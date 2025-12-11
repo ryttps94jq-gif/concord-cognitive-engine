@@ -1,0 +1,14 @@
+Github Community Page Security.md
+
+# Security Policy
+
+## Supported Versions
+Community Edition is maintained actively on the `main` branch.
+
+## Reporting a Vulnerability
+Please open an issue describing:
+- The exact behavior observed
+- Expected behavior
+- Steps to reproduce
+
+No sensitive data is ever stored online.
