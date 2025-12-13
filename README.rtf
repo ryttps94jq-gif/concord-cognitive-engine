@@ -1,97 +1,162 @@
-# Concord (Community Edition)
+Concord v1
 
-**Concord** is a fully local, modular cognitive engine designed to run offline, create knowledge structures (DTUs), and support OS-like reasoning layers for personal, research, and creative use.
+Local-First Cognitive Platform for Thought Synthesis, Debate, and Evolution
 
-This repository contains the *Community Edition*, which includes:
+Concord is a local-first cognitive platform that allows users to capture ideas as structured units (DTUs), explore them through simulations, debates, and personas, and watch their knowledge space grow over time — privately, ethically, and without data extraction.
 
-- ✔ Fully local backend (`server.js`)
-- ✔ Local DTU engine + starter DTUs
-- ✔ Working UI (`src/App.jsx`, `main.jsx`)
-- ✔ PersonaOS (simple persona-to-DTU interaction)
-- ✔ CRETI engine (Core / Reasoning / Evidence / Testing / Impact)
-- ✔ OS Stack toggles (dream, evolution, autogen, autocrawl)
-- ✔ Autoprocess heartbeat system
-- ✔ Full open-source license (Apache 2.0)
+Concord is not an LLM, not a chatbot, and not a productivity app.
+It is a thinking platform that can optionally integrate LLMs as tools.
 
-Concord CE is built for:
-- Researchers  
-- Students  
-- Innovators  
-- Developers  
-- Anyone who wants a *local-first cognitive workspace*  
+⸻
 
-No ads.  
-No tracking.  
-No cloud dependencies.
+✨ Core Concepts
 
----
+DTUs (Discrete Thought Units)
 
-## 🔧 Getting Started
+DTUs are atomic units of thought:
+	•	Ideas
+	•	Hypotheses
+	•	Notes
+	•	Research fragments
+	•	Syntheses
 
-### **1. Install dependencies npm install
-### **2. Run backend** node server.js
-### **3. Run frontend** npm run dev
-Then open the URL shown in your terminal (usually `http://localhost:5173`).
+DTUs can:
+	•	Reference other DTUs
+	•	Evolve over time
+	•	Be debated, simulated, or synthesized
+	•	Remain local-only or optionally shared
 
----
+⸻
 
-## 📦 Included Starter DTUs
+Local-First by Design
+	•	Your ideas stay on your machine
+	•	No required accounts
+	•	No telemetry
+	•	No data mining
+	•	Optional LLM usage via your own API keys
 
-In `dtus.js`, the repo includes safe starter DTUs:
+Concord works offline, and expands when connected.
 
-- Concord Overview  
-- CRETI Template  
-- PersonaOS Sample Persona  
-- Evolution / Dream sample seeds  
-- Basic knowledge scaffolds  
+⸻
 
-These are safe, simple, and do not expose deeper Concord logic.
+🧠 What Concord Does (v1)
 
----
+✔ Thought Capture
+	•	Manual DTU creation
+	•	Forge mode for structured idea generation
+	•	Tagging, lineage tracking, and synthesis
 
-## 🛡 License
+✔ Cognitive Expansion
+	•	Council debates between personas
+	•	Swarm analysis (multiple reasoning lenses)
+	•	What-if simulations
+	•	Evolution engine that refines DTUs over time
 
-This project is licensed under the **Apache License 2.0**, allowing:
+✔ Background Intelligence
+	•	Heartbeat system (periodic cognitive cycles)
+	•	Dream mode (idea resurfacing)
+	•	Auto-generation of new DTUs
+	•	Manual and automated ingest
+	•	Safe autocrawl (whitelisted sources only)
 
-- personal use  
-- commercial use  
-- modification  
-- distribution  
+✔ Personas
+	•	Ethicist
+	•	Engineer
+	•	Historian
+	•	Economist
 
-Only requirement: derivative works must preserve attribution and the license text.
+Personas:
+	•	Debate ideas
+	•	Speak with distinct reasoning styles
+	•	Provide synthesis instead of answers
 
----
+⸻
 
-## 🚧 Roadmap (Community Edition)
+🧩 Architecture Overview
 
-The Community Edition is intentionally minimal.  
-Future iterations (non-open repositories) will include:
+Backend
+	•	Node.js (Express)
+	•	Local JSON + SQLite persistence
+	•	Job governor for background processes
+	•	Modular OS layers (Reality, Sensemaking, Evolution, Council, Swarm, etc.)
 
-- DTU Marketplace  
-- Global OS  
-- Multi-agent Concord Council  
-- CRETI Auto-Expansion Engine  
-- CRI (Concord Research Institute) integrations  
-- USB ecosystem modules (not part of this repo)  
+Frontend
+	•	React (Vite)
+	•	Local-first UI
+	•	Persona interaction
+	•	Builder / Governor mode
+	•	No external analytics
 
----
+⸻
 
-## 🤝 Contributing
+🔌 LLM Integration (Optional)
 
-Pull requests are welcome.  
-Please see `CONTRIBUTING.md` for contribution guidelines.
+Concord supports optional LLM usage:
+	•	Bring your own API key
+	•	LLMs act as tools, not authorities
+	•	DTUs remain the primary knowledge substrate
 
----
+If no key is provided, Concord still functions fully.
 
-## 🔒 Security
+⸻
 
-Issues related to vulnerabilities should be reported privately.  
-See `SECURITY.md` for details.
+🛡 Ethics & Privacy
 
----
+Concord is built around:
+	•	Non-extractive design
+	•	User ownership of ideas
+	•	No behavioral tracking
+	•	No hidden training usage
+	•	Clear separation between local and global knowledge
 
-## 🌍 Mission
+Global sharing is opt-in and governed.
 
-Concord CE is the first step toward a world where knowledge, tools, and innovation are accessible to everyone — **offline or online**, regardless of geography or income.
+⸻
 
-Welcome to the next chapter.
+🚀 Getting Started
+
+Requirements
+	•	Node.js v18+
+	•	npm
+
+Install
+git clone https://github.com/YOUR_USERNAME/concord.git
+cd concord
+npm install
+# backend
+cd server
+npm start
+
+# frontend
+cd ..
+npm run dev
+http://localhost:5173
+🧪 Status
+
+Concord v1 is a foundational release.
+
+It proves:
+	•	The architecture
+	•	The cognitive model
+	•	The local-first workflow
+	•	Autonomous idea evolution
+
+v2+ will expand:
+	•	Global DTU markets
+	•	Advanced governance
+	•	Dimensional OS layers
+	•	Research institute tooling (CRI)
+
+⸻
+
+📌 Philosophy
+
+Concord is not here to think for you.
+It exists to help you think better, longer, and deeper — without losing ownership of your mind.
+
+⸻
+
+📄 License
+
+Open for research and experimentation.
+Commercial terms to be finalized in future releases.
