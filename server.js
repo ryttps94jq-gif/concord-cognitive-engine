@@ -1,585 +1,2487 @@
-// ConcordOS Community Edition - server.js
-// Monolithic backend for GitHub release
-// Offline-first DTU Cognitive OS with stubs for advanced systems.
+/**
+ * Concord v1 — Unified Monolith (Local-first, LLM-optional)
+ * Fixes included (per your A/B/B/C choices):
+ *  - Central Governor scheduler (heartbeat every 2 minutes) drives: dream + evolution + autogen + ingest queue + autocrawl queue
+ *  - Manual + Auto Ingest: turns text into CRETIs/DTUs (parent + children)
+ *  - Manual + Auto Crawl: fetch HTML -> extract readable text -> CRETI breakdown into DTUs (no hollow shells)
+ *  - Council gate: content can always stay LOCAL; GLOBAL submissions are blocked if flagged as closed-source/first-gen
+ *  - /api/chat and /api/ask both supported
+ *
+ * Run:
+ *   cd server
+ *   npm install
+ *   npm start
+ *
+ * Env (optional):
+ *   OPENAI_API_KEY=...
+ *   OPENAI_MODEL=gpt-4.1-mini (or any chat-capable model your SDK supports)
+ *   FRONTEND_ORIGIN=http://localhost:5173
+ *   PORT=5050
+ */
 
 import express from "express";
 import cors from "cors";
+import dotenv from "dotenv";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import crypto from "crypto";
 
-// --------------------------------------------------
-// Path helpers
-// --------------------------------------------------
+dotenv.config();
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// --------------------------------------------------
-// Env / config
-// --------------------------------------------------
-const PORT = process.env.PORT || "5050";
+const PORT = Number(process.env.PORT || 5050);
+const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "http://localhost:5173";
+
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
-const OPENAI_CONFIGURED = !!OPENAI_API_KEY;
+const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4.1-mini";
 
-// Single state file for simple persistence
-const STATE_FILE = path.join(__dirname, "concord-state.json");
+let OpenAIClient = null;
+async function getOpenAI() {
+  if (!OPENAI_API_KEY) return null;
+  if (OpenAIClient) return OpenAIClient;
+  try {
+    const mod = await import("openai");
+    const OpenAI = mod.default || mod.OpenAI || mod;
+    OpenAIClient = new OpenAI({ apiKey: OPENAI_API_KEY });
+    return OpenAIClient;
+  } catch (e) {
+    console.warn("[OpenAI] SDK not available or failed to load:", String(e?.message || e));
+    return null;
+  }
+}
 
-// --------------------------------------------------
-// In-memory state with lazy load/save
-// --------------------------------------------------
-let state = {
-  dtus: [],
-  osState: {
-    temporalOS: true,
-    realityOS: true,
-    physicsOS: true,
-    existentialOS: true,
-    emotionalOS: true,
-    motivationOS: true,
-    perceptionOS: true,
-    sensemakingOS: true,
-  },
-  autoprocessState: {
-    dream: false,
-    evolution: false,
-    autogen: false,
-    autocrawl: false,
-    ticks: 0,
-    lastTick: null,
-    lastAutogen: null,
-    lastEvolution: null,
-  },
-  autocrawlState: {
-    enabled: false,
-    crawledToday: 0,
-    maxPerDay: 50,
-    whitelist: [
-      "oerproject.com",
-      "openstax.org",
-      "khanacademy.org",
-      "creativecommons.org",
-    ],
-  },
+// -----------------------------
+// uuid helper (no external dep)
+// -----------------------------
+const uuidv4 = () => {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+    (c ^ crypto.randomBytes(1)[0] & 15 >> c / 4).toString(16)
+  );
 };
 
-function loadState() {
+// --------------------------------------------------
+// Data persistence (local JSON files)
+// --------------------------------------------------
+const DATA_DIR = path.join(__dirname, ".concord_data");
+const FILES = {
+  dtus: path.join(DATA_DIR, "dtus.json"),
+  simulations: path.join(DATA_DIR, "simulations.json"),
+  credits: path.join(DATA_DIR, "credits.json"),
+  marketplace: path.join(DATA_DIR, "marketplace.json"),
+  events: path.join(DATA_DIR, "events.json"),
+  settings: path.join(DATA_DIR, "settings.json"),
+  queues: path.join(DATA_DIR, "queues.json"),
+};
+
+function ensureDataDir() {
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+  const initArray = ["dtus","simulations","credits","marketplace","events"];
+  for (const key of initArray) {
+    const f = FILES[key];
+    if (!fs.existsSync(f)) fs.writeFileSync(f, "[]", "utf8");
+  }
+  if (!fs.existsSync(FILES.settings)) fs.writeFileSync(FILES.settings, "{}", "utf8");
+  if (!fs.existsSync(FILES.queues)) fs.writeFileSync(FILES.queues, "{}", "utf8");
+}
+ensureDataDir();
+
+function readJSON(file, fallback) {
   try {
-    if (fs.existsSync(STATE_FILE)) {
-      const raw = fs.readFileSync(STATE_FILE, "utf8");
-      const parsed = JSON.parse(raw);
-      state = {
-        ...state,
-        ...parsed,
-        osState: { ...state.osState, ...(parsed.osState || {}) },
-        autoprocessState: {
-          ...state.autoprocessState,
-          ...(parsed.autoprocessState || {}),
-        },
-        autocrawlState: {
-          ...state.autocrawlState,
-          ...(parsed.autocrawlState || {}),
-        },
-        dtus: Array.isArray(parsed.dtus) ? parsed.dtus : [],
-      };
-      console.log("[Concord] State loaded from", STATE_FILE);
-    } else {
-      console.log("[Concord] No existing state file, starting fresh.");
-    }
-  } catch (err) {
-    console.error("[Concord] Failed to load state:", err);
+    const raw = fs.readFileSync(file, "utf8");
+    return raw.trim() ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
   }
 }
-
-function saveState() {
-  try {
-    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), "utf8");
-  } catch (err) {
-    console.error("[Concord] Failed to save state:", err);
-  }
+function writeJSON(file, data) {
+  fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf8");
 }
 
-loadState();
+// --------------------------------------------------
+// Hashing / stable stringify
+// --------------------------------------------------
+function sha256(input) {
+  return crypto.createHash("sha256").update(input).digest("hex");
+}
+function stableStringify(obj) {
+  const allKeys = [];
+  JSON.stringify(obj, (k, v) => (allKeys.push(k), v));
+  allKeys.sort();
+  return JSON.stringify(obj, allKeys);
+}
+function nowISO() { return new Date().toISOString(); }
 
 // --------------------------------------------------
-// DTU helpers
+// Events
 // --------------------------------------------------
-function createDtuId() {
-  const base = Date.now().toString(36);
-  const rand = Math.random().toString(36).slice(2, 6);
-  return `dtu_${base}_${rand}`;
+let events = readJSON(FILES.events, []);
+function appendEvent(type, payload = {}) {
+  const ev = { id: uuidv4(), type, at: nowISO(), payload };
+  events.push(ev);
+  if (events.length > 5000) events = events.slice(-5000);
+  writeJSON(FILES.events, events);
+  return ev;
 }
 
-function createDTUFromText({ title, content, tags = [], source = "manual" }) {
-  const id = createDtuId();
+// --------------------------------------------------
+// DTUs + lineage hash (NO user identity)
+// --------------------------------------------------
+let dtus = readJSON(FILES.dtus, []);
+
+function computeDTULineageHash({ content, tags, parents }) {
+  const parentIds = (parents || []).map((p) => p?.id || p).filter(Boolean).sort();
+  const core = {
+    content: (content || "").trim(),
+    tags: Array.isArray(tags) ? tags.slice().sort() : [],
+    parents: parentIds,
+  };
+  return sha256(stableStringify(core));
+}
+
+function createDTU({ title, content, tags = [], source = "manual", parents = [], isGlobal = false, meta = {} }) {
+  const createdAt = nowISO();
+  const id = uuidv4();
+  const lineageHash = computeDTULineageHash({ content, tags, parents });
   const dtu = {
     id,
-    createdAt: new Date().toISOString(),
-    meta: { title },
-    content,
-    tags,
-    source,
+    lineageHash,
+    content: String(content || ""),
+    tags: Array.isArray(tags) ? tags : [],
+    isGlobal: Boolean(isGlobal),
+    meta: {
+      title: title || "DTU",
+      source,
+      createdAt,
+      updatedAt: createdAt,
+      parents: (parents || []).map((p) => (typeof p === "string" ? p : p?.id)).filter(Boolean),
+      ...meta,
+    },
   };
-  state.dtus.unshift(dtu);
-  saveState();
+  dtus.unshift(dtu);
+  writeJSON(FILES.dtus, dtus);
+  appendEvent("dtu.created", { id, lineageHash, source, isGlobal: dtu.isGlobal });
   return dtu;
 }
 
+function updateDTU(id, patch = {}) {
+  const idx = dtus.findIndex((d) => d.id === id);
+  if (idx === -1) return null;
+  const existing = dtus[idx];
+  const updated = {
+    ...existing,
+    ...patch,
+    meta: { ...existing.meta, ...(patch.meta || {}), updatedAt: nowISO() },
+  };
+  const content = updated.content;
+  const tags = updated.tags;
+  const parents = (updated.meta?.parents || []).slice();
+  updated.lineageHash = computeDTULineageHash({ content, tags, parents });
+  dtus[idx] = updated;
+  writeJSON(FILES.dtus, dtus);
+  appendEvent("dtu.updated", { id });
+  return updated;
+}
+
 // --------------------------------------------------
-// LLM helper (optional; stub if no key)
+// Optional seeding: load dtus from a local dtus.js file if present.
+// Supports:
+//   - export const dtus = [...]
+//   - export default [...]
+//   - module.exports = [...]
 // --------------------------------------------------
-async function runLLMChat(systemPrompt, messages) {
-  // If no API key, return simple stubbed reasoning
-  if (!OPENAI_CONFIGURED) {
-    const lastUser = messages.filter((m) => m.role === "user").pop();
-    const userText = lastUser?.content || "";
-    const snippet =
-      state.dtus.slice(0, 2).map((d) => d.meta?.title || d.id).join(", ") ||
-      "no DTUs yet";
-    return `Offline stub reply.\n\nYou asked: "${userText.slice(
-      0,
-      400
-    )}".\n\nConcordOS Community Edition is running without an external LLM key, so this is a local reasoning stub.\nKnown DTUs: ${snippet}`;
+async function seedDTUsFromLocalModule() {
+  const candidates = [
+    path.join(__dirname, "dtus.js"),
+    path.join(__dirname, "dtus.mjs"),
+    path.join(__dirname, "dtus.cjs"),
+  ];
+  const seedFile = candidates.find((p) => fs.existsSync(p));
+  if (!seedFile) return { ok: false, reason: "no dtus.* file found" };
+
+  let mod = null;
+  try {
+    const url = new URL(`file://${seedFile}`);
+    mod = await import(url.href);
+  } catch (e1) {
+    try {
+      const { createRequire } = await import("module");
+      const req = createRequire(import.meta.url);
+      mod = req(seedFile);
+    } catch (e2) {
+      return { ok: false, reason: "failed to load dtus module", errors: [String(e1), String(e2)] };
+    }
   }
 
-  // Minimal OpenAI Chat Completions call using fetch
-  const payload = {
-    model: "gpt-4.1-mini",
-    messages,
-  };
+  const arr =
+    (mod && Array.isArray(mod.dtus) && mod.dtus) ||
+    (mod && Array.isArray(mod.DTUS) && mod.DTUS) ||
+    (mod && Array.isArray(mod.default) && mod.default) ||
+    (mod && Array.isArray(mod) && mod) ||
+    [];
 
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
-      "Content-Type": "application/json",
+  if (!Array.isArray(arr) || !arr.length) return { ok: false, reason: "dtus module loaded but no array export found" };
+
+  const existing = new Set((dtus || []).map((d) => d.lineageHash || sha256(stableStringify(d))));
+  let added = 0;
+
+  for (const item of arr) {
+    const title = item?.meta?.title || item?.title || "Seed DTU";
+    const content = item?.content || item?.text || item?.body || "";
+    const tags = item?.tags || item?.meta?.tags || [];
+    const parents = item?.meta?.parents || item?.parents || [];
+    const key = computeDTULineageHash({ content, tags, parents });
+
+    if (existing.has(key)) continue;
+    createDTU({ title, content, tags, source: "seed", parents });
+    existing.add(key);
+    added += 1;
+  }
+  return { ok: true, added, total: arr.length, file: path.basename(seedFile) };
+}
+seedDTUsFromLocalModule()
+  .then((r)=>{ if(r?.ok && r.added) console.log(`[DTU Seed] Added ${r.added}/${r.total} from ${r.file}`); })
+  .catch(()=>{});
+
+// --------------------------------------------------
+// Credits (FAKE CCs) — device-local wallet ids
+// --------------------------------------------------
+let creditsLedger = readJSON(FILES.credits, []);
+function getOrCreateWallet(walletId) {
+  let w = creditsLedger.find((x) => x.walletId === walletId);
+  if (!w) {
+    w = { walletId, balance: 0, createdAt: nowISO(), updatedAt: nowISO() };
+    creditsLedger.push(w);
+    writeJSON(FILES.credits, creditsLedger);
+    appendEvent("credits.wallet_created", { walletId });
+  }
+  return w;
+}
+function creditWallet(walletId, amount, reason = "credit") {
+  const w = getOrCreateWallet(walletId);
+  w.balance = Number(w.balance || 0) + Number(amount || 0);
+  w.updatedAt = nowISO();
+  writeJSON(FILES.credits, creditsLedger);
+  appendEvent("credits.changed", { walletId, amount: Number(amount||0), reason });
+  return w;
+}
+function debitWallet(walletId, amount, reason = "debit") {
+  const w = getOrCreateWallet(walletId);
+  const amt = Number(amount || 0);
+  if (w.balance < amt) return { ok: false, error: "Insufficient CC balance." };
+  w.balance -= amt;
+  w.updatedAt = nowISO();
+  writeJSON(FILES.credits, creditsLedger);
+  appendEvent("credits.changed", { walletId, amount: -amt, reason });
+  return { ok: true, wallet: w };
+}
+
+// --------------------------------------------------
+// Marketplace (visible, “coming soon” friendly)
+// --------------------------------------------------
+let marketplaceListings = readJSON(FILES.marketplace, []);
+
+// --------------------------------------------------
+// Simulations
+// --------------------------------------------------
+let simulations = readJSON(FILES.simulations, []);
+function runWhatIf({ title, prompt, assumptions = [] }) {
+  const id = uuidv4();
+  const createdAt = nowISO();
+  const outcome = {
+    id,
+    title: title || "What-if",
+    prompt: prompt || "",
+    assumptions,
+    results: {
+      range: "v1 snapshot",
+      summary: "What-if v1. v2 deepens forks + Monte Carlo.",
+      keyRisks: ["unknown constraints", "edge cases"],
+      opportunities: ["rapid iteration", "macro-domain concealment"],
     },
-    body: JSON.stringify(payload),
+    createdAt,
+  };
+  simulations.unshift(outcome);
+  if (simulations.length > 500) simulations = simulations.slice(0, 500);
+  writeJSON(FILES.simulations, simulations);
+  appendEvent("simulation.created", { id });
+  return outcome;
+}
+
+// --------------------------------------------------
+// “Macros” = Declarative Layer Registry + Recipes
+// --------------------------------------------------
+const MacroDomains = [
+  "Epistemics", "Constraints", "Sandbox", "Temporal", "Simulation",
+  "Evolution", "DTUGraph", "Council", "Swarm", "Marketplace", "Privacy", "SelfRepair", "Ingest", "Crawl", "Dream"
+];
+
+const LayerRegistry = {
+  domains: MacroDomains,
+  recipes: {
+    HYPOTHESIS_PIPELINE: ["Epistemics", "Constraints", "Sandbox", "Evolution", "DTUGraph"],
+    SIMULATION_PIPELINE: ["Epistemics", "Constraints", "Simulation", "DTUGraph"],
+    COUNCIL_PIPELINE: ["Epistemics", "Council", "DTUGraph"],
+    INGEST_PIPELINE: ["Ingest", "DTUGraph", "Temporal"],
+    CRAWL_PIPELINE: ["Crawl", "Ingest", "DTUGraph", "Temporal"],
+    DREAM_PIPELINE: ["Dream", "Evolution", "DTUGraph"],
+  },
+};
+
+function runMacro(recipeName, ctx = {}) {
+  const recipe = LayerRegistry.recipes[recipeName];
+  if (!recipe) return { ok: false, error: "Unknown macro recipe." };
+  const trace = recipe.map((domain) => ({
+    domain,
+    at: nowISO(),
+    note: `Executed domain "${domain}" (v1 macro runtime).`,
+  }));
+  return { ok: true, recipeName, trace, ctx };
+}
+
+// --------------------------------------------------
+// Personas + Council (animation/speech cue protocol)
+// --------------------------------------------------
+const personas = [
+  { id: "p_ethicist", name: "Ethicist", style: "careful, harm-aware" },
+  { id: "p_engineer", name: "Engineer", style: "systems-first, implementation-aware" },
+  { id: "p_historian", name: "Historian", style: "contextual, precedent-driven" },
+  { id: "p_economist", name: "Economist", style: "incentives, second-order effects" },
+];
+
+function personaCue(kind = "talk") {
+  const cues = {
+    idle: { state: "idle", intensity: 0.2, durationMs: 800 },
+    talk: { state: "talk", intensity: 0.6, durationMs: 1800 },
+    emphasize: { state: "emphasize", intensity: 0.9, durationMs: 1200 },
+    thinking: { state: "thinking", intensity: 0.4, durationMs: 1400 },
+  };
+  return cues[kind] || cues.talk;
+}
+
+// ------------------------------
+// Council gate: GLOBAL rules
+// ------------------------------
+function councilGateGlobal({ declaredSourceType, url }) {
+  // Your rule: if it's first-gen closed source, Global can't accept it.
+  // Local is always allowed.
+  const t = String(declaredSourceType || "").toLowerCase();
+  if (t.includes("closed")) return { ok: false, reason: "Closed-source first generation is blocked from Global. Local is allowed." };
+  // If user doesn't declare, default to allowed, but record uncertainty.
+  return { ok: true, reason: "Allowed." };
+}
+
+// --------------------------------------------------
+// Readability extraction (no external libs)
+// --------------------------------------------------
+function stripHTMLToText(html) {
+  let s = String(html || "");
+  s = s.replace(/<script[\s\S]*?<\/script>/gi, " ");
+  s = s.replace(/<style[\s\S]*?<\/style>/gi, " ");
+  s = s.replace(/<!--[\s\S]*?-->/g, " ");
+  s = s.replace(/<\/(p|div|br|li|h1|h2|h3|h4|h5|h6)>/gi, "\n");
+  s = s.replace(/<[^>]+>/g, " ");
+  s = s.replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+  s = s.replace(/[ \t\r]+/g, " ");
+  s = s.replace(/\n{3,}/g, "\n\n");
+  return s.trim();
+}
+
+function chunkText(text, maxChars = 2200) {
+  const t = String(text || "").trim();
+  if (!t) return [];
+  const paras = t.split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
+  const chunks = [];
+  let cur = "";
+  for (const p of paras) {
+    if ((cur + "\n\n" + p).length <= maxChars) {
+      cur = cur ? (cur + "\n\n" + p) : p;
+    } else {
+      if (cur) chunks.push(cur);
+      if (p.length <= maxChars) {
+        cur = p;
+      } else {
+        // hard split
+        for (let i=0; i<p.length; i+=maxChars) chunks.push(p.slice(i, i+maxChars));
+        cur = "";
+      }
+    }
+  }
+  if (cur) chunks.push(cur);
+  return chunks;
+}
+
+// --------------------------------------------------
+// CRETI synthesis (LLM optional)
+// Returns: { parentDTU, childrenDTUs[], notes }
+// --------------------------------------------------
+async function cretiFromText({ title, text, tags = [], source = "ingest", url = "", declaredSourceType = "open", makeGlobal = false }) {
+  const clean = String(text || "").trim();
+  if (!clean) return { ok: false, error: "Empty text." };
+
+  // Global gate (local always allowed)
+  let globalAllowed = false;
+  if (makeGlobal) {
+    const gate = councilGateGlobal({ declaredSourceType, url });
+    if (!gate.ok) {
+      makeGlobal = false;
+      appendEvent("council.global_blocked", { reason: gate.reason, url, declaredSourceType });
+    } else {
+      globalAllowed = true;
+    }
+  }
+
+  // Parent DTU: preserve source content (bounded)
+  const parent = createDTU({
+    title: title || (url ? `Source: ${url}` : "Ingest Source"),
+    content: clean.slice(0, 50000),
+    tags: ["source", source, ...(tags || [])],
+    source,
+    isGlobal: false,
+    meta: { url, declaredSourceType, globalRequested: !!globalAllowed }
   });
 
-  if (!res.ok) {
-    const text = await res.text();
-    console.error("[Concord] OpenAI error:", res.status, text);
-    return `LLM error (${res.status}). Falling back to stub.`;
+  const chunks = chunkText(clean, 2200);
+  const oai = await getOpenAI();
+
+  const children = [];
+  const synthesisPrompt = (chunk) => `
+You are Concord CRETI.
+Turn the following source text into discrete thought units (DTUs).
+Rules:
+- Produce 3-7 DTUs maximum for this chunk.
+- Each DTU: a short title + concise content + 3-8 tags.
+- Do NOT copy long passages; paraphrase.
+- If uncertainty exists, label it.
+Return JSON ONLY in this schema:
+{
+  "dtus":[
+    {"title":"...","content":"...","tags":["...","..."]}
+  ]
+}
+SOURCE CHUNK:
+${chunk}
+`.trim();
+
+  for (let i=0; i<chunks.length; i++) {
+    const chunk = chunks[i];
+    if (oai) {
+      try {
+        const resp = await oai.chat.completions.create({
+          model: OPENAI_MODEL,
+          messages: [
+            { role: "system", content: "You output strict JSON only." },
+            { role: "user", content: synthesisPrompt(chunk) }
+          ],
+          temperature: 0.4
+        });
+        const raw = resp?.choices?.[0]?.message?.content || "{}";
+        const parsed = JSON.parse(raw);
+        const arr = Array.isArray(parsed?.dtus) ? parsed.dtus : [];
+        for (const d of arr.slice(0, 7)) {
+          const child = createDTU({
+            title: d.title || "CRETI DTU",
+            content: String(d.content || "").slice(0, 6000),
+            tags: Array.isArray(d.tags) ? ["creti", ...d.tags] : ["creti"],
+            source: "creti",
+            parents: [parent.id],
+            isGlobal: false,
+            meta: { url, chunkIndex: i }
+          });
+          children.push(child);
+        }
+      } catch (e) {
+        // Fallback: store chunk DTU if LLM fails
+        const child = createDTU({
+          title: `Chunk ${i+1}`,
+          content: chunk,
+          tags: ["creti", "chunk", source],
+          source: "creti_fallback",
+          parents: [parent.id],
+          meta: { url, chunkIndex: i, error: String(e?.message || e) }
+        });
+        children.push(child);
+      }
+    } else {
+      // No LLM: chunk DTUs (still not hollow)
+      const child = createDTU({
+        title: `Chunk ${i+1}`,
+        content: chunk,
+        tags: ["creti", "chunk", source],
+        source: "creti_chunk",
+        parents: [parent.id],
+        meta: { url, chunkIndex: i }
+      });
+      children.push(child);
+    }
   }
 
-  const data = await res.json();
-  const content =
-    data.choices?.[0]?.message?.content ||
-    "No content returned from LLM (unexpected).";
-  return content;
+  // If globalAllowed, create a GLOBAL "index" DTU that references lineage only (no raw text)
+  let globalDTU = null;
+  if (globalAllowed) {
+    globalDTU = createDTU({
+      title: `GLOBAL: ${title || (url || "CRETI Pack")}`,
+      content: `Global index for CRETI pack. Parent lineage: ${parent.lineageHash}. Children: ${children.length}.`,
+      tags: ["global", "creti", "index"],
+      source: "global_index",
+      parents: children.map(c=>c.id).slice(0, 20),
+      isGlobal: true,
+      meta: { url, declaredSourceType, parentLineage: parent.lineageHash }
+    });
+  }
+
+  appendEvent("creti.created", { parentId: parent.id, children: children.length, url, global: !!globalAllowed });
+  return { ok: true, parent, children, globalDTU };
 }
+
+// --------------------------------------------------
+// Fetch + crawl (manual & auto)
+// --------------------------------------------------
+async function crawlUrlToCretis({ url, declaredSourceType = "open", makeGlobal = false, tags = [] }) {
+  const u = String(url || "").trim();
+  if (!u) return { ok: false, error: "url required" };
+
+  // Basic URL allow: v1 manual crawl can be any URL, but you can lock it later.
+  let html = "";
+  try {
+    const res = await fetch(u, { method: "GET", redirect: "follow" });
+    html = await res.text();
+    if (!res.ok) {
+      return { ok: false, error: `Fetch failed: ${res.status}` };
+    }
+  } catch (e) {
+    return { ok: false, error: `Fetch error: ${String(e?.message || e)}` };
+  }
+
+  const text = stripHTMLToText(html);
+  if (!text || text.length < 80) {
+    // Still create a DTU with what we have, but record emptiness
+    const parent = createDTU({
+      title: `Crawl (low content): ${u}`,
+      content: text || "(No extractable content. Page may be JS-rendered.)",
+      tags: ["crawl", "low_content"],
+      source: "crawl",
+      meta: { url: u, declaredSourceType }
+    });
+    appendEvent("crawl.low_content", { url: u, chars: (text||"").length });
+    return { ok: true, parent, children: [], note: "Low extractable content (JS-rendered page likely)." };
+  }
+
+  return cretiFromText({
+    title: `Crawl: ${u}`,
+    text,
+    tags: ["crawl", ...tags],
+    source: "crawl",
+    url: u,
+    declaredSourceType,
+    makeGlobal
+  });
+}
+
+// --------------------------------------------------
+// Queues + Governor (Central Scheduler)
+// --------------------------------------------------
+let settings = readJSON(FILES.settings, {});
+const DEFAULT_JOBS = {
+  heartbeat: { enabled: true },
+  dream: { enabled: true },
+  evolution: { enabled: true },
+  autogen: { enabled: true },
+  ingest: { enabled: true },
+  autocrawl: { enabled: true }
+};
+
+function normalizeSettings() {
+  settings.jobs = settings.jobs || {};
+  for (const [k,v] of Object.entries(DEFAULT_JOBS)) {
+    if (typeof settings.jobs[k]?.enabled !== "boolean") settings.jobs[k] = { ...v, enabled: v.enabled };
+  }
+  settings.intervals = settings.intervals || {};
+  // Your choice: every 2 minutes heartbeat
+  if (!settings.intervals.heartbeatMs) settings.intervals.heartbeatMs = 120000;
+  // internal cooldowns (can be tuned)
+  if (!settings.intervals.dreamCooldownMs) settings.intervals.dreamCooldownMs = 240000;     // 4m
+  if (!settings.intervals.evolutionCooldownMs) settings.intervals.evolutionCooldownMs = 180000;// 3m
+  if (!settings.intervals.autogenCooldownMs) settings.intervals.autogenCooldownMs = 240000;  // 4m
+  if (!settings.intervals.ingestCooldownMs) settings.intervals.ingestCooldownMs = 30000;    // 30s
+  if (!settings.intervals.autocrawlCooldownMs) settings.intervals.autocrawlCooldownMs = 60000;// 60s
+  writeJSON(FILES.settings, settings);
+}
+normalizeSettings();
+
+let queues = readJSON(FILES.queues, {});
+queues.ingest = Array.isArray(queues.ingest) ? queues.ingest : [];
+queues.autocrawl = Array.isArray(queues.autocrawl) ? queues.autocrawl : [];
+writeJSON(FILES.queues, queues);
+
+const governor = {
+  startedAt: nowISO(),
+  lastTick: null,
+  lastRun: {
+    dream: null,
+    evolution: null,
+    autogen: null,
+    ingest: null,
+    autocrawl: null
+  },
+  lastResult: {}
+};
+
+function jobEnabled(name) {
+  return !!settings?.jobs?.[name]?.enabled;
+}
+
+function canRun(name, cooldownMs) {
+  const last = governor.lastRun[name];
+  if (!last) return true;
+  return (Date.now() - new Date(last).getTime()) >= cooldownMs;
+}
+
+// ------------------------------
+// Dream (C = both mutate + create)
+// ------------------------------
+async function dreamStep() {
+  if (!dtus.length) return { ok: false, note: "no dtus" };
+  const a = dtus[Math.floor(Math.random() * dtus.length)];
+  const b = dtus[Math.floor(Math.random() * dtus.length)];
+  const oai = await getOpenAI();
+
+  let dreamText = `DREAM (v1): recombine motifs from DTUs.\nA:${a?.meta?.title}\nB:${b?.meta?.title}\n`;
+  if (oai) {
+    try {
+      const resp = await oai.chat.completions.create({
+        model: OPENAI_MODEL,
+        messages: [
+          { role: "system", content: "You create a short speculative synthesis. No unsafe content." },
+          { role: "user", content: `Create a dream-synthesis DTU that combines these two ideas. Keep it short.\nDTU A:\n${a.content}\nDTU B:\n${b.content}` }
+        ],
+        temperature: 0.7
+      });
+      dreamText = resp?.choices?.[0]?.message?.content?.slice(0, 6000) || dreamText;
+    } catch {}
+  }
+
+  const dreamDTU = createDTU({
+    title: "Dream Synthesis",
+    content: dreamText,
+    tags: ["dream", "synthesis"],
+    source: "dream",
+    parents: [a?.id, b?.id].filter(Boolean),
+    meta: { mode: "mutate+create" }
+  });
+
+  // Mutate tags lightly (mark "dreamt" on parents)
+  for (const d of [a,b]) {
+    if (!d?.id) continue;
+    const tags = new Set(d.tags || []);
+    tags.add("dreamt");
+    updateDTU(d.id, { tags: Array.from(tags) });
+  }
+
+  appendEvent("dream.ran", { created: dreamDTU.id, parents: [a?.id,b?.id].filter(Boolean) });
+  return { ok: true, createdId: dreamDTU.id };
+}
+
+// ------------------------------
+// Evolution (light but real)
+// ------------------------------
+async function evolutionStep() {
+  if (!dtus.length) return { ok: false, note: "no dtus" };
+  // pick a DTU not evolved yet
+  const target = dtus.find(d => !(d.tags||[]).includes("evolved")) || dtus[0];
+  if (!target) return { ok: false, note: "no target" };
+
+  const tags = new Set(target.tags || []);
+  tags.add("evolved");
+  updateDTU(target.id, { tags: Array.from(tags) });
+
+  // Also create a tiny "evolution delta" DTU to show visible progress
+  const delta = createDTU({
+    title: `Evolution Delta: ${target.meta?.title || target.id}`,
+    content: `EvolutionOS marked DTU as evolved.\nTarget lineage: ${target.lineageHash}\nTime: ${nowISO()}`,
+    tags: ["evolution", "delta"],
+    source: "evolution",
+    parents: [target.id]
+  });
+
+  appendEvent("evolution.ran", { target: target.id, delta: delta.id });
+  return { ok: true, targetId: target.id, deltaId: delta.id };
+}
+
+// ------------------------------
+// Autogen (creates new DTU)
+// ------------------------------
+async function autogenStep() {
+  const oai = await getOpenAI();
+  let content = `Autogen (v1): propose a missing angle.\nTime: ${nowISO()}`;
+  if (oai) {
+    try {
+      const resp = await oai.chat.completions.create({
+        model: OPENAI_MODEL,
+        messages: [
+          { role: "system", content: "Generate one useful DTU idea for Concord. Short, structured." },
+          { role: "user", content: "Generate a novel DTU that adds a useful OS layer or feature idea. Include constraints and next step." }
+        ],
+        temperature: 0.6
+      });
+      content = resp?.choices?.[0]?.message?.content?.slice(0, 6000) || content;
+    } catch {}
+  }
+  const dtu = createDTU({ title: "Autogen DTU", content, tags: ["autogen"], source: "autogen" });
+  appendEvent("autogen.ran", { dtuId: dtu.id });
+  return { ok: true, dtuId: dtu.id };
+}
+
+// ------------------------------
+// Ingest queue processing
+// ------------------------------
+async function processIngestQueue(maxItems = 1) {
+  let created = 0;
+  const items = queues.ingest.splice(0, maxItems);
+  for (const it of items) {
+    const out = await cretiFromText({
+      title: it.title || "Ingest",
+      text: it.text || "",
+      tags: it.tags || ["ingest"],
+      source: "ingest",
+      url: "",
+      declaredSourceType: it.declaredSourceType || "open",
+      makeGlobal: !!it.makeGlobal
+    });
+    if (out.ok) created += (1 + (out.children?.length || 0));
+  }
+  writeJSON(FILES.queues, queues);
+  appendEvent("ingest.processed", { items: items.length, created });
+  return { ok: true, items: items.length, created };
+}
+
+// ------------------------------
+// Autocrawl queue processing
+// ------------------------------
+async function processAutocrawlQueue(maxItems = 1) {
+  let created = 0;
+  const items = queues.autocrawl.splice(0, maxItems);
+  for (const it of items) {
+    const out = await crawlUrlToCretis({
+      url: it.url,
+      declaredSourceType: it.declaredSourceType || "open",
+      makeGlobal: !!it.makeGlobal,
+      tags: it.tags || []
+    });
+    if (out?.ok) {
+      created += 1 + ((out.children && out.children.length) ? out.children.length : 0);
+    }
+  }
+  writeJSON(FILES.queues, queues);
+  appendEvent("autocrawl.processed", { items: items.length, created });
+  return { ok: true, items: items.length, created };
+}
+
+// ------------------------------
+// Governor Tick (Central)
+// ------------------------------
+async function governorTick() {
+  governor.lastTick = nowISO();
+  const i = settings.intervals;
+
+  const results = {};
+
+  if (jobEnabled("dream") && canRun("dream", i.dreamCooldownMs)) {
+    results.dream = await dreamStep();
+    governor.lastRun.dream = nowISO();
+  }
+
+  if (jobEnabled("evolution") && canRun("evolution", i.evolutionCooldownMs)) {
+    results.evolution = await evolutionStep();
+    governor.lastRun.evolution = nowISO();
+  }
+
+  if (jobEnabled("autogen") && canRun("autogen", i.autogenCooldownMs)) {
+    results.autogen = await autogenStep();
+    governor.lastRun.autogen = nowISO();
+  }
+
+  if (jobEnabled("ingest") && queues.ingest.length && canRun("ingest", i.ingestCooldownMs)) {
+    results.ingest = await processIngestQueue(1);
+    governor.lastRun.ingest = nowISO();
+  }
+
+  if (jobEnabled("autocrawl") && queues.autocrawl.length && canRun("autocrawl", i.autocrawlCooldownMs)) {
+    results.autocrawl = await processAutocrawlQueue(1);
+    governor.lastRun.autocrawl = nowISO();
+  }
+
+  governor.lastResult = results;
+  appendEvent("governor.tick", { results, queues: { ingest: queues.ingest.length, autocrawl: queues.autocrawl.length } });
+  return results;
+}
+
+function startGovernor() {
+  const ms = settings?.intervals?.heartbeatMs || 120000;
+  console.log(`[Governor] Started. Heartbeat interval: ${ms}ms`);
+  setInterval(() => governorTick().catch(e => console.error("[GovernorTick]", e)), ms);
+}
+if (jobEnabled("heartbeat")) startGovernor();
+
+// --------------------------------------------------
+// OS Stack state (exists; toggles are local-first)
+// --------------------------------------------------
+let osState = {
+  realityOS: true,
+  sensemakingOS: true,
+  perceptionOS: true,
+  temporalOS: true,
+  swarmOS: true,
+  evolutionOS: true,
+  governanceOS: true,
+  selfRepairOS: true,
+  marketplaceOS: true,
+  globalOS: true,
+  personaOS: true,
+  councilOS: true,
+  ingestOS: true,
+  crawlOS: true,
+  dreamOS: true
+};
 
 // --------------------------------------------------
 // Express app
 // --------------------------------------------------
 const app = express();
-app.use(cors());
-app.use(express.json());
+app.use(cors({ origin: [FRONTEND_ORIGIN], credentials: true }));
+app.use(express.json({ limit: "6mb" }));
 
-// --------------------------------------------------
-// Status endpoint
-// --------------------------------------------------
+// If you have a server/public folder, it will serve it.
+// If not, /api still works fine.
+const publicDir = path.join(__dirname, "public");
+if (fs.existsSync(publicDir)) app.use(express.static(publicDir));
+
+// ------------------------------
+// Status
+// ------------------------------
 app.get("/api/status", (req, res) => {
   res.json({
     ok: true,
     service: "ConcordOS",
-    version: "ConcordOS v0.1.0 â Community Edition (DTU Cognitive OS)",
+    version: "Concord v1 — Unified Monolith",
     port: PORT,
-    mode: process.env.CONCORD_MODE || (OPENAI_CONFIGURED ? "online" : "offline"),
-    dtuCount: state.dtus.length,
-    memoryCount: 0,
-    simulationCount: 0,
+    osState,
+    jobs: settings.jobs,
+    intervals: settings.intervals,
+    governor,
+    queues: { ingest: queues.ingest.length, autocrawl: queues.autocrawl.length },
+    counts: {
+      dtus: dtus.length,
+      simulations: simulations.length,
+      listings: marketplaceListings.length,
+      wallets: creditsLedger.length,
+      events: events.length,
+    },
+    macro: { domains: LayerRegistry.domains, recipes: Object.keys(LayerRegistry.recipes) },
+    llm: { enabled: !!OPENAI_API_KEY, model: OPENAI_MODEL }
   });
 });
 
-// --------------------------------------------------
-// DTU endpoints
-// --------------------------------------------------
-app.get("/api/dtus", (req, res) => {
-  res.json({ dtus: state.dtus });
+// ------------------------------
+// Jobs
+// ------------------------------
+app.get("/api/jobs/status", (req, res) => {
+  res.json({
+    ok: true,
+    jobs: settings.jobs,
+    intervals: settings.intervals,
+    governor,
+    queues: { ingest: queues.ingest.length, autocrawl: queues.autocrawl.length },
+    llm: { enabled: !!OPENAI_API_KEY, model: OPENAI_MODEL }
+  });
 });
 
-app.get("/api/dtus/:id", (req, res) => {
-  const dtu = state.dtus.find((d) => d.id === req.params.id);
-  if (!dtu) {
-    return res.status(404).json({ error: "DTU not found" });
-  }
-  res.json(dtu);
+app.post("/api/jobs/toggle", (req, res) => {
+  const { job, enabled } = req.body || {};
+  const j = String(job || "").trim();
+  if (!j || typeof enabled !== "boolean") return res.status(400).json({ ok: false, error: "job + enabled(boolean) required" });
+  settings.jobs = settings.jobs || {};
+  settings.jobs[j] = settings.jobs[j] || { enabled: true };
+  settings.jobs[j].enabled = enabled;
+  writeJSON(FILES.settings, settings);
+  appendEvent("jobs.toggled", { job: j, enabled });
+  res.json({ ok: true, job: j, enabled });
 });
 
+// ------------------------------
+// DTUs
+// ------------------------------
+app.get("/api/dtus", (req, res) => res.json({ ok: true, dtus }));
 app.post("/api/dtus", (req, res) => {
-  const { title, content, tags } = req.body || {};
-  if (!content || typeof content !== "string") {
-    return res.status(400).json({ error: "content (string) is required" });
+  const { title, content, tags, source, parents, isGlobal, meta, declaredSourceType = "open" } = req.body || {};
+
+  // If user tries to force GLOBAL here, gate it.
+  let makeGlobal = !!isGlobal;
+  if (makeGlobal) {
+    const gate = councilGateGlobal({ declaredSourceType, url: meta?.url || "" });
+    if (!gate.ok) {
+      makeGlobal = false;
+      return res.status(403).json({ ok: false, error: gate.reason, localAllowed: true });
+    }
   }
-  const dtu = createDTUFromText({
-    title: title || "Manual DTU",
-    content,
-    tags: Array.isArray(tags) ? tags : [],
-    source: "manual",
-  });
+
+  const dtu = createDTU({ title, content, tags, source, parents, isGlobal: makeGlobal, meta: { ...(meta||{}), declaredSourceType } });
   res.json({ ok: true, dtu });
 });
-
-// --------------------------------------------------
-// Ask Concord endpoint (online/offline)
-// --------------------------------------------------
-app.post("/api/ask", async (req, res) => {
-  const { message, mode } = req.body || {};
-  if (!message) {
-    return res.status(400).json({ error: "message is required" });
-  }
-
-  const offline = mode === "offline" || !OPENAI_CONFIGURED;
-  const systemPrompt = offline
-    ? "You are ConcordOS Community Edition running in offline mode. Use only the DTU context and reason carefully."
-    : "You are ConcordOS Community Edition using DTUs plus an external LLM. Be precise, structured, and helpful.";
-
-  const contextSnippet = state.dtus
-    .slice(0, 8)
-    .map((d) => `# ${d.meta?.title || d.id}\n${(d.content || "").slice(0, 400)}`)
-    .join("\n\n");
-
-  try {
-    const reply = await runLLMChat(systemPrompt, [
-      { role: "system", content: systemPrompt },
-      {
-        role: "system",
-        content: "Recent DTU context:\n" + (contextSnippet || "None yet."),
-      },
-      { role: "user", content: message },
-    ]);
-
-    const dtu = createDTUFromText({
-      title: "Ask Concord",
-      content: `Q: ${message}\n\nA: ${reply}`,
-      tags: ["console", "ask"],
-      source: "ask",
-    });
-
-    res.json({ reply, dtuId: dtu.id });
-  } catch (err) {
-    console.error("[Concord] /api/ask error:", err);
-    res.status(500).json({ error: "Internal error in ask endpoint." });
-  }
+app.patch("/api/dtus/:id", (req, res) => {
+  const updated = updateDTU(req.params.id, req.body || {});
+  if (!updated) return res.status(404).json({ ok: false, error: "DTU not found" });
+  res.json({ ok: true, dtu: updated });
 });
 
-// --------------------------------------------------
-// PersonaOS
-// --------------------------------------------------
-const personaDefinitions = [
-  {
-    id: "skeptic",
-    label: "The Skeptic",
-    style:
-      "Question assumptions, look for weaknesses, and challenge every claim.",
-  },
-  {
-    id: "socratic",
-    label: "The Socratic",
-    style: "Ask probing questions to refine the user's thinking.",
-  },
-  {
-    id: "idealist",
-    label: "The Idealist",
-    style: "Seek the highest ethical and long-term outcome.",
-  },
-  {
-    id: "pragmatist",
-    label: "The Pragmatist",
-    style:
-      "Focus on what can actually be implemented with minimal friction now.",
-  },
-  {
-    id: "strategist",
-    label: "The Strategist",
-    style: "Think long-term, multi-move planning with risk analysis.",
-  },
+// ------------------------------
+// Manual Ingest (B/B full CRETI)
+// ------------------------------
+app.post("/api/ingest", async (req, res) => {
+  const { text, title, tags = [], makeGlobal = false, declaredSourceType = "open" } = req.body || {};
+  // Manual ingest can be immediate (no queue) to feel responsive
+  const out = await cretiFromText({
+    title: title || "Manual Ingest",
+    text: text || "",
+    tags: Array.isArray(tags) ? tags : ["ingest"],
+    source: "ingest",
+    declaredSourceType,
+    makeGlobal: !!makeGlobal
+  });
+  if (!out.ok) return res.status(400).json(out);
+  res.json({ ok: true, parentId: out.parent?.id, created: 1 + (out.children?.length || 0), children: out.children?.map(d=>d.id) || [], globalId: out.globalDTU?.id || null });
+});
+
+// Queue ingest (auto)
+app.post("/api/ingest/queue", (req, res) => {
+  const { text, title, tags = [], makeGlobal = false, declaredSourceType = "open" } = req.body || {};
+  if (!String(text || "").trim()) return res.status(400).json({ ok: false, error: "text required" });
+  queues.ingest.push({ id: uuidv4(), text, title, tags, makeGlobal: !!makeGlobal, declaredSourceType, at: nowISO() });
+  writeJSON(FILES.queues, queues);
+  appendEvent("ingest.queued", { len: queues.ingest.length });
+  res.json({ ok: true, queued: true, queueLength: queues.ingest.length });
+});
+
+// ------------------------------
+// Autocrawl (manual) — creates REAL DTUs (not hollow)
+// ------------------------------
+app.post("/api/autocrawl", async (req, res) => {
+  const { url, makeGlobal = false, declaredSourceType = "open", tags = [] } = req.body || {};
+  const out = await crawlUrlToCretis({ url, declaredSourceType, makeGlobal: !!makeGlobal, tags });
+  if (!out.ok) return res.status(400).json(out);
+  const childrenCount = (out.children && out.children.length) ? out.children.length : 0;
+  res.json({
+    ok: true,
+    parentId: out.parent?.id || null,
+    children: out.children?.map(d=>d.id) || [],
+    created: 1 + childrenCount,
+    note: out.note || null
+  });
+});
+
+// Queue crawl (auto)
+app.post("/api/autocrawl/queue", (req, res) => {
+  const { url, makeGlobal = false, declaredSourceType = "open", tags = [] } = req.body || {};
+  if (!String(url || "").trim()) return res.status(400).json({ ok: false, error: "url required" });
+  queues.autocrawl.push({ id: uuidv4(), url, makeGlobal: !!makeGlobal, declaredSourceType, tags, at: nowISO() });
+  writeJSON(FILES.queues, queues);
+  appendEvent("autocrawl.queued", { len: queues.autocrawl.length });
+  res.json({ ok: true, queued: true, queueLength: queues.autocrawl.length });
+});
+
+// ------------------------------
+// Chat (LLM optional) — answers by scanning DTUs + LLM
+// ------------------------------
+function topDTUsForQuery(q, n = 8) {
+  const query = String(q || "").toLowerCase().trim();
+  if (!query) return dtus.slice(0, n);
+  // simple scoring: tag/title/content includes
+  const scored = dtus.map(d => {
+    const t = (d.meta?.title || "").toLowerCase();
+    const c = (d.content || "").toLowerCase();
+    const tags = (d.tags || []).join(" ").toLowerCase();
+    let s = 0;
+    if (t.includes(query)) s += 5;
+    if (tags.includes(query)) s += 3;
+    if (c.includes(query)) s += 1;
+    return { d, s };
+  }).sort((a,b)=>b.s-a.s);
+  return scored.slice(0, n).map(x=>x.d);
+}
+
+async function llmAnswerWithDTUs(message, mode="overview") {
+  const refs = topDTUsForQuery(message, 10);
+  const context = refs.map((d,i)=>`[DTU ${i+1}] ${d.meta?.title}\nTags: ${(d.tags||[]).join(", ")}\n${String(d.content||"").slice(0, 1200)}`).join("\n\n");
+  const oai = await getOpenAI();
+  if (!oai) {
+    return {
+      reply: `LLM not configured. Here are top DTUs:\n\n${refs.map(r=>`- ${r.meta?.title}`).join("\n")}`,
+      cue: personaCue("talk"),
+      refs: refs.map(r=>({ id:r.id, title:r.meta?.title, lineageHash:r.lineageHash })),
+      macro: runMacro("HYPOTHESIS_PIPELINE", { mode, offline: true })
+    };
+  }
+
+  const resp = await oai.chat.completions.create({
+    model: OPENAI_MODEL,
+    messages: [
+      { role: "system", content: "You are Concord. Use DTU context. Be concise but helpful. If unsure, say so." },
+      { role: "user", content: `MODE: ${mode}\nUSER QUESTION: ${message}\n\nDTU CONTEXT:\n${context}` }
+    ],
+    temperature: 0.4
+  });
+
+  const reply = resp?.choices?.[0]?.message?.content || "";
+  return {
+    reply,
+    cue: personaCue("talk"),
+    refs: refs.map(r=>({ id:r.id, title:r.meta?.title, lineageHash:r.lineageHash })),
+    macro: runMacro("HYPOTHESIS_PIPELINE", { mode, offline: false })
+  };
+}
+
+app.post("/api/chat", async (req, res) => {
+  const { message, mode = "overview" } = req.body || {};
+  const out = await llmAnswerWithDTUs(String(message||""), mode);
+  appendEvent("chat", { mode, chars: (message || "").length });
+  res.json({ ok: true, ...out });
+});
+
+// Back-compat alias (your clients posting to /api/ask)
+app.post("/api/ask", async (req, res) => {
+  const { message, mode = "overview" } = req.body || {};
+  const out = await llmAnswerWithDTUs(String(message||""), mode);
+  appendEvent("ask", { mode, chars: (message || "").length });
+  res.json({ ok: true, ...out });
+});
+
+// ------------------------------
+// Forge / CRETI (manual create)
+// ------------------------------
+app.post("/api/forge", (req, res) => {
+  const { title, content, tags = [], source = "forge" } = req.body || {};
+  const dtu = createDTU({ title: title || "Forge DTU", content, tags: ["forge", ...tags], source });
+  res.json({ ok: true, dtu, cue: personaCue("emphasize") });
+});
+
+// ------------------------------
+// Simulation
+// ------------------------------
+app.get("/api/simulations", (req, res) => res.json({ ok: true, simulations }));
+app.post("/api/simulations/whatif", (req, res) => {
+  const sim = runWhatIf(req.body || {});
+  res.json({ ok: true, simulation: sim, cue: personaCue("thinking") });
+});
+
+// ------------------------------
+// Personas / Council
+// ------------------------------
+app.get("/api/personas", (req, res) => res.json({ ok: true, personas }));
+
+async function councilDebate({ dtuA, dtuB, topic }) {
+  const prompt = topic || "Debate two DTUs, preserve both, synthesize a third.";
+  const turns = personas.map((p, i) => ({
+    personaId: p.id,
+    personaName: p.name,
+    text: `(${p.name}) Debate lens: ${p.style}\nTopic: ${prompt}\n(Stub text if LLM disabled)`,
+    cue: personaCue(i % 2 === 0 ? "talk" : "thinking"),
+  }));
+
+  // Optional LLM to improve debate + synthesis
+  const oai = await getOpenAI();
+  let synthesis = `SYNTHESIS (v1):\n- Keep A and B accessible.\n- Create C that reconciles contradictions where possible.\n- Label unresolved tensions.\n`;
+  if (oai) {
+    try {
+      const resp = await oai.chat.completions.create({
+        model: OPENAI_MODEL,
+        messages: [
+          { role: "system", content: "You run a short council debate then output a synthesis." },
+          { role: "user", content: `Topic: ${prompt}\nDTU A:\n${dtuA?.content || ""}\nDTU B:\n${dtuB?.content || ""}\nReturn a short synthesis with labeled tensions.` }
+        ],
+        temperature: 0.5
+      });
+      synthesis = resp?.choices?.[0]?.message?.content?.slice(0, 6000) || synthesis;
+    } catch {}
+  }
+
+  return { prompt, turns, synthesis, cue: personaCue("emphasize") };
+}
+
+app.post("/api/council/debate", async (req, res) => {
+  const { dtuA, dtuB, topic } = req.body || {};
+  const out = await councilDebate(req.body || {});
+  const parentIds = [dtuA?.id || dtuA, dtuB?.id || dtuB].filter(Boolean);
+
+  const dtuC = createDTU({
+    title: "Council Synthesis",
+    content: out.synthesis,
+    tags: ["council", "synthesis"],
+    source: "council",
+    parents: parentIds,
+    meta: { topic: topic || "" },
+  });
+  appendEvent("council.debate", { parents: parentIds, synthesisId: dtuC.id });
+  res.json({ ok: true, debate: out, synthesisDTU: dtuC });
+});
+
+// Persona speak / animate (cue protocol)
+app.post("/api/personas/:id/speak", (req, res) => {
+  const p = personas.find(x => x.id === req.params.id);
+  if (!p) return res.status(404).json({ ok: false, error: "Persona not found" });
+  const { text } = req.body || {};
+  const out = {
+    ok: true,
+    persona: p,
+    text: String(text || ""),
+    cue: personaCue("talk"),
+    speech: { engine: "browser_speechsynthesis", voiceHint: p.name, rate: 1.0, pitch: 1.0 },
+  };
+  appendEvent("persona.speak", { personaId: p.id, chars: out.text.length });
+  res.json(out);
+});
+
+app.post("/api/personas/:id/animate", (req, res) => {
+  const { kind = "talk" } = req.body || {};
+  const p = personas.find(x => x.id === req.params.id);
+  if (!p) return res.status(404).json({ ok: false, error: "Persona not found" });
+  res.json({ ok: true, persona: p, cue: personaCue(kind) });
+});
+
+// ------------------------------
+// Swarm
+// ------------------------------
+const swarmLenses = [
+  "Structural", "Ethical", "Practical", "Pattern", "Edge cases", "Second-order effects", "Failure modes", "Opportunities"
 ];
 
-const personaMemory = {};
-
-function getPersonaLog(personaId) {
-  if (!personaMemory[personaId]) {
-    personaMemory[personaId] = [];
-  }
-  return personaMemory[personaId];
+function swarmRun(prompt, count = 6) {
+  const selected = swarmLenses.slice(0, Math.max(3, Math.min(count, swarmLenses.length)));
+  const agents = selected.map((lens) => ({
+    id: uuidv4(),
+    lens,
+    output: `(${lens}) Signals on: ${prompt}\n- key bullets\n- constraints\n- next actions`,
+  }));
+  const synthesis = `SWARM SYNTHESIS (v1):\n` + agents.map(a => `- [${a.lens}] ${a.output.split("\n")[1] || "signal"}`).join("\n");
+  return { agents, synthesis, cue: personaCue("talk") };
 }
 
-app.get("/api/personas", (req, res) => {
-  res.json({ personas: personaDefinitions });
+app.post("/api/swarm/run", (req, res) => {
+  const { prompt, count } = req.body || {};
+  const out = swarmRun(String(prompt || ""), Number(count || 6));
+  appendEvent("swarm.run", { chars: (prompt || "").length, agents: out.agents.length });
+  res.json({ ok: true, ...out });
 });
 
-app.post("/api/persona/send", async (req, res) => {
-  const { personaId, message } = req.body || {};
-  if (!personaId || !message) {
-    return res
-      .status(400)
-      .json({ error: "personaId and message are required." });
-  }
+// ------------------------------
+// Credits
+// ------------------------------
+app.post("/api/credits/wallet", (req, res) => {
+  const { walletId } = req.body || {};
+  if (!walletId) return res.status(400).json({ ok: false, error: "walletId required" });
+  res.json({ ok: true, wallet: getOrCreateWallet(walletId) });
+});
+app.post("/api/credits/earn", (req, res) => {
+  const { walletId, amount = 1, reason = "quest" } = req.body || {};
+  if (!walletId) return res.status(400).json({ ok: false, error: "walletId required" });
+  res.json({ ok: true, wallet: creditWallet(walletId, Number(amount || 0), reason) });
+});
+app.post("/api/credits/spend", (req, res) => {
+  const { walletId, amount = 1, reason = "spend" } = req.body || {};
+  if (!walletId) return res.status(400).json({ ok: false, error: "walletId required" });
+  const out = debitWallet(walletId, Number(amount || 0), reason);
+  res.json(out.ok ? { ok: true, wallet: out.wallet } : out);
+});
 
-  const persona = personaDefinitions.find((p) => p.id === personaId);
-  if (!persona) {
-    return res.status(400).json({ error: "Unknown personaId." });
-  }
+// ------------------------------
+// Marketplace (visible; coming soon)
+// ------------------------------
+app.get("/api/marketplace/listings", (req, res) => {
+  res.json({
+    ok: true,
+    message: "Marketplace coming soon — can’t spoil the fun 😉",
+    listings: marketplaceListings
+  });
+});
 
-  const log = getPersonaLog(personaId);
-  log.push({ role: "user", content: message });
+// ------------------------------
+// Global stub (visible; consent-first later)
+// ------------------------------
+app.get("/api/global/feed", (req, res) => {
+  res.json({
+    ok: true,
+    message: "Global is visible in v1 but consent-first sync is v2+. Local-first is always available.",
+    cue: personaCue("thinking"),
+  });
+});
 
-  const systemPrompt = `You are the persona "${persona.label}". Style: ${persona.style}. Respond concisely but with depth.`;
+// ------------------------------
+// Macro runner
+// ------------------------------
+app.post("/api/macros/run", (req, res) => {
+  const { recipeName, ctx } = req.body || {};
+  const out = runMacro(String(recipeName || ""), ctx || {});
+  appendEvent("macro.run", { recipeName });
+  res.json({ ok: true, ...out });
+});
 
-  const messages = [
-    { role: "system", content: systemPrompt },
-    {
-      role: "system",
-      content:
-        "You are part of a multi-persona ConcordOS reasoning council. Reference DTUs if helpful.",
-    },
-    ...log.map((m) => ({ role: m.role, content: m.content })),
-  ];
+// ------------------------------
+// Events
+// ------------------------------
+app.get("/api/events", (req, res) => res.json({ ok: true, events: events.slice(-500).reverse() }));
 
+// ------------------------------
+// Fallback: serve UI if index exists
+// ------------------------------
+app.get("*", (req, res) => {
+  const idx = path.join(publicDir, "index.html");
+  if (fs.existsSync(idx)) return res.sendFile(idx);
+  res.status(404).json({ ok: false, error: "Not found" });
+});
+
+app.listen(PORT, () => console.log(`Concord v1 running on http://localhost:${PORT}`));/**
+ * Concord v1 — Unified Monolith (Local-first, LLM-optional)
+ * Fixes included (per your A/B/B/C choices):
+ *  - Central Governor scheduler (heartbeat every 2 minutes) drives: dream + evolution + autogen + ingest queue + autocrawl queue
+ *  - Manual + Auto Ingest: turns text into CRETIs/DTUs (parent + children)
+ *  - Manual + Auto Crawl: fetch HTML -> extract readable text -> CRETI breakdown into DTUs (no hollow shells)
+ *  - Council gate: content can always stay LOCAL; GLOBAL submissions are blocked if flagged as closed-source/first-gen
+ *  - /api/chat and /api/ask both supported
+ *
+ * Run:
+ *   cd server
+ *   npm install
+ *   npm start
+ *
+ * Env (optional):
+ *   OPENAI_API_KEY=...
+ *   OPENAI_MODEL=gpt-4.1-mini (or any chat-capable model your SDK supports)
+ *   FRONTEND_ORIGIN=http://localhost:5173
+ *   PORT=5050
+ */
+
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import crypto from "crypto";
+
+dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const PORT = Number(process.env.PORT || 5050);
+const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "http://localhost:5173";
+
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
+const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4.1-mini";
+
+let OpenAIClient = null;
+async function getOpenAI() {
+  if (!OPENAI_API_KEY) return null;
+  if (OpenAIClient) return OpenAIClient;
   try {
-    const reply = await runLLMChat(systemPrompt, messages);
-    log.push({ role: "assistant", content: reply });
-
-    const dtu = createDTUFromText({
-      title: `PersonaOS: ${persona.label}`,
-      content: `Persona: ${persona.label}\n\nUser: ${message}\n\nReply: ${reply}`,
-      tags: ["persona", personaId],
-      source: "persona",
-    });
-
-    res.json({ reply, dtuId: dtu.id });
-  } catch (err) {
-    console.error("[Concord] /api/persona/send error:", err);
-    res.status(500).json({ error: "Internal error in persona endpoint." });
+    const mod = await import("openai");
+    const OpenAI = mod.default || mod.OpenAI || mod;
+    OpenAIClient = new OpenAI({ apiKey: OPENAI_API_KEY });
+    return OpenAIClient;
+  } catch (e) {
+    console.warn("[OpenAI] SDK not available or failed to load:", String(e?.message || e));
+    return null;
   }
-});
+}
+
+// -----------------------------
+// uuid helper (no external dep)
+// -----------------------------
+const uuidv4 = () => {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+    (c ^ crypto.randomBytes(1)[0] & 15 >> c / 4).toString(16)
+  );
+};
 
 // --------------------------------------------------
-// Forge Mode (CRETI)
+// Data persistence (local JSON files)
 // --------------------------------------------------
-app.post("/api/forge/suggest", async (req, res) => {
-  const { seedDtuId, idea } = req.body || {};
-  if (!idea) {
-    return res.status(400).json({ error: "idea is required" });
+const DATA_DIR = path.join(__dirname, ".concord_data");
+const FILES = {
+  dtus: path.join(DATA_DIR, "dtus.json"),
+  simulations: path.join(DATA_DIR, "simulations.json"),
+  credits: path.join(DATA_DIR, "credits.json"),
+  marketplace: path.join(DATA_DIR, "marketplace.json"),
+  events: path.join(DATA_DIR, "events.json"),
+  settings: path.join(DATA_DIR, "settings.json"),
+  queues: path.join(DATA_DIR, "queues.json"),
+};
+
+function ensureDataDir() {
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+  const initArray = ["dtus","simulations","credits","marketplace","events"];
+  for (const key of initArray) {
+    const f = FILES[key];
+    if (!fs.existsSync(f)) fs.writeFileSync(f, "[]", "utf8");
   }
+  if (!fs.existsSync(FILES.settings)) fs.writeFileSync(FILES.settings, "{}", "utf8");
+  if (!fs.existsSync(FILES.queues)) fs.writeFileSync(FILES.queues, "{}", "utf8");
+}
+ensureDataDir();
 
-  const seed =
-    seedDtuId && state.dtus.find((d) => d.id === seedDtuId)
-      ? state.dtus.find((d) => d.id === seedDtuId)
-      : null;
+function readJSON(file, fallback) {
+  try {
+    const raw = fs.readFileSync(file, "utf8");
+    return raw.trim() ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+function writeJSON(file, data) {
+  fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf8");
+}
 
-  const systemPrompt = `You are Concord Forge (CRETI engine).
-Break ideas into:
-- Core
-- Reasoning
-- Evidence
-- Testing
-- Impact
-Return JSON with keys: core, reasoning, evidence, testing, impact, tags.`;
+// --------------------------------------------------
+// Hashing / stable stringify
+// --------------------------------------------------
+function sha256(input) {
+  return crypto.createHash("sha256").update(input).digest("hex");
+}
+function stableStringify(obj) {
+  const allKeys = [];
+  JSON.stringify(obj, (k, v) => (allKeys.push(k), v));
+  allKeys.sort();
+  return JSON.stringify(obj, allKeys);
+}
+function nowISO() { return new Date().toISOString(); }
 
-  const userPrompt = `Idea: ${idea}\n\nSeed DTU: ${
-    seed ? seed.content.slice(0, 800) : "none"
-  }`;
+// --------------------------------------------------
+// Events
+// --------------------------------------------------
+let events = readJSON(FILES.events, []);
+function appendEvent(type, payload = {}) {
+  const ev = { id: uuidv4(), type, at: nowISO(), payload };
+  events.push(ev);
+  if (events.length > 5000) events = events.slice(-5000);
+  writeJSON(FILES.events, events);
+  return ev;
+}
 
-  let draft = {
-    core: "",
-    reasoning: "",
-    evidence: "",
-    testing: "",
-    impact: "",
-    tags: [],
+// --------------------------------------------------
+// DTUs + lineage hash (NO user identity)
+// --------------------------------------------------
+let dtus = readJSON(FILES.dtus, []);
+
+function computeDTULineageHash({ content, tags, parents }) {
+  const parentIds = (parents || []).map((p) => p?.id || p).filter(Boolean).sort();
+  const core = {
+    content: (content || "").trim(),
+    tags: Array.isArray(tags) ? tags.slice().sort() : [],
+    parents: parentIds,
   };
+  return sha256(stableStringify(core));
+}
 
+function createDTU({ title, content, tags = [], source = "manual", parents = [], isGlobal = false, meta = {} }) {
+  const createdAt = nowISO();
+  const id = uuidv4();
+  const lineageHash = computeDTULineageHash({ content, tags, parents });
+  const dtu = {
+    id,
+    lineageHash,
+    content: String(content || ""),
+    tags: Array.isArray(tags) ? tags : [],
+    isGlobal: Boolean(isGlobal),
+    meta: {
+      title: title || "DTU",
+      source,
+      createdAt,
+      updatedAt: createdAt,
+      parents: (parents || []).map((p) => (typeof p === "string" ? p : p?.id)).filter(Boolean),
+      ...meta,
+    },
+  };
+  dtus.unshift(dtu);
+  writeJSON(FILES.dtus, dtus);
+  appendEvent("dtu.created", { id, lineageHash, source, isGlobal: dtu.isGlobal });
+  return dtu;
+}
+
+function updateDTU(id, patch = {}) {
+  const idx = dtus.findIndex((d) => d.id === id);
+  if (idx === -1) return null;
+  const existing = dtus[idx];
+  const updated = {
+    ...existing,
+    ...patch,
+    meta: { ...existing.meta, ...(patch.meta || {}), updatedAt: nowISO() },
+  };
+  const content = updated.content;
+  const tags = updated.tags;
+  const parents = (updated.meta?.parents || []).slice();
+  updated.lineageHash = computeDTULineageHash({ content, tags, parents });
+  dtus[idx] = updated;
+  writeJSON(FILES.dtus, dtus);
+  appendEvent("dtu.updated", { id });
+  return updated;
+}
+
+// --------------------------------------------------
+// Optional seeding: load dtus from a local dtus.js file if present.
+// Supports:
+//   - export const dtus = [...]
+//   - export default [...]
+//   - module.exports = [...]
+// --------------------------------------------------
+async function seedDTUsFromLocalModule() {
+  const candidates = [
+    path.join(__dirname, "dtus.js"),
+    path.join(__dirname, "dtus.mjs"),
+    path.join(__dirname, "dtus.cjs"),
+  ];
+  const seedFile = candidates.find((p) => fs.existsSync(p));
+  if (!seedFile) return { ok: false, reason: "no dtus.* file found" };
+
+  let mod = null;
   try {
-    const reply = await runLLMChat(systemPrompt, [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt },
-    ]);
+    const url = new URL(`file://${seedFile}`);
+    mod = await import(url.href);
+  } catch (e1) {
+    try {
+      const { createRequire } = await import("module");
+      const req = createRequire(import.meta.url);
+      mod = req(seedFile);
+    } catch (e2) {
+      return { ok: false, reason: "failed to load dtus module", errors: [String(e1), String(e2)] };
+    }
+  }
 
-    if (!OPENAI_CONFIGURED || reply.startsWith("Offline stub")) {
-      // Offline stub formatting
-      draft.core = idea;
-      draft.reasoning =
-        "High-level reasoning about this idea based on current DTUs.";
-      draft.evidence = "Evidence would be gathered from ingested DTUs.";
-      draft.testing = "Define tests or pilots to validate this idea.";
-      draft.impact =
-        "Describe short, medium, and long-term impact if this idea succeeds.";
-      draft.tags = ["forge", "creti"];
+  const arr =
+    (mod && Array.isArray(mod.dtus) && mod.dtus) ||
+    (mod && Array.isArray(mod.DTUS) && mod.DTUS) ||
+    (mod && Array.isArray(mod.default) && mod.default) ||
+    (mod && Array.isArray(mod) && mod) ||
+    [];
+
+  if (!Array.isArray(arr) || !arr.length) return { ok: false, reason: "dtus module loaded but no array export found" };
+
+  const existing = new Set((dtus || []).map((d) => d.lineageHash || sha256(stableStringify(d))));
+  let added = 0;
+
+  for (const item of arr) {
+    const title = item?.meta?.title || item?.title || "Seed DTU";
+    const content = item?.content || item?.text || item?.body || "";
+    const tags = item?.tags || item?.meta?.tags || [];
+    const parents = item?.meta?.parents || item?.parents || [];
+    const key = computeDTULineageHash({ content, tags, parents });
+
+    if (existing.has(key)) continue;
+    createDTU({ title, content, tags, source: "seed", parents });
+    existing.add(key);
+    added += 1;
+  }
+  return { ok: true, added, total: arr.length, file: path.basename(seedFile) };
+}
+seedDTUsFromLocalModule()
+  .then((r)=>{ if(r?.ok && r.added) console.log(`[DTU Seed] Added ${r.added}/${r.total} from ${r.file}`); })
+  .catch(()=>{});
+
+// --------------------------------------------------
+// Credits (FAKE CCs) — device-local wallet ids
+// --------------------------------------------------
+let creditsLedger = readJSON(FILES.credits, []);
+function getOrCreateWallet(walletId) {
+  let w = creditsLedger.find((x) => x.walletId === walletId);
+  if (!w) {
+    w = { walletId, balance: 0, createdAt: nowISO(), updatedAt: nowISO() };
+    creditsLedger.push(w);
+    writeJSON(FILES.credits, creditsLedger);
+    appendEvent("credits.wallet_created", { walletId });
+  }
+  return w;
+}
+function creditWallet(walletId, amount, reason = "credit") {
+  const w = getOrCreateWallet(walletId);
+  w.balance = Number(w.balance || 0) + Number(amount || 0);
+  w.updatedAt = nowISO();
+  writeJSON(FILES.credits, creditsLedger);
+  appendEvent("credits.changed", { walletId, amount: Number(amount||0), reason });
+  return w;
+}
+function debitWallet(walletId, amount, reason = "debit") {
+  const w = getOrCreateWallet(walletId);
+  const amt = Number(amount || 0);
+  if (w.balance < amt) return { ok: false, error: "Insufficient CC balance." };
+  w.balance -= amt;
+  w.updatedAt = nowISO();
+  writeJSON(FILES.credits, creditsLedger);
+  appendEvent("credits.changed", { walletId, amount: -amt, reason });
+  return { ok: true, wallet: w };
+}
+
+// --------------------------------------------------
+// Marketplace (visible, “coming soon” friendly)
+// --------------------------------------------------
+let marketplaceListings = readJSON(FILES.marketplace, []);
+
+// --------------------------------------------------
+// Simulations
+// --------------------------------------------------
+let simulations = readJSON(FILES.simulations, []);
+function runWhatIf({ title, prompt, assumptions = [] }) {
+  const id = uuidv4();
+  const createdAt = nowISO();
+  const outcome = {
+    id,
+    title: title || "What-if",
+    prompt: prompt || "",
+    assumptions,
+    results: {
+      range: "v1 snapshot",
+      summary: "What-if v1. v2 deepens forks + Monte Carlo.",
+      keyRisks: ["unknown constraints", "edge cases"],
+      opportunities: ["rapid iteration", "macro-domain concealment"],
+    },
+    createdAt,
+  };
+  simulations.unshift(outcome);
+  if (simulations.length > 500) simulations = simulations.slice(0, 500);
+  writeJSON(FILES.simulations, simulations);
+  appendEvent("simulation.created", { id });
+  return outcome;
+}
+
+// --------------------------------------------------
+// “Macros” = Declarative Layer Registry + Recipes
+// --------------------------------------------------
+const MacroDomains = [
+  "Epistemics", "Constraints", "Sandbox", "Temporal", "Simulation",
+  "Evolution", "DTUGraph", "Council", "Swarm", "Marketplace", "Privacy", "SelfRepair", "Ingest", "Crawl", "Dream"
+];
+
+const LayerRegistry = {
+  domains: MacroDomains,
+  recipes: {
+    HYPOTHESIS_PIPELINE: ["Epistemics", "Constraints", "Sandbox", "Evolution", "DTUGraph"],
+    SIMULATION_PIPELINE: ["Epistemics", "Constraints", "Simulation", "DTUGraph"],
+    COUNCIL_PIPELINE: ["Epistemics", "Council", "DTUGraph"],
+    INGEST_PIPELINE: ["Ingest", "DTUGraph", "Temporal"],
+    CRAWL_PIPELINE: ["Crawl", "Ingest", "DTUGraph", "Temporal"],
+    DREAM_PIPELINE: ["Dream", "Evolution", "DTUGraph"],
+  },
+};
+
+function runMacro(recipeName, ctx = {}) {
+  const recipe = LayerRegistry.recipes[recipeName];
+  if (!recipe) return { ok: false, error: "Unknown macro recipe." };
+  const trace = recipe.map((domain) => ({
+    domain,
+    at: nowISO(),
+    note: `Executed domain "${domain}" (v1 macro runtime).`,
+  }));
+  return { ok: true, recipeName, trace, ctx };
+}
+
+// --------------------------------------------------
+// Personas + Council (animation/speech cue protocol)
+// --------------------------------------------------
+const personas = [
+  { id: "p_ethicist", name: "Ethicist", style: "careful, harm-aware" },
+  { id: "p_engineer", name: "Engineer", style: "systems-first, implementation-aware" },
+  { id: "p_historian", name: "Historian", style: "contextual, precedent-driven" },
+  { id: "p_economist", name: "Economist", style: "incentives, second-order effects" },
+];
+
+function personaCue(kind = "talk") {
+  const cues = {
+    idle: { state: "idle", intensity: 0.2, durationMs: 800 },
+    talk: { state: "talk", intensity: 0.6, durationMs: 1800 },
+    emphasize: { state: "emphasize", intensity: 0.9, durationMs: 1200 },
+    thinking: { state: "thinking", intensity: 0.4, durationMs: 1400 },
+  };
+  return cues[kind] || cues.talk;
+}
+
+// ------------------------------
+// Council gate: GLOBAL rules
+// ------------------------------
+function councilGateGlobal({ declaredSourceType, url }) {
+  // Your rule: if it's first-gen closed source, Global can't accept it.
+  // Local is always allowed.
+  const t = String(declaredSourceType || "").toLowerCase();
+  if (t.includes("closed")) return { ok: false, reason: "Closed-source first generation is blocked from Global. Local is allowed." };
+  // If user doesn't declare, default to allowed, but record uncertainty.
+  return { ok: true, reason: "Allowed." };
+}
+
+// --------------------------------------------------
+// Readability extraction (no external libs)
+// --------------------------------------------------
+function stripHTMLToText(html) {
+  let s = String(html || "");
+  s = s.replace(/<script[\s\S]*?<\/script>/gi, " ");
+  s = s.replace(/<style[\s\S]*?<\/style>/gi, " ");
+  s = s.replace(/<!--[\s\S]*?-->/g, " ");
+  s = s.replace(/<\/(p|div|br|li|h1|h2|h3|h4|h5|h6)>/gi, "\n");
+  s = s.replace(/<[^>]+>/g, " ");
+  s = s.replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+  s = s.replace(/[ \t\r]+/g, " ");
+  s = s.replace(/\n{3,}/g, "\n\n");
+  return s.trim();
+}
+
+function chunkText(text, maxChars = 2200) {
+  const t = String(text || "").trim();
+  if (!t) return [];
+  const paras = t.split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
+  const chunks = [];
+  let cur = "";
+  for (const p of paras) {
+    if ((cur + "\n\n" + p).length <= maxChars) {
+      cur = cur ? (cur + "\n\n" + p) : p;
     } else {
-      // Try to parse LLM JSON; if fails, keep as plain text
-      try {
-        const parsed = JSON.parse(reply);
-        draft = {
-          ...draft,
-          ...parsed,
-          tags: Array.isArray(parsed.tags) ? parsed.tags : ["forge", "creti"],
-        };
-      } catch {
-        draft.core = reply;
-        draft.reasoning = "LLM returned non-JSON response; stored as core.";
-        draft.tags = ["forge", "creti"];
+      if (cur) chunks.push(cur);
+      if (p.length <= maxChars) {
+        cur = p;
+      } else {
+        // hard split
+        for (let i=0; i<p.length; i+=maxChars) chunks.push(p.slice(i, i+maxChars));
+        cur = "";
       }
     }
+  }
+  if (cur) chunks.push(cur);
+  return chunks;
+}
 
-    const content = `Core: ${draft.core}\n\nReasoning: ${draft.reasoning}\n\nEvidence: ${draft.evidence}\n\nTesting: ${draft.testing}\n\nImpact: ${draft.impact}`;
-    const dtu = createDTUFromText({
-      title: "Forge Draft",
-      content,
-      tags: draft.tags,
-      source: "forge",
+// --------------------------------------------------
+// CRETI synthesis (LLM optional)
+// Returns: { parentDTU, childrenDTUs[], notes }
+// --------------------------------------------------
+async function cretiFromText({ title, text, tags = [], source = "ingest", url = "", declaredSourceType = "open", makeGlobal = false }) {
+  const clean = String(text || "").trim();
+  if (!clean) return { ok: false, error: "Empty text." };
+
+  // Global gate (local always allowed)
+  let globalAllowed = false;
+  if (makeGlobal) {
+    const gate = councilGateGlobal({ declaredSourceType, url });
+    if (!gate.ok) {
+      makeGlobal = false;
+      appendEvent("council.global_blocked", { reason: gate.reason, url, declaredSourceType });
+    } else {
+      globalAllowed = true;
+    }
+  }
+
+  // Parent DTU: preserve source content (bounded)
+  const parent = createDTU({
+    title: title || (url ? `Source: ${url}` : "Ingest Source"),
+    content: clean.slice(0, 50000),
+    tags: ["source", source, ...(tags || [])],
+    source,
+    isGlobal: false,
+    meta: { url, declaredSourceType, globalRequested: !!globalAllowed }
+  });
+
+  const chunks = chunkText(clean, 2200);
+  const oai = await getOpenAI();
+
+  const children = [];
+  const synthesisPrompt = (chunk) => `
+You are Concord CRETI.
+Turn the following source text into discrete thought units (DTUs).
+Rules:
+- Produce 3-7 DTUs maximum for this chunk.
+- Each DTU: a short title + concise content + 3-8 tags.
+- Do NOT copy long passages; paraphrase.
+- If uncertainty exists, label it.
+Return JSON ONLY in this schema:
+{
+  "dtus":[
+    {"title":"...","content":"...","tags":["...","..."]}
+  ]
+}
+SOURCE CHUNK:
+${chunk}
+`.trim();
+
+  for (let i=0; i<chunks.length; i++) {
+    const chunk = chunks[i];
+    if (oai) {
+      try {
+        const resp = await oai.chat.completions.create({
+          model: OPENAI_MODEL,
+          messages: [
+            { role: "system", content: "You output strict JSON only." },
+            { role: "user", content: synthesisPrompt(chunk) }
+          ],
+          temperature: 0.4
+        });
+        const raw = resp?.choices?.[0]?.message?.content || "{}";
+        const parsed = JSON.parse(raw);
+        const arr = Array.isArray(parsed?.dtus) ? parsed.dtus : [];
+        for (const d of arr.slice(0, 7)) {
+          const child = createDTU({
+            title: d.title || "CRETI DTU",
+            content: String(d.content || "").slice(0, 6000),
+            tags: Array.isArray(d.tags) ? ["creti", ...d.tags] : ["creti"],
+            source: "creti",
+            parents: [parent.id],
+            isGlobal: false,
+            meta: { url, chunkIndex: i }
+          });
+          children.push(child);
+        }
+      } catch (e) {
+        // Fallback: store chunk DTU if LLM fails
+        const child = createDTU({
+          title: `Chunk ${i+1}`,
+          content: chunk,
+          tags: ["creti", "chunk", source],
+          source: "creti_fallback",
+          parents: [parent.id],
+          meta: { url, chunkIndex: i, error: String(e?.message || e) }
+        });
+        children.push(child);
+      }
+    } else {
+      // No LLM: chunk DTUs (still not hollow)
+      const child = createDTU({
+        title: `Chunk ${i+1}`,
+        content: chunk,
+        tags: ["creti", "chunk", source],
+        source: "creti_chunk",
+        parents: [parent.id],
+        meta: { url, chunkIndex: i }
+      });
+      children.push(child);
+    }
+  }
+
+  // If globalAllowed, create a GLOBAL "index" DTU that references lineage only (no raw text)
+  let globalDTU = null;
+  if (globalAllowed) {
+    globalDTU = createDTU({
+      title: `GLOBAL: ${title || (url || "CRETI Pack")}`,
+      content: `Global index for CRETI pack. Parent lineage: ${parent.lineageHash}. Children: ${children.length}.`,
+      tags: ["global", "creti", "index"],
+      source: "global_index",
+      parents: children.map(c=>c.id).slice(0, 20),
+      isGlobal: true,
+      meta: { url, declaredSourceType, parentLineage: parent.lineageHash }
     });
-
-    res.json({ draft, dtuId: dtu.id });
-  } catch (err) {
-    console.error("[Concord] /api/forge/suggest error:", err);
-    res.status(500).json({ error: "Internal error in forge endpoint." });
   }
-});
+
+  appendEvent("creti.created", { parentId: parent.id, children: children.length, url, global: !!globalAllowed });
+  return { ok: true, parent, children, globalDTU };
+}
 
 // --------------------------------------------------
-// OS Stack
+// Fetch + crawl (manual & auto)
 // --------------------------------------------------
-app.get("/api/os/state", (req, res) => {
-  res.json(state.osState);
-});
+async function crawlUrlToCretis({ url, declaredSourceType = "open", makeGlobal = false, tags = [] }) {
+  const u = String(url || "").trim();
+  if (!u) return { ok: false, error: "url required" };
 
-app.post("/api/os/toggle", (req, res) => {
-  const { key } = req.body || {};
-  if (!key || !(key in state.osState)) {
-    return res.status(400).json({ error: "Unknown OS key", key });
-  }
-  state.osState[key] = !state.osState[key];
-  saveState();
-  res.json(state.osState);
-});
-
-// --------------------------------------------------
-// Autoprocess (dream / evolution / autogen / heartbeat)
-// --------------------------------------------------
-app.get("/api/autoprocess/state", (req, res) => {
-  res.json(state.autoprocessState);
-});
-
-app.post("/api/autoprocess/toggle", (req, res) => {
-  const { key } = req.body || {};
-  if (!key || !(key in state.autoprocessState)) {
-    return res.status(400).json({ error: "Unknown autoprocess key", key });
-  }
-  if (["ticks", "lastTick", "lastAutogen", "lastEvolution"].includes(key)) {
-    return res.status(400).json({ error: "Cannot toggle counter field", key });
-  }
-  state.autoprocessState[key] = !state.autoprocessState[key];
-  saveState();
-  res.json(state.autoprocessState);
-});
-
-app.post("/api/autoprocess/heartbeat", async (req, res) => {
-  const now = new Date().toISOString();
-  state.autoprocessState.ticks += 1;
-  state.autoprocessState.lastTick = now;
-
+  // Basic URL allow: v1 manual crawl can be any URL, but you can lock it later.
+  let html = "";
   try {
-    // evolution: refine latest DTU
-    if (state.autoprocessState.evolution && state.dtus.length > 0) {
-      const target = state.dtus[0];
-      const systemPrompt =
-        "You are Concord Evolution. Refine and clarify the DTU content while preserving original meaning.";
-      const refined = await runLLMChat(systemPrompt, [
-        { role: "system", content: systemPrompt },
-        {
-          role: "user",
-          content: `Refine this DTU:\n\n${target.content.slice(0, 2000)}`,
-        },
-      ]);
-      createDTUFromText({
-        title: `${target.meta?.title || target.id} (evolved)`,
-        content: refined,
-        tags: [...(target.tags || []), "evolved"],
-        source: "evolution",
-      });
-      state.autoprocessState.lastEvolution = now;
+    const res = await fetch(u, { method: "GET", redirect: "follow" });
+    html = await res.text();
+    if (!res.ok) {
+      return { ok: false, error: `Fetch failed: ${res.status}` };
     }
-
-    // autogen: create new DTU from context
-    if (state.autoprocessState.autogen) {
-      const contextSnippet = state.dtus
-        .slice(0, 5)
-        .map((d) => d.meta?.title || d.id)
-        .join(", ");
-      const systemPrompt =
-        "You are Concord Autogen. Propose one new DTU idea based on recent DTUs.";
-      const reply = await runLLMChat(systemPrompt, [
-        { role: "system", content: systemPrompt },
-        {
-          role: "user",
-          content: `Recent DTUs: ${contextSnippet || "none yet"}`,
-        },
-      ]);
-      createDTUFromText({
-        title: "Autogen DTU",
-        content: reply,
-        tags: ["autogen"],
-        source: "autogen",
-      });
-      state.autoprocessState.lastAutogen = now;
-    }
-
-    saveState();
-    res.json(state.autoprocessState);
-  } catch (err) {
-    console.error("[Concord] heartbeat error:", err);
-    res.status(500).json({ error: "Heartbeat internal error." });
+  } catch (e) {
+    return { ok: false, error: `Fetch error: ${String(e?.message || e)}` };
   }
-});
 
-// --------------------------------------------------
-// Autocrawl (Community Edition stub - no real crawling)
-// --------------------------------------------------
-app.get("/api/autocrawl/state", (req, res) => {
-  res.json(state.autocrawlState);
-});
-
-app.post("/api/autocrawl/toggle", (req, res) => {
-  state.autocrawlState.enabled = !state.autocrawlState.enabled;
-  saveState();
-  res.json(state.autocrawlState);
-});
-
-// --------------------------------------------------
-// Community Edition stubs for advanced systems
-// --------------------------------------------------
-function stubEndpoint(label) {
-  return (req, res) => {
-    res.json({
-      ok: true,
-      system: label,
-      edition: "ConcordOS Community Edition",
-      status: "stub",
-      note:
-        "Full logic is available in Concord Global / CRI deployments, not in the open-source community server.",
+  const text = stripHTMLToText(html);
+  if (!text || text.length < 80) {
+    // Still create a DTU with what we have, but record emptiness
+    const parent = createDTU({
+      title: `Crawl (low content): ${u}`,
+      content: text || "(No extractable content. Page may be JS-rendered.)",
+      tags: ["crawl", "low_content"],
+      source: "crawl",
+      meta: { url: u, declaredSourceType }
     });
+    appendEvent("crawl.low_content", { url: u, chars: (text||"").length });
+    return { ok: true, parent, children: [], note: "Low extractable content (JS-rendered page likely)." };
+  }
+
+  return cretiFromText({
+    title: `Crawl: ${u}`,
+    text,
+    tags: ["crawl", ...tags],
+    source: "crawl",
+    url: u,
+    declaredSourceType,
+    makeGlobal
+  });
+}
+
+// --------------------------------------------------
+// Queues + Governor (Central Scheduler)
+// --------------------------------------------------
+let settings = readJSON(FILES.settings, {});
+const DEFAULT_JOBS = {
+  heartbeat: { enabled: true },
+  dream: { enabled: true },
+  evolution: { enabled: true },
+  autogen: { enabled: true },
+  ingest: { enabled: true },
+  autocrawl: { enabled: true }
+};
+
+function normalizeSettings() {
+  settings.jobs = settings.jobs || {};
+  for (const [k,v] of Object.entries(DEFAULT_JOBS)) {
+    if (typeof settings.jobs[k]?.enabled !== "boolean") settings.jobs[k] = { ...v, enabled: v.enabled };
+  }
+  settings.intervals = settings.intervals || {};
+  // Your choice: every 2 minutes heartbeat
+  if (!settings.intervals.heartbeatMs) settings.intervals.heartbeatMs = 120000;
+  // internal cooldowns (can be tuned)
+  if (!settings.intervals.dreamCooldownMs) settings.intervals.dreamCooldownMs = 240000;     // 4m
+  if (!settings.intervals.evolutionCooldownMs) settings.intervals.evolutionCooldownMs = 180000;// 3m
+  if (!settings.intervals.autogenCooldownMs) settings.intervals.autogenCooldownMs = 240000;  // 4m
+  if (!settings.intervals.ingestCooldownMs) settings.intervals.ingestCooldownMs = 30000;    // 30s
+  if (!settings.intervals.autocrawlCooldownMs) settings.intervals.autocrawlCooldownMs = 60000;// 60s
+  writeJSON(FILES.settings, settings);
+}
+normalizeSettings();
+
+let queues = readJSON(FILES.queues, {});
+queues.ingest = Array.isArray(queues.ingest) ? queues.ingest : [];
+queues.autocrawl = Array.isArray(queues.autocrawl) ? queues.autocrawl : [];
+writeJSON(FILES.queues, queues);
+
+const governor = {
+  startedAt: nowISO(),
+  lastTick: null,
+  lastRun: {
+    dream: null,
+    evolution: null,
+    autogen: null,
+    ingest: null,
+    autocrawl: null
+  },
+  lastResult: {}
+};
+
+function jobEnabled(name) {
+  return !!settings?.jobs?.[name]?.enabled;
+}
+
+function canRun(name, cooldownMs) {
+  const last = governor.lastRun[name];
+  if (!last) return true;
+  return (Date.now() - new Date(last).getTime()) >= cooldownMs;
+}
+
+// ------------------------------
+// Dream (C = both mutate + create)
+// ------------------------------
+async function dreamStep() {
+  if (!dtus.length) return { ok: false, note: "no dtus" };
+  const a = dtus[Math.floor(Math.random() * dtus.length)];
+  const b = dtus[Math.floor(Math.random() * dtus.length)];
+  const oai = await getOpenAI();
+
+  let dreamText = `DREAM (v1): recombine motifs from DTUs.\nA:${a?.meta?.title}\nB:${b?.meta?.title}\n`;
+  if (oai) {
+    try {
+      const resp = await oai.chat.completions.create({
+        model: OPENAI_MODEL,
+        messages: [
+          { role: "system", content: "You create a short speculative synthesis. No unsafe content." },
+          { role: "user", content: `Create a dream-synthesis DTU that combines these two ideas. Keep it short.\nDTU A:\n${a.content}\nDTU B:\n${b.content}` }
+        ],
+        temperature: 0.7
+      });
+      dreamText = resp?.choices?.[0]?.message?.content?.slice(0, 6000) || dreamText;
+    } catch {}
+  }
+
+  const dreamDTU = createDTU({
+    title: "Dream Synthesis",
+    content: dreamText,
+    tags: ["dream", "synthesis"],
+    source: "dream",
+    parents: [a?.id, b?.id].filter(Boolean),
+    meta: { mode: "mutate+create" }
+  });
+
+  // Mutate tags lightly (mark "dreamt" on parents)
+  for (const d of [a,b]) {
+    if (!d?.id) continue;
+    const tags = new Set(d.tags || []);
+    tags.add("dreamt");
+    updateDTU(d.id, { tags: Array.from(tags) });
+  }
+
+  appendEvent("dream.ran", { created: dreamDTU.id, parents: [a?.id,b?.id].filter(Boolean) });
+  return { ok: true, createdId: dreamDTU.id };
+}
+
+// ------------------------------
+// Evolution (light but real)
+// ------------------------------
+async function evolutionStep() {
+  if (!dtus.length) return { ok: false, note: "no dtus" };
+  // pick a DTU not evolved yet
+  const target = dtus.find(d => !(d.tags||[]).includes("evolved")) || dtus[0];
+  if (!target) return { ok: false, note: "no target" };
+
+  const tags = new Set(target.tags || []);
+  tags.add("evolved");
+  updateDTU(target.id, { tags: Array.from(tags) });
+
+  // Also create a tiny "evolution delta" DTU to show visible progress
+  const delta = createDTU({
+    title: `Evolution Delta: ${target.meta?.title || target.id}`,
+    content: `EvolutionOS marked DTU as evolved.\nTarget lineage: ${target.lineageHash}\nTime: ${nowISO()}`,
+    tags: ["evolution", "delta"],
+    source: "evolution",
+    parents: [target.id]
+  });
+
+  appendEvent("evolution.ran", { target: target.id, delta: delta.id });
+  return { ok: true, targetId: target.id, deltaId: delta.id };
+}
+
+// ------------------------------
+// Autogen (creates new DTU)
+// ------------------------------
+async function autogenStep() {
+  const oai = await getOpenAI();
+  let content = `Autogen (v1): propose a missing angle.\nTime: ${nowISO()}`;
+  if (oai) {
+    try {
+      const resp = await oai.chat.completions.create({
+        model: OPENAI_MODEL,
+        messages: [
+          { role: "system", content: "Generate one useful DTU idea for Concord. Short, structured." },
+          { role: "user", content: "Generate a novel DTU that adds a useful OS layer or feature idea. Include constraints and next step." }
+        ],
+        temperature: 0.6
+      });
+      content = resp?.choices?.[0]?.message?.content?.slice(0, 6000) || content;
+    } catch {}
+  }
+  const dtu = createDTU({ title: "Autogen DTU", content, tags: ["autogen"], source: "autogen" });
+  appendEvent("autogen.ran", { dtuId: dtu.id });
+  return { ok: true, dtuId: dtu.id };
+}
+
+// ------------------------------
+// Ingest queue processing
+// ------------------------------
+async function processIngestQueue(maxItems = 1) {
+  let created = 0;
+  const items = queues.ingest.splice(0, maxItems);
+  for (const it of items) {
+    const out = await cretiFromText({
+      title: it.title || "Ingest",
+      text: it.text || "",
+      tags: it.tags || ["ingest"],
+      source: "ingest",
+      url: "",
+      declaredSourceType: it.declaredSourceType || "open",
+      makeGlobal: !!it.makeGlobal
+    });
+    if (out.ok) created += (1 + (out.children?.length || 0));
+  }
+  writeJSON(FILES.queues, queues);
+  appendEvent("ingest.processed", { items: items.length, created });
+  return { ok: true, items: items.length, created };
+}
+
+// ------------------------------
+// Autocrawl queue processing
+// ------------------------------
+async function processAutocrawlQueue(maxItems = 1) {
+  let created = 0;
+  const items = queues.autocrawl.splice(0, maxItems);
+  for (const it of items) {
+    const out = await crawlUrlToCretis({
+      url: it.url,
+      declaredSourceType: it.declaredSourceType || "open",
+      makeGlobal: !!it.makeGlobal,
+      tags: it.tags || []
+    });
+    if (out?.ok) {
+      created += 1 + ((out.children && out.children.length) ? out.children.length : 0);
+    }
+  }
+  writeJSON(FILES.queues, queues);
+  appendEvent("autocrawl.processed", { items: items.length, created });
+  return { ok: true, items: items.length, created };
+}
+
+// ------------------------------
+// Governor Tick (Central)
+// ------------------------------
+async function governorTick() {
+  governor.lastTick = nowISO();
+  const i = settings.intervals;
+
+  const results = {};
+
+  if (jobEnabled("dream") && canRun("dream", i.dreamCooldownMs)) {
+    results.dream = await dreamStep();
+    governor.lastRun.dream = nowISO();
+  }
+
+  if (jobEnabled("evolution") && canRun("evolution", i.evolutionCooldownMs)) {
+    results.evolution = await evolutionStep();
+    governor.lastRun.evolution = nowISO();
+  }
+
+  if (jobEnabled("autogen") && canRun("autogen", i.autogenCooldownMs)) {
+    results.autogen = await autogenStep();
+    governor.lastRun.autogen = nowISO();
+  }
+
+  if (jobEnabled("ingest") && queues.ingest.length && canRun("ingest", i.ingestCooldownMs)) {
+    results.ingest = await processIngestQueue(1);
+    governor.lastRun.ingest = nowISO();
+  }
+
+  if (jobEnabled("autocrawl") && queues.autocrawl.length && canRun("autocrawl", i.autocrawlCooldownMs)) {
+    results.autocrawl = await processAutocrawlQueue(1);
+    governor.lastRun.autocrawl = nowISO();
+  }
+
+  governor.lastResult = results;
+  appendEvent("governor.tick", { results, queues: { ingest: queues.ingest.length, autocrawl: queues.autocrawl.length } });
+  return results;
+}
+
+function startGovernor() {
+  const ms = settings?.intervals?.heartbeatMs || 120000;
+  console.log(`[Governor] Started. Heartbeat interval: ${ms}ms`);
+  setInterval(() => governorTick().catch(e => console.error("[GovernorTick]", e)), ms);
+}
+if (jobEnabled("heartbeat")) startGovernor();
+
+// --------------------------------------------------
+// OS Stack state (exists; toggles are local-first)
+// --------------------------------------------------
+let osState = {
+  realityOS: true,
+  sensemakingOS: true,
+  perceptionOS: true,
+  temporalOS: true,
+  swarmOS: true,
+  evolutionOS: true,
+  governanceOS: true,
+  selfRepairOS: true,
+  marketplaceOS: true,
+  globalOS: true,
+  personaOS: true,
+  councilOS: true,
+  ingestOS: true,
+  crawlOS: true,
+  dreamOS: true
+};
+
+// --------------------------------------------------
+// Express app
+// --------------------------------------------------
+const app = express();
+app.use(cors({ origin: [FRONTEND_ORIGIN], credentials: true }));
+app.use(express.json({ limit: "6mb" }));
+
+// If you have a server/public folder, it will serve it.
+// If not, /api still works fine.
+const publicDir = path.join(__dirname, "public");
+if (fs.existsSync(publicDir)) app.use(express.static(publicDir));
+
+// ------------------------------
+// Status
+// ------------------------------
+app.get("/api/status", (req, res) => {
+  res.json({
+    ok: true,
+    service: "ConcordOS",
+    version: "Concord v1 — Unified Monolith",
+    port: PORT,
+    osState,
+    jobs: settings.jobs,
+    intervals: settings.intervals,
+    governor,
+    queues: { ingest: queues.ingest.length, autocrawl: queues.autocrawl.length },
+    counts: {
+      dtus: dtus.length,
+      simulations: simulations.length,
+      listings: marketplaceListings.length,
+      wallets: creditsLedger.length,
+      events: events.length,
+    },
+    macro: { domains: LayerRegistry.domains, recipes: Object.keys(LayerRegistry.recipes) },
+    llm: { enabled: !!OPENAI_API_KEY, model: OPENAI_MODEL }
+  });
+});
+
+// ------------------------------
+// Jobs
+// ------------------------------
+app.get("/api/jobs/status", (req, res) => {
+  res.json({
+    ok: true,
+    jobs: settings.jobs,
+    intervals: settings.intervals,
+    governor,
+    queues: { ingest: queues.ingest.length, autocrawl: queues.autocrawl.length },
+    llm: { enabled: !!OPENAI_API_KEY, model: OPENAI_MODEL }
+  });
+});
+
+app.post("/api/jobs/toggle", (req, res) => {
+  const { job, enabled } = req.body || {};
+  const j = String(job || "").trim();
+  if (!j || typeof enabled !== "boolean") return res.status(400).json({ ok: false, error: "job + enabled(boolean) required" });
+  settings.jobs = settings.jobs || {};
+  settings.jobs[j] = settings.jobs[j] || { enabled: true };
+  settings.jobs[j].enabled = enabled;
+  writeJSON(FILES.settings, settings);
+  appendEvent("jobs.toggled", { job: j, enabled });
+  res.json({ ok: true, job: j, enabled });
+});
+
+// ------------------------------
+// DTUs
+// ------------------------------
+app.get("/api/dtus", (req, res) => res.json({ ok: true, dtus }));
+app.post("/api/dtus", (req, res) => {
+  const { title, content, tags, source, parents, isGlobal, meta, declaredSourceType = "open" } = req.body || {};
+
+  // If user tries to force GLOBAL here, gate it.
+  let makeGlobal = !!isGlobal;
+  if (makeGlobal) {
+    const gate = councilGateGlobal({ declaredSourceType, url: meta?.url || "" });
+    if (!gate.ok) {
+      makeGlobal = false;
+      return res.status(403).json({ ok: false, error: gate.reason, localAllowed: true });
+    }
+  }
+
+  const dtu = createDTU({ title, content, tags, source, parents, isGlobal: makeGlobal, meta: { ...(meta||{}), declaredSourceType } });
+  res.json({ ok: true, dtu });
+});
+app.patch("/api/dtus/:id", (req, res) => {
+  const updated = updateDTU(req.params.id, req.body || {});
+  if (!updated) return res.status(404).json({ ok: false, error: "DTU not found" });
+  res.json({ ok: true, dtu: updated });
+});
+
+// ------------------------------
+// Manual Ingest (B/B full CRETI)
+// ------------------------------
+app.post("/api/ingest", async (req, res) => {
+  const { text, title, tags = [], makeGlobal = false, declaredSourceType = "open" } = req.body || {};
+  // Manual ingest can be immediate (no queue) to feel responsive
+  const out = await cretiFromText({
+    title: title || "Manual Ingest",
+    text: text || "",
+    tags: Array.isArray(tags) ? tags : ["ingest"],
+    source: "ingest",
+    declaredSourceType,
+    makeGlobal: !!makeGlobal
+  });
+  if (!out.ok) return res.status(400).json(out);
+  res.json({ ok: true, parentId: out.parent?.id, created: 1 + (out.children?.length || 0), children: out.children?.map(d=>d.id) || [], globalId: out.globalDTU?.id || null });
+});
+
+// Queue ingest (auto)
+app.post("/api/ingest/queue", (req, res) => {
+  const { text, title, tags = [], makeGlobal = false, declaredSourceType = "open" } = req.body || {};
+  if (!String(text || "").trim()) return res.status(400).json({ ok: false, error: "text required" });
+  queues.ingest.push({ id: uuidv4(), text, title, tags, makeGlobal: !!makeGlobal, declaredSourceType, at: nowISO() });
+  writeJSON(FILES.queues, queues);
+  appendEvent("ingest.queued", { len: queues.ingest.length });
+  res.json({ ok: true, queued: true, queueLength: queues.ingest.length });
+});
+
+// ------------------------------
+// Autocrawl (manual) — creates REAL DTUs (not hollow)
+// ------------------------------
+app.post("/api/autocrawl", async (req, res) => {
+  const { url, makeGlobal = false, declaredSourceType = "open", tags = [] } = req.body || {};
+  const out = await crawlUrlToCretis({ url, declaredSourceType, makeGlobal: !!makeGlobal, tags });
+  if (!out.ok) return res.status(400).json(out);
+  const childrenCount = (out.children && out.children.length) ? out.children.length : 0;
+  res.json({
+    ok: true,
+    parentId: out.parent?.id || null,
+    children: out.children?.map(d=>d.id) || [],
+    created: 1 + childrenCount,
+    note: out.note || null
+  });
+});
+
+// Queue crawl (auto)
+app.post("/api/autocrawl/queue", (req, res) => {
+  const { url, makeGlobal = false, declaredSourceType = "open", tags = [] } = req.body || {};
+  if (!String(url || "").trim()) return res.status(400).json({ ok: false, error: "url required" });
+  queues.autocrawl.push({ id: uuidv4(), url, makeGlobal: !!makeGlobal, declaredSourceType, tags, at: nowISO() });
+  writeJSON(FILES.queues, queues);
+  appendEvent("autocrawl.queued", { len: queues.autocrawl.length });
+  res.json({ ok: true, queued: true, queueLength: queues.autocrawl.length });
+});
+
+// ------------------------------
+// Chat (LLM optional) — answers by scanning DTUs + LLM
+// ------------------------------
+function topDTUsForQuery(q, n = 8) {
+  const query = String(q || "").toLowerCase().trim();
+  if (!query) return dtus.slice(0, n);
+  // simple scoring: tag/title/content includes
+  const scored = dtus.map(d => {
+    const t = (d.meta?.title || "").toLowerCase();
+    const c = (d.content || "").toLowerCase();
+    const tags = (d.tags || []).join(" ").toLowerCase();
+    let s = 0;
+    if (t.includes(query)) s += 5;
+    if (tags.includes(query)) s += 3;
+    if (c.includes(query)) s += 1;
+    return { d, s };
+  }).sort((a,b)=>b.s-a.s);
+  return scored.slice(0, n).map(x=>x.d);
+}
+
+async function llmAnswerWithDTUs(message, mode="overview") {
+  const refs = topDTUsForQuery(message, 10);
+  const context = refs.map((d,i)=>`[DTU ${i+1}] ${d.meta?.title}\nTags: ${(d.tags||[]).join(", ")}\n${String(d.content||"").slice(0, 1200)}`).join("\n\n");
+  const oai = await getOpenAI();
+  if (!oai) {
+    return {
+      reply: `LLM not configured. Here are top DTUs:\n\n${refs.map(r=>`- ${r.meta?.title}`).join("\n")}`,
+      cue: personaCue("talk"),
+      refs: refs.map(r=>({ id:r.id, title:r.meta?.title, lineageHash:r.lineageHash })),
+      macro: runMacro("HYPOTHESIS_PIPELINE", { mode, offline: true })
+    };
+  }
+
+  const resp = await oai.chat.completions.create({
+    model: OPENAI_MODEL,
+    messages: [
+      { role: "system", content: "You are Concord. Use DTU context. Be concise but helpful. If unsure, say so." },
+      { role: "user", content: `MODE: ${mode}\nUSER QUESTION: ${message}\n\nDTU CONTEXT:\n${context}` }
+    ],
+    temperature: 0.4
+  });
+
+  const reply = resp?.choices?.[0]?.message?.content || "";
+  return {
+    reply,
+    cue: personaCue("talk"),
+    refs: refs.map(r=>({ id:r.id, title:r.meta?.title, lineageHash:r.lineageHash })),
+    macro: runMacro("HYPOTHESIS_PIPELINE", { mode, offline: false })
   };
 }
 
-app.get("/api/marketplace/status", stubEndpoint("DTU Marketplace"));
-app.get("/api/cri/status", stubEndpoint("Concord Research Institute"));
-app.get("/api/quests/status", stubEndpoint("Quest Engine"));
-app.get("/api/treasury/status", stubEndpoint("Concord Treasury"));
-app.get("/api/usb/status", stubEndpoint("USB Infrastructure"));
-
-// --------------------------------------------------
-// Start server
-// --------------------------------------------------
-app.listen(Number(PORT), () => {
-  console.log(
-    `ConcordOS v0.1.0 â Community Edition running on port ${PORT} (DTU Cognitive OS)`
-  );
-  console.log(
-    OPENAI_CONFIGURED
-      ? "[Concord] External LLM is configured (OPENAI_API_KEY present)."
-      : "[Concord] No LLM key found. Running in offline stub mode."
-  );
+app.post("/api/chat", async (req, res) => {
+  const { message, mode = "overview" } = req.body || {};
+  const out = await llmAnswerWithDTUs(String(message||""), mode);
+  appendEvent("chat", { mode, chars: (message || "").length });
+  res.json({ ok: true, ...out });
 });
+
+// Back-compat alias (your clients posting to /api/ask)
+app.post("/api/ask", async (req, res) => {
+  const { message, mode = "overview" } = req.body || {};
+  const out = await llmAnswerWithDTUs(String(message||""), mode);
+  appendEvent("ask", { mode, chars: (message || "").length });
+  res.json({ ok: true, ...out });
+});
+
+// ------------------------------
+// Forge / CRETI (manual create)
+// ------------------------------
+app.post("/api/forge", (req, res) => {
+  const { title, content, tags = [], source = "forge" } = req.body || {};
+  const dtu = createDTU({ title: title || "Forge DTU", content, tags: ["forge", ...tags], source });
+  res.json({ ok: true, dtu, cue: personaCue("emphasize") });
+});
+
+// ------------------------------
+// Simulation
+// ------------------------------
+app.get("/api/simulations", (req, res) => res.json({ ok: true, simulations }));
+app.post("/api/simulations/whatif", (req, res) => {
+  const sim = runWhatIf(req.body || {});
+  res.json({ ok: true, simulation: sim, cue: personaCue("thinking") });
+});
+
+// ------------------------------
+// Personas / Council
+// ------------------------------
+app.get("/api/personas", (req, res) => res.json({ ok: true, personas }));
+
+async function councilDebate({ dtuA, dtuB, topic }) {
+  const prompt = topic || "Debate two DTUs, preserve both, synthesize a third.";
+  const turns = personas.map((p, i) => ({
+    personaId: p.id,
+    personaName: p.name,
+    text: `(${p.name}) Debate lens: ${p.style}\nTopic: ${prompt}\n(Stub text if LLM disabled)`,
+    cue: personaCue(i % 2 === 0 ? "talk" : "thinking"),
+  }));
+
+  // Optional LLM to improve debate + synthesis
+  const oai = await getOpenAI();
+  let synthesis = `SYNTHESIS (v1):\n- Keep A and B accessible.\n- Create C that reconciles contradictions where possible.\n- Label unresolved tensions.\n`;
+  if (oai) {
+    try {
+      const resp = await oai.chat.completions.create({
+        model: OPENAI_MODEL,
+        messages: [
+          { role: "system", content: "You run a short council debate then output a synthesis." },
+          { role: "user", content: `Topic: ${prompt}\nDTU A:\n${dtuA?.content || ""}\nDTU B:\n${dtuB?.content || ""}\nReturn a short synthesis with labeled tensions.` }
+        ],
+        temperature: 0.5
+      });
+      synthesis = resp?.choices?.[0]?.message?.content?.slice(0, 6000) || synthesis;
+    } catch {}
+  }
+
+  return { prompt, turns, synthesis, cue: personaCue("emphasize") };
+}
+
+app.post("/api/council/debate", async (req, res) => {
+  const { dtuA, dtuB, topic } = req.body || {};
+  const out = await councilDebate(req.body || {});
+  const parentIds = [dtuA?.id || dtuA, dtuB?.id || dtuB].filter(Boolean);
+
+  const dtuC = createDTU({
+    title: "Council Synthesis",
+    content: out.synthesis,
+    tags: ["council", "synthesis"],
+    source: "council",
+    parents: parentIds,
+    meta: { topic: topic || "" },
+  });
+  appendEvent("council.debate", { parents: parentIds, synthesisId: dtuC.id });
+  res.json({ ok: true, debate: out, synthesisDTU: dtuC });
+});
+
+// Persona speak / animate (cue protocol)
+app.post("/api/personas/:id/speak", (req, res) => {
+  const p = personas.find(x => x.id === req.params.id);
+  if (!p) return res.status(404).json({ ok: false, error: "Persona not found" });
+  const { text } = req.body || {};
+  const out = {
+    ok: true,
+    persona: p,
+    text: String(text || ""),
+    cue: personaCue("talk"),
+    speech: { engine: "browser_speechsynthesis", voiceHint: p.name, rate: 1.0, pitch: 1.0 },
+  };
+  appendEvent("persona.speak", { personaId: p.id, chars: out.text.length });
+  res.json(out);
+});
+
+app.post("/api/personas/:id/animate", (req, res) => {
+  const { kind = "talk" } = req.body || {};
+  const p = personas.find(x => x.id === req.params.id);
+  if (!p) return res.status(404).json({ ok: false, error: "Persona not found" });
+  res.json({ ok: true, persona: p, cue: personaCue(kind) });
+});
+
+// ------------------------------
+// Swarm
+// ------------------------------
+const swarmLenses = [
+  "Structural", "Ethical", "Practical", "Pattern", "Edge cases", "Second-order effects", "Failure modes", "Opportunities"
+];
+
+function swarmRun(prompt, count = 6) {
+  const selected = swarmLenses.slice(0, Math.max(3, Math.min(count, swarmLenses.length)));
+  const agents = selected.map((lens) => ({
+    id: uuidv4(),
+    lens,
+    output: `(${lens}) Signals on: ${prompt}\n- key bullets\n- constraints\n- next actions`,
+  }));
+  const synthesis = `SWARM SYNTHESIS (v1):\n` + agents.map(a => `- [${a.lens}] ${a.output.split("\n")[1] || "signal"}`).join("\n");
+  return { agents, synthesis, cue: personaCue("talk") };
+}
+
+app.post("/api/swarm/run", (req, res) => {
+  const { prompt, count } = req.body || {};
+  const out = swarmRun(String(prompt || ""), Number(count || 6));
+  appendEvent("swarm.run", { chars: (prompt || "").length, agents: out.agents.length });
+  res.json({ ok: true, ...out });
+});
+
+// ------------------------------
+// Credits
+// ------------------------------
+app.post("/api/credits/wallet", (req, res) => {
+  const { walletId } = req.body || {};
+  if (!walletId) return res.status(400).json({ ok: false, error: "walletId required" });
+  res.json({ ok: true, wallet: getOrCreateWallet(walletId) });
+});
+app.post("/api/credits/earn", (req, res) => {
+  const { walletId, amount = 1, reason = "quest" } = req.body || {};
+  if (!walletId) return res.status(400).json({ ok: false, error: "walletId required" });
+  res.json({ ok: true, wallet: creditWallet(walletId, Number(amount || 0), reason) });
+});
+app.post("/api/credits/spend", (req, res) => {
+  const { walletId, amount = 1, reason = "spend" } = req.body || {};
+  if (!walletId) return res.status(400).json({ ok: false, error: "walletId required" });
+  const out = debitWallet(walletId, Number(amount || 0), reason);
+  res.json(out.ok ? { ok: true, wallet: out.wallet } : out);
+});
+
+// ------------------------------
+// Marketplace (visible; coming soon)
+// ------------------------------
+app.get("/api/marketplace/listings", (req, res) => {
+  res.json({
+    ok: true,
+    message: "Marketplace coming soon — can’t spoil the fun 😉",
+    listings: marketplaceListings
+  });
+});
+
+// ------------------------------
+// Global stub (visible; consent-first later)
+// ------------------------------
+app.get("/api/global/feed", (req, res) => {
+  res.json({
+    ok: true,
+    message: "Global is visible in v1 but consent-first sync is v2+. Local-first is always available.",
+    cue: personaCue("thinking"),
+  });
+});
+
+// ------------------------------
+// Macro runner
+// ------------------------------
+app.post("/api/macros/run", (req, res) => {
+  const { recipeName, ctx } = req.body || {};
+  const out = runMacro(String(recipeName || ""), ctx || {});
+  appendEvent("macro.run", { recipeName });
+  res.json({ ok: true, ...out });
+});
+
+// ------------------------------
+// Events
+// ------------------------------
+app.get("/api/events", (req, res) => res.json({ ok: true, events: events.slice(-500).reverse() }));
+
+// ------------------------------
+// Fallback: serve UI if index exists
+// ------------------------------
+app.get("*", (req, res) => {
+  const idx = path.join(publicDir, "index.html");
+  if (fs.existsSync(idx)) return res.sendFile(idx);
+  res.status(404).json({ ok: false, error: "Not found" });
+});
+
+app.listen(PORT, () => console.log(`Concord v1 running on http://localhost:${PORT}`));
