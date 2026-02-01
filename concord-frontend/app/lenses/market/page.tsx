@@ -9,14 +9,10 @@ import { Store, TrendingUp, Package, Coins } from 'lucide-react';
 export default function MarketLensPage() {
   useLensNav('market');
 
+  // Backend: GET /api/marketplace/listings
   const { data: listings } = useQuery({
-    queryKey: ['market-listings'],
-    queryFn: () => api.get('/api/market/listings').then((r) => r.data),
-  });
-
-  const { data: library } = useQuery({
-    queryKey: ['market-library'],
-    queryFn: () => api.get('/api/market/library').then((r) => r.data),
+    queryKey: ['marketplace-listings'],
+    queryFn: () => api.get('/api/marketplace/listings').then((r) => r.data),
   });
 
   return (
@@ -40,7 +36,7 @@ export default function MarketLensPage() {
       {/* Market Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard icon={<Store />} label="Active Listings" value={listings?.listings?.length || 0} />
-        <StatCard icon={<Package />} label="Your Library" value={library?.entitlements?.length || 0} />
+        <StatCard icon={<Package />} label="Your Library" value="—" />
         <StatCard icon={<TrendingUp />} label="Transactions" value="—" />
         <StatCard icon={<Coins />} label="Volume" value="—" />
       </div>

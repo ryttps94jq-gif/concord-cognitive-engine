@@ -8,20 +8,26 @@ import { LockDashboard } from '@/components/sovereignty/LockDashboard';
 import { CoherenceBadge } from '@/components/graphs/CoherenceBadge';
 
 export default function DashboardPage() {
-  const { data: status, isLoading: statusLoading } = useQuery({
+  // Backend: GET /api/status
+  const { data: status } = useQuery({
     queryKey: ['status'],
     queryFn: () => api.get('/api/status').then((r) => r.data),
   });
 
-  const { data: latestState } = useQuery({
-    queryKey: ['state-latest'],
-    queryFn: () => api.get('/api/state/latest').then((r) => r.data),
+  // Backend: GET /api/dtus
+  const { data: dtusData } = useQuery({
+    queryKey: ['dtus'],
+    queryFn: () => api.get('/api/dtus').then((r) => r.data),
   });
 
-  const { data: dtus } = useQuery({
-    queryKey: ['dtus-recent'],
-    queryFn: () => api.get('/api/dtus?limit=6').then((r) => r.data),
+  // Backend: GET /api/events
+  const { data: eventsData } = useQuery({
+    queryKey: ['events'],
+    queryFn: () => api.get('/api/events').then((r) => r.data),
   });
+
+  const dtus = dtusData?.dtus || [];
+  const events = eventsData?.events || [];
 
   return (
     <div className="p-6 space-y-6">
@@ -32,30 +38,30 @@ export default function DashboardPage() {
             Concord Empire Dashboard
           </h1>
           <p className="text-gray-400 mt-1">
-            {status?.version || 'Loading...'} • {status?.dtus || 0} DTUs •{' '}
-            {status?.llmReady ? 'LLM Ready' : 'Local Mode'}
+            {status?.version || 'Loading...'} • {status?.counts?.dtus || 0} DTUs •{' '}
+            {status?.llm?.enabled ? 'LLM Ready' : 'Local Mode'}
           </p>
         </div>
-        <CoherenceBadge score={latestState?.session?.turns || 0} />
+        <CoherenceBadge score={events.length} />
       </header>
 
       {/* Metrics Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
           label="Total DTUs"
-          value={status?.dtus || 0}
+          value={status?.counts?.dtus || 0}
           icon="📦"
           color="blue"
         />
         <MetricCard
-          label="Wrappers"
-          value={status?.wrappers || 0}
-          icon="🔧"
+          label="Simulations"
+          value={status?.counts?.simulations || 0}
+          icon="🧪"
           color="purple"
         />
         <MetricCard
-          label="Active Layers"
-          value={status?.layers || 0}
+          label="Events"
+          value={status?.counts?.events || 0}
           icon="📊"
           color="pink"
         />
@@ -66,6 +72,34 @@ export default function DashboardPage() {
           color="green"
           locked
         />
+      </div>
+
+      {/* Jobs & Queues Status */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="lens-card">
+          <p className="text-sm text-gray-400">Ingest Queue</p>
+          <p className="text-xl font-bold text-neon-blue">
+            {status?.queues?.ingest || 0}
+          </p>
+        </div>
+        <div className="lens-card">
+          <p className="text-sm text-gray-400">Autocrawl Queue</p>
+          <p className="text-xl font-bold text-neon-purple">
+            {status?.queues?.autocrawl || 0}
+          </p>
+        </div>
+        <div className="lens-card">
+          <p className="text-sm text-gray-400">Macro Domains</p>
+          <p className="text-xl font-bold text-neon-cyan">
+            {status?.macro?.domains?.length || 0}
+          </p>
+        </div>
+        <div className="lens-card">
+          <p className="text-sm text-gray-400">Wallets</p>
+          <p className="text-xl font-bold text-neon-green">
+            {status?.counts?.wallets || 0}
+          </p>
+        </div>
       </div>
 
       {/* Main Content */}
@@ -92,10 +126,10 @@ export default function DashboardPage() {
           <span className="text-neon-cyan">◈</span> Recent DTUs
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {dtus?.dtus?.slice(0, 6).map((dtu: any) => (
+          {dtus.slice(0, 6).map((dtu: any) => (
             <DTUEmpireCard key={dtu.id} dtu={dtu} />
           ))}
-          {(!dtus?.dtus || dtus.dtus.length === 0) && (
+          {dtus.length === 0 && (
             <p className="text-gray-500 col-span-full text-center py-8">
               No DTUs yet. Start forging in the Chat or Forge lens.
             </p>
@@ -108,7 +142,7 @@ export default function DashboardPage() {
         <QuickAction href="/lenses/chat" label="Chat" icon="💬" />
         <QuickAction href="/lenses/graph" label="Graph" icon="🕸️" />
         <QuickAction href="/lenses/resonance" label="Resonance" icon="🌊" />
-        <QuickAction href="/lenses/council" label="Council" icon="⚖️" />
+        <QuickAction href="/lenses/council" label="Council" icon="🏛️" />
       </div>
     </div>
   );
