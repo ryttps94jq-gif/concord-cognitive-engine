@@ -8301,6 +8301,882 @@ try { startChicken3Cron(); } catch {}
 try { startChicken3Federation(); } catch {}
 // ===== END CHICKEN3: Cron + Federation =====
 
+// ============================================================================
+// CONCORD ENHANCEMENTS v3.1 - Search, Query DSL, Local LLM, Export, Plugins
+// ============================================================================
+
+// ---- Search Indexing (MiniSearch-like in-memory index) ----
+const SEARCH_INDEX = {
+  documents: new Map(),
+  invertedIndex: new Map(),
+  fieldBoosts: { title: 2.0, tags: 1.5, summary: 1.2, content: 1.0 },
+  dirty: true
+};
+
+function tokenizeForIndex(text) {
+  return String(text || "").toLowerCase()
+    .replace(/[^\w\s]/g, " ")
+    .split(/\s+/)
+    .filter(t => t.length > 1 && t.length < 40);
+}
+
+function rebuildSearchIndex() {
+  SEARCH_INDEX.invertedIndex.clear();
+  SEARCH_INDEX.documents.clear();
+
+  for (const dtu of dtusArray()) {
+    const docTokens = new Map();
+    const fields = {
+      title: dtu.title || "",
+      tags: (dtu.tags || []).join(" "),
+      summary: dtu.human?.summary || dtu.cretiHuman || "",
+      content: [
+        ...(dtu.core?.definitions || []),
+        ...(dtu.core?.invariants || []),
+        ...(dtu.core?.claims || [])
+      ].join(" ")
+    };
+
+    for (const [field, text] of Object.entries(fields)) {
+      const tokens = tokenizeForIndex(text);
+      const boost = SEARCH_INDEX.fieldBoosts[field] || 1.0;
+      for (const token of tokens) {
+        docTokens.set(token, (docTokens.get(token) || 0) + boost);
+      }
+    }
+
+    SEARCH_INDEX.documents.set(dtu.id, { id: dtu.id, tokens: docTokens, tier: dtu.tier });
+
+    for (const [token, score] of docTokens) {
+      if (!SEARCH_INDEX.invertedIndex.has(token)) {
+        SEARCH_INDEX.invertedIndex.set(token, new Map());
+      }
+      SEARCH_INDEX.invertedIndex.get(token).set(dtu.id, score);
+    }
+  }
+  SEARCH_INDEX.dirty = false;
+  log("search", "Search index rebuilt", { documents: SEARCH_INDEX.documents.size, terms: SEARCH_INDEX.invertedIndex.size });
+}
+
+function searchIndexed(query, { limit = 20, minScore = 0.01 } = {}) {
+  if (SEARCH_INDEX.dirty) rebuildSearchIndex();
+
+  const queryTokens = tokenizeForIndex(query);
+  if (!queryTokens.length) return [];
+
+  const scores = new Map();
+  const idf = new Map();
+  const N = SEARCH_INDEX.documents.size || 1;
+
+  for (const token of queryTokens) {
+    const docs = SEARCH_INDEX.invertedIndex.get(token);
+    if (docs) {
+      const docFreq = docs.size;
+      idf.set(token, Math.log(1 + N / (docFreq + 1)));
+      for (const [docId, tf] of docs) {
+        const tfidf = tf * idf.get(token);
+        scores.set(docId, (scores.get(docId) || 0) + tfidf);
+      }
+    }
+  }
+
+  const results = Array.from(scores.entries())
+    .map(([id, score]) => ({ id, score: score / queryTokens.length }))
+    .filter(r => r.score >= minScore)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+
+  return results.map(r => ({ ...STATE.dtus.get(r.id), _searchScore: r.score })).filter(Boolean);
+}
+
+// Mark index dirty on DTU changes
+const _originalDtuSet = STATE.dtus.set.bind(STATE.dtus);
+STATE.dtus.set = function(key, value) {
+  SEARCH_INDEX.dirty = true;
+  return _originalDtuSet(key, value);
+};
+
+// ---- Query DSL Parser ----
+function parseQueryDSL(queryString) {
+  const conditions = [];
+  const parts = String(queryString || "").match(/(\w+:[^\s]+|"[^"]+"|[^\s]+)/g) || [];
+  let freeText = [];
+
+  for (const part of parts) {
+    if (part.includes(":")) {
+      const [field, ...valueParts] = part.split(":");
+      const value = valueParts.join(":").replace(/^"|"$/g, "");
+      conditions.push({ field: field.toLowerCase(), value, op: "eq" });
+    } else if (part.startsWith(">") || part.startsWith("<")) {
+      const op = part[0] === ">" ? "gt" : "lt";
+      const field = part.slice(1).split(":")[0];
+      const value = part.split(":")[1];
+      if (field && value) conditions.push({ field, value: parseFloat(value), op });
+    } else {
+      freeText.push(part);
+    }
+  }
+
+  return { conditions, freeText: freeText.join(" ") };
+}
+
+function queryDTUs(queryString, { limit = 50 } = {}) {
+  const { conditions, freeText } = parseQueryDSL(queryString);
+  let results = dtusArray();
+
+  for (const cond of conditions) {
+    results = results.filter(dtu => {
+      const dtuValue = cond.field === "tier" ? dtu.tier :
+                       cond.field === "tag" || cond.field === "tags" ? (dtu.tags || []).join(",").toLowerCase() :
+                       cond.field === "title" ? (dtu.title || "").toLowerCase() :
+                       cond.field === "crispness" ? (dtu.meta?.crispness || 0) :
+                       cond.field === "id" ? dtu.id :
+                       cond.field === "source" ? (dtu.source || "") :
+                       null;
+
+      if (dtuValue === null) return true;
+
+      if (cond.op === "eq") {
+        if (typeof dtuValue === "string") return dtuValue.includes(cond.value.toLowerCase());
+        return dtuValue == cond.value;
+      }
+      if (cond.op === "gt") return dtuValue > cond.value;
+      if (cond.op === "lt") return dtuValue < cond.value;
+      return true;
+    });
+  }
+
+  if (freeText) {
+    const indexed = searchIndexed(freeText, { limit: 1000, minScore: 0.001 });
+    const indexedIds = new Set(indexed.map(d => d.id));
+    results = results.filter(d => indexedIds.has(d.id));
+    results.sort((a, b) => {
+      const aScore = indexed.find(x => x.id === a.id)?._searchScore || 0;
+      const bScore = indexed.find(x => x.id === b.id)?._searchScore || 0;
+      return bScore - aScore;
+    });
+  }
+
+  return results.slice(0, limit);
+}
+
+register("search", "query", async (ctx, input) => {
+  const q = String(input.q || input.query || "");
+  const limit = clamp(Number(input.limit || 50), 1, 500);
+  const results = queryDTUs(q, { limit });
+  return { ok: true, query: q, count: results.length, dtus: results };
+});
+
+register("search", "reindex", async (ctx, input) => {
+  rebuildSearchIndex();
+  return { ok: true, documents: SEARCH_INDEX.documents.size, terms: SEARCH_INDEX.invertedIndex.size };
+});
+
+// ---- Local LLM Support (Ollama) ----
+const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "llama3.2";
+const OLLAMA_ENABLED = process.env.OLLAMA_ENABLED === "true" || process.env.OLLAMA_ENABLED === "1";
+
+async function ollamaChat(messages, { temperature = 0.7, max_tokens = 1000 } = {}) {
+  if (!OLLAMA_ENABLED) return { ok: false, error: "Ollama not enabled" };
+  try {
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: OLLAMA_MODEL,
+        messages: messages.map(m => ({ role: m.role, content: m.content })),
+        stream: false,
+        options: { temperature, num_predict: max_tokens }
+      })
+    });
+    if (!response.ok) throw new Error(`Ollama error: ${response.status}`);
+    const data = await response.json();
+    return { ok: true, text: data.message?.content || "", model: OLLAMA_MODEL, source: "ollama" };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e), source: "ollama" };
+  }
+}
+
+async function ollamaEmbed(text) {
+  if (!OLLAMA_ENABLED) return { ok: false, error: "Ollama not enabled" };
+  try {
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/embeddings`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: OLLAMA_MODEL, prompt: String(text || "").slice(0, 8000) })
+    });
+    if (!response.ok) throw new Error(`Ollama embedding error: ${response.status}`);
+    const data = await response.json();
+    return { ok: true, embedding: data.embedding, dimensions: data.embedding?.length || 0 };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) };
+  }
+}
+
+register("llm", "local", async (ctx, input) => {
+  const messages = Array.isArray(input.messages) ? input.messages : [{ role: "user", content: String(input.prompt || input.message || "") }];
+  const result = await ollamaChat(messages, { temperature: input.temperature, max_tokens: input.max_tokens });
+  return result;
+});
+
+register("llm", "embed", async (ctx, input) => {
+  return await ollamaEmbed(String(input.text || ""));
+});
+
+// ---- Export/Import System ----
+register("export", "markdown", async (ctx, input) => {
+  const dtus = input.ids ? input.ids.map(id => STATE.dtus.get(id)).filter(Boolean) : dtusArray();
+  const lines = ["# Concord DTU Export", `Exported: ${nowISO()}`, `Count: ${dtus.length}`, ""];
+
+  for (const dtu of dtus) {
+    lines.push(`## ${dtu.title || "Untitled"}`);
+    lines.push(`**ID:** ${dtu.id} | **Tier:** ${dtu.tier || "regular"} | **Tags:** ${(dtu.tags || []).join(", ")}`);
+    lines.push("");
+    if (dtu.human?.summary) lines.push(`> ${dtu.human.summary}`, "");
+    if (dtu.core?.definitions?.length) {
+      lines.push("### Definitions");
+      dtu.core.definitions.forEach(d => lines.push(`- ${d}`));
+      lines.push("");
+    }
+    if (dtu.core?.invariants?.length) {
+      lines.push("### Invariants");
+      dtu.core.invariants.forEach(i => lines.push(`- ${i}`));
+      lines.push("");
+    }
+    if (dtu.core?.claims?.length) {
+      lines.push("### Claims");
+      dtu.core.claims.forEach(c => lines.push(`- ${c}`));
+      lines.push("");
+    }
+    lines.push("---", "");
+  }
+
+  return { ok: true, format: "markdown", content: lines.join("\n"), count: dtus.length };
+});
+
+register("export", "obsidian", async (ctx, input) => {
+  const dtus = input.ids ? input.ids.map(id => STATE.dtus.get(id)).filter(Boolean) : dtusArray();
+  const files = [];
+
+  for (const dtu of dtus) {
+    const filename = `${(dtu.title || "Untitled").replace(/[^\w\s-]/g, "").slice(0, 50)}.md`;
+    const content = [
+      "---",
+      `id: ${dtu.id}`,
+      `tier: ${dtu.tier || "regular"}`,
+      `tags: [${(dtu.tags || []).map(t => `"${t}"`).join(", ")}]`,
+      `created: ${dtu.createdAt || nowISO()}`,
+      "---",
+      "",
+      `# ${dtu.title || "Untitled"}`,
+      "",
+      dtu.human?.summary || "",
+      "",
+      "## Core",
+      "",
+      "### Definitions",
+      ...(dtu.core?.definitions || []).map(d => `- ${d}`),
+      "",
+      "### Invariants",
+      ...(dtu.core?.invariants || []).map(i => `- ${i}`),
+      "",
+      "### Claims",
+      ...(dtu.core?.claims || []).map(c => `- ${c}`),
+      "",
+      "## Lineage",
+      ...(dtu.lineage || []).map(id => `- [[${id}]]`)
+    ].join("\n");
+
+    files.push({ filename, content });
+  }
+
+  return { ok: true, format: "obsidian", files, count: files.length };
+});
+
+register("export", "json", async (ctx, input) => {
+  const dtus = input.ids ? input.ids.map(id => STATE.dtus.get(id)).filter(Boolean) : dtusArray();
+  return { ok: true, format: "json", dtus, count: dtus.length };
+});
+
+register("import", "json", async (ctx, input) => {
+  const dtus = Array.isArray(input.dtus) ? input.dtus : [];
+  let imported = 0, skipped = 0;
+
+  for (const dtu of dtus) {
+    if (!dtu.id || !dtu.title) { skipped++; continue; }
+    if (STATE.dtus.has(dtu.id) && !input.overwrite) { skipped++; continue; }
+
+    const normalized = {
+      id: dtu.id,
+      title: normalizeText(dtu.title),
+      tier: dtu.tier || "regular",
+      tags: Array.isArray(dtu.tags) ? dtu.tags : [],
+      human: dtu.human || {},
+      core: dtu.core || {},
+      machine: dtu.machine || {},
+      lineage: dtu.lineage || [],
+      source: "import",
+      createdAt: dtu.createdAt || nowISO(),
+      updatedAt: nowISO(),
+      meta: { ...dtu.meta, importedAt: nowISO() }
+    };
+
+    STATE.dtus.set(normalized.id, normalized);
+    imported++;
+  }
+
+  if (imported > 0) saveStateDebounced();
+  return { ok: true, imported, skipped, total: dtus.length };
+});
+
+register("import", "markdown", async (ctx, input) => {
+  const content = String(input.content || "");
+  const sections = content.split(/^## /m).filter(Boolean);
+  const dtus = [];
+
+  for (const section of sections) {
+    const lines = section.split("\n");
+    const title = lines[0]?.trim();
+    if (!title || title.startsWith("#")) continue;
+
+    const dtu = {
+      id: uid("dtu"),
+      title,
+      tier: "regular",
+      tags: ["imported"],
+      human: { summary: "" },
+      core: { definitions: [], invariants: [], claims: [], examples: [] },
+      source: "import-markdown",
+      createdAt: nowISO()
+    };
+
+    let currentSection = null;
+    for (const line of lines.slice(1)) {
+      if (line.startsWith("### Definitions")) currentSection = "definitions";
+      else if (line.startsWith("### Invariants")) currentSection = "invariants";
+      else if (line.startsWith("### Claims")) currentSection = "claims";
+      else if (line.startsWith(">")) dtu.human.summary = line.slice(1).trim();
+      else if (line.startsWith("- ") && currentSection) {
+        dtu.core[currentSection].push(line.slice(2).trim());
+      }
+    }
+
+    dtus.push(dtu);
+  }
+
+  let imported = 0;
+  for (const dtu of dtus) {
+    STATE.dtus.set(dtu.id, dtu);
+    imported++;
+  }
+
+  if (imported > 0) saveStateDebounced();
+  return { ok: true, imported, parsed: dtus.length };
+});
+
+// ---- Plugin/Extension System ----
+const PLUGINS = new Map();
+
+function registerPlugin(name, config) {
+  const plugin = {
+    name,
+    version: config.version || "1.0.0",
+    description: config.description || "",
+    macros: config.macros || {},
+    hooks: config.hooks || {},
+    enabled: config.enabled !== false,
+    registeredAt: nowISO()
+  };
+
+  // Register plugin macros
+  for (const [macroName, handler] of Object.entries(plugin.macros)) {
+    const [domain, op] = macroName.split(".");
+    if (domain && op && typeof handler === "function") {
+      register(domain, op, handler);
+    }
+  }
+
+  PLUGINS.set(name, plugin);
+  log("plugin", `Plugin registered: ${name}`, { version: plugin.version });
+  return plugin;
+}
+
+register("plugin", "register", async (ctx, input) => {
+  if (!input.name) return { ok: false, error: "Plugin name required" };
+  const plugin = registerPlugin(input.name, input);
+  return { ok: true, plugin: { name: plugin.name, version: plugin.version } };
+});
+
+register("plugin", "list", async (ctx, input) => {
+  const plugins = Array.from(PLUGINS.values()).map(p => ({
+    name: p.name,
+    version: p.version,
+    description: p.description,
+    enabled: p.enabled,
+    macroCount: Object.keys(p.macros).length
+  }));
+  return { ok: true, plugins, count: plugins.length };
+});
+
+register("plugin", "enable", async (ctx, input) => {
+  const plugin = PLUGINS.get(input.name);
+  if (!plugin) return { ok: false, error: "Plugin not found" };
+  plugin.enabled = true;
+  return { ok: true, name: plugin.name, enabled: true };
+});
+
+register("plugin", "disable", async (ctx, input) => {
+  const plugin = PLUGINS.get(input.name);
+  if (!plugin) return { ok: false, error: "Plugin not found" };
+  plugin.enabled = false;
+  return { ok: true, name: plugin.name, enabled: false };
+});
+
+// ---- Enhanced Council with Vote Tallying ----
+if (!STATE.councilVotes) STATE.councilVotes = new Map();
+
+register("council", "vote", async (ctx, input) => {
+  const { dtuId, vote, persona, reason } = input;
+  if (!dtuId || !vote) return { ok: false, error: "dtuId and vote required" };
+  if (!["approve", "reject", "abstain"].includes(vote)) return { ok: false, error: "Invalid vote" };
+
+  const voteRecord = {
+    id: uid("vote"),
+    dtuId,
+    vote,
+    persona: persona || "anonymous",
+    reason: reason || "",
+    timestamp: nowISO(),
+    weight: 1.0
+  };
+
+  if (!STATE.councilVotes.has(dtuId)) STATE.councilVotes.set(dtuId, []);
+  STATE.councilVotes.get(dtuId).push(voteRecord);
+  saveStateDebounced();
+
+  return { ok: true, vote: voteRecord };
+});
+
+register("council", "tally", async (ctx, input) => {
+  const { dtuId } = input;
+  if (!dtuId) return { ok: false, error: "dtuId required" };
+
+  const votes = STATE.councilVotes.get(dtuId) || [];
+  const tally = { approve: 0, reject: 0, abstain: 0, total: votes.length };
+
+  for (const v of votes) {
+    tally[v.vote] = (tally[v.vote] || 0) + v.weight;
+  }
+
+  tally.approved = tally.approve > tally.reject;
+  tally.margin = tally.approve - tally.reject;
+  tally.quorum = votes.length >= 3;
+
+  return { ok: true, dtuId, tally, votes };
+});
+
+register("council", "credibility", async (ctx, input) => {
+  const { dtuId, score, reason } = input;
+  const dtu = STATE.dtus.get(dtuId);
+  if (!dtu) return { ok: false, error: "DTU not found" };
+
+  dtu.authority = dtu.authority || {};
+  dtu.authority.credibility = clamp(Number(score || 0.5), 0, 1);
+  dtu.authority.credibilityReason = reason || "";
+  dtu.authority.credibilityAt = nowISO();
+
+  STATE.dtus.set(dtuId, dtu);
+  saveStateDebounced();
+
+  return { ok: true, dtuId, credibility: dtu.authority.credibility };
+});
+
+// ---- User-Defined Personas ----
+if (!STATE.customPersonas) STATE.customPersonas = new Map();
+
+register("persona", "create", async (ctx, input) => {
+  const { name, description, style, traits } = input;
+  if (!name) return { ok: false, error: "Persona name required" };
+
+  const persona = {
+    id: uid("persona"),
+    name: normalizeText(name),
+    description: description || "",
+    style: {
+      verbosity: clamp(Number(style?.verbosity ?? 0.5), 0, 1),
+      formality: clamp(Number(style?.formality ?? 0.5), 0, 1),
+      skepticism: clamp(Number(style?.skepticism ?? 0.5), 0, 1),
+      creativity: clamp(Number(style?.creativity ?? 0.5), 0, 1),
+      empathy: clamp(Number(style?.empathy ?? 0.5), 0, 1)
+    },
+    traits: Array.isArray(traits) ? traits : [],
+    systemPrompt: input.systemPrompt || "",
+    createdAt: nowISO(),
+    updatedAt: nowISO(),
+    usageCount: 0
+  };
+
+  STATE.customPersonas.set(persona.id, persona);
+  saveStateDebounced();
+
+  return { ok: true, persona };
+});
+
+register("persona", "list", async (ctx, input) => {
+  const builtIn = [
+    { id: "ethicist", name: "Ethicist", description: "Focuses on moral implications", builtin: true },
+    { id: "engineer", name: "Engineer", description: "Practical, implementation-focused", builtin: true },
+    { id: "historian", name: "Historian", description: "Historical context and precedent", builtin: true },
+    { id: "economist", name: "Economist", description: "Economic analysis and trade-offs", builtin: true }
+  ];
+  const custom = Array.from(STATE.customPersonas.values());
+  return { ok: true, personas: [...builtIn, ...custom], builtInCount: builtIn.length, customCount: custom.length };
+});
+
+register("persona", "update", async (ctx, input) => {
+  const persona = STATE.customPersonas.get(input.id);
+  if (!persona) return { ok: false, error: "Persona not found" };
+
+  if (input.name) persona.name = normalizeText(input.name);
+  if (input.description) persona.description = input.description;
+  if (input.style) persona.style = { ...persona.style, ...input.style };
+  if (input.traits) persona.traits = input.traits;
+  if (input.systemPrompt) persona.systemPrompt = input.systemPrompt;
+  persona.updatedAt = nowISO();
+
+  STATE.customPersonas.set(persona.id, persona);
+  saveStateDebounced();
+
+  return { ok: true, persona };
+});
+
+register("persona", "delete", async (ctx, input) => {
+  if (!STATE.customPersonas.has(input.id)) return { ok: false, error: "Persona not found" };
+  STATE.customPersonas.delete(input.id);
+  saveStateDebounced();
+  return { ok: true, deleted: input.id };
+});
+
+// ---- Admin Dashboard Endpoints ----
+register("admin", "dashboard", async (ctx, input) => {
+  const uptime = process.uptime();
+  const memory = process.memoryUsage();
+
+  return {
+    ok: true,
+    system: {
+      version: VERSION,
+      uptime: { seconds: uptime, formatted: `${Math.floor(uptime/3600)}h ${Math.floor((uptime%3600)/60)}m` },
+      memory: {
+        heapUsed: Math.round(memory.heapUsed / 1024 / 1024) + "MB",
+        heapTotal: Math.round(memory.heapTotal / 1024 / 1024) + "MB",
+        rss: Math.round(memory.rss / 1024 / 1024) + "MB"
+      },
+      nodeVersion: process.version
+    },
+    dtus: {
+      total: STATE.dtus.size,
+      regular: dtusArray().filter(d => d.tier === "regular").length,
+      mega: dtusArray().filter(d => d.tier === "mega").length,
+      hyper: dtusArray().filter(d => d.tier === "hyper").length,
+      shadow: STATE.shadowDtus?.size || 0
+    },
+    sessions: {
+      total: STATE.sessions?.size || 0,
+      active: Array.from(STATE.sessions?.values() || []).filter(s => {
+        const lastMsg = s.messages?.[s.messages.length - 1];
+        return lastMsg && (Date.now() - new Date(lastMsg.timestamp).getTime()) < 3600000;
+      }).length
+    },
+    organs: {
+      total: STATE.organs?.size || 0,
+      healthy: Array.from(STATE.organs?.values() || []).filter(o => (o.maturity?.score || 0) > 0.5).length
+    },
+    llm: {
+      openaiReady: LLM_READY,
+      ollamaEnabled: OLLAMA_ENABLED,
+      defaultOn: DEFAULT_LLM_ON
+    },
+    queues: {
+      maintenance: STATE.queues?.maintenance?.length || 0,
+      synthesis: STATE.queues?.synthesis?.length || 0,
+      hypotheses: STATE.queues?.hypotheses?.length || 0
+    },
+    plugins: {
+      total: PLUGINS.size,
+      enabled: Array.from(PLUGINS.values()).filter(p => p.enabled).length
+    },
+    searchIndex: {
+      documents: SEARCH_INDEX.documents.size,
+      terms: SEARCH_INDEX.invertedIndex.size,
+      dirty: SEARCH_INDEX.dirty
+    }
+  };
+});
+
+register("admin", "logs", async (ctx, input) => {
+  const limit = clamp(Number(input.limit || 100), 1, 1000);
+  const type = input.type || null;
+
+  let logs = STATE.__logs || [];
+  if (type) logs = logs.filter(l => l.type === type);
+  logs = logs.slice(-limit);
+
+  return { ok: true, logs, count: logs.length };
+});
+
+register("admin", "metrics", async (ctx, input) => {
+  const chicken2 = STATE.__chicken2 || {};
+  const growth = STATE.growth || {};
+  const abstraction = STATE.abstraction || {};
+
+  return {
+    ok: true,
+    chicken2: {
+      continuityAvg: chicken2.metrics?.continuityAvg || 0,
+      homeostasis: chicken2.metrics?.homeostasis || 0.8,
+      contradictionLoad: chicken2.metrics?.contradictionLoad || 0,
+      suffering: chicken2.metrics?.suffering || 0,
+      accepts: chicken2.metrics?.accepts || 0,
+      rejects: chicken2.metrics?.rejects || 0
+    },
+    growth: {
+      bioAge: growth.bioAge || 0,
+      telomere: growth.telomere || 1,
+      homeostasis: growth.homeostasis || 0.9,
+      stress: growth.stress || { acute: 0, chronic: 0 }
+    },
+    abstraction: {
+      load: abstraction.metrics?.load || 0,
+      margin: abstraction.metrics?.margin || 1,
+      enabled: abstraction.enabled !== false
+    }
+  };
+});
+
+// ---- Pagination Helper ----
+function paginateResults(items, { page = 1, pageSize = 20 } = {}) {
+  const total = items.length;
+  const totalPages = Math.ceil(total / pageSize);
+  const start = (page - 1) * pageSize;
+  const end = start + pageSize;
+
+  return {
+    items: items.slice(start, end),
+    pagination: {
+      page,
+      pageSize,
+      total,
+      totalPages,
+      hasNext: page < totalPages,
+      hasPrev: page > 1
+    }
+  };
+}
+
+// ---- Enhanced API Endpoints for New Features ----
+app.get("/api/search/indexed", async (req, res) => {
+  const q = String(req.query.q || "");
+  const limit = clamp(Number(req.query.limit || 20), 1, 100);
+  const results = searchIndexed(q, { limit });
+  return res.json({ ok: true, query: q, results, count: results.length });
+});
+
+app.get("/api/search/dsl", async (req, res) => {
+  const out = await runMacro("search", "query", { q: req.query.q, limit: req.query.limit }, makeCtx(req));
+  return res.json(out);
+});
+
+app.post("/api/search/reindex", async (req, res) => {
+  const out = await runMacro("search", "reindex", {}, makeCtx(req));
+  return res.json(out);
+});
+
+app.post("/api/llm/local", async (req, res) => {
+  const out = await runMacro("llm", "local", req.body, makeCtx(req));
+  return res.json(out);
+});
+
+app.post("/api/llm/embed", async (req, res) => {
+  const out = await runMacro("llm", "embed", req.body, makeCtx(req));
+  return res.json(out);
+});
+
+app.post("/api/export/markdown", async (req, res) => {
+  const out = await runMacro("export", "markdown", req.body, makeCtx(req));
+  return res.json(out);
+});
+
+app.post("/api/export/obsidian", async (req, res) => {
+  const out = await runMacro("export", "obsidian", req.body, makeCtx(req));
+  return res.json(out);
+});
+
+app.post("/api/export/json", async (req, res) => {
+  const out = await runMacro("export", "json", req.body, makeCtx(req));
+  return res.json(out);
+});
+
+app.post("/api/import/json", async (req, res) => {
+  const out = await runMacro("import", "json", req.body, makeCtx(req));
+  return res.json(out);
+});
+
+app.post("/api/import/markdown", async (req, res) => {
+  const out = await runMacro("import", "markdown", req.body, makeCtx(req));
+  return res.json(out);
+});
+
+app.get("/api/plugins", async (req, res) => {
+  const out = await runMacro("plugin", "list", {}, makeCtx(req));
+  return res.json(out);
+});
+
+app.post("/api/plugins", async (req, res) => {
+  const out = await runMacro("plugin", "register", req.body, makeCtx(req));
+  return res.json(out);
+});
+
+app.post("/api/council/vote", async (req, res) => {
+  const out = await runMacro("council", "vote", req.body, makeCtx(req));
+  return res.json(out);
+});
+
+app.get("/api/council/tally/:dtuId", async (req, res) => {
+  const out = await runMacro("council", "tally", { dtuId: req.params.dtuId }, makeCtx(req));
+  return res.json(out);
+});
+
+app.post("/api/council/credibility", async (req, res) => {
+  const out = await runMacro("council", "credibility", req.body, makeCtx(req));
+  return res.json(out);
+});
+
+app.post("/api/personas", async (req, res) => {
+  const out = await runMacro("persona", "create", req.body, makeCtx(req));
+  return res.json(out);
+});
+
+app.get("/api/personas", async (req, res) => {
+  const out = await runMacro("persona", "list", {}, makeCtx(req));
+  return res.json(out);
+});
+
+app.put("/api/personas/:id", async (req, res) => {
+  const out = await runMacro("persona", "update", { id: req.params.id, ...req.body }, makeCtx(req));
+  return res.json(out);
+});
+
+app.delete("/api/personas/:id", async (req, res) => {
+  const out = await runMacro("persona", "delete", { id: req.params.id }, makeCtx(req));
+  return res.json(out);
+});
+
+app.get("/api/admin/dashboard", async (req, res) => {
+  const out = await runMacro("admin", "dashboard", {}, makeCtx(req));
+  return res.json(out);
+});
+
+app.get("/api/admin/logs", async (req, res) => {
+  const out = await runMacro("admin", "logs", { limit: req.query.limit, type: req.query.type }, makeCtx(req));
+  return res.json(out);
+});
+
+app.get("/api/admin/metrics", async (req, res) => {
+  const out = await runMacro("admin", "metrics", {}, makeCtx(req));
+  return res.json(out);
+});
+
+app.get("/api/dtus/paginated", async (req, res) => {
+  const page = clamp(Number(req.query.page || 1), 1, 10000);
+  const pageSize = clamp(Number(req.query.pageSize || 20), 1, 100);
+  const tier = req.query.tier || null;
+  const tag = req.query.tag || null;
+
+  let dtus = dtusArray();
+  if (tier) dtus = dtus.filter(d => d.tier === tier);
+  if (tag) dtus = dtus.filter(d => (d.tags || []).includes(tag));
+
+  const result = paginateResults(dtus, { page, pageSize });
+  return res.json({ ok: true, ...result });
+});
+
+// ---- OpenAPI Documentation ----
+const OPENAPI_SPEC = {
+  openapi: "3.0.0",
+  info: {
+    title: "Concord Cognitive Engine API",
+    version: VERSION,
+    description: "Local-first cognitive operating system API"
+  },
+  servers: [{ url: `http://localhost:${PORT}`, description: "Local server" }],
+  paths: {
+    "/api/status": { get: { summary: "System status", tags: ["System"] }},
+    "/api/dtus": { get: { summary: "List all DTUs", tags: ["DTUs"] }},
+    "/api/dtus/paginated": { get: { summary: "Paginated DTU list", tags: ["DTUs"], parameters: [
+      { name: "page", in: "query", schema: { type: "integer" }},
+      { name: "pageSize", in: "query", schema: { type: "integer" }}
+    ]}},
+    "/api/search/indexed": { get: { summary: "Full-text search", tags: ["Search"] }},
+    "/api/search/dsl": { get: { summary: "Query DSL search", tags: ["Search"] }},
+    "/api/chat": { post: { summary: "Chat with Concord", tags: ["Chat"] }},
+    "/api/forge/manual": { post: { summary: "Create DTU manually", tags: ["Forge"] }},
+    "/api/forge/hybrid": { post: { summary: "Create DTU with LLM assistance", tags: ["Forge"] }},
+    "/api/export/markdown": { post: { summary: "Export as Markdown", tags: ["Export"] }},
+    "/api/export/obsidian": { post: { summary: "Export for Obsidian", tags: ["Export"] }},
+    "/api/import/json": { post: { summary: "Import DTUs from JSON", tags: ["Import"] }},
+    "/api/import/markdown": { post: { summary: "Import from Markdown", tags: ["Import"] }},
+    "/api/admin/dashboard": { get: { summary: "Admin dashboard data", tags: ["Admin"] }},
+    "/api/admin/metrics": { get: { summary: "System metrics", tags: ["Admin"] }},
+    "/api/admin/logs": { get: { summary: "System logs", tags: ["Admin"] }},
+    "/api/personas": {
+      get: { summary: "List personas", tags: ["Personas"] },
+      post: { summary: "Create persona", tags: ["Personas"] }
+    },
+    "/api/plugins": {
+      get: { summary: "List plugins", tags: ["Plugins"] },
+      post: { summary: "Register plugin", tags: ["Plugins"] }
+    },
+    "/api/council/vote": { post: { summary: "Submit council vote", tags: ["Council"] }},
+    "/api/council/tally/{dtuId}": { get: { summary: "Get vote tally", tags: ["Council"] }},
+    "/api/llm/local": { post: { summary: "Local LLM inference (Ollama)", tags: ["LLM"] }},
+    "/api/llm/embed": { post: { summary: "Generate embeddings", tags: ["LLM"] }}
+  },
+  tags: [
+    { name: "System", description: "System status and health" },
+    { name: "DTUs", description: "Discrete Thought Unit operations" },
+    { name: "Search", description: "Search and query" },
+    { name: "Chat", description: "Conversational interface" },
+    { name: "Forge", description: "DTU creation" },
+    { name: "Export", description: "Export data" },
+    { name: "Import", description: "Import data" },
+    { name: "Admin", description: "Administration" },
+    { name: "Personas", description: "Persona management" },
+    { name: "Plugins", description: "Plugin system" },
+    { name: "Council", description: "Governance and voting" },
+    { name: "LLM", description: "Language model operations" }
+  ]
+};
+
+app.get("/api/openapi.json", (req, res) => res.json(OPENAPI_SPEC));
+app.get("/api/docs", (req, res) => {
+  res.send(`<!DOCTYPE html>
+<html><head><title>Concord API Docs</title>
+<link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+</head><body>
+<div id="swagger-ui"></div>
+<script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+<script>SwaggerUIBundle({ url: "/api/openapi.json", dom_id: "#swagger-ui" });</script>
+</body></html>`);
+});
+
+console.log("[Concord] Enhancements v3.1 loaded: Search indexing, Query DSL, Local LLM, Export/Import, Plugins, Council voting, Personas, Admin dashboard");
+
+// ============================================================================
+// END CONCORD ENHANCEMENTS v3.1
+// ============================================================================
+
 const SHOULD_LISTEN = (String(process.env.CONCORD_NO_LISTEN || "").toLowerCase() !== "true") && (String(process.env.NODE_ENV || "").toLowerCase() !== "test");
 
 const server = SHOULD_LISTEN ? app.listen(PORT, () => {
