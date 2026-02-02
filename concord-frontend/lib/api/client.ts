@@ -1,6 +1,6 @@
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosError } from 'axios';
+import axios, { AxiosInstance, AxiosError } from 'axios';
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5050';
 
 // Create axios instance with defaults
 export const api: AxiosInstance = axios.create({
@@ -14,14 +14,11 @@ export const api: AxiosInstance = axios.create({
 // Request interceptor for API key
 api.interceptors.request.use(
   (config) => {
-    // Get API key from localStorage (client-side only)
     if (typeof window !== 'undefined') {
       const apiKey = localStorage.getItem('concord_api_key');
       if (apiKey) {
         config.headers['X-API-Key'] = apiKey;
       }
-
-      // Add session ID if available
       const sessionId = localStorage.getItem('concord_session_id');
       if (sessionId) {
         config.headers['X-Session-ID'] = sessionId;
@@ -37,119 +34,173 @@ api.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
     if (error.response) {
-      // Server responded with error
       const status = error.response.status;
-
-      if (status === 401) {
-        // Unauthorized - clear credentials and redirect
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('concord_api_key');
-          window.location.href = '/login';
-        }
+      if (status === 401 && typeof window !== 'undefined') {
+        localStorage.removeItem('concord_api_key');
+        window.location.href = '/login';
       }
-
       if (status === 429) {
-        // Rate limited
         console.warn('Rate limited. Please slow down requests.');
       }
-
       if (status >= 500) {
-        // Server error
         console.error('Server error:', error.response.data);
       }
     } else if (error.request) {
-      // No response received
       console.error('Network error - no response received');
     }
-
     return Promise.reject(error);
   }
 );
 
-// Typed API helper functions
+// Typed API helper functions matching actual backend endpoints
 export const apiHelpers = {
-  // DTU operations
-  dtu: {
-    list: (params?: { tier?: string; limit?: number; offset?: number }) =>
-      api.get('/api/dtu', { params }),
+  // System status
+  status: {
+    get: () => api.get('/api/status'),
+  },
 
-    get: (id: string) => api.get(`/api/dtu/${id}`),
+  // Jobs management
+  jobs: {
+    status: () => api.get('/api/jobs/status'),
+    toggle: (job: string, enabled: boolean) =>
+      api.post('/api/jobs/toggle', { job, enabled }),
+  },
 
-    create: (data: { content: string; tier?: string; parentId?: string }) =>
-      api.post('/api/dtu', data),
+  // DTU operations (note: endpoint is /api/dtus - plural)
+  dtus: {
+    list: () => api.get('/api/dtus'),
 
-    update: (id: string, data: Partial<{ content: string; tier: string }>) =>
-      api.patch(`/api/dtu/${id}`, data),
+    create: (data: {
+      title?: string;
+      content: string;
+      tags?: string[];
+      source?: string;
+      parents?: string[];
+      isGlobal?: boolean;
+      meta?: Record<string, unknown>;
+      declaredSourceType?: string;
+    }) => api.post('/api/dtus', data),
 
-    delete: (id: string) => api.delete(`/api/dtu/${id}`),
+    update: (id: string, patch: Record<string, unknown>) =>
+      api.patch(`/api/dtus/${id}`, patch),
+  },
 
-    promote: (id: string, targetTier: string) =>
-      api.post(`/api/dtu/${id}/promote`, { tier: targetTier }),
+  // Ingest operations
+  ingest: {
+    manual: (data: {
+      text: string;
+      title?: string;
+      tags?: string[];
+      makeGlobal?: boolean;
+      declaredSourceType?: string;
+    }) => api.post('/api/ingest', data),
 
-    lineage: (id: string) => api.get(`/api/dtu/${id}/lineage`),
+    queue: (data: {
+      text: string;
+      title?: string;
+      tags?: string[];
+      makeGlobal?: boolean;
+      declaredSourceType?: string;
+    }) => api.post('/api/ingest/queue', data),
+  },
+
+  // Autocrawl operations
+  autocrawl: {
+    manual: (data: {
+      url: string;
+      makeGlobal?: boolean;
+      declaredSourceType?: string;
+      tags?: string[];
+    }) => api.post('/api/autocrawl', data),
+
+    queue: (data: {
+      url: string;
+      makeGlobal?: boolean;
+      declaredSourceType?: string;
+      tags?: string[];
+    }) => api.post('/api/autocrawl/queue', data),
   },
 
   // Chat operations
   chat: {
-    send: (message: string, options?: { model?: string; context?: string[] }) =>
-      api.post('/api/chat', { message, ...options }),
+    send: (message: string, mode: string = 'overview') =>
+      api.post('/api/chat', { message, mode }),
 
-    history: (limit?: number) =>
-      api.get('/api/chat/history', { params: { limit } }),
+    ask: (message: string, mode: string = 'overview') =>
+      api.post('/api/ask', { message, mode }),
   },
 
-  // Lattice operations
-  lattice: {
-    status: () => api.get('/api/lattice/status'),
-
-    resonance: () => api.get('/api/lattice/resonance'),
-
-    graph: () => api.get('/api/lattice/graph'),
-
-    fractal: () => api.get('/api/lattice/fractal'),
+  // Forge (manual DTU creation)
+  forge: {
+    create: (data: { title?: string; content: string; tags?: string[]; source?: string }) =>
+      api.post('/api/forge', data),
   },
 
-  // Council operations
+  // Simulations
+  simulations: {
+    list: () => api.get('/api/simulations'),
+
+    whatIf: (data: { title?: string; prompt?: string; assumptions?: string[] }) =>
+      api.post('/api/simulations/whatif', data),
+  },
+
+  // Personas
+  personas: {
+    list: () => api.get('/api/personas'),
+
+    speak: (personaId: string, text: string) =>
+      api.post(`/api/personas/${personaId}/speak`, { text }),
+
+    animate: (personaId: string, kind: string = 'talk') =>
+      api.post(`/api/personas/${personaId}/animate`, { kind }),
+  },
+
+  // Council
   council: {
-    proposals: () => api.get('/api/council/proposals'),
-
-    submit: (proposal: { type: string; data: unknown }) =>
-      api.post('/api/council/propose', proposal),
-
-    vote: (proposalId: string, vote: 'approve' | 'reject') =>
-      api.post(`/api/council/vote/${proposalId}`, { vote }),
+    debate: (data: {
+      dtuA?: string | { id: string; content?: string };
+      dtuB?: string | { id: string; content?: string };
+      topic?: string;
+    }) => api.post('/api/council/debate', data),
   },
 
-  // Market operations
-  market: {
-    listings: (params?: { category?: string; sort?: string }) =>
-      api.get('/api/market/listings', { params }),
-
-    get: (id: string) => api.get(`/api/market/listing/${id}`),
-
-    create: (listing: { title: string; description: string; price: number }) =>
-      api.post('/api/market/listing', listing),
-
-    purchase: (id: string) => api.post(`/api/market/purchase/${id}`),
+  // Swarm
+  swarm: {
+    run: (prompt: string, count: number = 6) =>
+      api.post('/api/swarm/run', { prompt, count }),
   },
 
-  // Economy operations
-  economy: {
-    status: () => api.get('/api/economy/status'),
+  // Credits (wallet system)
+  credits: {
+    getWallet: (walletId: string) =>
+      api.post('/api/credits/wallet', { walletId }),
 
-    balance: () => api.get('/api/economy/balance'),
+    earn: (walletId: string, amount: number, reason: string = 'quest') =>
+      api.post('/api/credits/earn', { walletId, amount, reason }),
 
-    transactions: (params?: { limit?: number; offset?: number }) =>
-      api.get('/api/economy/transactions', { params }),
+    spend: (walletId: string, amount: number, reason: string = 'spend') =>
+      api.post('/api/credits/spend', { walletId, amount, reason }),
   },
 
-  // Sovereignty operations
-  sovereignty: {
-    status: () => api.get('/api/sovereignty/status'),
+  // Marketplace
+  marketplace: {
+    listings: () => api.get('/api/marketplace/listings'),
+  },
 
-    invariants: () => api.get('/api/sovereignty/invariants'),
+  // Global feed
+  global: {
+    feed: () => api.get('/api/global/feed'),
+  },
 
-    audit: () => api.post('/api/sovereignty/audit'),
+  // Macros
+  macros: {
+    run: (recipeName: string, ctx?: Record<string, unknown>) =>
+      api.post('/api/macros/run', { recipeName, ctx }),
+  },
+
+  // Events
+  events: {
+    list: () => api.get('/api/events'),
   },
 };
 
