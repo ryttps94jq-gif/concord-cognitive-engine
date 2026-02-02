@@ -6290,7 +6290,7 @@ register("verify","deriveSecondOrder", async (ctx, input) => {
     return { ok:false, committed:false, reason:"llm_off_or_unavailable_for_derivation", seedIds: seeds.map(d=>d.id) };
   }
 
-  const sys = "Synthesize ONE second-order DTU implied by the provided DTUs. Output STRICT JSON for a DTU with: title, tags[], human.summary, core.definitions[], core.invariants[], core.claims[], core.examples[], core.nextActions[], machine.math{equations:[],notes:""}. Do not invent external facts; derive logically.";
+  const sys = "Synthesize ONE second-order DTU implied by the provided DTUs. Output STRICT JSON for a DTU with: title, tags[], human.summary, core.definitions[], core.invariants[], core.claims[], core.examples[], core.nextActions[], machine.math{equations:[],notes:\"\"}. Do not invent external facts; derive logically.";
   const excerpts = seeds.map(d => ({ id:d.id, title:d.title, invariants:d.core?.invariants||[], claims:d.core?.claims||[], definitions:d.core?.definitions||[] }));
   const user = JSON.stringify({ seeds: excerpts });
   const out = await llmChat(ctx, [{role:"system", content:sys},{role:"user", content:user}], { temperature: 0.1, max_tokens: 900 });
@@ -8023,6 +8023,7 @@ app.post("/api/search", async (req, res) => {
     })),
     count: results.top.length
   });
+});
 
 app.get("/api/stats", async (req, res) => {
   const stats = {
@@ -8099,6 +8100,15 @@ app.get("/api/health/deep", async (req, res) => {
     status: STATE && typeof STATE === "object" ? "pass" : "fail",
     details: { hasState: !!STATE }
   });
+
+  const allPassed = checks.every(c => c.status === "pass");
+  return res.status(allPassed ? 200 : 503).json({
+    ok: allPassed,
+    status: allPassed ? "healthy" : "unhealthy",
+    checks,
+    timestamp: nowISO()
+  });
+});
 
 // ===== END EXTENDED API ENDPOINTS =====
 
