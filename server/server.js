@@ -26,12 +26,6 @@ async function tryLoadDotenv() {
   try {
     const dotenv = await import("dotenv");
     const result = envPath ? dotenv.config({ path: envPath }) : dotenv.config();
-// LLM toggle: default ON only when a key is present; override via CONCORD_LLM_DEFAULT_FORCED/LLM_DEFAULT_FORCED (0/1/true/false/yes/on)
-const __envBool = (v) => String(v ?? "").toLowerCase().trim();
-const __llmDefaultForcedRaw = (process.env.CONCORD_LLM_DEFAULT_FORCED ?? process.env.LLM_DEFAULT_FORCED ?? null);
-const __llmForced = (__llmDefaultForcedRaw !== null) ? __envBool(__llmDefaultForcedRaw) : "";
-
-
     DOTENV.loaded = !result?.error;
     DOTENV.path = envPath || "(default)";
     DOTENV.error = result?.error ? String(result.error) : null;
@@ -45,12 +39,16 @@ await tryLoadDotenv();
 
 // ---- config ----
 const PORT = Number(process.env.PORT || 5050);
-const VERSION = "3.0.0-full-simulation";
+const VERSION = "4.0.0-full-simulation";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
 const OPENAI_MODEL_FAST = process.env.OPENAI_MODEL_FAST || process.env.OPENAI_MODEL || "gpt-4o-mini";
-const OPENAI_MODEL_SMART = process.env.OPENAI_MODEL_SMART || "gpt-4.1"; // safe default; overridden by .env
+const OPENAI_MODEL_SMART = process.env.OPENAI_MODEL_SMART || "gpt-4.1";
 const LLM_READY = Boolean(OPENAI_API_KEY);
+// LLM toggle: default ON only when a key is present
+const __envBool = (v) => String(v ?? "").toLowerCase().trim();
+const __llmDefaultForcedRaw = (process.env.CONCORD_LLM_DEFAULT_FORCED ?? process.env.LLM_DEFAULT_FORCED ?? null);
+const __llmForced = (__llmDefaultForcedRaw !== null) ? __envBool(__llmDefaultForcedRaw) : "";
 const DEFAULT_LLM_ON = (__llmDefaultForcedRaw !== null)
   ? (["1","true","yes","y","on"].includes(__llmForced))
   : Boolean((process.env.OPENAI_API_KEY || "").trim());
@@ -8300,6 +8298,2071 @@ function startGovernorHeartbeat() {
 try { startChicken3Cron(); } catch {}
 try { startChicken3Federation(); } catch {}
 // ===== END CHICKEN3: Cron + Federation =====
+
+// ============================================================================
+// CONCORD ENHANCEMENTS v3.1 - Search, Query DSL, Local LLM, Export, Plugins
+// ============================================================================
+
+// ---- Search Indexing (MiniSearch-like in-memory index) ----
+const SEARCH_INDEX = {
+  documents: new Map(),
+  invertedIndex: new Map(),
+  fieldBoosts: { title: 2.0, tags: 1.5, summary: 1.2, content: 1.0 },
+  dirty: true
+};
+
+function tokenizeForIndex(text) {
+  return String(text || "").toLowerCase()
+    .replace(/[^\w\s]/g, " ")
+    .split(/\s+/)
+    .filter(t => t.length > 1 && t.length < 40);
+}
+
+function rebuildSearchIndex() {
+  SEARCH_INDEX.invertedIndex.clear();
+  SEARCH_INDEX.documents.clear();
+
+  for (const dtu of dtusArray()) {
+    const docTokens = new Map();
+    const fields = {
+      title: dtu.title || "",
+      tags: (dtu.tags || []).join(" "),
+      summary: dtu.human?.summary || dtu.cretiHuman || "",
+      content: [
+        ...(dtu.core?.definitions || []),
+        ...(dtu.core?.invariants || []),
+        ...(dtu.core?.claims || [])
+      ].join(" ")
+    };
+
+    for (const [field, text] of Object.entries(fields)) {
+      const tokens = tokenizeForIndex(text);
+      const boost = SEARCH_INDEX.fieldBoosts[field] || 1.0;
+      for (const token of tokens) {
+        docTokens.set(token, (docTokens.get(token) || 0) + boost);
+      }
+    }
+
+    SEARCH_INDEX.documents.set(dtu.id, { id: dtu.id, tokens: docTokens, tier: dtu.tier });
+
+    for (const [token, score] of docTokens) {
+      if (!SEARCH_INDEX.invertedIndex.has(token)) {
+        SEARCH_INDEX.invertedIndex.set(token, new Map());
+      }
+      SEARCH_INDEX.invertedIndex.get(token).set(dtu.id, score);
+    }
+  }
+  SEARCH_INDEX.dirty = false;
+  log("search", "Search index rebuilt", { documents: SEARCH_INDEX.documents.size, terms: SEARCH_INDEX.invertedIndex.size });
+}
+
+function searchIndexed(query, { limit = 20, minScore = 0.01 } = {}) {
+  if (SEARCH_INDEX.dirty) rebuildSearchIndex();
+
+  const queryTokens = tokenizeForIndex(query);
+  if (!queryTokens.length) return [];
+
+  const scores = new Map();
+  const idf = new Map();
+  const N = SEARCH_INDEX.documents.size || 1;
+
+  for (const token of queryTokens) {
+    const docs = SEARCH_INDEX.invertedIndex.get(token);
+    if (docs) {
+      const docFreq = docs.size;
+      idf.set(token, Math.log(1 + N / (docFreq + 1)));
+      for (const [docId, tf] of docs) {
+        const tfidf = tf * idf.get(token);
+        scores.set(docId, (scores.get(docId) || 0) + tfidf);
+      }
+    }
+  }
+
+  const results = Array.from(scores.entries())
+    .map(([id, score]) => ({ id, score: score / queryTokens.length }))
+    .filter(r => r.score >= minScore)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+
+  return results.map(r => ({ ...STATE.dtus.get(r.id), _searchScore: r.score })).filter(Boolean);
+}
+
+// Mark index dirty on DTU changes
+const _originalDtuSet = STATE.dtus.set.bind(STATE.dtus);
+STATE.dtus.set = function(key, value) {
+  SEARCH_INDEX.dirty = true;
+  return _originalDtuSet(key, value);
+};
+
+// ---- Query DSL Parser ----
+function parseQueryDSL(queryString) {
+  const conditions = [];
+  const parts = String(queryString || "").match(/(\w+:[^\s]+|"[^"]+"|[^\s]+)/g) || [];
+  let freeText = [];
+
+  for (const part of parts) {
+    if (part.includes(":")) {
+      const [field, ...valueParts] = part.split(":");
+      const value = valueParts.join(":").replace(/^"|"$/g, "");
+      conditions.push({ field: field.toLowerCase(), value, op: "eq" });
+    } else if (part.startsWith(">") || part.startsWith("<")) {
+      const op = part[0] === ">" ? "gt" : "lt";
+      const field = part.slice(1).split(":")[0];
+      const value = part.split(":")[1];
+      if (field && value) conditions.push({ field, value: parseFloat(value), op });
+    } else {
+      freeText.push(part);
+    }
+  }
+
+  return { conditions, freeText: freeText.join(" ") };
+}
+
+function queryDTUs(queryString, { limit = 50 } = {}) {
+  const { conditions, freeText } = parseQueryDSL(queryString);
+  let results = dtusArray();
+
+  for (const cond of conditions) {
+    results = results.filter(dtu => {
+      const dtuValue = cond.field === "tier" ? dtu.tier :
+                       cond.field === "tag" || cond.field === "tags" ? (dtu.tags || []).join(",").toLowerCase() :
+                       cond.field === "title" ? (dtu.title || "").toLowerCase() :
+                       cond.field === "crispness" ? (dtu.meta?.crispness || 0) :
+                       cond.field === "id" ? dtu.id :
+                       cond.field === "source" ? (dtu.source || "") :
+                       null;
+
+      if (dtuValue === null) return true;
+
+      if (cond.op === "eq") {
+        if (typeof dtuValue === "string") return dtuValue.includes(cond.value.toLowerCase());
+        return dtuValue == cond.value;
+      }
+      if (cond.op === "gt") return dtuValue > cond.value;
+      if (cond.op === "lt") return dtuValue < cond.value;
+      return true;
+    });
+  }
+
+  if (freeText) {
+    const indexed = searchIndexed(freeText, { limit: 1000, minScore: 0.001 });
+    const indexedIds = new Set(indexed.map(d => d.id));
+    results = results.filter(d => indexedIds.has(d.id));
+    results.sort((a, b) => {
+      const aScore = indexed.find(x => x.id === a.id)?._searchScore || 0;
+      const bScore = indexed.find(x => x.id === b.id)?._searchScore || 0;
+      return bScore - aScore;
+    });
+  }
+
+  return results.slice(0, limit);
+}
+
+register("search", "query", async (ctx, input) => {
+  const q = String(input.q || input.query || "");
+  const limit = clamp(Number(input.limit || 50), 1, 500);
+  const results = queryDTUs(q, { limit });
+  return { ok: true, query: q, count: results.length, dtus: results };
+});
+
+register("search", "reindex", async (ctx, input) => {
+  rebuildSearchIndex();
+  return { ok: true, documents: SEARCH_INDEX.documents.size, terms: SEARCH_INDEX.invertedIndex.size };
+});
+
+// ---- Local LLM Support (Ollama) ----
+const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "llama3.2";
+const OLLAMA_ENABLED = process.env.OLLAMA_ENABLED === "true" || process.env.OLLAMA_ENABLED === "1";
+
+async function ollamaChat(messages, { temperature = 0.7, max_tokens = 1000 } = {}) {
+  if (!OLLAMA_ENABLED) return { ok: false, error: "Ollama not enabled" };
+  try {
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: OLLAMA_MODEL,
+        messages: messages.map(m => ({ role: m.role, content: m.content })),
+        stream: false,
+        options: { temperature, num_predict: max_tokens }
+      })
+    });
+    if (!response.ok) throw new Error(`Ollama error: ${response.status}`);
+    const data = await response.json();
+    return { ok: true, text: data.message?.content || "", model: OLLAMA_MODEL, source: "ollama" };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e), source: "ollama" };
+  }
+}
+
+async function ollamaEmbed(text) {
+  if (!OLLAMA_ENABLED) return { ok: false, error: "Ollama not enabled" };
+  try {
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/embeddings`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: OLLAMA_MODEL, prompt: String(text || "").slice(0, 8000) })
+    });
+    if (!response.ok) throw new Error(`Ollama embedding error: ${response.status}`);
+    const data = await response.json();
+    return { ok: true, embedding: data.embedding, dimensions: data.embedding?.length || 0 };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) };
+  }
+}
+
+register("llm", "local", async (ctx, input) => {
+  const messages = Array.isArray(input.messages) ? input.messages : [{ role: "user", content: String(input.prompt || input.message || "") }];
+  const result = await ollamaChat(messages, { temperature: input.temperature, max_tokens: input.max_tokens });
+  return result;
+});
+
+register("llm", "embed", async (ctx, input) => {
+  return await ollamaEmbed(String(input.text || ""));
+});
+
+// ---- Export/Import System ----
+register("export", "markdown", async (ctx, input) => {
+  const dtus = input.ids ? input.ids.map(id => STATE.dtus.get(id)).filter(Boolean) : dtusArray();
+  const lines = ["# Concord DTU Export", `Exported: ${nowISO()}`, `Count: ${dtus.length}`, ""];
+
+  for (const dtu of dtus) {
+    lines.push(`## ${dtu.title || "Untitled"}`);
+    lines.push(`**ID:** ${dtu.id} | **Tier:** ${dtu.tier || "regular"} | **Tags:** ${(dtu.tags || []).join(", ")}`);
+    lines.push("");
+    if (dtu.human?.summary) lines.push(`> ${dtu.human.summary}`, "");
+    if (dtu.core?.definitions?.length) {
+      lines.push("### Definitions");
+      dtu.core.definitions.forEach(d => lines.push(`- ${d}`));
+      lines.push("");
+    }
+    if (dtu.core?.invariants?.length) {
+      lines.push("### Invariants");
+      dtu.core.invariants.forEach(i => lines.push(`- ${i}`));
+      lines.push("");
+    }
+    if (dtu.core?.claims?.length) {
+      lines.push("### Claims");
+      dtu.core.claims.forEach(c => lines.push(`- ${c}`));
+      lines.push("");
+    }
+    lines.push("---", "");
+  }
+
+  return { ok: true, format: "markdown", content: lines.join("\n"), count: dtus.length };
+});
+
+register("export", "obsidian", async (ctx, input) => {
+  const dtus = input.ids ? input.ids.map(id => STATE.dtus.get(id)).filter(Boolean) : dtusArray();
+  const files = [];
+
+  for (const dtu of dtus) {
+    const filename = `${(dtu.title || "Untitled").replace(/[^\w\s-]/g, "").slice(0, 50)}.md`;
+    const content = [
+      "---",
+      `id: ${dtu.id}`,
+      `tier: ${dtu.tier || "regular"}`,
+      `tags: [${(dtu.tags || []).map(t => `"${t}"`).join(", ")}]`,
+      `created: ${dtu.createdAt || nowISO()}`,
+      "---",
+      "",
+      `# ${dtu.title || "Untitled"}`,
+      "",
+      dtu.human?.summary || "",
+      "",
+      "## Core",
+      "",
+      "### Definitions",
+      ...(dtu.core?.definitions || []).map(d => `- ${d}`),
+      "",
+      "### Invariants",
+      ...(dtu.core?.invariants || []).map(i => `- ${i}`),
+      "",
+      "### Claims",
+      ...(dtu.core?.claims || []).map(c => `- ${c}`),
+      "",
+      "## Lineage",
+      ...(dtu.lineage || []).map(id => `- [[${id}]]`)
+    ].join("\n");
+
+    files.push({ filename, content });
+  }
+
+  return { ok: true, format: "obsidian", files, count: files.length };
+});
+
+register("export", "json", async (ctx, input) => {
+  const dtus = input.ids ? input.ids.map(id => STATE.dtus.get(id)).filter(Boolean) : dtusArray();
+  return { ok: true, format: "json", dtus, count: dtus.length };
+});
+
+register("import", "json", async (ctx, input) => {
+  const dtus = Array.isArray(input.dtus) ? input.dtus : [];
+  let imported = 0, skipped = 0;
+
+  for (const dtu of dtus) {
+    if (!dtu.id || !dtu.title) { skipped++; continue; }
+    if (STATE.dtus.has(dtu.id) && !input.overwrite) { skipped++; continue; }
+
+    const normalized = {
+      id: dtu.id,
+      title: normalizeText(dtu.title),
+      tier: dtu.tier || "regular",
+      tags: Array.isArray(dtu.tags) ? dtu.tags : [],
+      human: dtu.human || {},
+      core: dtu.core || {},
+      machine: dtu.machine || {},
+      lineage: dtu.lineage || [],
+      source: "import",
+      createdAt: dtu.createdAt || nowISO(),
+      updatedAt: nowISO(),
+      meta: { ...dtu.meta, importedAt: nowISO() }
+    };
+
+    STATE.dtus.set(normalized.id, normalized);
+    imported++;
+  }
+
+  if (imported > 0) saveStateDebounced();
+  return { ok: true, imported, skipped, total: dtus.length };
+});
+
+register("import", "markdown", async (ctx, input) => {
+  const content = String(input.content || "");
+  const sections = content.split(/^## /m).filter(Boolean);
+  const dtus = [];
+
+  for (const section of sections) {
+    const lines = section.split("\n");
+    const title = lines[0]?.trim();
+    if (!title || title.startsWith("#")) continue;
+
+    const dtu = {
+      id: uid("dtu"),
+      title,
+      tier: "regular",
+      tags: ["imported"],
+      human: { summary: "" },
+      core: { definitions: [], invariants: [], claims: [], examples: [] },
+      source: "import-markdown",
+      createdAt: nowISO()
+    };
+
+    let currentSection = null;
+    for (const line of lines.slice(1)) {
+      if (line.startsWith("### Definitions")) currentSection = "definitions";
+      else if (line.startsWith("### Invariants")) currentSection = "invariants";
+      else if (line.startsWith("### Claims")) currentSection = "claims";
+      else if (line.startsWith(">")) dtu.human.summary = line.slice(1).trim();
+      else if (line.startsWith("- ") && currentSection) {
+        dtu.core[currentSection].push(line.slice(2).trim());
+      }
+    }
+
+    dtus.push(dtu);
+  }
+
+  let imported = 0;
+  for (const dtu of dtus) {
+    STATE.dtus.set(dtu.id, dtu);
+    imported++;
+  }
+
+  if (imported > 0) saveStateDebounced();
+  return { ok: true, imported, parsed: dtus.length };
+});
+
+// ---- Plugin/Extension System ----
+const PLUGINS = new Map();
+
+function registerPlugin(name, config) {
+  const plugin = {
+    name,
+    version: config.version || "1.0.0",
+    description: config.description || "",
+    macros: config.macros || {},
+    hooks: config.hooks || {},
+    enabled: config.enabled !== false,
+    registeredAt: nowISO()
+  };
+
+  // Register plugin macros
+  for (const [macroName, handler] of Object.entries(plugin.macros)) {
+    const [domain, op] = macroName.split(".");
+    if (domain && op && typeof handler === "function") {
+      register(domain, op, handler);
+    }
+  }
+
+  PLUGINS.set(name, plugin);
+  log("plugin", `Plugin registered: ${name}`, { version: plugin.version });
+  return plugin;
+}
+
+register("plugin", "register", async (ctx, input) => {
+  if (!input.name) return { ok: false, error: "Plugin name required" };
+  const plugin = registerPlugin(input.name, input);
+  return { ok: true, plugin: { name: plugin.name, version: plugin.version } };
+});
+
+register("plugin", "list", async (ctx, input) => {
+  const plugins = Array.from(PLUGINS.values()).map(p => ({
+    name: p.name,
+    version: p.version,
+    description: p.description,
+    enabled: p.enabled,
+    macroCount: Object.keys(p.macros).length
+  }));
+  return { ok: true, plugins, count: plugins.length };
+});
+
+register("plugin", "enable", async (ctx, input) => {
+  const plugin = PLUGINS.get(input.name);
+  if (!plugin) return { ok: false, error: "Plugin not found" };
+  plugin.enabled = true;
+  return { ok: true, name: plugin.name, enabled: true };
+});
+
+register("plugin", "disable", async (ctx, input) => {
+  const plugin = PLUGINS.get(input.name);
+  if (!plugin) return { ok: false, error: "Plugin not found" };
+  plugin.enabled = false;
+  return { ok: true, name: plugin.name, enabled: false };
+});
+
+// ---- Enhanced Council with Vote Tallying ----
+if (!STATE.councilVotes) STATE.councilVotes = new Map();
+
+register("council", "vote", async (ctx, input) => {
+  const { dtuId, vote, persona, reason } = input;
+  if (!dtuId || !vote) return { ok: false, error: "dtuId and vote required" };
+  if (!["approve", "reject", "abstain"].includes(vote)) return { ok: false, error: "Invalid vote" };
+
+  const voteRecord = {
+    id: uid("vote"),
+    dtuId,
+    vote,
+    persona: persona || "anonymous",
+    reason: reason || "",
+    timestamp: nowISO(),
+    weight: 1.0
+  };
+
+  if (!STATE.councilVotes.has(dtuId)) STATE.councilVotes.set(dtuId, []);
+  STATE.councilVotes.get(dtuId).push(voteRecord);
+  saveStateDebounced();
+
+  return { ok: true, vote: voteRecord };
+});
+
+register("council", "tally", async (ctx, input) => {
+  const { dtuId } = input;
+  if (!dtuId) return { ok: false, error: "dtuId required" };
+
+  const votes = STATE.councilVotes.get(dtuId) || [];
+  const tally = { approve: 0, reject: 0, abstain: 0, total: votes.length };
+
+  for (const v of votes) {
+    tally[v.vote] = (tally[v.vote] || 0) + v.weight;
+  }
+
+  tally.approved = tally.approve > tally.reject;
+  tally.margin = tally.approve - tally.reject;
+  tally.quorum = votes.length >= 3;
+
+  return { ok: true, dtuId, tally, votes };
+});
+
+register("council", "credibility", async (ctx, input) => {
+  const { dtuId, score, reason } = input;
+  const dtu = STATE.dtus.get(dtuId);
+  if (!dtu) return { ok: false, error: "DTU not found" };
+
+  dtu.authority = dtu.authority || {};
+  dtu.authority.credibility = clamp(Number(score || 0.5), 0, 1);
+  dtu.authority.credibilityReason = reason || "";
+  dtu.authority.credibilityAt = nowISO();
+
+  STATE.dtus.set(dtuId, dtu);
+  saveStateDebounced();
+
+  return { ok: true, dtuId, credibility: dtu.authority.credibility };
+});
+
+// ---- User-Defined Personas ----
+if (!STATE.customPersonas) STATE.customPersonas = new Map();
+
+register("persona", "create", async (ctx, input) => {
+  const { name, description, style, traits } = input;
+  if (!name) return { ok: false, error: "Persona name required" };
+
+  const persona = {
+    id: uid("persona"),
+    name: normalizeText(name),
+    description: description || "",
+    style: {
+      verbosity: clamp(Number(style?.verbosity ?? 0.5), 0, 1),
+      formality: clamp(Number(style?.formality ?? 0.5), 0, 1),
+      skepticism: clamp(Number(style?.skepticism ?? 0.5), 0, 1),
+      creativity: clamp(Number(style?.creativity ?? 0.5), 0, 1),
+      empathy: clamp(Number(style?.empathy ?? 0.5), 0, 1)
+    },
+    traits: Array.isArray(traits) ? traits : [],
+    systemPrompt: input.systemPrompt || "",
+    createdAt: nowISO(),
+    updatedAt: nowISO(),
+    usageCount: 0
+  };
+
+  STATE.customPersonas.set(persona.id, persona);
+  saveStateDebounced();
+
+  return { ok: true, persona };
+});
+
+register("persona", "list", async (ctx, input) => {
+  const builtIn = [
+    { id: "ethicist", name: "Ethicist", description: "Focuses on moral implications", builtin: true },
+    { id: "engineer", name: "Engineer", description: "Practical, implementation-focused", builtin: true },
+    { id: "historian", name: "Historian", description: "Historical context and precedent", builtin: true },
+    { id: "economist", name: "Economist", description: "Economic analysis and trade-offs", builtin: true }
+  ];
+  const custom = Array.from(STATE.customPersonas.values());
+  return { ok: true, personas: [...builtIn, ...custom], builtInCount: builtIn.length, customCount: custom.length };
+});
+
+register("persona", "update", async (ctx, input) => {
+  const persona = STATE.customPersonas.get(input.id);
+  if (!persona) return { ok: false, error: "Persona not found" };
+
+  if (input.name) persona.name = normalizeText(input.name);
+  if (input.description) persona.description = input.description;
+  if (input.style) persona.style = { ...persona.style, ...input.style };
+  if (input.traits) persona.traits = input.traits;
+  if (input.systemPrompt) persona.systemPrompt = input.systemPrompt;
+  persona.updatedAt = nowISO();
+
+  STATE.customPersonas.set(persona.id, persona);
+  saveStateDebounced();
+
+  return { ok: true, persona };
+});
+
+register("persona", "delete", async (ctx, input) => {
+  if (!STATE.customPersonas.has(input.id)) return { ok: false, error: "Persona not found" };
+  STATE.customPersonas.delete(input.id);
+  saveStateDebounced();
+  return { ok: true, deleted: input.id };
+});
+
+// ---- Admin Dashboard Endpoints ----
+register("admin", "dashboard", async (ctx, input) => {
+  const uptime = process.uptime();
+  const memory = process.memoryUsage();
+
+  return {
+    ok: true,
+    system: {
+      version: VERSION,
+      uptime: { seconds: uptime, formatted: `${Math.floor(uptime/3600)}h ${Math.floor((uptime%3600)/60)}m` },
+      memory: {
+        heapUsed: Math.round(memory.heapUsed / 1024 / 1024) + "MB",
+        heapTotal: Math.round(memory.heapTotal / 1024 / 1024) + "MB",
+        rss: Math.round(memory.rss / 1024 / 1024) + "MB"
+      },
+      nodeVersion: process.version
+    },
+    dtus: {
+      total: STATE.dtus.size,
+      regular: dtusArray().filter(d => d.tier === "regular").length,
+      mega: dtusArray().filter(d => d.tier === "mega").length,
+      hyper: dtusArray().filter(d => d.tier === "hyper").length,
+      shadow: STATE.shadowDtus?.size || 0
+    },
+    sessions: {
+      total: STATE.sessions?.size || 0,
+      active: Array.from(STATE.sessions?.values() || []).filter(s => {
+        const lastMsg = s.messages?.[s.messages.length - 1];
+        return lastMsg && (Date.now() - new Date(lastMsg.timestamp).getTime()) < 3600000;
+      }).length
+    },
+    organs: {
+      total: STATE.organs?.size || 0,
+      healthy: Array.from(STATE.organs?.values() || []).filter(o => (o.maturity?.score || 0) > 0.5).length
+    },
+    llm: {
+      openaiReady: LLM_READY,
+      ollamaEnabled: OLLAMA_ENABLED,
+      defaultOn: DEFAULT_LLM_ON
+    },
+    queues: {
+      maintenance: STATE.queues?.maintenance?.length || 0,
+      synthesis: STATE.queues?.synthesis?.length || 0,
+      hypotheses: STATE.queues?.hypotheses?.length || 0
+    },
+    plugins: {
+      total: PLUGINS.size,
+      enabled: Array.from(PLUGINS.values()).filter(p => p.enabled).length
+    },
+    searchIndex: {
+      documents: SEARCH_INDEX.documents.size,
+      terms: SEARCH_INDEX.invertedIndex.size,
+      dirty: SEARCH_INDEX.dirty
+    }
+  };
+});
+
+register("admin", "logs", async (ctx, input) => {
+  const limit = clamp(Number(input.limit || 100), 1, 1000);
+  const type = input.type || null;
+
+  let logs = STATE.__logs || [];
+  if (type) logs = logs.filter(l => l.type === type);
+  logs = logs.slice(-limit);
+
+  return { ok: true, logs, count: logs.length };
+});
+
+register("admin", "metrics", async (ctx, input) => {
+  const chicken2 = STATE.__chicken2 || {};
+  const growth = STATE.growth || {};
+  const abstraction = STATE.abstraction || {};
+
+  return {
+    ok: true,
+    chicken2: {
+      continuityAvg: chicken2.metrics?.continuityAvg || 0,
+      homeostasis: chicken2.metrics?.homeostasis || 0.8,
+      contradictionLoad: chicken2.metrics?.contradictionLoad || 0,
+      suffering: chicken2.metrics?.suffering || 0,
+      accepts: chicken2.metrics?.accepts || 0,
+      rejects: chicken2.metrics?.rejects || 0
+    },
+    growth: {
+      bioAge: growth.bioAge || 0,
+      telomere: growth.telomere || 1,
+      homeostasis: growth.homeostasis || 0.9,
+      stress: growth.stress || { acute: 0, chronic: 0 }
+    },
+    abstraction: {
+      load: abstraction.metrics?.load || 0,
+      margin: abstraction.metrics?.margin || 1,
+      enabled: abstraction.enabled !== false
+    }
+  };
+});
+
+// ---- Pagination Helper ----
+function paginateResults(items, { page = 1, pageSize = 20 } = {}) {
+  const total = items.length;
+  const totalPages = Math.ceil(total / pageSize);
+  const start = (page - 1) * pageSize;
+  const end = start + pageSize;
+
+  return {
+    items: items.slice(start, end),
+    pagination: {
+      page,
+      pageSize,
+      total,
+      totalPages,
+      hasNext: page < totalPages,
+      hasPrev: page > 1
+    }
+  };
+}
+
+// ---- Enhanced API Endpoints for New Features ----
+app.get("/api/search/indexed", async (req, res) => {
+  const q = String(req.query.q || "");
+  const limit = clamp(Number(req.query.limit || 20), 1, 100);
+  const results = searchIndexed(q, { limit });
+  return res.json({ ok: true, query: q, results, count: results.length });
+});
+
+app.get("/api/search/dsl", async (req, res) => {
+  const out = await runMacro("search", "query", { q: req.query.q, limit: req.query.limit }, makeCtx(req));
+  return res.json(out);
+});
+
+app.post("/api/search/reindex", async (req, res) => {
+  const out = await runMacro("search", "reindex", {}, makeCtx(req));
+  return res.json(out);
+});
+
+app.post("/api/llm/local", async (req, res) => {
+  const out = await runMacro("llm", "local", req.body, makeCtx(req));
+  return res.json(out);
+});
+
+app.post("/api/llm/embed", async (req, res) => {
+  const out = await runMacro("llm", "embed", req.body, makeCtx(req));
+  return res.json(out);
+});
+
+app.post("/api/export/markdown", async (req, res) => {
+  const out = await runMacro("export", "markdown", req.body, makeCtx(req));
+  return res.json(out);
+});
+
+app.post("/api/export/obsidian", async (req, res) => {
+  const out = await runMacro("export", "obsidian", req.body, makeCtx(req));
+  return res.json(out);
+});
+
+app.post("/api/export/json", async (req, res) => {
+  const out = await runMacro("export", "json", req.body, makeCtx(req));
+  return res.json(out);
+});
+
+app.post("/api/import/json", async (req, res) => {
+  const out = await runMacro("import", "json", req.body, makeCtx(req));
+  return res.json(out);
+});
+
+app.post("/api/import/markdown", async (req, res) => {
+  const out = await runMacro("import", "markdown", req.body, makeCtx(req));
+  return res.json(out);
+});
+
+app.get("/api/plugins", async (req, res) => {
+  const out = await runMacro("plugin", "list", {}, makeCtx(req));
+  return res.json(out);
+});
+
+app.post("/api/plugins", async (req, res) => {
+  const out = await runMacro("plugin", "register", req.body, makeCtx(req));
+  return res.json(out);
+});
+
+app.post("/api/council/vote", async (req, res) => {
+  const out = await runMacro("council", "vote", req.body, makeCtx(req));
+  return res.json(out);
+});
+
+app.get("/api/council/tally/:dtuId", async (req, res) => {
+  const out = await runMacro("council", "tally", { dtuId: req.params.dtuId }, makeCtx(req));
+  return res.json(out);
+});
+
+app.post("/api/council/credibility", async (req, res) => {
+  const out = await runMacro("council", "credibility", req.body, makeCtx(req));
+  return res.json(out);
+});
+
+app.post("/api/personas", async (req, res) => {
+  const out = await runMacro("persona", "create", req.body, makeCtx(req));
+  return res.json(out);
+});
+
+app.get("/api/personas", async (req, res) => {
+  const out = await runMacro("persona", "list", {}, makeCtx(req));
+  return res.json(out);
+});
+
+app.put("/api/personas/:id", async (req, res) => {
+  const out = await runMacro("persona", "update", { id: req.params.id, ...req.body }, makeCtx(req));
+  return res.json(out);
+});
+
+app.delete("/api/personas/:id", async (req, res) => {
+  const out = await runMacro("persona", "delete", { id: req.params.id }, makeCtx(req));
+  return res.json(out);
+});
+
+app.get("/api/admin/dashboard", async (req, res) => {
+  const out = await runMacro("admin", "dashboard", {}, makeCtx(req));
+  return res.json(out);
+});
+
+app.get("/api/admin/logs", async (req, res) => {
+  const out = await runMacro("admin", "logs", { limit: req.query.limit, type: req.query.type }, makeCtx(req));
+  return res.json(out);
+});
+
+app.get("/api/admin/metrics", async (req, res) => {
+  const out = await runMacro("admin", "metrics", {}, makeCtx(req));
+  return res.json(out);
+});
+
+app.get("/api/dtus/paginated", async (req, res) => {
+  const page = clamp(Number(req.query.page || 1), 1, 10000);
+  const pageSize = clamp(Number(req.query.pageSize || 20), 1, 100);
+  const tier = req.query.tier || null;
+  const tag = req.query.tag || null;
+
+  let dtus = dtusArray();
+  if (tier) dtus = dtus.filter(d => d.tier === tier);
+  if (tag) dtus = dtus.filter(d => (d.tags || []).includes(tag));
+
+  const result = paginateResults(dtus, { page, pageSize });
+  return res.json({ ok: true, ...result });
+});
+
+// ---- OpenAPI Documentation ----
+const OPENAPI_SPEC = {
+  openapi: "3.0.0",
+  info: {
+    title: "Concord Cognitive Engine API",
+    version: VERSION,
+    description: "Local-first cognitive operating system API"
+  },
+  servers: [{ url: `http://localhost:${PORT}`, description: "Local server" }],
+  paths: {
+    "/api/status": { get: { summary: "System status", tags: ["System"] }},
+    "/api/dtus": { get: { summary: "List all DTUs", tags: ["DTUs"] }},
+    "/api/dtus/paginated": { get: { summary: "Paginated DTU list", tags: ["DTUs"], parameters: [
+      { name: "page", in: "query", schema: { type: "integer" }},
+      { name: "pageSize", in: "query", schema: { type: "integer" }}
+    ]}},
+    "/api/search/indexed": { get: { summary: "Full-text search", tags: ["Search"] }},
+    "/api/search/dsl": { get: { summary: "Query DSL search", tags: ["Search"] }},
+    "/api/chat": { post: { summary: "Chat with Concord", tags: ["Chat"] }},
+    "/api/forge/manual": { post: { summary: "Create DTU manually", tags: ["Forge"] }},
+    "/api/forge/hybrid": { post: { summary: "Create DTU with LLM assistance", tags: ["Forge"] }},
+    "/api/export/markdown": { post: { summary: "Export as Markdown", tags: ["Export"] }},
+    "/api/export/obsidian": { post: { summary: "Export for Obsidian", tags: ["Export"] }},
+    "/api/import/json": { post: { summary: "Import DTUs from JSON", tags: ["Import"] }},
+    "/api/import/markdown": { post: { summary: "Import from Markdown", tags: ["Import"] }},
+    "/api/admin/dashboard": { get: { summary: "Admin dashboard data", tags: ["Admin"] }},
+    "/api/admin/metrics": { get: { summary: "System metrics", tags: ["Admin"] }},
+    "/api/admin/logs": { get: { summary: "System logs", tags: ["Admin"] }},
+    "/api/personas": {
+      get: { summary: "List personas", tags: ["Personas"] },
+      post: { summary: "Create persona", tags: ["Personas"] }
+    },
+    "/api/plugins": {
+      get: { summary: "List plugins", tags: ["Plugins"] },
+      post: { summary: "Register plugin", tags: ["Plugins"] }
+    },
+    "/api/council/vote": { post: { summary: "Submit council vote", tags: ["Council"] }},
+    "/api/council/tally/{dtuId}": { get: { summary: "Get vote tally", tags: ["Council"] }},
+    "/api/llm/local": { post: { summary: "Local LLM inference (Ollama)", tags: ["LLM"] }},
+    "/api/llm/embed": { post: { summary: "Generate embeddings", tags: ["LLM"] }}
+  },
+  tags: [
+    { name: "System", description: "System status and health" },
+    { name: "DTUs", description: "Discrete Thought Unit operations" },
+    { name: "Search", description: "Search and query" },
+    { name: "Chat", description: "Conversational interface" },
+    { name: "Forge", description: "DTU creation" },
+    { name: "Export", description: "Export data" },
+    { name: "Import", description: "Import data" },
+    { name: "Admin", description: "Administration" },
+    { name: "Personas", description: "Persona management" },
+    { name: "Plugins", description: "Plugin system" },
+    { name: "Council", description: "Governance and voting" },
+    { name: "LLM", description: "Language model operations" }
+  ]
+};
+
+app.get("/api/openapi.json", (req, res) => res.json(OPENAPI_SPEC));
+app.get("/api/docs", (req, res) => {
+  res.send(`<!DOCTYPE html>
+<html><head><title>Concord API Docs</title>
+<link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+</head><body>
+<div id="swagger-ui"></div>
+<script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+<script>SwaggerUIBundle({ url: "/api/openapi.json", dom_id: "#swagger-ui" });</script>
+</body></html>`);
+});
+
+console.log("[Concord] Enhancements v3.1 loaded: Search indexing, Query DSL, Local LLM, Export/Import, Plugins, Council voting, Personas, Admin dashboard");
+
+// ============================================================================
+// WAVE 1: PLUGIN MARKETPLACE ECOSYSTEM (Surpassing Obsidian)
+// ============================================================================
+const PLUGIN_MARKETPLACE = {
+  listings: new Map(),
+  installed: new Map(),
+  reviews: new Map(),
+  categories: ["productivity", "visualization", "integration", "ai", "governance", "export", "theme", "automation"]
+};
+
+register("marketplace", "submit", async (ctx, input) => {
+  const { name, description, version, author, githubUrl, category, macros } = input;
+  if (!name || !githubUrl) return { ok: false, error: "Name and GitHub URL required" };
+  const listing = {
+    id: uid("plugin"),
+    name: normalizeText(name),
+    description: description || "",
+    version: version || "1.0.0",
+    author: author || "anonymous",
+    githubUrl,
+    category: PLUGIN_MARKETPLACE.categories.includes(category) ? category : "productivity",
+    macros: macros || [],
+    downloads: 0,
+    rating: 0,
+    reviews: [],
+    ethosCompliant: null,
+    submittedAt: nowISO(),
+    status: "pending_review"
+  };
+  PLUGIN_MARKETPLACE.listings.set(listing.id, listing);
+  STATE.queues.macroProposals = STATE.queues.macroProposals || [];
+  STATE.queues.macroProposals.push({ type: "plugin_review", pluginId: listing.id, name: listing.name, githubUrl: listing.githubUrl, submittedAt: nowISO() });
+  saveStateDebounced();
+  return { ok: true, listing, message: "Plugin submitted for Chicken3 ethos review" };
+});
+
+register("marketplace", "browse", async (ctx, input) => {
+  const { category, search, sort, page, pageSize } = input;
+  let listings = Array.from(PLUGIN_MARKETPLACE.listings.values()).filter(l => l.status === "approved" || l.status === "pending_review");
+  if (category) listings = listings.filter(l => l.category === category);
+  if (search) { const q = search.toLowerCase(); listings = listings.filter(l => l.name.toLowerCase().includes(q) || l.description.toLowerCase().includes(q)); }
+  if (sort === "rating") listings.sort((a, b) => b.rating - a.rating);
+  else if (sort === "downloads") listings.sort((a, b) => b.downloads - a.downloads);
+  else listings.sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
+  const result = paginateResults(listings, { page: Number(page || 1), pageSize: clamp(Number(pageSize || 20), 1, 100) });
+  return { ok: true, ...result, categories: PLUGIN_MARKETPLACE.categories };
+});
+
+register("marketplace", "install", async (ctx, input) => {
+  const { pluginId, fromGithub, githubUrl } = input;
+  if (fromGithub && githubUrl) {
+    const match = githubUrl.match(/github\.com\/([^\/]+)\/([^\/]+)/);
+    if (!match) return { ok: false, error: "Invalid GitHub URL" };
+    const [, owner, repo] = match;
+    const plugin = { id: uid("plugin"), name: repo, version: "1.0.0", source: githubUrl, installedAt: nowISO(), enabled: true, autoUpdate: true };
+    PLUGIN_MARKETPLACE.installed.set(plugin.id, plugin);
+    saveStateDebounced();
+    return { ok: true, plugin, message: "Plugin installed from GitHub" };
+  }
+  const listing = PLUGIN_MARKETPLACE.listings.get(pluginId);
+  if (!listing) return { ok: false, error: "Plugin not found" };
+  listing.downloads++;
+  const installed = { id: listing.id, name: listing.name, version: listing.version, source: listing.githubUrl, installedAt: nowISO(), enabled: true, autoUpdate: true };
+  PLUGIN_MARKETPLACE.installed.set(installed.id, installed);
+  saveStateDebounced();
+  return { ok: true, plugin: installed };
+});
+
+register("marketplace", "review", async (ctx, input) => {
+  const { pluginId, rating, comment, persona } = input;
+  if (!pluginId || !rating) return { ok: false, error: "Plugin ID and rating required" };
+  const review = { id: uid("review"), pluginId, rating: clamp(Number(rating), 1, 5), comment: comment || "", persona: persona || "anonymous", createdAt: nowISO() };
+  if (!PLUGIN_MARKETPLACE.reviews.has(pluginId)) PLUGIN_MARKETPLACE.reviews.set(pluginId, []);
+  PLUGIN_MARKETPLACE.reviews.get(pluginId).push(review);
+  const listing = PLUGIN_MARKETPLACE.listings.get(pluginId);
+  if (listing) { const reviews = PLUGIN_MARKETPLACE.reviews.get(pluginId) || []; listing.rating = reviews.reduce((s, r) => s + r.rating, 0) / reviews.length; }
+  saveStateDebounced();
+  return { ok: true, review };
+});
+
+register("marketplace", "heartbeatSync", async (ctx, input) => {
+  const installed = Array.from(PLUGIN_MARKETPLACE.installed.values());
+  const updates = installed.filter(p => p.autoUpdate && p.source).map(p => ({ pluginId: p.id, name: p.name, currentVersion: p.version, checkTime: nowISO() }));
+  return { ok: true, installed: installed.length, updateChecks: updates.length };
+});
+
+register("marketplace", "installed", async (ctx, input) => {
+  const plugins = Array.from(PLUGIN_MARKETPLACE.installed.values());
+  return { ok: true, plugins, count: plugins.length };
+});
+
+app.get("/api/marketplace/browse", async (req, res) => res.json(await runMacro("marketplace", "browse", { category: req.query.category, search: req.query.search, sort: req.query.sort, page: req.query.page, pageSize: req.query.pageSize }, makeCtx(req))));
+app.post("/api/marketplace/submit", async (req, res) => res.json(await runMacro("marketplace", "submit", req.body, makeCtx(req))));
+app.post("/api/marketplace/install", async (req, res) => res.json(await runMacro("marketplace", "install", req.body, makeCtx(req))));
+app.post("/api/marketplace/review", async (req, res) => res.json(await runMacro("marketplace", "review", req.body, makeCtx(req))));
+app.get("/api/marketplace/installed", async (req, res) => res.json(await runMacro("marketplace", "installed", {}, makeCtx(req))));
+
+console.log("[Concord] Wave 1: Plugin Marketplace loaded");
+
+// ============================================================================
+// WAVE 2: GRAPH-BASED RELATIONAL QUERIES (Surpassing Logseq)
+// ============================================================================
+const GRAPH_INDEX = { nodes: new Map(), edges: new Map(), dirty: true };
+
+function rebuildGraphIndex() {
+  GRAPH_INDEX.nodes.clear();
+  GRAPH_INDEX.edges.clear();
+  for (const [id, dtu] of STATE.dtus.entries()) {
+    GRAPH_INDEX.nodes.set(id, { id, title: dtu.title, tier: dtu.tier, tags: dtu.tags || [], lineageDepth: 0 });
+    const lineage = dtu.lineage || {};
+    for (const parentId of (lineage.parents || [])) { GRAPH_INDEX.edges.set(`${parentId}->${id}`, { id: `${parentId}->${id}`, source: parentId, target: id, type: "parent" }); }
+    for (const childId of (lineage.children || [])) { GRAPH_INDEX.edges.set(`${id}->${childId}`, { id: `${id}->${childId}`, source: id, target: childId, type: "child" }); }
+    for (const tag of (dtu.tags || [])) {
+      const tagNodeId = `tag:${tag}`;
+      if (!GRAPH_INDEX.nodes.has(tagNodeId)) GRAPH_INDEX.nodes.set(tagNodeId, { id: tagNodeId, type: "tag", label: tag });
+      GRAPH_INDEX.edges.set(`${id}->tag:${tag}`, { source: id, target: tagNodeId, type: "tagged" });
+    }
+  }
+  // Compute lineage depths
+  const roots = Array.from(STATE.dtus.values()).filter(d => !d.lineage?.parents?.length || d.tier === "core");
+  const visited = new Set();
+  const queue = roots.map(r => ({ id: r.id, depth: 0 }));
+  while (queue.length > 0) {
+    const { id, depth } = queue.shift();
+    if (visited.has(id)) continue;
+    visited.add(id);
+    const node = GRAPH_INDEX.nodes.get(id);
+    if (node) node.lineageDepth = depth;
+    const dtu = STATE.dtus.get(id);
+    for (const childId of (dtu?.lineage?.children || [])) { if (!visited.has(childId)) queue.push({ id: childId, depth: depth + 1 }); }
+  }
+  GRAPH_INDEX.dirty = false;
+}
+
+register("graph", "query", async (ctx, input) => {
+  if (GRAPH_INDEX.dirty) rebuildGraphIndex();
+  const { dsl } = input;
+  const results = [];
+  const dslLower = (dsl || "").toLowerCase();
+
+  // Tag queries
+  const tagMatch = dslLower.match(/linked to tag[:\s]+(\w+)/i);
+  if (tagMatch) {
+    const tag = tagMatch[1];
+    for (const [id, node] of GRAPH_INDEX.nodes.entries()) { if (node.tags?.includes(tag)) results.push({ id, ...node, matchType: "tag" }); }
+  }
+
+  // Lineage depth queries
+  const depthMatch = dslLower.match(/lineage depth\s*([><=]+)\s*(\d+)/i);
+  if (depthMatch) {
+    const op = depthMatch[1], val = Number(depthMatch[2]);
+    const filtered = results.length > 0 ? results : Array.from(GRAPH_INDEX.nodes.values());
+    return { ok: true, results: filtered.filter(n => { if (op === ">") return n.lineageDepth > val; if (op === "<") return n.lineageDepth < val; if (op === ">=") return n.lineageDepth >= val; if (op === "<=") return n.lineageDepth <= val; return n.lineageDepth === val; }), query: dsl };
+  }
+
+  // Relationship queries
+  const relMatch = dslLower.match(/(children|parents|ancestors|descendants) of (\w+)/i);
+  if (relMatch) {
+    const [, rel, targetId] = relMatch;
+    const traverse = (startId, dir, maxD = 10) => {
+      const found = [], vis = new Set(), q = [{ id: startId, d: 0 }];
+      while (q.length > 0) {
+        const { id, d } = q.shift();
+        if (vis.has(id) || d > maxD) continue;
+        vis.add(id);
+        const dtu = STATE.dtus.get(id);
+        if (!dtu) continue;
+        const related = dir === "down" ? (dtu.lineage?.children || []) : (dtu.lineage?.parents || []);
+        for (const relId of related) { if (!vis.has(relId)) { found.push({ id: relId, depth: d + 1 }); q.push({ id: relId, d: d + 1 }); } }
+      }
+      return found;
+    };
+    if (rel === "children") { const dtu = STATE.dtus.get(targetId); return { ok: true, results: (dtu?.lineage?.children || []).map(id => ({ id, ...GRAPH_INDEX.nodes.get(id) })) }; }
+    if (rel === "parents") { const dtu = STATE.dtus.get(targetId); return { ok: true, results: (dtu?.lineage?.parents || []).map(id => ({ id, ...GRAPH_INDEX.nodes.get(id) })) }; }
+    if (rel === "descendants") return { ok: true, results: traverse(targetId, "down") };
+    if (rel === "ancestors") return { ok: true, results: traverse(targetId, "up") };
+  }
+
+  // Cluster queries
+  const clusterMatch = dslLower.match(/cluster[s]?\s*(around|containing|near)\s*(\w+)/i);
+  if (clusterMatch) {
+    const targetId = clusterMatch[2];
+    const targetDtu = STATE.dtus.get(targetId);
+    if (!targetDtu) return { ok: false, error: "DTU not found" };
+    const targetTags = new Set(targetDtu.tags || []);
+    const similar = [];
+    for (const [id, dtu] of STATE.dtus.entries()) {
+      if (id === targetId) continue;
+      const overlap = (dtu.tags || []).filter(t => targetTags.has(t)).length;
+      if (overlap > 0) similar.push({ id, title: dtu.title, overlap, tags: dtu.tags });
+    }
+    similar.sort((a, b) => b.overlap - a.overlap);
+    return { ok: true, results: similar.slice(0, 20), clusteredAround: targetId };
+  }
+
+  return { ok: true, results, query: dsl, hint: "Use: 'DTUs linked to tag:X with lineage depth > 2' or 'descendants of dtu_xxx'" };
+});
+
+register("graph", "visualData", async (ctx, input) => {
+  if (GRAPH_INDEX.dirty) rebuildGraphIndex();
+  const { tier, limit, includeEdges } = input;
+  let nodes = Array.from(GRAPH_INDEX.nodes.values()).filter(n => !n.type || n.type !== "tag");
+  if (tier) nodes = nodes.filter(n => n.tier === tier);
+  nodes = nodes.slice(0, Number(limit) || 200);
+  const nodeIds = new Set(nodes.map(n => n.id));
+  const edges = includeEdges !== false ? Array.from(GRAPH_INDEX.edges.values()).filter(e => nodeIds.has(e.source) && nodeIds.has(e.target)) : [];
+  return { ok: true, nodes, edges, stats: { totalNodes: GRAPH_INDEX.nodes.size, totalEdges: GRAPH_INDEX.edges.size } };
+});
+
+register("graph", "forceGraph", async (ctx, input) => {
+  if (GRAPH_INDEX.dirty) rebuildGraphIndex();
+  const { centerNode, depth, maxNodes } = input;
+  let nodes = [], links = [];
+  if (centerNode) {
+    const visited = new Set(), queue = [{ id: centerNode, d: 0 }], maxDepth = Number(depth) || 2;
+    while (queue.length > 0 && nodes.length < (Number(maxNodes) || 100)) {
+      const { id, d } = queue.shift();
+      if (visited.has(id) || d > maxDepth) continue;
+      visited.add(id);
+      const dtu = STATE.dtus.get(id);
+      if (!dtu) continue;
+      nodes.push({ id, label: dtu.title, tier: dtu.tier, tags: dtu.tags, depth: d });
+      for (const parentId of (dtu.lineage?.parents || [])) { links.push({ source: parentId, target: id, type: "parent" }); if (!visited.has(parentId)) queue.push({ id: parentId, d: d + 1 }); }
+      for (const childId of (dtu.lineage?.children || [])) { links.push({ source: id, target: childId, type: "child" }); if (!visited.has(childId)) queue.push({ id: childId, d: d + 1 }); }
+    }
+  } else {
+    nodes = Array.from(GRAPH_INDEX.nodes.values()).filter(n => !n.type || n.type !== "tag").slice(0, Number(maxNodes) || 100);
+    const nodeIds = new Set(nodes.map(n => n.id));
+    links = Array.from(GRAPH_INDEX.edges.values()).filter(e => nodeIds.has(e.source) && nodeIds.has(e.target));
+  }
+  return { ok: true, nodes, links };
+});
+
+app.post("/api/graph/query", async (req, res) => res.json(await runMacro("graph", "query", req.body, makeCtx(req))));
+app.get("/api/graph/visual", async (req, res) => res.json(await runMacro("graph", "visualData", { tier: req.query.tier, limit: req.query.limit, includeEdges: req.query.includeEdges !== "false" }, makeCtx(req))));
+app.get("/api/graph/force", async (req, res) => res.json(await runMacro("graph", "forceGraph", { centerNode: req.query.centerNode, depth: req.query.depth, maxNodes: req.query.maxNodes }, makeCtx(req))));
+
+console.log("[Concord] Wave 2: Graph Queries loaded");
+
+// ============================================================================
+// WAVE 3: DYNAMIC SCHEMA TEMPLATES (Surpassing Tana's Supertags)
+// ============================================================================
+const SCHEMA_REGISTRY = new Map();
+
+register("schema", "create", async (ctx, input) => {
+  const { name, kind, fields, validation, evolves } = input;
+  if (!name || !kind) return { ok: false, error: "Name and kind required" };
+  const schema = {
+    id: uid("schema"),
+    name: normalizeText(name),
+    kind,
+    fields: (fields || []).map(f => ({ name: f.name, type: f.type || "string", required: f.required || false, default: f.default, validation: f.validation || null, description: f.description || "" })),
+    validation: validation || {},
+    evolves: evolves !== false,
+    version: 1,
+    createdAt: nowISO(),
+    updatedAt: nowISO(),
+    usageCount: 0
+  };
+  const schemaDtu = {
+    id: schema.id,
+    title: `Schema: ${schema.name}`,
+    tier: "core",
+    tags: ["schema", "meta", kind],
+    human: { summary: `Schema template for ${kind} DTUs` },
+    core: { definitions: schema.fields.map(f => `${f.name}: ${f.type}${f.required ? ' (required)' : ''}`), invariants: Object.entries(schema.validation).map(([k, v]) => `${k}: ${v}`) },
+    machine: { kind: "schema", schema },
+    source: "schema-registry",
+    createdAt: schema.createdAt
+  };
+  STATE.dtus.set(schemaDtu.id, schemaDtu);
+  SCHEMA_REGISTRY.set(schema.name, schema);
+  saveStateDebounced();
+  return { ok: true, schema, dtuId: schemaDtu.id };
+});
+
+register("schema", "list", async (ctx, input) => {
+  const schemas = Array.from(SCHEMA_REGISTRY.values());
+  return { ok: true, schemas, count: schemas.length };
+});
+
+register("schema", "validate", async (ctx, input) => {
+  const { schemaName, data } = input;
+  const schema = SCHEMA_REGISTRY.get(schemaName);
+  if (!schema) return { ok: false, error: "Schema not found" };
+  const errors = [];
+  for (const field of schema.fields) {
+    const value = data[field.name];
+    if (field.required && (value === undefined || value === null || value === "")) { errors.push({ field: field.name, error: "Required field missing" }); continue; }
+    if (value !== undefined && value !== null) {
+      if (field.type === "number" && typeof value !== "number") errors.push({ field: field.name, error: "Must be a number" });
+      if (field.type === "boolean" && typeof value !== "boolean") errors.push({ field: field.name, error: "Must be a boolean" });
+      if (field.type === "array" && !Array.isArray(value)) errors.push({ field: field.name, error: "Must be an array" });
+      if (field.validation) {
+        if (field.validation.regex && typeof value === "string" && !new RegExp(field.validation.regex).test(value)) errors.push({ field: field.name, error: `Must match: ${field.validation.regex}` });
+        if (field.validation.min !== undefined && value < field.validation.min) errors.push({ field: field.name, error: `Must be >= ${field.validation.min}` });
+        if (field.validation.max !== undefined && value > field.validation.max) errors.push({ field: field.name, error: `Must be <= ${field.validation.max}` });
+        if (field.validation.enum && !field.validation.enum.includes(value)) errors.push({ field: field.name, error: `Must be one of: ${field.validation.enum.join(", ")}` });
+      }
+    }
+  }
+  return { ok: errors.length === 0, valid: errors.length === 0, errors, schemaName };
+});
+
+register("schema", "apply", async (ctx, input) => {
+  const { schemaName, dtuId, data } = input;
+  const schema = SCHEMA_REGISTRY.get(schemaName);
+  if (!schema) return { ok: false, error: "Schema not found" };
+  const validation = await runMacro("schema", "validate", { schemaName, data }, ctx);
+  if (!validation.valid) return { ok: false, error: "Validation failed", errors: validation.errors };
+  const dtu = STATE.dtus.get(dtuId);
+  if (!dtu) return { ok: false, error: "DTU not found" };
+  dtu.machine = dtu.machine || {};
+  dtu.machine.schema = schemaName;
+  dtu.machine.schemaVersion = schema.version;
+  dtu.machine.schemaData = data;
+  dtu.tags = [...new Set([...(dtu.tags || []), schemaName, schema.kind])];
+  dtu.updatedAt = nowISO();
+  schema.usageCount++;
+  STATE.dtus.set(dtuId, dtu);
+  saveStateDebounced();
+  return { ok: true, dtuId, schemaApplied: schemaName };
+});
+
+register("schema", "evolve", async (ctx, input) => {
+  const { schemaName, changes, reason } = input;
+  const schema = SCHEMA_REGISTRY.get(schemaName);
+  if (!schema) return { ok: false, error: "Schema not found" };
+  if (!schema.evolves) return { ok: false, error: "Schema evolution disabled" };
+  STATE.queues.macroProposals.push({ type: "schema_evolution", schemaName, currentVersion: schema.version, proposedChanges: changes, reason: reason || "", proposedAt: nowISO() });
+  saveStateDebounced();
+  return { ok: true, message: "Schema evolution queued for council review" };
+});
+
+// Default schemas
+const DEFAULT_SCHEMAS = [
+  { name: "Hypothesis", kind: "hypothesis", fields: [{ name: "claim", type: "string", required: true }, { name: "evidence", type: "array", required: false }, { name: "confidence", type: "number", required: true, validation: { min: 0, max: 1 } }, { name: "testable", type: "boolean", required: true }, { name: "domain", type: "string", required: false }] },
+  { name: "Experiment", kind: "experiment", fields: [{ name: "hypothesis", type: "reference", required: true }, { name: "method", type: "string", required: true }, { name: "variables", type: "array", required: true }, { name: "results", type: "string", required: false }, { name: "status", type: "string", required: true, validation: { enum: ["planned", "running", "completed", "failed"] } }] },
+  { name: "Claim", kind: "claim", fields: [{ name: "statement", type: "string", required: true }, { name: "type", type: "string", required: true, validation: { enum: ["fact", "opinion", "inference", "speculation"] } }, { name: "sources", type: "array", required: false }, { name: "verifiable", type: "boolean", required: true }] },
+  { name: "Evidence", kind: "evidence", fields: [{ name: "description", type: "string", required: true }, { name: "type", type: "string", required: true, validation: { enum: ["empirical", "testimonial", "documentary", "statistical", "analogical"] } }, { name: "strength", type: "number", required: true, validation: { min: 0, max: 1 } }, { name: "source", type: "string", required: true }] }
+];
+setTimeout(() => { for (const s of DEFAULT_SCHEMAS) { if (!SCHEMA_REGISTRY.has(s.name)) SCHEMA_REGISTRY.set(s.name, { ...s, id: uid("schema"), version: 1, createdAt: nowISO(), usageCount: 0, evolves: true }); } }, 100);
+
+app.post("/api/schema", async (req, res) => res.json(await runMacro("schema", "create", req.body, makeCtx(req))));
+app.get("/api/schema", async (req, res) => res.json(await runMacro("schema", "list", {}, makeCtx(req))));
+app.post("/api/schema/validate", async (req, res) => res.json(await runMacro("schema", "validate", req.body, makeCtx(req))));
+app.post("/api/schema/apply", async (req, res) => res.json(await runMacro("schema", "apply", req.body, makeCtx(req))));
+app.post("/api/schema/evolve", async (req, res) => res.json(await runMacro("schema", "evolve", req.body, makeCtx(req))));
+
+console.log("[Concord] Wave 3: Dynamic Schemas loaded");
+
+// ============================================================================
+// WAVE 4: AI-ASSISTED AUTO-TAGGING & VISUAL LENS (Surpassing Capacities)
+// ============================================================================
+const DOMAIN_KEYWORDS = {
+  philosophy: ["ethics", "epistemology", "ontology", "metaphysics", "consciousness", "mind", "being", "existence", "moral", "virtue", "justice"],
+  science: ["experiment", "hypothesis", "data", "evidence", "empirical", "theory", "research", "observation", "method", "scientific"],
+  technology: ["algorithm", "software", "code", "system", "architecture", "api", "database", "network", "programming", "computer"],
+  mathematics: ["theorem", "proof", "equation", "function", "set", "axiom", "logic", "number", "calculus", "algebra"],
+  psychology: ["behavior", "cognition", "emotion", "perception", "memory", "learning", "motivation", "personality", "mental"],
+  economics: ["market", "price", "supply", "demand", "trade", "value", "currency", "investment", "capital", "growth"],
+  physics: ["quantum", "particle", "wave", "energy", "mass", "force", "field", "spacetime", "relativity", "momentum"],
+  biology: ["cell", "gene", "organism", "evolution", "species", "protein", "dna", "ecosystem", "life", "organism"]
+};
+
+register("autotag", "analyze", async (ctx, input) => {
+  const { dtuId, content, useEmbeddings } = input;
+  const dtu = dtuId ? STATE.dtus.get(dtuId) : null;
+  const text = content || (dtu ? dtu.title + " " + (dtu.human?.summary || "") + " " + (dtu.core?.definitions?.join(" ") || "") : "");
+  if (!text) return { ok: false, error: "No content to analyze" };
+  const suggestedTags = [], textLower = text.toLowerCase(), domainScores = {};
+  for (const [domain, keywords] of Object.entries(DOMAIN_KEYWORDS)) {
+    let score = 0;
+    for (const kw of keywords) { if (textLower.includes(kw)) { score++; suggestedTags.push(kw); } }
+    if (score > 0) domainScores[domain] = score;
+  }
+  const topDomain = Object.entries(domainScores).sort((a, b) => b[1] - a[1])[0];
+  const suggestedRelations = [];
+  if (suggestedTags.length > 0) {
+    const tagSet = new Set(suggestedTags);
+    for (const [id, d] of STATE.dtus.entries()) {
+      if (id === dtuId) continue;
+      const overlap = (d.tags || []).filter(t => tagSet.has(t)).length;
+      if (overlap >= 2) suggestedRelations.push({ id, title: d.title, overlap });
+    }
+    suggestedRelations.sort((a, b) => b.overlap - a.overlap);
+  }
+  return { ok: true, suggestedTags: [...new Set(suggestedTags)].slice(0, 10), suggestedDomain: topDomain ? topDomain[0] : null, domainScores, suggestedRelations: suggestedRelations.slice(0, 10) };
+});
+
+register("autotag", "apply", async (ctx, input) => {
+  const { dtuId, tags, domain, relations } = input;
+  const dtu = STATE.dtus.get(dtuId);
+  if (!dtu) return { ok: false, error: "DTU not found" };
+  if (tags && tags.length > 0) dtu.tags = [...new Set([...(dtu.tags || []), ...tags])];
+  if (domain) { dtu.tags = [...new Set([...(dtu.tags || []), domain])]; dtu.meta = dtu.meta || {}; dtu.meta.autotaggedDomain = domain; }
+  if (relations && relations.length > 0) { dtu.lineage = dtu.lineage || { parents: [], children: [] }; for (const rel of relations) { if (!dtu.lineage.parents.includes(rel.id)) dtu.lineage.parents.push(rel.id); } }
+  dtu.meta = dtu.meta || {}; dtu.meta.autotaggedAt = nowISO(); dtu.updatedAt = nowISO();
+  STATE.dtus.set(dtuId, dtu);
+  GRAPH_INDEX.dirty = true;
+  saveStateDebounced();
+  return { ok: true, dtuId, appliedTags: tags, appliedDomain: domain, linkedRelations: relations?.length || 0 };
+});
+
+register("autotag", "batchProcess", async (ctx, input) => {
+  const { tier, limit, dryRun } = input;
+  let dtus = dtusArray().filter(d => !d.meta?.autotaggedAt);
+  if (tier) dtus = dtus.filter(d => d.tier === tier);
+  dtus = dtus.slice(0, Number(limit) || 50);
+  const results = [];
+  for (const dtu of dtus) {
+    const analysis = await runMacro("autotag", "analyze", { dtuId: dtu.id }, ctx);
+    if (analysis.ok && analysis.suggestedTags.length > 0) {
+      if (!dryRun) await runMacro("autotag", "apply", { dtuId: dtu.id, tags: analysis.suggestedTags, domain: analysis.suggestedDomain }, ctx);
+      results.push({ dtuId: dtu.id, title: dtu.title, suggestedTags: analysis.suggestedTags, suggestedDomain: analysis.suggestedDomain, applied: !dryRun });
+    }
+  }
+  return { ok: true, processed: results.length, results, dryRun: !!dryRun };
+});
+
+register("visual", "moodboard", async (ctx, input) => {
+  const { tags, tier, maxNodes } = input;
+  let dtus = dtusArray();
+  if (tags && tags.length > 0) { const tagSet = new Set(tags); dtus = dtus.filter(d => (d.tags || []).some(t => tagSet.has(t))); }
+  if (tier) dtus = dtus.filter(d => d.tier === tier);
+  dtus = dtus.slice(0, Number(maxNodes) || 100);
+  const tagGroups = {};
+  for (const dtu of dtus) { const primaryTag = dtu.tags?.[0] || "untagged"; if (!tagGroups[primaryTag]) tagGroups[primaryTag] = []; tagGroups[primaryTag].push({ id: dtu.id, title: dtu.title, tier: dtu.tier, size: (dtu.core?.definitions?.length || 1) + (dtu.core?.claims?.length || 0) }); }
+  const hierarchy = { name: "Knowledge", children: Object.entries(tagGroups).map(([tag, items]) => ({ name: tag, children: items.map(i => ({ name: i.title, id: i.id, size: i.size, tier: i.tier })) })) };
+  return { ok: true, hierarchy, totalNodes: dtus.length, tagCount: Object.keys(tagGroups).length };
+});
+
+register("visual", "sunburst", async (ctx, input) => {
+  const { maxDepth, maxNodes } = input;
+  const depth = Number(maxDepth) || 3;
+  const hierarchy = { name: "Concord", children: [] };
+  const tierGroups = { core: [], mega: [], hyper: [], regular: [] };
+  for (const dtu of dtusArray().slice(0, Number(maxNodes) || 200)) { const t = dtu.tier || "regular"; if (tierGroups[t]) tierGroups[t].push(dtu); }
+  for (const [tier, dtus] of Object.entries(tierGroups)) {
+    if (dtus.length === 0) continue;
+    const tierNode = { name: tier.toUpperCase(), children: [] };
+    const tagMap = {};
+    for (const dtu of dtus) { const tag = dtu.tags?.[0] || "untagged"; if (!tagMap[tag]) tagMap[tag] = []; tagMap[tag].push({ name: dtu.title.slice(0, 30), id: dtu.id, value: 1 }); }
+    for (const [tag, nodes] of Object.entries(tagMap)) { tierNode.children.push({ name: tag, children: nodes }); }
+    hierarchy.children.push(tierNode);
+  }
+  return { ok: true, hierarchy };
+});
+
+register("visual", "timeline", async (ctx, input) => {
+  const { startDate, endDate, limit } = input;
+  let dtus = dtusArray().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  if (startDate) dtus = dtus.filter(d => new Date(d.createdAt) >= new Date(startDate));
+  if (endDate) dtus = dtus.filter(d => new Date(d.createdAt) <= new Date(endDate));
+  dtus = dtus.slice(0, Number(limit) || 100);
+  const events = dtus.map(d => ({ id: d.id, title: d.title, date: d.createdAt, tier: d.tier, tags: d.tags?.slice(0, 3) }));
+  return { ok: true, events, count: events.length };
+});
+
+app.post("/api/autotag/analyze", async (req, res) => res.json(await runMacro("autotag", "analyze", req.body, makeCtx(req))));
+app.post("/api/autotag/apply", async (req, res) => res.json(await runMacro("autotag", "apply", req.body, makeCtx(req))));
+app.post("/api/autotag/batch", async (req, res) => res.json(await runMacro("autotag", "batchProcess", req.body, makeCtx(req))));
+app.get("/api/visual/moodboard", async (req, res) => res.json(await runMacro("visual", "moodboard", { tags: req.query.tags?.split(","), tier: req.query.tier, maxNodes: req.query.maxNodes }, makeCtx(req))));
+app.get("/api/visual/sunburst", async (req, res) => res.json(await runMacro("visual", "sunburst", { maxDepth: req.query.maxDepth, maxNodes: req.query.maxNodes }, makeCtx(req))));
+app.get("/api/visual/timeline", async (req, res) => res.json(await runMacro("visual", "timeline", { startDate: req.query.startDate, endDate: req.query.endDate, limit: req.query.limit }, makeCtx(req))));
+
+console.log("[Concord] Wave 4: Auto-Tagging & Visuals loaded");
+
+// ============================================================================
+// WAVE 5: REAL-TIME COLLABORATION & WHITEBOARD (Surpassing AFFiNE)
+// ============================================================================
+const COLLAB_SESSIONS = new Map();
+const COLLAB_LOCKS = new Map();
+
+register("collab", "createSession", async (ctx, input) => {
+  const { dtuId, userId, mode } = input;
+  if (!dtuId) return { ok: false, error: "DTU ID required" };
+  const session = {
+    id: uid("collab"),
+    dtuId,
+    creatorId: userId || "anonymous",
+    mode: mode || "edit",
+    participants: [{ userId: userId || "anonymous", joinedAt: nowISO(), role: "owner" }],
+    changes: [],
+    createdAt: nowISO(),
+    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    councilGated: true
+  };
+  COLLAB_SESSIONS.set(session.id, session);
+  realtimeEmit("collab:session:created", { sessionId: session.id, dtuId }, { sessionId: ctx.reqMeta?.sessionId });
+  return { ok: true, session };
+});
+
+register("collab", "join", async (ctx, input) => {
+  const { sessionId, userId } = input;
+  const session = COLLAB_SESSIONS.get(sessionId);
+  if (!session) return { ok: false, error: "Session not found" };
+  if (!session.participants.find(p => p.userId === userId)) session.participants.push({ userId: userId || "anonymous", joinedAt: nowISO(), role: "collaborator" });
+  realtimeEmit("collab:user:joined", { sessionId, userId }, { sessionId: ctx.reqMeta?.sessionId });
+  return { ok: true, session };
+});
+
+register("collab", "edit", async (ctx, input) => {
+  const { sessionId, userId, operation, path, value, previousValue } = input;
+  const session = COLLAB_SESSIONS.get(sessionId);
+  if (!session) return { ok: false, error: "Session not found" };
+  const lockKey = `${session.dtuId}:${path}`;
+  const existingLock = COLLAB_LOCKS.get(lockKey);
+  if (existingLock && existingLock.userId !== userId && Date.now() - new Date(existingLock.lockedAt).getTime() < 30000) return { ok: false, error: "Path locked by another user", lockedBy: existingLock.userId };
+  const change = { id: uid("change"), userId: userId || "anonymous", operation: operation || "update", path, value, previousValue, timestamp: nowISO(), status: "pending" };
+  session.changes.push(change);
+  realtimeEmit("collab:change", { sessionId, change }, { sessionId: ctx.reqMeta?.sessionId });
+  return { ok: true, change, session };
+});
+
+register("collab", "merge", async (ctx, input) => {
+  const { sessionId } = input;
+  const session = COLLAB_SESSIONS.get(sessionId);
+  if (!session) return { ok: false, error: "Session not found" };
+  if (session.councilGated) {
+    STATE.queues.macroProposals.push({ type: "collab_merge", sessionId, dtuId: session.dtuId, changeCount: session.changes.length, participants: session.participants.map(p => p.userId), proposedAt: nowISO() });
+    saveStateDebounced();
+    return { ok: true, message: "Merge queued for council review", queuedChanges: session.changes.length };
+  }
+  const dtu = STATE.dtus.get(session.dtuId);
+  if (!dtu) return { ok: false, error: "DTU not found" };
+  for (const change of session.changes.filter(c => c.status === "pending")) {
+    const pathParts = change.path.split(".");
+    let target = dtu;
+    for (let i = 0; i < pathParts.length - 1; i++) target = target[pathParts[i]] = target[pathParts[i]] || {};
+    target[pathParts[pathParts.length - 1]] = change.value;
+    change.status = "applied";
+  }
+  dtu.updatedAt = nowISO();
+  dtu.meta = dtu.meta || {};
+  dtu.meta.lastCollabSession = sessionId;
+  STATE.dtus.set(session.dtuId, dtu);
+  saveStateDebounced();
+  return { ok: true, merged: session.changes.filter(c => c.status === "applied").length };
+});
+
+register("collab", "listSessions", async (ctx, input) => {
+  const sessions = Array.from(COLLAB_SESSIONS.values()).filter(s => new Date(s.expiresAt) > new Date()).map(s => ({ id: s.id, dtuId: s.dtuId, mode: s.mode, participantCount: s.participants.length, changeCount: s.changes.length, createdAt: s.createdAt }));
+  return { ok: true, sessions, count: sessions.length };
+});
+
+register("collab", "lock", async (ctx, input) => {
+  const { sessionId, userId, path } = input;
+  const session = COLLAB_SESSIONS.get(sessionId);
+  if (!session) return { ok: false, error: "Session not found" };
+  const lockKey = `${session.dtuId}:${path}`;
+  COLLAB_LOCKS.set(lockKey, { userId, lockedAt: nowISO(), path });
+  realtimeEmit("collab:lock", { sessionId, userId, path }, {});
+  return { ok: true, locked: true, path };
+});
+
+register("collab", "unlock", async (ctx, input) => {
+  const { sessionId, path } = input;
+  const session = COLLAB_SESSIONS.get(sessionId);
+  if (!session) return { ok: false, error: "Session not found" };
+  const lockKey = `${session.dtuId}:${path}`;
+  COLLAB_LOCKS.delete(lockKey);
+  realtimeEmit("collab:unlock", { sessionId, path }, {});
+  return { ok: true, unlocked: true, path };
+});
+
+// Whiteboard with Excalidraw integration
+register("whiteboard", "create", async (ctx, input) => {
+  const { title, linkedDtus } = input;
+  const whiteboard = { id: uid("wb"), title: title || "Untitled Whiteboard", elements: [], linkedDtus: linkedDtus || [], collaborators: [], createdAt: nowISO(), updatedAt: nowISO() };
+  const wbDtu = {
+    id: whiteboard.id,
+    title: `Whiteboard: ${whiteboard.title}`,
+    tier: "regular",
+    tags: ["whiteboard", "visual"],
+    human: { summary: `Visual whiteboard with ${whiteboard.linkedDtus.length} linked DTUs` },
+    machine: { kind: "whiteboard", data: whiteboard },
+    lineage: { parents: whiteboard.linkedDtus, children: [] },
+    source: "whiteboard",
+    createdAt: whiteboard.createdAt
+  };
+  STATE.dtus.set(wbDtu.id, wbDtu);
+  saveStateDebounced();
+  return { ok: true, whiteboard, dtuId: wbDtu.id };
+});
+
+register("whiteboard", "update", async (ctx, input) => {
+  const { whiteboardId, elements, linkedDtus } = input;
+  const dtu = STATE.dtus.get(whiteboardId);
+  if (!dtu || dtu.machine?.kind !== "whiteboard") return { ok: false, error: "Whiteboard not found" };
+  const wb = dtu.machine.data;
+  if (elements) wb.elements = elements;
+  if (linkedDtus) { wb.linkedDtus = linkedDtus; dtu.lineage.parents = linkedDtus; }
+  wb.updatedAt = nowISO();
+  dtu.updatedAt = nowISO();
+  STATE.dtus.set(whiteboardId, dtu);
+  saveStateDebounced();
+  realtimeEmit("whiteboard:updated", { whiteboardId, elementCount: wb.elements.length }, {});
+  return { ok: true, whiteboard: wb };
+});
+
+register("whiteboard", "get", async (ctx, input) => {
+  const { whiteboardId } = input;
+  const dtu = STATE.dtus.get(whiteboardId);
+  if (!dtu || dtu.machine?.kind !== "whiteboard") return { ok: false, error: "Whiteboard not found" };
+  return { ok: true, whiteboard: dtu.machine.data, linkedDtus: dtu.lineage?.parents || [] };
+});
+
+register("whiteboard", "list", async (ctx, input) => {
+  const whiteboards = dtusArray().filter(d => d.machine?.kind === "whiteboard").map(d => ({ id: d.id, title: d.title, elementCount: d.machine.data?.elements?.length || 0, linkedDtuCount: d.lineage?.parents?.length || 0, createdAt: d.createdAt }));
+  return { ok: true, whiteboards, count: whiteboards.length };
+});
+
+app.post("/api/collab/session", async (req, res) => res.json(await runMacro("collab", "createSession", req.body, makeCtx(req))));
+app.post("/api/collab/join", async (req, res) => res.json(await runMacro("collab", "join", req.body, makeCtx(req))));
+app.post("/api/collab/edit", async (req, res) => res.json(await runMacro("collab", "edit", req.body, makeCtx(req))));
+app.post("/api/collab/merge", async (req, res) => res.json(await runMacro("collab", "merge", req.body, makeCtx(req))));
+app.get("/api/collab/sessions", async (req, res) => res.json(await runMacro("collab", "listSessions", {}, makeCtx(req))));
+app.post("/api/collab/lock", async (req, res) => res.json(await runMacro("collab", "lock", req.body, makeCtx(req))));
+app.post("/api/collab/unlock", async (req, res) => res.json(await runMacro("collab", "unlock", req.body, makeCtx(req))));
+app.post("/api/whiteboard", async (req, res) => res.json(await runMacro("whiteboard", "create", req.body, makeCtx(req))));
+app.put("/api/whiteboard/:id", async (req, res) => res.json(await runMacro("whiteboard", "update", { whiteboardId: req.params.id, ...req.body }, makeCtx(req))));
+app.get("/api/whiteboard/:id", async (req, res) => res.json(await runMacro("whiteboard", "get", { whiteboardId: req.params.id }, makeCtx(req))));
+app.get("/api/whiteboards", async (req, res) => res.json(await runMacro("whiteboard", "list", {}, makeCtx(req))));
+
+console.log("[Concord] Wave 5: Collaboration & Whiteboard loaded");
+
+// ============================================================================
+// WAVE 6: PWA & MOBILE SUPPORT
+// ============================================================================
+register("pwa", "manifest", async (ctx, input) => {
+  return {
+    ok: true,
+    manifest: {
+      name: "Concord Cognitive Engine",
+      short_name: "Concord",
+      description: "Local-first cognitive operating system for knowledge synthesis",
+      start_url: "/",
+      display: "standalone",
+      background_color: "#1a1a2e",
+      theme_color: "#6366f1",
+      orientation: "any",
+      icons: [
+        { src: "/icons/icon-72.png", sizes: "72x72", type: "image/png" },
+        { src: "/icons/icon-96.png", sizes: "96x96", type: "image/png" },
+        { src: "/icons/icon-128.png", sizes: "128x128", type: "image/png" },
+        { src: "/icons/icon-144.png", sizes: "144x144", type: "image/png" },
+        { src: "/icons/icon-152.png", sizes: "152x152", type: "image/png" },
+        { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+        { src: "/icons/icon-384.png", sizes: "384x384", type: "image/png" },
+        { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png" }
+      ],
+      categories: ["productivity", "education", "utilities"],
+      shortcuts: [
+        { name: "Quick Forge", short_name: "Forge", url: "/lenses/forge", icons: [{ src: "/icons/forge.png", sizes: "192x192" }] },
+        { name: "Chat", short_name: "Chat", url: "/lenses/chat", icons: [{ src: "/icons/chat.png", sizes: "192x192" }] },
+        { name: "Graph", short_name: "Graph", url: "/lenses/graph", icons: [{ src: "/icons/graph.png", sizes: "192x192" }] },
+        { name: "Voice Note", short_name: "Voice", url: "/lenses/voice", icons: [{ src: "/icons/voice.png", sizes: "192x192" }] }
+      ],
+      share_target: { action: "/share", method: "POST", enctype: "multipart/form-data", params: { title: "title", text: "text", url: "url" } }
+    }
+  };
+});
+
+register("pwa", "serviceWorkerConfig", async (ctx, input) => {
+  return {
+    ok: true,
+    config: {
+      version: VERSION,
+      cacheFirst: ["/api/dtus", "/api/status", "/api/personas", "/api/schema", "/api/plugins"],
+      networkFirst: ["/api/chat", "/api/forge", "/api/ask", "/api/collab"],
+      staleWhileRevalidate: ["/api/search", "/api/graph", "/api/visual"],
+      offlineOnly: ["/api/dtus/local", "/api/cache"],
+      precache: ["/", "/lenses/chat", "/lenses/forge", "/lenses/graph", "/manifest.json"],
+      syncTags: ["dtu-sync", "collab-sync", "voice-sync"],
+      backgroundSync: { enabled: true, minInterval: 300000, maxRetries: 3 },
+      pushNotifications: { enabled: true, vapidPublicKey: process.env.VAPID_PUBLIC_KEY || null }
+    }
+  };
+});
+
+register("voice", "ingest", async (ctx, input) => {
+  const { audioData, format, language, autoForge } = input;
+  const transcription = await runMacro("voice", "transcribe", { audio: audioData, format: format || "webm", language: language || "en" }, ctx);
+  if (!transcription.ok) return transcription;
+  const text = transcription.text;
+  if (!autoForge) return { ok: true, transcription: text };
+  const tags = await runMacro("autotag", "analyze", { content: text }, ctx);
+  const dtu = await runMacro("dtu", "create", {
+    title: text.slice(0, 80) + (text.length > 80 ? "..." : ""),
+    human: { summary: text },
+    tags: tags.ok ? [...tags.suggestedTags, "voice-note"] : ["voice-note"],
+    source: "voice-ingest",
+    meta: { voiceIngest: true, language: language || "en", format: format || "webm", transcribedAt: nowISO() }
+  }, ctx);
+  return { ok: true, transcription: text, dtu: dtu.dtu };
+});
+
+register("mobile", "shortcuts", async (ctx, input) => {
+  return {
+    ok: true,
+    shortcuts: [
+      { id: "quick-forge", label: "Quick Forge", action: "/api/forge/manual", icon: "plus-circle", gesture: "swipe-right" },
+      { id: "voice-note", label: "Voice Note", action: "/api/voice/ingest", icon: "microphone", gesture: "long-press" },
+      { id: "search", label: "Search", action: "/api/search/indexed", icon: "search", gesture: "swipe-down" },
+      { id: "recent", label: "Recent DTUs", action: "/api/dtus/recent", icon: "clock", gesture: "swipe-left" },
+      { id: "graph-view", label: "Graph View", action: "/lenses/graph", icon: "network", gesture: "pinch" },
+      { id: "sync", label: "Force Sync", action: "/api/sync/force", icon: "refresh", gesture: "pull-down" }
+    ],
+    gestures: {
+      enabled: true,
+      sensitivity: 0.7,
+      hapticFeedback: true
+    }
+  };
+});
+
+register("mobile", "touchOptimized", async (ctx, input) => {
+  const { dtuId } = input;
+  const dtu = STATE.dtus.get(dtuId);
+  if (!dtu) return { ok: false, error: "DTU not found" };
+  return {
+    ok: true,
+    compactView: {
+      id: dtu.id,
+      title: dtu.title,
+      tier: dtu.tier,
+      tags: (dtu.tags || []).slice(0, 3),
+      summary: (dtu.human?.summary || "").slice(0, 140),
+      bulletCount: dtu.human?.bullets?.length || 0,
+      hasLineage: !!(dtu.lineage?.parents?.length || dtu.lineage?.children?.length),
+      createdAt: dtu.createdAt
+    },
+    actions: [
+      { id: "view", label: "View", icon: "eye" },
+      { id: "edit", label: "Edit", icon: "pencil" },
+      { id: "share", label: "Share", icon: "share" },
+      { id: "link", label: "Link", icon: "link" },
+      { id: "delete", label: "Delete", icon: "trash", danger: true }
+    ]
+  };
+});
+
+register("sync", "force", async (ctx, input) => {
+  const { since } = input;
+  const sinceDate = since ? new Date(since) : new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const modified = dtusArray().filter(d => new Date(d.updatedAt || d.createdAt) > sinceDate);
+  return {
+    ok: true,
+    synced: modified.length,
+    dtus: modified.map(d => ({ id: d.id, title: d.title, updatedAt: d.updatedAt || d.createdAt })),
+    syncedAt: nowISO()
+  };
+});
+
+app.get("/manifest.json", async (req, res) => { const out = await runMacro("pwa", "manifest", {}, makeCtx(req)); res.json(out.manifest); });
+app.get("/api/pwa/sw-config", async (req, res) => res.json(await runMacro("pwa", "serviceWorkerConfig", {}, makeCtx(req))));
+app.post("/api/voice/ingest", async (req, res) => res.json(await runMacro("voice", "ingest", req.body, makeCtx(req))));
+app.get("/api/mobile/shortcuts", async (req, res) => res.json(await runMacro("mobile", "shortcuts", {}, makeCtx(req))));
+app.get("/api/mobile/dtu/:id", async (req, res) => res.json(await runMacro("mobile", "touchOptimized", { dtuId: req.params.id }, makeCtx(req))));
+app.post("/api/sync/force", async (req, res) => res.json(await runMacro("sync", "force", req.body, makeCtx(req))));
+
+console.log("[Concord] Wave 6: PWA & Mobile loaded");
+
+// ============================================================================
+// WAVE 7: SCALABILITY & PERFORMANCE
+// ============================================================================
+const CACHE = { hot: new Map(), queries: new Map(), ttl: 300000, maxSize: 1000 };
+
+register("cache", "get", async (ctx, input) => {
+  const { key } = input;
+  const cached = CACHE.hot.get(key);
+  if (!cached) return { ok: false, miss: true };
+  if (Date.now() - cached.cachedAt > (cached.ttl || CACHE.ttl)) { CACHE.hot.delete(key); return { ok: false, miss: true, expired: true }; }
+  return { ok: true, data: cached.data, cachedAt: cached.cachedAt };
+});
+
+register("cache", "set", async (ctx, input) => {
+  const { key, data, ttl } = input;
+  CACHE.hot.set(key, { data, cachedAt: Date.now(), ttl: ttl || CACHE.ttl });
+  if (CACHE.hot.size > CACHE.maxSize) {
+    const entries = Array.from(CACHE.hot.entries()).sort((a, b) => a[1].cachedAt - b[1].cachedAt);
+    for (let i = 0; i < 100; i++) CACHE.hot.delete(entries[i][0]);
+  }
+  return { ok: true, key, cached: true };
+});
+
+register("cache", "invalidate", async (ctx, input) => {
+  const { key, pattern } = input;
+  if (key) { CACHE.hot.delete(key); return { ok: true, invalidated: 1 }; }
+  if (pattern) { const re = new RegExp(pattern); let count = 0; for (const k of CACHE.hot.keys()) { if (re.test(k)) { CACHE.hot.delete(k); count++; } } return { ok: true, invalidated: count }; }
+  return { ok: false, error: "Key or pattern required" };
+});
+
+register("cache", "stats", async (ctx, input) => {
+  return { ok: true, size: CACHE.hot.size, maxSize: CACHE.maxSize, ttl: CACHE.ttl, queryCache: CACHE.queries.size };
+});
+
+register("cache", "clear", async (ctx, input) => {
+  const size = CACHE.hot.size;
+  CACHE.hot.clear();
+  CACHE.queries.clear();
+  return { ok: true, cleared: size };
+});
+
+// Sharding for multi-tenant
+register("shard", "route", async (ctx, input) => {
+  const { userId, orgId } = input;
+  const shardKey = orgId || userId || "default";
+  const hash = crypto.createHash("md5").update(shardKey).digest("hex");
+  const shardNum = parseInt(hash.slice(0, 8), 16) % 16;
+  return {
+    ok: true,
+    shardKey,
+    shardNum,
+    shardId: `shard_${shardNum.toString().padStart(2, "0")}`,
+    routing: { primary: `shard_${shardNum.toString().padStart(2, "0")}`, replicas: [`shard_${((shardNum + 1) % 16).toString().padStart(2, "0")}`, `shard_${((shardNum + 2) % 16).toString().padStart(2, "0")}`] }
+  };
+});
+
+register("shard", "stats", async (ctx, input) => {
+  const shards = {};
+  for (const [id, dtu] of STATE.dtus.entries()) {
+    const shardResult = await runMacro("shard", "route", { userId: dtu.meta?.userId, orgId: dtu.meta?.orgId }, ctx);
+    const shardId = shardResult.shardId;
+    if (!shards[shardId]) shards[shardId] = { count: 0, size: 0 };
+    shards[shardId].count++;
+    shards[shardId].size += JSON.stringify(dtu).length;
+  }
+  return { ok: true, shards, totalShards: Object.keys(shards).length };
+});
+
+// Governor for rate limiting
+register("governor", "configure", async (ctx, input) => {
+  const { userId, maxDtusPerHour, maxQueriesPerMinute, heartbeatInterval } = input;
+  const governor = {
+    userId: userId || "default",
+    limits: { maxDtusPerHour: Number(maxDtusPerHour) || 100, maxQueriesPerMinute: Number(maxQueriesPerMinute) || 60, heartbeatInterval: Number(heartbeatInterval) || 15000 },
+    usage: { dtusThisHour: 0, queriesThisMinute: 0, lastHourReset: Date.now(), lastMinuteReset: Date.now() },
+    configuredAt: nowISO()
+  };
+  STATE.governors = STATE.governors || new Map();
+  STATE.governors.set(governor.userId, governor);
+  saveStateDebounced();
+  return { ok: true, governor };
+});
+
+register("governor", "check", async (ctx, input) => {
+  const { userId, action } = input;
+  const governor = STATE.governors?.get(userId) || STATE.governors?.get("default");
+  if (!governor) return { ok: true, allowed: true };
+  const now = Date.now();
+  if (now - governor.usage.lastHourReset > 3600000) { governor.usage.dtusThisHour = 0; governor.usage.lastHourReset = now; }
+  if (now - governor.usage.lastMinuteReset > 60000) { governor.usage.queriesThisMinute = 0; governor.usage.lastMinuteReset = now; }
+  if (action === "create_dtu" && governor.usage.dtusThisHour >= governor.limits.maxDtusPerHour) return { ok: true, allowed: false, reason: "DTU creation limit reached", retryAfter: 3600000 - (now - governor.usage.lastHourReset) };
+  if (action === "query" && governor.usage.queriesThisMinute >= governor.limits.maxQueriesPerMinute) return { ok: true, allowed: false, reason: "Query rate limit reached", retryAfter: 60000 - (now - governor.usage.lastMinuteReset) };
+  return { ok: true, allowed: true, usage: governor.usage, limits: governor.limits };
+});
+
+register("governor", "increment", async (ctx, input) => {
+  const { userId, action } = input;
+  const governor = STATE.governors?.get(userId) || STATE.governors?.get("default");
+  if (!governor) return { ok: true };
+  if (action === "create_dtu") governor.usage.dtusThisHour++;
+  if (action === "query") governor.usage.queriesThisMinute++;
+  return { ok: true, usage: governor.usage };
+});
+
+// Performance metrics
+register("perf", "metrics", async (ctx, input) => {
+  const mem = process.memoryUsage();
+  return {
+    ok: true,
+    memory: { heapUsed: Math.round(mem.heapUsed / 1024 / 1024), heapTotal: Math.round(mem.heapTotal / 1024 / 1024), rss: Math.round(mem.rss / 1024 / 1024), external: Math.round(mem.external / 1024 / 1024) },
+    uptime: process.uptime(),
+    dtus: { total: STATE.dtus.size, shadow: STATE.shadowDtus?.size || 0 },
+    cache: { hot: CACHE.hot.size, queries: CACHE.queries.size },
+    graph: { nodes: GRAPH_INDEX.nodes.size, edges: GRAPH_INDEX.edges.size, dirty: GRAPH_INDEX.dirty },
+    collab: { sessions: COLLAB_SESSIONS.size, locks: COLLAB_LOCKS.size },
+    plugins: { marketplace: PLUGIN_MARKETPLACE.listings.size, installed: PLUGIN_MARKETPLACE.installed.size }
+  };
+});
+
+register("perf", "gc", async (ctx, input) => {
+  if (global.gc) { global.gc(); return { ok: true, gcRun: true }; }
+  return { ok: false, error: "GC not exposed. Start node with --expose-gc" };
+});
+
+// Backpressure for conservation
+register("backpressure", "status", async (ctx, input) => {
+  const dtuCount = STATE.dtus.size;
+  const thresholds = { warning: 50000, critical: 100000, max: 200000 };
+  let level = "normal";
+  if (dtuCount > thresholds.critical) level = "critical";
+  else if (dtuCount > thresholds.warning) level = "warning";
+  return {
+    ok: true,
+    level,
+    dtuCount,
+    thresholds,
+    recommendations: level === "critical" ? ["Run MEGA consolidation", "Archive old DTUs", "Increase promotion rate"] : level === "warning" ? ["Consider archiving inactive DTUs", "Review promotion thresholds"] : []
+  };
+});
+
+app.get("/api/cache/:key", async (req, res) => res.json(await runMacro("cache", "get", { key: req.params.key }, makeCtx(req))));
+app.post("/api/cache", async (req, res) => res.json(await runMacro("cache", "set", req.body, makeCtx(req))));
+app.delete("/api/cache", async (req, res) => res.json(await runMacro("cache", "invalidate", req.body, makeCtx(req))));
+app.get("/api/cache/stats", async (req, res) => res.json(await runMacro("cache", "stats", {}, makeCtx(req))));
+app.post("/api/cache/clear", async (req, res) => res.json(await runMacro("cache", "clear", {}, makeCtx(req))));
+app.get("/api/shard/route", async (req, res) => res.json(await runMacro("shard", "route", { userId: req.query.userId, orgId: req.query.orgId }, makeCtx(req))));
+app.get("/api/shard/stats", async (req, res) => res.json(await runMacro("shard", "stats", {}, makeCtx(req))));
+app.post("/api/governor/configure", async (req, res) => res.json(await runMacro("governor", "configure", req.body, makeCtx(req))));
+app.get("/api/governor/check", async (req, res) => res.json(await runMacro("governor", "check", { userId: req.query.userId, action: req.query.action }, makeCtx(req))));
+app.get("/api/perf/metrics", async (req, res) => res.json(await runMacro("perf", "metrics", {}, makeCtx(req))));
+app.post("/api/perf/gc", async (req, res) => res.json(await runMacro("perf", "gc", {}, makeCtx(req))));
+app.get("/api/backpressure/status", async (req, res) => res.json(await runMacro("backpressure", "status", {}, makeCtx(req))));
+
+console.log("[Concord] Wave 7: Scalability & Performance loaded");
+
+// ============================================================================
+// WAVE 8: INTEGRATIONS ECOSYSTEM (Surpassing Roam Research)
+// ============================================================================
+const WEBHOOKS = new Map();
+const AUTOMATIONS = new Map();
+
+register("webhook", "register", async (ctx, input) => {
+  const { url, events, secret, name, headers } = input;
+  if (!url || !events) return { ok: false, error: "URL and events required" };
+  const webhook = {
+    id: uid("wh"),
+    name: name || "Unnamed Webhook",
+    url,
+    events: Array.isArray(events) ? events : [events],
+    secret: secret || crypto.randomBytes(32).toString("hex"),
+    headers: headers || {},
+    enabled: true,
+    createdAt: nowISO(),
+    lastTriggered: null,
+    triggerCount: 0,
+    failureCount: 0,
+    lastError: null
+  };
+  WEBHOOKS.set(webhook.id, webhook);
+  saveStateDebounced();
+  return { ok: true, webhook: { ...webhook, secret: webhook.secret.slice(0, 8) + "..." } };
+});
+
+register("webhook", "trigger", async (ctx, input) => {
+  const { event, payload } = input;
+  const matchingWebhooks = Array.from(WEBHOOKS.values()).filter(wh => wh.enabled && wh.events.includes(event));
+  const results = [];
+  for (const webhook of matchingWebhooks) {
+    const signature = crypto.createHmac("sha256", webhook.secret).update(JSON.stringify(payload)).digest("hex");
+    webhook.lastTriggered = nowISO();
+    webhook.triggerCount++;
+    results.push({ webhookId: webhook.id, name: webhook.name, triggered: true, signature: signature.slice(0, 16) + "..." });
+  }
+  return { ok: true, event, triggered: results.length, results };
+});
+
+register("webhook", "list", async (ctx, input) => {
+  const webhooks = Array.from(WEBHOOKS.values()).map(wh => ({ id: wh.id, name: wh.name, url: wh.url, events: wh.events, enabled: wh.enabled, triggerCount: wh.triggerCount, lastTriggered: wh.lastTriggered }));
+  return { ok: true, webhooks, count: webhooks.length };
+});
+
+register("webhook", "delete", async (ctx, input) => {
+  const { webhookId } = input;
+  if (!WEBHOOKS.has(webhookId)) return { ok: false, error: "Webhook not found" };
+  WEBHOOKS.delete(webhookId);
+  saveStateDebounced();
+  return { ok: true, deleted: webhookId };
+});
+
+register("webhook", "toggle", async (ctx, input) => {
+  const { webhookId, enabled } = input;
+  const webhook = WEBHOOKS.get(webhookId);
+  if (!webhook) return { ok: false, error: "Webhook not found" };
+  webhook.enabled = enabled !== undefined ? enabled : !webhook.enabled;
+  return { ok: true, webhookId, enabled: webhook.enabled };
+});
+
+// Zapier-style automations
+register("automation", "create", async (ctx, input) => {
+  const { name, trigger, conditions, actions } = input;
+  if (!name || !trigger || !actions) return { ok: false, error: "Name, trigger, and actions required" };
+  const automation = {
+    id: uid("auto"),
+    name: normalizeText(name),
+    trigger: { event: trigger.event, filters: trigger.filters || {} },
+    conditions: conditions || [],
+    actions: actions.map(a => ({ type: a.type, config: a.config || {} })),
+    enabled: true,
+    createdAt: nowISO(),
+    runCount: 0,
+    lastRun: null,
+    lastResult: null
+  };
+  AUTOMATIONS.set(automation.id, automation);
+  saveStateDebounced();
+  return { ok: true, automation };
+});
+
+register("automation", "run", async (ctx, input) => {
+  const { automationId, triggerData } = input;
+  const automation = AUTOMATIONS.get(automationId);
+  if (!automation) return { ok: false, error: "Automation not found" };
+  if (!automation.enabled) return { ok: false, error: "Automation disabled" };
+  const results = [];
+  for (const action of automation.actions) {
+    try {
+      if (action.type === "create_dtu") { results.push({ action: "create_dtu", result: await runMacro("dtu", "create", { ...action.config, ...triggerData }, ctx) }); }
+      else if (action.type === "update_dtu") { results.push({ action: "update_dtu", result: await runMacro("dtu", "update", { ...action.config, ...triggerData }, ctx) }); }
+      else if (action.type === "run_macro") { const [domain, op] = action.config.macro.split("."); results.push({ action: "run_macro", macro: action.config.macro, result: await runMacro(domain, op, { ...action.config.input, ...triggerData }, ctx) }); }
+      else if (action.type === "send_webhook") { results.push({ action: "send_webhook", result: await runMacro("webhook", "trigger", { event: "automation.action", payload: { automationId, triggerData, action } }, ctx) }); }
+      else if (action.type === "notify") { results.push({ action: "notify", result: { ok: true, message: action.config.message } }); }
+    } catch (e) { results.push({ action: action.type, error: e.message }); }
+  }
+  automation.runCount++;
+  automation.lastRun = nowISO();
+  automation.lastResult = results;
+  return { ok: true, automationId, actionResults: results };
+});
+
+register("automation", "list", async (ctx, input) => {
+  const automations = Array.from(AUTOMATIONS.values()).map(a => ({ id: a.id, name: a.name, trigger: a.trigger.event, actionCount: a.actions.length, enabled: a.enabled, runCount: a.runCount, lastRun: a.lastRun }));
+  return { ok: true, automations, count: automations.length };
+});
+
+register("automation", "delete", async (ctx, input) => {
+  const { automationId } = input;
+  if (!AUTOMATIONS.has(automationId)) return { ok: false, error: "Automation not found" };
+  AUTOMATIONS.delete(automationId);
+  saveStateDebounced();
+  return { ok: true, deleted: automationId };
+});
+
+register("automation", "toggle", async (ctx, input) => {
+  const { automationId, enabled } = input;
+  const automation = AUTOMATIONS.get(automationId);
+  if (!automation) return { ok: false, error: "Automation not found" };
+  automation.enabled = enabled !== undefined ? enabled : !automation.enabled;
+  return { ok: true, automationId, enabled: automation.enabled };
+});
+
+// VS Code extension support
+register("vscode", "codeToDtu", async (ctx, input) => {
+  const { code, language, filename, selection, context, autoTag } = input;
+  if (!code) return { ok: false, error: "Code content required" };
+  const dtu = {
+    id: uid("dtu"),
+    title: `Code: ${filename || "snippet"} (${language || "unknown"})`,
+    tier: "regular",
+    tags: ["code", language || "unknown", "vscode-import"],
+    human: { summary: `Code snippet from ${filename || "editor"}`, bullets: selection ? [`Lines ${selection.start}-${selection.end}`] : [] },
+    core: { definitions: [`Language: ${language}`], examples: [code.slice(0, 1000)] },
+    machine: { kind: "code_snippet", code, language, filename, selection, context },
+    source: "vscode",
+    createdAt: nowISO()
+  };
+  STATE.dtus.set(dtu.id, dtu);
+  GRAPH_INDEX.dirty = true;
+  saveStateDebounced();
+  if (autoTag) await runMacro("autotag", "apply", { dtuId: dtu.id, tags: ["code", language].filter(Boolean) }, ctx);
+  return { ok: true, dtu };
+});
+
+register("vscode", "dtuToCode", async (ctx, input) => {
+  const { dtuId, format } = input;
+  const dtu = STATE.dtus.get(dtuId);
+  if (!dtu) return { ok: false, error: "DTU not found" };
+  let code = "";
+  if (dtu.machine?.code) code = dtu.machine.code;
+  else if (dtu.core?.examples?.[0]) code = dtu.core.examples[0];
+  else { code = `// DTU: ${dtu.title}\n// Tags: ${(dtu.tags || []).join(", ")}\n\n`; if (dtu.human?.summary) code += `/* ${dtu.human.summary} */\n\n`; if (dtu.core?.definitions) code += dtu.core.definitions.map(d => `// ${d}`).join("\n"); }
+  return { ok: true, code, language: dtu.machine?.language || "plaintext", dtuId };
+});
+
+register("vscode", "search", async (ctx, input) => {
+  const { query, language, limit } = input;
+  let results = dtusArray().filter(d => d.tags?.includes("code") || d.machine?.kind === "code_snippet");
+  if (language) results = results.filter(d => d.machine?.language === language || d.tags?.includes(language));
+  if (query) { const q = query.toLowerCase(); results = results.filter(d => d.title.toLowerCase().includes(q) || (d.machine?.code || "").toLowerCase().includes(q)); }
+  results = results.slice(0, Number(limit) || 20);
+  return { ok: true, results: results.map(d => ({ id: d.id, title: d.title, language: d.machine?.language, filename: d.machine?.filename, preview: (d.machine?.code || "").slice(0, 100) })), count: results.length };
+});
+
+// Obsidian export/import
+register("obsidian", "export", async (ctx, input) => {
+  const { dtuIds, includeLineage, vaultPath } = input;
+  const dtus = dtuIds ? dtuIds.map(id => STATE.dtus.get(id)).filter(Boolean) : dtusArray();
+  const files = [];
+  for (const dtu of dtus) {
+    let content = `# ${dtu.title}\n\n`;
+    content += `> ${dtu.human?.summary || ""}\n\n`;
+    content += `**Tags:** ${(dtu.tags || []).map(t => `#${t}`).join(" ")}\n\n`;
+    if (dtu.core?.definitions?.length) { content += `## Definitions\n${dtu.core.definitions.map(d => `- ${d}`).join("\n")}\n\n`; }
+    if (dtu.core?.claims?.length) { content += `## Claims\n${dtu.core.claims.map(c => `- ${c}`).join("\n")}\n\n`; }
+    if (dtu.human?.bullets?.length) { content += `## Key Points\n${dtu.human.bullets.map(b => `- ${b}`).join("\n")}\n\n`; }
+    if (includeLineage && dtu.lineage?.parents?.length) { content += `## Lineage\n**Parents:** ${dtu.lineage.parents.map(p => `[[${STATE.dtus.get(p)?.title || p}]]`).join(", ")}\n\n`; }
+    content += `---\n*ID: ${dtu.id}*\n*Created: ${dtu.createdAt}*\n`;
+    files.push({ filename: `${dtu.title.replace(/[\/\\?%*:|"<>]/g, "-")}.md`, content, dtuId: dtu.id });
+  }
+  return { ok: true, files, count: files.length, vaultPath };
+});
+
+register("obsidian", "import", async (ctx, input) => {
+  const { files } = input;
+  const imported = [];
+  for (const file of (files || [])) {
+    const lines = (file.content || "").split("\n");
+    const title = lines[0]?.replace(/^#\s*/, "") || file.filename?.replace(/\.md$/, "") || "Untitled";
+    const tagMatch = file.content.match(/\*\*Tags:\*\*\s*(.+)/);
+    const tags = tagMatch ? tagMatch[1].split(/\s+/).map(t => t.replace(/^#/, "")).filter(Boolean) : ["obsidian-import"];
+    const summaryMatch = file.content.match(/^>\s*(.+)/m);
+    const dtu = {
+      id: uid("dtu"),
+      title: normalizeText(title),
+      tier: "regular",
+      tags: [...tags, "obsidian-import"],
+      human: { summary: summaryMatch ? summaryMatch[1] : "" },
+      core: { definitions: [], claims: [] },
+      source: "obsidian-import",
+      meta: { originalFile: file.filename, importedAt: nowISO() },
+      createdAt: nowISO()
+    };
+    STATE.dtus.set(dtu.id, dtu);
+    imported.push({ dtuId: dtu.id, title: dtu.title, filename: file.filename });
+  }
+  if (imported.length) { GRAPH_INDEX.dirty = true; saveStateDebounced(); }
+  return { ok: true, imported, count: imported.length };
+});
+
+// Notion import
+register("notion", "import", async (ctx, input) => {
+  const { pages } = input;
+  const imported = [];
+  for (const page of (pages || [])) {
+    const dtu = {
+      id: uid("dtu"),
+      title: normalizeText(page.title || "Untitled"),
+      tier: "regular",
+      tags: [...(page.tags || []), "notion-import"],
+      human: { summary: page.content?.slice(0, 500) || "", bullets: page.bullets || [] },
+      core: { definitions: page.properties ? Object.entries(page.properties).map(([k, v]) => `${k}: ${v}`) : [] },
+      source: "notion-import",
+      meta: { notionId: page.id, notionUrl: page.url, importedAt: nowISO() },
+      createdAt: page.createdTime || nowISO()
+    };
+    STATE.dtus.set(dtu.id, dtu);
+    imported.push({ dtuId: dtu.id, title: dtu.title, notionId: page.id });
+  }
+  if (imported.length) { GRAPH_INDEX.dirty = true; saveStateDebounced(); }
+  return { ok: true, imported, count: imported.length };
+});
+
+// Integration marketplace
+register("integration", "list", async (ctx, input) => {
+  const integrations = [
+    { id: "obsidian", name: "Obsidian", status: "available", type: "export/import", description: "Sync with Obsidian vaults" },
+    { id: "notion", name: "Notion", status: "available", type: "import", description: "Import from Notion" },
+    { id: "vscode", name: "VS Code", status: "available", type: "bidirectional", description: "Code snippets integration" },
+    { id: "zapier", name: "Zapier", status: "available", type: "webhook", description: "Automation via Zapier" },
+    { id: "github", name: "GitHub", status: "planned", type: "bidirectional", description: "Sync with GitHub repos" },
+    { id: "slack", name: "Slack", status: "planned", type: "webhook", description: "Slack notifications" },
+    { id: "discord", name: "Discord", status: "planned", type: "webhook", description: "Discord integration" },
+    { id: "linear", name: "Linear", status: "planned", type: "bidirectional", description: "Issue tracking sync" }
+  ];
+  return { ok: true, integrations };
+});
+
+app.post("/api/webhooks", async (req, res) => res.json(await runMacro("webhook", "register", req.body, makeCtx(req))));
+app.get("/api/webhooks", async (req, res) => res.json(await runMacro("webhook", "list", {}, makeCtx(req))));
+app.delete("/api/webhooks/:id", async (req, res) => res.json(await runMacro("webhook", "delete", { webhookId: req.params.id }, makeCtx(req))));
+app.post("/api/webhooks/:id/toggle", async (req, res) => res.json(await runMacro("webhook", "toggle", { webhookId: req.params.id, ...req.body }, makeCtx(req))));
+app.post("/api/automations", async (req, res) => res.json(await runMacro("automation", "create", req.body, makeCtx(req))));
+app.get("/api/automations", async (req, res) => res.json(await runMacro("automation", "list", {}, makeCtx(req))));
+app.post("/api/automations/:id/run", async (req, res) => res.json(await runMacro("automation", "run", { automationId: req.params.id, triggerData: req.body }, makeCtx(req))));
+app.delete("/api/automations/:id", async (req, res) => res.json(await runMacro("automation", "delete", { automationId: req.params.id }, makeCtx(req))));
+app.post("/api/automations/:id/toggle", async (req, res) => res.json(await runMacro("automation", "toggle", { automationId: req.params.id, ...req.body }, makeCtx(req))));
+app.post("/api/vscode/code-to-dtu", async (req, res) => res.json(await runMacro("vscode", "codeToDtu", req.body, makeCtx(req))));
+app.get("/api/vscode/dtu-to-code/:id", async (req, res) => res.json(await runMacro("vscode", "dtuToCode", { dtuId: req.params.id, format: req.query.format }, makeCtx(req))));
+app.get("/api/vscode/search", async (req, res) => res.json(await runMacro("vscode", "search", { query: req.query.q, language: req.query.language, limit: req.query.limit }, makeCtx(req))));
+app.post("/api/obsidian/export", async (req, res) => res.json(await runMacro("obsidian", "export", req.body, makeCtx(req))));
+app.post("/api/obsidian/import", async (req, res) => res.json(await runMacro("obsidian", "import", req.body, makeCtx(req))));
+app.post("/api/notion/import", async (req, res) => res.json(await runMacro("notion", "import", req.body, makeCtx(req))));
+app.get("/api/integrations", async (req, res) => res.json(await runMacro("integration", "list", {}, makeCtx(req))));
+
+console.log("[Concord] Wave 8: Integrations Ecosystem loaded");
+
+// ============================================================================
+// END CONCORD ENHANCEMENTS v4.0 - ALL WAVES COMPLETE
+// ============================================================================
 
 const SHOULD_LISTEN = (String(process.env.CONCORD_NO_LISTEN || "").toLowerCase() !== "true") && (String(process.env.NODE_ENV || "").toLowerCase() !== "test");
 

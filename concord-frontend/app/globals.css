@@ -7,7 +7,7 @@
   --background-start-rgb: 10, 10, 15;
   --background-end-rgb: 13, 13, 20;
 
-  /* Lattice Empire Theme */
+  /* Lattice Empire Theme - Dark (Default) */
   --lattice-void: #0a0a0f;
   --lattice-deep: #0d0d14;
   --lattice-surface: #12121a;
@@ -20,6 +20,8 @@
   --neon-purple: #a855f7;
   --neon-pink: #ec4899;
   --neon-green: #22c55e;
+  --neon-orange: #f97316;
+  --neon-yellow: #eab308;
 
   /* Resonance Spectrum */
   --resonance-low: #3b82f6;
@@ -31,6 +33,38 @@
   --sovereignty-locked: #22c55e;
   --sovereignty-warning: #f59e0b;
   --sovereignty-danger: #ef4444;
+
+  /* Status Colors */
+  --status-success: #22c55e;
+  --status-warning: #f59e0b;
+  --status-error: #ef4444;
+  --status-info: #3b82f6;
+
+  /* Chart Colors */
+  --chart-1: #00d4ff;
+  --chart-2: #a855f7;
+  --chart-3: #22c55e;
+  --chart-4: #f97316;
+  --chart-5: #ec4899;
+}
+
+/* Light Mode */
+[data-theme="light"], .light {
+  --foreground-rgb: 10, 10, 15;
+  --background-start-rgb: 250, 250, 252;
+  --background-end-rgb: 245, 245, 250;
+
+  --lattice-void: #fafafa;
+  --lattice-deep: #f5f5f7;
+  --lattice-surface: #ffffff;
+  --lattice-elevated: #f8f8fc;
+  --lattice-border: #e5e5e8;
+
+  --neon-blue: #0095cc;
+  --neon-cyan: #00b8b0;
+  --neon-purple: #7c3aed;
+  --neon-pink: #db2777;
+  --neon-green: #16a34a;
 }
 
 @layer base {
@@ -193,4 +227,113 @@
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
+
+  /* Theme Toggle */
+  .theme-toggle {
+    @apply p-2 rounded-lg cursor-pointer;
+    @apply bg-lattice-surface border border-lattice-border;
+    @apply hover:border-neon-blue/50 transition-all;
+  }
+
+  /* Dashboard Cards */
+  .dashboard-card {
+    @apply bg-lattice-surface border border-lattice-border rounded-xl p-6;
+    @apply transition-all duration-200;
+    @apply hover:border-neon-blue/30;
+  }
+
+  .dashboard-stat {
+    @apply text-3xl font-bold text-gradient-neon;
+  }
+
+  .dashboard-label {
+    @apply text-sm text-gray-400 mt-1;
+  }
+
+  /* Progress Bar */
+  .progress-bar {
+    @apply h-2 bg-lattice-deep rounded-full overflow-hidden;
+  }
+
+  .progress-fill {
+    @apply h-full rounded-full transition-all duration-300;
+  }
+
+  /* Status Indicator */
+  .status-dot {
+    @apply w-2 h-2 rounded-full inline-block;
+  }
+
+  .status-dot.success { @apply bg-status-success; }
+  .status-dot.warning { @apply bg-status-warning; }
+  .status-dot.error { @apply bg-status-error; }
+  .status-dot.info { @apply bg-status-info; }
+
+  /* Metric Card */
+  .metric-card {
+    @apply bg-lattice-deep rounded-lg p-4;
+    @apply border border-lattice-border;
+  }
+
+  /* Command Palette Enhancements */
+  .command-item {
+    @apply px-4 py-2 cursor-pointer rounded-lg;
+    @apply hover:bg-neon-blue/10 transition-colors;
+  }
+
+  .command-item.selected {
+    @apply bg-neon-blue/20 border-l-2 border-neon-blue;
+  }
+
+  /* Fuzzy Match Highlight */
+  .fuzzy-match {
+    @apply text-neon-blue font-semibold;
+  }
+
+  /* Keyboard Shortcut Badge */
+  .kbd {
+    @apply inline-flex items-center justify-center;
+    @apply px-1.5 py-0.5 text-xs font-mono;
+    @apply bg-lattice-elevated border border-lattice-border rounded;
+    @apply text-gray-400;
+  }
+
+  /* Toast Notifications */
+  .toast {
+    @apply fixed bottom-4 right-4 p-4 rounded-lg shadow-lg;
+    @apply bg-lattice-surface border border-lattice-border;
+    @apply animate-slide-up;
+  }
+
+  .toast.success { @apply border-l-4 border-l-status-success; }
+  .toast.error { @apply border-l-4 border-l-status-error; }
+  .toast.warning { @apply border-l-4 border-l-status-warning; }
+  .toast.info { @apply border-l-4 border-l-status-info; }
 }
+
+/* Animations */
+@keyframes slide-up {
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 5px var(--neon-blue); }
+  50% { box-shadow: 0 0 20px var(--neon-blue); }
+}
+
+@keyframes resonance-wave {
+  0% { opacity: 0.3; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.02); }
+  100% { opacity: 0.3; transform: scale(1); }
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-slide-up { animation: slide-up 0.3s ease-out; }
+.animate-pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
+.animate-resonance-wave { animation: resonance-wave 3s ease-in-out infinite; }
+.animate-spin-slow { animation: spin-slow 3s linear infinite; }
