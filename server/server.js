@@ -2837,6 +2837,265 @@ register("goals", "config", async (ctx, input = {}) => {
 
 // ===== END GOAL SYSTEM MACROS =====
 
+// ===== WORLD MODEL MACROS =====
+
+register("worldmodel", "status", async (ctx, input = {}) => {
+  enforceEthosInvariant("worldmodel_status");
+  ensureWorldModel();
+
+  return {
+    ok: true,
+    entities: ctx.state.worldModel.entities.size,
+    relations: ctx.state.worldModel.relations.size,
+    simulations: ctx.state.worldModel.simulations.size,
+    snapshots: ctx.state.worldModel.snapshots.length,
+    stats: ctx.state.worldModel.stats,
+    config: ctx.state.worldModel.config,
+    invariants: WORLD_MODEL_INVARIANTS
+  };
+}, { public: true });
+
+register("worldmodel", "create_entity", async (ctx, input = {}) => {
+  enforceEthosInvariant("worldmodel_create_entity");
+  return createWorldEntity(input);
+}, { public: false });
+
+register("worldmodel", "create_relation", async (ctx, input = {}) => {
+  enforceEthosInvariant("worldmodel_create_relation");
+  return createWorldRelation(input);
+}, { public: false });
+
+register("worldmodel", "get_entity", async (ctx, input = {}) => {
+  enforceEthosInvariant("worldmodel_get_entity");
+  ensureWorldModel();
+
+  const entityId = String(input.entityId || input.id || "");
+  if (!entityId) return { ok: false, error: "entityId required" };
+
+  const includeRelations = input.includeRelations !== false;
+
+  if (includeRelations) {
+    return getEntityWithRelations(entityId);
+  }
+
+  const entity = ctx.state.worldModel.entities.get(entityId);
+  if (!entity) return { ok: false, error: "Entity not found" };
+  return { ok: true, entity };
+}, { public: true });
+
+register("worldmodel", "list_entities", async (ctx, input = {}) => {
+  enforceEthosInvariant("worldmodel_list_entities");
+  ensureWorldModel();
+
+  const type = input.type;
+  const limit = clamp(Number(input.limit || 100), 1, 500);
+  const search = String(input.search || "").toLowerCase();
+
+  let entities = Array.from(ctx.state.worldModel.entities.values());
+
+  if (type) entities = entities.filter(e => e.type === type);
+  if (search) entities = entities.filter(e =>
+    e.name.toLowerCase().includes(search) ||
+    e.description.toLowerCase().includes(search)
+  );
+
+  entities = entities
+    .sort((a, b) => b.state.salience - a.state.salience)
+    .slice(0, limit)
+    .map(e => ({
+      id: e.id,
+      name: e.name,
+      type: e.type,
+      salience: e.state.salience,
+      confidence: e.state.confidence,
+      relationCount: e.relationCount,
+      createdAt: e.createdAt
+    }));
+
+  return { ok: true, entities, total: ctx.state.worldModel.entities.size };
+}, { public: true });
+
+register("worldmodel", "list_relations", async (ctx, input = {}) => {
+  enforceEthosInvariant("worldmodel_list_relations");
+  ensureWorldModel();
+
+  const entityId = input.entityId;
+  const type = input.type;
+  const limit = clamp(Number(input.limit || 100), 1, 500);
+
+  let relations = Array.from(ctx.state.worldModel.relations.values());
+
+  if (entityId) relations = relations.filter(r => r.from === entityId || r.to === entityId);
+  if (type) relations = relations.filter(r => r.type === type);
+
+  relations = relations
+    .sort((a, b) => b.strength - a.strength)
+    .slice(0, limit)
+    .map(r => ({
+      id: r.id,
+      from: r.from,
+      to: r.to,
+      type: r.type,
+      strength: r.strength,
+      confidence: r.confidence
+    }));
+
+  return { ok: true, relations, total: ctx.state.worldModel.relations.size };
+}, { public: true });
+
+register("worldmodel", "simulate", async (ctx, input = {}) => {
+  enforceEthosInvariant("worldmodel_simulate");
+  return runWorldSimulation(input);
+}, { public: false });
+
+register("worldmodel", "counterfactual", async (ctx, input = {}) => {
+  enforceEthosInvariant("worldmodel_counterfactual");
+  return generateCounterfactual(input);
+}, { public: false });
+
+register("worldmodel", "get_simulation", async (ctx, input = {}) => {
+  enforceEthosInvariant("worldmodel_get_simulation");
+  ensureWorldModel();
+
+  const simId = String(input.simId || input.id || "");
+  if (!simId) return { ok: false, error: "simId required" };
+
+  const sim = ctx.state.worldModel.simulations.get(simId);
+  if (!sim) return { ok: false, error: "Simulation not found" };
+
+  return { ok: true, simulation: sim };
+}, { public: true });
+
+register("worldmodel", "list_simulations", async (ctx, input = {}) => {
+  enforceEthosInvariant("worldmodel_list_simulations");
+  ensureWorldModel();
+
+  const limit = clamp(Number(input.limit || 20), 1, 100);
+
+  const simulations = Array.from(ctx.state.worldModel.simulations.values())
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .slice(0, limit)
+    .map(s => ({
+      id: s.id,
+      type: s.type,
+      status: s.status,
+      hypothesis: s.config.hypothesis,
+      insightCount: s.insights.length,
+      createdAt: s.createdAt,
+      completedAt: s.completedAt
+    }));
+
+  return { ok: true, simulations, total: ctx.state.worldModel.simulations.size };
+}, { public: true });
+
+register("worldmodel", "snapshot", async (ctx, input = {}) => {
+  enforceEthosInvariant("worldmodel_snapshot");
+  return takeWorldSnapshot(input.label);
+}, { public: false });
+
+register("worldmodel", "list_snapshots", async (ctx, input = {}) => {
+  enforceEthosInvariant("worldmodel_list_snapshots");
+  ensureWorldModel();
+
+  const snapshots = ctx.state.worldModel.snapshots.map(s => ({
+    id: s.id,
+    label: s.label,
+    entityCount: s.entityCount,
+    relationCount: s.relationCount,
+    takenAt: s.takenAt
+  }));
+
+  return { ok: true, snapshots };
+}, { public: true });
+
+register("worldmodel", "extract_from_dtu", async (ctx, input = {}) => {
+  enforceEthosInvariant("worldmodel_extract");
+
+  const dtuId = String(input.dtuId || "");
+  if (!dtuId) return { ok: false, error: "dtuId required" };
+
+  const dtu = ctx.state.dtus.get(dtuId);
+  if (!dtu) return { ok: false, error: "DTU not found" };
+
+  return extractEntitiesFromDtu(dtu);
+}, { public: false });
+
+register("worldmodel", "config", async (ctx, input = {}) => {
+  enforceEthosInvariant("worldmodel_config");
+  ensureWorldModel();
+
+  // Only owner/admin can modify config
+  if (!["owner", "admin", "founder"].includes(ctx.actor?.role)) {
+    return { ok: true, config: ctx.state.worldModel.config, readonly: true };
+  }
+
+  if (typeof input.maxEntities === "number") {
+    ctx.state.worldModel.config.maxEntities = clamp(input.maxEntities, 100, 100000);
+  }
+  if (typeof input.maxSimulationSteps === "number") {
+    ctx.state.worldModel.config.maxSimulationSteps = clamp(input.maxSimulationSteps, 5, 100);
+  }
+  if (typeof input.autoExtractEnabled === "boolean") {
+    ctx.state.worldModel.config.autoExtractEnabled = input.autoExtractEnabled;
+  }
+
+  saveStateDebounced();
+  return { ok: true, config: ctx.state.worldModel.config };
+}, { public: false });
+
+register("worldmodel", "update_entity", async (ctx, input = {}) => {
+  enforceEthosInvariant("worldmodel_update_entity");
+  ensureWorldModel();
+
+  const entityId = String(input.entityId || input.id || "");
+  if (!entityId) return { ok: false, error: "entityId required" };
+
+  const entity = ctx.state.worldModel.entities.get(entityId);
+  if (!entity) return { ok: false, error: "Entity not found" };
+
+  // Update allowed fields
+  if (input.name) entity.name = String(input.name).slice(0, 200);
+  if (input.description) entity.description = String(input.description).slice(0, 2000);
+  if (typeof input.confidence === "number") entity.state.confidence = clamp(input.confidence, 0, 1);
+  if (typeof input.salience === "number") entity.state.salience = clamp(input.salience, 0, 1);
+  if (typeof input.volatility === "number") entity.state.volatility = clamp(input.volatility, 0, 1);
+  if (input.properties && typeof input.properties === "object") {
+    entity.state.properties = { ...entity.state.properties, ...input.properties };
+  }
+
+  entity.updatedAt = nowISO();
+  saveStateDebounced();
+
+  return { ok: true, entity };
+}, { public: false });
+
+register("worldmodel", "delete_entity", async (ctx, input = {}) => {
+  enforceEthosInvariant("worldmodel_delete_entity");
+  ensureWorldModel();
+
+  const entityId = String(input.entityId || input.id || "");
+  if (!entityId) return { ok: false, error: "entityId required" };
+
+  const entity = ctx.state.worldModel.entities.get(entityId);
+  if (!entity) return { ok: false, error: "Entity not found" };
+
+  // Delete associated relations
+  const relationsToDelete = Array.from(ctx.state.worldModel.relations.entries())
+    .filter(([_, r]) => r.from === entityId || r.to === entityId)
+    .map(([id]) => id);
+
+  for (const relId of relationsToDelete) {
+    ctx.state.worldModel.relations.delete(relId);
+  }
+
+  ctx.state.worldModel.entities.delete(entityId);
+  saveStateDebounced();
+
+  return { ok: true, deleted: entityId, relationsRemoved: relationsToDelete.length };
+}, { public: false });
+
+// ===== END WORLD MODEL MACROS =====
+
 // ---- ctx ----
 function makeCtx(req=null) {
   return {
@@ -10921,6 +11180,105 @@ app.post("/api/goals/config", async (req, res) => {
 
 // ===== END GOAL SYSTEM API ENDPOINTS =====
 
+// ===== WORLD MODEL API ENDPOINTS =====
+
+app.get("/api/worldmodel/status", async (req, res) => {
+  const out = await runMacro("worldmodel", "status", req.query, makeCtx(req));
+  return res.json(out);
+});
+
+app.get("/api/worldmodel/entities", async (req, res) => {
+  const out = await runMacro("worldmodel", "list_entities", req.query, makeCtx(req));
+  return res.json(out);
+});
+
+app.post("/api/worldmodel/entities", async (req, res) => {
+  const out = await runMacro("worldmodel", "create_entity", req.body, makeCtx(req));
+  return res.json(out);
+});
+
+app.get("/api/worldmodel/entities/:entityId", async (req, res) => {
+  const out = await runMacro("worldmodel", "get_entity", {
+    entityId: req.params.entityId,
+    includeRelations: req.query.relations !== "false"
+  }, makeCtx(req));
+  return res.json(out);
+});
+
+app.put("/api/worldmodel/entities/:entityId", async (req, res) => {
+  const out = await runMacro("worldmodel", "update_entity", {
+    ...req.body,
+    entityId: req.params.entityId
+  }, makeCtx(req));
+  return res.json(out);
+});
+
+app.delete("/api/worldmodel/entities/:entityId", async (req, res) => {
+  const out = await runMacro("worldmodel", "delete_entity", {
+    entityId: req.params.entityId
+  }, makeCtx(req));
+  return res.json(out);
+});
+
+app.get("/api/worldmodel/relations", async (req, res) => {
+  const out = await runMacro("worldmodel", "list_relations", req.query, makeCtx(req));
+  return res.json(out);
+});
+
+app.post("/api/worldmodel/relations", async (req, res) => {
+  const out = await runMacro("worldmodel", "create_relation", req.body, makeCtx(req));
+  return res.json(out);
+});
+
+app.post("/api/worldmodel/simulate", async (req, res) => {
+  const out = await runMacro("worldmodel", "simulate", req.body, makeCtx(req));
+  return res.json(out);
+});
+
+app.get("/api/worldmodel/simulations", async (req, res) => {
+  const out = await runMacro("worldmodel", "list_simulations", req.query, makeCtx(req));
+  return res.json(out);
+});
+
+app.get("/api/worldmodel/simulations/:simId", async (req, res) => {
+  const out = await runMacro("worldmodel", "get_simulation", {
+    simId: req.params.simId
+  }, makeCtx(req));
+  return res.json(out);
+});
+
+app.post("/api/worldmodel/counterfactual", async (req, res) => {
+  const out = await runMacro("worldmodel", "counterfactual", req.body, makeCtx(req));
+  return res.json(out);
+});
+
+app.post("/api/worldmodel/snapshot", async (req, res) => {
+  const out = await runMacro("worldmodel", "snapshot", req.body, makeCtx(req));
+  return res.json(out);
+});
+
+app.get("/api/worldmodel/snapshots", async (req, res) => {
+  const out = await runMacro("worldmodel", "list_snapshots", req.query, makeCtx(req));
+  return res.json(out);
+});
+
+app.post("/api/worldmodel/extract", async (req, res) => {
+  const out = await runMacro("worldmodel", "extract_from_dtu", req.body, makeCtx(req));
+  return res.json(out);
+});
+
+app.get("/api/worldmodel/config", async (req, res) => {
+  const out = await runMacro("worldmodel", "config", {}, makeCtx(req));
+  return res.json(out);
+});
+
+app.post("/api/worldmodel/config", async (req, res) => {
+  const out = await runMacro("worldmodel", "config", req.body, makeCtx(req));
+  return res.json(out);
+});
+
+// ===== END WORLD MODEL API ENDPOINTS =====
+
 app.post("/api/multimodal/vision", async (req, res) => {
   const out = await runMacro("multimodal", "vision_analyze", req.body, makeCtx(req));
   return res.json(out);
@@ -15205,6 +15563,13 @@ const ORGAN_DEFS = [
   { organId: "goal_evaluation_gate", desc: "Evaluates goal feasibility, alignment, and value before activation.", deps: ["goal_os", "council_engine"] },
   { organId: "goal_pursuit_tracker", desc: "Tracks active goal progress, milestones, and resource allocation.", deps: ["goal_os", "metabolic_budget"] },
   { organId: "goal_completion_arbiter", desc: "Determines goal success/completion criteria and triggers celebration.", deps: ["goal_os", "experience_os"] },
+
+  // World Model Engine (internal simulation of knowledge domain states)
+  { organId: "world_model_os", desc: "Maintains internal representation of knowledge domain states and relationships.", deps: ["linguistic_engine", "causal_trace"] },
+  { organId: "world_state_tracker", desc: "Tracks current state of concepts, entities, and relationships in the lattice.", deps: ["world_model_os"] },
+  { organId: "world_simulator", desc: "Runs bounded simulations to predict knowledge evolution.", deps: ["world_model_os", "expectation_modeling"] },
+  { organId: "causal_inference_engine", desc: "Infers causal relationships between concepts beyond correlation.", deps: ["world_model_os", "causal_trace"] },
+  { organId: "counterfactual_engine", desc: "Generates and evaluates what-if scenarios safely.", deps: ["world_model_os", "counterfactual_guard"] },
 ];
 
 function _defaultOrganState(def) {
@@ -15783,6 +16148,505 @@ async function processGoalHeartbeat(ctx = {}) {
 
 // ===== END GOAL SYSTEM CORE =====
 
+// ===== WORLD MODEL ENGINE: Internal Knowledge Domain Simulation =====
+// Design: Maintains internal representation of knowledge states, enables
+// bounded simulation and counterfactual reasoning. No unbounded recursion.
+
+const WORLD_MODEL_INVARIANTS = Object.freeze({
+  NO_UNBOUNDED_SIMULATION: true,       // Simulations have finite steps
+  NO_REALITY_CONFUSION: true,          // Clear separation: simulation vs actual
+  NO_SELF_MODELING_RECURSION: true,    // Cannot model itself modeling itself
+  CAUSAL_GROUNDING: true,              // Causal claims must be grounded in DTUs
+  COUNTERFACTUAL_LABELED: true         // What-if outputs clearly marked
+});
+
+const ENTITY_TYPES = Object.freeze({
+  CONCEPT: "concept",                  // Abstract idea/topic
+  PERSON: "person",                    // Individual (human)
+  ORGANIZATION: "organization",        // Company, group, institution
+  LOCATION: "location",                // Physical or virtual place
+  EVENT: "event",                      // Point-in-time occurrence
+  PROCESS: "process",                  // Ongoing activity/transformation
+  ARTIFACT: "artifact",                // Created thing (document, code, tool)
+  CLAIM: "claim"                       // Assertion that can be true/false
+});
+
+const RELATION_TYPES = Object.freeze({
+  CAUSES: "causes",                    // A → B (causal)
+  CORRELATES: "correlates",            // A ~ B (statistical)
+  ENABLES: "enables",                  // A makes B possible
+  INHIBITS: "inhibits",                // A reduces likelihood of B
+  CONTAINS: "contains",                // A includes B
+  PART_OF: "part_of",                  // A is contained by B
+  PRECEDES: "precedes",                // A happens before B
+  CONTRADICTS: "contradicts",          // A and B cannot both be true
+  SUPPORTS: "supports",                // A provides evidence for B
+  DERIVES_FROM: "derives_from",        // A was computed from B
+  SIMILAR_TO: "similar_to",            // A resembles B
+  INSTANCE_OF: "instance_of"           // A is an example of B
+});
+
+function ensureWorldModel() {
+  if (!STATE.worldModel) {
+    STATE.worldModel = {
+      entities: new Map(),              // Entity snapshots by ID
+      relations: new Map(),             // Relation edges by ID
+      snapshots: [],                    // Historical state snapshots (capped)
+      simulations: new Map(),           // Active/completed simulations
+      stats: {
+        entitiesCreated: 0,
+        relationsCreated: 0,
+        simulationsRun: 0,
+        counterfactualsGenerated: 0
+      },
+      config: {
+        maxEntities: 10000,             // Prevent unbounded growth
+        maxRelationsPerEntity: 100,     // Prevent hub explosion
+        maxSimulationSteps: 50,         // Bounded simulation
+        maxSnapshots: 20,               // Historical limit
+        autoExtractEnabled: true        // Extract entities from DTUs
+      }
+    };
+  }
+  // Ensure Maps after restore
+  if (!(STATE.worldModel.entities instanceof Map)) {
+    STATE.worldModel.entities = new Map(Object.entries(STATE.worldModel.entities || {}));
+  }
+  if (!(STATE.worldModel.relations instanceof Map)) {
+    STATE.worldModel.relations = new Map(Object.entries(STATE.worldModel.relations || {}));
+  }
+  if (!(STATE.worldModel.simulations instanceof Map)) {
+    STATE.worldModel.simulations = new Map(Object.entries(STATE.worldModel.simulations || {}));
+  }
+  if (!Array.isArray(STATE.worldModel.snapshots)) {
+    STATE.worldModel.snapshots = [];
+  }
+}
+
+// Create an entity in the world model
+function createWorldEntity(input = {}) {
+  ensureWorldModel();
+
+  const entityType = ENTITY_TYPES[input.type?.toUpperCase()] || input.type || ENTITY_TYPES.CONCEPT;
+  if (!Object.values(ENTITY_TYPES).includes(entityType)) {
+    return { ok: false, error: `Invalid entity type: ${entityType}` };
+  }
+
+  // Check capacity
+  if (STATE.worldModel.entities.size >= STATE.worldModel.config.maxEntities) {
+    return { ok: false, error: "World model entity limit reached" };
+  }
+
+  const id = uid("entity");
+  const now = nowISO();
+
+  const entity = {
+    id,
+    name: String(input.name || "").slice(0, 200) || "Unnamed Entity",
+    type: entityType,
+    description: String(input.description || "").slice(0, 2000),
+
+    // State properties (can evolve over time)
+    state: {
+      confidence: clamp(Number(input.confidence || 0.5), 0, 1),
+      salience: clamp(Number(input.salience || 0.5), 0, 1),
+      volatility: clamp(Number(input.volatility || 0.3), 0, 1),  // How likely to change
+      properties: input.properties || {}                         // Custom key-value
+    },
+
+    // Provenance
+    source: {
+      dtuIds: Array.isArray(input.dtuIds) ? input.dtuIds.slice(0, 50) : [],
+      extractedFrom: input.extractedFrom || null,
+      createdBy: input.createdBy || "system"
+    },
+
+    // Relations are tracked separately
+    relationCount: 0,
+
+    createdAt: now,
+    updatedAt: now
+  };
+
+  STATE.worldModel.entities.set(id, entity);
+  STATE.worldModel.stats.entitiesCreated++;
+  saveStateDebounced();
+
+  return { ok: true, entity };
+}
+
+// Create a relation between entities
+function createWorldRelation(input = {}) {
+  ensureWorldModel();
+
+  const fromId = String(input.from || input.fromId || "");
+  const toId = String(input.to || input.toId || "");
+  const relationType = RELATION_TYPES[input.type?.toUpperCase()] || input.type || RELATION_TYPES.CORRELATES;
+
+  if (!fromId || !toId) {
+    return { ok: false, error: "Both 'from' and 'to' entity IDs required" };
+  }
+  if (!Object.values(RELATION_TYPES).includes(relationType)) {
+    return { ok: false, error: `Invalid relation type: ${relationType}` };
+  }
+
+  const fromEntity = STATE.worldModel.entities.get(fromId);
+  const toEntity = STATE.worldModel.entities.get(toId);
+
+  if (!fromEntity) return { ok: false, error: `Source entity not found: ${fromId}` };
+  if (!toEntity) return { ok: false, error: `Target entity not found: ${toId}` };
+
+  // Check relation limit per entity
+  if (fromEntity.relationCount >= STATE.worldModel.config.maxRelationsPerEntity) {
+    return { ok: false, error: "Source entity has too many relations" };
+  }
+
+  const id = uid("rel");
+  const now = nowISO();
+
+  const relation = {
+    id,
+    from: fromId,
+    to: toId,
+    type: relationType,
+
+    // Relation strength and confidence
+    strength: clamp(Number(input.strength || 0.5), 0, 1),
+    confidence: clamp(Number(input.confidence || 0.5), 0, 1),
+
+    // Causal specific (only for causal types)
+    causal: relationType === RELATION_TYPES.CAUSES ? {
+      mechanism: String(input.mechanism || "").slice(0, 500),
+      conditions: Array.isArray(input.conditions) ? input.conditions.slice(0, 10) : [],
+      delay: input.delay || "immediate"  // immediate, short, long
+    } : null,
+
+    // Evidence
+    evidence: {
+      dtuIds: Array.isArray(input.dtuIds) ? input.dtuIds.slice(0, 20) : [],
+      observationCount: Number(input.observationCount || 1)
+    },
+
+    createdAt: now,
+    updatedAt: now
+  };
+
+  STATE.worldModel.relations.set(id, relation);
+  STATE.worldModel.stats.relationsCreated++;
+  fromEntity.relationCount++;
+  fromEntity.updatedAt = now;
+  saveStateDebounced();
+
+  return { ok: true, relation };
+}
+
+// Get entity with its relations
+function getEntityWithRelations(entityId) {
+  ensureWorldModel();
+
+  const entity = STATE.worldModel.entities.get(entityId);
+  if (!entity) return { ok: false, error: "Entity not found" };
+
+  // Find all relations involving this entity
+  const relations = Array.from(STATE.worldModel.relations.values())
+    .filter(r => r.from === entityId || r.to === entityId)
+    .map(r => ({
+      ...r,
+      direction: r.from === entityId ? "outgoing" : "incoming",
+      otherEntity: r.from === entityId ?
+        STATE.worldModel.entities.get(r.to) :
+        STATE.worldModel.entities.get(r.from)
+    }));
+
+  return { ok: true, entity, relations };
+}
+
+// Run a bounded simulation
+function runWorldSimulation(input = {}) {
+  ensureWorldModel();
+
+  const simId = uid("sim");
+  const now = nowISO();
+  const maxSteps = Math.min(
+    Number(input.steps || 10),
+    STATE.worldModel.config.maxSimulationSteps
+  );
+
+  // Get starting entities
+  const startEntityIds = Array.isArray(input.entityIds) ?
+    input.entityIds.slice(0, 50) :
+    Array.from(STATE.worldModel.entities.keys()).slice(0, 20);
+
+  // Create simulation state
+  const simulation = {
+    id: simId,
+    type: input.type || "evolution",  // evolution, intervention, counterfactual
+    status: "running",
+    config: {
+      maxSteps,
+      interventions: input.interventions || [],  // { entityId, property, value }
+      hypothesis: String(input.hypothesis || "").slice(0, 500)
+    },
+    startState: {},
+    steps: [],
+    endState: {},
+    insights: [],
+    createdAt: now,
+    completedAt: null
+  };
+
+  // Capture start state
+  for (const eid of startEntityIds) {
+    const e = STATE.worldModel.entities.get(eid);
+    if (e) {
+      simulation.startState[eid] = JSON.parse(JSON.stringify(e.state));
+    }
+  }
+
+  // Apply interventions (for counterfactual/intervention simulations)
+  const workingState = JSON.parse(JSON.stringify(simulation.startState));
+  for (const intervention of (input.interventions || [])) {
+    if (workingState[intervention.entityId]) {
+      workingState[intervention.entityId].properties[intervention.property] = intervention.value;
+    }
+  }
+
+  // Run bounded simulation steps
+  for (let step = 0; step < maxSteps; step++) {
+    const stepResult = {
+      step,
+      changes: [],
+      propagations: []
+    };
+
+    // For each entity, propagate changes through causal relations
+    for (const [entityId, entityState] of Object.entries(workingState)) {
+      const relations = Array.from(STATE.worldModel.relations.values())
+        .filter(r => r.from === entityId && r.type === RELATION_TYPES.CAUSES);
+
+      for (const rel of relations) {
+        const targetState = workingState[rel.to];
+        if (!targetState) continue;
+
+        // Propagate influence based on relation strength
+        const influence = rel.strength * entityState.salience * (1 - targetState.volatility);
+        if (influence > 0.1) {
+          // Increase target salience proportionally
+          const oldSalience = targetState.salience;
+          targetState.salience = clamp(targetState.salience + influence * 0.1, 0, 1);
+
+          if (Math.abs(targetState.salience - oldSalience) > 0.01) {
+            stepResult.propagations.push({
+              from: entityId,
+              to: rel.to,
+              relation: rel.type,
+              delta: targetState.salience - oldSalience
+            });
+          }
+        }
+      }
+    }
+
+    // Natural decay of volatility
+    for (const entityState of Object.values(workingState)) {
+      entityState.volatility = clamp(entityState.volatility * 0.95, 0.05, 1);
+    }
+
+    simulation.steps.push(stepResult);
+
+    // Early termination if no propagations
+    if (stepResult.propagations.length === 0 && step > 2) {
+      break;
+    }
+  }
+
+  // Capture end state
+  simulation.endState = workingState;
+  simulation.status = "completed";
+  simulation.completedAt = nowISO();
+
+  // Generate insights
+  for (const [entityId, startState] of Object.entries(simulation.startState)) {
+    const endState = simulation.endState[entityId];
+    if (!endState) continue;
+
+    const salienceDelta = endState.salience - startState.salience;
+    if (Math.abs(salienceDelta) > 0.1) {
+      const entity = STATE.worldModel.entities.get(entityId);
+      simulation.insights.push({
+        entityId,
+        entityName: entity?.name || entityId,
+        type: salienceDelta > 0 ? "increased_salience" : "decreased_salience",
+        delta: salienceDelta,
+        description: `${entity?.name || entityId} ${salienceDelta > 0 ? "gained" : "lost"} significance (${(Math.abs(salienceDelta) * 100).toFixed(1)}%)`
+      });
+    }
+  }
+
+  STATE.worldModel.simulations.set(simId, simulation);
+  STATE.worldModel.stats.simulationsRun++;
+
+  // Cap simulations history
+  if (STATE.worldModel.simulations.size > 50) {
+    const oldest = Array.from(STATE.worldModel.simulations.entries())
+      .sort((a, b) => new Date(a[1].createdAt) - new Date(b[1].createdAt))
+      .slice(0, 10);
+    for (const [id] of oldest) {
+      STATE.worldModel.simulations.delete(id);
+    }
+  }
+
+  saveStateDebounced();
+  return { ok: true, simulation };
+}
+
+// Generate counterfactual: "What if X had been different?"
+function generateCounterfactual(input = {}) {
+  ensureWorldModel();
+
+  const entityId = String(input.entityId || "");
+  const entity = STATE.worldModel.entities.get(entityId);
+  if (!entity) return { ok: false, error: "Entity not found" };
+
+  const property = String(input.property || "salience");
+  const altValue = input.altValue;
+  const hypothesis = String(input.hypothesis || `What if ${entity.name}'s ${property} were different?`);
+
+  // Run simulation with intervention
+  const simResult = runWorldSimulation({
+    type: "counterfactual",
+    entityIds: [entityId, ...getRelatedEntityIds(entityId, 2)],
+    interventions: [{ entityId, property, value: altValue }],
+    hypothesis,
+    steps: 20
+  });
+
+  if (!simResult.ok) return simResult;
+
+  // Mark output clearly as counterfactual (invariant compliance)
+  const counterfactual = {
+    id: uid("cf"),
+    entityId,
+    entityName: entity.name,
+    hypothesis,
+    intervention: { property, originalValue: entity.state.properties[property], altValue },
+    simulationId: simResult.simulation.id,
+    insights: simResult.simulation.insights,
+    isCounterfactual: true,  // COUNTERFACTUAL_LABELED invariant
+    warning: "This is a hypothetical scenario, not actual state",
+    createdAt: nowISO()
+  };
+
+  STATE.worldModel.stats.counterfactualsGenerated++;
+  saveStateDebounced();
+
+  return { ok: true, counterfactual };
+}
+
+// Helper: get related entity IDs up to N hops
+function getRelatedEntityIds(entityId, hops = 1, visited = new Set()) {
+  ensureWorldModel();
+  if (hops <= 0 || visited.has(entityId)) return [];
+
+  visited.add(entityId);
+  const related = [];
+
+  const relations = Array.from(STATE.worldModel.relations.values())
+    .filter(r => r.from === entityId || r.to === entityId);
+
+  for (const rel of relations) {
+    const otherId = rel.from === entityId ? rel.to : rel.from;
+    if (!visited.has(otherId)) {
+      related.push(otherId);
+      related.push(...getRelatedEntityIds(otherId, hops - 1, visited));
+    }
+  }
+
+  return [...new Set(related)];
+}
+
+// Take a snapshot of current world state
+function takeWorldSnapshot(label = "") {
+  ensureWorldModel();
+
+  const snapshot = {
+    id: uid("snap"),
+    label: String(label).slice(0, 100) || `Snapshot at ${nowISO()}`,
+    entityCount: STATE.worldModel.entities.size,
+    relationCount: STATE.worldModel.relations.size,
+    entities: {},
+    takenAt: nowISO()
+  };
+
+  // Store condensed entity states (not full entities)
+  for (const [id, entity] of STATE.worldModel.entities) {
+    snapshot.entities[id] = {
+      name: entity.name,
+      type: entity.type,
+      state: JSON.parse(JSON.stringify(entity.state))
+    };
+  }
+
+  STATE.worldModel.snapshots.push(snapshot);
+
+  // Cap snapshots
+  if (STATE.worldModel.snapshots.length > STATE.worldModel.config.maxSnapshots) {
+    STATE.worldModel.snapshots = STATE.worldModel.snapshots.slice(-STATE.worldModel.config.maxSnapshots);
+  }
+
+  saveStateDebounced();
+  return { ok: true, snapshot: { id: snapshot.id, label: snapshot.label, entityCount: snapshot.entityCount } };
+}
+
+// Extract entities from a DTU (auto-extraction)
+function extractEntitiesFromDtu(dtu) {
+  ensureWorldModel();
+
+  if (!STATE.worldModel.config.autoExtractEnabled) {
+    return { ok: false, error: "Auto-extraction disabled" };
+  }
+
+  const extracted = [];
+  const title = String(dtu?.title || "");
+  const tags = Array.isArray(dtu?.tags) ? dtu.tags : [];
+  const dtuId = dtu?.id;
+
+  // Simple extraction: create entity from DTU topic
+  if (title && dtuId) {
+    const existing = Array.from(STATE.worldModel.entities.values())
+      .find(e => e.name.toLowerCase() === title.toLowerCase());
+
+    if (!existing) {
+      const result = createWorldEntity({
+        name: title,
+        type: tags.includes("person") ? ENTITY_TYPES.PERSON :
+              tags.includes("org") ? ENTITY_TYPES.ORGANIZATION :
+              tags.includes("event") ? ENTITY_TYPES.EVENT :
+              ENTITY_TYPES.CONCEPT,
+        description: dtu.human?.summary || "",
+        confidence: dtu.authority?.score || 0.5,
+        salience: 0.3,
+        dtuIds: [dtuId],
+        extractedFrom: dtuId,
+        createdBy: "auto_extract"
+      });
+
+      if (result.ok) extracted.push(result.entity);
+    } else {
+      // Update existing entity's evidence
+      if (!existing.source.dtuIds.includes(dtuId)) {
+        existing.source.dtuIds.push(dtuId);
+        existing.state.confidence = clamp(existing.state.confidence + 0.05, 0, 1);
+        existing.updatedAt = nowISO();
+      }
+    }
+  }
+
+  return { ok: true, extracted: extracted.length, entities: extracted.map(e => ({ id: e.id, name: e.name })) };
+}
+
+// ===== END WORLD MODEL ENGINE CORE =====
+
 function _clamp01(x){ return clamp(Number(x||0), 0, 1); }
 
 function computeGrowthTick(signal={}) {
@@ -15836,6 +16700,7 @@ function kernelTick(event) {
   ensureOrganRegistry();
   ensureQueues();
   ensureGoalSystem();
+  ensureWorldModel();
   // Simple universal tick: update wear/debt and write Learning DTU for major changes.
   const t = nowISO();
   const signal = { acuteStress: 0, chronicStress: 0, drift: 0, paramShift: 0, decline: 0, repairDelta: 0, backlogDelta: 0 };
