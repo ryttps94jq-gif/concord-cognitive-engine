@@ -1670,9 +1670,21 @@ council.reviewAndCommitQuiet = async function reviewAndCommitQuiet(ctx, input={}
   const gate = councilGate(dtu, { allowRewrite:true });
   if (!gate.ok) return { ok:false, error:`councilGate:${gate.reason}`, gate };
 
-  upsertDTU(dtu);
+  upsertDTU(dtu, { federate: true }); // broadcast + federate meta-DTUs
   ctx.state.queues.metaProposals = (ctx.state.queues.metaProposals || []).filter(p => p?.id !== prop.id);
   ctx.state.__chicken3.stats.metaCommits++;
+
+  // Broadcast meta-commit event to connected clients
+  try {
+    realtimeEmit("meta:committed", {
+      dtuId: dtu.id,
+      title: dtu.title,
+      proposalId: prop.id,
+      metaCommitCount: ctx.state.__chicken3.stats.metaCommits,
+      ts: nowISO()
+    });
+  } catch (e) { /* best-effort */ }
+
   saveStateDebounced();
   return { ok:true, committed: dtuForClient(dtu), gate };
 };
@@ -2234,9 +2246,39 @@ function dtusByIds(ids=[]) {
   }
   return out;
 }
-function upsertDTU(dtu) {
+function upsertDTU(dtu, { broadcast = true, federate = false } = {}) {
+  const isNew = !STATE.dtus.has(dtu.id);
   STATE.dtus.set(dtu.id, dtu);
   saveStateDebounced();
+
+  // Broadcast DTU change via WebSocket (local-first realtime)
+  if (broadcast && REALTIME.ready) {
+    const eventType = isNew ? "dtu:created" : "dtu:updated";
+    try {
+      realtimeEmit(eventType, {
+        id: dtu.id,
+        title: dtu.title,
+        tier: dtu.tier,
+        tags: dtu.tags,
+        updatedAt: dtu.updatedAt
+      });
+    } catch (e) { /* best-effort */ }
+  }
+
+  // Optionally broadcast to federation (multi-node sync)
+  if (federate && _c3Federation.enabled) {
+    federationPublish("dtu:sync", {
+      id: dtu.id,
+      title: dtu.title,
+      tier: dtu.tier,
+      content: (dtu.content || "").slice(0, 5000), // truncate for network
+      tags: dtu.tags,
+      createdAt: dtu.createdAt,
+      updatedAt: dtu.updatedAt,
+      hash: dtu.hash
+    }).catch(() => {});
+  }
+
   return dtu;
 }
 
@@ -3111,6 +3153,52 @@ register("dtu", "get", async (ctx, input) => {
   if (!dtu) return { ok: false, error: "DTU not found" };
   return { ok: true, dtu, shadow: isShadowDTU(dtu) };
 });
+
+register("dtu", "update", async (ctx, input) => {
+  const id = String(input.id || "");
+  if (!id) return { ok: false, error: "Missing id" };
+  const existing = STATE.dtus.get(id);
+  if (!existing) return { ok: false, error: "DTU not found" };
+
+  // Update allowed fields
+  const updated = { ...existing };
+  if (input.title !== undefined) updated.title = String(input.title || existing.title);
+  if (input.content !== undefined) updated.content = String(input.content);
+  if (input.creti !== undefined) updated.creti = String(input.creti);
+  if (input.tags !== undefined) updated.tags = Array.isArray(input.tags) ? input.tags.slice(0, 40) : existing.tags;
+  if (input.tier !== undefined && ["regular", "mega", "hyper"].includes(input.tier)) updated.tier = input.tier;
+  updated.updatedAt = nowISO();
+
+  upsertDTU(updated, { broadcast: true });
+  ctx.log("dtu.update", `Updated DTU: ${updated.title}`, { id });
+  return { ok: true, dtu: updated };
+}, { description: "Update an existing DTU" });
+
+register("dtu", "delete", async (ctx, input) => {
+  const id = String(input.id || "");
+  if (!id) return { ok: false, error: "Missing id" };
+
+  const dtu = STATE.dtus.get(id);
+  if (!dtu) return { ok: false, error: "DTU not found" };
+
+  // Delete the DTU
+  STATE.dtus.delete(id);
+  SEARCH_INDEX.dirty = true;
+  saveStateDebounced();
+
+  // Broadcast deletion via WebSocket
+  try {
+    realtimeEmit("dtu:deleted", { id, title: dtu.title });
+  } catch (e) { /* best-effort */ }
+
+  // Optionally notify federation
+  if (_c3Federation.enabled) {
+    federationPublish("dtu:deleted", { id, deletedAt: nowISO() }).catch(() => {});
+  }
+
+  ctx.log("dtu.delete", `Deleted DTU: ${dtu.title}`, { id });
+  return { ok: true, deleted: { id, title: dtu.title } };
+}, { description: "Delete a DTU by id" });
 
 register("dtu", "list", async (ctx, input) => {
   const limit = clamp(Number(input.limit || 5000), 1, 5000);
@@ -8232,6 +8320,37 @@ async function startChicken3Federation() {
   } catch (e) {
     console.error("[Chicken3] Federation failed:", e);
     return { ok:false, error:String(e?.message||e) };
+  }
+}
+
+// Publish DTU/event to federation channel (Redis pub/sub)
+async function federationPublish(eventType, payload) {
+  if (!_c3Federation.enabled || !_c3Federation.client) {
+    return { ok: false, reason: "federation_not_enabled" };
+  }
+  try {
+    const msg = JSON.stringify({
+      type: eventType,
+      nodeId: process.env.NODE_ID || "local",
+      payload,
+      ts: nowISO()
+    });
+    // Redis publish requires a separate client (subscriber can't publish)
+    // Create a publisher client on first use
+    if (!_c3Federation.publisher) {
+      const mod = await import("redis").catch(() => null);
+      if (!mod?.createClient) return { ok: false, error: "redis unavailable" };
+      const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
+      _c3Federation.publisher = mod.createClient({ url: REDIS_URL });
+      _c3Federation.publisher.on("error", (err) => console.error("[Federation][Pub] error:", err));
+      await _c3Federation.publisher.connect();
+    }
+    await _c3Federation.publisher.publish(_c3Federation.channel, msg);
+    STATE.__chicken3.stats.federationTx = (STATE.__chicken3.stats.federationTx || 0) + 1;
+    return { ok: true };
+  } catch (e) {
+    console.error("[Federation] Publish failed:", e);
+    return { ok: false, error: String(e?.message || e) };
   }
 }
 
