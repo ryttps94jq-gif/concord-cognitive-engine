@@ -7,7 +7,8 @@ import {
   MessageSquare, MessageCircle, Code, FlaskConical, Store, FileText,
   Book, Layout, Calendar, Share2, Sparkles, Target, Activity, Users,
   User, Dna, Atom, Orbit, DollarSign, Gamepad2, Glasses, Newspaper,
-  Music, Brain, Wand2, Home, ChevronLeft, ChevronRight
+  Music, Brain, Wand2, Home, ChevronLeft, ChevronRight, Hash, Rss,
+  FolderGit2, Heart
 } from 'lucide-react';
 
 const lenses = [
@@ -15,6 +16,10 @@ const lenses = [
   { id: 'chat', name: 'Chat', icon: MessageSquare, path: '/lenses/chat' },
   { id: 'thread', name: 'Thread', icon: MessageCircle, path: '/lenses/thread' },
   { id: 'code', name: 'Code', icon: Code, path: '/lenses/code' },
+  { id: 'forum', name: 'Forum', icon: Hash, path: '/lenses/forum' },
+  { id: 'feed', name: 'Feed', icon: Rss, path: '/lenses/feed' },
+  { id: 'repos', name: 'Repos', icon: FolderGit2, path: '/lenses/repos' },
+  { id: 'timeline', name: 'Timeline', icon: Heart, path: '/lenses/timeline' },
   { id: 'lab', name: 'Lab', icon: FlaskConical, path: '/lenses/lab' },
   { id: 'market', name: 'Market', icon: Store, path: '/lenses/market' },
   { id: 'paper', name: 'Paper', icon: FileText, path: '/lenses/paper' },
