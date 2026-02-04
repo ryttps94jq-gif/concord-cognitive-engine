@@ -11,7 +11,7 @@ interface AppShellProps {
 }
 
 export function AppShell({ children }: AppShellProps) {
-  const { sidebarCollapsed, commandPaletteOpen, setCommandPaletteOpen } = useUIStore();
+  const { sidebarCollapsed, commandPaletteOpen, setCommandPaletteOpen, fullPageMode } = useUIStore();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -37,6 +37,11 @@ export function AppShell({ children }: AppShellProps) {
     return null;
   }
 
+  // Full page mode: render children without shell chrome (for landing page, etc.)
+  if (fullPageMode) {
+    return <>{children}</>;
+  }
+
   return (
     <div className="flex h-screen overflow-hidden bg-lattice-void">
       <Sidebar />
@@ -46,7 +51,7 @@ export function AppShell({ children }: AppShellProps) {
 
         <main
           className={`flex-1 overflow-auto transition-all duration-300 ${
-            sidebarCollapsed ? 'ml-16' : 'ml-64'
+            sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'
           }`}
         >
           {children}

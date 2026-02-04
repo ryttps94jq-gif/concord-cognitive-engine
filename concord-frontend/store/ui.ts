@@ -15,6 +15,9 @@ interface UIState {
   // Theme
   theme: 'dark' | 'light';
 
+  // Full page mode (hides shell chrome)
+  fullPageMode: boolean;
+
   // Toast notifications
   toasts: Toast[];
 
@@ -26,6 +29,7 @@ interface UIState {
   setCommandPaletteOpen: (open: boolean) => void;
   setActiveLens: (lens: string) => void;
   setTheme: (theme: 'dark' | 'light') => void;
+  setFullPageMode: (mode: boolean) => void;
   addToast: (toast: Omit<Toast, 'id'>) => void;
   removeToast: (id: string) => void;
 }
@@ -46,6 +50,7 @@ export const useUIStore = create<UIState>()(
       commandPaletteOpen: false,
       activeLens: 'chat',
       theme: 'dark',
+      fullPageMode: false,
       toasts: [],
 
       // Actions
@@ -60,6 +65,8 @@ export const useUIStore = create<UIState>()(
       setActiveLens: (lens) => set({ activeLens: lens }),
 
       setTheme: (theme) => set({ theme }),
+
+      setFullPageMode: (mode) => set({ fullPageMode: mode }),
 
       addToast: (toast) =>
         set((state) => ({

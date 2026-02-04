@@ -20082,6 +20082,1267 @@ function kernelTick(event) {
 
 // Ensure regi
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// CONCORD ECONOMIC ENGINE v2.1
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ---- Stripe Integration (lazy load) ----
+let stripe = null;
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || '';
+const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
+const STRIPE_ENABLED = Boolean(STRIPE_SECRET_KEY);
+
+async function getStripe() {
+  if (!STRIPE_ENABLED) return null;
+  if (!stripe) {
+    try {
+      const Stripe = (await import('stripe')).default;
+      stripe = new Stripe(STRIPE_SECRET_KEY, { apiVersion: '2023-10-16' });
+    } catch (e) {
+      console.warn('[Economic] Stripe not available:', e.message);
+    }
+  }
+  return stripe;
+}
+
+// ---- Economic Constants ----
+const ECONOMIC_CONFIG = Object.freeze({
+  TOKEN_PURCHASE_FEE: 0.0146,        // 1.46% fee on token purchases
+  MARKETPLACE_FEE: 0.04,              // 4% marketplace fee (adjustable 3-5%)
+  CREATOR_SHARE: 0.70,                // 70% to creator
+  ROYALTY_SHARE: 0.20,                // 20% to royalty wheel
+  TREASURY_SHARE: 0.10,               // 10% to Concord treasury
+
+  // Royalty wheel decay by generation
+  ROYALTY_DECAY: [0.30, 0.20, 0.10, 0.05, 0.03, 0.02, 0.01],
+
+  // Token packages (CT = Concord Tokens)
+  TOKEN_PACKAGES: [
+    { id: 'pack_500', tokens: 500, price: 500, bonus: 0 },      // $5.00
+    { id: 'pack_2000', tokens: 2200, price: 1800, bonus: 0.10 }, // $18.00, 10% bonus
+    { id: 'pack_10000', tokens: 12000, price: 8000, bonus: 0.20 }, // $80.00, 20% bonus
+  ],
+
+  // Subscription tiers
+  TIERS: {
+    free: { name: 'Free', price: 0, ingestLimit: 10, tokensPerMonth: 100 },
+    pro: { name: 'Pro', price: 1200, ingestLimit: -1, tokensPerMonth: 2000 },    // $12/mo
+    teams: { name: 'Teams', price: 2900, ingestLimit: -1, tokensPerMonth: 5000 }, // $29/seat/mo
+  },
+
+  // Stripe price IDs (set in env)
+  STRIPE_PRICES: {
+    pro: process.env.STRIPE_PRICE_PRO || '',
+    teams: process.env.STRIPE_PRICE_TEAMS || '',
+  },
+});
+
+// ---- Economic State ----
+function ensureEconomicState() {
+  if (!STATE.economic) {
+    STATE.economic = {
+      wallets: new Map(),           // odId -> { balance, tier, stripeCustomerId, ... }
+      listings: new Map(),          // listingId -> { dtuId, price, seller, ... }
+      transactions: [],             // transaction log
+      treasury: 0,                  // Concord treasury balance
+      ingestTracking: new Map(),    // odId -> { date, count }
+    };
+  }
+  return STATE.economic;
+}
+
+// ---- Wallet Management ----
+function getWallet(odId) {
+  ensureEconomicState();
+  if (!STATE.economic.wallets.has(odId)) {
+    STATE.economic.wallets.set(odId, {
+      odId,
+      balance: 0,
+      tier: 'free',
+      stripeCustomerId: null,
+      stripeSubscriptionId: null,
+      tokensEarned: 0,
+      tokensSpent: 0,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+  }
+  return STATE.economic.wallets.get(odId);
+}
+
+function creditWallet(odId, amount, reason = '') {
+  const wallet = getWallet(odId);
+  wallet.balance += amount;
+  wallet.tokensEarned += amount;
+  wallet.updatedAt = Date.now();
+  logTransaction({ type: 'credit', odId, amount, reason, balance: wallet.balance });
+  return wallet;
+}
+
+function debitWallet(odId, amount, reason = '') {
+  const wallet = getWallet(odId);
+  if (wallet.balance < amount) {
+    throw new Error(`Insufficient balance: have ${wallet.balance}, need ${amount}`);
+  }
+  wallet.balance -= amount;
+  wallet.tokensSpent += amount;
+  wallet.updatedAt = Date.now();
+  logTransaction({ type: 'debit', odId, amount, reason, balance: wallet.balance });
+  return wallet;
+}
+
+function logTransaction(tx) {
+  ensureEconomicState();
+  STATE.economic.transactions.push({
+    ...tx,
+    id: `tx_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    timestamp: Date.now(),
+  });
+  // Keep only last 10000 transactions in memory
+  if (STATE.economic.transactions.length > 10000) {
+    STATE.economic.transactions = STATE.economic.transactions.slice(-10000);
+  }
+}
+
+// ---- Token Purchase System (1.46% fee) ----
+app.post('/api/economic/tokens/purchase', async (req, res) => {
+  try {
+    const { odId, packageId } = req.body;
+    if (!odId || !packageId) return res.status(400).json({ error: 'Missing odId or packageId' });
+
+    const pkg = ECONOMIC_CONFIG.TOKEN_PACKAGES.find(p => p.id === packageId);
+    if (!pkg) return res.status(400).json({ error: 'Invalid package' });
+
+    const stripeClient = await getStripe();
+    if (!stripeClient) {
+      return res.status(503).json({ error: 'Payment system not configured' });
+    }
+
+    const wallet = getWallet(odId);
+
+    // Create or get Stripe customer
+    let customerId = wallet.stripeCustomerId;
+    if (!customerId) {
+      const customer = await stripeClient.customers.create({
+        metadata: { odId },
+      });
+      customerId = customer.id;
+      wallet.stripeCustomerId = customerId;
+    }
+
+    // Create checkout session
+    const session = await stripeClient.checkout.sessions.create({
+      customer: customerId,
+      payment_method_types: ['card'],
+      line_items: [{
+        price_data: {
+          currency: 'usd',
+          product_data: {
+            name: `${pkg.tokens} Concord Tokens`,
+            description: pkg.bonus > 0 ? `Includes ${Math.round(pkg.bonus * 100)}% bonus!` : undefined,
+          },
+          unit_amount: pkg.price,
+        },
+        quantity: 1,
+      }],
+      mode: 'payment',
+      success_url: `${process.env.FRONTEND_URL || 'https://concord-os.org'}/billing?success=true`,
+      cancel_url: `${process.env.FRONTEND_URL || 'https://concord-os.org'}/billing?canceled=true`,
+      metadata: {
+        odId,
+        packageId,
+        tokens: pkg.tokens,
+        type: 'token_purchase',
+      },
+    });
+
+    res.json({ sessionId: session.id, url: session.url });
+  } catch (e) {
+    console.error('[Economic] Token purchase error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ---- Subscription Management ----
+app.post('/api/economic/subscribe', async (req, res) => {
+  try {
+    const { odId, tier } = req.body;
+    if (!odId || !tier) return res.status(400).json({ error: 'Missing odId or tier' });
+
+    const tierConfig = ECONOMIC_CONFIG.TIERS[tier];
+    if (!tierConfig || tier === 'free') {
+      return res.status(400).json({ error: 'Invalid tier' });
+    }
+
+    const priceId = ECONOMIC_CONFIG.STRIPE_PRICES[tier];
+    if (!priceId) {
+      return res.status(503).json({ error: 'Subscription not configured for this tier' });
+    }
+
+    const stripeClient = await getStripe();
+    if (!stripeClient) {
+      return res.status(503).json({ error: 'Payment system not configured' });
+    }
+
+    const wallet = getWallet(odId);
+
+    // Create or get Stripe customer
+    let customerId = wallet.stripeCustomerId;
+    if (!customerId) {
+      const customer = await stripeClient.customers.create({
+        metadata: { odId },
+      });
+      customerId = customer.id;
+      wallet.stripeCustomerId = customerId;
+    }
+
+    // Create checkout session for subscription
+    const session = await stripeClient.checkout.sessions.create({
+      customer: customerId,
+      payment_method_types: ['card'],
+      line_items: [{ price: priceId, quantity: 1 }],
+      mode: 'subscription',
+      success_url: `${process.env.FRONTEND_URL || 'https://concord-os.org'}/billing?success=true`,
+      cancel_url: `${process.env.FRONTEND_URL || 'https://concord-os.org'}/billing?canceled=true`,
+      metadata: { odId, tier, type: 'subscription' },
+    });
+
+    res.json({ sessionId: session.id, url: session.url });
+  } catch (e) {
+    console.error('[Economic] Subscribe error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ---- Stripe Webhook Handler ----
+app.post('/api/economic/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  const stripeClient = await getStripe();
+  if (!stripeClient) return res.status(503).send('Stripe not configured');
+
+  const sig = req.headers['stripe-signature'];
+  let event;
+
+  try {
+    event = stripeClient.webhooks.constructEvent(req.body, sig, STRIPE_WEBHOOK_SECRET);
+  } catch (e) {
+    console.error('[Economic] Webhook signature verification failed:', e.message);
+    return res.status(400).send(`Webhook Error: ${e.message}`);
+  }
+
+  try {
+    switch (event.type) {
+      case 'checkout.session.completed': {
+        const session = event.data.object;
+        const { odId, type, packageId, tokens, tier } = session.metadata || {};
+
+        if (type === 'token_purchase' && odId && tokens) {
+          // Apply 1.46% fee (already collected by Stripe, we credit net tokens)
+          const netTokens = Math.floor(Number(tokens));
+          creditWallet(odId, netTokens, `Token purchase: ${packageId}`);
+
+          // Fee goes to treasury
+          const fee = Math.ceil(netTokens * ECONOMIC_CONFIG.TOKEN_PURCHASE_FEE);
+          ensureEconomicState();
+          STATE.economic.treasury += fee;
+
+          console.log(`[Economic] Token purchase: ${odId} received ${netTokens} CT (fee: ${fee})`);
+        }
+
+        if (type === 'subscription' && odId && tier) {
+          const wallet = getWallet(odId);
+          wallet.tier = tier;
+          wallet.stripeSubscriptionId = session.subscription;
+          wallet.updatedAt = Date.now();
+
+          // Credit monthly tokens
+          const tierConfig = ECONOMIC_CONFIG.TIERS[tier];
+          if (tierConfig?.tokensPerMonth) {
+            creditWallet(odId, tierConfig.tokensPerMonth, `${tier} subscription monthly tokens`);
+          }
+
+          console.log(`[Economic] Subscription: ${odId} upgraded to ${tier}`);
+        }
+        break;
+      }
+
+      case 'customer.subscription.deleted': {
+        const subscription = event.data.object;
+        // Find wallet by subscription ID and downgrade
+        ensureEconomicState();
+        for (const [, wallet] of STATE.economic.wallets) {
+          if (wallet.stripeSubscriptionId === subscription.id) {
+            wallet.tier = 'free';
+            wallet.stripeSubscriptionId = null;
+            wallet.updatedAt = Date.now();
+            console.log(`[Economic] Subscription canceled: ${wallet.odId} downgraded to free`);
+            break;
+          }
+        }
+        break;
+      }
+
+      case 'invoice.payment_succeeded': {
+        const invoice = event.data.object;
+        // Monthly token grant for subscriptions
+        if (invoice.subscription) {
+          ensureEconomicState();
+          for (const [, wallet] of STATE.economic.wallets) {
+            if (wallet.stripeSubscriptionId === invoice.subscription) {
+              const tierConfig = ECONOMIC_CONFIG.TIERS[wallet.tier];
+              if (tierConfig?.tokensPerMonth) {
+                creditWallet(wallet.odId, tierConfig.tokensPerMonth, `${wallet.tier} monthly tokens`);
+              }
+              break;
+            }
+          }
+        }
+        break;
+      }
+    }
+
+    res.json({ received: true });
+  } catch (e) {
+    console.error('[Economic] Webhook processing error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ---- Universal Marketplace ----
+// Supports: DTUs, Lenses, Graphs, Templates, Simulations, Personas, Macros, Datasets, Integrations
+const MARKETPLACE_ASSET_TYPES = Object.freeze({
+  dtu: { name: 'DTU', icon: 'cube', hasRoyalties: true },
+  lens: { name: 'Custom Lens', icon: 'eye', hasRoyalties: false },
+  graph: { name: 'Knowledge Graph', icon: 'share2', hasRoyalties: true },
+  template: { name: 'Template', icon: 'file-text', hasRoyalties: true },
+  simulation: { name: 'Simulation', icon: 'flask', hasRoyalties: true },
+  persona: { name: 'AI Persona', icon: 'user', hasRoyalties: false },
+  macro: { name: 'Macro/Automation', icon: 'zap', hasRoyalties: false },
+  dataset: { name: 'Dataset/Collection', icon: 'database', hasRoyalties: true },
+  integration: { name: 'Integration/Plugin', icon: 'plug', hasRoyalties: false },
+  theme: { name: 'Theme/Style', icon: 'palette', hasRoyalties: false },
+  workflow: { name: 'Workflow', icon: 'git-branch', hasRoyalties: true },
+  model: { name: 'ML Model', icon: 'brain', hasRoyalties: true },
+});
+
+// List any asset on marketplace
+app.post('/api/economic/marketplace/list', (req, res) => {
+  try {
+    const { odId, assetType, assetId, price, title, description, tags, preview, license } = req.body;
+
+    if (!odId || !assetType || !assetId || !price || !title) {
+      return res.status(400).json({ error: 'Missing required fields: odId, assetType, assetId, price, title' });
+    }
+
+    if (!MARKETPLACE_ASSET_TYPES[assetType]) {
+      return res.status(400).json({
+        error: 'Invalid asset type',
+        validTypes: Object.keys(MARKETPLACE_ASSET_TYPES),
+      });
+    }
+
+    ensureEconomicState();
+    const listingId = `listing_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    STATE.economic.listings.set(listingId, {
+      id: listingId,
+      assetType,
+      assetId,
+      title,
+      seller: odId,
+      price: Number(price),
+      description: description || '',
+      tags: tags || [],
+      preview: preview || null,
+      license: license || 'standard',
+      status: 'active',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      sales: 0,
+      rating: null,
+      reviews: [],
+    });
+
+    res.json({
+      listingId,
+      assetType,
+      message: `${MARKETPLACE_ASSET_TYPES[assetType].name} listed successfully`,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Update listing
+app.patch('/api/economic/marketplace/listing/:listingId', (req, res) => {
+  try {
+    const { listingId } = req.params;
+    const { odId, price, title, description, tags, status } = req.body;
+
+    ensureEconomicState();
+    const listing = STATE.economic.listings.get(listingId);
+
+    if (!listing) {
+      return res.status(404).json({ error: 'Listing not found' });
+    }
+
+    if (listing.seller !== odId) {
+      return res.status(403).json({ error: 'Not authorized to edit this listing' });
+    }
+
+    if (price !== undefined) listing.price = Number(price);
+    if (title !== undefined) listing.title = title;
+    if (description !== undefined) listing.description = description;
+    if (tags !== undefined) listing.tags = tags;
+    if (status !== undefined && ['active', 'paused', 'removed'].includes(status)) {
+      listing.status = status;
+    }
+    listing.updatedAt = Date.now();
+
+    res.json({ listing, message: 'Listing updated' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Buy any asset
+app.post('/api/economic/marketplace/buy', (req, res) => {
+  try {
+    const { odId, listingId } = req.body;
+    if (!odId || !listingId) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    ensureEconomicState();
+    const listing = STATE.economic.listings.get(listingId);
+    if (!listing || listing.status !== 'active') {
+      return res.status(404).json({ error: 'Listing not found or inactive' });
+    }
+
+    if (listing.seller === odId) {
+      return res.status(400).json({ error: 'Cannot buy your own listing' });
+    }
+
+    const buyerWallet = getWallet(odId);
+    if (buyerWallet.balance < listing.price) {
+      return res.status(400).json({ error: 'Insufficient balance' });
+    }
+
+    // Calculate splits
+    const marketplaceFee = Math.ceil(listing.price * ECONOMIC_CONFIG.MARKETPLACE_FEE);
+    const netAmount = listing.price - marketplaceFee;
+
+    const assetConfig = MARKETPLACE_ASSET_TYPES[listing.assetType];
+    let creatorAmount, royaltyAmount, treasuryAmount;
+
+    if (assetConfig.hasRoyalties) {
+      creatorAmount = Math.floor(netAmount * ECONOMIC_CONFIG.CREATOR_SHARE);
+      royaltyAmount = Math.floor(netAmount * ECONOMIC_CONFIG.ROYALTY_SHARE);
+      treasuryAmount = netAmount - creatorAmount - royaltyAmount;
+    } else {
+      // No royalties for this asset type - creator gets full net
+      creatorAmount = netAmount;
+      royaltyAmount = 0;
+      treasuryAmount = 0;
+    }
+
+    // Debit buyer
+    debitWallet(odId, listing.price, `Purchase: ${listing.title}`);
+
+    // Credit seller
+    creditWallet(listing.seller, creatorAmount, `Sale: ${listing.title}`);
+
+    // Process royalty wheel (only for DTUs and other reference-able assets)
+    if (royaltyAmount > 0 && listing.assetType === 'dtu') {
+      processRoyaltyWheel(listing.assetId, royaltyAmount);
+    } else if (royaltyAmount > 0) {
+      // For non-DTU assets, royalty pool goes to treasury for now
+      STATE.economic.treasury += royaltyAmount;
+    }
+
+    // Treasury
+    STATE.economic.treasury += treasuryAmount + marketplaceFee;
+
+    // Update listing
+    listing.sales += 1;
+
+    // Record purchase for buyer (so they can access the asset)
+    const purchaseRecord = {
+      id: `purchase_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      buyer: odId,
+      listingId,
+      assetType: listing.assetType,
+      assetId: listing.assetId,
+      title: listing.title,
+      purchasedAt: Date.now(),
+    };
+
+    // Store purchases in wallet
+    const wallet = getWallet(odId);
+    wallet.purchases = wallet.purchases || [];
+    wallet.purchases.push(purchaseRecord);
+
+    // Log transaction
+    logTransaction({
+      type: 'marketplace_sale',
+      listingId,
+      assetType: listing.assetType,
+      assetId: listing.assetId,
+      title: listing.title,
+      buyer: odId,
+      seller: listing.seller,
+      price: listing.price,
+      creatorAmount,
+      royaltyAmount,
+      treasuryAmount,
+      marketplaceFee,
+    });
+
+    res.json({
+      success: true,
+      purchase: purchaseRecord,
+      paid: listing.price,
+      breakdown: { creatorAmount, royaltyAmount, treasuryAmount, marketplaceFee },
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Browse marketplace with filters
+app.get('/api/economic/marketplace', (req, res) => {
+  ensureEconomicState();
+
+  const { type, search, minPrice, maxPrice, sort, limit = 50, offset = 0 } = req.query;
+
+  let listings = Array.from(STATE.economic.listings.values())
+    .filter(l => l.status === 'active');
+
+  // Filter by type
+  if (type && type !== 'all') {
+    listings = listings.filter(l => l.assetType === type);
+  }
+
+  // Search in title/description
+  if (search) {
+    const searchLower = String(search).toLowerCase();
+    listings = listings.filter(l =>
+      l.title.toLowerCase().includes(searchLower) ||
+      l.description.toLowerCase().includes(searchLower) ||
+      (l.tags && l.tags.some(t => t.toLowerCase().includes(searchLower)))
+    );
+  }
+
+  // Price filters
+  if (minPrice) listings = listings.filter(l => l.price >= Number(minPrice));
+  if (maxPrice) listings = listings.filter(l => l.price <= Number(maxPrice));
+
+  // Sort
+  if (sort === 'price_asc') listings.sort((a, b) => a.price - b.price);
+  else if (sort === 'price_desc') listings.sort((a, b) => b.price - a.price);
+  else if (sort === 'sales') listings.sort((a, b) => b.sales - a.sales);
+  else if (sort === 'oldest') listings.sort((a, b) => a.createdAt - b.createdAt);
+  else listings.sort((a, b) => b.createdAt - a.createdAt); // newest first (default)
+
+  const total = listings.length;
+  listings = listings.slice(Number(offset), Number(offset) + Number(limit));
+
+  res.json({
+    listings,
+    total,
+    assetTypes: MARKETPLACE_ASSET_TYPES,
+    pagination: { limit: Number(limit), offset: Number(offset), hasMore: Number(offset) + listings.length < total },
+  });
+});
+
+// Get single listing details
+app.get('/api/economic/marketplace/listing/:listingId', (req, res) => {
+  ensureEconomicState();
+  const listing = STATE.economic.listings.get(req.params.listingId);
+
+  if (!listing) {
+    return res.status(404).json({ error: 'Listing not found' });
+  }
+
+  res.json({ listing, assetTypeInfo: MARKETPLACE_ASSET_TYPES[listing.assetType] });
+});
+
+// Get user's purchases
+app.get('/api/economic/purchases/:odId', (req, res) => {
+  const wallet = getWallet(req.params.odId);
+  res.json({ purchases: wallet.purchases || [] });
+});
+
+// Get user's listings
+app.get('/api/economic/my-listings/:odId', (req, res) => {
+  ensureEconomicState();
+  const listings = Array.from(STATE.economic.listings.values())
+    .filter(l => l.seller === req.params.odId)
+    .sort((a, b) => b.createdAt - a.createdAt);
+  res.json({ listings });
+});
+
+// Add review to listing
+app.post('/api/economic/marketplace/review', (req, res) => {
+  try {
+    const { odId, listingId, rating, comment } = req.body;
+
+    if (!odId || !listingId || !rating) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    if (rating < 1 || rating > 5) {
+      return res.status(400).json({ error: 'Rating must be 1-5' });
+    }
+
+    ensureEconomicState();
+    const listing = STATE.economic.listings.get(listingId);
+
+    if (!listing) {
+      return res.status(404).json({ error: 'Listing not found' });
+    }
+
+    // Check if user purchased this
+    const wallet = getWallet(odId);
+    const hasPurchased = (wallet.purchases || []).some(p => p.listingId === listingId);
+
+    if (!hasPurchased) {
+      return res.status(403).json({ error: 'Must purchase to review' });
+    }
+
+    // Add review
+    listing.reviews = listing.reviews || [];
+    listing.reviews.push({
+      reviewer: odId,
+      rating: Number(rating),
+      comment: comment || '',
+      createdAt: Date.now(),
+    });
+
+    // Update average rating
+    const totalRating = listing.reviews.reduce((sum, r) => sum + r.rating, 0);
+    listing.rating = totalRating / listing.reviews.length;
+
+    res.json({ message: 'Review added', rating: listing.rating, reviewCount: listing.reviews.length });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Get marketplace asset types
+app.get('/api/economic/marketplace/types', (req, res) => {
+  res.json({ assetTypes: MARKETPLACE_ASSET_TYPES });
+});
+
+// ---- Royalty Wheel ----
+function processRoyaltyWheel(dtuId, totalRoyalty) {
+  if (totalRoyalty <= 0) return;
+
+  // Get DTU and its references
+  const dtu = STATE.dtus?.get(dtuId);
+  if (!dtu || !dtu.references || dtu.references.length === 0) {
+    // No references, royalty goes to treasury
+    ensureEconomicState();
+    STATE.economic.treasury += totalRoyalty;
+    return;
+  }
+
+  let remaining = totalRoyalty;
+  const decay = ECONOMIC_CONFIG.ROYALTY_DECAY;
+
+  // Process each generation of references
+  let currentRefs = [...dtu.references];
+  let generation = 0;
+  const processed = new Set();
+
+  while (currentRefs.length > 0 && generation < decay.length && remaining > 0) {
+    const genShare = decay[generation];
+    const genAmount = Math.floor(totalRoyalty * genShare);
+    const perRef = Math.floor(genAmount / currentRefs.length);
+
+    const nextRefs = [];
+
+    for (const refId of currentRefs) {
+      if (processed.has(refId)) continue;
+      processed.add(refId);
+
+      const refDtu = STATE.dtus?.get(refId);
+      if (refDtu && refDtu.authorId && perRef > 0) {
+        creditWallet(refDtu.authorId, perRef, `Royalty gen${generation + 1}: ${dtuId}`);
+        remaining -= perRef;
+      }
+
+      // Queue next generation
+      if (refDtu?.references) {
+        nextRefs.push(...refDtu.references.filter(r => !processed.has(r)));
+      }
+    }
+
+    currentRefs = nextRefs;
+    generation++;
+  }
+
+  // Remaining goes to treasury
+  if (remaining > 0) {
+    ensureEconomicState();
+    STATE.economic.treasury += remaining;
+  }
+}
+
+// ---- Ingest Rate Limiter ----
+function checkIngestLimit(odId) {
+  ensureEconomicState();
+  const wallet = getWallet(odId);
+  const tierConfig = ECONOMIC_CONFIG.TIERS[wallet.tier] || ECONOMIC_CONFIG.TIERS.free;
+
+  // Unlimited for paid tiers
+  if (tierConfig.ingestLimit === -1) {
+    return { allowed: true, remaining: -1, limit: -1 };
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const tracking = STATE.economic.ingestTracking.get(odId) || { date: today, count: 0 };
+
+  // Reset if new day
+  if (tracking.date !== today) {
+    tracking.date = today;
+    tracking.count = 0;
+  }
+
+  const remaining = tierConfig.ingestLimit - tracking.count;
+  return {
+    allowed: remaining > 0,
+    remaining,
+    limit: tierConfig.ingestLimit,
+    tier: wallet.tier,
+  };
+}
+
+function recordIngest(odId, pageCount = 1) {
+  ensureEconomicState();
+  const today = new Date().toISOString().slice(0, 10);
+  const tracking = STATE.economic.ingestTracking.get(odId) || { date: today, count: 0 };
+
+  if (tracking.date !== today) {
+    tracking.date = today;
+    tracking.count = 0;
+  }
+
+  tracking.count += pageCount;
+  STATE.economic.ingestTracking.set(odId, tracking);
+  return tracking;
+}
+
+// Ingest limit check endpoint
+app.get('/api/economic/ingest-limit/:odId', (req, res) => {
+  const result = checkIngestLimit(req.params.odId);
+  res.json(result);
+});
+
+// Hook into existing ingest endpoint
+app.post('/api/economic/ingest-check', (req, res) => {
+  const { odId, pageCount = 1 } = req.body;
+  if (!odId) return res.status(400).json({ error: 'Missing odId' });
+
+  const limit = checkIngestLimit(odId);
+  if (!limit.allowed) {
+    return res.status(429).json({
+      error: 'Daily ingest limit reached',
+      ...limit,
+      upgrade: 'Upgrade to Pro for unlimited ingestion',
+    });
+  }
+
+  recordIngest(odId, pageCount);
+  res.json({ allowed: true, remaining: limit.remaining - pageCount });
+});
+
+// ---- Economic Status Endpoints ----
+app.get('/api/economic/wallet/:odId', (req, res) => {
+  const wallet = getWallet(req.params.odId);
+  const ingestStatus = checkIngestLimit(req.params.odId);
+  res.json({ ...wallet, ingestStatus });
+});
+
+app.get('/api/economic/marketplace', (req, res) => {
+  ensureEconomicState();
+  const listings = Array.from(STATE.economic.listings.values())
+    .filter(l => l.status === 'active')
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, 100);
+  res.json({ listings, count: listings.length });
+});
+
+app.get('/api/economic/config', (req, res) => {
+  res.json({
+    tiers: ECONOMIC_CONFIG.TIERS,
+    tokenPackages: ECONOMIC_CONFIG.TOKEN_PACKAGES,
+    fees: {
+      tokenPurchase: ECONOMIC_CONFIG.TOKEN_PURCHASE_FEE,
+      marketplace: ECONOMIC_CONFIG.MARKETPLACE_FEE,
+    },
+    splits: {
+      creator: ECONOMIC_CONFIG.CREATOR_SHARE,
+      royalty: ECONOMIC_CONFIG.ROYALTY_SHARE,
+      treasury: ECONOMIC_CONFIG.TREASURY_SHARE,
+    },
+    stripeEnabled: STRIPE_ENABLED,
+  });
+});
+
+app.get('/api/economic/stats', (req, res) => {
+  ensureEconomicState();
+  const wallets = Array.from(STATE.economic.wallets.values());
+  res.json({
+    totalWallets: wallets.length,
+    totalTokensCirculating: wallets.reduce((sum, w) => sum + w.balance, 0),
+    treasury: STATE.economic.treasury,
+    activeListings: Array.from(STATE.economic.listings.values()).filter(l => l.status === 'active').length,
+    totalTransactions: STATE.economic.transactions.length,
+    tierBreakdown: {
+      free: wallets.filter(w => w.tier === 'free').length,
+      pro: wallets.filter(w => w.tier === 'pro').length,
+      teams: wallets.filter(w => w.tier === 'teams').length,
+    },
+  });
+});
+
+console.log(`[Economic] Engine initialized | Stripe: ${STRIPE_ENABLED ? 'enabled' : 'disabled'}`);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// END ECONOMIC ENGINE
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// REALM SYSTEM: Local vs Global Knowledge Separation
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/*
+ * REALM PHILOSOPHY:
+ * - LOCAL: User's personal DTUs, creative freedom, light council approval
+ * - GLOBAL: Shared/public DTUs, requires full council approval to publish
+ *
+ * Everyone starts with their own unique local experience.
+ * Global becomes curated, high-quality shared knowledge.
+ * Users must MANUALLY choose to publish to global.
+ */
+
+const REALM_TYPES = Object.freeze({
+  local: { name: 'Local', description: 'Personal knowledge, creative freedom', councilThreshold: 0.3 },
+  global: { name: 'Global', description: 'Shared knowledge, council approved', councilThreshold: 0.7 },
+});
+
+// ---- Global DTU Store (separate from local STATE.dtus) ----
+function ensureGlobalState() {
+  if (!STATE.global) {
+    STATE.global = {
+      dtus: new Map(),                    // Global DTUs
+      pendingPublish: new Map(),          // DTUs awaiting council approval for global
+      syncLog: [],                        // Record of syncs
+    };
+  }
+  return STATE.global;
+}
+
+// ---- Publish Local DTU to Global (requires council approval) ----
+app.post('/api/realm/publish-to-global', async (req, res) => {
+  try {
+    const { odId, dtuId, reason } = req.body;
+    if (!odId || !dtuId) {
+      return res.status(400).json({ error: 'Missing odId or dtuId' });
+    }
+
+    // Get the local DTU
+    const localDtu = STATE.dtus.get(dtuId);
+    if (!localDtu) {
+      return res.status(404).json({ error: 'DTU not found in local' });
+    }
+
+    // Check if user owns this DTU
+    if (localDtu.authorId && localDtu.authorId !== odId && localDtu.source !== odId) {
+      return res.status(403).json({ error: 'Not authorized to publish this DTU' });
+    }
+
+    ensureGlobalState();
+
+    // Check if already published or pending
+    if (STATE.global.dtus.has(dtuId)) {
+      return res.status(400).json({ error: 'DTU already exists in global' });
+    }
+    if (STATE.global.pendingPublish.has(dtuId)) {
+      return res.status(400).json({ error: 'DTU already pending global approval' });
+    }
+
+    // Create publish request for council
+    const publishRequest = {
+      id: `publish_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      dtuId,
+      dtu: { ...localDtu },
+      requestedBy: odId,
+      reason: reason || '',
+      status: 'pending',
+      votes: {},
+      votesFor: 0,
+      votesAgainst: 0,
+      createdAt: Date.now(),
+      threshold: REALM_TYPES.global.councilThreshold,
+    };
+
+    STATE.global.pendingPublish.set(dtuId, publishRequest);
+
+    // Auto-approve if DTU already has high council score
+    const councilScore = localDtu.authority?.score || 0;
+    if (councilScore >= REALM_TYPES.global.councilThreshold) {
+      // Auto-approve: copy to global
+      const globalDtu = {
+        ...localDtu,
+        realm: 'global',
+        publishedAt: Date.now(),
+        publishedBy: odId,
+        originalLocalId: dtuId,
+        globalId: `global_${dtuId}`,
+        syncCount: 0,
+      };
+      STATE.global.dtus.set(dtuId, globalDtu);
+      STATE.global.pendingPublish.delete(dtuId);
+
+      return res.json({
+        status: 'approved',
+        message: 'DTU auto-approved for global (high council score)',
+        globalDtu,
+      });
+    }
+
+    res.json({
+      status: 'pending',
+      message: 'DTU submitted for council review',
+      publishRequest: { id: publishRequest.id, dtuId, status: 'pending' },
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ---- Council Vote on Global Publish ----
+app.post('/api/realm/vote-publish', async (req, res) => {
+  try {
+    const { odId, dtuId, vote, reason } = req.body;
+    if (!odId || !dtuId || vote === undefined) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    ensureGlobalState();
+    const request = STATE.global.pendingPublish.get(dtuId);
+    if (!request) {
+      return res.status(404).json({ error: 'No pending publish request for this DTU' });
+    }
+
+    // Record vote
+    const voteValue = vote === true || vote === 'yes' || vote === 1;
+    request.votes[odId] = { vote: voteValue, reason: reason || '', at: Date.now() };
+
+    // Tally votes
+    const votes = Object.values(request.votes);
+    request.votesFor = votes.filter(v => v.vote).length;
+    request.votesAgainst = votes.filter(v => !v.vote).length;
+
+    const totalVotes = request.votesFor + request.votesAgainst;
+    const approvalRatio = totalVotes > 0 ? request.votesFor / totalVotes : 0;
+
+    // Check if threshold met (need at least 3 votes and > threshold approval)
+    if (totalVotes >= 3 && approvalRatio >= request.threshold) {
+      // Approved: copy to global
+      const globalDtu = {
+        ...request.dtu,
+        realm: 'global',
+        publishedAt: Date.now(),
+        publishedBy: request.requestedBy,
+        originalLocalId: dtuId,
+        globalId: `global_${dtuId}`,
+        councilApproval: { votesFor: request.votesFor, votesAgainst: request.votesAgainst, ratio: approvalRatio },
+        syncCount: 0,
+      };
+      STATE.global.dtus.set(dtuId, globalDtu);
+      STATE.global.pendingPublish.delete(dtuId);
+
+      return res.json({
+        status: 'approved',
+        message: 'DTU approved for global by council',
+        globalDtu,
+      });
+    }
+
+    // Check if rejected (> 50% against with enough votes)
+    if (totalVotes >= 3 && request.votesAgainst > request.votesFor) {
+      request.status = 'rejected';
+      return res.json({
+        status: 'rejected',
+        message: 'DTU rejected by council',
+        votesFor: request.votesFor,
+        votesAgainst: request.votesAgainst,
+      });
+    }
+
+    res.json({
+      status: 'pending',
+      votesFor: request.votesFor,
+      votesAgainst: request.votesAgainst,
+      totalVotes,
+      threshold: request.threshold,
+      message: `Need ${Math.ceil(request.threshold * 100)}% approval with at least 3 votes`,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ---- Sync Single Global DTU to Local ----
+app.post('/api/realm/sync', async (req, res) => {
+  try {
+    const { odId, dtuId } = req.body;
+    if (!odId || !dtuId) {
+      return res.status(400).json({ error: 'Missing odId or dtuId' });
+    }
+
+    ensureGlobalState();
+    const globalDtu = STATE.global.dtus.get(dtuId);
+    if (!globalDtu) {
+      return res.status(404).json({ error: 'DTU not found in global' });
+    }
+
+    // Check if already in local
+    const existingLocal = STATE.dtus.get(dtuId);
+    if (existingLocal) {
+      return res.json({
+        status: 'exists',
+        message: 'DTU already exists in your local',
+        dtu: existingLocal,
+      });
+    }
+
+    // Copy to local with citation
+    const localCopy = {
+      ...globalDtu,
+      id: dtuId,
+      realm: 'local',
+      syncedFrom: 'global',
+      syncedAt: Date.now(),
+      syncedBy: odId,
+      references: [...(globalDtu.references || []), globalDtu.originalLocalId].filter(Boolean),
+      meta: {
+        ...(globalDtu.meta || {}),
+        globalCitation: {
+          globalId: globalDtu.globalId,
+          publishedBy: globalDtu.publishedBy,
+          publishedAt: globalDtu.publishedAt,
+        },
+      },
+    };
+
+    STATE.dtus.set(dtuId, localCopy);
+
+    // Increment sync count on global
+    globalDtu.syncCount = (globalDtu.syncCount || 0) + 1;
+
+    // Log sync
+    STATE.global.syncLog.push({
+      type: 'single',
+      dtuId,
+      syncedBy: odId,
+      at: Date.now(),
+    });
+
+    res.json({
+      status: 'synced',
+      message: 'Global DTU synced to your local with citation',
+      dtu: localCopy,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ---- Sync All Global DTUs to Local ----
+app.post('/api/realm/sync-all', async (req, res) => {
+  try {
+    const { odId } = req.body;
+    if (!odId) {
+      return res.status(400).json({ error: 'Missing odId' });
+    }
+
+    ensureGlobalState();
+    const globalDtus = Array.from(STATE.global.dtus.values());
+
+    if (globalDtus.length === 0) {
+      return res.json({ synced: 0, skipped: 0, message: 'No global DTUs to sync' });
+    }
+
+    let synced = 0;
+    let skipped = 0;
+
+    for (const globalDtu of globalDtus) {
+      const dtuId = globalDtu.originalLocalId || globalDtu.id;
+
+      // Skip if already exists
+      if (STATE.dtus.has(dtuId)) {
+        skipped++;
+        continue;
+      }
+
+      // Copy to local with citation
+      const localCopy = {
+        ...globalDtu,
+        id: dtuId,
+        realm: 'local',
+        syncedFrom: 'global',
+        syncedAt: Date.now(),
+        syncedBy: odId,
+        references: [...(globalDtu.references || []), globalDtu.originalLocalId].filter(Boolean),
+        meta: {
+          ...(globalDtu.meta || {}),
+          globalCitation: {
+            globalId: globalDtu.globalId,
+            publishedBy: globalDtu.publishedBy,
+            publishedAt: globalDtu.publishedAt,
+          },
+        },
+      };
+
+      STATE.dtus.set(dtuId, localCopy);
+      globalDtu.syncCount = (globalDtu.syncCount || 0) + 1;
+      synced++;
+    }
+
+    // Log sync
+    STATE.global.syncLog.push({
+      type: 'all',
+      syncedBy: odId,
+      synced,
+      skipped,
+      at: Date.now(),
+    });
+
+    res.json({
+      status: 'completed',
+      synced,
+      skipped,
+      total: globalDtus.length,
+      message: `Synced ${synced} global DTUs to local (${skipped} already existed)`,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ---- Browse Global DTUs ----
+app.get('/api/realm/global', (req, res) => {
+  ensureGlobalState();
+
+  const { search, tags, sort, limit = 50, offset = 0 } = req.query;
+
+  let dtus = Array.from(STATE.global.dtus.values());
+
+  // Search filter
+  if (search) {
+    const searchLower = String(search).toLowerCase();
+    dtus = dtus.filter(d =>
+      d.title?.toLowerCase().includes(searchLower) ||
+      d.human?.summary?.toLowerCase().includes(searchLower) ||
+      (d.tags && d.tags.some(t => t.toLowerCase().includes(searchLower)))
+    );
+  }
+
+  // Tags filter
+  if (tags) {
+    const tagList = String(tags).split(',').map(t => t.trim().toLowerCase());
+    dtus = dtus.filter(d =>
+      d.tags && d.tags.some(t => tagList.includes(t.toLowerCase()))
+    );
+  }
+
+  // Sort
+  if (sort === 'popular') dtus.sort((a, b) => (b.syncCount || 0) - (a.syncCount || 0));
+  else if (sort === 'oldest') dtus.sort((a, b) => (a.publishedAt || 0) - (b.publishedAt || 0));
+  else dtus.sort((a, b) => (b.publishedAt || 0) - (a.publishedAt || 0)); // newest first
+
+  const total = dtus.length;
+  dtus = dtus.slice(Number(offset), Number(offset) + Number(limit));
+
+  res.json({
+    dtus,
+    total,
+    pagination: { limit: Number(limit), offset: Number(offset), hasMore: Number(offset) + dtus.length < total },
+  });
+});
+
+// ---- Get Pending Global Publish Requests ----
+app.get('/api/realm/pending', (req, res) => {
+  ensureGlobalState();
+  const pending = Array.from(STATE.global.pendingPublish.values())
+    .filter(p => p.status === 'pending')
+    .sort((a, b) => b.createdAt - a.createdAt);
+
+  res.json({ pending, count: pending.length });
+});
+
+// ---- Get Local DTUs (filtered to local realm) ----
+app.get('/api/realm/local', (req, res) => {
+  const { odId, search, limit = 50, offset = 0 } = req.query;
+
+  let dtus = Array.from(STATE.dtus.values());
+
+  // Filter to user's DTUs or all local if no odId
+  if (odId) {
+    dtus = dtus.filter(d =>
+      d.authorId === odId ||
+      d.source === odId ||
+      d.syncedBy === odId
+    );
+  }
+
+  // Search
+  if (search) {
+    const searchLower = String(search).toLowerCase();
+    dtus = dtus.filter(d =>
+      d.title?.toLowerCase().includes(searchLower) ||
+      d.human?.summary?.toLowerCase().includes(searchLower)
+    );
+  }
+
+  // Sort by newest
+  dtus.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+  const total = dtus.length;
+  dtus = dtus.slice(Number(offset), Number(offset) + Number(limit));
+
+  res.json({
+    dtus,
+    total,
+    pagination: { limit: Number(limit), offset: Number(offset), hasMore: Number(offset) + dtus.length < total },
+  });
+});
+
+// ---- Realm Stats ----
+app.get('/api/realm/stats', (req, res) => {
+  ensureGlobalState();
+  res.json({
+    local: {
+      total: STATE.dtus.size,
+    },
+    global: {
+      total: STATE.global.dtus.size,
+      pending: STATE.global.pendingPublish.size,
+      totalSyncs: STATE.global.syncLog.length,
+    },
+    realmTypes: REALM_TYPES,
+  });
+});
+
+console.log('[Realm] Local/Global separation initialized');
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// END REALM SYSTEM
+// ═══════════════════════════════════════════════════════════════════════════════
+
 // ---- test surface (safe exports; no side effects) ----
 export const __TEST__ = Object.freeze({
   VERSION,

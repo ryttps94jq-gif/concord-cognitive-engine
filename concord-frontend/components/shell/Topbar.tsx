@@ -3,10 +3,10 @@
 import { useUIStore } from '@/store/ui';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
-import { Search, Bell, User, Command, Activity, Zap } from 'lucide-react';
+import { Search, Bell, User, Command, Activity, Zap, Menu } from 'lucide-react';
 
 export function Topbar() {
-  const { sidebarCollapsed, setCommandPaletteOpen, activeLens } = useUIStore();
+  const { sidebarCollapsed, setCommandPaletteOpen, activeLens, setSidebarOpen } = useUIStore();
 
   const { data: resonance } = useQuery({
     queryKey: ['resonance-quick'],
@@ -21,25 +21,33 @@ export function Topbar() {
 
   return (
     <header
-      className={`h-16 bg-lattice-surface border-b border-lattice-border flex items-center justify-between px-6 sticky top-0 z-30 transition-all duration-300 ${
-        sidebarCollapsed ? 'ml-16' : 'ml-64'
+      className={`h-14 lg:h-16 bg-lattice-surface border-b border-lattice-border flex items-center justify-between px-4 lg:px-6 sticky top-0 z-30 transition-all duration-300 ${
+        sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'
       }`}
     >
-      {/* Current Lens Title */}
+      {/* Left - Mobile menu + Title */}
       <div className="flex items-center gap-3">
-        <h1 className="text-lg font-semibold capitalize">
+        {/* Mobile menu button */}
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className="lg:hidden p-2 -ml-2 rounded-lg hover:bg-lattice-elevated text-gray-400 hover:text-white transition-colors"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+
+        <h1 className="text-base lg:text-lg font-semibold capitalize truncate max-w-[120px] sm:max-w-none">
           {activeLens || 'Dashboard'}
         </h1>
       </div>
 
-      {/* Center - Search */}
+      {/* Center - Search (hidden on small mobile) */}
       <button
         onClick={() => setCommandPaletteOpen(true)}
-        className="flex items-center gap-2 px-4 py-2 bg-lattice-deep rounded-lg border border-lattice-border hover:border-neon-blue/50 transition-colors group"
+        className="hidden sm:flex items-center gap-2 px-3 lg:px-4 py-2 bg-lattice-deep rounded-lg border border-lattice-border hover:border-neon-blue/50 transition-colors group"
       >
         <Search className="w-4 h-4 text-gray-400 group-hover:text-neon-blue" />
-        <span className="text-sm text-gray-400">Search...</span>
-        <div className="flex items-center gap-1 ml-8">
+        <span className="text-sm text-gray-400 hidden md:inline">Search...</span>
+        <div className="hidden lg:flex items-center gap-1 ml-4 lg:ml-8">
           <kbd className="px-1.5 py-0.5 text-xs bg-lattice-elevated rounded text-gray-500">
             <Command className="w-3 h-3 inline" />
           </kbd>
@@ -50,17 +58,25 @@ export function Topbar() {
       </button>
 
       {/* Right Side */}
-      <div className="flex items-center gap-4">
-        {/* Resonance Indicator */}
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-lattice-deep rounded-lg">
+      <div className="flex items-center gap-2 lg:gap-4">
+        {/* Mobile search button */}
+        <button
+          onClick={() => setCommandPaletteOpen(true)}
+          className="sm:hidden p-2 rounded-lg hover:bg-lattice-elevated text-gray-400 hover:text-white transition-colors"
+        >
+          <Search className="w-5 h-5" />
+        </button>
+
+        {/* Resonance Indicator (hidden on small mobile) */}
+        <div className="hidden md:flex items-center gap-2 px-2 lg:px-3 py-1.5 bg-lattice-deep rounded-lg">
           <Activity className="w-4 h-4 text-neon-green" />
-          <span className="text-sm font-mono">
+          <span className="text-xs lg:text-sm font-mono">
             {((resonance?.coherence || 0) * 100).toFixed(0)}%
           </span>
         </div>
 
-        {/* DTU Count */}
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-lattice-deep rounded-lg">
+        {/* DTU Count (hidden on mobile) */}
+        <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-lattice-deep rounded-lg">
           <Zap className="w-4 h-4 text-neon-blue" />
           <span className="text-sm font-mono">{resonance?.dtuCount || 0}</span>
         </div>
@@ -69,16 +85,16 @@ export function Topbar() {
         <button className="relative p-2 rounded-lg hover:bg-lattice-elevated transition-colors">
           <Bell className="w-5 h-5 text-gray-400" />
           {(notifications?.count || 0) > 0 && (
-            <span className="absolute -top-1 -right-1 w-5 h-5 bg-neon-pink text-white text-xs rounded-full flex items-center justify-center">
+            <span className="absolute -top-1 -right-1 w-4 h-4 lg:w-5 lg:h-5 bg-neon-pink text-white text-[10px] lg:text-xs rounded-full flex items-center justify-center">
               {notifications?.count > 9 ? '9+' : notifications?.count}
             </span>
           )}
         </button>
 
         {/* User Menu */}
-        <button className="flex items-center gap-2 p-2 rounded-lg hover:bg-lattice-elevated transition-colors">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-neon-purple to-neon-blue flex items-center justify-center">
-            <User className="w-4 h-4" />
+        <button className="flex items-center gap-2 p-1.5 lg:p-2 rounded-lg hover:bg-lattice-elevated transition-colors">
+          <div className="w-7 h-7 lg:w-8 lg:h-8 rounded-full bg-gradient-to-br from-neon-purple to-neon-blue flex items-center justify-center">
+            <User className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
           </div>
         </button>
       </div>
