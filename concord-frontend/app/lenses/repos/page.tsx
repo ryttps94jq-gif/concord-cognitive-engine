@@ -72,14 +72,14 @@ interface Commit {
 
 type ActiveTab = 'code' | 'issues' | 'pulls' | 'actions' | 'projects' | 'wiki' | 'security' | 'insights' | 'settings';
 
-export default function GitHubLensPage() {
-  useLensNav('github');
+export default function ReposLensPage() {
+  useLensNav('repos');
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('code');
   const [selectedRepo, setSelectedRepo] = useState<string | null>(null);
 
   const { data: repos } = useQuery({
-    queryKey: ['github-repos'],
+    queryKey: ['repos-list'],
     queryFn: () => api.get('/api/dtus', { params: { tags: 'repo' } }).then(r =>
       r.data?.dtus?.map((dtu: any, i: number) => ({
         id: dtu.id,
@@ -99,7 +99,7 @@ export default function GitHubLensPage() {
   });
 
   const { data: issues } = useQuery({
-    queryKey: ['github-issues', selectedRepo],
+    queryKey: ['repos-issues', selectedRepo],
     queryFn: () => api.get('/api/dtus', { params: { tags: 'issue' } }).then(r =>
       r.data?.dtus?.map((dtu: any, i: number) => ({
         id: dtu.id,
@@ -119,7 +119,7 @@ export default function GitHubLensPage() {
   });
 
   const { data: commits } = useQuery({
-    queryKey: ['github-commits', selectedRepo],
+    queryKey: ['repos-commits', selectedRepo],
     queryFn: () => Promise.resolve(generateMockCommits()),
     enabled: activeTab === 'code',
   });
@@ -162,7 +162,7 @@ export default function GitHubLensPage() {
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex items-center justify-between py-4">
             <div className="flex items-center gap-4">
-              <span className="text-3xl">🐙</span>
+              <span className="text-3xl">📦</span>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input

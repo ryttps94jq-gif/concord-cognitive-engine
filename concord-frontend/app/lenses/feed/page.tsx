@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-interface Tweet {
+interface FeedPost {
   id: string;
   author: {
     id: string;
@@ -40,11 +40,11 @@ interface Tweet {
   content: string;
   createdAt: string;
   likes: number;
-  retweets: number;
+  reposts: number;
   replies: number;
   views: number;
   liked: boolean;
-  retweeted: boolean;
+  reposted: boolean;
   bookmarked: boolean;
   images?: string[];
   replyTo?: string;
@@ -58,15 +58,15 @@ interface TrendingTopic {
   posts: number;
 }
 
-export default function TwitterLensPage() {
-  useLensNav('twitter');
+export default function FeedLensPage() {
+  useLensNav('feed');
   const queryClient = useQueryClient();
 
-  const [newTweet, setNewTweet] = useState('');
+  const [newPost, setNewPost] = useState('');
   const [activeTab, setActiveTab] = useState<'for-you' | 'following'>('for-you');
 
-  const { data: tweets, isLoading } = useQuery({
-    queryKey: ['tweets', activeTab],
+  const { data: feedPosts, isLoading } = useQuery({
+    queryKey: ['feed-posts', activeTab],
     queryFn: () => api.get('/api/dtus', { params: { limit: 50 } }).then(r =>
       r.data?.dtus?.map((dtu: any) => ({
         id: dtu.id,
@@ -79,11 +79,11 @@ export default function TwitterLensPage() {
         content: dtu.content?.slice(0, 280) || dtu.title,
         createdAt: dtu.createdAt,
         likes: Math.floor(Math.random() * 1000),
-        retweets: Math.floor(Math.random() * 500),
+        reposts: Math.floor(Math.random() * 500),
         replies: Math.floor(Math.random() * 100),
         views: Math.floor(Math.random() * 10000),
         liked: false,
-        retweeted: false,
+        reposted: false,
         bookmarked: false,
         dtuId: dtu.id
       })) || []
@@ -103,16 +103,16 @@ export default function TwitterLensPage() {
   });
 
   const postMutation = useMutation({
-    mutationFn: (content: string) => api.post('/api/dtus', { content, tags: ['tweet'] }),
+    mutationFn: (content: string) => api.post('/api/dtus', { content, tags: ['post'] }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tweets'] });
-      setNewTweet('');
+      queryClient.invalidateQueries({ queryKey: ['feed-posts'] });
+      setNewPost('');
     },
   });
 
   const likeMutation = useMutation({
-    mutationFn: (tweetId: string) => api.post(`/api/dtus/${tweetId}/like`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tweets'] }),
+    mutationFn: (postId: string) => api.post(`/api/dtus/${postId}/like`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['feed-posts'] }),
   });
 
   const formatTime = (dateStr: string) => {
@@ -135,7 +135,7 @@ export default function TwitterLensPage() {
     <div className="min-h-screen bg-black flex">
       {/* Left Sidebar */}
       <aside className="w-20 xl:w-64 border-r border-gray-800 p-2 xl:p-4 flex flex-col items-center xl:items-start">
-        <div className="text-3xl mb-6 p-3">🐦</div>
+        <div className="text-3xl mb-6 p-3">📡</div>
 
         {[
           { icon: Home, label: 'Home', active: true },
@@ -196,9 +196,9 @@ export default function TwitterLensPage() {
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-neon-cyan to-neon-purple flex-shrink-0" />
             <div className="flex-1">
               <textarea
-                value={newTweet}
-                onChange={(e) => setNewTweet(e.target.value)}
-                placeholder="What's happening?!"
+                value={newPost}
+                onChange={(e) => setNewPost(e.target.value)}
+                placeholder="What's on your mind?"
                 className="w-full bg-transparent text-xl text-white placeholder-gray-600 resize-none focus:outline-none"
                 rows={2}
               />
@@ -218,8 +218,8 @@ export default function TwitterLensPage() {
                   </button>
                 </div>
                 <button
-                  onClick={() => postMutation.mutate(newTweet)}
-                  disabled={!newTweet.trim() || postMutation.isPending}
+                  onClick={() => postMutation.mutate(newPost)}
+                  disabled={!newPost.trim() || postMutation.isPending}
                   className="px-4 py-1.5 bg-neon-cyan text-black font-bold rounded-full hover:bg-neon-cyan/90 disabled:opacity-50 transition-colors"
                 >
                   Post
@@ -229,7 +229,7 @@ export default function TwitterLensPage() {
           </div>
         </div>
 
-        {/* Tweets */}
+        {/* Posts */}
         <div>
           {isLoading ? (
             <div className="p-4 space-y-4">
@@ -244,9 +244,9 @@ export default function TwitterLensPage() {
               ))}
             </div>
           ) : (
-            tweets?.map((tweet: Tweet) => (
+            feedPosts?.map((post: FeedPost) => (
               <article
-                key={tweet.id}
+                key={post.id}
                 className="p-4 border-b border-gray-800 hover:bg-gray-900/50 transition-colors cursor-pointer"
               >
                 <div className="flex gap-3">
@@ -255,15 +255,15 @@ export default function TwitterLensPage() {
                     {/* Header */}
                     <div className="flex items-center gap-1 text-sm">
                       <span className="font-bold text-white hover:underline">
-                        {tweet.author.name}
+                        {post.author.name}
                       </span>
-                      {tweet.author.verified && (
+                      {post.author.verified && (
                         <Verified className="w-4 h-4 text-neon-cyan fill-neon-cyan" />
                       )}
-                      <span className="text-gray-500">@{tweet.author.handle}</span>
+                      <span className="text-gray-500">@{post.author.handle}</span>
                       <span className="text-gray-500">·</span>
                       <span className="text-gray-500 hover:underline">
-                        {formatTime(tweet.createdAt)}
+                        {formatTime(post.createdAt)}
                       </span>
                       <button className="ml-auto p-1 text-gray-500 hover:text-neon-cyan hover:bg-neon-cyan/10 rounded-full">
                         <MoreHorizontal className="w-4 h-4" />
@@ -271,7 +271,7 @@ export default function TwitterLensPage() {
                     </div>
 
                     {/* Content */}
-                    <p className="text-white mt-1 whitespace-pre-wrap">{tweet.content}</p>
+                    <p className="text-white mt-1 whitespace-pre-wrap">{post.content}</p>
 
                     {/* Actions */}
                     <div className="flex items-center justify-between mt-3 max-w-md text-gray-500">
@@ -279,38 +279,38 @@ export default function TwitterLensPage() {
                         <div className="p-2 rounded-full group-hover:bg-blue-500/10 group-hover:text-blue-500 transition-colors">
                           <MessageCircle className="w-4 h-4" />
                         </div>
-                        <span className="text-sm group-hover:text-blue-500">{formatNumber(tweet.replies)}</span>
+                        <span className="text-sm group-hover:text-blue-500">{formatNumber(post.replies)}</span>
                       </button>
                       <button className={cn(
                         'flex items-center gap-2 group',
-                        tweet.retweeted && 'text-green-500'
+                        post.reposted && 'text-green-500'
                       )}>
                         <div className="p-2 rounded-full group-hover:bg-green-500/10 group-hover:text-green-500 transition-colors">
                           <Repeat2 className="w-4 h-4" />
                         </div>
-                        <span className="text-sm group-hover:text-green-500">{formatNumber(tweet.retweets)}</span>
+                        <span className="text-sm group-hover:text-green-500">{formatNumber(post.reposts)}</span>
                       </button>
                       <button
-                        onClick={() => likeMutation.mutate(tweet.id)}
+                        onClick={() => likeMutation.mutate(post.id)}
                         className={cn(
                           'flex items-center gap-2 group',
-                          tweet.liked && 'text-pink-500'
+                          post.liked && 'text-pink-500'
                         )}
                       >
                         <div className="p-2 rounded-full group-hover:bg-pink-500/10 group-hover:text-pink-500 transition-colors">
-                          <Heart className={cn('w-4 h-4', tweet.liked && 'fill-current')} />
+                          <Heart className={cn('w-4 h-4', post.liked && 'fill-current')} />
                         </div>
-                        <span className="text-sm group-hover:text-pink-500">{formatNumber(tweet.likes)}</span>
+                        <span className="text-sm group-hover:text-pink-500">{formatNumber(post.likes)}</span>
                       </button>
                       <button className="flex items-center gap-2 group">
                         <div className="p-2 rounded-full group-hover:bg-neon-cyan/10 group-hover:text-neon-cyan transition-colors">
                           <BarChart3 className="w-4 h-4" />
                         </div>
-                        <span className="text-sm group-hover:text-neon-cyan">{formatNumber(tweet.views)}</span>
+                        <span className="text-sm group-hover:text-neon-cyan">{formatNumber(post.views)}</span>
                       </button>
                       <div className="flex items-center">
                         <button className="p-2 rounded-full hover:bg-neon-cyan/10 hover:text-neon-cyan transition-colors">
-                          <Bookmark className={cn('w-4 h-4', tweet.bookmarked && 'fill-current text-neon-cyan')} />
+                          <Bookmark className={cn('w-4 h-4', post.bookmarked && 'fill-current text-neon-cyan')} />
                         </button>
                         <button className="p-2 rounded-full hover:bg-neon-cyan/10 hover:text-neon-cyan transition-colors">
                           <Share className="w-4 h-4" />

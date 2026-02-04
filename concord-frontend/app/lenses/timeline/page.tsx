@@ -86,15 +86,15 @@ const REACTIONS = [
   { id: 'angry', icon: Angry, color: 'text-orange-500', label: 'Angry' },
 ];
 
-export default function SocialLensPage() {
-  useLensNav('social');
+export default function TimelineLensPage() {
+  useLensNav('timeline');
   const queryClient = useQueryClient();
 
   const [newPost, setNewPost] = useState('');
   const [showReactions, setShowReactions] = useState<string | null>(null);
 
   const { data: posts, isLoading } = useQuery({
-    queryKey: ['social-posts'],
+    queryKey: ['timeline-posts'],
     queryFn: () => api.get('/api/dtus', { params: { limit: 30 } }).then(r =>
       r.data?.dtus?.map((dtu: any) => ({
         id: dtu.id,
@@ -142,9 +142,9 @@ export default function SocialLensPage() {
   });
 
   const postMutation = useMutation({
-    mutationFn: (content: string) => api.post('/api/dtus', { content, tags: ['social'] }),
+    mutationFn: (content: string) => api.post('/api/dtus', { content, tags: ['timeline'] }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['social-posts'] });
+      queryClient.invalidateQueries({ queryKey: ['timeline-posts'] });
       setNewPost('');
     },
   });
@@ -179,8 +179,8 @@ export default function SocialLensPage() {
       <header className="sticky top-0 z-20 bg-[#242526] shadow-lg">
         <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-3xl">📘</span>
-            <span className="text-2xl font-bold text-blue-500">Social Lens</span>
+            <span className="text-3xl">📅</span>
+            <span className="text-2xl font-bold text-blue-500">Timeline Lens</span>
           </div>
           <div className="flex items-center gap-2">
             <button className="p-2 bg-[#3a3b3c] rounded-full hover:bg-[#4a4b4c] transition-colors">

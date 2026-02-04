@@ -30,7 +30,7 @@ interface Post {
   title: string;
   content?: string;
   author: string;
-  subreddit: string;
+  community: string;
   score: number;
   userVote: number; // -1, 0, 1
   commentCount: number;
@@ -41,7 +41,7 @@ interface Post {
   dtuId?: string;
 }
 
-interface Subreddit {
+interface Community {
   id: string;
   name: string;
   description: string;
@@ -52,20 +52,20 @@ interface Subreddit {
 
 type SortMode = 'hot' | 'new' | 'top' | 'rising';
 
-export default function RedditLensPage() {
-  useLensNav('reddit');
+export default function ForumLensPage() {
+  useLensNav('forum');
   const queryClient = useQueryClient();
 
-  const [selectedSubreddit, setSelectedSubreddit] = useState<string>('all');
+  const [selectedCommunity, setSelectedCommunity] = useState<string>('all');
   const [sortMode, setSortMode] = useState<SortMode>('hot');
   const [showCreatePost, setShowCreatePost] = useState(false);
   const [expandedPost, setExpandedPost] = useState<string | null>(null);
 
   const { data: posts, isLoading } = useQuery({
-    queryKey: ['reddit-posts', selectedSubreddit, sortMode],
+    queryKey: ['forum-posts', selectedCommunity, sortMode],
     queryFn: () => api.get('/api/dtus', {
       params: {
-        tags: selectedSubreddit !== 'all' ? selectedSubreddit : undefined,
+        tags: selectedCommunity !== 'all' ? selectedCommunity : undefined,
         sort: sortMode === 'new' ? 'createdAt' : 'score',
         order: 'desc'
       }
@@ -74,7 +74,7 @@ export default function RedditLensPage() {
       title: dtu.title || dtu.content?.slice(0, 100),
       content: dtu.content,
       author: dtu.author || 'anonymous',
-      subreddit: dtu.tags?.[0] || 'general',
+      community: dtu.tags?.[0] || 'general',
       score: dtu.score || Math.floor(Math.random() * 1000),
       userVote: 0,
       commentCount: dtu.commentCount || 0,
@@ -84,12 +84,12 @@ export default function RedditLensPage() {
     })) || []),
   });
 
-  const { data: subreddits } = useQuery({
-    queryKey: ['subreddits'],
+  const { data: communities } = useQuery({
+    queryKey: ['communities'],
     queryFn: () => api.get('/api/tags').then(r =>
       r.data?.tags?.slice(0, 20).map((tag: string) => ({
         id: tag,
-        name: `r/${tag}`,
+        name: `c/${tag}`,
         description: `Community for ${tag} discussions`,
         memberCount: Math.floor(Math.random() * 10000),
         joined: Math.random() > 0.5
@@ -100,7 +100,7 @@ export default function RedditLensPage() {
   const voteMutation = useMutation({
     mutationFn: ({ postId, vote }: { postId: string; vote: number }) =>
       api.post(`/api/dtus/${postId}/vote`, { vote }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['reddit-posts'] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['forum-posts'] }),
   });
 
   const formatTime = (dateStr: string) => {
@@ -129,7 +129,7 @@ export default function RedditLensPage() {
             <div className="flex items-center gap-3">
               <span className="text-2xl">🔥</span>
               <div>
-                <h1 className="text-xl font-bold text-white">Reddit Lens</h1>
+                <h1 className="text-xl font-bold text-white">Forum Lens</h1>
                 <p className="text-xs text-gray-400">DTUs as discussion threads</p>
               </div>
             </div>
@@ -234,7 +234,7 @@ export default function RedditLensPage() {
                         {/* Meta */}
                         <div className="flex items-center gap-2 text-xs text-gray-400 mb-1">
                           <span className="font-medium text-white hover:underline cursor-pointer">
-                            r/{post.subreddit}
+                            c/{post.community}
                           </span>
                           <span>•</span>
                           <span>Posted by u/{post.author}</span>
@@ -302,7 +302,7 @@ export default function RedditLensPage() {
               <div className="h-20 bg-gradient-to-r from-neon-cyan to-neon-purple" />
               <div className="p-4">
                 <h3 className="font-bold text-white mb-2">
-                  {selectedSubreddit === 'all' ? 'Home' : `r/${selectedSubreddit}`}
+                  {selectedCommunity === 'all' ? 'Home' : `c/${selectedCommunity}`}
                 </h3>
                 <p className="text-sm text-gray-400 mb-4">
                   Your personal front page of the lattice. Browse DTUs as discussion threads.
@@ -321,10 +321,10 @@ export default function RedditLensPage() {
               </h3>
               <div className="space-y-2">
                 <button
-                  onClick={() => setSelectedSubreddit('all')}
+                  onClick={() => setSelectedCommunity('all')}
                   className={cn(
                     'w-full flex items-center gap-3 p-2 rounded-lg text-left transition-colors',
-                    selectedSubreddit === 'all' ? 'bg-neon-cyan/20 text-neon-cyan' : 'hover:bg-lattice-bg text-gray-300'
+                    selectedCommunity === 'all' ? 'bg-neon-cyan/20 text-neon-cyan' : 'hover:bg-lattice-bg text-gray-300'
                   )}
                 >
                   <div className="w-8 h-8 rounded-full bg-gradient-to-br from-neon-cyan to-neon-purple flex items-center justify-center text-white text-xs font-bold">
@@ -332,21 +332,21 @@ export default function RedditLensPage() {
                   </div>
                   <span className="text-sm font-medium">All</span>
                 </button>
-                {subreddits?.slice(0, 8).map((sub: Subreddit) => (
+                {communities?.slice(0, 8).map((comm: Community) => (
                   <button
-                    key={sub.id}
-                    onClick={() => setSelectedSubreddit(sub.id)}
+                    key={comm.id}
+                    onClick={() => setSelectedCommunity(comm.id)}
                     className={cn(
                       'w-full flex items-center gap-3 p-2 rounded-lg text-left transition-colors',
-                      selectedSubreddit === sub.id ? 'bg-neon-cyan/20 text-neon-cyan' : 'hover:bg-lattice-bg text-gray-300'
+                      selectedCommunity === comm.id ? 'bg-neon-cyan/20 text-neon-cyan' : 'hover:bg-lattice-bg text-gray-300'
                     )}
                   >
                     <div className="w-8 h-8 rounded-full bg-lattice-bg flex items-center justify-center text-xs font-bold">
-                      {sub.name.slice(2, 4).toUpperCase()}
+                      {comm.name.slice(2, 4).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{sub.name}</p>
-                      <p className="text-xs text-gray-500">{sub.memberCount.toLocaleString()} members</p>
+                      <p className="text-sm font-medium truncate">{comm.name}</p>
+                      <p className="text-xs text-gray-500">{comm.memberCount.toLocaleString()} members</p>
                     </div>
                   </button>
                 ))}
