@@ -52,3 +52,15 @@ export * from './shell/AppShell';
 export * from './shell/Sidebar';
 export * from './shell/Topbar';
 export * from './shell/CommandPalette';
+
+// Onboarding Components
+export * from './onboarding/OnboardingWizard';
+
+// Versioning Components
+export * from './versioning/VersionHistory';
+
+// SRS (Spaced Repetition) Components
+export * from './srs/SRSReview';
+
+// Collaboration Components
+export * from './collaboration/CommentThread';

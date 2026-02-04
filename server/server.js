@@ -19,6 +19,15 @@ import fs from "fs";
 import path from "path";
 import { spawnSync } from "child_process";
 
+// ---- Production dependencies (graceful loading) ----
+let jwt = null, bcrypt = null, z = null, rateLimit = null, helmet = null, compression = null, promClient = null;
+try { jwt = (await import("jsonwebtoken")).default; } catch {}
+try { bcrypt = (await import("bcryptjs")).default; } catch {}
+try { z = (await import("zod")).z || (await import("zod")).default?.z; } catch {}
+try { rateLimit = (await import("express-rate-limit")).default; } catch {}
+try { helmet = (await import("helmet")).default; } catch {}
+try { compression = (await import("compression")).default; } catch {}
+
 // ---- dotenv (safe) ----
 let DOTENV = { loaded: false, path: null, error: null };
 async function tryLoadDotenv() {
@@ -39,7 +48,13 @@ await tryLoadDotenv();
 
 // ---- config ----
 const PORT = Number(process.env.PORT || 5050);
-const VERSION = "4.0.0-full-simulation";
+const VERSION = "5.0.0-production";
+const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(64).toString("hex");
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
+const BCRYPT_ROUNDS = Number(process.env.BCRYPT_ROUNDS || 12);
+const AUTH_ENABLED = String(process.env.AUTH_ENABLED || "false").toLowerCase() === "true";
+const RATE_LIMIT_WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_MS || 60000);
+const RATE_LIMIT_MAX = Number(process.env.RATE_LIMIT_MAX || 100);
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
 const OPENAI_MODEL_FAST = process.env.OPENAI_MODEL_FAST || process.env.OPENAI_MODEL || "gpt-4o-mini";
@@ -903,6 +918,410 @@ const STATE = {
     history: []
   },
 };
+
+// ============================================================================
+// WAVE 1: PRODUCTION READINESS
+// ============================================================================
+
+// ---- Authentication System (Local JWT) ----
+const AUTH = {
+  users: new Map(), // userId -> { id, username, email, passwordHash, role, createdAt, lastLoginAt }
+  sessions: new Map(), // token -> { userId, createdAt, expiresAt }
+  apiKeys: new Map(), // apiKey -> { userId, name, scopes, createdAt, lastUsedAt }
+};
+
+// Load auth data from disk
+const AUTH_PATH = path.join(DATA_DIR, "auth.json");
+function loadAuthData() {
+  try {
+    if (fs.existsSync(AUTH_PATH)) {
+      const data = JSON.parse(fs.readFileSync(AUTH_PATH, "utf8"));
+      if (data.users) AUTH.users = new Map(Object.entries(data.users));
+      if (data.apiKeys) AUTH.apiKeys = new Map(Object.entries(data.apiKeys));
+    }
+  } catch (e) { console.error("[Auth] Failed to load:", e.message); }
+}
+function saveAuthData() {
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    const data = {
+      users: Object.fromEntries(AUTH.users),
+      apiKeys: Object.fromEntries(AUTH.apiKeys)
+    };
+    fs.writeFileSync(AUTH_PATH, JSON.stringify(data, null, 2));
+  } catch (e) { console.error("[Auth] Failed to save:", e.message); }
+}
+loadAuthData();
+
+// Create default admin if no users exist
+if (AUTH.users.size === 0 && bcrypt) {
+  const adminId = crypto.randomUUID();
+  const defaultPassword = process.env.ADMIN_PASSWORD || "admin123";
+  AUTH.users.set(adminId, {
+    id: adminId,
+    username: "admin",
+    email: "admin@localhost",
+    passwordHash: bcrypt.hashSync(defaultPassword, BCRYPT_ROUNDS),
+    role: "owner",
+    scopes: ["*"],
+    createdAt: new Date().toISOString(),
+    lastLoginAt: null
+  });
+  saveAuthData();
+  console.log(`[Auth] Created default admin user (password: ${defaultPassword})`);
+}
+
+// Auth helper functions
+function createToken(userId, expiresIn = JWT_EXPIRES_IN) {
+  if (!jwt) return null;
+  return jwt.sign({ userId, iat: Math.floor(Date.now() / 1000) }, JWT_SECRET, { expiresIn });
+}
+
+function verifyToken(token) {
+  if (!jwt) return null;
+  try {
+    return jwt.verify(token, JWT_SECRET);
+  } catch { return null; }
+}
+
+function hashPassword(password) {
+  if (!bcrypt) return null;
+  return bcrypt.hashSync(password, BCRYPT_ROUNDS);
+}
+
+function verifyPassword(password, hash) {
+  if (!bcrypt) return false;
+  return bcrypt.compareSync(password, hash);
+}
+
+function generateApiKey() {
+  return `ck_${crypto.randomBytes(32).toString("hex")}`;
+}
+
+// Auth middleware
+function authMiddleware(req, res, next) {
+  if (!AUTH_ENABLED) return next();
+
+  // Skip auth for public endpoints
+  const publicPaths = ["/health", "/ready", "/metrics", "/api/auth/login", "/api/auth/register", "/api/docs"];
+  if (publicPaths.some(p => req.path.startsWith(p))) return next();
+
+  // Check Authorization header
+  const authHeader = req.headers.authorization || "";
+  const apiKey = req.headers["x-api-key"] || req.query.apiKey || "";
+
+  // Try Bearer token
+  if (authHeader.startsWith("Bearer ")) {
+    const token = authHeader.slice(7);
+    const decoded = verifyToken(token);
+    if (decoded?.userId) {
+      const user = AUTH.users.get(decoded.userId);
+      if (user) {
+        req.user = user;
+        req.authMethod = "jwt";
+        return next();
+      }
+    }
+  }
+
+  // Try API key
+  if (apiKey) {
+    const keyData = AUTH.apiKeys.get(apiKey);
+    if (keyData) {
+      const user = AUTH.users.get(keyData.userId);
+      if (user) {
+        keyData.lastUsedAt = new Date().toISOString();
+        req.user = user;
+        req.apiKeyData = keyData;
+        req.authMethod = "apiKey";
+        return next();
+      }
+    }
+  }
+
+  return res.status(401).json({ ok: false, error: "Unauthorized", code: "AUTH_REQUIRED" });
+}
+
+// Permission check helper
+function requireRole(...roles) {
+  return (req, res, next) => {
+    if (!AUTH_ENABLED) return next();
+    if (!req.user) return res.status(401).json({ ok: false, error: "Unauthorized" });
+    if (roles.length === 0 || roles.includes(req.user.role) || req.user.scopes?.includes("*")) {
+      return next();
+    }
+    return res.status(403).json({ ok: false, error: "Forbidden", requiredRoles: roles });
+  };
+}
+
+// ---- Validation Schemas (Zod) ----
+const schemas = {};
+if (z) {
+  schemas.dtuCreate = z.object({
+    title: z.string().min(1).max(500),
+    content: z.string().max(100000).optional(),
+    tier: z.enum(["regular", "mega", "hyper"]).optional().default("regular"),
+    tags: z.array(z.string().max(50)).max(40).optional().default([]),
+    creti: z.string().max(50000).optional(),
+    source: z.string().max(100).optional()
+  });
+
+  schemas.dtuUpdate = z.object({
+    id: z.string().uuid(),
+    title: z.string().min(1).max(500).optional(),
+    content: z.string().max(100000).optional(),
+    tier: z.enum(["regular", "mega", "hyper"]).optional(),
+    tags: z.array(z.string().max(50)).max(40).optional(),
+    creti: z.string().max(50000).optional()
+  });
+
+  schemas.userRegister = z.object({
+    username: z.string().min(3).max(50).regex(/^[a-zA-Z0-9_-]+$/),
+    email: z.string().email(),
+    password: z.string().min(8).max(100)
+  });
+
+  schemas.userLogin = z.object({
+    username: z.string().optional(),
+    email: z.string().email().optional(),
+    password: z.string()
+  }).refine(d => d.username || d.email, { message: "Username or email required" });
+
+  schemas.apiKeyCreate = z.object({
+    name: z.string().min(1).max(100),
+    scopes: z.array(z.string()).optional().default(["read"])
+  });
+
+  schemas.pagination = z.object({
+    limit: z.coerce.number().min(1).max(1000).optional().default(50),
+    offset: z.coerce.number().min(0).optional().default(0),
+    q: z.string().max(500).optional()
+  });
+}
+
+// Validation middleware factory
+function validate(schemaName) {
+  return (req, res, next) => {
+    if (!z || !schemas[schemaName]) return next();
+    const result = schemas[schemaName].safeParse(req.body);
+    if (!result.success) {
+      return res.status(400).json({
+        ok: false,
+        error: "Validation failed",
+        details: result.error.errors
+      });
+    }
+    req.validated = result.data;
+    next();
+  };
+}
+
+// ---- Metrics (Prometheus) ----
+const METRICS = {
+  enabled: false,
+  registry: null,
+  counters: {},
+  histograms: {},
+  gauges: {}
+};
+
+async function initMetrics() {
+  try {
+    const prom = await import("prom-client").catch(() => null);
+    if (!prom) return;
+
+    METRICS.enabled = true;
+    METRICS.registry = new prom.Registry();
+    prom.collectDefaultMetrics({ register: METRICS.registry });
+
+    // Custom counters
+    METRICS.counters.httpRequests = new prom.Counter({
+      name: "concord_http_requests_total",
+      help: "Total HTTP requests",
+      labelNames: ["method", "path", "status"],
+      registers: [METRICS.registry]
+    });
+
+    METRICS.counters.dtuOperations = new prom.Counter({
+      name: "concord_dtu_operations_total",
+      help: "Total DTU operations",
+      labelNames: ["operation"],
+      registers: [METRICS.registry]
+    });
+
+    METRICS.counters.macroExecutions = new prom.Counter({
+      name: "concord_macro_executions_total",
+      help: "Total macro executions",
+      labelNames: ["domain", "name", "success"],
+      registers: [METRICS.registry]
+    });
+
+    // Histograms
+    METRICS.histograms.requestDuration = new prom.Histogram({
+      name: "concord_request_duration_seconds",
+      help: "Request duration in seconds",
+      labelNames: ["method", "path"],
+      buckets: [0.01, 0.05, 0.1, 0.5, 1, 2, 5],
+      registers: [METRICS.registry]
+    });
+
+    // Gauges
+    METRICS.gauges.dtuCount = new prom.Gauge({
+      name: "concord_dtus_total",
+      help: "Total number of DTUs",
+      registers: [METRICS.registry]
+    });
+
+    METRICS.gauges.activeConnections = new prom.Gauge({
+      name: "concord_ws_connections",
+      help: "Active WebSocket connections",
+      registers: [METRICS.registry]
+    });
+
+    console.log("[Metrics] Prometheus metrics initialized");
+  } catch (e) {
+    console.error("[Metrics] Failed to initialize:", e.message);
+  }
+}
+initMetrics();
+
+// Metrics middleware
+function metricsMiddleware(req, res, next) {
+  if (!METRICS.enabled) return next();
+  const start = Date.now();
+  res.on("finish", () => {
+    const duration = (Date.now() - start) / 1000;
+    const path = req.route?.path || req.path.split("/").slice(0, 3).join("/");
+    METRICS.counters.httpRequests?.inc({ method: req.method, path, status: res.statusCode });
+    METRICS.histograms.requestDuration?.observe({ method: req.method, path }, duration);
+  });
+  next();
+}
+
+// Update gauges periodically
+setInterval(() => {
+  if (METRICS.gauges.dtuCount) METRICS.gauges.dtuCount.set(STATE.dtus.size);
+  if (METRICS.gauges.activeConnections) METRICS.gauges.activeConnections.set(REALTIME.clients?.size || 0);
+}, 5000);
+
+// ---- Backup & Restore ----
+const BACKUP_DIR = process.env.BACKUP_DIR || path.join(DATA_DIR, "backups");
+
+async function createBackup(name = null) {
+  try {
+    fs.mkdirSync(BACKUP_DIR, { recursive: true });
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const backupName = name || `backup-${timestamp}`;
+    const backupPath = path.join(BACKUP_DIR, `${backupName}.json`);
+
+    const backup = {
+      version: VERSION,
+      createdAt: new Date().toISOString(),
+      data: {
+        dtus: Object.fromEntries(STATE.dtus),
+        shadowDtus: Object.fromEntries(STATE.shadowDtus),
+        sessions: Object.fromEntries(STATE.sessions),
+        queues: STATE.queues,
+        config: STATE.config,
+        __chicken2: STATE.__chicken2,
+        __chicken3: STATE.__chicken3
+      },
+      auth: {
+        users: Object.fromEntries(AUTH.users),
+        apiKeys: Object.fromEntries(AUTH.apiKeys)
+      }
+    };
+
+    fs.writeFileSync(backupPath, JSON.stringify(backup, null, 2));
+    console.log(`[Backup] Created: ${backupPath}`);
+    return { ok: true, path: backupPath, name: backupName, size: fs.statSync(backupPath).size };
+  } catch (e) {
+    console.error("[Backup] Failed:", e);
+    return { ok: false, error: String(e.message || e) };
+  }
+}
+
+async function restoreBackup(backupPath) {
+  try {
+    if (!fs.existsSync(backupPath)) {
+      // Try in backup dir
+      const tryPath = path.join(BACKUP_DIR, backupPath.endsWith(".json") ? backupPath : `${backupPath}.json`);
+      if (fs.existsSync(tryPath)) backupPath = tryPath;
+      else return { ok: false, error: "Backup file not found" };
+    }
+
+    const backup = JSON.parse(fs.readFileSync(backupPath, "utf8"));
+
+    // Restore state
+    if (backup.data?.dtus) STATE.dtus = new Map(Object.entries(backup.data.dtus));
+    if (backup.data?.shadowDtus) STATE.shadowDtus = new Map(Object.entries(backup.data.shadowDtus));
+    if (backup.data?.sessions) STATE.sessions = new Map(Object.entries(backup.data.sessions));
+    if (backup.data?.queues) STATE.queues = backup.data.queues;
+    if (backup.data?.config) STATE.config = backup.data.config;
+    if (backup.data?.__chicken2) STATE.__chicken2 = backup.data.__chicken2;
+    if (backup.data?.__chicken3) STATE.__chicken3 = backup.data.__chicken3;
+
+    // Restore auth
+    if (backup.auth?.users) AUTH.users = new Map(Object.entries(backup.auth.users));
+    if (backup.auth?.apiKeys) AUTH.apiKeys = new Map(Object.entries(backup.auth.apiKeys));
+
+    saveStateDebounced();
+    saveAuthData();
+
+    console.log(`[Backup] Restored from: ${backupPath}`);
+    return { ok: true, version: backup.version, createdAt: backup.createdAt };
+  } catch (e) {
+    console.error("[Backup] Restore failed:", e);
+    return { ok: false, error: String(e.message || e) };
+  }
+}
+
+function listBackups() {
+  try {
+    if (!fs.existsSync(BACKUP_DIR)) return { ok: true, backups: [] };
+    const files = fs.readdirSync(BACKUP_DIR).filter(f => f.endsWith(".json"));
+    const backups = files.map(f => {
+      const fpath = path.join(BACKUP_DIR, f);
+      const stat = fs.statSync(fpath);
+      return { name: f.replace(".json", ""), path: fpath, size: stat.size, createdAt: stat.mtime.toISOString() };
+    }).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return { ok: true, backups };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+}
+
+// Auto-backup scheduler
+let _autoBackupTimer = null;
+function startAutoBackup(intervalHours = 24) {
+  if (_autoBackupTimer) clearInterval(_autoBackupTimer);
+  const ms = intervalHours * 60 * 60 * 1000;
+  _autoBackupTimer = setInterval(() => createBackup(`auto-${Date.now()}`), ms);
+  console.log(`[Backup] Auto-backup enabled (every ${intervalHours}h)`);
+}
+if (String(process.env.AUTO_BACKUP || "true").toLowerCase() === "true") {
+  startAutoBackup(Number(process.env.BACKUP_INTERVAL_HOURS || 24));
+}
+
+// Export for CLI
+export { createBackup, restoreBackup, listBackups };
+
+// ---- Rate Limiting ----
+let rateLimiter = null;
+if (rateLimit) {
+  rateLimiter = rateLimit({
+    windowMs: RATE_LIMIT_WINDOW_MS,
+    max: RATE_LIMIT_MAX,
+    message: { ok: false, error: "Too many requests", retryAfter: Math.ceil(RATE_LIMIT_WINDOW_MS / 1000) },
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => req.user?.id || req.ip
+  });
+}
+
+// ============================================================================
+// END WAVE 1: PRODUCTION READINESS
+// ============================================================================
 
 // ---- realtime (optional WebSockets; local-first) ----
 // Thin transport only: mirrors state changes (no new logic).
@@ -2281,6 +2700,1995 @@ function upsertDTU(dtu, { broadcast = true, federate = false } = {}) {
 
   return dtu;
 }
+
+// ============================================================================
+// WAVE 2: CORE FEATURES (Version History, Templates, Import/Export, Queries)
+// ============================================================================
+
+// ---- DTU Version History ----
+const VERSION_HISTORY = new Map(); // dtuId -> [{ version, snapshot, changedAt, changedBy }]
+const MAX_VERSIONS_PER_DTU = Number(process.env.MAX_VERSIONS_PER_DTU || 50);
+
+function saveDTUVersion(dtu, changedBy = "system") {
+  if (!dtu?.id) return;
+  const versions = VERSION_HISTORY.get(dtu.id) || [];
+  const version = versions.length + 1;
+
+  // Store a lightweight snapshot
+  versions.push({
+    version,
+    snapshot: {
+      title: dtu.title,
+      content: dtu.content,
+      creti: dtu.creti,
+      tags: [...(dtu.tags || [])],
+      tier: dtu.tier
+    },
+    changedAt: nowISO(),
+    changedBy
+  });
+
+  // Trim old versions
+  if (versions.length > MAX_VERSIONS_PER_DTU) {
+    versions.splice(0, versions.length - MAX_VERSIONS_PER_DTU);
+  }
+
+  VERSION_HISTORY.set(dtu.id, versions);
+}
+
+function getDTUVersions(dtuId) {
+  return VERSION_HISTORY.get(dtuId) || [];
+}
+
+function restoreDTUVersion(dtuId, version) {
+  const versions = VERSION_HISTORY.get(dtuId);
+  if (!versions) return { ok: false, error: "No version history" };
+
+  const v = versions.find(v => v.version === version);
+  if (!v) return { ok: false, error: "Version not found" };
+
+  const dtu = STATE.dtus.get(dtuId);
+  if (!dtu) return { ok: false, error: "DTU not found" };
+
+  // Save current state as new version before restoring
+  saveDTUVersion(dtu, "restore");
+
+  // Restore fields from snapshot
+  Object.assign(dtu, v.snapshot, { updatedAt: nowISO() });
+  upsertDTU(dtu);
+
+  return { ok: true, restoredTo: version, dtu };
+}
+
+// ---- DTU Templates ----
+const TEMPLATES = new Map(); // templateId -> { id, name, description, fields, defaultValues, tags }
+
+// Built-in templates
+const BUILTIN_TEMPLATES = [
+  {
+    id: "meeting-notes",
+    name: "Meeting Notes",
+    description: "Structured meeting notes with attendees, agenda, and action items",
+    fields: ["attendees", "agenda", "discussion", "decisions", "actionItems"],
+    defaultContent: `## Attendees\n- \n\n## Agenda\n1. \n\n## Discussion\n\n## Decisions\n- \n\n## Action Items\n- [ ] `,
+    defaultTags: ["meeting", "notes"]
+  },
+  {
+    id: "decision-record",
+    name: "Decision Record",
+    description: "Architecture Decision Record (ADR) format",
+    fields: ["context", "decision", "consequences", "alternatives"],
+    defaultContent: `## Context\nWhat is the issue that we're seeing that is motivating this decision?\n\n## Decision\nWhat is the change that we're proposing and/or doing?\n\n## Consequences\nWhat becomes easier or more difficult to do because of this change?\n\n## Alternatives Considered\n- `,
+    defaultTags: ["decision", "adr"]
+  },
+  {
+    id: "research-note",
+    name: "Research Note",
+    description: "Academic/research note with sources and methodology",
+    fields: ["hypothesis", "methodology", "findings", "sources", "questions"],
+    defaultContent: `## Hypothesis\n\n## Methodology\n\n## Findings\n\n## Sources\n- \n\n## Open Questions\n- `,
+    defaultTags: ["research", "academic"]
+  },
+  {
+    id: "daily-log",
+    name: "Daily Log",
+    description: "Daily reflection and progress tracking",
+    fields: ["accomplished", "learned", "blockers", "tomorrow"],
+    defaultContent: `## What I Accomplished\n- \n\n## What I Learned\n- \n\n## Blockers\n- \n\n## Tomorrow's Focus\n- `,
+    defaultTags: ["daily", "log", "reflection"]
+  },
+  {
+    id: "concept-definition",
+    name: "Concept Definition",
+    description: "Define a concept with examples and relationships",
+    fields: ["definition", "examples", "relatedConcepts", "misconceptions"],
+    defaultContent: `## Definition\n\n## Examples\n1. \n\n## Related Concepts\n- \n\n## Common Misconceptions\n- `,
+    defaultTags: ["concept", "definition"]
+  },
+  {
+    id: "creti-full",
+    name: "CRETI Format",
+    description: "Full CRETI structured thought",
+    fields: ["context", "reasoning", "evidence", "tests", "impact"],
+    defaultContent: `## Context\nWhat situation or problem prompted this thought?\n\n## Reasoning\nWhat is the logical chain of thought?\n\n## Evidence\nWhat supports this reasoning?\n\n## Tests\nHow can this be verified or falsified?\n\n## Impact\nWhat are the implications if true?`,
+    defaultTags: ["creti", "structured"]
+  }
+];
+
+// Initialize templates
+BUILTIN_TEMPLATES.forEach(t => TEMPLATES.set(t.id, { ...t, builtIn: true }));
+
+function createFromTemplate(templateId, overrides = {}) {
+  const template = TEMPLATES.get(templateId);
+  if (!template) return { ok: false, error: "Template not found" };
+
+  return {
+    ok: true,
+    dtu: {
+      title: overrides.title || `New ${template.name}`,
+      content: overrides.content || template.defaultContent,
+      tags: [...(template.defaultTags || []), ...(overrides.tags || [])],
+      tier: overrides.tier || "regular",
+      template: templateId
+    }
+  };
+}
+
+// ---- Import/Export ----
+function exportDTUsToMarkdown(dtuIds = null, options = {}) {
+  const dtus = dtuIds
+    ? dtuIds.map(id => STATE.dtus.get(id)).filter(Boolean)
+    : dtusArray();
+
+  const lines = [];
+
+  for (const dtu of dtus) {
+    lines.push(`# ${dtu.title}\n`);
+    if (dtu.tags?.length) lines.push(`Tags: ${dtu.tags.map(t => `#${t}`).join(" ")}\n`);
+    lines.push(`Tier: ${dtu.tier || "regular"}`);
+    lines.push(`Created: ${dtu.createdAt}`);
+    lines.push(`Updated: ${dtu.updatedAt}\n`);
+
+    if (dtu.content) lines.push(dtu.content);
+    if (dtu.creti) lines.push(`\n---\n**CRETI:**\n${dtu.creti}`);
+
+    lines.push("\n---\n");
+  }
+
+  return { ok: true, markdown: lines.join("\n"), count: dtus.length };
+}
+
+function exportDTUsToJSON(dtuIds = null) {
+  const dtus = dtuIds
+    ? dtuIds.map(id => STATE.dtus.get(id)).filter(Boolean)
+    : dtusArray();
+
+  return {
+    ok: true,
+    data: {
+      version: VERSION,
+      exportedAt: nowISO(),
+      dtus: dtus.map(d => ({
+        id: d.id,
+        title: d.title,
+        content: d.content,
+        creti: d.creti,
+        tags: d.tags,
+        tier: d.tier,
+        createdAt: d.createdAt,
+        updatedAt: d.updatedAt,
+        connections: d.connections,
+        lineage: d.lineage
+      }))
+    },
+    count: dtus.length
+  };
+}
+
+function importFromObsidian(markdownFiles) {
+  // markdownFiles: [{ name, content }]
+  const imported = [];
+  const errors = [];
+
+  for (const file of markdownFiles) {
+    try {
+      const content = file.content || "";
+      const name = file.name?.replace(/\.md$/i, "") || "Untitled";
+
+      // Extract YAML frontmatter if present
+      let frontmatter = {};
+      let body = content;
+      const fmMatch = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+      if (fmMatch) {
+        try {
+          // Simple YAML parsing for common fields
+          const yamlStr = fmMatch[1];
+          yamlStr.split("\n").forEach(line => {
+            const [key, ...vals] = line.split(":");
+            if (key && vals.length) {
+              const val = vals.join(":").trim();
+              frontmatter[key.trim()] = val.startsWith("[") ? JSON.parse(val.replace(/'/g, '"')) : val;
+            }
+          });
+        } catch {}
+        body = fmMatch[2];
+      }
+
+      // Extract tags from content (Obsidian style: #tag)
+      const tagMatches = body.match(/#([a-zA-Z0-9_-]+)/g) || [];
+      const tags = [...new Set([
+        ...(frontmatter.tags || []),
+        ...tagMatches.map(t => t.slice(1))
+      ])].slice(0, 40);
+
+      // Extract wikilinks [[link]]
+      const wikilinks = body.match(/\[\[([^\]]+)\]\]/g)?.map(l => l.slice(2, -2)) || [];
+
+      const dtu = {
+        id: uid("dtu"),
+        title: frontmatter.title || name,
+        content: body.trim(),
+        tags,
+        tier: "regular",
+        createdAt: frontmatter.created || nowISO(),
+        updatedAt: nowISO(),
+        source: "obsidian",
+        meta: {
+          originalFile: file.name,
+          wikilinks,
+          frontmatter
+        }
+      };
+
+      upsertDTU(dtu, { broadcast: false });
+      imported.push({ id: dtu.id, title: dtu.title });
+    } catch (e) {
+      errors.push({ file: file.name, error: String(e.message || e) });
+    }
+  }
+
+  return { ok: true, imported, errors, count: imported.length };
+}
+
+function importFromRoam(roamJson) {
+  // Roam JSON export format
+  const imported = [];
+  const errors = [];
+
+  try {
+    const pages = Array.isArray(roamJson) ? roamJson : [roamJson];
+
+    for (const page of pages) {
+      try {
+        const processBlock = (block, depth = 0) => {
+          const lines = [];
+          const indent = "  ".repeat(depth);
+
+          if (block.string) {
+            lines.push(`${indent}- ${block.string}`);
+          }
+
+          if (block.children) {
+            for (const child of block.children) {
+              lines.push(...processBlock(child, depth + 1));
+            }
+          }
+
+          return lines;
+        };
+
+        const content = page.children?.map(b => processBlock(b).join("\n")).join("\n") || "";
+
+        // Extract tags from [[Page References]] and #hashtags
+        const pageRefs = content.match(/\[\[([^\]]+)\]\]/g)?.map(r => r.slice(2, -2)) || [];
+        const hashTags = content.match(/#([a-zA-Z0-9_-]+)/g)?.map(t => t.slice(1)) || [];
+        const tags = [...new Set([...pageRefs.slice(0, 20), ...hashTags])].slice(0, 40);
+
+        const dtu = {
+          id: uid("dtu"),
+          title: page.title || "Untitled",
+          content,
+          tags,
+          tier: "regular",
+          createdAt: page["create-time"] ? new Date(page["create-time"]).toISOString() : nowISO(),
+          updatedAt: page["edit-time"] ? new Date(page["edit-time"]).toISOString() : nowISO(),
+          source: "roam",
+          meta: { uid: page.uid }
+        };
+
+        upsertDTU(dtu, { broadcast: false });
+        imported.push({ id: dtu.id, title: dtu.title });
+      } catch (e) {
+        errors.push({ page: page.title, error: String(e.message || e) });
+      }
+    }
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+
+  return { ok: true, imported, errors, count: imported.length };
+}
+
+// ---- Query System (Dataview-like) ----
+function queryDTUsAdvanced(query) {
+  /*
+   * Query syntax:
+   * - WHERE tag:philosophy AND tier:mega
+   * - WHERE created:>2024-01-01
+   * - WHERE title:~"neural" (contains)
+   * - SORT BY updatedAt DESC
+   * - LIMIT 50
+   */
+  let results = dtusArray();
+  const lines = query.split("\n").map(l => l.trim()).filter(Boolean);
+
+  for (const line of lines) {
+    const upper = line.toUpperCase();
+
+    if (upper.startsWith("WHERE ")) {
+      const conditions = line.slice(6).split(/\s+AND\s+/i);
+      for (const cond of conditions) {
+        const match = cond.match(/^(\w+):([<>=~]?)(.+)$/);
+        if (!match) continue;
+
+        const [, field, op, value] = match;
+        const cleanValue = value.replace(/^["']|["']$/g, "").toLowerCase();
+
+        results = results.filter(dtu => {
+          let dtuValue;
+          switch (field.toLowerCase()) {
+            case "tag": case "tags":
+              return (dtu.tags || []).some(t => t.toLowerCase().includes(cleanValue));
+            case "tier":
+              return (dtu.tier || "regular") === cleanValue;
+            case "title":
+              dtuValue = (dtu.title || "").toLowerCase();
+              break;
+            case "content":
+              dtuValue = (dtu.content || "").toLowerCase();
+              break;
+            case "created": case "createdat":
+              dtuValue = dtu.createdAt;
+              break;
+            case "updated": case "updatedat":
+              dtuValue = dtu.updatedAt;
+              break;
+            default:
+              dtuValue = dtu[field];
+          }
+
+          if (op === "~") return String(dtuValue).toLowerCase().includes(cleanValue);
+          if (op === ">") return dtuValue > cleanValue;
+          if (op === "<") return dtuValue < cleanValue;
+          return String(dtuValue).toLowerCase() === cleanValue;
+        });
+      }
+    }
+
+    if (upper.startsWith("SORT BY ") || upper.startsWith("ORDER BY ")) {
+      const sortMatch = line.match(/(?:SORT|ORDER)\s+BY\s+(\w+)\s*(ASC|DESC)?/i);
+      if (sortMatch) {
+        const [, field, order] = sortMatch;
+        const desc = (order || "").toUpperCase() === "DESC";
+        results.sort((a, b) => {
+          const av = a[field] || "";
+          const bv = b[field] || "";
+          const cmp = String(av).localeCompare(String(bv));
+          return desc ? -cmp : cmp;
+        });
+      }
+    }
+
+    if (upper.startsWith("LIMIT ")) {
+      const limit = parseInt(line.slice(6), 10);
+      if (!isNaN(limit)) results = results.slice(0, limit);
+    }
+  }
+
+  return { ok: true, results, count: results.length };
+}
+
+// ---- File Attachments ----
+const ATTACHMENTS_DIR = path.join(DATA_DIR, "attachments");
+const ATTACHMENTS = new Map(); // attachmentId -> { id, dtuId, filename, mimeType, size, path, createdAt }
+
+function ensureAttachmentsDir() {
+  try { fs.mkdirSync(ATTACHMENTS_DIR, { recursive: true }); } catch {}
+}
+
+function saveAttachment(dtuId, filename, buffer, mimeType) {
+  ensureAttachmentsDir();
+  const id = uid("att");
+  const ext = path.extname(filename) || "";
+  const safeName = `${id}${ext}`;
+  const filePath = path.join(ATTACHMENTS_DIR, safeName);
+
+  fs.writeFileSync(filePath, buffer);
+
+  const attachment = {
+    id,
+    dtuId,
+    filename,
+    mimeType: mimeType || "application/octet-stream",
+    size: buffer.length,
+    path: filePath,
+    createdAt: nowISO()
+  };
+
+  ATTACHMENTS.set(id, attachment);
+  return { ok: true, attachment: { ...attachment, path: undefined } };
+}
+
+function getAttachment(id) {
+  return ATTACHMENTS.get(id);
+}
+
+function listAttachments(dtuId) {
+  const atts = [];
+  for (const [, att] of ATTACHMENTS) {
+    if (!dtuId || att.dtuId === dtuId) {
+      atts.push({ ...att, path: undefined });
+    }
+  }
+  return atts;
+}
+
+// ============================================================================
+// END WAVE 2: CORE FEATURES
+// ============================================================================
+
+// ============================================================================
+// WAVE 3: AI CAPABILITIES (RAG, Auto-linking, CRETI Gen, Contradiction, SRS)
+// ============================================================================
+
+// ---- Vector Embeddings Store (Local-first) ----
+const EMBEDDINGS = {
+  enabled: false,
+  model: null,
+  store: new Map(), // dtuId -> Float32Array
+  dim: 384 // default for all-MiniLM-L6-v2
+};
+
+// Initialize local embeddings (Xenova Transformers - runs in Node.js)
+async function initLocalEmbeddings() {
+  try {
+    const { pipeline } = await import("@xenova/transformers").catch(() => ({}));
+    if (!pipeline) {
+      console.log("[Embeddings] @xenova/transformers not available");
+      return { ok: false, reason: "package_not_installed" };
+    }
+
+    EMBEDDINGS.model = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
+    EMBEDDINGS.enabled = true;
+    EMBEDDINGS.dim = 384;
+    console.log("[Embeddings] Local embedding model loaded (all-MiniLM-L6-v2)");
+    return { ok: true };
+  } catch (e) {
+    console.error("[Embeddings] Failed to load:", e.message);
+    return { ok: false, error: String(e.message || e) };
+  }
+}
+
+// Generate embedding for text
+async function generateEmbedding(text) {
+  if (!EMBEDDINGS.enabled || !EMBEDDINGS.model) {
+    return { ok: false, error: "Embeddings not enabled" };
+  }
+
+  try {
+    const output = await EMBEDDINGS.model(text, { pooling: "mean", normalize: true });
+    const embedding = Array.from(output.data);
+    return { ok: true, embedding, dim: embedding.length };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+}
+
+// Index a DTU's embedding
+async function indexDTUEmbedding(dtu) {
+  if (!EMBEDDINGS.enabled) return { ok: false, reason: "disabled" };
+
+  const text = `${dtu.title || ""} ${dtu.content || ""} ${(dtu.tags || []).join(" ")}`.trim();
+  if (!text) return { ok: false, reason: "empty_content" };
+
+  const result = await generateEmbedding(text.slice(0, 8000));
+  if (result.ok) {
+    EMBEDDINGS.store.set(dtu.id, new Float32Array(result.embedding));
+  }
+  return result;
+}
+
+// Cosine similarity
+function cosineSimilarity(a, b) {
+  if (a.length !== b.length) return 0;
+  let dot = 0, normA = 0, normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  return dot / (Math.sqrt(normA) * Math.sqrt(normB) || 1);
+}
+
+// Semantic search across DTUs
+async function semanticSearch(query, { limit = 10, minScore = 0.3 } = {}) {
+  if (!EMBEDDINGS.enabled) return { ok: false, error: "Embeddings not enabled" };
+
+  const queryResult = await generateEmbedding(query);
+  if (!queryResult.ok) return queryResult;
+
+  const queryVec = new Float32Array(queryResult.embedding);
+  const scores = [];
+
+  for (const [dtuId, vec] of EMBEDDINGS.store) {
+    const score = cosineSimilarity(queryVec, vec);
+    if (score >= minScore) {
+      scores.push({ dtuId, score });
+    }
+  }
+
+  scores.sort((a, b) => b.score - a.score);
+  const topResults = scores.slice(0, limit);
+
+  const results = topResults.map(({ dtuId, score }) => {
+    const dtu = STATE.dtus.get(dtuId);
+    return dtu ? { ...dtu, _semanticScore: score } : null;
+  }).filter(Boolean);
+
+  return { ok: true, results, query };
+}
+
+// Build/rebuild embedding index
+async function rebuildEmbeddingIndex() {
+  if (!EMBEDDINGS.enabled) return { ok: false, reason: "disabled" };
+
+  const dtus = dtusArray();
+  let indexed = 0, errors = 0;
+
+  for (const dtu of dtus) {
+    const result = await indexDTUEmbedding(dtu);
+    if (result.ok) indexed++;
+    else errors++;
+  }
+
+  return { ok: true, indexed, errors, total: dtus.length };
+}
+
+// ---- Auto-Linking (AI Suggests Connections) ----
+async function suggestConnections(dtuId, { limit = 5 } = {}) {
+  const dtu = STATE.dtus.get(dtuId);
+  if (!dtu) return { ok: false, error: "DTU not found" };
+
+  // Use semantic search to find related DTUs
+  const query = `${dtu.title} ${dtu.content?.slice(0, 500) || ""}`;
+  const searchResult = await semanticSearch(query, { limit: limit + 1, minScore: 0.4 });
+
+  if (!searchResult.ok) {
+    // Fallback to tag-based suggestions
+    const tagMatches = dtusArray()
+      .filter(d => d.id !== dtuId)
+      .map(d => {
+        const overlap = (dtu.tags || []).filter(t => (d.tags || []).includes(t)).length;
+        return { dtu: d, score: overlap / Math.max((dtu.tags || []).length, 1) };
+      })
+      .filter(m => m.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
+
+    return {
+      ok: true,
+      suggestions: tagMatches.map(m => ({
+        id: m.dtu.id,
+        title: m.dtu.title,
+        score: m.score,
+        reason: "tag_overlap",
+        sharedTags: (dtu.tags || []).filter(t => (m.dtu.tags || []).includes(t))
+      })),
+      method: "tag_based"
+    };
+  }
+
+  const suggestions = searchResult.results
+    .filter(d => d.id !== dtuId)
+    .slice(0, limit)
+    .map(d => ({
+      id: d.id,
+      title: d.title,
+      score: d._semanticScore,
+      reason: "semantic_similarity"
+    }));
+
+  return { ok: true, suggestions, method: "semantic" };
+}
+
+// ---- CRETI Generation (AI-assisted structured thought) ----
+async function generateCRETI(input, ctx = null) {
+  const { title, content, existingCRETI } = input;
+
+  // If no LLM available, generate deterministic CRETI structure
+  if (!LLM_READY) {
+    return {
+      ok: true,
+      creti: {
+        context: content?.slice(0, 500) || title || "Context not provided",
+        reasoning: "Reasoning to be filled in",
+        evidence: "Evidence to be gathered",
+        tests: "Tests to be defined",
+        impact: "Impact to be assessed"
+      },
+      method: "template"
+    };
+  }
+
+  // Use LLM to generate structured CRETI
+  const prompt = `Analyze the following content and generate a structured CRETI (Context-Reasoning-Evidence-Tests-Impact) analysis.
+
+Title: ${title || "Untitled"}
+Content: ${content || "(no content)"}
+${existingCRETI ? `Existing CRETI to refine: ${existingCRETI}` : ""}
+
+Generate a JSON response with these fields:
+- context: What situation or problem is being addressed? (2-3 sentences)
+- reasoning: What is the logical chain of thought? (2-4 sentences)
+- evidence: What supports this reasoning? (bullet points)
+- tests: How can this be verified or falsified? (bullet points)
+- impact: What are the implications? (2-3 sentences)
+
+Respond with valid JSON only.`;
+
+  try {
+    const response = await llmChat([{ role: "user", content: prompt }], {
+      model: OPENAI_MODEL_FAST,
+      temperature: 0.3,
+      max_tokens: 1000
+    });
+
+    const text = response?.choices?.[0]?.message?.content || "";
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const creti = JSON.parse(jsonMatch[0]);
+      return { ok: true, creti, method: "llm" };
+    }
+
+    return { ok: false, error: "Failed to parse LLM response" };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+}
+
+// ---- Contradiction Detection ----
+async function detectContradictions(dtuId) {
+  const dtu = STATE.dtus.get(dtuId);
+  if (!dtu) return { ok: false, error: "DTU not found" };
+
+  // Find semantically similar DTUs
+  const similar = await semanticSearch(`${dtu.title} ${dtu.content?.slice(0, 300) || ""}`, { limit: 10, minScore: 0.5 });
+
+  if (!similar.ok || !LLM_READY) {
+    return { ok: true, contradictions: [], method: "unavailable" };
+  }
+
+  const contradictions = [];
+
+  // For each similar DTU, check for contradiction (simplified)
+  for (const candidate of similar.results) {
+    if (candidate.id === dtuId) continue;
+
+    // Simple heuristic: check for negation words
+    const dtuLower = (dtu.content || "").toLowerCase();
+    const candLower = (candidate.content || "").toLowerCase();
+
+    const negationPatterns = [
+      { pattern: /\bnot\b/, antiPattern: /\bis\b/ },
+      { pattern: /\bwrong\b/, antiPattern: /\bright\b/ },
+      { pattern: /\bfalse\b/, antiPattern: /\btrue\b/ },
+      { pattern: /\bimpossible\b/, antiPattern: /\bpossible\b/ }
+    ];
+
+    for (const { pattern, antiPattern } of negationPatterns) {
+      if ((pattern.test(dtuLower) && antiPattern.test(candLower)) ||
+          (antiPattern.test(dtuLower) && pattern.test(candLower))) {
+        contradictions.push({
+          dtuId: candidate.id,
+          title: candidate.title,
+          confidence: 0.5,
+          reason: "potential_negation"
+        });
+        break;
+      }
+    }
+  }
+
+  return { ok: true, contradictions, method: "heuristic" };
+}
+
+// ---- Knowledge Gap Analysis ----
+async function analyzeKnowledgeGaps(domain = null) {
+  const dtus = domain
+    ? dtusArray().filter(d => (d.tags || []).some(t => t.toLowerCase().includes(domain.toLowerCase())))
+    : dtusArray();
+
+  // Analyze tag coverage
+  const tagCounts = new Map();
+  for (const dtu of dtus) {
+    for (const tag of (dtu.tags || [])) {
+      tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
+    }
+  }
+
+  // Find orphan DTUs (no connections)
+  const orphans = dtus.filter(d => !d.connections?.length && !d.lineage?.length);
+
+  // Find incomplete DTUs (missing CRETI fields)
+  const incomplete = dtus.filter(d => {
+    if (!d.creti) return true;
+    const lower = d.creti.toLowerCase();
+    return !lower.includes("context") || !lower.includes("evidence");
+  });
+
+  // Identify potential topics with sparse coverage
+  const sparseTopics = Array.from(tagCounts.entries())
+    .filter(([, count]) => count === 1)
+    .map(([tag]) => tag);
+
+  return {
+    ok: true,
+    analysis: {
+      totalDTUs: dtus.length,
+      orphanDTUs: orphans.length,
+      incompleteDTUs: incomplete.length,
+      uniqueTags: tagCounts.size,
+      sparseTopics: sparseTopics.slice(0, 20),
+      topTags: Array.from(tagCounts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([tag, count]) => ({ tag, count }))
+    },
+    recommendations: [
+      orphans.length > 0 ? `Connect ${orphans.length} orphan DTUs to related thoughts` : null,
+      incomplete.length > 0 ? `Complete CRETI structure for ${incomplete.length} DTUs` : null,
+      sparseTopics.length > 0 ? `Expand coverage on sparse topics: ${sparseTopics.slice(0, 5).join(", ")}` : null
+    ].filter(Boolean)
+  };
+}
+
+// ---- Spaced Repetition System (SRS) ----
+const SRS = {
+  cards: new Map(), // dtuId -> { interval, easeFactor, nextReview, repetitions, history }
+  defaultEaseFactor: 2.5,
+  minEaseFactor: 1.3
+};
+
+function getSRSCard(dtuId) {
+  if (!SRS.cards.has(dtuId)) {
+    SRS.cards.set(dtuId, {
+      interval: 1,
+      easeFactor: SRS.defaultEaseFactor,
+      nextReview: new Date().toISOString(),
+      repetitions: 0,
+      history: []
+    });
+  }
+  return SRS.cards.get(dtuId);
+}
+
+function reviewSRSCard(dtuId, quality) {
+  // quality: 0-5 (0=complete blackout, 5=perfect)
+  const card = getSRSCard(dtuId);
+  const q = Math.max(0, Math.min(5, quality));
+
+  card.history.push({ quality: q, reviewedAt: nowISO() });
+
+  if (q < 3) {
+    // Failed review - reset
+    card.repetitions = 0;
+    card.interval = 1;
+  } else {
+    // Successful review - SM-2 algorithm
+    if (card.repetitions === 0) {
+      card.interval = 1;
+    } else if (card.repetitions === 1) {
+      card.interval = 6;
+    } else {
+      card.interval = Math.round(card.interval * card.easeFactor);
+    }
+
+    card.easeFactor = Math.max(
+      SRS.minEaseFactor,
+      card.easeFactor + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02))
+    );
+    card.repetitions++;
+  }
+
+  const nextDate = new Date();
+  nextDate.setDate(nextDate.getDate() + card.interval);
+  card.nextReview = nextDate.toISOString();
+
+  return { ok: true, card: { ...card, history: card.history.slice(-10) } };
+}
+
+function getDueCards(limit = 20) {
+  const now = new Date().toISOString();
+  const due = [];
+
+  for (const [dtuId, card] of SRS.cards) {
+    if (card.nextReview <= now) {
+      const dtu = STATE.dtus.get(dtuId);
+      if (dtu) {
+        due.push({ dtu, card });
+      }
+    }
+  }
+
+  // Sort by most overdue first
+  due.sort((a, b) => a.card.nextReview.localeCompare(b.card.nextReview));
+
+  return { ok: true, cards: due.slice(0, limit), total: due.length };
+}
+
+function addToSRS(dtuId) {
+  const dtu = STATE.dtus.get(dtuId);
+  if (!dtu) return { ok: false, error: "DTU not found" };
+
+  getSRSCard(dtuId); // Initialize if not exists
+  return { ok: true, dtuId, message: "Added to SRS" };
+}
+
+// ---- Chat with Lattice (RAG) ----
+async function chatWithLattice(query, { contextLimit = 5, sessionId = "" } = {}) {
+  // Retrieve relevant context using semantic search
+  let context = [];
+
+  if (EMBEDDINGS.enabled) {
+    const searchResult = await semanticSearch(query, { limit: contextLimit, minScore: 0.3 });
+    if (searchResult.ok) {
+      context = searchResult.results.map(d => ({
+        title: d.title,
+        content: d.content?.slice(0, 1000) || "",
+        tags: d.tags
+      }));
+    }
+  }
+
+  // Fallback to keyword search
+  if (context.length === 0) {
+    const keywords = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+    const matches = dtusArray()
+      .filter(d => {
+        const text = `${d.title} ${d.content || ""} ${(d.tags || []).join(" ")}`.toLowerCase();
+        return keywords.some(k => text.includes(k));
+      })
+      .slice(0, contextLimit);
+
+    context = matches.map(d => ({
+      title: d.title,
+      content: d.content?.slice(0, 1000) || "",
+      tags: d.tags
+    }));
+  }
+
+  if (!LLM_READY) {
+    // Return context without LLM synthesis
+    return {
+      ok: true,
+      response: `Found ${context.length} relevant DTUs. LLM not available for synthesis.`,
+      context,
+      method: "context_only"
+    };
+  }
+
+  // Build prompt with context
+  const contextStr = context.map((c, i) => `[${i + 1}] ${c.title}\n${c.content}`).join("\n\n---\n\n");
+
+  const systemPrompt = `You are an AI assistant helping the user explore their personal knowledge base (lattice of DTUs - Discrete Thought Units).
+Answer questions based on the provided context from the user's lattice. If the context doesn't contain relevant information, say so.
+Be concise but thorough. Reference specific DTUs by title when applicable.`;
+
+  const userPrompt = `Context from my knowledge lattice:\n\n${contextStr}\n\n---\n\nQuestion: ${query}`;
+
+  try {
+    const response = await llmChat([
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt }
+    ], {
+      model: OPENAI_MODEL_FAST,
+      temperature: 0.7,
+      max_tokens: 1000
+    });
+
+    const answer = response?.choices?.[0]?.message?.content || "Unable to generate response";
+
+    return {
+      ok: true,
+      response: answer,
+      context,
+      method: "rag"
+    };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e), context };
+  }
+}
+
+// Initialize embeddings on startup (async, non-blocking)
+if (String(process.env.EMBEDDINGS_ENABLED || "true").toLowerCase() === "true") {
+  initLocalEmbeddings().then(result => {
+    if (result.ok) {
+      // Rebuild index in background
+      setTimeout(() => rebuildEmbeddingIndex(), 5000);
+    }
+  });
+}
+
+// ============================================================================
+// END WAVE 3: AI CAPABILITIES
+// ============================================================================
+
+// ============================================================================
+// WAVE 4: COLLABORATION (Comments, Permissions, Workspaces, Sharing)
+// ============================================================================
+
+// ---- Workspaces ----
+const WORKSPACES = new Map(); // workspaceId -> { id, name, description, ownerId, members, dtuIds, settings, createdAt }
+
+function createWorkspace(ownerId, name, description = "") {
+  const id = uid("ws");
+  const workspace = {
+    id,
+    name,
+    description,
+    ownerId,
+    members: new Map([[ownerId, { role: "owner", joinedAt: nowISO() }]]),
+    dtuIds: new Set(),
+    settings: {
+      isPublic: false,
+      allowComments: true,
+      allowEditing: true
+    },
+    createdAt: nowISO(),
+    updatedAt: nowISO()
+  };
+  WORKSPACES.set(id, workspace);
+  return { ok: true, workspace: workspaceForClient(workspace) };
+}
+
+function workspaceForClient(ws) {
+  return {
+    id: ws.id,
+    name: ws.name,
+    description: ws.description,
+    ownerId: ws.ownerId,
+    members: Array.from(ws.members.entries()).map(([userId, data]) => ({ userId, ...data })),
+    dtuCount: ws.dtuIds.size,
+    settings: ws.settings,
+    createdAt: ws.createdAt,
+    updatedAt: ws.updatedAt
+  };
+}
+
+function addWorkspaceMember(workspaceId, userId, role = "member") {
+  const ws = WORKSPACES.get(workspaceId);
+  if (!ws) return { ok: false, error: "Workspace not found" };
+  ws.members.set(userId, { role, joinedAt: nowISO() });
+  ws.updatedAt = nowISO();
+  return { ok: true };
+}
+
+function removeWorkspaceMember(workspaceId, userId) {
+  const ws = WORKSPACES.get(workspaceId);
+  if (!ws) return { ok: false, error: "Workspace not found" };
+  if (userId === ws.ownerId) return { ok: false, error: "Cannot remove owner" };
+  ws.members.delete(userId);
+  ws.updatedAt = nowISO();
+  return { ok: true };
+}
+
+function addDTUToWorkspace(workspaceId, dtuId) {
+  const ws = WORKSPACES.get(workspaceId);
+  if (!ws) return { ok: false, error: "Workspace not found" };
+  ws.dtuIds.add(dtuId);
+  ws.updatedAt = nowISO();
+  return { ok: true };
+}
+
+function getWorkspaceDTUs(workspaceId) {
+  const ws = WORKSPACES.get(workspaceId);
+  if (!ws) return { ok: false, error: "Workspace not found" };
+  const dtus = Array.from(ws.dtuIds).map(id => STATE.dtus.get(id)).filter(Boolean);
+  return { ok: true, dtus, count: dtus.length };
+}
+
+function checkWorkspaceAccess(workspaceId, userId, requiredRole = "member") {
+  const ws = WORKSPACES.get(workspaceId);
+  if (!ws) return { ok: false, error: "Workspace not found" };
+
+  const member = ws.members.get(userId);
+  if (!member) return { ok: false, error: "Not a member" };
+
+  const roleHierarchy = { viewer: 0, member: 1, editor: 2, admin: 3, owner: 4 };
+  if ((roleHierarchy[member.role] || 0) < (roleHierarchy[requiredRole] || 0)) {
+    return { ok: false, error: "Insufficient permissions" };
+  }
+
+  return { ok: true, role: member.role };
+}
+
+// ---- Comments/Threads ----
+const COMMENTS = new Map(); // commentId -> { id, dtuId, userId, content, parentId, createdAt, updatedAt, resolved }
+
+function addComment(dtuId, userId, content, parentId = null) {
+  const dtu = STATE.dtus.get(dtuId);
+  if (!dtu) return { ok: false, error: "DTU not found" };
+
+  const id = uid("cmt");
+  const comment = {
+    id,
+    dtuId,
+    userId,
+    content,
+    parentId,
+    createdAt: nowISO(),
+    updatedAt: nowISO(),
+    resolved: false,
+    reactions: {}
+  };
+
+  COMMENTS.set(id, comment);
+
+  // Broadcast comment added
+  try {
+    realtimeEmit("comment:added", { dtuId, commentId: id, userId });
+  } catch {}
+
+  return { ok: true, comment };
+}
+
+function getComments(dtuId) {
+  const comments = [];
+  for (const [, comment] of COMMENTS) {
+    if (comment.dtuId === dtuId) {
+      comments.push(comment);
+    }
+  }
+  // Build thread structure
+  const rootComments = comments.filter(c => !c.parentId);
+  const threads = rootComments.map(root => ({
+    ...root,
+    replies: comments.filter(c => c.parentId === root.id)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+  }));
+
+  return { ok: true, threads, total: comments.length };
+}
+
+function resolveComment(commentId, resolved = true) {
+  const comment = COMMENTS.get(commentId);
+  if (!comment) return { ok: false, error: "Comment not found" };
+  comment.resolved = resolved;
+  comment.updatedAt = nowISO();
+  return { ok: true, comment };
+}
+
+function addReaction(commentId, userId, emoji) {
+  const comment = COMMENTS.get(commentId);
+  if (!comment) return { ok: false, error: "Comment not found" };
+
+  if (!comment.reactions[emoji]) comment.reactions[emoji] = [];
+  if (!comment.reactions[emoji].includes(userId)) {
+    comment.reactions[emoji].push(userId);
+  }
+  comment.updatedAt = nowISO();
+  return { ok: true, reactions: comment.reactions };
+}
+
+// ---- DTU Permissions ----
+const DTU_PERMISSIONS = new Map(); // dtuId -> { ownerId, viewers: Set, editors: Set, isPublic }
+
+function setDTUPermissions(dtuId, ownerId, permissions = {}) {
+  DTU_PERMISSIONS.set(dtuId, {
+    ownerId,
+    viewers: new Set(permissions.viewers || []),
+    editors: new Set(permissions.editors || []),
+    isPublic: permissions.isPublic || false
+  });
+  return { ok: true };
+}
+
+function checkDTUAccess(dtuId, userId, action = "view") {
+  const perms = DTU_PERMISSIONS.get(dtuId);
+  if (!perms) return { ok: true }; // No permissions set = open access
+
+  if (perms.isPublic && action === "view") return { ok: true };
+  if (perms.ownerId === userId) return { ok: true };
+
+  if (action === "view" && (perms.viewers.has(userId) || perms.editors.has(userId))) {
+    return { ok: true };
+  }
+
+  if (action === "edit" && perms.editors.has(userId)) {
+    return { ok: true };
+  }
+
+  return { ok: false, error: "Access denied" };
+}
+
+// ---- Share Links ----
+const SHARE_LINKS = new Map(); // token -> { dtuId, createdBy, createdAt, expiresAt, accessCount, maxAccess }
+
+function createShareLink(dtuId, createdBy, options = {}) {
+  const dtu = STATE.dtus.get(dtuId);
+  if (!dtu) return { ok: false, error: "DTU not found" };
+
+  const token = crypto.randomBytes(24).toString("base64url");
+  const expiresAt = options.expiresIn
+    ? new Date(Date.now() + options.expiresIn * 1000).toISOString()
+    : null;
+
+  SHARE_LINKS.set(token, {
+    dtuId,
+    createdBy,
+    createdAt: nowISO(),
+    expiresAt,
+    accessCount: 0,
+    maxAccess: options.maxAccess || null
+  });
+
+  return {
+    ok: true,
+    token,
+    url: `/shared/${token}`,
+    expiresAt
+  };
+}
+
+function accessShareLink(token) {
+  const link = SHARE_LINKS.get(token);
+  if (!link) return { ok: false, error: "Invalid link" };
+
+  // Check expiration
+  if (link.expiresAt && new Date(link.expiresAt) < new Date()) {
+    SHARE_LINKS.delete(token);
+    return { ok: false, error: "Link expired" };
+  }
+
+  // Check max access
+  if (link.maxAccess && link.accessCount >= link.maxAccess) {
+    return { ok: false, error: "Link access limit reached" };
+  }
+
+  link.accessCount++;
+
+  const dtu = STATE.dtus.get(link.dtuId);
+  if (!dtu) return { ok: false, error: "DTU not found" };
+
+  return { ok: true, dtu: dtuForClient(dtu) };
+}
+
+// ---- Activity Log ----
+const ACTIVITY_LOG = []; // { id, userId, action, targetType, targetId, details, createdAt }
+const MAX_ACTIVITY_LOG = 10000;
+
+function logActivity(userId, action, targetType, targetId, details = {}) {
+  const entry = {
+    id: uid("act"),
+    userId,
+    action,
+    targetType,
+    targetId,
+    details,
+    createdAt: nowISO()
+  };
+
+  ACTIVITY_LOG.push(entry);
+
+  // Trim old entries
+  if (ACTIVITY_LOG.length > MAX_ACTIVITY_LOG) {
+    ACTIVITY_LOG.splice(0, ACTIVITY_LOG.length - MAX_ACTIVITY_LOG);
+  }
+
+  // Broadcast activity
+  try {
+    realtimeEmit("activity:new", entry);
+  } catch {}
+
+  return entry;
+}
+
+function getActivityLog(filters = {}) {
+  let results = [...ACTIVITY_LOG];
+
+  if (filters.userId) results = results.filter(a => a.userId === filters.userId);
+  if (filters.action) results = results.filter(a => a.action === filters.action);
+  if (filters.targetType) results = results.filter(a => a.targetType === filters.targetType);
+  if (filters.targetId) results = results.filter(a => a.targetId === filters.targetId);
+  if (filters.since) results = results.filter(a => a.createdAt >= filters.since);
+
+  results.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  const limit = filters.limit || 100;
+  const offset = filters.offset || 0;
+
+  return {
+    ok: true,
+    activities: results.slice(offset, offset + limit),
+    total: results.length
+  };
+}
+
+// ---- Yjs CRDT Support (for real-time collaborative editing) ----
+// Note: Actual Yjs integration requires WebSocket server setup
+// This provides the server-side hooks and document management
+
+const YJS_DOCS = new Map(); // dtuId -> { updates: Buffer[], lastUpdate: Date }
+
+function initYjsDoc(dtuId) {
+  if (!YJS_DOCS.has(dtuId)) {
+    YJS_DOCS.set(dtuId, { updates: [], lastUpdate: null });
+  }
+  return YJS_DOCS.get(dtuId);
+}
+
+function applyYjsUpdate(dtuId, update) {
+  const doc = initYjsDoc(dtuId);
+  doc.updates.push(Buffer.from(update));
+  doc.lastUpdate = new Date();
+
+  // Broadcast update to all clients editing this DTU
+  try {
+    realtimeEmit("yjs:update", { dtuId, update: update.toString("base64") });
+  } catch {}
+
+  return { ok: true };
+}
+
+function getYjsUpdates(dtuId) {
+  const doc = YJS_DOCS.get(dtuId);
+  if (!doc) return { ok: true, updates: [] };
+  return { ok: true, updates: doc.updates.map(u => u.toString("base64")) };
+}
+
+// ============================================================================
+// END WAVE 4: COLLABORATION
+// ============================================================================
+
+// ============================================================================
+// WAVE 5: FRONTEND SUPPORT (Themes, PWA, Keyboard Config)
+// ============================================================================
+
+// ---- Theme Configuration ----
+const THEMES = {
+  dark: {
+    id: "dark",
+    name: "Dark",
+    colors: {
+      bg: "#0a0a0a",
+      surface: "#141414",
+      border: "#262626",
+      text: "#ffffff",
+      textMuted: "#a0a0a0",
+      primary: "#22d3ee",
+      secondary: "#a855f7",
+      success: "#10b981",
+      warning: "#f59e0b",
+      danger: "#ef4444"
+    }
+  },
+  light: {
+    id: "light",
+    name: "Light",
+    colors: {
+      bg: "#ffffff",
+      surface: "#f5f5f5",
+      border: "#e5e5e5",
+      text: "#0a0a0a",
+      textMuted: "#666666",
+      primary: "#0891b2",
+      secondary: "#7c3aed",
+      success: "#059669",
+      warning: "#d97706",
+      danger: "#dc2626"
+    }
+  },
+  nord: {
+    id: "nord",
+    name: "Nord",
+    colors: {
+      bg: "#2e3440",
+      surface: "#3b4252",
+      border: "#4c566a",
+      text: "#eceff4",
+      textMuted: "#d8dee9",
+      primary: "#88c0d0",
+      secondary: "#b48ead",
+      success: "#a3be8c",
+      warning: "#ebcb8b",
+      danger: "#bf616a"
+    }
+  }
+};
+
+function getTheme(themeId) {
+  return THEMES[themeId] || THEMES.dark;
+}
+
+function getAllThemes() {
+  return Object.values(THEMES);
+}
+
+// ---- Keyboard Shortcuts Configuration ----
+const DEFAULT_SHORTCUTS = {
+  "mod+k": { action: "openCommandPalette", description: "Open command palette" },
+  "mod+n": { action: "createDTU", description: "Create new DTU" },
+  "mod+s": { action: "save", description: "Save current DTU" },
+  "mod+f": { action: "search", description: "Open search" },
+  "mod+shift+f": { action: "searchAll", description: "Search all DTUs" },
+  "mod+/": { action: "toggleSlashCommands", description: "Toggle slash commands" },
+  "mod+g": { action: "openGraph", description: "Open graph view" },
+  "mod+b": { action: "toggleSidebar", description: "Toggle sidebar" },
+  "mod+shift+e": { action: "focusMode", description: "Toggle focus mode" },
+  "mod+[": { action: "goBack", description: "Go back in history" },
+  "mod+]": { action: "goForward", description: "Go forward in history" },
+  "mod+1": { action: "switchToTab1", description: "Switch to tab 1" },
+  "mod+2": { action: "switchToTab2", description: "Switch to tab 2" },
+  "mod+3": { action: "switchToTab3", description: "Switch to tab 3" },
+  "escape": { action: "closeModal", description: "Close modal/panel" },
+  "mod+shift+p": { action: "togglePreview", description: "Toggle preview" }
+};
+
+const USER_SHORTCUTS = new Map(); // userId -> { shortcutKey: action }
+
+function getShortcuts(userId = null) {
+  const userShortcuts = userId ? USER_SHORTCUTS.get(userId) : null;
+  return { ...DEFAULT_SHORTCUTS, ...(userShortcuts || {}) };
+}
+
+function setUserShortcut(userId, key, action) {
+  if (!USER_SHORTCUTS.has(userId)) {
+    USER_SHORTCUTS.set(userId, {});
+  }
+  USER_SHORTCUTS.get(userId)[key] = { action, custom: true };
+  return { ok: true };
+}
+
+// ---- PWA Manifest Generation ----
+function generatePWAManifest(options = {}) {
+  return {
+    name: options.name || "Concord",
+    short_name: options.shortName || "Concord",
+    description: options.description || "Local-first cognitive engine for thought synthesis",
+    start_url: options.startUrl || "/",
+    display: "standalone",
+    background_color: THEMES.dark.colors.bg,
+    theme_color: THEMES.dark.colors.primary,
+    icons: [
+      { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+      { src: "/icons/icon-maskable.png", sizes: "512x512", type: "image/png", purpose: "maskable" }
+    ],
+    categories: ["productivity", "utilities"],
+    orientation: "any",
+    scope: "/",
+    lang: "en",
+    dir: "ltr"
+  };
+}
+
+// ---- Service Worker Registration Helper ----
+function generateServiceWorkerConfig() {
+  return {
+    cacheName: `concord-v${VERSION}`,
+    precacheUrls: [
+      "/",
+      "/app",
+      "/offline",
+      "/manifest.json"
+    ],
+    runtimeCaching: [
+      { pattern: /\/api\/dtus/, strategy: "network-first", maxAge: 60 },
+      { pattern: /\/api\//, strategy: "network-first", maxAge: 300 },
+      { pattern: /\.(js|css|woff2)$/, strategy: "cache-first", maxAge: 86400 }
+    ]
+  };
+}
+
+// ---- Onboarding Configuration ----
+const ONBOARDING_STEPS = [
+  {
+    id: "welcome",
+    title: "Welcome to Concord",
+    description: "Your local-first cognitive engine for thought synthesis",
+    action: null
+  },
+  {
+    id: "create-first-dtu",
+    title: "Create Your First Thought",
+    description: "DTUs (Discrete Thought Units) are atomic pieces of knowledge. Create your first one!",
+    action: "createDTU"
+  },
+  {
+    id: "explore-graph",
+    title: "Explore the Graph",
+    description: "See how your thoughts connect in the interactive graph view",
+    action: "openGraph"
+  },
+  {
+    id: "use-ai",
+    title: "Get AI Assistance",
+    description: "Use the AI panel to expand, summarize, or challenge your thoughts",
+    action: "openAIPanel"
+  },
+  {
+    id: "keyboard-shortcuts",
+    title: "Learn Shortcuts",
+    description: "Press Cmd/Ctrl+K to open the command palette anytime",
+    action: "openCommandPalette"
+  }
+];
+
+function getOnboardingProgress(userId) {
+  // Track which steps user has completed
+  const key = `onboarding:${userId}`;
+  const progress = STATE.config?.[key] || { completed: [], currentStep: 0 };
+  return {
+    ok: true,
+    steps: ONBOARDING_STEPS,
+    progress,
+    isComplete: progress.completed.length >= ONBOARDING_STEPS.length
+  };
+}
+
+function completeOnboardingStep(userId, stepId) {
+  const key = `onboarding:${userId}`;
+  if (!STATE.config) STATE.config = {};
+  if (!STATE.config[key]) STATE.config[key] = { completed: [], currentStep: 0 };
+
+  if (!STATE.config[key].completed.includes(stepId)) {
+    STATE.config[key].completed.push(stepId);
+    STATE.config[key].currentStep++;
+  }
+
+  saveStateDebounced();
+  return { ok: true, progress: STATE.config[key] };
+}
+
+// ============================================================================
+// END WAVE 5: FRONTEND SUPPORT
+// ============================================================================
+
+// ============================================================================
+// WAVE 6: DEVELOPER EXPERIENCE (OpenAPI, Plugins, CLI helpers)
+// ============================================================================
+
+// ---- OpenAPI Specification Generator ----
+function generateOpenAPISpec() {
+  return {
+    openapi: "3.0.3",
+    info: {
+      title: "Concord API",
+      description: "Local-first cognitive engine API",
+      version: VERSION,
+      license: { name: "MIT" }
+    },
+    servers: [
+      { url: `http://localhost:${PORT}`, description: "Local server" }
+    ],
+    paths: {
+      "/health": {
+        get: {
+          summary: "Health check",
+          responses: { "200": { description: "Server is healthy" } }
+        }
+      },
+      "/api/dtus": {
+        get: {
+          summary: "List DTUs",
+          parameters: [
+            { name: "limit", in: "query", schema: { type: "integer", default: 50 } },
+            { name: "offset", in: "query", schema: { type: "integer", default: 0 } },
+            { name: "q", in: "query", schema: { type: "string" } }
+          ],
+          responses: { "200": { description: "List of DTUs" } }
+        },
+        post: {
+          summary: "Create DTU",
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["title"],
+                  properties: {
+                    title: { type: "string" },
+                    content: { type: "string" },
+                    tags: { type: "array", items: { type: "string" } },
+                    tier: { type: "string", enum: ["regular", "mega", "hyper"] }
+                  }
+                }
+              }
+            }
+          },
+          responses: { "201": { description: "DTU created" } }
+        }
+      },
+      "/api/dtus/{id}": {
+        get: {
+          summary: "Get DTU by ID",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "DTU details" } }
+        },
+        put: {
+          summary: "Update DTU",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "DTU updated" } }
+        },
+        delete: {
+          summary: "Delete DTU",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "DTU deleted" } }
+        }
+      },
+      "/api/search": {
+        get: {
+          summary: "Search DTUs",
+          parameters: [
+            { name: "q", in: "query", required: true, schema: { type: "string" } },
+            { name: "semantic", in: "query", schema: { type: "boolean" } }
+          ],
+          responses: { "200": { description: "Search results" } }
+        }
+      },
+      "/api/macro/{domain}/{name}": {
+        post: {
+          summary: "Execute macro",
+          parameters: [
+            { name: "domain", in: "path", required: true, schema: { type: "string" } },
+            { name: "name", in: "path", required: true, schema: { type: "string" } }
+          ],
+          responses: { "200": { description: "Macro result" } }
+        }
+      }
+    },
+    components: {
+      securitySchemes: {
+        bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "JWT" },
+        apiKey: { type: "apiKey", in: "header", name: "X-API-Key" }
+      }
+    },
+    security: [{ bearerAuth: [] }, { apiKey: [] }]
+  };
+}
+
+// ---- Plugin System ----
+const PLUGINS = new Map(); // pluginId -> { id, name, version, hooks, enabled, config }
+const PLUGIN_HOOKS = {
+  "dtu:beforeCreate": [],
+  "dtu:afterCreate": [],
+  "dtu:beforeUpdate": [],
+  "dtu:afterUpdate": [],
+  "dtu:beforeDelete": [],
+  "dtu:afterDelete": [],
+  "macro:beforeExecute": [],
+  "macro:afterExecute": [],
+  "search:beforeQuery": [],
+  "search:afterQuery": []
+};
+
+function registerPlugin(plugin) {
+  if (!plugin.id || !plugin.name) {
+    return { ok: false, error: "Plugin must have id and name" };
+  }
+
+  const registered = {
+    id: plugin.id,
+    name: plugin.name,
+    version: plugin.version || "1.0.0",
+    description: plugin.description || "",
+    author: plugin.author || "Unknown",
+    hooks: [],
+    enabled: true,
+    config: plugin.defaultConfig || {}
+  };
+
+  // Register hooks
+  for (const [hookName, handler] of Object.entries(plugin.hooks || {})) {
+    if (PLUGIN_HOOKS[hookName]) {
+      PLUGIN_HOOKS[hookName].push({ pluginId: plugin.id, handler });
+      registered.hooks.push(hookName);
+    }
+  }
+
+  PLUGINS.set(plugin.id, registered);
+  console.log(`[Plugins] Registered: ${plugin.name} v${registered.version}`);
+  return { ok: true, plugin: registered };
+}
+
+function unregisterPlugin(pluginId) {
+  const plugin = PLUGINS.get(pluginId);
+  if (!plugin) return { ok: false, error: "Plugin not found" };
+
+  // Remove hooks
+  for (const hookName of Object.keys(PLUGIN_HOOKS)) {
+    PLUGIN_HOOKS[hookName] = PLUGIN_HOOKS[hookName].filter(h => h.pluginId !== pluginId);
+  }
+
+  PLUGINS.delete(pluginId);
+  return { ok: true };
+}
+
+async function executeHook(hookName, context) {
+  const handlers = PLUGIN_HOOKS[hookName] || [];
+  let result = context;
+
+  for (const { pluginId, handler } of handlers) {
+    const plugin = PLUGINS.get(pluginId);
+    if (!plugin?.enabled) continue;
+
+    try {
+      result = await handler(result, plugin.config);
+    } catch (e) {
+      console.error(`[Plugins] Hook ${hookName} failed for ${pluginId}:`, e.message);
+    }
+  }
+
+  return result;
+}
+
+function listPlugins() {
+  return Array.from(PLUGINS.values()).map(p => ({
+    id: p.id,
+    name: p.name,
+    version: p.version,
+    description: p.description,
+    enabled: p.enabled,
+    hooks: p.hooks
+  }));
+}
+
+// ---- CLI Helpers ----
+function generateCLIHelp() {
+  return `
+Concord CLI - Local-first cognitive engine
+
+USAGE:
+  concord <command> [options]
+
+COMMANDS:
+  start             Start the server
+  backup            Create a backup
+  restore <file>    Restore from backup
+  import <file>     Import from Obsidian/Roam
+  export [--format] Export DTUs (json, markdown)
+  search <query>    Search DTUs
+  stats             Show lattice statistics
+  macro <d.n>       Execute a macro
+
+OPTIONS:
+  --port, -p        Server port (default: 5050)
+  --data-dir        Data directory
+  --auth            Enable authentication
+  --help, -h        Show help
+
+EXAMPLES:
+  concord start --port 3000
+  concord backup
+  concord import ./vault --format obsidian
+  concord search "neural networks"
+  concord macro dtu.list --limit 10
+`.trim();
+}
+
+function getCLIStats() {
+  return {
+    version: VERSION,
+    dtus: STATE.dtus.size,
+    shadowDtus: STATE.shadowDtus.size,
+    sessions: STATE.sessions.size,
+    macros: Array.from(MACROS.entries()).reduce((acc, [, m]) => acc + m.size, 0),
+    plugins: PLUGINS.size,
+    embeddings: EMBEDDINGS.store.size,
+    uptime: process.uptime()
+  };
+}
+
+// ============================================================================
+// END WAVE 6: DEVELOPER EXPERIENCE
+// ============================================================================
+
+// ============================================================================
+// WAVE 7: DIFFERENTIATORS (Thought Replay, Lattice Diff, Public Lattice, Debate)
+// ============================================================================
+
+// ---- Thought Replay (Temporal Navigation) ----
+const THOUGHT_TIMELINE = []; // { timestamp, dtuId, action, snapshot }
+const MAX_TIMELINE_ENTRIES = 5000;
+
+function recordThoughtEvent(dtuId, action, snapshot = null) {
+  THOUGHT_TIMELINE.push({
+    id: uid("evt"),
+    timestamp: nowISO(),
+    dtuId,
+    action, // created, updated, deleted, connected, promoted
+    snapshot: snapshot ? { title: snapshot.title, tier: snapshot.tier, tags: [...(snapshot.tags || [])] } : null
+  });
+
+  if (THOUGHT_TIMELINE.length > MAX_TIMELINE_ENTRIES) {
+    THOUGHT_TIMELINE.splice(0, THOUGHT_TIMELINE.length - MAX_TIMELINE_ENTRIES);
+  }
+}
+
+function getThoughtTimeline(filters = {}) {
+  let events = [...THOUGHT_TIMELINE];
+
+  if (filters.dtuId) events = events.filter(e => e.dtuId === filters.dtuId);
+  if (filters.action) events = events.filter(e => e.action === filters.action);
+  if (filters.since) events = events.filter(e => e.timestamp >= filters.since);
+  if (filters.until) events = events.filter(e => e.timestamp <= filters.until);
+
+  events.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+
+  const limit = filters.limit || 100;
+  return { ok: true, events: events.slice(0, limit), total: events.length };
+}
+
+function replayThoughtsAt(timestamp) {
+  // Reconstruct lattice state at a given timestamp
+  // Returns list of DTUs that existed at that time
+  const dtusAtTime = new Map();
+
+  for (const event of THOUGHT_TIMELINE) {
+    if (event.timestamp > timestamp) break;
+
+    if (event.action === "created" && event.snapshot) {
+      dtusAtTime.set(event.dtuId, event.snapshot);
+    } else if (event.action === "updated" && event.snapshot) {
+      dtusAtTime.set(event.dtuId, event.snapshot);
+    } else if (event.action === "deleted") {
+      dtusAtTime.delete(event.dtuId);
+    }
+  }
+
+  return {
+    ok: true,
+    timestamp,
+    dtus: Array.from(dtusAtTime.entries()).map(([id, snap]) => ({ id, ...snap })),
+    count: dtusAtTime.size
+  };
+}
+
+// ---- Lattice Diffing ----
+function diffLattices(timestampA, timestampB) {
+  const stateA = replayThoughtsAt(timestampA);
+  const stateB = replayThoughtsAt(timestampB);
+
+  const idsA = new Set(stateA.dtus.map(d => d.id));
+  const idsB = new Set(stateB.dtus.map(d => d.id));
+
+  const added = stateB.dtus.filter(d => !idsA.has(d.id));
+  const removed = stateA.dtus.filter(d => !idsB.has(d.id));
+  const modified = [];
+
+  for (const dtuB of stateB.dtus) {
+    if (idsA.has(dtuB.id)) {
+      const dtuA = stateA.dtus.find(d => d.id === dtuB.id);
+      if (dtuA && (dtuA.title !== dtuB.title || dtuA.tier !== dtuB.tier)) {
+        modified.push({ before: dtuA, after: dtuB });
+      }
+    }
+  }
+
+  return {
+    ok: true,
+    from: timestampA,
+    to: timestampB,
+    added: added.length,
+    removed: removed.length,
+    modified: modified.length,
+    changes: { added, removed, modified }
+  };
+}
+
+// ---- Public Lattice (Blog/Wiki Publishing) ----
+const PUBLIC_LATTICE = {
+  enabled: false,
+  publishedDTUs: new Set(), // dtuIds that are publicly visible
+  customDomain: null,
+  settings: {
+    allowComments: false,
+    showGraph: true,
+    theme: "dark"
+  }
+};
+
+function publishDTU(dtuId) {
+  const dtu = STATE.dtus.get(dtuId);
+  if (!dtu) return { ok: false, error: "DTU not found" };
+
+  PUBLIC_LATTICE.publishedDTUs.add(dtuId);
+  PUBLIC_LATTICE.enabled = true;
+
+  return {
+    ok: true,
+    publicUrl: `/public/${dtuId}`,
+    dtuId
+  };
+}
+
+function unpublishDTU(dtuId) {
+  PUBLIC_LATTICE.publishedDTUs.delete(dtuId);
+  return { ok: true };
+}
+
+function getPublicDTU(dtuId) {
+  if (!PUBLIC_LATTICE.publishedDTUs.has(dtuId)) {
+    return { ok: false, error: "Not published" };
+  }
+
+  const dtu = STATE.dtus.get(dtuId);
+  if (!dtu) return { ok: false, error: "DTU not found" };
+
+  // Return sanitized public view
+  return {
+    ok: true,
+    dtu: {
+      id: dtu.id,
+      title: dtu.title,
+      content: dtu.content,
+      tags: dtu.tags,
+      tier: dtu.tier,
+      createdAt: dtu.createdAt,
+      updatedAt: dtu.updatedAt
+    }
+  };
+}
+
+function listPublicDTUs() {
+  const dtus = Array.from(PUBLIC_LATTICE.publishedDTUs)
+    .map(id => STATE.dtus.get(id))
+    .filter(Boolean)
+    .map(d => ({ id: d.id, title: d.title, tier: d.tier, updatedAt: d.updatedAt }));
+
+  return { ok: true, dtus, count: dtus.length };
+}
+
+function generatePublicFeed() {
+  // Generate RSS/Atom feed for public lattice
+  const dtus = Array.from(PUBLIC_LATTICE.publishedDTUs)
+    .map(id => STATE.dtus.get(id))
+    .filter(Boolean)
+    .sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""))
+    .slice(0, 20);
+
+  const items = dtus.map(d => `
+    <item>
+      <title>${escapeXml(d.title)}</title>
+      <link>/public/${d.id}</link>
+      <description>${escapeXml((d.content || "").slice(0, 500))}</description>
+      <pubDate>${new Date(d.createdAt).toUTCString()}</pubDate>
+      <guid>/public/${d.id}</guid>
+    </item>
+  `).join("\n");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Concord Public Lattice</title>
+    <description>Public thoughts from Concord</description>
+    <link>/public</link>
+    <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
+    ${items}
+  </channel>
+</rss>`;
+}
+
+function escapeXml(str) {
+  return String(str || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+// ---- Debate Mode (AI Challenges Your Thoughts) ----
+async function debateThought(dtuId, options = {}) {
+  const dtu = STATE.dtus.get(dtuId);
+  if (!dtu) return { ok: false, error: "DTU not found" };
+
+  if (!LLM_READY) {
+    return {
+      ok: true,
+      challenges: [
+        "What evidence supports this claim?",
+        "Are there alternative explanations?",
+        "What assumptions are being made?",
+        "How could this be falsified?",
+        "What are the strongest counterarguments?"
+      ],
+      method: "template"
+    };
+  }
+
+  const prompt = `You are a Socratic debate partner. Your role is to challenge the following thought with rigorous but constructive questions and counterarguments.
+
+THOUGHT:
+Title: ${dtu.title}
+Content: ${dtu.content || "(no content)"}
+Tags: ${(dtu.tags || []).join(", ")}
+
+Generate 3-5 challenging questions or counterarguments that would help strengthen this thought. Be specific and reference the actual content. Format as a JSON array of strings.
+
+Respond with valid JSON only: ["challenge1", "challenge2", ...]`;
+
+  try {
+    const response = await llmChat([{ role: "user", content: prompt }], {
+      model: OPENAI_MODEL_FAST,
+      temperature: 0.8,
+      max_tokens: 500
+    });
+
+    const text = response?.choices?.[0]?.message?.content || "";
+    const jsonMatch = text.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      const challenges = JSON.parse(jsonMatch[0]);
+      return { ok: true, challenges, method: "llm" };
+    }
+
+    return { ok: false, error: "Failed to parse response" };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+}
+
+// ---- Steelman Mode (AI Strengthens Your Thoughts) ----
+async function steelmanThought(dtuId) {
+  const dtu = STATE.dtus.get(dtuId);
+  if (!dtu) return { ok: false, error: "DTU not found" };
+
+  if (!LLM_READY) {
+    return {
+      ok: true,
+      suggestions: [
+        "Add supporting evidence or citations",
+        "Clarify the main claim",
+        "Address potential counterarguments",
+        "Connect to related concepts",
+        "Add practical implications"
+      ],
+      method: "template"
+    };
+  }
+
+  const prompt = `You are helping strengthen and improve a thought. Suggest specific improvements that would make the argument more rigorous, complete, and compelling.
+
+THOUGHT:
+Title: ${dtu.title}
+Content: ${dtu.content || "(no content)"}
+
+Generate 3-5 specific, actionable suggestions to strengthen this thought. Be concrete and reference the actual content. Format as JSON array.
+
+Respond with valid JSON only: ["suggestion1", "suggestion2", ...]`;
+
+  try {
+    const response = await llmChat([{ role: "user", content: prompt }], {
+      model: OPENAI_MODEL_FAST,
+      temperature: 0.7,
+      max_tokens: 500
+    });
+
+    const text = response?.choices?.[0]?.message?.content || "";
+    const jsonMatch = text.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      return { ok: true, suggestions: JSON.parse(jsonMatch[0]), method: "llm" };
+    }
+
+    return { ok: false, error: "Failed to parse response" };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+}
+
+// ============================================================================
+// END WAVE 7: DIFFERENTIATORS
+// ============================================================================
 
 // ===================== ORGANISM PIPELINE UPGRADE (Merged Organ Graft) =====================
 // This graft adds: proposals + WAL + snapshot rollback + deterministic verifier + enforced commits.
@@ -6586,6 +8994,190 @@ register("harness", "run", async (ctx, input={}) => {
 // ===== END CHICKEN2 MACROS =====
 const app = express();
 
+// ---- Production Middleware ----
+if (helmet) app.use(helmet({ contentSecurityPolicy: false })); // Security headers
+if (compression) app.use(compression()); // Gzip compression
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+app.use(cors());
+if (rateLimiter) app.use(rateLimiter);
+app.use(metricsMiddleware);
+app.use(authMiddleware);
+
+// ---- Health & Readiness Endpoints ----
+app.get("/health", (req, res) => {
+  res.json({
+    status: "healthy",
+    version: VERSION,
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.get("/ready", (req, res) => {
+  const checks = {
+    state: STATE.dtus !== null,
+    macros: MACROS.size > 0
+  };
+  const ready = Object.values(checks).every(Boolean);
+  res.status(ready ? 200 : 503).json({
+    ready,
+    checks,
+    version: VERSION
+  });
+});
+
+app.get("/metrics", async (req, res) => {
+  if (!METRICS.enabled || !METRICS.registry) {
+    return res.status(501).json({ ok: false, error: "Metrics not enabled" });
+  }
+  try {
+    res.set("Content-Type", METRICS.registry.contentType);
+    res.end(await METRICS.registry.metrics());
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e.message) });
+  }
+});
+
+// ---- Auth Endpoints ----
+app.post("/api/auth/register", validate("userRegister"), async (req, res) => {
+  const { username, email, password } = req.validated || req.body;
+
+  // Check if registration is allowed
+  if (String(process.env.ALLOW_REGISTRATION || "true").toLowerCase() !== "true") {
+    return res.status(403).json({ ok: false, error: "Registration disabled" });
+  }
+
+  // Check for existing user
+  for (const [, user] of AUTH.users) {
+    if (user.username === username) return res.status(409).json({ ok: false, error: "Username taken" });
+    if (user.email === email) return res.status(409).json({ ok: false, error: "Email taken" });
+  }
+
+  const userId = crypto.randomUUID();
+  const user = {
+    id: userId,
+    username,
+    email,
+    passwordHash: hashPassword(password),
+    role: AUTH.users.size === 0 ? "owner" : "member",
+    scopes: AUTH.users.size === 0 ? ["*"] : ["read", "write"],
+    createdAt: new Date().toISOString(),
+    lastLoginAt: null
+  };
+
+  AUTH.users.set(userId, user);
+  saveAuthData();
+
+  const token = createToken(userId);
+  res.status(201).json({
+    ok: true,
+    user: { id: userId, username, email, role: user.role },
+    token
+  });
+});
+
+app.post("/api/auth/login", validate("userLogin"), async (req, res) => {
+  const { username, email, password } = req.validated || req.body;
+
+  let user = null;
+  for (const [, u] of AUTH.users) {
+    if ((username && u.username === username) || (email && u.email === email)) {
+      user = u;
+      break;
+    }
+  }
+
+  if (!user || !verifyPassword(password, user.passwordHash)) {
+    return res.status(401).json({ ok: false, error: "Invalid credentials" });
+  }
+
+  user.lastLoginAt = new Date().toISOString();
+  saveAuthData();
+
+  const token = createToken(user.id);
+  res.json({
+    ok: true,
+    user: { id: user.id, username: user.username, email: user.email, role: user.role },
+    token
+  });
+});
+
+app.get("/api/auth/me", (req, res) => {
+  if (!req.user) return res.status(401).json({ ok: false, error: "Not authenticated" });
+  res.json({
+    ok: true,
+    user: {
+      id: req.user.id,
+      username: req.user.username,
+      email: req.user.email,
+      role: req.user.role,
+      scopes: req.user.scopes
+    }
+  });
+});
+
+app.post("/api/auth/api-keys", requireRole("owner", "admin"), validate("apiKeyCreate"), async (req, res) => {
+  const { name, scopes } = req.validated || req.body;
+  const apiKey = generateApiKey();
+
+  AUTH.apiKeys.set(apiKey, {
+    userId: req.user.id,
+    name,
+    scopes,
+    createdAt: new Date().toISOString(),
+    lastUsedAt: null
+  });
+  saveAuthData();
+
+  res.status(201).json({ ok: true, apiKey, name, scopes });
+});
+
+app.get("/api/auth/api-keys", (req, res) => {
+  if (!req.user) return res.status(401).json({ ok: false, error: "Not authenticated" });
+
+  const keys = [];
+  for (const [key, data] of AUTH.apiKeys) {
+    if (data.userId === req.user.id || req.user.role === "owner") {
+      keys.push({
+        key: key.slice(0, 8) + "..." + key.slice(-4),
+        name: data.name,
+        scopes: data.scopes,
+        createdAt: data.createdAt,
+        lastUsedAt: data.lastUsedAt
+      });
+    }
+  }
+  res.json({ ok: true, apiKeys: keys });
+});
+
+app.delete("/api/auth/api-keys/:key", (req, res) => {
+  const keyPrefix = req.params.key;
+  for (const [key, data] of AUTH.apiKeys) {
+    if (key.startsWith(keyPrefix) && (data.userId === req.user?.id || req.user?.role === "owner")) {
+      AUTH.apiKeys.delete(key);
+      saveAuthData();
+      return res.json({ ok: true });
+    }
+  }
+  res.status(404).json({ ok: false, error: "API key not found" });
+});
+
+// ---- Backup Endpoints ----
+app.post("/api/backup", requireRole("owner", "admin"), async (req, res) => {
+  const result = await createBackup(req.body.name);
+  res.json(result);
+});
+
+app.get("/api/backups", requireRole("owner", "admin"), (req, res) => {
+  res.json(listBackups());
+});
+
+app.post("/api/backup/restore", requireRole("owner"), async (req, res) => {
+  const result = await restoreBackup(req.body.path || req.body.name);
+  res.json(result);
+});
+
 // ---- UI Response Contract (prevents raw JSON dumps to frontend) ----
 function _extractReply(out) {
   if (!out) return "";
@@ -10612,7 +13204,355 @@ setTimeout(async () => {
 console.log("[Concord] Wave 9: Database Integrations loaded");
 
 // ============================================================================
-// END CONCORD ENHANCEMENTS v4.0 - ALL WAVES COMPLETE
+// WAVE 10: NEW API ENDPOINTS (Waves 1-7 Feature APIs)
+// ============================================================================
+
+// ---- Wave 2: Version History Endpoints ----
+app.get("/api/dtus/:id/versions", async (req, res) => {
+  const versions = getDTUVersions(req.params.id);
+  res.json({ ok: true, versions });
+});
+
+app.post("/api/dtus/:id/restore", async (req, res) => {
+  const result = restoreDTUVersion(req.params.id, Number(req.body.version));
+  res.json(result);
+});
+
+// ---- Wave 2: Templates Endpoints ----
+app.get("/api/templates", (req, res) => {
+  res.json({ ok: true, templates: Array.from(TEMPLATES.values()) });
+});
+
+app.post("/api/templates/:id/create", async (req, res) => {
+  const result = createFromTemplate(req.params.id, req.body);
+  if (!result.ok) return res.status(404).json(result);
+
+  // Actually create the DTU
+  const ctx = makeCtx(req);
+  const dtuResult = await runMacro("dtu", "create", result.dtu, ctx);
+  res.json(dtuResult);
+});
+
+// ---- Wave 2: Import/Export Endpoints ----
+app.post("/api/import/obsidian", async (req, res) => {
+  const result = importFromObsidian(req.body.files || []);
+  res.json(result);
+});
+
+app.post("/api/import/roam", async (req, res) => {
+  const result = importFromRoam(req.body.data || req.body);
+  res.json(result);
+});
+
+app.get("/api/export/markdown", (req, res) => {
+  const ids = req.query.ids ? req.query.ids.split(",") : null;
+  const result = exportDTUsToMarkdown(ids);
+  if (req.query.download === "1") {
+    res.set("Content-Type", "text/markdown");
+    res.set("Content-Disposition", "attachment; filename=concord-export.md");
+    return res.send(result.markdown);
+  }
+  res.json(result);
+});
+
+app.get("/api/export/json", (req, res) => {
+  const ids = req.query.ids ? req.query.ids.split(",") : null;
+  const result = exportDTUsToJSON(ids);
+  if (req.query.download === "1") {
+    res.set("Content-Disposition", "attachment; filename=concord-export.json");
+  }
+  res.json(result);
+});
+
+// ---- Wave 2: Query Endpoint ----
+app.post("/api/query", (req, res) => {
+  const result = queryDTUsAdvanced(req.body.query || "");
+  res.json(result);
+});
+
+// ---- Wave 3: AI Endpoints ----
+app.get("/api/ai/embeddings/status", (req, res) => {
+  res.json({
+    ok: true,
+    enabled: EMBEDDINGS.enabled,
+    indexed: EMBEDDINGS.store.size,
+    dim: EMBEDDINGS.dim
+  });
+});
+
+app.post("/api/ai/embeddings/rebuild", async (req, res) => {
+  const result = await rebuildEmbeddingIndex();
+  res.json(result);
+});
+
+app.get("/api/ai/search", async (req, res) => {
+  const result = await semanticSearch(req.query.q || "", {
+    limit: Number(req.query.limit || 10),
+    minScore: Number(req.query.minScore || 0.3)
+  });
+  res.json(result);
+});
+
+app.get("/api/dtus/:id/suggestions", async (req, res) => {
+  const result = await suggestConnections(req.params.id, { limit: Number(req.query.limit || 5) });
+  res.json(result);
+});
+
+app.post("/api/ai/creti", async (req, res) => {
+  const result = await generateCRETI(req.body, makeCtx(req));
+  res.json(result);
+});
+
+app.get("/api/dtus/:id/contradictions", async (req, res) => {
+  const result = await detectContradictions(req.params.id);
+  res.json(result);
+});
+
+app.get("/api/ai/gaps", async (req, res) => {
+  const result = await analyzeKnowledgeGaps(req.query.domain);
+  res.json(result);
+});
+
+app.post("/api/ai/chat", async (req, res) => {
+  const result = await chatWithLattice(req.body.query || req.body.message, {
+    contextLimit: Number(req.body.contextLimit || 5)
+  });
+  res.json(result);
+});
+
+// ---- Wave 3: SRS Endpoints ----
+app.get("/api/srs/due", (req, res) => {
+  const result = getDueCards(Number(req.query.limit || 20));
+  res.json(result);
+});
+
+app.post("/api/srs/:dtuId/add", (req, res) => {
+  const result = addToSRS(req.params.dtuId);
+  res.json(result);
+});
+
+app.post("/api/srs/:dtuId/review", (req, res) => {
+  const result = reviewSRSCard(req.params.dtuId, Number(req.body.quality));
+  res.json(result);
+});
+
+// ---- Wave 4: Workspace Endpoints ----
+app.post("/api/workspaces", (req, res) => {
+  const userId = req.user?.id || "anonymous";
+  const result = createWorkspace(userId, req.body.name, req.body.description);
+  res.json(result);
+});
+
+app.get("/api/workspaces", (req, res) => {
+  const userId = req.user?.id;
+  const workspaces = Array.from(WORKSPACES.values())
+    .filter(ws => !userId || ws.members.has(userId))
+    .map(workspaceForClient);
+  res.json({ ok: true, workspaces });
+});
+
+app.get("/api/workspaces/:id", (req, res) => {
+  const ws = WORKSPACES.get(req.params.id);
+  if (!ws) return res.status(404).json({ ok: false, error: "Workspace not found" });
+  res.json({ ok: true, workspace: workspaceForClient(ws) });
+});
+
+app.get("/api/workspaces/:id/dtus", (req, res) => {
+  const result = getWorkspaceDTUs(req.params.id);
+  res.json(result);
+});
+
+app.post("/api/workspaces/:id/dtus", (req, res) => {
+  const result = addDTUToWorkspace(req.params.id, req.body.dtuId);
+  res.json(result);
+});
+
+app.post("/api/workspaces/:id/members", (req, res) => {
+  const result = addWorkspaceMember(req.params.id, req.body.userId, req.body.role);
+  res.json(result);
+});
+
+// ---- Wave 4: Comments Endpoints ----
+app.get("/api/dtus/:id/comments", (req, res) => {
+  const result = getComments(req.params.id);
+  res.json(result);
+});
+
+app.post("/api/dtus/:id/comments", (req, res) => {
+  const userId = req.user?.id || "anonymous";
+  const result = addComment(req.params.id, userId, req.body.content, req.body.parentId);
+  res.json(result);
+});
+
+app.post("/api/comments/:id/resolve", (req, res) => {
+  const result = resolveComment(req.params.id, req.body.resolved !== false);
+  res.json(result);
+});
+
+app.post("/api/comments/:id/react", (req, res) => {
+  const userId = req.user?.id || "anonymous";
+  const result = addReaction(req.params.id, userId, req.body.emoji);
+  res.json(result);
+});
+
+// ---- Wave 4: Share Links Endpoints ----
+app.post("/api/dtus/:id/share", (req, res) => {
+  const userId = req.user?.id || "anonymous";
+  const result = createShareLink(req.params.id, userId, req.body);
+  res.json(result);
+});
+
+app.get("/api/shared/:token", (req, res) => {
+  const result = accessShareLink(req.params.token);
+  if (!result.ok) return res.status(404).json(result);
+  res.json(result);
+});
+
+// ---- Wave 4: Activity Log ----
+app.get("/api/activity", (req, res) => {
+  const result = getActivityLog({
+    userId: req.query.userId,
+    action: req.query.action,
+    targetType: req.query.targetType,
+    limit: Number(req.query.limit || 100),
+    offset: Number(req.query.offset || 0)
+  });
+  res.json(result);
+});
+
+// ---- Wave 5: Frontend Config Endpoints ----
+app.get("/api/config/themes", (req, res) => {
+  res.json({ ok: true, themes: getAllThemes() });
+});
+
+app.get("/api/config/theme/:id", (req, res) => {
+  res.json({ ok: true, theme: getTheme(req.params.id) });
+});
+
+app.get("/api/config/shortcuts", (req, res) => {
+  const userId = req.user?.id;
+  res.json({ ok: true, shortcuts: getShortcuts(userId) });
+});
+
+app.put("/api/config/shortcuts", (req, res) => {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ ok: false, error: "Auth required" });
+  const result = setUserShortcut(userId, req.body.key, req.body.action);
+  res.json(result);
+});
+
+app.get("/api/manifest.json", (req, res) => {
+  res.json(generatePWAManifest(req.query));
+});
+
+app.get("/api/sw-config", (req, res) => {
+  res.json(generateServiceWorkerConfig());
+});
+
+app.get("/api/onboarding", (req, res) => {
+  const userId = req.user?.id || req.query.userId || "anonymous";
+  res.json(getOnboardingProgress(userId));
+});
+
+app.post("/api/onboarding/complete", (req, res) => {
+  const userId = req.user?.id || req.body.userId || "anonymous";
+  const result = completeOnboardingStep(userId, req.body.stepId);
+  res.json(result);
+});
+
+// ---- Wave 6: Developer Endpoints ----
+app.get("/api/docs", (req, res) => {
+  res.json(generateOpenAPISpec());
+});
+
+app.get("/api/docs/openapi.json", (req, res) => {
+  res.json(generateOpenAPISpec());
+});
+
+app.get("/api/plugins", (req, res) => {
+  res.json({ ok: true, plugins: listPlugins() });
+});
+
+app.post("/api/plugins", requireRole("owner", "admin"), (req, res) => {
+  const result = registerPlugin(req.body);
+  res.json(result);
+});
+
+app.delete("/api/plugins/:id", requireRole("owner", "admin"), (req, res) => {
+  const result = unregisterPlugin(req.params.id);
+  res.json(result);
+});
+
+app.get("/api/cli/help", (req, res) => {
+  res.type("text/plain").send(generateCLIHelp());
+});
+
+app.get("/api/cli/stats", (req, res) => {
+  res.json({ ok: true, stats: getCLIStats() });
+});
+
+// ---- Wave 7: Timeline/Replay Endpoints ----
+app.get("/api/timeline", (req, res) => {
+  const result = getThoughtTimeline({
+    dtuId: req.query.dtuId,
+    action: req.query.action,
+    since: req.query.since,
+    until: req.query.until,
+    limit: Number(req.query.limit || 100)
+  });
+  res.json(result);
+});
+
+app.get("/api/timeline/replay", (req, res) => {
+  const result = replayThoughtsAt(req.query.timestamp || new Date().toISOString());
+  res.json(result);
+});
+
+app.get("/api/timeline/diff", (req, res) => {
+  const result = diffLattices(req.query.from, req.query.to);
+  res.json(result);
+});
+
+// ---- Wave 7: Public Lattice Endpoints ----
+app.post("/api/dtus/:id/publish", requireRole("owner", "admin", "editor"), (req, res) => {
+  const result = publishDTU(req.params.id);
+  res.json(result);
+});
+
+app.delete("/api/dtus/:id/publish", requireRole("owner", "admin", "editor"), (req, res) => {
+  const result = unpublishDTU(req.params.id);
+  res.json(result);
+});
+
+app.get("/api/public", (req, res) => {
+  res.json(listPublicDTUs());
+});
+
+app.get("/api/public/:id", (req, res) => {
+  const result = getPublicDTU(req.params.id);
+  if (!result.ok) return res.status(404).json(result);
+  res.json(result);
+});
+
+app.get("/api/public/feed.xml", (req, res) => {
+  res.type("application/rss+xml").send(generatePublicFeed());
+});
+
+// ---- Wave 7: Debate/Steelman Endpoints ----
+app.post("/api/dtus/:id/debate", async (req, res) => {
+  const result = await debateThought(req.params.id, req.body);
+  res.json(result);
+});
+
+app.post("/api/dtus/:id/steelman", async (req, res) => {
+  const result = await steelmanThought(req.params.id);
+  res.json(result);
+});
+
+console.log("[Concord] Wave 10: New Feature APIs loaded");
+
+// ============================================================================
+// END CONCORD ENHANCEMENTS v5.0 - ALL WAVES COMPLETE
 // ============================================================================
 
 const SHOULD_LISTEN = (String(process.env.CONCORD_NO_LISTEN || "").toLowerCase() !== "true") && (String(process.env.NODE_ENV || "").toLowerCase() !== "test");
