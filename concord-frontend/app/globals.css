@@ -337,3 +337,88 @@
 .animate-pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
 .animate-resonance-wave { animation: resonance-wave 3s ease-in-out infinite; }
 .animate-spin-slow { animation: spin-slow 3s linear infinite; }
+
+/* Page Transitions */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slide-in-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.animate-fade-in { animation: fade-in 0.3s ease-out; }
+.animate-slide-in-right { animation: slide-in-right 0.3s ease-out; }
+.animate-slide-in-up { animation: slide-in-up 0.3s ease-out; }
+.animate-scale-in { animation: scale-in 0.2s ease-out; }
+
+/* Stagger animations for lists */
+.stagger-1 { animation-delay: 50ms; }
+.stagger-2 { animation-delay: 100ms; }
+.stagger-3 { animation-delay: 150ms; }
+.stagger-4 { animation-delay: 200ms; }
+.stagger-5 { animation-delay: 250ms; }
+.stagger-6 { animation-delay: 300ms; }
+
+/* Focus visible styles for accessibility */
+:focus-visible {
+  @apply outline-none ring-2 ring-neon-cyan ring-offset-2 ring-offset-lattice-void;
+}
+
+/* Better button focus */
+button:focus-visible,
+a:focus-visible {
+  @apply outline-none ring-2 ring-neon-cyan/50 ring-offset-2 ring-offset-lattice-void;
+}
+
+/* Smooth transitions for interactive elements */
+button, a, input, textarea, select {
+  @apply transition-all duration-200;
+}
+
+/* Mobile touch feedback */
+@media (hover: none) {
+  button:active,
+  a:active {
+    @apply opacity-70;
+  }
+}
+
+/* Improved skeleton loading */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--lattice-surface) 0%,
+    var(--lattice-elevated) 50%,
+    var(--lattice-surface) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* Safe area padding for mobile devices */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top);
+  }
+}

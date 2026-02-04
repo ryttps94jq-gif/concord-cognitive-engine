@@ -1,0 +1,52 @@
+# Initial HTTP-only configuration
+# Use this BEFORE obtaining SSL certificates
+#
+# Steps:
+# 1. Rename this file to default.conf
+# 2. Run: docker-compose up -d nginx
+# 3. Get certificates: docker-compose run --rm certbot certonly --webroot -w /var/www/certbot -d yourdomain.com
+# 4. Replace with the full default.conf (with SSL)
+# 5. Restart: docker-compose restart nginx
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name yourdomain.com;  # CHANGE THIS to your domain
+
+    # Let's Encrypt ACME challenge
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    # API proxy
+    location /api/ {
+        proxy_pass http://backend;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Socket.io
+    location /socket.io/ {
+        proxy_pass http://backend;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    # Frontend
+    location / {
+        proxy_pass http://frontend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
