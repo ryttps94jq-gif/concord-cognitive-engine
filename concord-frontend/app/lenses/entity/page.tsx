@@ -4,7 +4,7 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { useState } from 'react';
-import { Users, Plus, Terminal, GitFork, Activity, Shield } from 'lucide-react';
+import { Users, Plus, Terminal, GitFork, Activity, Shield, Play } from 'lucide-react';
 
 interface Entity {
   id: string;
@@ -23,24 +23,62 @@ export default function EntityLensPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [newEntityName, setNewEntityName] = useState('');
   const [newEntityType, setNewEntityType] = useState<Entity['type']>('worker');
+  const [terminalEntity, setTerminalEntity] = useState<string | null>(null);
+  const [terminalCommand, setTerminalCommand] = useState('');
+  const [terminalOutput, setTerminalOutput] = useState<string[]>([]);
 
-  // Mock entities (would come from entity terminal registry)
-  const entities: Entity[] = [
-    { id: 'e-001', name: 'Alpha Worker', type: 'worker', status: 'active', workspace: 'main', forks: 3, createdAt: '2026-01-15', lastActive: new Date().toISOString() },
-    { id: 'e-002', name: 'Research Prime', type: 'researcher', status: 'active', workspace: 'research-lab', forks: 7, createdAt: '2026-01-20', lastActive: new Date().toISOString() },
-    { id: 'e-003', name: 'Guardian One', type: 'guardian', status: 'idle', workspace: 'security', forks: 1, createdAt: '2026-01-22', lastActive: '2026-01-31T10:00:00Z' },
-    { id: 'e-004', name: 'Architect Zero', type: 'architect', status: 'active', workspace: 'core', forks: 12, createdAt: '2026-01-10', lastActive: new Date().toISOString() },
-  ];
+  // Fetch entities from backend
+  const { data: entitiesData, isLoading } = useQuery({
+    queryKey: ['entities'],
+    queryFn: async () => {
+      const res = await api.get('/api/entities');
+      return res.data;
+    },
+  });
+
+  const entities: Entity[] = entitiesData?.entities || [];
 
   const createEntity = useMutation({
     mutationFn: async (data: { name: string; type: string }) => {
-      // Would call entity_terminal macro to register
-      return { ok: true, id: `e-${Date.now()}` };
+      const res = await api.post('/api/entities', data);
+      return res.data;
     },
     onSuccess: () => {
       setShowCreate(false);
       setNewEntityName('');
       queryClient.invalidateQueries({ queryKey: ['entities'] });
+    },
+  });
+
+  const forkEntity = useMutation({
+    mutationFn: async (entityId: string) => {
+      const res = await api.post(`/api/entities/${entityId}/fork`);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['entities'] });
+    },
+  });
+
+  const executeTerminal = useMutation({
+    mutationFn: async (data: { entityId: string; command: string }) => {
+      const res = await api.post('/api/entity/terminal', data);
+      return res.data;
+    },
+    onSuccess: (data) => {
+      setTerminalOutput(prev => [
+        ...prev,
+        `$ ${terminalCommand}`,
+        data.output || data.error || JSON.stringify(data)
+      ]);
+      setTerminalCommand('');
+    },
+    onError: (err: any) => {
+      setTerminalOutput(prev => [
+        ...prev,
+        `$ ${terminalCommand}`,
+        `Error: ${err.message || 'Command failed'}`
+      ]);
     },
   });
 
@@ -65,7 +103,7 @@ export default function EntityLensPage() {
           <div>
             <h1 className="text-xl font-bold">Entity Lens</h1>
             <p className="text-sm text-gray-400">
-              Create and manage swarm entities with workspaces
+              Create and manage swarm entities with terminal access
             </p>
           </div>
         </div>
@@ -117,6 +155,61 @@ export default function EntityLensPage() {
         </div>
       )}
 
+      {/* Terminal Modal */}
+      {terminalEntity && (
+        <div className="panel p-4 space-y-4 border-2 border-neon-cyan">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold flex items-center gap-2">
+              <Terminal className="w-4 h-4 text-neon-cyan" />
+              Terminal: {entities.find(e => e.id === terminalEntity)?.name}
+            </h3>
+            <button
+              onClick={() => {
+                setTerminalEntity(null);
+                setTerminalOutput([]);
+              }}
+              className="text-gray-400 hover:text-white"
+            >
+              X
+            </button>
+          </div>
+          <div className="bg-black rounded p-3 h-48 overflow-y-auto font-mono text-sm text-neon-green">
+            {terminalOutput.length === 0 ? (
+              <p className="text-gray-500">Terminal ready. Entity has council-gated access to system commands.</p>
+            ) : (
+              terminalOutput.map((line, i) => (
+                <div key={i} className={line.startsWith('$') ? 'text-white' : ''}>{line}</div>
+              ))
+            )}
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={terminalCommand}
+              onChange={(e) => setTerminalCommand(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && terminalCommand.trim()) {
+                  executeTerminal.mutate({ entityId: terminalEntity, command: terminalCommand });
+                }
+              }}
+              placeholder="Enter command..."
+              className="input-lattice flex-1 font-mono"
+            />
+            <button
+              onClick={() => {
+                if (terminalCommand.trim()) {
+                  executeTerminal.mutate({ entityId: terminalEntity, command: terminalCommand });
+                }
+              }}
+              disabled={!terminalCommand.trim() || executeTerminal.isPending}
+              className="btn-neon cyan"
+            >
+              <Play className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="lens-card">
@@ -147,46 +240,59 @@ export default function EntityLensPage() {
           <Users className="w-4 h-4 text-neon-blue" />
           Entity Registry
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {entities.map((entity) => (
-            <div key={entity.id} className="lens-card">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h3 className="font-semibold">{entity.name}</h3>
-                  <p className="text-xs text-gray-500 font-mono">{entity.id}</p>
+        {isLoading ? (
+          <p className="text-gray-400">Loading entities...</p>
+        ) : entities.length === 0 ? (
+          <p className="text-gray-400">No entities spawned yet. Click "Spawn Entity" to create one.</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {entities.map((entity) => (
+              <div key={entity.id} className="lens-card">
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <h3 className="font-semibold">{entity.name}</h3>
+                    <p className="text-xs text-gray-500 font-mono">{entity.id}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${statusColors[entity.status]}`} />
+                    <span className={`text-xs px-2 py-0.5 rounded ${typeColors[entity.type]}`}>
+                      {entity.type}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className={`w-2 h-2 rounded-full ${statusColors[entity.status]}`} />
-                  <span className={`text-xs px-2 py-0.5 rounded ${typeColors[entity.type]}`}>
-                    {entity.type}
-                  </span>
-                </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <p className="text-gray-400">Workspace</p>
-                  <p className="font-mono">{entity.workspace}</p>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-gray-400">Workspace</p>
+                    <p className="font-mono">{entity.workspace}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-400">Forks</p>
+                    <p className="font-bold text-neon-purple">{entity.forks}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-gray-400">Forks</p>
-                  <p className="font-bold text-neon-purple">{entity.forks}</p>
-                </div>
-              </div>
 
-              <div className="flex gap-2 mt-4">
-                <button className="btn-neon text-xs flex-1">
-                  <Terminal className="w-3 h-3 mr-1 inline" />
-                  Terminal
-                </button>
-                <button className="btn-neon text-xs flex-1">
-                  <GitFork className="w-3 h-3 mr-1 inline" />
-                  Fork
-                </button>
+                <div className="flex gap-2 mt-4">
+                  <button
+                    onClick={() => setTerminalEntity(entity.id)}
+                    className="btn-neon text-xs flex-1"
+                  >
+                    <Terminal className="w-3 h-3 mr-1 inline" />
+                    Terminal
+                  </button>
+                  <button
+                    onClick={() => forkEntity.mutate(entity.id)}
+                    disabled={forkEntity.isPending}
+                    className="btn-neon text-xs flex-1"
+                  >
+                    <GitFork className="w-3 h-3 mr-1 inline" />
+                    Fork
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
