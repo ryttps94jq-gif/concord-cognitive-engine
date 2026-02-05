@@ -130,18 +130,33 @@ export const apiHelpers = {
       api.post('/api/ask', { message, mode }),
   },
 
-  // Forge (manual DTU creation)
-  forge: {
-    create: (data: { title?: string; content: string; tags?: string[]; source?: string }) =>
-      api.post('/api/forge', data),
+  // Dream mode (synthesis)
+  dream: {
+    run: (data?: { seed?: string }) => api.post('/api/dream', data || {}),
   },
 
-  // Simulations
-  simulations: {
-    list: () => api.get('/api/simulations'),
+  // Reseed DTUs
+  reseed: {
+    run: (force: boolean = false) => api.post('/api/reseed', { force }),
+  },
 
-    whatIf: (data: { title?: string; prompt?: string; assumptions?: string[] }) =>
-      api.post('/api/simulations/whatif', data),
+  // Forge (DTU creation modes)
+  forge: {
+    manual: (data: { title?: string; content: string; tags?: string[]; source?: string }) =>
+      api.post('/api/forge/manual', data),
+    hybrid: (data: { title?: string; content: string; tags?: string[]; source?: string }) =>
+      api.post('/api/forge/hybrid', data),
+    auto: (data: { prompt: string; tags?: string[] }) =>
+      api.post('/api/forge/auto', data),
+    fromSource: (data: { url?: string; text?: string; tags?: string[] }) =>
+      api.post('/api/forge/fromSource', data),
+  },
+
+  // Simulations (worldmodel)
+  simulations: {
+    list: () => api.get('/api/worldmodel/simulations'),
+    get: (simId: string) => api.get(`/api/worldmodel/simulations/${simId}`),
+    run: (data: { prompt?: string }) => api.post('/api/worldmodel/simulate', data),
   },
 
   // Personas
@@ -157,17 +172,19 @@ export const apiHelpers = {
 
   // Council
   council: {
-    debate: (data: {
-      dtuA?: string | { id: string; content?: string };
-      dtuB?: string | { id: string; content?: string };
-      topic?: string;
-    }) => api.post('/api/council/debate', data),
+    reviewGlobal: () => api.post('/api/council/review-global', {}),
+    weekly: () => api.post('/api/council/weekly', {}),
+    vote: (data: { dtuId: string; vote: 'approve' | 'reject'; reason?: string }) =>
+      api.post('/api/council/vote', data),
+    tally: (dtuId: string) => api.get(`/api/council/tally/${dtuId}`),
+    credibility: (data: { dtuId: string }) =>
+      api.post('/api/council/credibility', data),
   },
 
   // Swarm
   swarm: {
     run: (prompt: string, count: number = 6) =>
-      api.post('/api/swarm/run', { prompt, count }),
+      api.post('/api/swarm', { prompt, count }),
   },
 
   // Credits (wallet system)
