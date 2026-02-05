@@ -91,7 +91,7 @@ export function QuickCapture({ isOpen, onClose, onCapture }: QuickCaptureProps) 
 
     setIsSubmitting(true);
     try {
-      const response = await apiHelpers.forge.create({
+      const response = await apiHelpers.forge.manual({
         content: content.trim(),
         tags: [...tags, captureType],
         source: 'quick-capture'

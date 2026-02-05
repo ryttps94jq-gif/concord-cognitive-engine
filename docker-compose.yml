@@ -12,8 +12,20 @@ services:
       - NODE_ENV=production
       - PORT=5050
       - DATA_DIR=/data
+      - STATE_PATH=/data/concord_state.json
       - OLLAMA_HOST=${OLLAMA_HOST:-http://ollama:11434}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-https://concord-os.org}
+      # Auth - MUST set these in .env file
+      - JWT_SECRET=${JWT_SECRET}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - AUTH_ENABLED=${AUTH_ENABLED:-true}
+      # LLM - set OPENAI_API_KEY in .env for AI features
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL_FAST=${OPENAI_MODEL_FAST:-gpt-4o-mini}
+      - OPENAI_MODEL_SMART=${OPENAI_MODEL_SMART:-gpt-4o}
+      # Optional features
+      - EMBEDDINGS_ENABLED=${EMBEDDINGS_ENABLED:-true}
+      - FEDERATION_ENABLED=${FEDERATION_ENABLED:-false}
     volumes:
       - concord-data:/data
     networks:
