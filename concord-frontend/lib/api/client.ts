@@ -1,20 +1,30 @@
-import axios, { AxiosInstance, AxiosError } from 'axios';
+import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5050';
 
 // Create axios instance with defaults
+// SECURITY: withCredentials ensures httpOnly cookies are sent with requests
 export const api: AxiosInstance = axios.create({
   baseURL: BASE_URL,
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true, // SECURITY: Include cookies in cross-origin requests
 });
 
-// Request interceptor for API key
+// Helper to get CSRF token from cookie
+function getCsrfToken(): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(/csrf_token=([^;]+)/);
+  return match ? match[1] : null;
+}
+
+// Request interceptor for API key and CSRF
 api.interceptors.request.use(
-  (config) => {
+  (config: InternalAxiosRequestConfig) => {
     if (typeof window !== 'undefined') {
+      // API key for programmatic access (optional, cookies preferred)
       const apiKey = localStorage.getItem('concord_api_key');
       if (apiKey) {
         config.headers['X-API-Key'] = apiKey;
@@ -22,6 +32,15 @@ api.interceptors.request.use(
       const sessionId = localStorage.getItem('concord_session_id');
       if (sessionId) {
         config.headers['X-Session-ID'] = sessionId;
+      }
+
+      // SECURITY: Add CSRF token for state-changing requests
+      const stateChangingMethods = ['POST', 'PUT', 'DELETE', 'PATCH'];
+      if (stateChangingMethods.includes(config.method?.toUpperCase() || '')) {
+        const csrfToken = getCsrfToken();
+        if (csrfToken) {
+          config.headers['X-CSRF-Token'] = csrfToken;
+        }
       }
     }
     return config;
@@ -32,12 +51,31 @@ api.interceptors.request.use(
 // Response interceptor for error handling
 api.interceptors.response.use(
   (response) => response,
-  (error: AxiosError) => {
+  async (error: AxiosError) => {
     if (error.response) {
       const status = error.response.status;
+
+      // SECURITY: Handle CSRF token expiration
+      if (status === 403) {
+        const data = error.response.data as { code?: string };
+        if (data?.code === 'CSRF_FAILED') {
+          // Refresh CSRF token and retry
+          try {
+            await api.get('/api/auth/csrf-token');
+            // Retry original request
+            return api.request(error.config!);
+          } catch {
+            console.error('Failed to refresh CSRF token');
+          }
+        }
+      }
+
       if (status === 401 && typeof window !== 'undefined') {
-        localStorage.removeItem('concord_api_key');
-        window.location.href = '/login';
+        // Don't clear localStorage immediately - let logout handle it
+        // Redirect only if not already on login page
+        if (!window.location.pathname.includes('/login')) {
+          window.location.href = '/login';
+        }
       }
       if (status === 429) {
         console.warn('Rate limited. Please slow down requests.');
@@ -353,6 +391,42 @@ export const apiHelpers = {
     shortcuts: () => api.get('/api/mobile/shortcuts'),
     dtu: (id: string) => api.get(`/api/mobile/dtu/${id}`),
   },
+
+  // Auth - uses httpOnly cookies (token also returned for non-browser clients)
+  auth: {
+    login: (data: { username?: string; email?: string; password: string }) =>
+      api.post('/api/auth/login', data),
+
+    register: (data: { username: string; email: string; password: string }) =>
+      api.post('/api/auth/register', data),
+
+    logout: () => api.post('/api/auth/logout', {}),
+
+    me: () => api.get('/api/auth/me'),
+
+    // Get CSRF token (called automatically on page load)
+    csrfToken: () => api.get('/api/auth/csrf-token'),
+
+    // API key management (for programmatic access)
+    apiKeys: {
+      list: () => api.get('/api/auth/api-keys'),
+      create: (data: { name: string; scopes: string[] }) =>
+        api.post('/api/auth/api-keys', data),
+      delete: (id: string) => api.delete(`/api/auth/api-keys/${id}`),
+    },
+
+    // Audit log (admin only)
+    auditLog: (params?: { limit?: number; offset?: number; category?: string; action?: string }) =>
+      api.get('/api/auth/audit-log', { params }),
+  },
 };
+
+// Initialize CSRF token on page load (browser only)
+if (typeof window !== 'undefined') {
+  // Fetch CSRF token when the module loads
+  api.get('/api/auth/csrf-token').catch(() => {
+    // Silent fail - token will be fetched on first state-changing request
+  });
+}
 
 export default api;

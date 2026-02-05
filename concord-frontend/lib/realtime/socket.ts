@@ -5,15 +5,16 @@ const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:5050'
 
 let socket: Socket | null = null;
 
-// Get authentication credentials from localStorage
-function getAuthCredentials(): { token?: string; apiKey?: string } {
+// Get authentication credentials
+// SECURITY: Prefer cookies (handled automatically via withCredentials)
+// API key from localStorage is fallback for programmatic access
+function getAuthCredentials(): { apiKey?: string } {
   if (typeof window === 'undefined') return {};
 
-  const token = localStorage.getItem('concord_token');
+  // Only use API key if explicitly set (for programmatic clients)
   const apiKey = localStorage.getItem('concord_api_key');
 
   return {
-    ...(token && { token }),
     ...(apiKey && { apiKey }),
   };
 }
@@ -28,7 +29,9 @@ export function getSocket(): Socket {
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
       transports: ['websocket', 'polling'],
-      // SECURITY: Pass authentication credentials
+      // SECURITY: Include cookies for httpOnly cookie auth
+      withCredentials: true,
+      // SECURITY: API key fallback for programmatic clients
       auth,
     });
 

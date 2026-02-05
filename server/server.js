@@ -1046,19 +1046,179 @@ function verifyApiKey(rawKey, hashedKey) {
   }
 }
 
+// ============================================================================
+// SECURITY: Cookie Configuration
+// ============================================================================
+const COOKIE_CONFIG = {
+  httpOnly: true,
+  secure: NODE_ENV === "production", // HTTPS only in production
+  sameSite: "strict", // CSRF protection
+  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+  path: "/"
+};
+
+function setAuthCookie(res, token) {
+  res.cookie("concord_auth", token, COOKIE_CONFIG);
+}
+
+function clearAuthCookie(res) {
+  res.clearCookie("concord_auth", { path: "/" });
+}
+
+// ============================================================================
+// SECURITY: CSRF Protection (Double-Submit Cookie Pattern)
+// Privacy-friendly: no server-side state, token derived from session
+// ============================================================================
+function generateCsrfToken(sessionId = "") {
+  // Generate a token based on a secret + session identifier
+  const secret = EFFECTIVE_JWT_SECRET.slice(0, 32);
+  const data = `${sessionId}:${Date.now()}`;
+  return crypto.createHmac("sha256", secret).update(data).digest("hex").slice(0, 32);
+}
+
+function validateCsrfToken(token, cookieToken) {
+  if (!token || !cookieToken) return false;
+  try {
+    return crypto.timingSafeEqual(Buffer.from(token), Buffer.from(cookieToken));
+  } catch {
+    return false;
+  }
+}
+
+// CSRF middleware - validates token on state-changing requests
+function csrfMiddleware(req, res, next) {
+  // Skip CSRF for non-browser requests (API keys, no cookies)
+  if (req.authMethod === "apiKey") return next();
+
+  // Skip for safe methods
+  const safeMethods = ["GET", "HEAD", "OPTIONS"];
+  if (safeMethods.includes(req.method)) return next();
+
+  // Skip for public endpoints
+  const csrfExempt = ["/api/auth/login", "/api/auth/register", "/health", "/ready"];
+  if (csrfExempt.some(p => req.path.startsWith(p))) return next();
+
+  // In development, CSRF is optional
+  if (NODE_ENV !== "production") return next();
+
+  // Validate CSRF token
+  const headerToken = req.headers["x-csrf-token"] || req.headers["x-xsrf-token"];
+  const cookieToken = req.cookies?.csrf_token;
+
+  if (!validateCsrfToken(headerToken, cookieToken)) {
+    auditLog("security", "csrf_failed", { path: req.path, method: req.method, ip: req.ip });
+    return res.status(403).json({ ok: false, error: "CSRF token invalid or missing", code: "CSRF_FAILED" });
+  }
+
+  return next();
+}
+
+// ============================================================================
+// SECURITY: Audit Logging
+// ============================================================================
+const AUDIT_LOG = [];
+const AUDIT_LOG_MAX = 10000;
+
+function auditLog(category, action, details = {}) {
+  const entry = {
+    id: uid("audit"),
+    timestamp: nowISO(),
+    category,
+    action,
+    userId: details.userId || null,
+    ip: details.ip || null,
+    userAgent: details.userAgent || null,
+    path: details.path || null,
+    method: details.method || null,
+    status: details.status || null,
+    details: { ...details }
+  };
+
+  // Remove duplicated fields from details
+  delete entry.details.userId;
+  delete entry.details.ip;
+  delete entry.details.userAgent;
+  delete entry.details.path;
+  delete entry.details.method;
+  delete entry.details.status;
+
+  AUDIT_LOG.push(entry);
+
+  // Trim if too large
+  if (AUDIT_LOG.length > AUDIT_LOG_MAX) {
+    AUDIT_LOG.splice(0, AUDIT_LOG.length - AUDIT_LOG_MAX);
+  }
+
+  // Also log to console in development
+  if (NODE_ENV !== "production") {
+    console.log(`[Audit] ${category}.${action}`, JSON.stringify(entry.details).slice(0, 200));
+  }
+
+  return entry;
+}
+
+// Audit events for security-relevant actions
+const AUDIT_EVENTS = {
+  AUTH_LOGIN_SUCCESS: "auth.login_success",
+  AUTH_LOGIN_FAILED: "auth.login_failed",
+  AUTH_LOGOUT: "auth.logout",
+  AUTH_REGISTER: "auth.register",
+  AUTH_TOKEN_REFRESH: "auth.token_refresh",
+  API_KEY_CREATED: "api_key.created",
+  API_KEY_DELETED: "api_key.deleted",
+  API_KEY_USED: "api_key.used",
+  ADMIN_ACTION: "admin.action",
+  DATA_EXPORT: "data.export",
+  DATA_DELETE: "data.delete",
+  SETTINGS_CHANGED: "settings.changed",
+  SECURITY_CSRF_FAILED: "security.csrf_failed",
+  SECURITY_RATE_LIMITED: "security.rate_limited"
+};
+
+// Simple cookie parser (no external dependency needed)
+function parseCookies(cookieHeader) {
+  const cookies = {};
+  if (!cookieHeader) return cookies;
+  cookieHeader.split(";").forEach(cookie => {
+    const [name, ...rest] = cookie.trim().split("=");
+    if (name) cookies[name] = decodeURIComponent(rest.join("="));
+  });
+  return cookies;
+}
+
+// Cookie parsing middleware
+function cookieParserMiddleware(req, res, next) {
+  req.cookies = parseCookies(req.headers.cookie);
+  next();
+}
+
 // Auth middleware
 function authMiddleware(req, res, next) {
   if (!AUTH_ENABLED) return next();
 
   // Skip auth for public endpoints
-  const publicPaths = ["/health", "/ready", "/metrics", "/api/auth/login", "/api/auth/register", "/api/docs"];
+  const publicPaths = ["/health", "/ready", "/metrics", "/api/auth/login", "/api/auth/register", "/api/auth/csrf-token", "/api/docs"];
   if (publicPaths.some(p => req.path.startsWith(p))) return next();
 
   // Check Authorization header
   const authHeader = req.headers.authorization || "";
-  const apiKey = req.headers["x-api-key"] || req.query.apiKey || "";
+  const apiKey = req.headers["x-api-key"] || "";
 
-  // Try Bearer token
+  // 1. Try httpOnly cookie first (most secure for browsers)
+  const cookieToken = req.cookies?.concord_auth;
+  if (cookieToken) {
+    const decoded = verifyToken(cookieToken);
+    if (decoded?.userId) {
+      const user = AUTH.users.get(decoded.userId);
+      if (user) {
+        req.user = user;
+        req.authMethod = "cookie";
+        return next();
+      }
+    }
+  }
+
+  // 2. Try Bearer token (for API clients)
   if (authHeader.startsWith("Bearer ")) {
     const token = authHeader.slice(7);
     const decoded = verifyToken(token);
@@ -1072,20 +1232,17 @@ function authMiddleware(req, res, next) {
     }
   }
 
-  // Try API key (keys are stored hashed for security)
+  // 3. Try API key (keys are stored hashed for security)
   if (apiKey) {
     // First try direct lookup (for backwards compatibility with old unhashed keys)
     let keyData = AUTH.apiKeys.get(apiKey);
-    let matchedKey = apiKey;
 
     // If not found, search by hash
     if (!keyData) {
-      const hashedKey = hashApiKey(apiKey);
       for (const [storedKey, data] of AUTH.apiKeys) {
         // Check if stored key is a hash (64 hex chars) and matches
         if (storedKey.length === 64 && verifyApiKey(apiKey, storedKey)) {
           keyData = data;
-          matchedKey = storedKey;
           break;
         }
       }
@@ -1098,6 +1255,7 @@ function authMiddleware(req, res, next) {
         req.user = user;
         req.apiKeyData = keyData;
         req.authMethod = "apiKey";
+        auditLog("auth", "api_key_used", { userId: user.id, keyName: keyData.name, ip: req.ip });
         return next();
       }
     }
@@ -1462,7 +1620,11 @@ async function tryInitWebSockets(server) {
 
   // SECURITY: Socket.IO authentication middleware
   io.use((socket, next) => {
-    const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.replace("Bearer ", "");
+    // Parse cookies from handshake
+    const cookies = parseCookies(socket.handshake.headers?.cookie || "");
+    const cookieToken = cookies.concord_auth;
+
+    const token = cookieToken || socket.handshake.auth?.token || socket.handshake.headers?.authorization?.replace("Bearer ", "");
     const apiKey = socket.handshake.auth?.apiKey || socket.handshake.headers?.["x-api-key"];
 
     // In development, allow unauthenticated connections
@@ -1472,23 +1634,39 @@ async function tryInitWebSockets(server) {
       return next();
     }
 
-    // Try JWT token
-    if (token) {
-      const decoded = verifyToken(token);
+    // 1. Try httpOnly cookie token first (most secure for browsers)
+    if (cookieToken) {
+      const decoded = verifyToken(cookieToken);
       if (decoded?.userId) {
         const user = AUTH.users.get(decoded.userId);
         if (user) {
           socket.data.userId = user.id;
           socket.data.username = user.username;
           socket.data.authenticated = true;
+          socket.data.authMethod = "cookie";
           return next();
         }
       }
     }
 
-    // Try API key
+    // 2. Try Bearer token (for API clients)
+    const bearerToken = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.replace("Bearer ", "");
+    if (bearerToken) {
+      const decoded = verifyToken(bearerToken);
+      if (decoded?.userId) {
+        const user = AUTH.users.get(decoded.userId);
+        if (user) {
+          socket.data.userId = user.id;
+          socket.data.username = user.username;
+          socket.data.authenticated = true;
+          socket.data.authMethod = "bearer";
+          return next();
+        }
+      }
+    }
+
+    // 3. Try API key
     if (apiKey) {
-      const hashedKey = hashApiKey(apiKey);
       for (const [storedKey, data] of AUTH.apiKeys) {
         if (storedKey.length === 64 && verifyApiKey(apiKey, storedKey)) {
           const user = AUTH.users.get(data.userId);
@@ -1496,6 +1674,7 @@ async function tryInitWebSockets(server) {
             socket.data.userId = user.id;
             socket.data.username = user.username;
             socket.data.authenticated = true;
+            socket.data.authMethod = "apiKey";
             return next();
           }
         }
@@ -10514,13 +10693,15 @@ const corsOptions = {
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-API-Key", "X-Requested-With", "X-Session-ID"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-API-Key", "X-Requested-With", "X-Session-ID", "X-CSRF-Token", "X-XSRF-Token"],
 };
 app.use(cors(corsOptions));
 
 if (rateLimiter) app.use(rateLimiter);
 app.use(metricsMiddleware);
+app.use(cookieParserMiddleware); // Parse cookies before auth
 app.use(authMiddleware);
+app.use(csrfMiddleware); // CSRF protection after auth
 
 // ---- Health & Readiness Endpoints ----
 app.get("/health", (req, res) => {
@@ -10591,10 +10772,22 @@ app.post("/api/auth/register", authRateLimitMiddleware, validate("userRegister")
   saveAuthData();
 
   const token = createToken(userId);
+
+  // SECURITY: Set httpOnly cookie for browser auth
+  setAuthCookie(res, token);
+
+  // Audit log registration
+  auditLog("auth", "register", {
+    userId,
+    username,
+    ip: req.ip,
+    userAgent: req.headers["user-agent"]
+  });
+
   res.status(201).json({
     ok: true,
     user: { id: userId, username, email, role: user.role },
-    token
+    token // Also return token for non-browser clients
   });
 });
 
@@ -10610,6 +10803,12 @@ app.post("/api/auth/login", authRateLimitMiddleware, validate("userLogin"), asyn
   }
 
   if (!user || !verifyPassword(password, user.passwordHash)) {
+    // Audit failed login attempt
+    auditLog("auth", "login_failed", {
+      attemptedUser: username || email,
+      ip: req.ip,
+      userAgent: req.headers["user-agent"]
+    });
     return res.status(401).json({ ok: false, error: "Invalid credentials" });
   }
 
@@ -10617,10 +10816,22 @@ app.post("/api/auth/login", authRateLimitMiddleware, validate("userLogin"), asyn
   saveAuthData();
 
   const token = createToken(user.id);
+
+  // SECURITY: Set httpOnly cookie for browser auth
+  setAuthCookie(res, token);
+
+  // Audit successful login
+  auditLog("auth", "login_success", {
+    userId: user.id,
+    username: user.username,
+    ip: req.ip,
+    userAgent: req.headers["user-agent"]
+  });
+
   res.json({
     ok: true,
     user: { id: user.id, username: user.username, email: user.email, role: user.role },
-    token
+    token // Also return token for non-browser clients
   });
 });
 
@@ -10635,6 +10846,71 @@ app.get("/api/auth/me", (req, res) => {
       role: req.user.role,
       scopes: req.user.scopes
     }
+  });
+});
+
+// Logout - clears auth cookie
+app.post("/api/auth/logout", (req, res) => {
+  // Audit logout
+  if (req.user) {
+    auditLog("auth", "logout", {
+      userId: req.user.id,
+      username: req.user.username,
+      ip: req.ip,
+      userAgent: req.headers["user-agent"]
+    });
+  }
+
+  // Clear auth cookie
+  clearAuthCookie(res);
+
+  res.json({ ok: true, message: "Logged out successfully" });
+});
+
+// CSRF Token endpoint - provides token for state-changing requests
+app.get("/api/auth/csrf-token", (req, res) => {
+  const csrfToken = generateCsrfToken(req.user?.id || req.ip);
+
+  // Set CSRF cookie (readable by JS for double-submit pattern)
+  res.cookie("csrf_token", csrfToken, {
+    httpOnly: false, // JS needs to read this
+    secure: NODE_ENV === "production",
+    sameSite: "strict",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    path: "/"
+  });
+
+  res.json({ ok: true, csrfToken });
+});
+
+// Audit log endpoint (admin only)
+app.get("/api/auth/audit-log", requireRole("owner", "admin"), (req, res) => {
+  const { limit = 100, offset = 0, category, action } = req.query;
+
+  let logs = [...AUDIT_LOG];
+
+  // Filter by category
+  if (category) {
+    logs = logs.filter(l => l.category === category);
+  }
+
+  // Filter by action
+  if (action) {
+    logs = logs.filter(l => l.action === action);
+  }
+
+  // Reverse to get newest first
+  logs.reverse();
+
+  // Paginate
+  const paginated = logs.slice(Number(offset), Number(offset) + Number(limit));
+
+  res.json({
+    ok: true,
+    total: logs.length,
+    offset: Number(offset),
+    limit: Number(limit),
+    logs: paginated
   });
 });
 
@@ -15278,6 +15554,51 @@ app.post("/api/obsidian/export", async (req, res) => res.json(await runMacro("ob
 app.post("/api/obsidian/import", async (req, res) => res.json(await runMacro("obsidian", "import", req.body, makeCtx(req))));
 app.post("/api/notion/import", async (req, res) => res.json(await runMacro("notion", "import", req.body, makeCtx(req))));
 app.get("/api/integrations", async (req, res) => res.json(await runMacro("integration", "list", {}, makeCtx(req))));
+
+// Additional endpoints for frontend compatibility
+app.get("/api/events", (req, res) => {
+  try {
+    // Return recent system events/logs
+    const events = STATE.logs.slice(-100).map(log => ({
+      id: log.id || uid("evt"),
+      type: log.domain || "system",
+      action: log.action || "event",
+      message: log.message || "",
+      timestamp: log.ts || log.timestamp || nowISO(),
+      meta: log.meta || {}
+    }));
+    return res.json({ ok: true, events, count: events.length });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+app.post("/api/autocrawl", async (req, res) => {
+  try {
+    const { url, makeGlobal, declaredSourceType, tags } = req.body || {};
+    if (!url) return res.status(400).json({ ok: false, error: "URL required" });
+    const out = await runMacro("crawl", "fetch", {
+      url: String(url).trim(),
+      tags: tags || [],
+      makeGlobal: makeGlobal || false,
+      declaredSourceType: declaredSourceType || "web"
+    }, makeCtx(req));
+    return res.json(out);
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+app.get("/api/marketplace/listings", async (req, res) => {
+  // Alias for browse endpoint
+  return res.json(await runMacro("marketplace", "browse", {
+    category: req.query.category,
+    search: req.query.search,
+    sort: req.query.sort,
+    page: req.query.page,
+    pageSize: req.query.pageSize
+  }, makeCtx(req)));
+});
 
 console.log("[Concord] Wave 8: Integrations Ecosystem loaded");
 
