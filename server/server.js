@@ -1067,6 +1067,53 @@ function maybeWriteLinguisticShadowDTU({ phrase="", expands=[], topIds=[] } = {}
     return { ok:false, error:String(e?.message||e) };
   }
 }
+// Shadow DTU cleanup - prevent unbounded memory growth
+const SHADOW_DTU_MAX = 2000; // Maximum shadow DTUs to keep
+const SHADOW_DTU_TTL_DAYS = 14; // Days before shadow DTU expires
+
+function cleanupShadowDTUs() {
+  try {
+    const now = Date.now();
+    const ttlMs = SHADOW_DTU_TTL_DAYS * 24 * 60 * 60 * 1000;
+    const shadows = Array.from(STATE.shadowDtus.entries());
+
+    // Remove expired shadow DTUs
+    let expired = 0;
+    for (const [id, dtu] of shadows) {
+      const createdAt = new Date(dtu.createdAt || 0).getTime();
+      if (now - createdAt > ttlMs) {
+        STATE.shadowDtus.delete(id);
+        EMBEDDINGS.store.delete(id); // Also remove from embeddings
+        expired++;
+      }
+    }
+
+    // If still over max, remove oldest
+    if (STATE.shadowDtus.size > SHADOW_DTU_MAX) {
+      const sorted = Array.from(STATE.shadowDtus.entries())
+        .sort((a, b) => (a[1].createdAt || "").localeCompare(b[1].createdAt || ""));
+      const toRemove = sorted.slice(0, STATE.shadowDtus.size - SHADOW_DTU_MAX);
+      for (const [id] of toRemove) {
+        STATE.shadowDtus.delete(id);
+        EMBEDDINGS.store.delete(id);
+      }
+    }
+
+    if (expired > 0 || STATE.shadowDtus.size > SHADOW_DTU_MAX) {
+      saveStateDebounced();
+      console.log(`[Shadow] Cleanup: removed ${expired} expired, ${STATE.shadowDtus.size} remaining`);
+    }
+
+    return { ok: true, expired, remaining: STATE.shadowDtus.size };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) };
+  }
+}
+
+// Run shadow cleanup periodically (every 6 hours)
+setInterval(() => cleanupShadowDTUs(), 6 * 60 * 60 * 1000);
+setTimeout(() => cleanupShadowDTUs(), 60000); // Initial cleanup after 1 min
+
 // ---- End semantic query expansion ----
 
 function cretiPack({ title, purpose, context, procedure, outputs, tests, notes }) {
@@ -5548,6 +5595,9 @@ async function generateEmbedding(text) {
 async function indexDTUEmbedding(dtu) {
   if (!EMBEDDINGS.enabled) return { ok: false, reason: "disabled" };
 
+  // Skip shadow DTUs - they're internal and shouldn't pollute semantic search
+  if (isShadowDTU(dtu)) return { ok: true, skipped: true, reason: "shadow_dtu" };
+
   const text = `${dtu.title || ""} ${dtu.content || ""} ${(dtu.tags || []).join(" ")}`.trim();
   if (!text) return { ok: false, reason: "empty_content" };
 
@@ -5593,7 +5643,7 @@ async function semanticSearch(query, { limit = 10, minScore = 0.3 } = {}) {
   const results = topResults.map(({ dtuId, score }) => {
     const dtu = STATE.dtus.get(dtuId);
     return dtu ? { ...dtu, _semanticScore: score } : null;
-  }).filter(Boolean);
+  }).filter(d => d && !isShadowDTU(d)); // Filter out shadow DTUs from results
 
   return { ok: true, results, query };
 }
@@ -6201,6 +6251,57 @@ function setLLMPipelineMode(mode) {
 
 // Initialize on startup
 setTimeout(() => initLLMPipeline(), 100);
+
+// Global llmChat() wrapper - routes all LLM calls through the pipeline
+// This enables hybrid local/cloud AI for all DTU generation
+async function llmChat(messagesOrCtx, messagesOrOptions = {}, maybeOptions = {}) {
+  // Handle both signatures:
+  // llmChat([messages], options) - direct call
+  // llmChat(ctx, [messages], options) - context call
+  let messages, options;
+
+  if (Array.isArray(messagesOrCtx)) {
+    // Direct call: llmChat([messages], options)
+    messages = messagesOrCtx;
+    options = messagesOrOptions;
+  } else if (Array.isArray(messagesOrOptions)) {
+    // Context call: llmChat(ctx, [messages], options)
+    messages = messagesOrOptions;
+    options = maybeOptions;
+  } else {
+    return { ok: false, error: "Invalid llmChat arguments" };
+  }
+
+  // Convert messages to single prompt for pipeline
+  const prompt = messages.map(m => {
+    if (m.role === "system") return `[System]: ${m.content}`;
+    if (m.role === "assistant") return `[Assistant]: ${m.content}`;
+    return m.content;
+  }).join("\n\n");
+
+  // Call the hybrid pipeline
+  const result = await llmPipeline(prompt, {
+    temperature: options.temperature || 0.7,
+    maxTokens: options.max_tokens || options.maxTokens || 500,
+    mode: options.mode || LLM_PIPELINE.defaultMode
+  });
+
+  if (!result.ok) {
+    return result;
+  }
+
+  // Format response to match OpenAI chat format (for compatibility)
+  return {
+    ok: true,
+    text: result.content,
+    choices: [{
+      message: { role: "assistant", content: result.content }
+    }],
+    source: result.source,
+    polished: result.polished,
+    tokens: result.tokens
+  };
+}
 
 // ============================================================================
 // END WAVE 3: AI CAPABILITIES
