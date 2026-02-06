@@ -448,6 +448,69 @@ const uid = (prefix="id") => `${prefix}_${crypto.randomBytes(10).toString("hex")
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 const safeJson = (x, fallback=null) => { try { return JSON.parse(x); } catch { return fallback; } };
 
+// ---- Input Validation Helpers ----
+const VALIDATION = {
+  // String validation with max length
+  string: (val, maxLen = 10000, defaultVal = "") => {
+    if (val === null || val === undefined) return defaultVal;
+    return String(val).slice(0, maxLen);
+  },
+  // Integer with bounds
+  int: (val, min = 0, max = Number.MAX_SAFE_INTEGER, defaultVal = 0) => {
+    const n = parseInt(val, 10);
+    return isNaN(n) ? defaultVal : clamp(n, min, max);
+  },
+  // Float with bounds
+  float: (val, min = 0, max = Number.MAX_VALUE, defaultVal = 0) => {
+    const n = parseFloat(val);
+    return isNaN(n) ? defaultVal : clamp(n, min, max);
+  },
+  // Boolean
+  bool: (val, defaultVal = false) => {
+    if (typeof val === "boolean") return val;
+    if (val === "true" || val === "1" || val === 1) return true;
+    if (val === "false" || val === "0" || val === 0) return false;
+    return defaultVal;
+  },
+  // Array with item limit
+  array: (val, maxItems = 100) => {
+    if (!Array.isArray(val)) return [];
+    return val.slice(0, maxItems);
+  },
+  // ID format validation (alphanumeric + underscore)
+  id: (val, maxLen = 100) => {
+    const s = String(val || "").slice(0, maxLen);
+    return /^[a-zA-Z0-9_-]+$/.test(s) ? s : "";
+  },
+  // Email format
+  email: (val) => {
+    const s = String(val || "").toLowerCase().trim().slice(0, 254);
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s) ? s : "";
+  },
+  // URL format
+  url: (val, maxLen = 2000) => {
+    const s = String(val || "").slice(0, maxLen);
+    try { new URL(s); return s; } catch { return ""; }
+  },
+  // Tags array (alphanumeric, lowercase)
+  tags: (val, maxTags = 40, maxTagLen = 50) => {
+    if (!Array.isArray(val)) return [];
+    return val
+      .slice(0, maxTags)
+      .map(t => String(t).toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, maxTagLen))
+      .filter(Boolean);
+  },
+  // Sanitize for XSS prevention (basic HTML escape)
+  html: (val, maxLen = 50000) => {
+    return String(val || "").slice(0, maxLen)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#x27;");
+  }
+};
+
 function normalizeText(s="") {
   return String(s).replace(/\s+/g, " ").trim();
 }
@@ -2791,7 +2854,7 @@ const STATE_DISK = loadStateFromDisk();
 // Final boot normalization (ensures env-driven defaults win)
 try {
   if (STATE && STATE.settings) {
-    if (__llmDefaultForced !== null) STATE.settings.llmDefault = __llmDefaultForced;
+    if (__llmDefaultForcedRaw !== null) STATE.settings.llmDefault = DEFAULT_LLM_ON;
     else if ((process.env.OPENAI_API_KEY || "").trim()) STATE.settings.llmDefault = true;
   }
 } catch {}
