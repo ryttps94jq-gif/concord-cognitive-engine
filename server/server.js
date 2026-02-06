@@ -30,6 +30,7 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { spawnSync } from "child_process";
+import { initAll as initLoaf } from "./loaf/index.js";
 
 // ---- Ensure iconv-lite encodings are loaded (fixes ESM/CJS interop in CI) ----
 try { const _iconv = await import("iconv-lite"); _iconv.default?.encodingExists?.("utf8"); } catch { /* transitive dep via body-parser; ok if absent */ }
@@ -12841,6 +12842,33 @@ register("harness", "run", async (ctx, input={}) => {
 }, { summary:"Chicken2 proof harness runner (lightweight initial suite)." });
 
 // ===== END CHICKEN2 MACROS =====
+
+// ===== LOAF — Hardening, Scalable Cognitive OS, Civilizational-Grade Infrastructure =====
+try {
+  const loafCtx = {
+    register,
+    STATE,
+    helpers: {
+      uid, nowISO, clamp, normalizeText, log,
+      enforceEthosInvariant,
+      councilGate,
+      upsertDTU,
+      realtimeEmit,
+      saveStateDebounced,
+    },
+  };
+  const loafResult = initLoaf(loafCtx);
+  if (loafResult.ok) {
+    log("loaf.init", `LOAF v${loafResult.version} initialized: ${loafResult.modules.length} modules`, { modules: loafResult.modules });
+  } else {
+    log("loaf.init", `LOAF initialized with errors`, { errors: loafResult.errors, modules: loafResult.modules });
+  }
+} catch (e) {
+  console.error("[LOAF] Initialization failed:", e);
+  log("loaf.init", "LOAF initialization failed", { error: String(e?.message || e) });
+}
+// ===== END LOAF =====
+
 const app = express();
 
 // ---- Production Middleware ----
@@ -28175,5 +28203,8 @@ export const __TEST__ = Object.freeze({
   realtimeEmit,
   inLatticeReality,
   overlap_verifier,
-  _defaultOrganState
+  _defaultOrganState,
+  register,
+  runMacro,
+  MACROS,
 });
