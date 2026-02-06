@@ -26,9 +26,26 @@ let serverProcess = null;
 
 // Start the server before tests run
 before(async () => {
+  // If API_BASE is provided externally (e.g. integration-test CI), use it directly
+  if (process.env.API_BASE) {
+    API_BASE = process.env.API_BASE;
+    // Wait for the external server to be ready
+    const deadline = Date.now() + 30_000;
+    while (Date.now() < deadline) {
+      try {
+        const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(5_000) });
+        if (res.ok) return;
+      } catch {
+        // Server not ready yet
+      }
+      await new Promise(r => { setTimeout(r, 500); });
+    }
+    throw new Error('External server not reachable within 30 seconds');
+  }
+
+  // No external server — spawn our own on a random port
   const serverDir = join(__dirname, '..');
-  // Use a random port to avoid conflicts with zombie servers and stale rate-limit state
-  const port = API_BASE ? (new URL(API_BASE).port || '5050') : String(10000 + Math.floor(Math.random() * 50000));
+  const port = String(10000 + Math.floor(Math.random() * 50000));
   API_BASE = `http://localhost:${port}`;
 
   serverProcess = spawn('node', ['server.js'], {
@@ -50,9 +67,8 @@ before(async () => {
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
     try {
-      const res = await fetch(`${API_BASE}/health`);
+      const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(5_000) });
       if (res.ok) {
-        // Allow node to exit without waiting for child process
         serverProcess.unref();
         return;
       }
