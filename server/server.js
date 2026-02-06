@@ -2216,7 +2216,7 @@ function authMiddleware(req, res, next) {
   if (!AUTH_ENABLED) return next();
 
   // Skip auth for public endpoints
-  const publicPaths = ["/health", "/ready", "/metrics", "/api/auth/login", "/api/auth/register", "/api/auth/csrf-token", "/api/docs"];
+  const publicPaths = ["/health", "/ready", "/metrics", "/api/auth/login", "/api/auth/register", "/api/auth/csrf-token", "/api/docs", "/api/status"];
   if (publicPaths.some(p => req.path.startsWith(p))) return next();
 
   // Check Authorization header
