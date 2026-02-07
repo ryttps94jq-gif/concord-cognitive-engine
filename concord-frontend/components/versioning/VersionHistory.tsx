@@ -35,7 +35,7 @@ interface VersionHistoryProps {
 }
 
 export function VersionHistory({
-  _dtuId,
+  dtuId,
   versions,
   currentVersion,
   onRestore,

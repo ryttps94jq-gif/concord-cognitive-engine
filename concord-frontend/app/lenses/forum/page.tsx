@@ -65,7 +65,7 @@ export default function ForumLensPage() {
         sort: sortMode === 'new' ? 'createdAt' : 'score',
         order: 'desc'
       }
-    }).then(r => r.data?.dtus?.map((dtu: Record<string, unknown>) => ({
+    }).then(r => r.data?.dtus?.map((dtu: Record<string, any>) => ({
       id: dtu.id,
       title: dtu.title || dtu.content?.slice(0, 100),
       content: dtu.content,

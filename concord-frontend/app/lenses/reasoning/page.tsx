@@ -29,7 +29,7 @@ export default function ReasoningLensPage() {
   const [selectedChain, setSelectedChain] = useState<string | null>(null);
   const [newStep, setNewStep] = useState('');
 
-  const { data: chainsData, _isLoading } = useQuery({
+  const { data: chainsData, isLoading: _isLoading } = useQuery({
     queryKey: ['reasoning-chains'],
     queryFn: () => apiHelpers.reasoning.list().then((r) => r.data),
     refetchInterval: 10000,
@@ -80,8 +80,8 @@ export default function ReasoningLensPage() {
   });
 
   const chains: Chain[] = chainsData?.chains || chainsData || [];
-  const status = statusData?.status || statusData || {};
-  const trace = traceData?.trace || traceData || {};
+  const status: Record<string, any> = statusData?.status || statusData || {};
+  const trace: Record<string, any> = traceData?.trace || traceData || {};
 
   return (
     <div className="p-6 space-y-6">
@@ -196,7 +196,7 @@ export default function ReasoningLensPage() {
             <>
               {/* Trace visualization */}
               <div className="space-y-3">
-                {trace?.steps?.map?.((step: Record<string, unknown>, i: number) => (
+                {trace?.steps?.map?.((step: Record<string, any>, i: number) => (
                   <motion.div
                     key={i}
                     initial={{ opacity: 0, x: -10 }}

@@ -514,10 +514,10 @@ export default function AdminDashboardPage() {
               className="flex items-center justify-between p-2 bg-lattice-deep rounded-lg text-sm"
             >
               <div className="flex items-center gap-3">
-                <span className="text-neon-purple font-mono">{log.type}</span>
-                <span className="text-gray-400">{log.message}</span>
+                <span className="text-neon-purple font-mono">{String(log.type)}</span>
+                <span className="text-gray-400">{String(log.message)}</span>
               </div>
-              <span className="text-xs text-gray-500">{log.at}</span>
+              <span className="text-xs text-gray-500">{String(log.at)}</span>
             </div>
           ))}
           {(!logs?.logs || logs.logs.length === 0) && (

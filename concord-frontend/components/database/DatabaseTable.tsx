@@ -25,7 +25,7 @@ interface Column {
 
 interface Row {
   id: string;
-  data: Record<string, unknown>;
+  data: Record<string, any>;
   createdAt: string;
   updatedAt: string;
 }
@@ -34,8 +34,8 @@ interface DatabaseTableProps {
   name: string;
   schema: Column[];
   rows: Row[];
-  onAddRow?: (data: Record<string, unknown>) => void;
-  onUpdateRow?: (rowId: string, data: Record<string, unknown>) => void;
+  onAddRow?: (data: Record<string, any>) => void;
+  onUpdateRow?: (rowId: string, data: Record<string, any>) => void;
   onDeleteRow?: (rowId: string) => void;
   onAddColumn?: (column: Partial<Column>) => void;
   className?: string;
@@ -58,7 +58,7 @@ export function DatabaseTable({
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [filterText, setFilterText] = useState('');
   const [editingCell, setEditingCell] = useState<{ rowId: string; colId: string } | null>(null);
-  const [newRowData, setNewRowData] = useState<Record<string, unknown>>({});
+  const [newRowData, setNewRowData] = useState<Record<string, any>>({});
   const [showNewRow, setShowNewRow] = useState(false);
 
   const filteredAndSortedRows = useMemo(() => {
@@ -96,7 +96,7 @@ export function DatabaseTable({
     }
   };
 
-  const handleCellChange = (rowId: string, colId: string, value: unknown) => {
+  const handleCellChange = (rowId: string, colId: string, value: any) => {
     if (onUpdateRow) {
       const row = rows.find(r => r.id === rowId);
       if (row) {
@@ -114,7 +114,7 @@ export function DatabaseTable({
     }
   };
 
-  const renderCellValue = (column: Column, value: unknown, rowId: string) => {
+  const renderCellValue = (column: Column, value: any, rowId: string) => {
     const isEditing = editingCell?.rowId === rowId && editingCell?.colId === column.id;
 
     if (isEditing) {

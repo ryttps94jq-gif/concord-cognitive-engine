@@ -37,7 +37,7 @@ export interface SlashCommand {
   description: string;
   keywords: string[];
   category: 'basic' | 'media' | 'advanced' | 'dtu' | 'ai';
-  action: (editor: Record<string, unknown>) => void;
+  action: (editor: any) => void;
 }
 
 // Default slash commands
@@ -288,7 +288,7 @@ const categoryLabels: Record<string, string> = {
 };
 
 interface SlashCommandMenuProps {
-  editor: unknown;
+  editor: any;
   isOpen: boolean;
   onClose: () => void;
   position: { top: number; left: number };
@@ -488,7 +488,7 @@ export function SlashCommandMenu({
 }
 
 // Hook to detect slash command trigger
-export function useSlashCommand(editor: unknown) {
+export function useSlashCommand(editor: any) {
   const [isOpen, setIsOpen] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0 });
 

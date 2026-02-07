@@ -182,7 +182,7 @@ export default function BillingPage() {
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {tokenPackages.map((pkg: Record<string, unknown>) => (
+          {tokenPackages.map((pkg: Record<string, any>) => (
             <div
               key={pkg.id}
               className={`relative bg-lattice-surface border rounded-xl p-6 cursor-pointer transition-all ${

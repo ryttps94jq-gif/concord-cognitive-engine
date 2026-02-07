@@ -61,7 +61,7 @@ interface Experiment {
   name: string;
   modelId: string;
   status: 'running' | 'completed' | 'failed' | 'queued';
-  hyperparams: Record<string, unknown>;
+  hyperparams: Record<string, any>;
   metrics: {
     epoch: number;
     trainLoss: number;
@@ -251,7 +251,7 @@ export default function MLLensPage() {
   const [selectedExperiment, setSelectedExperiment] = useState<Experiment | null>(null);
   const [showNewExperiment, setShowNewExperiment] = useState(false);
   const [playgroundInput, setPlaygroundInput] = useState('');
-  const [playgroundOutput, setPlaygroundOutput] = useState<unknown>(null);
+  const [playgroundOutput, setPlaygroundOutput] = useState<any>(null);
   const [playgroundModel, setPlaygroundModel] = useState<string>('');
 
   // Queries
@@ -288,7 +288,7 @@ export default function MLLensPage() {
   });
 
   const startTraining = useMutation({
-    mutationFn: (config: Record<string, unknown>) => api.post('/api/ml/train', config),
+    mutationFn: (config: any) => api.post('/api/ml/train', config),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ml-experiments'] });
       setShowNewExperiment(false);
@@ -941,7 +941,7 @@ function MetricCard({ icon, label, value, trend, color }: { icon: React.ReactNod
   );
 }
 
-function ModelCard({ model, statusConfig, typeConfig, onSelect, _onDeploy }: { model: Model; statusConfig: Record<string, Record<string, unknown>>; typeConfig: Record<string, Record<string, unknown>>; onSelect: () => void; _onDeploy: () => void }) {
+function ModelCard({ model, statusConfig, typeConfig, onSelect, onDeploy }: { model: Model; statusConfig: Record<string, any>; typeConfig: Record<string, any>; onSelect: () => void; onDeploy: () => void }) {
   const StatusIcon = statusConfig[model.status]?.icon || Activity;
   const TypeIcon = typeConfig[model.type]?.icon || Brain;
 
@@ -999,7 +999,7 @@ function ModelCard({ model, statusConfig, typeConfig, onSelect, _onDeploy }: { m
   );
 }
 
-function ModelListItem({ model, statusConfig, typeConfig, onSelect, onDeploy }: { model: Model; statusConfig: Record<string, Record<string, unknown>>; typeConfig: Record<string, Record<string, unknown>>; onSelect: () => void; onDeploy: () => void }) {
+function ModelListItem({ model, statusConfig, typeConfig, onSelect, onDeploy }: { model: Model; statusConfig: Record<string, any>; typeConfig: Record<string, any>; onSelect: () => void; onDeploy: () => void }) {
   const StatusIcon = statusConfig[model.status]?.icon || Activity;
   const TypeIcon = typeConfig[model.type]?.icon || Brain;
 
@@ -1037,7 +1037,7 @@ function ModelListItem({ model, statusConfig, typeConfig, onSelect, onDeploy }: 
   );
 }
 
-function ModelDetailModal({ model, onClose, onDeploy, onTrain, statusConfig, typeConfig }: { model: Model; onClose: () => void; onDeploy: () => void; onTrain: () => void; statusConfig: Record<string, Record<string, unknown>>; typeConfig: Record<string, Record<string, unknown>> }) {
+function ModelDetailModal({ model, onClose, onDeploy, onTrain, statusConfig, typeConfig }: { model: Model; onClose: () => void; onDeploy: () => void; onTrain: () => void; statusConfig: Record<string, any>; typeConfig: Record<string, any> }) {
   const StatusIcon = statusConfig[model.status]?.icon || Activity;
   const TypeIcon = typeConfig[model.type]?.icon || Brain;
 
@@ -1165,7 +1165,7 @@ function ModelDetailModal({ model, onClose, onDeploy, onTrain, statusConfig, typ
   );
 }
 
-function NewExperimentModal({ models, datasets, onClose, onSubmit, submitting }: { models: Model[]; datasets: Record<string, unknown>[]; onClose: () => void; onSubmit: (config: Record<string, unknown>) => void; submitting: boolean }) {
+function NewExperimentModal({ models, datasets, onClose, onSubmit, submitting }: { models: Model[]; datasets: Dataset[]; onClose: () => void; onSubmit: (config: any) => void; submitting: boolean }) {
   const [config, setConfig] = useState({
     name: '',
     modelId: '',

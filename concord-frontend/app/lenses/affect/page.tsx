@@ -242,9 +242,9 @@ export default function AffectLensPage() {
             {(events?.events || events || []).slice?.(-15)?.reverse?.()?.map?.((evt: Record<string, unknown>, i: number) => (
               <div key={i} className="lens-card text-xs">
                 <div className="flex items-center justify-between">
-                  <span className="font-mono font-medium">{evt.type}</span>
+                  <span className="font-mono font-medium">{String(evt.type)}</span>
                   <span className="text-gray-500">
-                    i={evt.intensity?.toFixed(2)} p={evt.polarity?.toFixed(2)}
+                    i={(evt.intensity as number | undefined)?.toFixed(2)} p={(evt.polarity as number | undefined)?.toFixed(2)}
                   </span>
                 </div>
               </div>

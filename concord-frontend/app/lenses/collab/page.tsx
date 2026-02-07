@@ -70,13 +70,13 @@ export default function CollabLensPage() {
         <div className="lens-card">
           <p className="text-sm text-gray-400">Total Participants</p>
           <p className="text-2xl font-bold text-neon-purple">
-            {sessions?.sessions?.reduce((acc: number, s: Record<string, unknown>) => acc + s.participantCount, 0) || 0}
+            {sessions?.sessions?.reduce((acc: number, s: Record<string, any>) => acc + s.participantCount, 0) || 0}
           </p>
         </div>
         <div className="lens-card">
           <p className="text-sm text-gray-400">Pending Changes</p>
           <p className="text-2xl font-bold text-neon-cyan">
-            {sessions?.sessions?.reduce((acc: number, s: Record<string, unknown>) => acc + s.changeCount, 0) || 0}
+            {sessions?.sessions?.reduce((acc: number, s: Record<string, any>) => acc + s.changeCount, 0) || 0}
           </p>
         </div>
       </div>
@@ -94,7 +94,7 @@ export default function CollabLensPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {sessions?.sessions?.map((session: Record<string, unknown>) => (
+            {sessions?.sessions?.map((session: Record<string, any>) => (
               <SessionCard
                 key={session.id}
                 session={session}
@@ -120,7 +120,13 @@ export default function CollabLensPage() {
   );
 }
 
-function SessionCard({ session, onJoin, onMerge, joining, merging }: unknown) {
+function SessionCard({ session, onJoin, onMerge, joining, merging }: {
+  session: Record<string, any>;
+  onJoin: () => void;
+  onMerge: () => void;
+  joining: boolean;
+  merging: boolean;
+}) {
   return (
     <div className="panel p-4">
       <div className="flex items-center justify-between">
@@ -155,7 +161,12 @@ function SessionCard({ session, onJoin, onMerge, joining, merging }: unknown) {
   );
 }
 
-function CreateSessionModal({ onClose, onCreate, dtus, creating }: unknown) {
+function CreateSessionModal({ onClose, onCreate, dtus, creating }: {
+  onClose: () => void;
+  onCreate: (data: { dtuId: string; mode: string }) => void;
+  dtus: Record<string, any>[];
+  creating: boolean;
+}) {
   const [form, setForm] = useState({ dtuId: '', mode: 'edit' });
 
   return (
@@ -168,7 +179,7 @@ function CreateSessionModal({ onClose, onCreate, dtus, creating }: unknown) {
           className="w-full px-3 py-2 bg-lattice-surface border border-lattice-border rounded"
         >
           <option value="">Select DTU to collaborate on</option>
-          {dtus.slice(0, 50).map((dtu: Record<string, unknown>) => (
+          {dtus.slice(0, 50).map((dtu: Record<string, any>) => (
             <option key={dtu.id} value={dtu.id}>{dtu.title}</option>
           ))}
         </select>

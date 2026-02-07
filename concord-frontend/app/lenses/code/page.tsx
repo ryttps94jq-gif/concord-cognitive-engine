@@ -9,7 +9,7 @@ import {
   Play, FileCode, Terminal, FolderTree, Plus, X,
   ChevronRight, ChevronDown, File, Folder, FolderOpen,
   Sparkles, RefreshCw, TestTube, Copy,
-  Download, Zap, Brain,
+  Download, Zap, Brain, Bug,
   CheckCircle, Loader2,
   Save, FileJson, FileText, Maximize2, Minimize2
 } from 'lucide-react';

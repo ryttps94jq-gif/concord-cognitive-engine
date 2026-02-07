@@ -193,8 +193,8 @@ export default function AttentionLensPage() {
             <div className="space-y-1 max-h-40 overflow-y-auto">
               {queueData.length > 0 ? queueData.map((q: Record<string, unknown>, i: number) => (
                 <div key={i} className="flex justify-between text-xs text-gray-400">
-                  <span>{q.threadId?.slice(0, 12)}</span>
-                  <span>P:{q.priority?.toFixed(1)}</span>
+                  <span>{(q.threadId as string | undefined)?.slice(0, 12)}</span>
+                  <span>P:{(q.priority as number | undefined)?.toFixed(1)}</span>
                 </div>
               )) : (
                 <p className="text-sm text-gray-500">Queue empty</p>
@@ -209,7 +209,7 @@ export default function AttentionLensPage() {
             <div className="space-y-1 max-h-48 overflow-y-auto">
               {completedData.length > 0 ? completedData.map((c: Record<string, unknown>, i: number) => (
                 <div key={i} className="lens-card text-xs">
-                  <span className="text-gray-300">{c.type}</span>
+                  <span className="text-gray-300">{String(c.type)}</span>
                 </div>
               )) : (
                 <p className="text-sm text-gray-500">None yet</p>

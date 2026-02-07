@@ -181,7 +181,7 @@ export default function MetacognitionLensPage() {
         </h2>
         {Array.isArray(spots) && spots.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {spots.map((spot: Record<string, unknown>, i: number) => (
+            {spots.map((spot: Record<string, any>, i: number) => (
               <div key={i} className="lens-card border-l-4 border-l-yellow-500">
                 <p className="font-medium text-sm">{spot.description || spot.domain || spot}</p>
                 {spot.severity && (

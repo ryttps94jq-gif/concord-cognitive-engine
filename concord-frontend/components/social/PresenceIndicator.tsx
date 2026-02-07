@@ -206,7 +206,7 @@ interface CollaborativeCursorsProps {
   containerRef: React.RefObject<HTMLElement>;
 }
 
-export function CollaborativeCursors({ cursors, _containerRef }: CollaborativeCursorsProps) {
+export function CollaborativeCursors({ cursors, containerRef }: CollaborativeCursorsProps) {
   return (
     <>
       {cursors.map(cursor => (

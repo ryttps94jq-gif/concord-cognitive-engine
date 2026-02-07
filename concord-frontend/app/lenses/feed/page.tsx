@@ -65,7 +65,7 @@ export default function FeedLensPage() {
   const { data: feedPosts, isLoading } = useQuery({
     queryKey: ['feed-posts', activeTab],
     queryFn: () => api.get('/api/dtus', { params: { limit: 50 } }).then(r =>
-      r.data?.dtus?.map((dtu: Record<string, unknown>) => ({
+      r.data?.dtus?.map((dtu: Record<string, any>) => ({
         id: dtu.id,
         author: {
           id: dtu.authorId || 'user',

@@ -102,7 +102,7 @@ export default function DebugLensPage() {
             Recent Events ({events?.events?.length || 0})
           </h2>
           <div className="space-y-2 max-h-[500px] overflow-auto">
-            {(events?.events || []).slice(0, 50).map((event: Record<string, unknown>) => (
+            {(events?.events || []).slice(0, 50).map((event: Record<string, any>) => (
               <details key={event.id} className="bg-lattice-deep rounded-lg">
                 <summary className="flex items-center justify-between p-3 cursor-pointer">
                   <div className="flex items-center gap-3">
