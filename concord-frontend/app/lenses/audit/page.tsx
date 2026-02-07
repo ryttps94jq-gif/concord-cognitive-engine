@@ -28,7 +28,7 @@ export default function AuditLensPage() {
   });
 
   // Transform events to audit entries
-  const auditEntries: AuditEntry[] = (events?.events || []).slice(0, 100).map((e: Record<string, unknown>) => ({
+  const auditEntries: AuditEntry[] = (events?.events || []).slice(0, 100).map((e: Record<string, any>) => ({
     id: e.id,
     type: e.type?.includes('dtu') ? 'dtu' : e.type?.includes('tick') ? 'tick' : 'terminal',
     action: e.type || 'unknown',

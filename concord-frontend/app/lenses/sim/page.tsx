@@ -118,7 +118,7 @@ export default function SimLensPage() {
           {sims.length === 0 ? (
             <p className="text-center py-8 text-gray-500">No simulations yet</p>
           ) : (
-            sims.slice(0, 10).map((sim: Record<string, unknown>) => (
+            sims.slice(0, 10).map((sim: Record<string, any>) => (
               <details key={sim.id} className="bg-lattice-deep rounded-lg">
                 <summary className="flex items-center justify-between p-4 cursor-pointer">
                   <div>

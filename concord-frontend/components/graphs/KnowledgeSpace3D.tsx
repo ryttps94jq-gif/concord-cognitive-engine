@@ -153,7 +153,8 @@ function Scene({
   selectedNodeId?: string;
 }) {
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
-  const { _camera } = useThree();
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { camera } = useThree();
 
   // Create position map for edges
   const positionMap = useMemo(() => {

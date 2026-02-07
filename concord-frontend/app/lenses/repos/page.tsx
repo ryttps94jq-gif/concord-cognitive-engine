@@ -75,7 +75,7 @@ export default function ReposLensPage() {
   const { data: repos } = useQuery({
     queryKey: ['repos-list'],
     queryFn: () => api.get('/api/dtus', { params: { tags: 'repo' } }).then(r =>
-      r.data?.dtus?.map((dtu: Record<string, unknown>, i: number) => ({
+      r.data?.dtus?.map((dtu: Record<string, any>, i: number) => ({
         id: dtu.id,
         name: dtu.title || `project-${i}`,
         description: dtu.content?.slice(0, 100) || 'A Concord DTU repository',
@@ -95,7 +95,7 @@ export default function ReposLensPage() {
   const { data: issues } = useQuery({
     queryKey: ['repos-issues', selectedRepo],
     queryFn: () => api.get('/api/dtus', { params: { tags: 'issue' } }).then(r =>
-      r.data?.dtus?.map((dtu: Record<string, unknown>, i: number) => ({
+      r.data?.dtus?.map((dtu: Record<string, any>, i: number) => ({
         id: dtu.id,
         number: i + 1,
         title: dtu.title || dtu.content?.slice(0, 60),

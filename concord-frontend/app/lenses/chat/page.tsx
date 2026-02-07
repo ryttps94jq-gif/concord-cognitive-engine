@@ -57,7 +57,7 @@ interface Conversation {
 interface AIMode {
   id: string;
   name: string;
-  icon: React.ComponentType;
+  icon: React.ElementType;
   description: string;
 }
 

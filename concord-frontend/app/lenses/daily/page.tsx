@@ -147,7 +147,7 @@ export default function DailyLensPage() {
 
             {/* Due Reminders */}
             <div className="space-y-2">
-              {Array.isArray(reminders) && reminders.length > 0 ? reminders.map((r: Record<string, unknown>) => (
+              {Array.isArray(reminders) && reminders.length > 0 ? reminders.map((r: Record<string, any>) => (
                 <div key={r.id} className="lens-card text-sm">
                   <div className="flex items-start justify-between">
                     <div>

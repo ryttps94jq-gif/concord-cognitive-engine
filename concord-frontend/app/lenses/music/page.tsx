@@ -940,7 +940,7 @@ export default function MusicLensPage() {
                     value={eqBands[i]}
                     onChange={(e) => handleEqChange(i, parseInt(e.target.value))}
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    style={{ writingMode: 'vertical-rl' as unknown as string }}
+                    style={{ writingMode: 'vertical-rl' as any }}
                   />
                   <div
                     className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-neon-cyan to-neon-purple rounded-full transition-all"

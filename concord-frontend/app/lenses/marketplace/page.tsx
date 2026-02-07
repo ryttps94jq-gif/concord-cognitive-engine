@@ -67,6 +67,8 @@ interface Plugin {
   updatedAt: string;
   weeklyDownloads?: number;
   revenue?: number;
+  hasUpdate?: boolean;
+  installedAt?: string;
 }
 
 interface Review {
@@ -191,7 +193,7 @@ export default function MarketplaceLensPage() {
     }
   }, [plugins, category, search, sortBy]);
 
-  const isInstalled = (pluginId: string) => installed.some((p: Record<string, unknown>) => p.id === pluginId);
+  const isInstalled = (pluginId: string) => installed.some((p: any) => p.id === pluginId);
 
   // Auto-rotate featured
   // useEffect(() => {
@@ -663,7 +665,7 @@ function PluginListItem({ plugin, isInstalled, onInstall, onClick }: { plugin: P
   );
 }
 
-function InstalledTab({ plugins, onUninstall, onUpdate, onSettings }: { plugins: Plugin[]; onUninstall: (id: string) => void; onUpdate: (id: string) => void; onSettings: (id: string) => void }) {
+function InstalledTab({ plugins, onUninstall, onUpdate, onSettings }: { plugins: Plugin[]; onUninstall: (id: string) => void; onUpdate: (id: string) => void; onSettings: (plugin: Plugin) => void }) {
   if (plugins.length === 0) {
     return (
       <div className="text-center py-12 text-gray-400">
@@ -853,7 +855,7 @@ function CollectionsTab() {
   );
 }
 
-function PluginDetailModal({ plugin, reviews, isInstalled, onClose, onInstall, onReview }: { plugin: Plugin; reviews: Record<string, unknown>[]; isInstalled: boolean; onClose: () => void; onInstall: () => void; onReview: () => void }) {
+function PluginDetailModal({ plugin, reviews, isInstalled, onClose, onInstall, onReview }: { plugin: Plugin; reviews: Review[]; isInstalled: boolean; onClose: () => void; onInstall: () => void; onReview: () => void }) {
   const [activeTab, setActiveTab] = useState<'overview' | 'reviews' | 'changelog'>('overview');
 
   return (
@@ -1045,7 +1047,7 @@ function PluginDetailModal({ plugin, reviews, isInstalled, onClose, onInstall, o
             <div className="space-y-4">
               {(plugin.changelog || [
                 { version: plugin.version, date: plugin.updatedAt, changes: ['Initial release'] }
-              ]).map((entry: Record<string, unknown>) => (
+              ]).map((entry: Record<string, any>) => (
                 <div key={entry.version} className="p-4 bg-lattice-surface rounded-lg">
                   <div className="flex items-center gap-2 mb-2">
                     <span className="font-mono text-neon-purple">v{entry.version}</span>
@@ -1066,7 +1068,7 @@ function PluginDetailModal({ plugin, reviews, isInstalled, onClose, onInstall, o
   );
 }
 
-function SubmitPluginModal({ onClose, onSubmit, categories, submitting }: { onClose: () => void; onSubmit: (data: Record<string, unknown>) => void; categories: string[]; submitting: boolean }) {
+function SubmitPluginModal({ onClose, onSubmit, categories, submitting }: { onClose: () => void; onSubmit: (data: any) => void; categories: string[]; submitting: boolean }) {
   const [form, setForm] = useState({
     name: '',
     githubUrl: '',
@@ -1162,7 +1164,7 @@ function SubmitPluginModal({ onClose, onSubmit, categories, submitting }: { onCl
   );
 }
 
-function ReviewModal({ plugin, onClose, onSubmit, submitting }: { plugin: Plugin; onClose: () => void; onSubmit: (data: Record<string, unknown>) => void; submitting: boolean }) {
+function ReviewModal({ plugin, onClose, onSubmit, submitting }: { plugin: Plugin; onClose: () => void; onSubmit: (data: any) => void; submitting: boolean }) {
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
 

@@ -20,7 +20,7 @@ export default function TemporalLensPage() {
   const [frameName, setFrameName] = useState('');
   const [frameStart, setFrameStart] = useState('');
   const [frameEnd, setFrameEnd] = useState('');
-  const [results, setResults] = useState<unknown>(null);
+  const [results, setResults] = useState<any>(null);
 
   const { data: frames } = useQuery({
     queryKey: ['temporal-frames'],
@@ -139,7 +139,7 @@ export default function TemporalLensPage() {
           <div className="panel p-4">
             <h2 className="font-semibold mb-3">Time Frames</h2>
             <div className="space-y-2 max-h-48 overflow-y-auto">
-              {Array.isArray(framesList) && framesList.map((f: Record<string, unknown>, i: number) => (
+              {Array.isArray(framesList) && framesList.map((f: Record<string, any>, i: number) => (
                 <div key={i} className="lens-card text-xs">
                   <p className="font-medium">{f.name}</p>
                   <p className="text-gray-400">{f.start} → {f.end}</p>

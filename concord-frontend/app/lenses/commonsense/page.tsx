@@ -16,7 +16,7 @@ export default function CommonsenseLensPage() {
   const [relation, setRelation] = useState('is_a');
   const [object, setObject] = useState('');
   const [queryText, setQueryText] = useState('');
-  const [results, setResults] = useState<unknown>(null);
+  const [results, setResults] = useState<any>(null);
 
   const { data: factsData } = useQuery({
     queryKey: ['commonsense-facts'],
@@ -140,9 +140,9 @@ export default function CommonsenseLensPage() {
             <div className="space-y-1 max-h-64 overflow-y-auto">
               {Array.isArray(facts) && facts.slice(-20).reverse().map((f: Record<string, unknown>, i: number) => (
                 <div key={i} className="lens-card text-xs">
-                  <span className="text-neon-cyan">{f.subject}</span>
-                  <span className="text-gray-400 mx-1">{f.relation}</span>
-                  <span className="text-neon-purple">{f.object}</span>
+                  <span className="text-neon-cyan">{String(f.subject)}</span>
+                  <span className="text-gray-400 mx-1">{String(f.relation)}</span>
+                  <span className="text-neon-purple">{String(f.object)}</span>
                 </div>
               ))}
               {(!Array.isArray(facts) || facts.length === 0) && (

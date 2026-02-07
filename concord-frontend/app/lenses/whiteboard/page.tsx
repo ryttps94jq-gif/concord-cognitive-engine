@@ -296,7 +296,7 @@ export default function WhiteboardLensPage() {
     setTextPosition(null);
   };
 
-  const addDtu = (dtu: Record<string, unknown>) => {
+  const addDtu = (dtu: Record<string, any>) => {
     if (!textPosition) return;
     pushUndo();
     setElements(prev => [...prev, {
@@ -304,8 +304,8 @@ export default function WhiteboardLensPage() {
       type: 'dtu',
       x: textPosition.x,
       y: textPosition.y,
-      dtuId: dtu.id,
-      dtuTitle: dtu.title || dtu.content?.slice(0, 30),
+      dtuId: dtu.id as string,
+      dtuTitle: (dtu.title || dtu.content?.slice(0, 30)) as string,
       stroke: '#a855f7',
       fill: 'rgba(168, 85, 247, 0.1)',
       strokeWidth: 2,
@@ -535,7 +535,7 @@ export default function WhiteboardLensPage() {
           {isLoading ? (
             <div className="text-gray-500 text-sm">Loading...</div>
           ) : (
-            whiteboards?.whiteboards?.map((wb: Record<string, unknown>) => (
+            whiteboards?.whiteboards?.map((wb: Record<string, any>) => (
               <button key={wb.id} onClick={() => setSelectedWbId(wb.id)}
                 className={`w-full text-left p-3 rounded-lg border transition-colors ${selectedWbId === wb.id ? 'border-neon-pink bg-lattice-elevated' : 'border-lattice-border hover:border-neon-pink/50'}`}>
                 <p className="font-medium truncate">{wb.title}</p>
@@ -670,7 +670,7 @@ export default function WhiteboardLensPage() {
                         <button onClick={() => setShowDtuPicker(false)}><X className="w-5 h-5" /></button>
                       </div>
                       <div className="space-y-2">
-                        {dtus?.dtus?.slice(0, 20).map((dtu: Record<string, unknown>) => (
+                        {dtus?.dtus?.slice(0, 20).map((dtu: Record<string, any>) => (
                           <button key={dtu.id} onClick={() => addDtu(dtu)}
                             className="w-full text-left p-3 rounded-lg border border-lattice-border hover:border-neon-purple transition-colors">
                             <p className="font-medium truncate">{dtu.title || dtu.content?.slice(0, 40)}</p>
