@@ -233,7 +233,127 @@ Core functionality works without optional dependencies. These enhance capability
 
 ## License
 
-[License details here]
+CONCORD SOURCE LICENSE — COMMUNITY EDITION (CSL-CE 1.0)
+
+(DRAFT — Source-Available License)
+(Not legal advice — for public release until formal review)
+
+⸻
+
+1. Purpose
+
+The Concord Source License – Community Edition (“License”) enables individuals, students, researchers, and open-source contributors to freely use, run, study, and modify ConcordOS for personal and self-hosted purposes.
+
+This License exists to protect:
+	•	the integrity of the Concord ecosystem,
+	•	the DTU economy,
+	•	the Concord lexicon and architecture,
+	•	the Global Concord network,
+	•	and the Creator Marketplace
+
+…from unauthorized commercial exploitation, repackaging, or rebranding.
+
+This License is designed to be friendly to the community while ensuring Concord cannot be “sniped,” cloned, or commercialized by third parties without written permission from the Concord Project Owner.
+
+⸻
+
+2. Definitions
+
+“Software” – All ConcordOS source files, models, schemas, DTU systems, documentation, and accompanying assets in this repository.
+
+“Owner” – The creator and maintainer of the Concord Project.
+
+“Self-Hosted Use” – Running the Software for personal, research, educational, or internal organizational purposes, without charging users or offering it as a service.
+
+“Commercial Use” – Offering, selling, hosting, licensing, monetizing, or distributing the Software or any derivative for financial benefit, credits, tokens, royalties, subscriptions, or institutional income.
+
+“Derivative Marketplace” – Any platform that publishes, distributes, trades, licenses, or monetizes DTUs, Hyper-DTUs, simulation assets, personas, or lineage-derived structures.
+
+“Competing Global Network” – Any public deployment attempting to replicate, replace, compete with, or fork the official Concord Global infrastructure.
+
+⸻
+
+3. Rights Granted (Community-Friendly)
+
+Under this License, and subject to the Restrictions below, You MAY:
+
+✔ 1. Use the Software for personal, educational, and research purposes.
+
+✔ 2. Run private, self-hosted Concord nodes.
+
+✔ 3. Modify the Software for non-commercial experimentation.
+
+✔ 4. Create DTUs, personas, simulations, and extensions for private use.
+
+✔ 5. Contribute improvements back to the community via pull request.
+
+✔ 6. Teach, study, analyze, or learn from the Software.
+
+✔ 7. Fork the repository for personal or research use (non-commercial).
+
+These rights are perpetual, worldwide, and irrevocable so long as you follow this License.
+
+⸻
+
+4. Restrictions (Anti-Sniping Protections)
+
+You MAY NOT:
+
+❌ 1. Sell, license, or commercially distribute the Software.
+
+❌ 2. Offer Concord as a hosted service (“Concord-as-a-Service”).
+
+❌ 3. Operate or publish a Derivative Marketplace.
+
+❌ 4. Create, operate, or assist a Competing Global Network.
+
+❌ 5. Monetize DTUs, Hyper-DTUs, lineage graphs, simulations, or Concord-derived assets.
+
+❌ 6. Rebrand, rename, or misrepresent the Software as your own product.
+
+❌ 7. Modify and redistribute the Software for commercial purposes.
+
+❌ 8. Use the Software in any product that charges users directly or indirectly.
+
+❌ 9. Use Concord trademarks without written permission.
+
+❌ 10. Use Concord’s architecture or lexicon to bootstrap a competing ecosystem.
+
+If you wish to do any of these things, you must obtain written permission from the Owner.
+
+⸻
+
+5. Commercial Licensing Path
+
+Commercial hosting, enterprise deployment, integration with paid systems, marketplace operations, or running Concord-based public networks requires a separate commercial agreement with the Concord Project Owner.
+
+Permission may be granted or denied at the Owner’s sole discretion.
+
+⸻
+
+6. Trademark Notice
+
+“Concord,” “ConcordOS,” “DTU,” “Hyper-DTU,” “Concord Global,” “Concord Marketplace,” and associated names, logos, and terminology are not licensed under this agreement.
+
+Use of these marks requires explicit written permission.
+
+⸻
+
+7. Redistribution Rules (Community-Safe)
+
+You MAY redistribute modified versions only if:
+	•	You include this License in full,
+	•	The distribution is non-commercial,
+	•	You clearly state:
+“This is a modified, unofficial version of ConcordOS and not the official Concord project.”
+
+This keeps the community open while ensuring the brand identity stays protected.
+
+⸻
+
+8. Warranty Disclaimer
+
+The Software is provided “AS IS,” without warranty or liability.
 
 ---
 
