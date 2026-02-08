@@ -1403,6 +1403,8 @@ const STATE = {
   papers: new Map(),      // paperId -> {id, orgId, topic, outline, sections, refs, status, createdAt, updatedAt}
   organs: new Map(),      // organId -> organState
   growth: null,          // growth OS state
+  // v3: Generic lens artifact store (domain.type → artifact)
+  lensArtifacts: new Map(), // artifactId → {id, domain, type, ownerId, title, data, meta, createdAt, updatedAt, version}
   __chicken2: {
     enabled: true,
     mode: "full_blast",
@@ -13741,6 +13743,12 @@ allowMacro("chicken3", "meta_commit_quiet", _ACL_OWNER);
 allowMacro("entity", "terminal_approve", _ACL_ADMIN);
 allowMacro("grounding", "approve_action", _ACL_ADMIN);
 
+// Lens artifact macros: list/get/export = member, create/update/delete/run/bulkCreate = member
+allowDomain("lens", _ACL_MEMBER);
+allowMacro("lens", "list", _ACL_PUB);
+allowMacro("lens", "get", _ACL_PUB);
+allowMacro("lens", "export", _ACL_PUB);
+
 // Activate macro ACL enforcement
 globalThis.canRunMacro = _canRunMacro;
 
@@ -17620,6 +17628,196 @@ app.get("/api/visual/sunburst", async (req, res) => res.json(await runMacro("vis
 app.get("/api/visual/timeline", async (req, res) => res.json(await runMacro("visual", "timeline", { startDate: req.query.startDate, endDate: req.query.endDate, limit: req.query.limit }, makeCtx(req))));
 
 console.log("[Concord] Wave 4: Auto-Tagging & Visuals loaded");
+
+// ============================================================================
+// GENERIC LENS ARTIFACT RUNTIME (No-Mock Upgrade Infrastructure)
+// ============================================================================
+// Every lens can persist artifacts via these generic macros. Structure:
+//   { id, domain, type, ownerId, title, data:{}, meta:{tags,status,visibility}, createdAt, updatedAt, version }
+// DTU exhaust is emitted automatically on every mutation.
+
+function _lensEmitDTU(ctx, domain, action, artifactType, artifact, extra={}) {
+  try {
+    const dtuId = uid("dtu");
+    const dtu = {
+      id: dtuId,
+      title: `Lens:${domain} ${action} ${artifactType}`,
+      tier: "regular",
+      summary: `${action} ${artifactType} "${artifact.title || artifact.id}" in ${domain} lens`,
+      content: JSON.stringify({ domain, action, artifactType, artifactId: artifact.id, ...extra }),
+      tags: [`lens:${domain}`, `artifact:${artifactType}`, `action:${action}`],
+      createdAt: nowISO(),
+      updatedAt: nowISO(),
+      machine: { kind: "lens_exhaust", domain, action, artifactType, artifactId: artifact.id },
+      human: { summary: `${action} ${artifactType} in ${domain}` },
+      claims: extra.claims || [],
+    };
+    STATE.dtus.set(dtuId, dtu);
+    saveStateDebounced();
+    return dtuId;
+  } catch { return null; }
+}
+
+register("lens", "list", (ctx, input={}) => {
+  const { domain, type, search, tags, status, limit=100, offset=0 } = input;
+  if (!domain) return { ok: false, error: "domain required" };
+  let artifacts = Array.from(STATE.lensArtifacts.values())
+    .filter(a => a.domain === domain && (!type || a.type === type));
+  if (search) {
+    const q = String(search).toLowerCase();
+    artifacts = artifacts.filter(a => (a.title||"").toLowerCase().includes(q) || JSON.stringify(a.data||{}).toLowerCase().includes(q));
+  }
+  if (tags && tags.length) artifacts = artifacts.filter(a => tags.some(t => (a.meta?.tags||[]).includes(t)));
+  if (status) artifacts = artifacts.filter(a => a.meta?.status === status);
+  artifacts.sort((a,b) => (b.updatedAt||b.createdAt||"").localeCompare(a.updatedAt||a.createdAt||""));
+  const total = artifacts.length;
+  artifacts = artifacts.slice(offset, offset + limit);
+  return { ok: true, artifacts, total, domain, type };
+});
+
+register("lens", "get", (ctx, input={}) => {
+  const { id, domain } = input;
+  if (!id) return { ok: false, error: "id required" };
+  const artifact = STATE.lensArtifacts.get(id);
+  if (!artifact) return { ok: false, error: "not found" };
+  if (domain && artifact.domain !== domain) return { ok: false, error: "domain mismatch" };
+  return { ok: true, artifact };
+});
+
+register("lens", "create", (ctx, input={}) => {
+  const { domain, type, title, data={}, meta={} } = input;
+  if (!domain || !type) return { ok: false, error: "domain and type required" };
+  const id = uid("lart");
+  const artifact = {
+    id, domain, type,
+    ownerId: ctx.actor?.userId || "anon",
+    title: title || `New ${type}`,
+    data,
+    meta: { tags: meta.tags || [], status: meta.status || "draft", visibility: meta.visibility || "private", ...meta },
+    createdAt: nowISO(),
+    updatedAt: nowISO(),
+    version: 1,
+  };
+  STATE.lensArtifacts.set(id, artifact);
+  saveStateDebounced();
+  _lensEmitDTU(ctx, domain, "create", type, artifact);
+  return { ok: true, artifact };
+});
+
+register("lens", "update", (ctx, input={}) => {
+  const { id, title, data, meta } = input;
+  if (!id) return { ok: false, error: "id required" };
+  const artifact = STATE.lensArtifacts.get(id);
+  if (!artifact) return { ok: false, error: "not found" };
+  const before = { title: artifact.title, data: { ...artifact.data } };
+  if (title !== undefined) artifact.title = title;
+  if (data !== undefined) artifact.data = { ...artifact.data, ...data };
+  if (meta !== undefined) artifact.meta = { ...artifact.meta, ...meta };
+  artifact.updatedAt = nowISO();
+  artifact.version = (artifact.version || 1) + 1;
+  saveStateDebounced();
+  _lensEmitDTU(ctx, artifact.domain, "update", artifact.type, artifact, { claims: [`updated from v${artifact.version-1}`], before });
+  return { ok: true, artifact };
+});
+
+register("lens", "delete", (ctx, input={}) => {
+  const { id } = input;
+  if (!id) return { ok: false, error: "id required" };
+  const artifact = STATE.lensArtifacts.get(id);
+  if (!artifact) return { ok: false, error: "not found" };
+  STATE.lensArtifacts.delete(id);
+  saveStateDebounced();
+  _lensEmitDTU(ctx, artifact.domain, "delete", artifact.type, artifact);
+  return { ok: true, deleted: id };
+});
+
+register("lens", "run", async (ctx, input={}) => {
+  const { id, action, params={} } = input;
+  if (!id || !action) return { ok: false, error: "id and action required" };
+  const artifact = STATE.lensArtifacts.get(id);
+  if (!artifact) return { ok: false, error: "not found" };
+  // Domain-specific action handlers can be registered via lens.registerAction
+  const handler = LENS_ACTIONS.get(`${artifact.domain}.${action}`);
+  if (!handler) return { ok: false, error: `no handler for ${artifact.domain}.${action}` };
+  const result = await handler(ctx, artifact, params);
+  _lensEmitDTU(ctx, artifact.domain, action, artifact.type, artifact, { actionResult: result?.ok });
+  return { ok: true, result };
+});
+
+register("lens", "export", (ctx, input={}) => {
+  const { id, format="json" } = input;
+  if (!id) return { ok: false, error: "id required" };
+  const artifact = STATE.lensArtifacts.get(id);
+  if (!artifact) return { ok: false, error: "not found" };
+  _lensEmitDTU(ctx, artifact.domain, "export", artifact.type, artifact, { format });
+  if (format === "json") return { ok: true, format: "json", data: artifact };
+  return { ok: false, error: `unsupported format: ${format}` };
+});
+
+register("lens", "bulkCreate", (ctx, input={}) => {
+  const { domain, type, items=[] } = input;
+  if (!domain || !type || !items.length) return { ok: false, error: "domain, type, and items required" };
+  const created = [];
+  for (const item of items) {
+    const id = uid("lart");
+    const artifact = {
+      id, domain, type,
+      ownerId: ctx.actor?.userId || "anon",
+      title: item.title || `New ${type}`,
+      data: item.data || {},
+      meta: { tags: item.tags || [], status: item.status || "active", visibility: "private", ...(item.meta||{}) },
+      createdAt: nowISO(), updatedAt: nowISO(), version: 1,
+    };
+    STATE.lensArtifacts.set(id, artifact);
+    created.push(artifact);
+  }
+  saveStateDebounced();
+  _lensEmitDTU(ctx, domain, "bulkCreate", type, { id: "bulk", title: `${created.length} ${type}s` }, { count: created.length });
+  return { ok: true, artifacts: created, count: created.length };
+});
+
+// Lens action registry for domain-specific engines
+const LENS_ACTIONS = new Map(); // `${domain}.${action}` → async (ctx, artifact, params) => result
+function registerLensAction(domain, action, handler) {
+  LENS_ACTIONS.set(`${domain}.${action}`, handler);
+}
+
+// REST routes for generic lens artifacts
+app.get("/api/lens/:domain", async (req, res) => {
+  const ctx = makeCtx(req);
+  const out = await runMacro("lens", "list", { domain: req.params.domain, type: req.query.type, search: req.query.search, tags: req.query.tags?.split(","), status: req.query.status, limit: Number(req.query.limit)||100, offset: Number(req.query.offset)||0 }, ctx);
+  res.json(out);
+});
+app.get("/api/lens/:domain/:id", async (req, res) => {
+  const ctx = makeCtx(req);
+  res.json(await runMacro("lens", "get", { id: req.params.id, domain: req.params.domain }, ctx));
+});
+app.post("/api/lens/:domain", async (req, res) => {
+  const ctx = makeCtx(req);
+  res.json(await runMacro("lens", "create", { domain: req.params.domain, ...req.body }, ctx));
+});
+app.put("/api/lens/:domain/:id", async (req, res) => {
+  const ctx = makeCtx(req);
+  res.json(await runMacro("lens", "update", { id: req.params.id, ...req.body }, ctx));
+});
+app.delete("/api/lens/:domain/:id", async (req, res) => {
+  const ctx = makeCtx(req);
+  res.json(await runMacro("lens", "delete", { id: req.params.id }, ctx));
+});
+app.post("/api/lens/:domain/:id/run", async (req, res) => {
+  const ctx = makeCtx(req);
+  res.json(await runMacro("lens", "run", { id: req.params.id, ...req.body }, ctx));
+});
+app.get("/api/lens/:domain/:id/export", async (req, res) => {
+  const ctx = makeCtx(req);
+  res.json(await runMacro("lens", "export", { id: req.params.id, format: req.query.format || "json" }, ctx));
+});
+app.post("/api/lens/:domain/bulk", async (req, res) => {
+  const ctx = makeCtx(req);
+  res.json(await runMacro("lens", "bulkCreate", { domain: req.params.domain, ...req.body }, ctx));
+});
+
+console.log("[Concord] Lens Artifact Runtime loaded (generic CRUD + DTU exhaust)");
 
 // ============================================================================
 // WAVE 5: REAL-TIME COLLABORATION & WHITEBOARD (Surpassing AFFiNE)
