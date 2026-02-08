@@ -1,7 +1,7 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -36,7 +36,7 @@ import {
   Settings2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { DEMO_PLUGINS } from '@/lib/marketplace-demo';
+import { DEMO_PLUGINS as _DEMO_PLUGINS } from '@/lib/marketplace-demo';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -403,7 +403,7 @@ function AudioPreviewBar({
 
 export default function MarketplaceLensPage() {
   useLensNav('marketplace');
-  const queryClient = useQueryClient();
+  const _queryClient = useQueryClient();
 
   // State
   const [tab, setTab] = useState<Tab>('browse');
@@ -420,7 +420,7 @@ export default function MarketplaceLensPage() {
   const [showNewListing, setShowNewListing] = useState(false);
 
   // Queries (with demo fallback)
-  const { data: browseData } = useQuery({
+  const { data: _browseData } = useQuery({
     queryKey: ['marketplace-browse', search, category],
     queryFn: () => api.get(`/api/marketplace/browse?search=${search}&category=${category}`).then(r => r.data).catch(() => null),
   });
