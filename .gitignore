@@ -4,3 +4,6 @@ server/node_modules/
 server/concord_state.json
 concord_state.json
 data/
+
+# Next.js build output (when built from root)
+.next/
