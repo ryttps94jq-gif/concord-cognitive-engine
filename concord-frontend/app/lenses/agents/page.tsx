@@ -13,6 +13,7 @@ import {
   Workflow, Database,
   Layers, TrendingUp,
 } from 'lucide-react';
+import { ErrorState } from '@/components/common/EmptyState';
 
 // --- Types ---
 interface Agent {
@@ -193,7 +194,7 @@ export default function AgentsLensPage() {
   const [newMaxTokens, setNewMaxTokens] = useState(4096);
 
   // API with fallback
-  const { data: agentsData, isLoading } = useQuery({
+  const { data: agentsData, isLoading, isError: isError2, error: error2, refetch: refetch2,} = useQuery({
     queryKey: ['agents'],
     queryFn: () => apiHelpers.agents.list().then((r) => r.data).catch(() => null),
     refetchInterval: 5000,
@@ -271,6 +272,14 @@ export default function AgentsLensPage() {
 
   const typeInfo = (type?: string) => AGENT_TYPES.find(t => t.id === type) || AGENT_TYPES[0];
 
+
+  if (isError || isError2) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <ErrorState error={error?.message || error2?.message} onRetry={() => { refetch(); refetch2(); }} />
+      </div>
+    );
+  }
   return (
     <div className="min-h-full bg-lattice-bg">
       {/* Header */}

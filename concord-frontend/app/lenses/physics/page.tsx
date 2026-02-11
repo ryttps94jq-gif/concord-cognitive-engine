@@ -21,6 +21,7 @@ import {
   Target,
   Magnet
 } from 'lucide-react';
+import { ErrorState } from '@/components/common/EmptyState';
 
 // Physics body types
 interface Vector2D {
@@ -947,6 +948,14 @@ export default function PhysicsLensPage() {
   // Get selected body for editing
   const selectedBodyObj = bodies.find(b => b.id === selectedBody);
 
+
+  if (isError) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <ErrorState error={error?.message} onRetry={refetch} />
+      </div>
+    );
+  }
   return (
     <div className="p-6 space-y-6">
       <header className="flex items-center justify-between">

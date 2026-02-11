@@ -36,6 +36,7 @@ import {
   Beaker,
   LineChart
 } from 'lucide-react';
+import { ErrorState } from '@/components/common/EmptyState';
 
 // Types
 interface Model {
@@ -242,10 +243,10 @@ const INITIAL_DEPLOYMENTS: Deployment[] = [
 export default function MLLensPage() {
   useLensNav('ml');
   const queryClient = useQueryClient();
-  const { items: modelItems } = useLensData<Model>('ml', 'model', {
+  const { isError: isError, error: error, refetch: refetch, items: modelItems } = useLensData<Model>('ml', 'model', {
     seed: INITIAL_MODELS.map(m => ({ title: m.name, data: m as unknown as Record<string, unknown> })),
   });
-  const { items: expItems } = useLensData<Experiment>('ml', 'experiment', {
+  const { isError: isError2, error: error2, refetch: refetch2, items: expItems } = useLensData<Experiment>('ml', 'experiment', {
     seed: INITIAL_EXPERIMENTS.map(e => ({ title: e.name, data: e as unknown as Record<string, unknown> })),
   });
   const models: Model[] = modelItems.length > 0 ? modelItems.map(i => ({ ...(i.data as unknown as Model), id: i.id })) : INITIAL_MODELS;
@@ -416,6 +417,14 @@ export default function MLLensPage() {
     transformer: { color: 'text-yellow-400', icon: Brain }
   };
 
+
+  if (isError || isError2 || isError3 || isError4 || isError5) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <ErrorState error={error?.message || error2?.message || error3?.message || error4?.message || error5?.message} onRetry={() => { refetch(); refetch2(); refetch3(); refetch4(); refetch5(); }} />
+      </div>
+    );
+  }
   return (
     <div className="p-6 space-y-6">
       {/* Header */}

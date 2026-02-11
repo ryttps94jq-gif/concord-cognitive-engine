@@ -27,6 +27,7 @@ import {
   TrendingUp,
   Swords,
 } from 'lucide-react';
+import { ErrorState } from '@/components/common/EmptyState';
 
 // --------------- Types ---------------
 
@@ -279,13 +280,13 @@ export default function GoalsLensPage() {
   const [newXp, setNewXp] = useState(200);
   const [newPriority, setNewPriority] = useState<DemoGoal['priority']>('medium');
 
-  const { items: _goalItems, create: _createGoal, update: _updateGoal } = useLensData('goals', 'goal', {
+  const { isError: isError, error: error, refetch: refetch, items: _goalItems, create: _createGoal, update: _updateGoal } = useLensData('goals', 'goal', {
     seed: SEED_GOALS.map(g => ({ title: g.title, data: g as unknown as Record<string, unknown> })),
   });
-  const { items: _challengeItems } = useLensData('goals', 'challenge', {
+  const { isError: isError2, error: error2, refetch: refetch2, items: _challengeItems } = useLensData('goals', 'challenge', {
     seed: SEED_CHALLENGES.map(c => ({ title: c.title, data: c as unknown as Record<string, unknown> })),
   });
-  const { items: _milestoneItems } = useLensData('goals', 'milestone', {
+  const { isError: isError3, error: error3, refetch: refetch3, items: _milestoneItems } = useLensData('goals', 'milestone', {
     seed: SEED_MILESTONES.map(m => ({ title: m.title, data: m as unknown as Record<string, unknown> })),
   });
 
@@ -402,6 +403,14 @@ export default function GoalsLensPage() {
 
   const filterPills = ['All', 'Active', 'Completed', 'Creative', 'Technical', 'Release'];
 
+
+  if (isError || isError2 || isError3 || isError4 || isError5) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <ErrorState error={error?.message || error2?.message || error3?.message || error4?.message || error5?.message} onRetry={() => { refetch(); refetch2(); refetch3(); refetch4(); refetch5(); }} />
+      </div>
+    );
+  }
   return (
     <div className="p-6 space-y-6 max-w-5xl mx-auto">
       {/* ---- Header ---- */}

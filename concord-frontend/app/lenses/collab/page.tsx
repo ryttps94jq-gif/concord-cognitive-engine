@@ -38,6 +38,7 @@ import {
   Archive,
   Search,
 } from 'lucide-react';
+import { ErrorState } from '@/components/common/EmptyState';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -340,7 +341,7 @@ export default function CollabLensPage() {
   useLensNav('collab');
   const _queryClient = useQueryClient();
 
-  const { items: _sessionItems, create: _createSession } = useLensData('collab', 'session', {
+  const { isError: isError, error: error, refetch: refetch, items: _sessionItems, create: _createSession } = useLensData('collab', 'session', {
     seed: INITIAL_SESSIONS.map(s => ({ title: s.name, data: s as unknown as Record<string, unknown> })),
   });
 
@@ -388,6 +389,14 @@ export default function CollabLensPage() {
     );
   }
 
+
+  if (isError || isError2 || isError3 || isError4) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <ErrorState error={error?.message || error2?.message || error3?.message || error4?.message} onRetry={() => { refetch(); refetch2(); refetch3(); refetch4(); }} />
+      </div>
+    );
+  }
   return (
     <div className="p-6 space-y-5 max-w-[1440px] mx-auto">
       {/* Header */}
@@ -1026,7 +1035,7 @@ function CreateSessionModal({ onClose }: { onClose: () => void }) {
     linkedProjectId: '',
   });
 
-  const { data: projectsData } = useQuery({
+  const { data: projectsData, isError: isError4, error: error4, refetch: refetch4,} = useQuery({
     queryKey: ['studio-projects-for-link'],
     queryFn: () => api.get('/api/artistry/studio/projects').then(r => r.data),
     retry: 1,

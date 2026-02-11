@@ -26,6 +26,7 @@ import {
   Maximize2,
   Link2
 } from 'lucide-react';
+import { ErrorState } from '@/components/common/EmptyState';
 
 interface ThreadNode {
   id: string;
@@ -304,6 +305,14 @@ export default function ThreadLensPage() {
     );
   };
 
+
+  if (isError || isError2) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <ErrorState error={error?.message || error2?.message} onRetry={() => { refetch(); refetch2(); }} />
+      </div>
+    );
+  }
   return (
     <div className="h-[calc(100vh-4rem)] flex flex-col">
       <header className="flex items-center justify-between p-4 border-b border-lattice-border">

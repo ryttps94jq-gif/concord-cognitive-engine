@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { useState } from 'react';
 import { Glasses, Camera, Scan, Settings } from 'lucide-react';
+import { ErrorState } from '@/components/common/EmptyState';
 
 export default function ARLensPage() {
   useLensNav('ar');
@@ -24,6 +25,14 @@ export default function ARLensPage() {
     { id: 'temporal-markers', name: 'Temporal Markers', description: 'Time-based annotations', icon: '⏰' },
   ];
 
+
+  if (isError || isError2) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <ErrorState error={error?.message || error2?.message} onRetry={() => { refetch(); refetch2(); }} />
+      </div>
+    );
+  }
   return (
     <div className="p-6 space-y-6">
       <header className="flex items-center justify-between">
