@@ -12,11 +12,6 @@ export default function ARLensPage() {
   const [arEnabled, setArEnabled] = useState(false);
   const [selectedLayer, setSelectedLayer] = useState<string | null>(null);
 
-  const { data: _arStatus } = useQuery({
-    queryKey: ['ar-status'],
-    queryFn: () => api.get('/api/ar/status').then((r) => r.data),
-  });
-
   const { data: arLayers } = useQuery({
     queryKey: ['ar-layers'],
     queryFn: () => api.get('/api/ar/layers').then((r) => r.data),

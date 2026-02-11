@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { api } from '@/lib/api/client';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -264,18 +264,6 @@ export default function GameLensPage() {
   });
 
   // API queries -- fall back to demo data when backend is unavailable
-  const { data: _profileData } = useQuery({
-    queryKey: ['game-profile'],
-    queryFn: () => api.get('/api/game/profile').then((r) => r.data),
-    retry: false,
-  });
-
-  const { data: _serverAchievements } = useQuery({
-    queryKey: ['game-achievements'],
-    queryFn: () => api.get('/api/game/achievements').then((r) => r.data),
-    retry: false,
-  });
-
   const completeQuestMutation = useMutation({
     mutationFn: (questId: string) => api.post(`/api/game/quests/${questId}/complete`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['game-profile'] }),
