@@ -257,7 +257,17 @@ import {
   updateContentShieldConfig, getContentShieldMetrics,
 } from "./content-shield.js";
 
-const EMERGENT_VERSION = "5.0.0";
+// ── Action Slots (UX Architecture) ──────────────────────────────────────────
+
+import {
+  SLOT_POSITIONS, ALL_SLOT_POSITIONS, RESULT_STATES, ALL_RESULT_STATES,
+  registerSlotConfig, getSlotConfig, getAllSlotConfigs, getSlotLabel,
+  recordInvocation, makeResult, unregisterSlotConfig,
+  getInvocations, getResultDistribution, auditSlotCoverage,
+  getFailureRates, getActionSlotMetrics,
+} from "./action-slots.js";
+
+const EMERGENT_VERSION = "5.1.0";
 
 /**
  * Initialize the Emergent Agent Governance system.
@@ -1203,6 +1213,58 @@ function init({ register, STATE, helpers }) {
   }, { description: "Get content shield metrics", public: true });
 
   // ══════════════════════════════════════════════════════════════════════════
+  // ACTION SLOTS (UX Architecture)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  register("emergent", "slots.register", (_ctx, input = {}) => {
+    return registerSlotConfig(STATE, input.domain, input);
+  }, { description: "Register lens action slot configuration", public: false });
+
+  register("emergent", "slots.get", (_ctx, input = {}) => {
+    return getSlotConfig(STATE, input.domain);
+  }, { description: "Get slot config for a lens", public: true });
+
+  register("emergent", "slots.all", (_ctx) => {
+    return getAllSlotConfigs(STATE);
+  }, { description: "Get all lens slot configurations", public: true });
+
+  register("emergent", "slots.label", (_ctx, input = {}) => {
+    return getSlotLabel(STATE, input.domain, input.position);
+  }, { description: "Get slot label for a lens position", public: true });
+
+  register("emergent", "slots.invoke", (_ctx, input = {}) => {
+    return recordInvocation(STATE, input.domain, input.position, input);
+  }, { description: "Record a slot handler invocation", public: false });
+
+  register("emergent", "slots.result", (_ctx, input = {}) => {
+    return makeResult(input.state, input.data || {});
+  }, { description: "Create a standardized handler result", public: true });
+
+  register("emergent", "slots.unregister", (_ctx, input = {}) => {
+    return unregisterSlotConfig(STATE, input.domain);
+  }, { description: "Unregister a lens slot configuration", public: false });
+
+  register("emergent", "slots.invocations", (_ctx, input = {}) => {
+    return getInvocations(STATE, input);
+  }, { description: "Get recent slot invocations", public: true });
+
+  register("emergent", "slots.distribution", (_ctx, input = {}) => {
+    return getResultDistribution(STATE, input.domain);
+  }, { description: "Get result distribution for a lens", public: true });
+
+  register("emergent", "slots.coverage", (_ctx) => {
+    return auditSlotCoverage(STATE);
+  }, { description: "Audit slot coverage across lenses", public: true });
+
+  register("emergent", "slots.failureRates", (_ctx, input = {}) => {
+    return getFailureRates(STATE, input);
+  }, { description: "Get failure rates per lens", public: true });
+
+  register("emergent", "slots.metrics", (_ctx) => {
+    return getActionSlotMetrics(STATE);
+  }, { description: "Get action slot system metrics", public: true });
+
+  // ══════════════════════════════════════════════════════════════════════════
   // AUDIT / STATUS
   // ══════════════════════════════════════════════════════════════════════════
 
@@ -1281,6 +1343,9 @@ function init({ register, STATE, helpers }) {
       piiTypes: ALL_PII_TYPES,
       adviceDomains: ALL_ADVICE_DOMAINS,
       contentRiskLevels: Object.values(CONTENT_RISK),
+      // Action Slots additions
+      slotPositions: ALL_SLOT_POSITIONS,
+      resultStates: ALL_RESULT_STATES,
     };
   }, { description: "Get emergent system schema", public: true });
 
@@ -1288,13 +1353,13 @@ function init({ register, STATE, helpers }) {
   getConstitutionStore(STATE);
 
   if (helpers?.log) {
-    helpers.log("emergent.init", `Emergent Agent Governance v${EMERGENT_VERSION} initialized (stages 1-9 + hardening)`);
+    helpers.log("emergent.init", `Emergent Agent Governance v${EMERGENT_VERSION} initialized (stages 1-9 + hardening + action slots)`);
   }
 
   return {
     ok: true,
     version: EMERGENT_VERSION,
-    macroCount: 210,
+    macroCount: 223,
   };
 }
 
