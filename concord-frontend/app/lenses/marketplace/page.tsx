@@ -37,7 +37,7 @@ import {
   Settings2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { DEMO_PLUGINS as _DEMO_PLUGINS } from '@/lib/marketplace-demo';
+// marketplace-demo.ts has been deprecated — all data comes from API
 import { ErrorState } from '@/components/common/EmptyState';
 
 // ---------------------------------------------------------------------------
@@ -129,86 +129,86 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
 const GENRE_OPTIONS = ['All Genres', 'Hip-Hop', 'R&B', 'Pop', 'Electronic', 'Lo-Fi', 'Trap', 'Rock', 'Jazz', 'Ambient'];
 
 // ---------------------------------------------------------------------------
-// Demo Data
+// Helpers: normalize API responses into MarketplaceItem shape
 // ---------------------------------------------------------------------------
 
-const INITIAL_ITEMS: MarketplaceItem[] = [
-  {
-    id: 'beat-001', title: 'Midnight Cipher', description: 'Dark trap beat with haunting 808s and ethereal pads. Perfect for introspective rap.', type: 'beat', genre: 'Trap', bpm: 140, key: 'Dm', duration: '3:42',
-    creator: { name: 'ProdByNova', avatar: undefined, verified: true },
-    prices: { basic: 29, premium: 79, unlimited: 199, exclusive: 499 },
-    rating: 4.8, ratingCount: 124, sales: 312, tags: ['dark', 'trap', '808', 'atmospheric'],
-    featured: true, createdAt: '2026-01-15',
-  },
-  {
-    id: 'beat-002', title: 'Golden Hour', description: 'Smooth R&B instrumental with warm keys and layered drums.', type: 'beat', genre: 'R&B', bpm: 92, key: 'Gb', duration: '4:05',
-    creator: { name: 'VelvetBeats', verified: true },
-    prices: { basic: 25, premium: 65, unlimited: 179, exclusive: 450 },
-    rating: 4.6, ratingCount: 89, sales: 198, tags: ['rnb', 'smooth', 'keys', 'soulful'],
-    featured: true, createdAt: '2026-01-22',
-  },
-  {
-    id: 'stem-001', title: 'Neon Dreams Stem Pack', description: 'Full stem pack: drums, bass, synths, and FX from the Neon Dreams beat.', type: 'stem', genre: 'Electronic',
-    creator: { name: 'SynthLord', verified: false },
-    prices: { basic: 15, premium: 39, unlimited: 89, exclusive: 200 },
-    rating: 4.5, ratingCount: 56, sales: 143, tags: ['stems', 'electronic', 'synth', 'drums'],
-    createdAt: '2026-01-18',
-  },
-  {
-    id: 'sample-001', title: 'Lo-Fi Textures Vol. 3', description: '50 vinyl crackle, tape hiss, and ambient noise samples for lo-fi production.', type: 'sample', genre: 'Lo-Fi',
-    creator: { name: 'DustyCrates', verified: true },
-    prices: { basic: 19, premium: 45, unlimited: 99, exclusive: 250 },
-    rating: 4.9, ratingCount: 203, sales: 587, tags: ['lofi', 'texture', 'vinyl', 'ambient'],
-    featured: true, createdAt: '2026-01-05',
-  },
-  {
-    id: 'sample-002', title: 'Orchestra Hits & Stabs', description: 'Cinematic orchestral one-shots. Brass stabs, string swells, and timpani hits.', type: 'sample', genre: 'Hip-Hop',
-    creator: { name: 'CinematicSound', verified: true },
-    prices: { basic: 25, premium: 59, unlimited: 129, exclusive: 300 },
-    rating: 4.7, ratingCount: 91, sales: 234, tags: ['orchestra', 'cinematic', 'brass', 'strings'],
-    createdAt: '2026-01-12',
-  },
-  {
-    id: 'art-001', title: 'Void Walker Cover Art', description: 'Dark futuristic album cover. 3000x3000px, layered PSD included.', type: 'artwork',
-    creator: { name: 'PixelDrift', verified: true },
-    prices: { basic: 50, premium: 120, unlimited: 250, exclusive: 500 },
-    rating: 4.9, ratingCount: 67, sales: 89, tags: ['album-cover', 'dark', 'futuristic', '3d'],
-    featured: true, createdAt: '2026-01-20',
-  },
-  {
-    id: 'art-002', title: 'Gradient Aura Pack', description: '10 abstract gradient artwork templates for singles and EPs.', type: 'artwork',
-    creator: { name: 'ChromaStudio' },
-    prices: { basic: 35, premium: 75, unlimited: 150, exclusive: 350 },
-    rating: 4.4, ratingCount: 42, sales: 112, tags: ['gradient', 'abstract', 'template', 'modern'],
-    createdAt: '2026-01-25',
-  },
-  {
-    id: 'preset-001', title: 'Serum: Future Bass Essentials', description: '64 Serum presets for future bass, including leads, pads, and plucks.', type: 'preset', genre: 'Electronic',
-    creator: { name: 'SynthLord', verified: false },
-    prices: { basic: 20, premium: 49, unlimited: 99, exclusive: 200 },
-    rating: 4.6, ratingCount: 158, sales: 421, tags: ['serum', 'future-bass', 'presets', 'synth'],
-    createdAt: '2026-01-08',
-  },
-  {
-    id: 'beat-003', title: 'Paper Trail', description: 'Hard-hitting boom bap beat with dusty samples and punchy drums.', type: 'beat', genre: 'Hip-Hop', bpm: 90, key: 'Am', duration: '3:28',
-    creator: { name: 'DustyCrates', verified: true },
-    prices: { basic: 30, premium: 80, unlimited: 190, exclusive: 475 },
-    rating: 4.7, ratingCount: 76, sales: 167, tags: ['boombap', 'dusty', 'classic', 'raw'],
-    createdAt: '2026-02-01',
-  },
-  {
-    id: 'plugin-001', title: 'Concord Spectrum Analyzer', description: 'Real-time audio spectrum analyzer plugin for Concord workstation.', type: 'plugin',
-    creator: { name: 'Concord Labs', verified: true },
-    prices: { basic: 0, premium: 29, unlimited: 49, exclusive: 99 },
-    rating: 4.8, ratingCount: 312, sales: 890, tags: ['analyzer', 'audio', 'visualization', 'utility'],
-    featured: true, createdAt: '2025-12-20',
-  },
-];
+function normalizeBeats(beats: Record<string, unknown>[]): MarketplaceItem[] {
+  return (beats || []).map((b: Record<string, unknown>) => ({
+    id: String(b.id || ''),
+    title: String(b.title || 'Untitled'),
+    description: String(b.description || ''),
+    type: 'beat' as const,
+    genre: b.genre ? String(b.genre) : undefined,
+    bpm: typeof b.bpm === 'number' ? b.bpm : undefined,
+    key: b.key ? String(b.key) : undefined,
+    creator: { name: String((b as Record<string, unknown>).ownerId || 'Unknown') },
+    prices: normalizePrices(b.licenses as Record<string, unknown>),
+    rating: typeof b.rating === 'number' ? b.rating : 0,
+    ratingCount: Array.isArray(b.reviews) ? b.reviews.length : 0,
+    sales: typeof b.totalSales === 'number' ? b.totalSales : 0,
+    tags: Array.isArray(b.tags) ? b.tags : [],
+    createdAt: b.createdAt ? new Date(b.createdAt as number).toISOString() : new Date().toISOString(),
+  }));
+}
 
-const INITIAL_PURCHASES: Purchase[] = [
-  { id: 'p-1', item: INITIAL_ITEMS[0], license: 'premium', price: 79, purchasedAt: '2026-01-28' },
-  { id: 'p-2', item: INITIAL_ITEMS[3], license: 'basic', price: 19, purchasedAt: '2026-01-20' },
-];
+function normalizeStems(stems: Record<string, unknown>[]): MarketplaceItem[] {
+  return (stems || []).map((s: Record<string, unknown>) => ({
+    id: String(s.id || ''),
+    title: String(s.title || 'Untitled'),
+    description: String(s.description || ''),
+    type: 'stem' as const,
+    genre: s.genre ? String(s.genre) : undefined,
+    creator: { name: String(s.ownerId || 'Unknown') },
+    prices: { basic: typeof s.price === 'number' ? s.price : 0, premium: 0, unlimited: 0, exclusive: 0 },
+    rating: 0,
+    ratingCount: 0,
+    sales: typeof s.totalSales === 'number' ? s.totalSales : 0,
+    tags: Array.isArray(s.tags) ? s.tags : [],
+    createdAt: s.createdAt ? new Date(s.createdAt as number).toISOString() : new Date().toISOString(),
+  }));
+}
+
+function normalizeSamples(samples: Record<string, unknown>[]): MarketplaceItem[] {
+  return (samples || []).map((s: Record<string, unknown>) => ({
+    id: String(s.id || ''),
+    title: String(s.title || 'Untitled'),
+    description: String(s.description || ''),
+    type: 'sample' as const,
+    genre: s.genre ? String(s.genre) : undefined,
+    creator: { name: String(s.ownerId || 'Unknown') },
+    prices: { basic: typeof s.price === 'number' ? s.price : 0, premium: 0, unlimited: 0, exclusive: 0 },
+    rating: 0,
+    ratingCount: 0,
+    sales: typeof s.totalSales === 'number' ? s.totalSales : 0,
+    tags: Array.isArray(s.tags) ? s.tags : [],
+    createdAt: s.createdAt ? new Date(s.createdAt as number).toISOString() : new Date().toISOString(),
+  }));
+}
+
+function normalizeArt(art: Record<string, unknown>[]): MarketplaceItem[] {
+  return (art || []).map((a: Record<string, unknown>) => ({
+    id: String(a.id || ''),
+    title: String(a.title || 'Untitled'),
+    description: String(a.description || ''),
+    type: 'artwork' as const,
+    creator: { name: String(a.ownerId || 'Unknown') },
+    prices: { basic: typeof a.price === 'number' ? a.price : 0, premium: 0, unlimited: 0, exclusive: 0 },
+    rating: 0,
+    ratingCount: 0,
+    sales: typeof a.totalSales === 'number' ? a.totalSales : 0,
+    tags: Array.isArray(a.tags) ? a.tags : [],
+    createdAt: a.createdAt ? new Date(a.createdAt as number).toISOString() : new Date().toISOString(),
+  }));
+}
+
+function normalizePrices(licenses: Record<string, unknown> | null | undefined): LicensePrice {
+  if (!licenses) return { basic: 0, premium: 0, unlimited: 0, exclusive: 0 };
+  const get = (key: string) => {
+    const entry = licenses[key] as Record<string, unknown> | undefined;
+    return typeof entry?.price === 'number' ? entry.price : 0;
+  };
+  return { basic: get('basic'), premium: get('premium'), unlimited: get('unlimited'), exclusive: get('exclusive') };
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -415,49 +415,54 @@ export default function MarketplaceLensPage() {
   const [sortBy, setSortBy] = useState<SortOption>('popular');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [purchases, setPurchases] = useState<Purchase[]>(INITIAL_PURCHASES);
+  const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [previewItem, setPreviewItem] = useState<MarketplaceItem | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [featuredIdx, setFeaturedIdx] = useState(0);
   const [showNewListing, setShowNewListing] = useState(false);
 
   const { isError: isError, error: error, refetch: refetch, items: _listingItems, create: _createListing } = useLensData('marketplace', 'listing', {
-    seed: INITIAL_ITEMS.map(i => ({ title: i.title, data: i as unknown as Record<string, unknown> })),
+    noSeed: true,
   });
   const { isError: isError2, error: error2, refetch: refetch2, items: _purchaseItems } = useLensData('marketplace', 'purchase', {
-    seed: INITIAL_PURCHASES.map(p => ({ title: p.item?.title || p.id, data: p as unknown as Record<string, unknown> })),
+    noSeed: true,
   });
 
-  // Queries (with demo fallback)
+  // Real API queries — no demo fallback
   const { data: beatsData } = useQuery({
     queryKey: ['artistry-beats'],
-    queryFn: () => api.get('/api/artistry/marketplace/beats').then(r => r.data).catch(() => null),
+    queryFn: () => api.get('/api/artistry/marketplace/beats').then(r => r.data).catch(() => ({ beats: [] })),
   });
 
   const { data: stemsData, isError: isError5, error: error5, refetch: refetch5,} = useQuery({
     queryKey: ['artistry-stems'],
-    queryFn: () => api.get('/api/artistry/marketplace/stems').then(r => r.data).catch(() => null),
+    queryFn: () => api.get('/api/artistry/marketplace/stems').then(r => r.data).catch(() => ({ stems: [] })),
   });
 
   const { data: samplesData, isError: isError6, error: error6, refetch: refetch6,} = useQuery({
     queryKey: ['artistry-samples'],
-    queryFn: () => api.get('/api/artistry/marketplace/samples').then(r => r.data).catch(() => null),
+    queryFn: () => api.get('/api/artistry/marketplace/samples').then(r => r.data).catch(() => ({ samples: [] })),
   });
 
   const { data: artData, isError: isError7, error: error7, refetch: refetch7,} = useQuery({
     queryKey: ['artistry-art'],
-    queryFn: () => api.get('/api/artistry/marketplace/art').then(r => r.data).catch(() => null),
+    queryFn: () => api.get('/api/artistry/marketplace/art').then(r => r.data).catch(() => ({ artworks: [] })),
   });
 
-  // Merge API data with demo fallback
+  // Purchases from API
+  const { data: purchaseData } = useQuery({
+    queryKey: ['artistry-purchases'],
+    queryFn: () => api.get('/api/artistry/marketplace/licenses').then(r => r.data).catch(() => ({ licenseTypes: {} })),
+  });
+
+  // Merge real API data — no demo fallback
   const allItems = useMemo(() => {
-    const apiItems: MarketplaceItem[] = [
-      ...(beatsData?.items ?? []),
-      ...(stemsData?.items ?? []),
-      ...(samplesData?.items ?? []),
-      ...(artData?.items ?? []),
+    return [
+      ...normalizeBeats(beatsData?.beats ?? []),
+      ...normalizeStems(stemsData?.stems ?? []),
+      ...normalizeSamples(samplesData?.samples ?? []),
+      ...normalizeArt(artData?.artworks ?? []),
     ];
-    return apiItems.length > 0 ? apiItems : INITIAL_ITEMS;
   }, [beatsData, stemsData, samplesData, artData]);
 
   const featuredItems = useMemo(() => allItems.filter(i => i.featured), [allItems]);
@@ -743,9 +748,9 @@ export default function MarketplaceLensPage() {
             </button>
           </div>
 
-          {/* Existing listings (mock) */}
+          {/* Existing listings from API */}
           <div className="space-y-2">
-            {INITIAL_ITEMS.slice(0, 3).map(item => (
+            {allItems.slice(0, 3).map(item => (
               <div key={item.id} className="panel p-4 flex items-center gap-4">
                 <div className="w-10 h-10 rounded-lg bg-lattice-deep flex items-center justify-center">
                   {(() => { const I = typeIcon(item.type); return <I className="w-5 h-5 text-gray-500" />; })()}
@@ -938,7 +943,7 @@ export default function MarketplaceLensPage() {
           {/* Top Sellers */}
           <div className="panel p-5 space-y-3">
             <h3 className="font-semibold flex items-center gap-2"><TrendingUp className="w-4 h-4 text-neon-green" /> Top Selling Items</h3>
-            {INITIAL_ITEMS.sort((a, b) => b.sales - a.sales).slice(0, 5).map((item, i) => (
+            {[...allItems].sort((a, b) => b.sales - a.sales).slice(0, 5).map((item, i) => (
               <div key={item.id} className="flex items-center gap-3 py-2 border-b border-lattice-border last:border-0">
                 <span className="text-xs text-gray-600 w-5 text-right font-mono">{i + 1}</span>
                 <div className="flex-1 min-w-0">
@@ -951,13 +956,19 @@ export default function MarketplaceLensPage() {
             ))}
           </div>
 
-          {/* Quick stats */}
+          {/* Quick stats — computed from real data */}
           <div className="grid grid-cols-3 gap-4">
-            {[
-              { label: 'This Month', value: '$1,240', sub: '+18% vs last month', color: 'text-neon-green' },
-              { label: 'Unique Buyers', value: '23', sub: '+5 new this month', color: 'text-neon-cyan' },
-              { label: 'Avg Order Value', value: '$52', sub: 'Across all licenses', color: 'text-neon-purple' },
-            ].map(s => (
+            {(() => {
+              const myListings = allItems.slice(0, 3);
+              const totalRevenue = myListings.reduce((sum, i) => sum + (i.sales * i.prices.basic * 0.7), 0);
+              const totalSales = myListings.reduce((sum, i) => sum + i.sales, 0);
+              const avgOrder = totalSales > 0 ? Math.round(totalRevenue / totalSales) : 0;
+              return [
+                { label: 'Total Revenue', value: totalRevenue > 0 ? `$${Math.round(totalRevenue).toLocaleString()}` : '$0', sub: `From ${totalSales} sales`, color: 'text-neon-green' },
+                { label: 'Total Sales', value: String(totalSales), sub: `Across ${myListings.length} listings`, color: 'text-neon-cyan' },
+                { label: 'Avg Order Value', value: avgOrder > 0 ? `$${avgOrder}` : '$0', sub: 'Across all licenses', color: 'text-neon-purple' },
+              ];
+            })().map(s => (
               <div key={s.label} className="lens-card p-4 space-y-1">
                 <p className="text-xs text-gray-400">{s.label}</p>
                 <p className={cn('text-xl font-bold', s.color)}>{s.value}</p>

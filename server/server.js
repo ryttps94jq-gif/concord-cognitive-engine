@@ -24340,12 +24340,16 @@ function getAdminStats() {
   };
 }
 
-// ---- Team Templates ----
-const TEAM_TEMPLATES = new Map(); // templateId -> { id, name, schema, workspaceId, createdBy }
+// ---- Team Templates — backed by STATE for persistence ----
+function ensureTeamTemplates() {
+  if (!STATE.teamTemplates) STATE.teamTemplates = new Map();
+  return STATE.teamTemplates;
+}
 
 function createTeamTemplate(workspaceId, template, createdBy) {
+  const templates = ensureTeamTemplates();
   const id = uid("tmpl");
-  TEAM_TEMPLATES.set(id, {
+  templates.set(id, {
     id,
     name: template.name,
     description: template.description || "",
@@ -24353,19 +24357,40 @@ function createTeamTemplate(workspaceId, template, createdBy) {
     tags: template.tags || [],
     workspaceId,
     createdBy,
-    createdAt: nowISO()
+    createdAt: nowISO(),
+    updatedAt: nowISO(),
   });
   return { ok: true, templateId: id };
 }
 
+function updateTeamTemplate(templateId, updates) {
+  const templates = ensureTeamTemplates();
+  const tmpl = templates.get(templateId);
+  if (!tmpl) return { ok: false, error: "not_found" };
+  if (updates.name) tmpl.name = updates.name;
+  if (updates.description !== undefined) tmpl.description = updates.description;
+  if (updates.content !== undefined) tmpl.content = updates.content;
+  if (updates.tags) tmpl.tags = updates.tags;
+  tmpl.updatedAt = nowISO();
+  return { ok: true, template: tmpl };
+}
+
+function deleteTeamTemplate(templateId) {
+  const templates = ensureTeamTemplates();
+  if (!templates.has(templateId)) return { ok: false, error: "not_found" };
+  templates.delete(templateId);
+  return { ok: true };
+}
+
 function getWorkspaceTemplates(workspaceId) {
-  const templates = [];
-  for (const [, tmpl] of TEAM_TEMPLATES) {
+  const templates = ensureTeamTemplates();
+  const result = [];
+  for (const [, tmpl] of templates) {
     if (tmpl.workspaceId === workspaceId) {
-      templates.push(tmpl);
+      result.push(tmpl);
     }
   }
-  return { ok: true, templates };
+  return { ok: true, templates: result };
 }
 
 // ---- SSO Placeholder (would need passport.js for full implementation) ----
@@ -24773,6 +24798,14 @@ app.get("/api/workspaces/:id/templates", (req, res) => {
   res.json(getWorkspaceTemplates(req.params.id));
 });
 
+app.put("/api/workspaces/:id/templates/:templateId", (req, res) => {
+  res.json(updateTeamTemplate(req.params.templateId, req.body));
+});
+
+app.delete("/api/workspaces/:id/templates/:templateId", (req, res) => {
+  res.json(deleteTeamTemplate(req.params.templateId));
+});
+
 // ---- Wave 15: Ecosystem Endpoints ----
 app.post("/api/cli", async (req, res) => {
   const result = await executeCLICommand(req.body.command);
@@ -24946,24 +24979,106 @@ app.get("/api/quests/mine", async (req, res) => {
   }
 });
 
-// Physics simulation (stub)
-const PHYSICS_STATE = { enabled: false, params: { gravity: 9.81, friction: 0.5 }, bodies: [] };
+// Physics simulation — backed by STATE for persistence
+function ensurePhysicsState() {
+  if (!STATE.physics) {
+    STATE.physics = {
+      enabled: false,
+      params: { gravity: 9.81, friction: 0.5, timeStep: 1/60, restitution: 0.3 },
+      bodies: new Map(), // bodyId -> { id, label, mass, position, velocity, forces }
+      stepCount: 0,
+      lastStepAt: null,
+    };
+  }
+  return STATE.physics;
+}
+
 app.get("/api/physics/simulation", (req, res) => {
-  res.json({ ok: true, ...PHYSICS_STATE });
+  const ps = ensurePhysicsState();
+  res.json({
+    ok: true,
+    enabled: ps.enabled,
+    params: ps.params,
+    bodies: Array.from(ps.bodies.values()),
+    bodyCount: ps.bodies.size,
+    stepCount: ps.stepCount,
+    lastStepAt: ps.lastStepAt,
+  });
 });
 
 app.post("/api/physics/toggle", (req, res) => {
-  PHYSICS_STATE.enabled = !PHYSICS_STATE.enabled;
-  res.json({ ok: true, enabled: PHYSICS_STATE.enabled });
+  const ps = ensurePhysicsState();
+  ps.enabled = !ps.enabled;
+  res.json({ ok: true, enabled: ps.enabled });
 });
 
 app.post("/api/physics/params", (req, res) => {
-  Object.assign(PHYSICS_STATE.params, req.body);
-  res.json({ ok: true, params: PHYSICS_STATE.params });
+  const ps = ensurePhysicsState();
+  const { gravity, friction, timeStep, restitution } = req.body;
+  if (typeof gravity === 'number') ps.params.gravity = gravity;
+  if (typeof friction === 'number') ps.params.friction = Math.max(0, Math.min(1, friction));
+  if (typeof timeStep === 'number' && timeStep > 0) ps.params.timeStep = timeStep;
+  if (typeof restitution === 'number') ps.params.restitution = Math.max(0, Math.min(1, restitution));
+  res.json({ ok: true, params: ps.params });
+});
+
+app.post("/api/physics/bodies", (req, res) => {
+  const ps = ensurePhysicsState();
+  const { label, mass, position, velocity } = req.body;
+  const id = `body_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const body = {
+    id,
+    label: label || id,
+    mass: typeof mass === 'number' && mass > 0 ? mass : 1.0,
+    position: { x: position?.x || 0, y: position?.y || 0, z: position?.z || 0 },
+    velocity: { x: velocity?.x || 0, y: velocity?.y || 0, z: velocity?.z || 0 },
+    forces: [],
+    createdAt: nowISO(),
+  };
+  ps.bodies.set(id, body);
+  res.json({ ok: true, body });
+});
+
+app.delete("/api/physics/bodies/:id", (req, res) => {
+  const ps = ensurePhysicsState();
+  if (!ps.bodies.has(req.params.id)) return res.status(404).json({ ok: false, error: "body not found" });
+  ps.bodies.delete(req.params.id);
+  res.json({ ok: true });
+});
+
+app.post("/api/physics/step", (req, res) => {
+  const ps = ensurePhysicsState();
+  if (!ps.enabled) return res.json({ ok: false, error: "simulation not enabled" });
+  const dt = ps.params.timeStep;
+  const g = ps.params.gravity;
+  const friction = ps.params.friction;
+  for (const body of ps.bodies.values()) {
+    // Apply gravity (downward on y-axis)
+    body.velocity.y -= g * dt;
+    // Apply friction damping
+    body.velocity.x *= (1 - friction * dt);
+    body.velocity.z *= (1 - friction * dt);
+    // Integrate position
+    body.position.x += body.velocity.x * dt;
+    body.position.y += body.velocity.y * dt;
+    body.position.z += body.velocity.z * dt;
+    // Simple ground collision at y=0
+    if (body.position.y < 0) {
+      body.position.y = 0;
+      body.velocity.y = -body.velocity.y * ps.params.restitution;
+    }
+  }
+  ps.stepCount++;
+  ps.lastStepAt = nowISO();
+  res.json({ ok: true, stepCount: ps.stepCount, bodyCount: ps.bodies.size });
 });
 
 app.post("/api/physics/reset", (req, res) => {
-  PHYSICS_STATE.bodies = [];
+  const ps = ensurePhysicsState();
+  ps.bodies.clear();
+  ps.stepCount = 0;
+  ps.lastStepAt = null;
+  ps.enabled = false;
   res.json({ ok: true });
 });
 
@@ -25010,32 +25125,48 @@ app.get("/api/lattice/resonance", async (req, res) => {
   }
 });
 
-// ML endpoints - backed by real embedding/inference state
-if (!STATE.mlJobs) STATE.mlJobs = new Map();
-if (!STATE.mlModels) STATE.mlModels = new Map([
-  ["embeddings", { id: "embeddings", name: "Text Embeddings", status: typeof globalThis.getEmbedding === "function" ? "active" : "unavailable", type: "embedding", requestCount: 0 }],
-  ["classifier", { id: "classifier", name: "Intent Classifier", status: "active", type: "classification", requestCount: 0 }],
-]);
+// ML endpoints — dynamically discover available models from runtime capabilities
+function ensureMlState() {
+  if (!STATE.mlJobs) STATE.mlJobs = new Map();
+  if (!STATE.mlModels) STATE.mlModels = new Map();
+  // Discover models from runtime capabilities each time
+  const embeddingAvailable = typeof globalThis.getEmbedding === "function";
+  const classifierAvailable = typeof classifyIntent === "function";
+  if (embeddingAvailable && !STATE.mlModels.has("embeddings")) {
+    STATE.mlModels.set("embeddings", { id: "embeddings", name: "Text Embeddings", status: "active", type: "embedding", requestCount: 0, discoveredAt: nowISO() });
+  } else if (!embeddingAvailable && STATE.mlModels.has("embeddings")) {
+    STATE.mlModels.get("embeddings").status = "unavailable";
+  }
+  if (classifierAvailable && !STATE.mlModels.has("classifier")) {
+    STATE.mlModels.set("classifier", { id: "classifier", name: "Intent Classifier", status: "active", type: "classification", requestCount: 0, discoveredAt: nowISO() });
+  } else if (!classifierAvailable && STATE.mlModels.has("classifier")) {
+    STATE.mlModels.get("classifier").status = "unavailable";
+  }
+  return { mlModels: STATE.mlModels, mlJobs: STATE.mlJobs };
+}
 
 app.get("/api/ml/models", (req, res) => {
-  const models = Array.from(STATE.mlModels.values());
-  res.json({ ok: true, models });
+  const { mlModels } = ensureMlState();
+  const models = Array.from(mlModels.values());
+  res.json({ ok: true, models, discoveredAt: new Date().toISOString() });
 });
 
 app.get("/api/ml/jobs", (req, res) => {
-  const jobs = Array.from(STATE.mlJobs.values())
+  const { mlJobs } = ensureMlState();
+  const jobs = Array.from(mlJobs.values())
     .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""))
     .slice(0, 50);
-  res.json({ ok: true, jobs, total: STATE.mlJobs.size });
+  res.json({ ok: true, jobs, total: mlJobs.size });
 });
 
 app.get("/api/ml/metrics", (req, res) => {
+  const { mlModels } = ensureMlState();
   const latencyStats = _LATENCY.stats();
   let totalRequests = 0;
-  for (const m of STATE.mlModels.values()) totalRequests += m.requestCount || 0;
+  for (const m of mlModels.values()) totalRequests += m.requestCount || 0;
   res.json({
     ok: true,
-    models: Array.from(STATE.mlModels.values()).map(m => ({ id: m.id, status: m.status, requests: m.requestCount })),
+    models: Array.from(mlModels.values()).map(m => ({ id: m.id, status: m.status, requests: m.requestCount })),
     latency: latencyStats.p50,
     throughput: totalRequests,
     embeddingsAvailable: typeof globalThis.getEmbedding === "function",
@@ -25052,26 +25183,32 @@ app.post("/api/ml/infer", async (req, res) => {
   }
 
   try {
-    const modelEntry = STATE.mlModels.get(model);
-    if (modelEntry) modelEntry.requestCount = (modelEntry.requestCount || 0) + 1;
+    const { mlModels, mlJobs } = ensureMlState();
+    const modelEntry = mlModels.get(model);
+    if (!modelEntry) {
+      return res.json({ ok: false, error: `Model '${model}' not registered. Available: ${Array.from(mlModels.keys()).join(", ")}` });
+    }
+    if (modelEntry.status === "unavailable") {
+      return res.json({ ok: false, error: `Model '${model}' is currently unavailable` });
+    }
+    modelEntry.requestCount = (modelEntry.requestCount || 0) + 1;
 
     // Track as a job
     const jobId = uid("mljob");
-    STATE.mlJobs.set(jobId, { id: jobId, model, status: "running", createdAt: nowISO() });
+    mlJobs.set(jobId, { id: jobId, model, status: "running", createdAt: nowISO() });
 
     if (model === "embeddings" && typeof globalThis.getEmbedding === "function") {
       const embedding = await globalThis.getEmbedding(text);
-      STATE.mlJobs.get(jobId).status = "completed";
+      mlJobs.get(jobId).status = "completed";
       return res.json({ ok: true, jobId, embedding });
     }
-    if (model === "classifier") {
-      // Use the built-in intent classifier
+    if (model === "classifier" && typeof classifyIntent === "function") {
       const intent = classifyIntent(text);
-      STATE.mlJobs.get(jobId).status = "completed";
+      mlJobs.get(jobId).status = "completed";
       return res.json({ ok: true, jobId, result: intent });
     }
-    STATE.mlJobs.get(jobId).status = "failed";
-    res.json({ ok: false, error: `Model '${model}' not available` });
+    mlJobs.get(jobId).status = "failed";
+    res.json({ ok: false, error: `Model '${model}' handler not available at runtime` });
   } finally {
     _CONCURRENCY.release("ml_infer");
   }
