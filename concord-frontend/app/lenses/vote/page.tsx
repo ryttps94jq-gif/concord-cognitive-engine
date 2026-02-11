@@ -1,12 +1,14 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
+import { useLensData } from '@/lib/hooks/use-lens-data';
+import { apiHelpers } from '@/lib/api/client';
+import { Loading } from '@/components/common/Loading';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Check, X, Users, Scale } from 'lucide-react';
 
-interface Proposal {
-  id: string;
+interface ProposalData {
   title: string;
   description: string;
   proposer: string;
@@ -19,26 +21,59 @@ interface Proposal {
   createdAt: string;
 }
 
+const SEED_PROPOSALS = [
+  {
+    title: 'Upgrade Resonance Core to v2.1',
+    data: { description: 'Improve coherence calculation with new algorithm', proposer: 'Architect Zero', type: 'upgrade', status: 'active', votesFor: 7, votesAgainst: 2, threshold: 10, deadline: '2026-02-05', createdAt: '2026-01-30' },
+  },
+  {
+    title: 'Add Quantum Lens to core set',
+    data: { description: 'Integrate quantum computing simulations', proposer: 'Research Prime', type: 'policy', status: 'active', votesFor: 5, votesAgainst: 1, threshold: 8, deadline: '2026-02-03', createdAt: '2026-01-29' },
+  },
+  {
+    title: 'Increase entity fork limit to 20',
+    data: { description: 'Allow more parallel entity forks', proposer: 'Alpha Worker', type: 'resource', status: 'passed', votesFor: 12, votesAgainst: 3, threshold: 10, deadline: '2026-01-28', createdAt: '2026-01-25' },
+  },
+  {
+    title: 'Spawn 10 new worker entities',
+    data: { description: 'Scale swarm for parallel processing', proposer: 'Guardian One', type: 'entity', status: 'pending', votesFor: 0, votesAgainst: 0, threshold: 5, deadline: '2026-02-10', createdAt: '2026-02-01' },
+  },
+];
+
 export default function VoteLensPage() {
   useLensNav('vote');
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<'all' | 'active' | 'passed' | 'rejected'>('all');
 
-  // Mock proposals (would come from terminal_approve macro queue)
-  const proposals: Proposal[] = [
-    { id: 'p-001', title: 'Upgrade Resonance Core to v2.1', description: 'Improve coherence calculation with new algorithm', proposer: 'Architect Zero', type: 'upgrade', status: 'active', votesFor: 7, votesAgainst: 2, threshold: 10, deadline: '2026-02-05', createdAt: '2026-01-30' },
-    { id: 'p-002', title: 'Add Quantum Lens to core set', description: 'Integrate quantum computing simulations', proposer: 'Research Prime', type: 'policy', status: 'active', votesFor: 5, votesAgainst: 1, threshold: 8, deadline: '2026-02-03', createdAt: '2026-01-29' },
-    { id: 'p-003', title: 'Increase entity fork limit to 20', description: 'Allow more parallel entity forks', proposer: 'Alpha Worker', type: 'resource', status: 'passed', votesFor: 12, votesAgainst: 3, threshold: 10, deadline: '2026-01-28', createdAt: '2026-01-25' },
-    { id: 'p-004', title: 'Spawn 10 new worker entities', description: 'Scale swarm for parallel processing', proposer: 'Guardian One', type: 'entity', status: 'pending', votesFor: 0, votesAgainst: 0, threshold: 5, deadline: '2026-02-10', createdAt: '2026-02-01' },
-  ];
+  const { items: proposalItems, isLoading } = useLensData<ProposalData>('vote', 'proposal', {
+    seed: SEED_PROPOSALS,
+  });
+
+  // Map lens items to the proposal shape used in rendering
+  const proposals = proposalItems.map((item) => ({
+    id: item.id,
+    title: item.title || item.data?.title || '',
+    description: item.data?.description || '',
+    proposer: item.data?.proposer || '',
+    type: (item.data?.type || 'upgrade') as ProposalData['type'],
+    status: (item.data?.status || 'pending') as ProposalData['status'],
+    votesFor: item.data?.votesFor ?? 0,
+    votesAgainst: item.data?.votesAgainst ?? 0,
+    threshold: item.data?.threshold ?? 10,
+    deadline: item.data?.deadline || '',
+    createdAt: item.data?.createdAt || item.createdAt,
+  }));
 
   const castVote = useMutation({
-    mutationFn: async (_data: { proposalId: string; vote: 'for' | 'against' }) => {
-      // Would call council vote endpoint
-      return { ok: true };
+    mutationFn: async ({ proposalId, vote }: { proposalId: string; vote: 'for' | 'against' }) => {
+      const { data } = await apiHelpers.council.vote({
+        dtuId: proposalId,
+        vote: vote === 'for' ? 'approve' : 'reject',
+      });
+      return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['proposals'] });
+      queryClient.invalidateQueries({ queryKey: ['lens', 'vote', 'list'] });
     },
   });
 
@@ -52,6 +87,14 @@ export default function VoteLensPage() {
     resource: 'text-neon-green bg-neon-green/20',
     entity: 'text-neon-blue bg-neon-blue/20',
   };
+
+  if (isLoading) {
+    return (
+      <div className="p-6 flex items-center justify-center min-h-[400px]">
+        <Loading text="Loading proposals..." />
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -168,17 +211,19 @@ export default function VoteLensPage() {
                 <div className="flex gap-3">
                   <button
                     onClick={() => castVote.mutate({ proposalId: proposal.id, vote: 'for' })}
+                    disabled={castVote.isPending}
                     className="btn-neon green flex-1"
                   >
                     <Check className="w-4 h-4 mr-2 inline" />
-                    Vote For
+                    {castVote.isPending ? 'Voting...' : 'Vote For'}
                   </button>
                   <button
                     onClick={() => castVote.mutate({ proposalId: proposal.id, vote: 'against' })}
+                    disabled={castVote.isPending}
                     className="btn-neon pink flex-1"
                   >
                     <X className="w-4 h-4 mr-2 inline" />
-                    Vote Against
+                    {castVote.isPending ? 'Voting...' : 'Vote Against'}
                   </button>
                 </div>
               )}

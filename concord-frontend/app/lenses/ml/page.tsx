@@ -266,33 +266,24 @@ export default function MLLensPage() {
   // Queries
   const { data: _modelsData } = useQuery({
     queryKey: ['ml-models'],
-    queryFn: () => api.get('/api/ml/models').then(r => r.data).catch(() => ({ models: INITIAL_MODELS })),
+    queryFn: () => api.get('/api/ml/models').then(r => r.data),
   });
 
   const { data: _experimentsData } = useQuery({
     queryKey: ['ml-experiments'],
-    queryFn: () => api.get('/api/ml/experiments').then(r => r.data).catch(() => ({ experiments: INITIAL_EXPERIMENTS })),
+    queryFn: () => api.get('/api/ml/experiments').then(r => r.data),
   });
 
   const { data: metricsData } = useQuery({
     queryKey: ['ml-metrics'],
-    queryFn: () => api.get('/api/ml/metrics').then(r => r.data).catch(() => ({
-      gpuUsage: 67,
-      memoryUsage: 54,
-      totalInferences: 1248562,
-      avgLatency: 38
-    })),
+    queryFn: () => api.get('/api/ml/metrics').then(r => r.data),
     refetchInterval: 5000
   });
 
   // Mutations
   const runInference = useMutation({
     mutationFn: (payload: { modelId: string; input: string }) =>
-      api.post('/api/ml/infer', payload).then(r => r.data).catch(() => ({
-        prediction: Math.random() > 0.5 ? 'positive' : 'negative',
-        confidence: 0.85 + Math.random() * 0.14,
-        latency: 35 + Math.random() * 20
-      })),
+      api.post('/api/ml/infer', payload).then(r => r.data),
     onSuccess: (data) => setPlaygroundOutput(data)
   });
 

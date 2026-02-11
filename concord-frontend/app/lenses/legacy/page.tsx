@@ -1,32 +1,53 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
-import { useState } from 'react';
-import { Clock, Target, TrendingUp, Calendar, Milestone, Rocket } from 'lucide-react';
+import { Clock, Target, TrendingUp, Calendar, Milestone, Rocket, Loader2 } from 'lucide-react';
+import { useLensData } from '@/lib/hooks/use-lens-data';
 
-interface Milestone {
+interface MilestoneData {
   year: number;
-  title: string;
   description: string;
   status: 'completed' | 'current' | 'future';
   confidence: number;
 }
 
+const SEED_MILESTONES = [
+  { title: 'Foundation', data: { year: 2026, description: 'Concord OS v1 launch, 50+ lenses', status: 'current' as const, confidence: 1.0 } },
+  { title: 'Swarm Scaling', data: { year: 2030, description: '10,000+ entities, distributed cognition', status: 'future' as const, confidence: 0.85 } },
+  { title: 'Global Network', data: { year: 2050, description: 'Federated Concord instances worldwide', status: 'future' as const, confidence: 0.72 } },
+  { title: 'Centennial', data: { year: 2100, description: 'Self-sustaining cognitive ecosystem', status: 'future' as const, confidence: 0.58 } },
+  { title: 'Bicentennial', data: { year: 2200, description: 'Multi-generational knowledge transfer', status: 'future' as const, confidence: 0.42 } },
+  { title: '400-Year Vision', data: { year: 2400, description: 'Complete founder intent realization', status: 'future' as const, confidence: 0.25 } },
+];
+
 export default function LegacyLensPage() {
   useLensNav('legacy');
-  const [bioAge] = useState(340); // years projected
 
-  const milestones: Milestone[] = [
-    { year: 2026, title: 'Foundation', description: 'Concord OS v1 launch, 50+ lenses', status: 'current', confidence: 1.0 },
-    { year: 2030, title: 'Swarm Scaling', description: '10,000+ entities, distributed cognition', status: 'future', confidence: 0.85 },
-    { year: 2050, title: 'Global Network', description: 'Federated Concord instances worldwide', status: 'future', confidence: 0.72 },
-    { year: 2100, title: 'Centennial', description: 'Self-sustaining cognitive ecosystem', status: 'future', confidence: 0.58 },
-    { year: 2200, title: 'Bicentennial', description: 'Multi-generational knowledge transfer', status: 'future', confidence: 0.42 },
-    { year: 2400, title: '400-Year Vision', description: 'Complete founder intent realization', status: 'future', confidence: 0.25 },
-  ];
+  const { items: milestoneItems, isLoading } = useLensData<MilestoneData>('legacy', 'milestone', {
+    seed: SEED_MILESTONES,
+  });
 
-  const currentYear = 2026;
-  const _yearsToGo = 400 - (currentYear - 2026);
+  const milestones = milestoneItems.map((item) => ({
+    year: item.data.year,
+    title: item.title,
+    description: item.data.description,
+    status: item.data.status,
+    confidence: item.data.confidence,
+  })).sort((a, b) => a.year - b.year);
+
+  const currentYear = new Date().getFullYear();
+  const bioAge = milestones.length > 0
+    ? Math.max(...milestones.map((m) => m.year)) - currentYear
+    : 340;
+
+  if (isLoading) {
+    return (
+      <div className="p-6 flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-neon-purple" />
+        <span className="ml-3 text-gray-400">Loading legacy timeline...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -70,13 +91,10 @@ export default function LegacyLensPage() {
           400-Year Timeline
         </h2>
         <div className="relative">
-          {/* Timeline line */}
           <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-lattice-border" />
-
           <div className="space-y-6">
             {milestones.map((milestone) => (
               <div key={milestone.year} className="relative flex gap-4 pl-10">
-                {/* Dot */}
                 <div
                   className={`absolute left-2.5 w-3 h-3 rounded-full border-2 ${
                     milestone.status === 'completed'
@@ -86,7 +104,6 @@ export default function LegacyLensPage() {
                       : 'bg-lattice-surface border-lattice-border'
                   }`}
                 />
-
                 <div className="flex-1 lens-card">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">

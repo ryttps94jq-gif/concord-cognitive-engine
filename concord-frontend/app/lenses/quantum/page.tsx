@@ -2,37 +2,74 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { useState } from 'react';
-import { Atom, Zap, Waves, RotateCcw, Play, Shuffle } from 'lucide-react';
+import { Atom, Zap, Waves, RotateCcw, Play, Shuffle, Loader2 } from 'lucide-react';
+import { useLensData } from '@/lib/hooks/use-lens-data';
+import { apiHelpers } from '@/lib/api/client';
+import { useMutation } from '@tanstack/react-query';
+
+interface SimResultData {
+  qubits: number;
+  result: string;
+  gates: string[];
+}
+
+const SEED_CIRCUITS = [
+  { title: 'Hadamard', data: { name: 'Hadamard', desc: 'Superposition gate', icon: '|H>' } },
+  { title: 'CNOT', data: { name: 'CNOT', desc: 'Entanglement gate', icon: '+' } },
+  { title: 'Phase', data: { name: 'Phase', desc: 'Rotation gate', icon: 'eith' } },
+  { title: 'Measure', data: { name: 'Measure', desc: 'Collapse state', icon: 'M' } },
+];
 
 export default function QuantumLensPage() {
   useLensNav('quantum');
   const [qubits, setQubits] = useState(4);
-  const [running, setRunning] = useState(false);
   const [result, setResult] = useState<string | null>(null);
 
-  const runSimulation = () => {
-    setRunning(true);
-    setTimeout(() => {
+  const { items: circuitItems, isLoading: circuitsLoading, create: saveResult } = useLensData<SimResultData>('quantum', 'sim-result', {
+    seed: [],
+  });
+
+  const circuits = [
+    { name: 'Hadamard', desc: 'Superposition gate', icon: '|H\u27E9' },
+    { name: 'CNOT', desc: 'Entanglement gate', icon: '\u2295' },
+    { name: 'Phase', desc: 'Rotation gate', icon: 'ei\u03B8' },
+    { name: 'Measure', desc: 'Collapse state', icon: '\uD83D\uDCCA' },
+  ];
+
+  const runSimulation = useMutation({
+    mutationFn: async () => {
+      try {
+        const { data } = await apiHelpers.chat.ask(
+          `Simulate a ${qubits}-qubit quantum circuit with Hadamard and CNOT gates. Return a measurement outcome as a binary string of length ${qubits}.`,
+          'quantum'
+        );
+        const reply = data?.reply || data?.response || '';
+        // Extract a binary string from the response
+        const binaryMatch = reply.match(/[01]{2,}/);
+        if (binaryMatch) return binaryMatch[0].slice(0, qubits).padStart(qubits, '0');
+      } catch {
+        // Fallback to local simulation if backend unavailable
+      }
       const outcomes = Array.from({ length: 2 ** qubits }, (_, i) =>
         i.toString(2).padStart(qubits, '0')
       );
-      const selected = outcomes[Math.floor(Math.random() * outcomes.length)];
-      setResult(selected);
-      setRunning(false);
-    }, 1500);
-  };
+      return outcomes[Math.floor(Math.random() * outcomes.length)];
+    },
+    onSuccess: (resultStr) => {
+      setResult(resultStr);
+      saveResult({
+        title: `Sim ${new Date().toISOString().slice(0, 19)}`,
+        data: { qubits, result: resultStr, gates: circuits.map((c) => c.name) },
+      }).catch(() => {});
+    },
+  });
 
-  const circuits = [
-    { name: 'Hadamard', desc: 'Superposition gate', icon: '|H⟩' },
-    { name: 'CNOT', desc: 'Entanglement gate', icon: '⊕' },
-    { name: 'Phase', desc: 'Rotation gate', icon: 'eiθ' },
-    { name: 'Measure', desc: 'Collapse state', icon: '📊' },
-  ];
+  const recentSims = circuitItems.slice(0, 5);
 
   return (
     <div className="p-6 space-y-6">
       <header className="flex items-center gap-3">
-        <span className="text-2xl">⚛️</span>
+        <span className="text-2xl">\u269B\uFE0F</span>
         <div>
           <h1 className="text-xl font-bold">Quantum Lens</h1>
           <p className="text-sm text-gray-400">
@@ -54,12 +91,12 @@ export default function QuantumLensPage() {
         </div>
         <div className="lens-card">
           <Shuffle className="w-5 h-5 text-neon-blue mb-2" />
-          <p className="text-2xl font-bold">4</p>
+          <p className="text-2xl font-bold">{circuits.length}</p>
           <p className="text-sm text-gray-400">Gates</p>
         </div>
         <div className="lens-card">
           <Zap className="w-5 h-5 text-neon-green mb-2" />
-          <p className="text-2xl font-bold">{running ? '...' : 'Ready'}</p>
+          <p className="text-2xl font-bold">{runSimulation.isPending ? '...' : 'Ready'}</p>
           <p className="text-sm text-gray-400">Status</p>
         </div>
       </div>
@@ -94,9 +131,16 @@ export default function QuantumLensPage() {
           ))}
         </div>
         <div className="flex gap-2">
-          <button onClick={runSimulation} disabled={running} className="btn-neon purple flex-1">
-            <Play className="w-4 h-4 mr-2 inline" />
-            {running ? 'Simulating...' : 'Run Circuit'}
+          <button
+            onClick={() => runSimulation.mutate()}
+            disabled={runSimulation.isPending}
+            className="btn-neon purple flex-1"
+          >
+            {runSimulation.isPending ? (
+              <><Loader2 className="w-4 h-4 mr-2 inline animate-spin" />Simulating...</>
+            ) : (
+              <><Play className="w-4 h-4 mr-2 inline" />Run Circuit</>
+            )}
           </button>
           <button onClick={() => setResult(null)} className="btn-neon">
             <RotateCcw className="w-4 h-4" />
@@ -108,8 +152,29 @@ export default function QuantumLensPage() {
       {result && (
         <div className="panel p-6 text-center">
           <h3 className="text-sm text-gray-400 mb-2">Measurement Result</h3>
-          <p className="text-4xl font-mono text-neon-cyan tracking-widest">|{result}⟩</p>
+          <p className="text-4xl font-mono text-neon-cyan tracking-widest">|{result}\u27E9</p>
           <p className="text-sm text-gray-500 mt-2">Collapsed from superposition</p>
+        </div>
+      )}
+
+      {/* Recent Simulations */}
+      {recentSims.length > 0 && (
+        <div className="panel p-4">
+          <h2 className="font-semibold mb-4 flex items-center gap-2">
+            <Zap className="w-4 h-4 text-neon-green" />
+            Recent Simulations
+          </h2>
+          <div className="space-y-2">
+            {recentSims.map((sim) => (
+              <div key={sim.id} className="flex items-center justify-between p-3 bg-lattice-deep rounded-lg">
+                <div>
+                  <span className="font-mono text-neon-cyan">|{sim.data.result}\u27E9</span>
+                  <span className="text-xs text-gray-500 ml-2">{sim.data.qubits} qubits</span>
+                </div>
+                <span className="text-xs text-gray-500">{new Date(sim.createdAt).toLocaleString()}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

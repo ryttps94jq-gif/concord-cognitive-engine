@@ -2,60 +2,134 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { useState } from 'react';
-import { Calculator, Play, CheckCircle, XCircle, Sigma, Pi } from 'lucide-react';
+import { Calculator, Play, CheckCircle, XCircle, Sigma, Pi, Loader2 } from 'lucide-react';
+import { useLensData } from '@/lib/hooks/use-lens-data';
+import { apiHelpers } from '@/lib/api/client';
+
+interface ExpressionRecord {
+  expression: string;
+  result: string;
+  verified: boolean;
+  evaluatedAt: string;
+}
+
+interface MathStatsData {
+  label: string;
+  value: string;
+}
+
+const SEED_STATS = [
+  { title: 'Expressions', data: { label: 'Expressions', value: '0' } },
+  { title: 'Verified', data: { label: 'Verified', value: '0' } },
+  { title: 'Constants', data: { label: 'Constants', value: 'pi' } },
+  { title: 'Accuracy', data: { label: 'Accuracy', value: '100%' } },
+];
 
 export default function MathLensPage() {
   useLensNav('math');
   const [expression, setExpression] = useState('');
   const [result, setResult] = useState<{ value: string; verified: boolean } | null>(null);
+  const [evaluating, setEvaluating] = useState(false);
 
-  const handleEvaluate = () => {
+  // Fetch stats from backend via lens data
+  const {
+    items: statsItems,
+    isLoading: statsLoading,
+    update: updateStat,
+  } = useLensData<MathStatsData>('math', 'stats', {
+    seed: SEED_STATS,
+  });
+
+  // Fetch expression history from backend
+  const {
+    items: expressionItems,
+    isLoading: expLoading,
+    create: createExpression,
+  } = useLensData<ExpressionRecord>('math', 'expression', { seed: [] });
+
+  const stats = {
+    expressions: statsItems.find(s => s.data.label === 'Expressions'),
+    verified: statsItems.find(s => s.data.label === 'Verified'),
+    constants: statsItems.find(s => s.data.label === 'Constants'),
+    accuracy: statsItems.find(s => s.data.label === 'Accuracy'),
+  };
+
+  // Compute live stats from expression history
+  const totalExpressions = expressionItems.length;
+  const verifiedCount = expressionItems.filter(e => e.data.verified).length;
+  const accuracyPct = totalExpressions > 0
+    ? `${Math.round((verifiedCount / totalExpressions) * 100)}%`
+    : '100%';
+
+  const handleEvaluate = async () => {
+    if (!expression.trim()) return;
+
+    setEvaluating(true);
+    setResult(null);
     try {
-      // Safe evaluation using explicit token parsing instead of Function() constructor
-      // Only allow numbers, basic operators, and safe Math functions
-      const allowedMath = ['sqrt', 'pow', 'abs', 'floor', 'ceil', 'round', 'sin', 'cos', 'tan', 'log', 'exp', 'PI', 'E'];
-      let sanitized = expression.trim();
+      // Send the expression to the backend for server-side evaluation
+      const response = await apiHelpers.chat.ask(expression, 'math');
+      const respData = response.data;
 
-      // Validate: only allow safe characters
-      if (!/^[0-9+\-*/().^\s]+$/.test(sanitized.replace(/Math\.\w+/g, '').replace(/\*\*/g, ''))) {
-        // Check if it contains allowed Math functions
-        const hasMath = allowedMath.some(fn => sanitized.includes(`Math.${fn}`));
-        if (!hasMath && sanitized.match(/[a-zA-Z]/)) {
-          throw new Error('Invalid characters');
-        }
+      // Extract the result from the API response
+      let evalValue: string;
+      let verified: boolean;
+
+      if (respData && typeof respData === 'object') {
+        // The chat.ask response typically has a `reply` or `answer` field
+        evalValue = String(
+          respData.result ?? respData.answer ?? respData.reply ?? respData.message ?? respData.data ?? 'No result'
+        );
+        verified = respData.verified !== false && evalValue !== 'Error' && evalValue !== 'No result';
+      } else {
+        evalValue = String(respData);
+        verified = true;
       }
 
-      // Replace ** with Math.pow for safety
-      sanitized = sanitized.replace(/(\d+(?:\.\d+)?)\s*\*\*\s*(\d+(?:\.\d+)?)/g, 'Math.pow($1,$2)');
+      setResult({ value: evalValue, verified });
 
-      // Only evaluate if it looks safe (numbers, operators, Math.*)
-      const safePattern = /^[\d+\-*/().^\s]+$|^(?:[\d+\-*/().^\s]|Math\.(sqrt|pow|abs|floor|ceil|round|sin|cos|tan|log|exp|PI|E))+$/;
-      if (!safePattern.test(sanitized.replace(/\(/g, '').replace(/\)/g, ''))) {
-        // Final safety: just do basic arithmetic
-        sanitized = sanitized.replace(/[^0-9+\-*/().]/g, '');
-      }
+      // Persist the expression + result to lens data
+      await createExpression({
+        title: expression,
+        data: {
+          expression,
+          result: evalValue,
+          verified,
+          evaluatedAt: new Date().toISOString(),
+        } as unknown as Partial<ExpressionRecord>,
+        meta: { tags: ['math', verified ? 'verified' : 'unverified'], status: verified ? 'verified' : 'error' },
+      });
 
-      // Use indirect eval with strict number checking on result
-      const result = (0, eval)(sanitized);
-      if (typeof result !== 'number' || !isFinite(result)) {
-        throw new Error('Invalid result');
+      // Update stats in backend
+      if (stats.expressions) {
+        await updateStat(stats.expressions.id, {
+          data: { label: 'Expressions', value: String(totalExpressions + 1) } as unknown as Partial<MathStatsData>,
+        });
       }
-      setResult({ value: String(result), verified: true });
+      if (stats.verified && verified) {
+        await updateStat(stats.verified.id, {
+          data: { label: 'Verified', value: String(verifiedCount + 1) } as unknown as Partial<MathStatsData>,
+        });
+      }
     } catch {
-      setResult({ value: 'Error', verified: false });
+      setResult({ value: 'Error: Failed to evaluate', verified: false });
+    } finally {
+      setEvaluating(false);
     }
   };
 
   const examples = [
-    { label: 'Quadratic', expr: '(-5 + Math.sqrt(25 - 4*2*3)) / (2*2)' },
-    { label: 'Fibonacci', expr: '(1.618**10 - (-0.618)**10) / 2.236' },
-    { label: 'Golden Ratio', expr: '(1 + Math.sqrt(5)) / 2' },
+    { label: 'Quadratic', expr: '(-5 + sqrt(25 - 4*2*3)) / (2*2)' },
+    { label: 'Fibonacci', expr: '(1.618^10 - (-0.618)^10) / 2.236' },
+    { label: 'Golden Ratio', expr: '(1 + sqrt(5)) / 2' },
   ];
+
+  const isLoading = statsLoading || expLoading;
 
   return (
     <div className="p-6 space-y-6">
       <header className="flex items-center gap-3">
-        <span className="text-2xl">🧮</span>
+        <span className="text-2xl">&#x1F9EE;</span>
         <div>
           <h1 className="text-xl font-bold">Math Lens</h1>
           <p className="text-sm text-gray-400">
@@ -64,76 +138,126 @@ export default function MathLensPage() {
         </div>
       </header>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="lens-card">
-          <Calculator className="w-5 h-5 text-neon-blue mb-2" />
-          <p className="text-2xl font-bold">∞</p>
-          <p className="text-sm text-gray-400">Expressions</p>
+      {isLoading ? (
+        <div className="flex items-center justify-center p-12 text-gray-400">
+          <Loader2 className="w-6 h-6 animate-spin mr-2" />
+          Loading math data...
         </div>
-        <div className="lens-card">
-          <Sigma className="w-5 h-5 text-neon-purple mb-2" />
-          <p className="text-2xl font-bold">42</p>
-          <p className="text-sm text-gray-400">Verified</p>
-        </div>
-        <div className="lens-card">
-          <Pi className="w-5 h-5 text-neon-cyan mb-2" />
-          <p className="text-2xl font-bold">π</p>
-          <p className="text-sm text-gray-400">Constants</p>
-        </div>
-        <div className="lens-card">
-          <CheckCircle className="w-5 h-5 text-neon-green mb-2" />
-          <p className="text-2xl font-bold">100%</p>
-          <p className="text-sm text-gray-400">Accuracy</p>
-        </div>
-      </div>
-
-      <div className="panel p-4">
-        <h2 className="font-semibold mb-4 flex items-center gap-2">
-          <Calculator className="w-4 h-4 text-neon-blue" />
-          Expression Evaluator
-        </h2>
-        <div className="flex gap-2 mb-4">
-          <input
-            type="text"
-            value={expression}
-            onChange={(e) => setExpression(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleEvaluate()}
-            placeholder="Enter mathematical expression..."
-            className="input-lattice flex-1 font-mono"
-          />
-          <button onClick={handleEvaluate} className="btn-neon purple">
-            <Play className="w-4 h-4 mr-2 inline" />
-            Evaluate
-          </button>
-        </div>
-        {result && (
-          <div className={`p-4 rounded-lg flex items-center gap-3 ${
-            result.verified ? 'bg-neon-green/20' : 'bg-neon-pink/20'
-          }`}>
-            {result.verified ? (
-              <CheckCircle className="w-5 h-5 text-neon-green" />
-            ) : (
-              <XCircle className="w-5 h-5 text-neon-pink" />
-            )}
-            <span className="font-mono text-xl">{result.value}</span>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="lens-card">
+              <Calculator className="w-5 h-5 text-neon-blue mb-2" />
+              <p className="text-2xl font-bold">{totalExpressions || stats.expressions?.data.value || '0'}</p>
+              <p className="text-sm text-gray-400">Expressions</p>
+            </div>
+            <div className="lens-card">
+              <Sigma className="w-5 h-5 text-neon-purple mb-2" />
+              <p className="text-2xl font-bold">{verifiedCount || stats.verified?.data.value || '0'}</p>
+              <p className="text-sm text-gray-400">Verified</p>
+            </div>
+            <div className="lens-card">
+              <Pi className="w-5 h-5 text-neon-cyan mb-2" />
+              <p className="text-2xl font-bold">{'\u03C0'}</p>
+              <p className="text-sm text-gray-400">Constants</p>
+            </div>
+            <div className="lens-card">
+              <CheckCircle className="w-5 h-5 text-neon-green mb-2" />
+              <p className="text-2xl font-bold">{accuracyPct}</p>
+              <p className="text-sm text-gray-400">Accuracy</p>
+            </div>
           </div>
-        )}
-      </div>
 
-      <div className="panel p-4">
-        <h2 className="font-semibold mb-4">Quick Examples</h2>
-        <div className="flex flex-wrap gap-2">
-          {examples.map((ex) => (
-            <button
-              key={ex.label}
-              onClick={() => setExpression(ex.expr)}
-              className="px-3 py-2 bg-lattice-surface rounded-lg text-sm hover:bg-lattice-elevated"
-            >
-              {ex.label}
-            </button>
-          ))}
-        </div>
-      </div>
+          <div className="panel p-4">
+            <h2 className="font-semibold mb-4 flex items-center gap-2">
+              <Calculator className="w-4 h-4 text-neon-blue" />
+              Expression Evaluator
+            </h2>
+            <div className="flex gap-2 mb-4">
+              <input
+                type="text"
+                value={expression}
+                onChange={(e) => setExpression(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && !evaluating && handleEvaluate()}
+                placeholder="Enter mathematical expression..."
+                className="input-lattice flex-1 font-mono"
+                disabled={evaluating}
+              />
+              <button
+                onClick={handleEvaluate}
+                disabled={evaluating || !expression.trim()}
+                className="btn-neon purple flex items-center gap-1 disabled:opacity-50"
+              >
+                {evaluating ? (
+                  <Loader2 className="w-4 h-4 mr-1 inline animate-spin" />
+                ) : (
+                  <Play className="w-4 h-4 mr-2 inline" />
+                )}
+                {evaluating ? 'Evaluating...' : 'Evaluate'}
+              </button>
+            </div>
+            {result && (
+              <div className={`p-4 rounded-lg flex items-center gap-3 ${
+                result.verified ? 'bg-neon-green/20' : 'bg-neon-pink/20'
+              }`}>
+                {result.verified ? (
+                  <CheckCircle className="w-5 h-5 text-neon-green" />
+                ) : (
+                  <XCircle className="w-5 h-5 text-neon-pink" />
+                )}
+                <span className="font-mono text-xl">{result.value}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="panel p-4">
+            <h2 className="font-semibold mb-4">Quick Examples</h2>
+            <div className="flex flex-wrap gap-2">
+              {examples.map((ex) => (
+                <button
+                  key={ex.label}
+                  onClick={() => setExpression(ex.expr)}
+                  className="px-3 py-2 bg-lattice-surface rounded-lg text-sm hover:bg-lattice-elevated"
+                >
+                  {ex.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Expression History */}
+          {expressionItems.length > 0 && (
+            <div className="panel p-4">
+              <h2 className="font-semibold mb-4 flex items-center gap-2">
+                <Sigma className="w-4 h-4 text-neon-purple" />
+                Recent Evaluations
+              </h2>
+              <div className="space-y-2">
+                {expressionItems.slice(0, 10).map((item) => (
+                  <div key={item.id} className="flex items-center justify-between p-3 bg-lattice-deep rounded-lg">
+                    <div className="flex items-center gap-3">
+                      {item.data.verified ? (
+                        <CheckCircle className="w-4 h-4 text-neon-green" />
+                      ) : (
+                        <XCircle className="w-4 h-4 text-neon-pink" />
+                      )}
+                      <div>
+                        <p className="text-sm font-mono">{item.data.expression || item.title}</p>
+                        <p className="text-xs text-gray-500">
+                          {item.data.evaluatedAt
+                            ? new Date(item.data.evaluatedAt).toLocaleString()
+                            : new Date(item.createdAt).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="font-mono text-neon-blue">{item.data.result}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

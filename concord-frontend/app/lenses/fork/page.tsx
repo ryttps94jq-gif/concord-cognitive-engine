@@ -1,11 +1,11 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
-import { useState } from 'react';
-import { GitFork, GitBranch, GitMerge, Layers } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { GitFork, GitBranch, GitMerge, Layers, Loader2 } from 'lucide-react';
+import { useLensData } from '@/lib/hooks/use-lens-data';
 
-interface Fork {
-  id: string;
+interface ForkData {
   parentId: string | null;
   entityId: string;
   entityName: string;
@@ -13,24 +13,40 @@ interface Fork {
   status: 'active' | 'merged' | 'abandoned';
   depth: number;
   children: number;
-  createdAt: string;
   lastActivity: string;
 }
+
+const SEED_FORKS = [
+  { title: 'f-root', data: { parentId: null, entityId: 'e-004', entityName: 'Architect Zero', workspace: 'core', status: 'active' as const, depth: 0, children: 3, lastActivity: new Date().toISOString() } },
+  { title: 'f-001', data: { parentId: 'f-root', entityId: 'e-001', entityName: 'Alpha Worker', workspace: 'main', status: 'active' as const, depth: 1, children: 2, lastActivity: new Date().toISOString() } },
+  { title: 'f-002', data: { parentId: 'f-root', entityId: 'e-002', entityName: 'Research Prime', workspace: 'research-lab', status: 'active' as const, depth: 1, children: 4, lastActivity: new Date().toISOString() } },
+  { title: 'f-003', data: { parentId: 'f-root', entityId: 'e-003', entityName: 'Guardian One', workspace: 'security', status: 'merged' as const, depth: 1, children: 0, lastActivity: '2026-01-30' } },
+  { title: 'f-004', data: { parentId: 'f-001', entityId: 'e-001', entityName: 'Alpha Worker', workspace: 'main-exp-1', status: 'active' as const, depth: 2, children: 0, lastActivity: new Date().toISOString() } },
+  { title: 'f-005', data: { parentId: 'f-002', entityId: 'e-002', entityName: 'Research Prime', workspace: 'quantum-exp', status: 'active' as const, depth: 2, children: 1, lastActivity: new Date().toISOString() } },
+];
 
 export default function ForkLensPage() {
   useLensNav('fork');
   const [selectedFork, setSelectedFork] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'tree' | 'list'>('tree');
 
-  // Mock fork data (would come from ENTITY_HOME scans)
-  const forks: Fork[] = [
-    { id: 'f-root', parentId: null, entityId: 'e-004', entityName: 'Architect Zero', workspace: 'core', status: 'active', depth: 0, children: 3, createdAt: '2026-01-10', lastActivity: new Date().toISOString() },
-    { id: 'f-001', parentId: 'f-root', entityId: 'e-001', entityName: 'Alpha Worker', workspace: 'main', status: 'active', depth: 1, children: 2, createdAt: '2026-01-15', lastActivity: new Date().toISOString() },
-    { id: 'f-002', parentId: 'f-root', entityId: 'e-002', entityName: 'Research Prime', workspace: 'research-lab', status: 'active', depth: 1, children: 4, createdAt: '2026-01-20', lastActivity: new Date().toISOString() },
-    { id: 'f-003', parentId: 'f-root', entityId: 'e-003', entityName: 'Guardian One', workspace: 'security', status: 'merged', depth: 1, children: 0, createdAt: '2026-01-22', lastActivity: '2026-01-30' },
-    { id: 'f-004', parentId: 'f-001', entityId: 'e-001', entityName: 'Alpha Worker', workspace: 'main-exp-1', status: 'active', depth: 2, children: 0, createdAt: '2026-01-25', lastActivity: new Date().toISOString() },
-    { id: 'f-005', parentId: 'f-002', entityId: 'e-002', entityName: 'Research Prime', workspace: 'quantum-exp', status: 'active', depth: 2, children: 1, createdAt: '2026-01-28', lastActivity: new Date().toISOString() },
-  ];
+  const { items: forkItems, isLoading, create, update } = useLensData<ForkData>('fork', 'fork', {
+    seed: SEED_FORKS,
+  });
+
+  const forks = forkItems.map((item) => ({
+    id: item.title || item.id,
+    _artifactId: item.id,
+    parentId: item.data.parentId,
+    entityId: item.data.entityId,
+    entityName: item.data.entityName,
+    workspace: item.data.workspace,
+    status: item.data.status,
+    depth: item.data.depth,
+    children: item.data.children,
+    createdAt: item.createdAt,
+    lastActivity: item.data.lastActivity,
+  }));
 
   const statusColors = {
     active: 'text-neon-green bg-neon-green/20',
@@ -38,7 +54,33 @@ export default function ForkLensPage() {
     abandoned: 'text-gray-500 bg-gray-500/20',
   };
 
-  const renderTreeNode = (fork: Fork, level: number = 0) => {
+  const handleMerge = useCallback(async () => {
+    if (!selectedFork) return;
+    const forkItem = forkItems.find((f) => (f.title || f.id) === selectedFork);
+    if (!forkItem) return;
+    await update(forkItem.id, { data: { ...forkItem.data, status: 'merged' as const } });
+  }, [selectedFork, forkItems, update]);
+
+  const handleFork = useCallback(async () => {
+    if (!selectedFork) return;
+    const parent = forks.find((f) => f.id === selectedFork);
+    if (!parent) return;
+    await create({
+      title: `f-${Date.now().toString(36)}`,
+      data: {
+        parentId: parent.id,
+        entityId: parent.entityId,
+        entityName: parent.entityName,
+        workspace: `${parent.workspace}-fork-${Date.now().toString(36).slice(-4)}`,
+        status: 'active',
+        depth: parent.depth + 1,
+        children: 0,
+        lastActivity: new Date().toISOString(),
+      },
+    });
+  }, [selectedFork, forks, create]);
+
+  const renderTreeNode = (fork: typeof forks[0], level: number = 0) => {
     const children = forks.filter((f) => f.parentId === fork.id);
     const isSelected = selectedFork === fork.id;
 
@@ -52,12 +94,8 @@ export default function ForkLensPage() {
               : 'bg-lattice-deep hover:bg-lattice-surface'
           }`}
         >
-          {level > 0 && (
-            <GitBranch className="w-4 h-4 text-gray-500" />
-          )}
-          {level === 0 && (
-            <GitFork className="w-4 h-4 text-neon-purple" />
-          )}
+          {level > 0 && <GitBranch className="w-4 h-4 text-gray-500" />}
+          {level === 0 && <GitFork className="w-4 h-4 text-neon-purple" />}
           <div className="flex-1 text-left">
             <p className="font-medium">{fork.workspace}</p>
             <p className="text-xs text-gray-400">{fork.entityName}</p>
@@ -66,9 +104,7 @@ export default function ForkLensPage() {
             {fork.status}
           </span>
           {fork.children > 0 && (
-            <span className="text-xs text-gray-500">
-              +{fork.children}
-            </span>
+            <span className="text-xs text-gray-500">+{fork.children}</span>
           )}
         </button>
         {children.map((child) => renderTreeNode(child, level + 1))}
@@ -78,6 +114,15 @@ export default function ForkLensPage() {
 
   const rootForks = forks.filter((f) => f.parentId === null);
   const selectedForkData = forks.find((f) => f.id === selectedFork);
+
+  if (isLoading) {
+    return (
+      <div className="p-6 flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-neon-purple" />
+        <span className="ml-3 text-gray-400">Loading fork tree...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -126,7 +171,7 @@ export default function ForkLensPage() {
         </div>
         <div className="lens-card">
           <Layers className="w-5 h-5 text-neon-cyan mb-2" />
-          <p className="text-2xl font-bold">{Math.max(...forks.map((f) => f.depth)) + 1}</p>
+          <p className="text-2xl font-bold">{forks.length > 0 ? Math.max(...forks.map((f) => f.depth)) + 1 : 0}</p>
           <p className="text-sm text-gray-400">Max Depth</p>
         </div>
       </div>
@@ -172,14 +217,18 @@ export default function ForkLensPage() {
               </div>
               <div className="lens-card">
                 <p className="text-xs text-gray-400">Created</p>
-                <p>{selectedForkData.createdAt}</p>
+                <p>{new Date(selectedForkData.createdAt).toLocaleDateString()}</p>
               </div>
               <div className="flex gap-2">
-                <button className="btn-neon flex-1 text-sm">
+                <button
+                  onClick={handleMerge}
+                  disabled={selectedForkData.status === 'merged'}
+                  className="btn-neon flex-1 text-sm"
+                >
                   <GitMerge className="w-3 h-3 mr-1 inline" />
                   Merge
                 </button>
-                <button className="btn-neon purple flex-1 text-sm">
+                <button onClick={handleFork} className="btn-neon purple flex-1 text-sm">
                   <GitFork className="w-3 h-3 mr-1 inline" />
                   Fork
                 </button>

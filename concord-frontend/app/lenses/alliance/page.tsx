@@ -1,11 +1,12 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
+import { useLensData } from '@/lib/hooks/use-lens-data';
+import { Loading } from '@/components/common/Loading';
 import { useState } from 'react';
 import { Users, Plus, MessageSquare, Target, Shield, Zap } from 'lucide-react';
 
-interface Alliance {
-  id: string;
+interface AllianceData {
   name: string;
   description: string;
   members: string[];
@@ -16,32 +17,86 @@ interface Alliance {
   createdAt: string;
 }
 
-interface AllianceMessage {
-  id: string;
+interface MessageData {
   allianceId: string;
   sender: string;
   content: string;
   timestamp: string;
 }
 
+const SEED_ALLIANCES = [
+  {
+    title: 'Research Collective',
+    data: { name: 'Research Collective', description: 'Collaborative DTU synthesis and verification', members: ['Research Prime', 'Architect Zero'], type: 'research', status: 'active', sharedWorkspace: 'research-shared', activeProposals: 3, createdAt: '2026-01-20' },
+  },
+  {
+    title: 'Guardian Alliance',
+    data: { name: 'Guardian Alliance', description: 'Security monitoring and invariant enforcement', members: ['Guardian One', 'Alpha Worker'], type: 'security', status: 'active', sharedWorkspace: 'security-ops', activeProposals: 1, createdAt: '2026-01-25' },
+  },
+  {
+    title: 'Core Builders',
+    data: { name: 'Core Builders', description: 'System evolution and upgrades', members: ['Architect Zero'], type: 'development', status: 'forming', sharedWorkspace: 'core-dev', activeProposals: 0, createdAt: '2026-01-30' },
+  },
+];
+
+const SEED_MESSAGES = [
+  {
+    title: 'Message from Research Prime',
+    data: { allianceId: '', sender: 'Research Prime', content: 'New quantum DTU ready for verification', timestamp: new Date().toISOString() },
+  },
+  {
+    title: 'Message from Architect Zero',
+    data: { allianceId: '', sender: 'Architect Zero', content: 'Running overlap verifier now', timestamp: new Date().toISOString() },
+  },
+];
+
 export default function AllianceLensPage() {
   useLensNav('alliance');
   const [selectedAlliance, setSelectedAlliance] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [chatMessage, setChatMessage] = useState('');
+  const [newAllianceName, setNewAllianceName] = useState('');
+  const [newAllianceDesc, setNewAllianceDesc] = useState('');
+  const [newAllianceType, setNewAllianceType] = useState<AllianceData['type']>('research');
 
-  // Mock alliances
-  const alliances: Alliance[] = [
-    { id: 'a-001', name: 'Research Collective', description: 'Collaborative DTU synthesis and verification', members: ['Research Prime', 'Architect Zero'], type: 'research', status: 'active', sharedWorkspace: 'research-shared', activeProposals: 3, createdAt: '2026-01-20' },
-    { id: 'a-002', name: 'Guardian Alliance', description: 'Security monitoring and invariant enforcement', members: ['Guardian One', 'Alpha Worker'], type: 'security', status: 'active', sharedWorkspace: 'security-ops', activeProposals: 1, createdAt: '2026-01-25' },
-    { id: 'a-003', name: 'Core Builders', description: 'System evolution and upgrades', members: ['Architect Zero'], type: 'development', status: 'forming', sharedWorkspace: 'core-dev', activeProposals: 0, createdAt: '2026-01-30' },
-  ];
+  const {
+    items: allianceItems,
+    isLoading: alliancesLoading,
+    create: createAlliance,
+    createMut: createAllianceMut,
+  } = useLensData<AllianceData>('alliance', 'alliance', {
+    seed: SEED_ALLIANCES,
+  });
 
-  // Mock chat messages
-  const messages: AllianceMessage[] = [
-    { id: 'm-001', allianceId: 'a-001', sender: 'Research Prime', content: 'New quantum DTU ready for verification', timestamp: new Date().toISOString() },
-    { id: 'm-002', allianceId: 'a-001', sender: 'Architect Zero', content: 'Running overlap verifier now', timestamp: new Date().toISOString() },
-  ];
+  const {
+    items: messageItems,
+    isLoading: messagesLoading,
+    create: createMessage,
+    createMut: createMessageMut,
+  } = useLensData<MessageData>('alliance', 'message', {
+    seed: SEED_MESSAGES,
+  });
+
+  // Map lens items to the shapes used in rendering
+  const alliances = allianceItems.map((item) => ({
+    id: item.id,
+    name: item.title || item.data?.name || '',
+    description: item.data?.description || '',
+    members: item.data?.members || [],
+    type: (item.data?.type || 'research') as AllianceData['type'],
+    status: (item.data?.status || 'forming') as AllianceData['status'],
+    sharedWorkspace: item.data?.sharedWorkspace || '',
+    activeProposals: item.data?.activeProposals ?? 0,
+    createdAt: item.data?.createdAt || item.createdAt,
+  }));
+
+  const messages = messageItems.map((item) => ({
+    id: item.id,
+    allianceId: item.data?.allianceId || '',
+    sender: item.data?.sender || '',
+    content: item.data?.content || '',
+    timestamp: item.data?.timestamp || item.createdAt,
+  }));
 
   const typeColors = {
     research: 'text-neon-purple bg-neon-purple/20',
@@ -52,6 +107,50 @@ export default function AllianceLensPage() {
 
   const selectedAllianceData = alliances.find((a) => a.id === selectedAlliance);
   const allianceMessages = messages.filter((m) => m.allianceId === selectedAlliance);
+
+  const handleCreateAlliance = async () => {
+    if (!newAllianceName.trim()) return;
+    await createAlliance({
+      title: newAllianceName,
+      data: {
+        name: newAllianceName,
+        description: newAllianceDesc,
+        members: [],
+        type: newAllianceType,
+        status: 'forming',
+        sharedWorkspace: newAllianceName.toLowerCase().replace(/\s+/g, '-'),
+        activeProposals: 0,
+        createdAt: new Date().toISOString().split('T')[0],
+      } as Partial<AllianceData>,
+    });
+    setNewAllianceName('');
+    setNewAllianceDesc('');
+    setShowCreate(false);
+  };
+
+  const handleSendMessage = async () => {
+    if (!chatMessage.trim() || !selectedAlliance) return;
+    await createMessage({
+      title: `Message in ${selectedAllianceData?.name || 'alliance'}`,
+      data: {
+        allianceId: selectedAlliance,
+        sender: 'You',
+        content: chatMessage,
+        timestamp: new Date().toISOString(),
+      } as Partial<MessageData>,
+    });
+    setChatMessage('');
+  };
+
+  const isLoading = alliancesLoading || messagesLoading;
+
+  if (isLoading) {
+    return (
+      <div className="p-6 flex items-center justify-center min-h-[400px]">
+        <Loading text="Loading alliances..." />
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -73,6 +172,44 @@ export default function AllianceLensPage() {
           Form Alliance
         </button>
       </header>
+
+      {/* Create Alliance Form */}
+      {showCreate && (
+        <div className="panel p-4 space-y-3">
+          <h3 className="font-semibold">Form New Alliance</h3>
+          <input
+            type="text"
+            value={newAllianceName}
+            onChange={(e) => setNewAllianceName(e.target.value)}
+            placeholder="Alliance name..."
+            className="input-lattice w-full"
+          />
+          <input
+            type="text"
+            value={newAllianceDesc}
+            onChange={(e) => setNewAllianceDesc(e.target.value)}
+            placeholder="Description..."
+            className="input-lattice w-full"
+          />
+          <select
+            value={newAllianceType}
+            onChange={(e) => setNewAllianceType(e.target.value as AllianceData['type'])}
+            className="input-lattice w-full"
+          >
+            <option value="research">Research</option>
+            <option value="security">Security</option>
+            <option value="development">Development</option>
+            <option value="governance">Governance</option>
+          </select>
+          <button
+            onClick={handleCreateAlliance}
+            disabled={createAllianceMut.isPending || !newAllianceName.trim()}
+            className="btn-neon green w-full"
+          >
+            {createAllianceMut.isPending ? 'Creating...' : 'Create Alliance'}
+          </button>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -189,10 +326,22 @@ export default function AllianceLensPage() {
                     type="text"
                     value={chatMessage}
                     onChange={(e) => setChatMessage(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSendMessage();
+                      }
+                    }}
                     placeholder="Message the alliance..."
                     className="input-lattice flex-1"
                   />
-                  <button className="btn-neon">Send</button>
+                  <button
+                    onClick={handleSendMessage}
+                    disabled={createMessageMut.isPending || !chatMessage.trim()}
+                    className="btn-neon"
+                  >
+                    {createMessageMut.isPending ? 'Sending...' : 'Send'}
+                  </button>
                 </div>
               </div>
             </>

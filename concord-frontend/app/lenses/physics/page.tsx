@@ -273,11 +273,10 @@ export default function PhysicsLensPage() {
     fps: 60
   });
 
-  // Sync with backend (optional)
+  // Sync with backend
   const { data: _backendSim } = useQuery({
     queryKey: ['physics-sim'],
     queryFn: () => api.get('/api/physics/simulation').then((r) => r.data).catch(() => null),
-    enabled: false // Disable for now - run client-side
   });
 
   // Helper functions

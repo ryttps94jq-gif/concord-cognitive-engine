@@ -2,26 +2,71 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { useState } from 'react';
-import { Brain, Network, Activity, Layers } from 'lucide-react';
+import { Brain, Network, Activity, Layers, Loader2 } from 'lucide-react';
+import { useLensData } from '@/lib/hooks/use-lens-data';
+
+interface NetworkData {
+  name: string;
+  neurons: number;
+  layers: number;
+  accuracy: number;
+}
+
+interface NeuronData {
+  activation: number;
+  connections: number;
+  type: 'input' | 'hidden' | 'output';
+}
+
+const SEED_NETWORKS = [
+  { title: 'feedforward', data: { name: 'Feedforward', neurons: 128, layers: 4, accuracy: 0.92 } },
+  { title: 'recurrent', data: { name: 'Recurrent', neurons: 64, layers: 3, accuracy: 0.88 } },
+  { title: 'transformer', data: { name: 'Transformer', neurons: 256, layers: 6, accuracy: 0.95 } },
+];
+
+const SEED_NEURONS = [
+  { title: 'n-001', data: { activation: 0.85, connections: 12, type: 'input' as const } },
+  { title: 'n-002', data: { activation: 0.72, connections: 8, type: 'hidden' as const } },
+  { title: 'n-003', data: { activation: 0.91, connections: 15, type: 'hidden' as const } },
+  { title: 'n-004', data: { activation: 0.68, connections: 5, type: 'output' as const } },
+];
 
 export default function NeuroLensPage() {
   useLensNav('neuro');
-  const [networkType, setNetworkType] = useState('feedforward');
+  const [networkType, setNetworkType] = useState('Feedforward');
 
-  const networks = [
-    { id: 'feedforward', name: 'Feedforward', neurons: 128, layers: 4, accuracy: 0.92 },
-    { id: 'recurrent', name: 'Recurrent', neurons: 64, layers: 3, accuracy: 0.88 },
-    { id: 'transformer', name: 'Transformer', neurons: 256, layers: 6, accuracy: 0.95 },
-  ];
+  const { items: networkItems, isLoading: networksLoading } = useLensData<NetworkData>('neuro', 'network', {
+    seed: SEED_NETWORKS,
+  });
+  const { items: neuronItems, isLoading: neuronsLoading } = useLensData<NeuronData>('neuro', 'neuron', {
+    seed: SEED_NEURONS,
+  });
 
-  const selectedNetwork = networks.find((n) => n.id === networkType);
+  const networks = networkItems.map((item) => ({
+    id: item.title || item.id,
+    name: item.data.name || item.title,
+    neurons: item.data.neurons,
+    layers: item.data.layers,
+    accuracy: item.data.accuracy,
+  }));
 
-  const dtuNeurons = [
-    { id: 'n-001', activation: 0.85, connections: 12, type: 'input' },
-    { id: 'n-002', activation: 0.72, connections: 8, type: 'hidden' },
-    { id: 'n-003', activation: 0.91, connections: 15, type: 'hidden' },
-    { id: 'n-004', activation: 0.68, connections: 5, type: 'output' },
-  ];
+  const dtuNeurons = neuronItems.map((item) => ({
+    id: item.title || item.id,
+    activation: item.data.activation,
+    connections: item.data.connections,
+    type: item.data.type,
+  }));
+
+  const selectedNetwork = networks.find((n) => n.name === networkType) || networks[0];
+
+  if (networksLoading || neuronsLoading) {
+    return (
+      <div className="p-6 flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-neon-pink" />
+        <span className="ml-3 text-gray-400">Loading neural networks...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -38,12 +83,12 @@ export default function NeuroLensPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="lens-card">
           <Brain className="w-5 h-5 text-neon-pink mb-2" />
-          <p className="text-2xl font-bold">{selectedNetwork?.neurons}</p>
+          <p className="text-2xl font-bold">{selectedNetwork?.neurons ?? 0}</p>
           <p className="text-sm text-gray-400">Neurons</p>
         </div>
         <div className="lens-card">
           <Layers className="w-5 h-5 text-neon-purple mb-2" />
-          <p className="text-2xl font-bold">{selectedNetwork?.layers}</p>
+          <p className="text-2xl font-bold">{selectedNetwork?.layers ?? 0}</p>
           <p className="text-sm text-gray-400">Layers</p>
         </div>
         <div className="lens-card">
@@ -68,9 +113,9 @@ export default function NeuroLensPage() {
           {networks.map((net) => (
             <button
               key={net.id}
-              onClick={() => setNetworkType(net.id)}
+              onClick={() => setNetworkType(net.name)}
               className={`px-4 py-2 rounded-lg ${
-                networkType === net.id
+                networkType === net.name
                   ? 'bg-neon-purple/20 text-neon-purple border border-neon-purple/30'
                   : 'bg-lattice-surface text-gray-400'
               }`}

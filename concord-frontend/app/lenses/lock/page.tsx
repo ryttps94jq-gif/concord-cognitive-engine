@@ -2,18 +2,49 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { use70Lock } from '@/hooks/use70Lock';
-import { Lock, Shield, Eye, AlertTriangle, Check, Key } from 'lucide-react';
+import { Lock, Shield, Eye, AlertTriangle, Check, Key, Loader2 } from 'lucide-react';
+import { useLensData } from '@/lib/hooks/use-lens-data';
+import { apiHelpers } from '@/lib/api/client';
+import { useMutation } from '@tanstack/react-query';
+
+interface LockEventData {
+  event: string;
+  level: number;
+}
+
+const SEED_LOCK_HISTORY = [
+  { title: '2026-01-15', data: { event: 'Lock initialized', level: 70 } },
+  { title: '2026-01-20', data: { event: 'Invariant added: LEGALITY_GATE', level: 70 } },
+  { title: '2026-01-25', data: { event: 'Audit passed', level: 70 } },
+  { title: '2026-02-01', data: { event: 'Sovereignty check: PASS', level: 70 } },
+];
 
 export default function LockLensPage() {
   useLensNav('lock');
   const { lockPercentage, invariants, isLocked, invariantSummary } = use70Lock();
 
-  const lockHistory = [
-    { date: '2026-01-15', event: 'Lock initialized', level: 70 },
-    { date: '2026-01-20', event: 'Invariant added: LEGALITY_GATE', level: 70 },
-    { date: '2026-01-25', event: 'Audit passed', level: 70 },
-    { date: '2026-02-01', event: 'Sovereignty check: PASS', level: 70 },
-  ];
+  const { items: historyItems, isLoading: historyLoading, create: addEvent } = useLensData<LockEventData>('lock', 'lock-event', {
+    seed: SEED_LOCK_HISTORY,
+  });
+
+  const lockHistory = historyItems.map((item) => ({
+    date: item.title || new Date(item.createdAt).toLocaleDateString(),
+    event: item.data.event,
+    level: item.data.level,
+  }));
+
+  const runAudit = useMutation({
+    mutationFn: async () => {
+      const { data } = await apiHelpers.sovereignty.audit();
+      return data;
+    },
+    onSuccess: (data) => {
+      addEvent({
+        title: new Date().toISOString().split('T')[0],
+        data: { event: `Audit ${data?.ok ? 'passed' : 'failed'}`, level: lockPercentage },
+      }).catch(() => {});
+    },
+  });
 
   return (
     <div className="p-6 space-y-6">
@@ -46,7 +77,6 @@ export default function LockLensPage() {
               {lockPercentage >= 70 ? 'SOVEREIGNTY LOCKED' : 'WARNING: Below Threshold'}
             </span>
           </div>
-          {/* 70% marker */}
           <div
             className="absolute top-0 bottom-0 w-0.5 bg-white"
             style={{ left: '70%' }}
@@ -103,24 +133,43 @@ export default function LockLensPage() {
 
       {/* Lock History */}
       <div className="panel p-4">
-        <h2 className="font-semibold mb-4 flex items-center gap-2">
-          <Key className="w-4 h-4 text-neon-purple" />
-          Lock History
-        </h2>
-        <div className="space-y-2">
-          {lockHistory.map((entry, i) => (
-            <div key={i} className="flex items-center justify-between p-3 bg-lattice-deep rounded-lg">
-              <div className="flex items-center gap-3">
-                <Eye className="w-4 h-4 text-gray-500" />
-                <div>
-                  <p className="text-sm">{entry.event}</p>
-                  <p className="text-xs text-gray-500">{entry.date}</p>
-                </div>
-              </div>
-              <span className="text-sovereignty-locked font-mono">{entry.level}%</span>
-            </div>
-          ))}
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-semibold flex items-center gap-2">
+            <Key className="w-4 h-4 text-neon-purple" />
+            Lock History
+          </h2>
+          <button
+            onClick={() => runAudit.mutate()}
+            disabled={runAudit.isPending}
+            className="btn-neon text-sm"
+          >
+            {runAudit.isPending ? (
+              <><Loader2 className="w-3 h-3 mr-1 inline animate-spin" />Auditing...</>
+            ) : (
+              <><Shield className="w-3 h-3 mr-1 inline" />Run Audit</>
+            )}
+          </button>
         </div>
+        {historyLoading ? (
+          <div className="flex items-center justify-center py-4">
+            <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {lockHistory.map((entry, i) => (
+              <div key={i} className="flex items-center justify-between p-3 bg-lattice-deep rounded-lg">
+                <div className="flex items-center gap-3">
+                  <Eye className="w-4 h-4 text-gray-500" />
+                  <div>
+                    <p className="text-sm">{entry.event}</p>
+                    <p className="text-xs text-gray-500">{entry.date}</p>
+                  </div>
+                </div>
+                <span className="text-sovereignty-locked font-mono">{entry.level}%</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

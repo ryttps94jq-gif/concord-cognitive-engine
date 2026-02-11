@@ -1,33 +1,117 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
+import { useLensData } from '@/lib/hooks/use-lens-data';
+import { apiHelpers } from '@/lib/api/client';
+import { Loading } from '@/components/common/Loading';
 import { useState } from 'react';
 import { Heart, Scale, Brain, MessageSquare, Shield } from 'lucide-react';
 
-interface MoralDTU {
-  id: string;
+interface FrameworkData {
+  name: string;
+  desc: string;
+  weight: number;
+}
+
+interface MoralDTUData {
   framework: string;
   position: string;
   weight: number;
 }
 
+const SEED_FRAMEWORKS = [
+  {
+    title: 'Utilitarianism',
+    data: { name: 'Utilitarianism', desc: 'Greatest good for greatest number', weight: 0.3 },
+  },
+  {
+    title: 'Deontology',
+    data: { name: 'Deontology', desc: 'Duty-based ethics', weight: 0.25 },
+  },
+  {
+    title: 'Virtue Ethics',
+    data: { name: 'Virtue Ethics', desc: 'Character-based approach', weight: 0.25 },
+  },
+  {
+    title: 'Care Ethics',
+    data: { name: 'Care Ethics', desc: 'Relationship-centered', weight: 0.2 },
+  },
+];
+
+const SEED_MORAL_DTUS = [
+  {
+    title: 'Maximize aggregate wellbeing',
+    data: { framework: 'Utilitarianism', position: 'Maximize aggregate wellbeing', weight: 0.85 },
+  },
+  {
+    title: 'Respect rational autonomy',
+    data: { framework: 'Deontology', position: 'Respect rational autonomy', weight: 0.78 },
+  },
+  {
+    title: 'Cultivate practical wisdom',
+    data: { framework: 'Virtue Ethics', position: 'Cultivate practical wisdom', weight: 0.82 },
+  },
+];
+
 export default function EthicsLensPage() {
   useLensNav('ethics');
   const [dilemma, setDilemma] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<string | null>(null);
 
-  const frameworks = [
-    { id: 'util', name: 'Utilitarianism', desc: 'Greatest good for greatest number', weight: 0.3 },
-    { id: 'deont', name: 'Deontology', desc: 'Duty-based ethics', weight: 0.25 },
-    { id: 'virtue', name: 'Virtue Ethics', desc: 'Character-based approach', weight: 0.25 },
-    { id: 'care', name: 'Care Ethics', desc: 'Relationship-centered', weight: 0.2 },
-  ];
+  const { items: frameworkItems, isLoading: frameworksLoading } = useLensData<FrameworkData>(
+    'ethics',
+    'framework',
+    { seed: SEED_FRAMEWORKS }
+  );
 
-  const moralDTUs: MoralDTU[] = [
-    { id: 'm-001', framework: 'Utilitarianism', position: 'Maximize aggregate wellbeing', weight: 0.85 },
-    { id: 'm-002', framework: 'Deontology', position: 'Respect rational autonomy', weight: 0.78 },
-    { id: 'm-003', framework: 'Virtue Ethics', position: 'Cultivate practical wisdom', weight: 0.82 },
-  ];
+  const { items: moralDTUItems, isLoading: moralDTUsLoading } = useLensData<MoralDTUData>(
+    'ethics',
+    'moral-dtu',
+    { seed: SEED_MORAL_DTUS }
+  );
+
+  // Map lens items to the shapes used in rendering
+  const frameworks = frameworkItems.map((item) => ({
+    id: item.id,
+    name: item.title || item.data?.name || '',
+    desc: item.data?.desc || '',
+    weight: item.data?.weight ?? 0,
+  }));
+
+  const moralDTUs = moralDTUItems.map((item) => ({
+    id: item.id,
+    framework: item.data?.framework || '',
+    position: item.data?.position || item.title || '',
+    weight: item.data?.weight ?? 0,
+  }));
+
+  const handleAnalyzeDilemma = async () => {
+    if (!dilemma.trim()) return;
+    setAnalyzing(true);
+    setAnalysisResult(null);
+    try {
+      const { data } = await apiHelpers.chat.ask(dilemma, 'ethics');
+      const responseText =
+        data?.answer || data?.response || data?.message || JSON.stringify(data);
+      setAnalysisResult(responseText);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      setAnalysisResult(`Analysis failed: ${errorMessage}`);
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const isLoading = frameworksLoading || moralDTUsLoading;
+
+  if (isLoading) {
+    return (
+      <div className="p-6 flex items-center justify-center min-h-[400px]">
+        <Loading text="Loading ethics frameworks..." />
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -77,15 +161,20 @@ export default function EthicsLensPage() {
           className="input-lattice w-full h-24 resize-none mb-4"
         />
         <button
-          onClick={() => {
-            setAnalyzing(true);
-            setTimeout(() => setAnalyzing(false), 1500);
-          }}
+          onClick={handleAnalyzeDilemma}
           disabled={analyzing || !dilemma}
           className="btn-neon purple w-full"
         >
           {analyzing ? 'Analyzing across frameworks...' : 'Analyze Dilemma'}
         </button>
+
+        {/* Analysis Result */}
+        {analysisResult && (
+          <div className="mt-4 p-4 bg-lattice-deep rounded-lg border border-neon-purple/20">
+            <h3 className="text-sm font-semibold text-neon-purple mb-2">Analysis Result</h3>
+            <p className="text-sm text-gray-300 whitespace-pre-wrap">{analysisResult}</p>
+          </div>
+        )}
       </div>
 
       {/* Ethical Frameworks */}
