@@ -2,7 +2,6 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useLensData } from '@/lib/hooks/use-lens-data';
 import { apiHelpers } from '@/lib/api/client';
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -177,9 +176,6 @@ export default function AgentsLensPage() {
   useLensNav('agents');
 
   const queryClient = useQueryClient();
-  const { isError: isError, error: error, refetch: refetch, items: _agentItems } = useLensData('agents', 'agent', {
-    seed: INITIAL_AGENTS.map(a => ({ title: a.name, data: a as unknown as Record<string, unknown> })),
-  });
   const [_view, setView] = useState<ViewMode>('dashboard');
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [showCreate, setShowCreate] = useState(false);

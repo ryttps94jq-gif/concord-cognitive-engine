@@ -1,7 +1,7 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { apiHelpers } from '@/lib/api/client';
 import { useState, useMemo } from 'react';
@@ -297,17 +297,6 @@ export default function GoalsLensPage() {
   const [achievements] = useState<Achievement[]>(SEED_ACHIEVEMENTS);
 
   // API integration (preserves original backend connectivity)
-  const { data: _goalsData, isError: isError4, error: error4, refetch: refetch4,} = useQuery({
-    queryKey: ['goals'],
-    queryFn: () => apiHelpers.goals.list().then((r) => r.data),
-    refetchInterval: 10000,
-  });
-
-  const { data: _statusData, isError: isError5, error: error5, refetch: refetch5,} = useQuery({
-    queryKey: ['goals-status'],
-    queryFn: () => apiHelpers.goals.status().then((r) => r.data),
-  });
-
   const createGoalMutation = useMutation({
     mutationFn: () =>
       apiHelpers.goals.create({

@@ -265,17 +265,7 @@ export default function MLLensPage() {
   const [playgroundModel, setPlaygroundModel] = useState<string>('');
 
   // Queries
-  const { data: _modelsData, isError: isError3, error: error3, refetch: refetch3,} = useQuery({
-    queryKey: ['ml-models'],
-    queryFn: () => api.get('/api/ml/models').then(r => r.data),
-  });
-
-  const { data: _experimentsData, isError: isError4, error: error4, refetch: refetch4,} = useQuery({
-    queryKey: ['ml-experiments'],
-    queryFn: () => api.get('/api/ml/experiments').then(r => r.data),
-  });
-
-  const { data: metricsData, isError: isError5, error: error5, refetch: refetch5,} = useQuery({
+  const { data: metricsData } = useQuery({
     queryKey: ['ml-metrics'],
     queryFn: () => api.get('/api/ml/metrics').then(r => r.data),
     refetchInterval: 5000

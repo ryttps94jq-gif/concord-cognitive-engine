@@ -3,7 +3,6 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
-import { useLensData } from '@/lib/hooks/use-lens-data';
 import { api } from '@/lib/api/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -158,13 +157,7 @@ export default function ThreadLensPage() {
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set(['msg-1', 'msg-2']));
   const [viewMode, setViewMode] = useState<ViewMode>('tree');
   const [searchQuery, setSearchQuery] = useState('');
-  const [_showArchived, _setShowArchived] = useState(false);
-
-  const { isError: isError, error: error, refetch: refetch, items: _threadItems, create: _createThread } = useLensData('thread', 'thread', {
-    seed: INITIAL_THREADS.map(t => ({ title: t.name, data: t as unknown as Record<string, unknown> })),
-  });
-
-  const { data: sessions, isError: isError2, error: error2, refetch: refetch2,} = useQuery({
+  const { data: sessions } = useQuery({
     queryKey: ['sessions'],
     queryFn: () => api.get('/api/state/latest').then((r) => r.data),
   });

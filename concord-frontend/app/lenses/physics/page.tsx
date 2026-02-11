@@ -1,8 +1,6 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
-import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -272,12 +270,6 @@ export default function PhysicsLensPage() {
     totalEnergy: 0,
     momentum: { x: 0, y: 0 },
     fps: 60
-  });
-
-  // Sync with backend
-  const { data: _backendSim, isError: isError, error: error, refetch: refetch,} = useQuery({
-    queryKey: ['physics-sim'],
-    queryFn: () => api.get('/api/physics/simulation').then((r) => r.data).catch(() => null),
   });
 
   // Helper functions

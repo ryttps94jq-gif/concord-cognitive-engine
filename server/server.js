@@ -15517,10 +15517,7 @@ app.get("/api/organs", (req, res) => {
 // === v3 identity/account + global + marketplace + ingest endpoints (explicit HTTP surface) ===
 // These wrap existing macro domains so frontend can wire cleanly without calling /api/macros/run directly.
 
-app.get("/api/auth/me", async (req,res) => {
-  try { return res.json(await runMacro("auth","whoami", {}, makeCtx(req))); }
-  catch (e) { return res.status(500).json({ ok:false, error:String(e?.message||e) }); }
-});
+// GET /api/auth/me is already registered above (line ~14081) with full JWT validation.
 
 app.post("/api/auth/keys", async (req,res) => {
   try {
@@ -18015,15 +18012,7 @@ app.post("/api/council/credibility", async (req, res) => {
   return res.json(out);
 });
 
-app.post("/api/personas", async (req, res) => {
-  const out = await runMacro("persona", "create", req.body, makeCtx(req));
-  return res.json(out);
-});
-
-app.get("/api/personas", async (req, res) => {
-  const out = await runMacro("persona", "list", {}, makeCtx(req));
-  return res.json(out);
-});
+// POST/GET /api/personas already registered above (lines ~15377-15378).
 
 app.put("/api/personas/:id", async (req, res) => {
   const out = await runMacro("persona", "update", { id: req.params.id, ...req.body }, makeCtx(req));
@@ -22139,14 +22128,7 @@ app.get("/api/docs/openapi.yaml", (req, res) => {
   res.status(404).json({ ok: false, error: "OpenAPI spec not found" });
 });
 
-app.get("/api/plugins", (req, res) => {
-  res.json({ ok: true, plugins: listPlugins() });
-});
-
-app.post("/api/plugins", requireRole("owner", "admin"), (req, res) => {
-  const result = registerPlugin(req.body);
-  res.json(result);
-});
+// GET/POST /api/plugins already registered above (lines ~17993-18001).
 
 app.delete("/api/plugins/:id", requireRole("owner", "admin"), (req, res) => {
   const result = unregisterPlugin(req.params.id);
@@ -23225,7 +23207,9 @@ app.post("/api/embed/parse", (req, res) => {
 });
 
 // ---- Wave 12: AI Depth Endpoints ----
-app.post("/api/voice/transcribe", express.raw({ type: "audio/*", limit: "50mb" }), async (req, res) => {
+// POST /api/voice/transcribe already registered above (line ~16867) via macro.
+// Raw audio uploads: use /api/voice/transcribe-raw instead for binary audio data.
+app.post("/api/voice/transcribe-raw", express.raw({ type: "audio/*", limit: "50mb" }), async (req, res) => {
   const result = await processVoiceNote(req.body, { createDTU: req.query.createDTU === "1" });
   res.json(result);
 });
@@ -23308,10 +23292,15 @@ app.get("/api/admin/stats", requireRole("owner", "admin"), (req, res) => {
   res.json(getAdminStats());
 });
 
+// Proxy /api/admin/audit to the real audit-log implementation at /api/auth/audit-log
 app.get("/api/admin/audit", requireRole("owner", "admin"), (req, res) => {
-  // Stub: return empty audit log; full implementation depends on audit storage
-  const limit = Math.min(Number(req.query.limit) || 100, 1000);
-  res.json({ ok: true, entries: [], total: 0, limit });
+  const { limit = 100, offset = 0, category, action, userId, startDate, endDate } = req.query;
+  const logs = AuditDB.query({
+    limit: Number(limit), offset: Number(offset),
+    category, action, userId, startDate, endDate
+  });
+  const total = AuditDB.count({ category, userId });
+  res.json({ ok: true, total, offset: Number(offset), limit: Number(limit), entries: logs });
 });
 
 app.post("/api/admin/sso", requireRole("owner"), (req, res) => {
@@ -23343,21 +23332,8 @@ app.post("/api/webhooks/register", (req, res) => {
   res.json(result);
 });
 
-app.get("/api/webhooks", (req, res) => {
-  const webhooks = Array.from(WEBHOOK_SUBSCRIPTIONS.values()).map(w => ({
-    id: w.id,
-    url: w.url,
-    events: w.events,
-    active: w.active,
-    lastTriggered: w.lastTriggered
-  }));
-  res.json({ ok: true, webhooks });
-});
-
-app.delete("/api/webhooks/:id", (req, res) => {
-  WEBHOOK_SUBSCRIPTIONS.delete(req.params.id);
-  res.json({ ok: true });
-});
+// GET /api/webhooks already registered above (line ~21631) via macro.
+// DELETE /api/webhooks/:id already registered above (line ~21632) via macro.
 
 app.get("/api/themes/marketplace", (req, res) => {
   res.json(getMarketplaceThemes());

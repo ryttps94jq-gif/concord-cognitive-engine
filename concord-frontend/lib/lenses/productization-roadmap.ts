@@ -715,7 +715,6 @@ export const PRODUCTIZATION_PHASES: ProductionPhase[] = [
     ],
     status: 'blocked',
   },
-];
 
   // ── PHASE 11: Calendar ───────────────────────────────────────────
   {
