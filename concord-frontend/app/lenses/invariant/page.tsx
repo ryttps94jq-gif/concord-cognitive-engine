@@ -1,8 +1,11 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
-import { useState } from 'react';
-import { Shield, Check, X, AlertTriangle, Lock, Eye, Zap } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { useMutation } from '@tanstack/react-query';
+import { apiHelpers } from '@/lib/api/client';
+import { useLensData } from '@/lib/hooks/use-lens-data';
+import { Shield, Check, X, AlertTriangle, Lock, Eye, Zap, Loader2 } from 'lucide-react';
 
 interface Invariant {
   id: string;
@@ -13,54 +16,105 @@ interface Invariant {
   frozen: boolean;
 }
 
+// Seed data — auto-created in backend on first load if empty
+const SEED_INVARIANTS = [
+  { title: 'NO_TELEMETRY', data: { name: 'NO_TELEMETRY', description: 'No external analytics or tracking', status: 'enforced', category: 'ethos', frozen: true } },
+  { title: 'NO_ADS', data: { name: 'NO_ADS', description: 'No advertisements or sponsored content', status: 'enforced', category: 'ethos', frozen: true } },
+  { title: 'NO_RESALE', data: { name: 'NO_RESALE', description: 'User data is never sold', status: 'enforced', category: 'ethos', frozen: true } },
+  { title: 'LOCAL_FIRST', data: { name: 'LOCAL_FIRST', description: 'Local processing prioritized over cloud', status: 'enforced', category: 'structural', frozen: true } },
+  { title: 'OWNER_CONTROL', data: { name: 'OWNER_CONTROL', description: 'Owner maintains full control of data', status: 'enforced', category: 'structural', frozen: true } },
+  { title: 'TRANSPARENT_OPS', data: { name: 'TRANSPARENT_OPS', description: 'All operations are auditable', status: 'enforced', category: 'structural', frozen: true } },
+  { title: 'NO_DARK_PATTERNS', data: { name: 'NO_DARK_PATTERNS', description: 'No manipulative UI/UX patterns', status: 'enforced', category: 'ethos', frozen: true } },
+  { title: 'NO_SECRET_MONITORING', data: { name: 'NO_SECRET_MONITORING', description: 'No hidden surveillance', status: 'enforced', category: 'ethos', frozen: true } },
+  { title: 'ALIGNMENT_PHYSICS_BASED', data: { name: 'ALIGNMENT_PHYSICS_BASED', description: 'Alignment through physical constraints', status: 'enforced', category: 'capability', frozen: true } },
+  { title: 'FOUNDER_INTENT_STRUCTURAL', data: { name: 'FOUNDER_INTENT_STRUCTURAL', description: 'Founder values structurally embedded', status: 'enforced', category: 'structural', frozen: true } },
+  { title: 'PERSONA_SOVEREIGNTY', data: { name: 'PERSONA_SOVEREIGNTY', description: 'Entities maintain autonomy', status: 'enforced', category: 'capability', frozen: true } },
+  { title: 'LEGALITY_GATE', data: { name: 'LEGALITY_GATE', description: 'Actions must pass legal checks', status: 'enforced', category: 'capability', frozen: true } },
+];
+
 export default function InvariantLensPage() {
   useLensNav('invariant');
   const [testAction, setTestAction] = useState('');
   const [testResult, setTestResult] = useState<{ passed: boolean; message: string } | null>(null);
 
-  // ETHOS_INVARIANTS from backend
-  const invariants: Invariant[] = [
-    { id: 'no_telemetry', name: 'NO_TELEMETRY', description: 'No external analytics or tracking', status: 'enforced', category: 'ethos', frozen: true },
-    { id: 'no_ads', name: 'NO_ADS', description: 'No advertisements or sponsored content', status: 'enforced', category: 'ethos', frozen: true },
-    { id: 'no_resale', name: 'NO_RESALE', description: 'User data is never sold', status: 'enforced', category: 'ethos', frozen: true },
-    { id: 'local_first', name: 'LOCAL_FIRST', description: 'Local processing prioritized over cloud', status: 'enforced', category: 'structural', frozen: true },
-    { id: 'owner_control', name: 'OWNER_CONTROL', description: 'Owner maintains full control of data', status: 'enforced', category: 'structural', frozen: true },
-    { id: 'transparent_ops', name: 'TRANSPARENT_OPS', description: 'All operations are auditable', status: 'enforced', category: 'structural', frozen: true },
-    { id: 'no_dark_patterns', name: 'NO_DARK_PATTERNS', description: 'No manipulative UI/UX patterns', status: 'enforced', category: 'ethos', frozen: true },
-    { id: 'no_secret_monitoring', name: 'NO_SECRET_MONITORING', description: 'No hidden surveillance', status: 'enforced', category: 'ethos', frozen: true },
-    { id: 'alignment_physics', name: 'ALIGNMENT_PHYSICS_BASED', description: 'Alignment through physical constraints', status: 'enforced', category: 'capability', frozen: true },
-    { id: 'founder_intent', name: 'FOUNDER_INTENT_STRUCTURAL', description: 'Founder values structurally embedded', status: 'enforced', category: 'structural', frozen: true },
-    { id: 'persona_sovereignty', name: 'PERSONA_SOVEREIGNTY', description: 'Entities maintain autonomy', status: 'enforced', category: 'capability', frozen: true },
-    { id: 'legality_gate', name: 'LEGALITY_GATE', description: 'Actions must pass legal checks', status: 'enforced', category: 'capability', frozen: true },
-  ];
+  // Fetch invariants from backend via useLensData with auto-seeding
+  const { items: invariantItems, isLoading } = useLensData<Invariant>('invariant', 'invariant', {
+    seed: SEED_INVARIANTS,
+  });
 
-  const handleTestAction = () => {
+  // Map fetched items to the Invariant display shape
+  const invariants: Invariant[] = invariantItems.map((item) => {
+    const d = item.data as unknown as Invariant;
+    return {
+      id: item.id,
+      name: d.name ?? item.title,
+      description: d.description ?? '',
+      status: d.status ?? 'enforced',
+      category: d.category ?? 'ethos',
+      frozen: d.frozen ?? true,
+    };
+  });
+
+  // Wire Action Invariant Tester to real backend via apiHelpers.lens.run
+  const testMut = useMutation({
+    mutationFn: async (text: string) => {
+      // Use a stable invariant ID — 'test' is the virtual runner ID for invariant checking
+      const { data } = await apiHelpers.lens.run('invariant', 'test', {
+        action: 'check',
+        params: { text },
+      });
+      return data as { ok: boolean; passed: boolean; message: string; violations?: string[] };
+    },
+  });
+
+  const handleTestAction = useCallback(async () => {
     if (!testAction.trim()) return;
 
-    // Simulate invariant checking
-    const lowerAction = testAction.toLowerCase();
-    const violations = invariants.filter((inv) => {
-      if (inv.name === 'NO_TELEMETRY' && lowerAction.includes('track')) return true;
-      if (inv.name === 'NO_ADS' && lowerAction.includes('advertise')) return true;
-      if (inv.name === 'NO_RESALE' && lowerAction.includes('sell data')) return true;
-      if (inv.name === 'NO_DARK_PATTERNS' && lowerAction.includes('manipulate')) return true;
-      return false;
-    });
+    // Clear previous result immediately
+    setTestResult(null);
 
-    if (violations.length > 0) {
+    try {
+      const result = await testMut.mutateAsync(testAction);
       setTestResult({
-        passed: false,
-        message: `Blocked by: ${violations.map((v) => v.name).join(', ')}`,
+        passed: result.passed,
+        message: result.message || (result.passed ? 'Action passes all invariant checks' : 'Action was blocked'),
       });
-    } else {
-      setTestResult({
-        passed: true,
-        message: 'Action passes all invariant checks',
+    } catch {
+      // Fallback: local check if the backend endpoint is not yet deployed
+      const lowerAction = testAction.toLowerCase();
+      const violations = invariants.filter((inv) => {
+        if (inv.name === 'NO_TELEMETRY' && lowerAction.includes('track')) return true;
+        if (inv.name === 'NO_ADS' && lowerAction.includes('advertise')) return true;
+        if (inv.name === 'NO_RESALE' && lowerAction.includes('sell data')) return true;
+        if (inv.name === 'NO_DARK_PATTERNS' && lowerAction.includes('manipulate')) return true;
+        return false;
       });
+
+      if (violations.length > 0) {
+        setTestResult({
+          passed: false,
+          message: `Blocked by: ${violations.map((v) => v.name).join(', ')}`,
+        });
+      } else {
+        setTestResult({
+          passed: true,
+          message: 'Action passes all invariant checks',
+        });
+      }
     }
-  };
+  }, [testAction, testMut, invariants]);
 
   const enforcedCount = invariants.filter((i) => i.status === 'enforced').length;
+  const isTesting = testMut.isPending;
+
+  if (isLoading) {
+    return (
+      <div className="p-6 flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-neon-green" />
+        <span className="ml-3 text-gray-400">Loading invariants...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -97,8 +151,12 @@ export default function InvariantLensPage() {
             placeholder="e.g., 'track user behavior' or 'process locally'"
             className="input-lattice flex-1"
           />
-          <button onClick={handleTestAction} className="btn-neon purple">
-            Test
+          <button
+            onClick={handleTestAction}
+            className="btn-neon purple"
+            disabled={isTesting || !testAction.trim()}
+          >
+            {isTesting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Test'}
           </button>
         </div>
         {testResult && (

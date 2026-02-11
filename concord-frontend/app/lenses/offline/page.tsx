@@ -1,8 +1,11 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
-import { useState } from 'react';
-import { Wifi, WifiOff, Database, RefreshCw, Upload, Download, Trash2 } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiHelpers } from '@/lib/api/client';
+import { useLensData } from '@/lib/hooks/use-lens-data';
+import { Wifi, WifiOff, Database, RefreshCw, Upload, Download, Trash2, Loader2 } from 'lucide-react';
 
 interface SyncItem {
   id: string;
@@ -12,22 +15,142 @@ interface SyncItem {
   synced: boolean;
 }
 
+// Seed data for pending sync items
+const SEED_SYNC_ITEMS = [
+  { title: 'Create DTU', data: { type: 'dtu', action: 'create', timestamp: new Date().toISOString(), synced: false } },
+  { title: 'Update Event', data: { type: 'event', action: 'update', timestamp: new Date().toISOString(), synced: false } },
+  { title: 'Update DTU', data: { type: 'dtu', action: 'update', timestamp: new Date().toISOString(), synced: false } },
+];
+
 export default function OfflineLensPage() {
   useLensNav('offline');
   const [isOnline, setIsOnline] = useState(true);
+  const qc = useQueryClient();
+
+  // Fetch cache stats from the real DB status endpoint
+  const { data: dbStatusResponse, isLoading: statsLoading } = useQuery({
+    queryKey: ['db', 'status'],
+    queryFn: async () => {
+      const { data } = await apiHelpers.db.status();
+      return data as {
+        ok: boolean;
+        dtus?: number;
+        events?: number;
+        settings?: number;
+        totalSize?: string;
+        [key: string]: unknown;
+      };
+    },
+    staleTime: 10000,
+    retry: 1,
+  });
 
   const cacheStats = {
-    dtus: 1250,
-    events: 3400,
-    settings: 45,
-    totalSize: '24.5 MB',
+    dtus: dbStatusResponse?.dtus ?? 0,
+    events: dbStatusResponse?.events ?? 0,
+    settings: dbStatusResponse?.settings ?? 0,
+    totalSize: dbStatusResponse?.totalSize ?? '-- MB',
   };
 
-  const pendingSync: SyncItem[] = [
-    { id: 's-001', type: 'dtu', action: 'create', timestamp: new Date().toISOString(), synced: false },
-    { id: 's-002', type: 'event', action: 'update', timestamp: new Date().toISOString(), synced: false },
-    { id: 's-003', type: 'dtu', action: 'update', timestamp: new Date().toISOString(), synced: false },
-  ];
+  // Fetch pending sync items via useLensData
+  const {
+    items: syncItems,
+    isLoading: syncLoading,
+    remove: removeSyncItem,
+    refetch: refetchSync,
+  } = useLensData<SyncItem>('offline', 'sync-item', {
+    seed: SEED_SYNC_ITEMS,
+  });
+
+  const pendingSync: SyncItem[] = syncItems.map((item) => {
+    const d = item.data as unknown as SyncItem;
+    return {
+      id: item.id,
+      type: d.type ?? 'dtu',
+      action: d.action ?? 'create',
+      timestamp: d.timestamp ?? item.createdAt,
+      synced: d.synced ?? false,
+    };
+  });
+
+  // Sync All mutation — calls apiHelpers.db.sync()
+  const syncAllMut = useMutation({
+    mutationFn: async () => {
+      const { data } = await apiHelpers.db.sync();
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['db', 'status'] });
+      qc.invalidateQueries({ queryKey: ['lens', 'offline', 'list'] });
+    },
+  });
+
+  // Clear Cache mutation — deletes all sync items one by one
+  const clearCacheMut = useMutation({
+    mutationFn: async () => {
+      const deletePromises = syncItems.map((item) => removeSyncItem(item.id));
+      await Promise.all(deletePromises);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['db', 'status'] });
+      qc.invalidateQueries({ queryKey: ['lens', 'offline', 'list'] });
+    },
+  });
+
+  // Sync a single item
+  const syncSingleMut = useMutation({
+    mutationFn: async (itemId: string) => {
+      const { data } = await apiHelpers.db.sync(1);
+      await removeSyncItem(itemId);
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['lens', 'offline', 'list'] });
+    },
+  });
+
+  // Force Refresh — invalidate all queries to re-fetch from server
+  const handleForceRefresh = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ['db', 'status'] });
+    qc.invalidateQueries({ queryKey: ['lens', 'offline', 'list'] });
+    refetchSync();
+  }, [qc, refetchSync]);
+
+  const handleSyncAll = useCallback(() => {
+    if (!isOnline) return;
+    syncAllMut.mutate();
+  }, [isOnline, syncAllMut]);
+
+  const handleClearCache = useCallback(() => {
+    clearCacheMut.mutate();
+  }, [clearCacheMut]);
+
+  const handleSyncSingle = useCallback(
+    (itemId: string) => {
+      if (!isOnline) return;
+      syncSingleMut.mutate(itemId);
+    },
+    [isOnline, syncSingleMut]
+  );
+
+  const handleDeleteSingle = useCallback(
+    (itemId: string) => {
+      removeSyncItem(itemId);
+    },
+    [removeSyncItem]
+  );
+
+  const isLoading = statsLoading || syncLoading;
+  const isSyncing = syncAllMut.isPending || syncSingleMut.isPending;
+
+  if (isLoading) {
+    return (
+      <div className="p-6 flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-neon-blue" />
+        <span className="ml-3 text-gray-400">Loading offline cache data...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -79,15 +202,26 @@ export default function OfflineLensPage() {
       <div className="panel p-4">
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-semibold flex items-center gap-2">
-            <RefreshCw className="w-4 h-4 text-neon-purple" />
+            <RefreshCw className={`w-4 h-4 text-neon-purple ${isSyncing ? 'animate-spin' : ''}`} />
             Sync Queue
           </h2>
-          <button className="btn-neon text-sm" disabled={!isOnline}>
-            <Upload className="w-4 h-4 mr-2 inline" />
-            Sync All
+          <button
+            className="btn-neon text-sm"
+            disabled={!isOnline || isSyncing}
+            onClick={handleSyncAll}
+          >
+            {isSyncing ? (
+              <Loader2 className="w-4 h-4 mr-2 inline animate-spin" />
+            ) : (
+              <Upload className="w-4 h-4 mr-2 inline" />
+            )}
+            {isSyncing ? 'Syncing...' : 'Sync All'}
           </button>
         </div>
         <div className="space-y-2">
+          {pendingSync.length === 0 && (
+            <p className="text-sm text-gray-500 text-center py-4">No pending sync items</p>
+          )}
           {pendingSync.map((item) => (
             <div key={item.id} className="flex items-center justify-between p-3 bg-lattice-deep rounded-lg">
               <div className="flex items-center gap-3">
@@ -98,10 +232,17 @@ export default function OfflineLensPage() {
                 </div>
               </div>
               <div className="flex gap-2">
-                <button className="p-2 bg-neon-green/20 text-neon-green rounded" disabled={!isOnline}>
+                <button
+                  className="p-2 bg-neon-green/20 text-neon-green rounded"
+                  disabled={!isOnline || isSyncing}
+                  onClick={() => handleSyncSingle(item.id)}
+                >
                   <Upload className="w-4 h-4" />
                 </button>
-                <button className="p-2 bg-neon-pink/20 text-neon-pink rounded">
+                <button
+                  className="p-2 bg-neon-pink/20 text-neon-pink rounded"
+                  onClick={() => handleDeleteSingle(item.id)}
+                >
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
@@ -117,19 +258,30 @@ export default function OfflineLensPage() {
           Cache Management
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <button className="lens-card text-left hover:border-neon-green">
+          <button
+            className="lens-card text-left hover:border-neon-green"
+            onClick={handleSyncAll}
+            disabled={!isOnline || isSyncing}
+          >
             <Download className="w-5 h-5 text-neon-green mb-2" />
             <p className="font-medium">Download All</p>
             <p className="text-xs text-gray-400">Cache entire database locally</p>
           </button>
-          <button className="lens-card text-left hover:border-neon-blue">
+          <button
+            className="lens-card text-left hover:border-neon-blue"
+            onClick={handleForceRefresh}
+          >
             <RefreshCw className="w-5 h-5 text-neon-blue mb-2" />
             <p className="font-medium">Force Refresh</p>
             <p className="text-xs text-gray-400">Re-sync from server</p>
           </button>
-          <button className="lens-card text-left hover:border-neon-pink">
+          <button
+            className="lens-card text-left hover:border-neon-pink"
+            onClick={handleClearCache}
+            disabled={clearCacheMut.isPending}
+          >
             <Trash2 className="w-5 h-5 text-neon-pink mb-2" />
-            <p className="font-medium">Clear Cache</p>
+            <p className="font-medium">{clearCacheMut.isPending ? 'Clearing...' : 'Clear Cache'}</p>
             <p className="text-xs text-gray-400">Remove all cached data</p>
           </button>
         </div>

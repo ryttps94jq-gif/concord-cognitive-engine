@@ -1,23 +1,69 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
-import { Leaf, Sun, Droplet, Wind, TreeDeciduous, TrendingUp } from 'lucide-react';
+import { useLensData } from '@/lib/hooks/use-lens-data';
+import { Leaf, Sun, Droplet, Wind, TreeDeciduous, TrendingUp, Loader2 } from 'lucide-react';
+
+// Seed data — auto-created in backend if empty
+const SEED_METRICS = [
+  { title: 'Energy Flow', data: { id: 'energy', value: 0.85, unit: 'TJ/day', icon: 'Sun', color: 'text-yellow-500' } },
+  { title: 'Water Cycle', data: { id: 'water', value: 0.92, unit: 'ML/day', icon: 'Droplet', color: 'text-neon-blue' } },
+  { title: 'Carbon Balance', data: { id: 'carbon', value: 0.78, unit: 'kt CO2', icon: 'Wind', color: 'text-gray-400' } },
+  { title: 'Biodiversity', data: { id: 'biodiversity', value: 0.88, unit: 'index', icon: 'TreeDeciduous', color: 'text-neon-green' } },
+];
+
+const SEED_ORGANISMS = [
+  { title: 'Producers', data: { type: 'Producers', count: 1250, growth: 0.05 } },
+  { title: 'Consumers', data: { type: 'Consumers', count: 340, growth: -0.02 } },
+  { title: 'Decomposers', data: { type: 'Decomposers', count: 890, growth: 0.08 } },
+];
+
+const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+  Sun,
+  Droplet,
+  Wind,
+  TreeDeciduous,
+};
 
 export default function EcoLensPage() {
   useLensNav('eco');
 
-  const ecosystemMetrics = [
-    { id: 'energy', name: 'Energy Flow', value: 0.85, unit: 'TJ/day', icon: Sun, color: 'text-yellow-500' },
-    { id: 'water', name: 'Water Cycle', value: 0.92, unit: 'ML/day', icon: Droplet, color: 'text-neon-blue' },
-    { id: 'carbon', name: 'Carbon Balance', value: 0.78, unit: 'kt CO2', icon: Wind, color: 'text-gray-400' },
-    { id: 'biodiversity', name: 'Biodiversity', value: 0.88, unit: 'index', icon: TreeDeciduous, color: 'text-neon-green' },
-  ];
+  const { items: metricItems, isLoading: metricsLoading } = useLensData('eco', 'metric', {
+    seed: SEED_METRICS,
+  });
 
-  const organisms = [
-    { type: 'Producers', count: 1250, growth: 0.05 },
-    { type: 'Consumers', count: 340, growth: -0.02 },
-    { type: 'Decomposers', count: 890, growth: 0.08 },
-  ];
+  const { items: organismItems, isLoading: organismsLoading } = useLensData('eco', 'organism', {
+    seed: SEED_ORGANISMS,
+  });
+
+  const isLoading = metricsLoading || organismsLoading;
+
+  // Map fetched items to display shape
+  const ecosystemMetrics = metricItems.map((item) => {
+    const d = item.data as { id: string; value: number; unit: string; icon: string; color: string };
+    return {
+      id: d.id ?? item.id,
+      name: item.title,
+      value: d.value,
+      unit: d.unit,
+      icon: ICON_MAP[d.icon] ?? Sun,
+      color: d.color ?? 'text-gray-400',
+    };
+  });
+
+  const organisms = organismItems.map((item) => {
+    const d = item.data as { type: string; count: number; growth: number };
+    return { type: d.type ?? item.title, count: d.count, growth: d.growth };
+  });
+
+  if (isLoading) {
+    return (
+      <div className="p-6 flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-neon-green" />
+        <span className="ml-3 text-gray-400">Loading ecosystem data...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">

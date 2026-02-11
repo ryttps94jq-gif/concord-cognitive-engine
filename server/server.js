@@ -15377,6 +15377,16 @@ app.post("/api/layers/toggle", async (req,res)=> res.json(await runMacro("layer"
 app.get("/api/personas", async (req,res)=> res.json(await runMacro("persona","list", {}, makeCtx(req))));
 app.post("/api/personas", async (req,res)=> res.json(await runMacro("persona","create", req.body||{}, makeCtx(req))));
 
+// Persona interaction endpoints (speak + animate)
+app.post("/api/personas/:id/speak", async (req, res) => {
+  const out = await runMacro("persona", "speak", { personaId: req.params.id, text: req.body?.text || "" }, makeCtx(req));
+  return res.json(out);
+});
+app.post("/api/personas/:id/animate", async (req, res) => {
+  const out = await runMacro("persona", "animate", { personaId: req.params.id, kind: req.body?.kind || "talk" }, makeCtx(req));
+  return res.json(out);
+});
+
 // Macros registry + runner
 app.get("/api/macros/domains", (req,res)=> res.json({ ok:true, domains: listDomains() }));
 app.get("/api/macros/:domain", (req,res)=> res.json({ ok:true, domain:req.params.domain, macros: listMacros(req.params.domain) }));
@@ -15840,7 +15850,12 @@ app.post("/api/style/mutate", async (req, res) => {
 });
 
 app.put("/api/dtus/:id", async (req, res) => {
-  // Note: You may need to create a dtu.update macro first
+  const out = await runMacro("dtu", "update", { id: req.params.id, ...req.body }, makeCtx(req));
+  return res.json(out);
+});
+
+// PATCH is an alias for PUT — frontend client.ts sends PATCH for partial updates
+app.patch("/api/dtus/:id", async (req, res) => {
   const out = await runMacro("dtu", "update", { id: req.params.id, ...req.body }, makeCtx(req));
   return res.json(out);
 });
@@ -17980,7 +17995,7 @@ app.get("/api/plugins", async (req, res) => {
   return res.json(out);
 });
 
-app.post("/api/plugins", async (req, res) => {
+app.post("/api/plugins", requireRole("owner", "admin"), async (req, res) => {
   const out = await runMacro("plugin", "register", req.body, makeCtx(req));
   return res.json(out);
 });
@@ -23225,6 +23240,12 @@ app.get("/api/digest", async (req, res) => {
   res.json(result);
 });
 
+// POST /api/digest — frontend daily lens triggers digest generation via POST
+app.post("/api/digest", async (req, res) => {
+  const result = await generateDailyDigest(req.body?.date || null);
+  res.json(result);
+});
+
 app.post("/api/ai/complete", async (req, res) => {
   const result = await getInlineCompletion(req.body.text, Number(req.body.cursorPosition), req.body.context);
   res.json(result);
@@ -23502,6 +23523,15 @@ app.post("/api/physics/reset", (req, res) => {
 });
 
 // Resonance
+// Support both GET (used by frontend topbar) and POST for resonance/quick
+app.get("/api/resonance/quick", async (req, res) => {
+  try {
+    const out = await runMacro("lattice", "resonance", req.query || {}, makeCtx(req));
+    res.json(out);
+  } catch (e) {
+    res.json({ ok: false, error: String(e?.message || e) });
+  }
+});
 app.post("/api/resonance/quick", async (req, res) => {
   try {
     const out = await runMacro("lattice", "resonance", req.body || {}, makeCtx(req));

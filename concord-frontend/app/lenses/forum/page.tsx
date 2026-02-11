@@ -342,9 +342,9 @@ export default function ForumLensPage() {
     seed: INITIAL_COMMUNITIES.map(c => ({ title: c.name, data: c as unknown as Record<string, unknown> })),
   });
 
-  // Keep the API queries for future real-data integration
-  useQuery({ queryKey: ['forum-posts-api', selectedCommunity, sortMode], queryFn: () => api.get('/api/dtus', { params: { tags: selectedCommunity !== 'all' ? selectedCommunity : undefined, sort: sortMode === 'new' ? 'createdAt' : 'score', order: 'desc' } }).then(r => r.data), enabled: false });
-  useQuery({ queryKey: ['communities-api'], queryFn: () => api.get('/api/tags').then(r => r.data), enabled: false });
+  // API queries for real-data integration
+  useQuery({ queryKey: ['forum-posts-api', selectedCommunity, sortMode], queryFn: () => api.get('/api/dtus', { params: { tags: selectedCommunity !== 'all' ? selectedCommunity : undefined, sort: sortMode === 'new' ? 'createdAt' : 'score', order: 'desc' } }).then(r => r.data) });
+  useQuery({ queryKey: ['communities-api'], queryFn: () => api.get('/api/tags').then(r => r.data) });
   const voteMutation = useMutation({ mutationFn: ({ postId, vote }: { postId: string; vote: number }) => api.post(`/api/dtus/${postId}/vote`, { vote }), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['forum-posts-api'] }) });
 
   // ----- Filtered & sorted posts -----
