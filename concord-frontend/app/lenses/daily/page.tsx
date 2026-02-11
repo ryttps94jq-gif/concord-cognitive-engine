@@ -5,7 +5,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { apiHelpers } from '@/lib/api/client';
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { DailyNotes as _DailyNotes } from '@/components/daily/DailyNotes';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Bell, Plus, Sparkles, CheckCircle2, Clock, Play, Square, RotateCcw,
@@ -153,15 +152,6 @@ export default function DailyLensPage() {
   const { data: dailyData } = useQuery({
     queryKey: ['daily-notes'],
     queryFn: () => apiHelpers.daily.list().then((r) => r.data),
-  });
-  const { data: _currentData } = useQuery({
-    queryKey: ['daily-current'],
-    queryFn: () => apiHelpers.daily.get().then((r) => r.data),
-  });
-  const { data: _dueReminders } = useQuery({
-    queryKey: ['reminders-due'],
-    queryFn: () => apiHelpers.daily.dueReminders().then((r) => r.data),
-    refetchInterval: 60000,
   });
   const generateDigest = useMutation({
     mutationFn: () => apiHelpers.daily.digest(),

@@ -428,11 +428,6 @@ export default function MarketplaceLensPage() {
   });
 
   // Queries (with demo fallback)
-  const { data: _browseData } = useQuery({
-    queryKey: ['marketplace-browse', search, category],
-    queryFn: () => api.get(`/api/marketplace/browse?search=${search}&category=${category}`).then(r => r.data).catch(() => null),
-  });
-
   const { data: beatsData } = useQuery({
     queryKey: ['artistry-beats'],
     queryFn: () => api.get('/api/artistry/marketplace/beats').then(r => r.data).catch(() => null),

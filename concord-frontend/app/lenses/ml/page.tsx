@@ -264,16 +264,6 @@ export default function MLLensPage() {
   const [playgroundModel, setPlaygroundModel] = useState<string>('');
 
   // Queries
-  const { data: _modelsData } = useQuery({
-    queryKey: ['ml-models'],
-    queryFn: () => api.get('/api/ml/models').then(r => r.data),
-  });
-
-  const { data: _experimentsData } = useQuery({
-    queryKey: ['ml-experiments'],
-    queryFn: () => api.get('/api/ml/experiments').then(r => r.data),
-  });
-
   const { data: metricsData } = useQuery({
     queryKey: ['ml-metrics'],
     queryFn: () => api.get('/api/ml/metrics').then(r => r.data),

@@ -350,21 +350,6 @@ export default function CollabLensPage() {
   const [activeSession, setActiveSession] = useState<CollabSession | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Queries -- fall back to demo data
-  const { data: _sessionsData } = useQuery({
-    queryKey: ['artistry-collab-sessions'],
-    queryFn: () => api.get('/api/artistry/collab/sessions').then(r => r.data),
-    refetchInterval: 8000,
-    retry: 1,
-  });
-
-  const { data: _collabData } = useQuery({
-    queryKey: ['collab-sessions'],
-    queryFn: () => api.get('/api/collab/sessions').then(r => r.data),
-    refetchInterval: 8000,
-    retry: 1,
-  });
-
   const sessions: CollabSession[] = INITIAL_SESSIONS;
   const onlineCount = sessions.reduce((n, s) => n + s.participants.filter(p => p.online).length, 0);
 
