@@ -88,6 +88,24 @@ function validateEnvironment() {
     }
   }
 
+  // ---- Security dependencies mandatory in production ----
+  if (isProduction) {
+    const securityDeps = [
+      { name: "helmet", ref: helmet, pkg: "helmet" },
+      { name: "rateLimit", ref: rateLimit, pkg: "express-rate-limit" },
+      { name: "bcrypt", ref: bcrypt, pkg: "bcryptjs" },
+      { name: "jwt", ref: jwt, pkg: "jsonwebtoken" },
+    ];
+    for (const dep of securityDeps) {
+      if (!dep.ref) {
+        errors.push(`Security dependency '${dep.name}' (${dep.pkg}) is required in production but failed to load. Run: npm install ${dep.pkg}`);
+      }
+    }
+    if (!Database) {
+      warnings.push("better-sqlite3 not available in production — falling back to JSON persistence. Install better-sqlite3 for production-grade storage.");
+    }
+  }
+
   // Check recommended vars
   for (const envVar of RECOMMENDED_ENV) {
     if (!process.env[envVar]) {
@@ -4200,10 +4218,30 @@ async function tryInitNativeWebSockets(server) {
 // ---- end realtime ----
 
 
-// ---- persistence (optional but recommended) ----
+// ---- persistence ----
+// Production: SQLite (if available). Dev fallback: JSON file.
 // This prevents "DTUs disappeared" when server restarts or hot-reloads.
 const STATE_PATH = process.env.STATE_PATH || path.join(process.cwd(), "concord_state.json");
+const IS_PRODUCTION = (process.env.NODE_ENV || "").toLowerCase() === "production";
+const USE_SQLITE_STATE = db && (IS_PRODUCTION || process.env.STATE_BACKEND === "sqlite");
 let _saveTimer = null;
+
+// Create state table in SQLite if available
+if (USE_SQLITE_STATE) {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS state_snapshots (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        data TEXT NOT NULL,
+        version TEXT,
+        saved_at TEXT NOT NULL
+      );
+    `);
+    console.log("[Persistence] SQLite state backend enabled (production mode)");
+  } catch (e) {
+    console.error("[Persistence] Failed to create state table:", e.message);
+  }
+}
 
 function _serializeState() {
   const toArr = (m) => Array.from(m.values());
@@ -4235,6 +4273,8 @@ function _serializeState() {
     transactions: Array.from(STATE.transactions.values()),
     papers: Array.from(STATE.papers.values()),
     lensArtifacts: Array.from(STATE.lensArtifacts.values()),
+    _scopeSeparation: STATE._scopeSeparation || null,
+    _autogenPipeline: STATE._autogenPipeline || null,
   };
 }
 
@@ -4348,34 +4388,72 @@ function _hydrateState(obj) {
   if (Array.isArray(obj.lensArtifacts)) for (const a of obj.lensArtifacts) if (a && a.id) STATE.lensArtifacts.set(a.id, a);
   // Rebuild domain index
   _rebuildLensDomainIndex();
+
+  // Scope Separation state
+  if (obj._scopeSeparation && typeof obj._scopeSeparation === "object") {
+    STATE._scopeSeparation = obj._scopeSeparation;
+  }
+
+  // Autogen Pipeline state
+  if (obj._autogenPipeline && typeof obj._autogenPipeline === "object") {
+    STATE._autogenPipeline = obj._autogenPipeline;
+  }
 }
 
 
-function loadStateFromDisk() {
+function _normalizeSettingsDefaults() {
   try {
-    if (!fs.existsSync(STATE_PATH)) return { ok: true, loaded: false, path: STATE_PATH };
+    if (STATE && STATE.settings) {
+      if (typeof STATE.settings.llmDefault !== "boolean") STATE.settings.llmDefault = DEFAULT_LLM_ON;
+      if (typeof STATE.settings.interpretiveTruthMin !== "number") STATE.settings.interpretiveTruthMin = 0.35;
+      if (typeof STATE.settings.interpretiveTruthMax !== "number") STATE.settings.interpretiveTruthMax = 0.85;
+      if (typeof STATE.settings.speculativeGateEnabled !== "boolean") STATE.settings.speculativeGateEnabled = false;
+      if (typeof STATE.settings.canonicalOnly !== "boolean") STATE.settings.canonicalOnly = true;
+    }
+  } catch {}
+}
+
+function loadStateFromDisk() {
+  // Try SQLite first in production
+  if (USE_SQLITE_STATE) {
+    try {
+      const row = db.prepare("SELECT data, saved_at FROM state_snapshots WHERE id = 1").get();
+      if (row) {
+        const obj = JSON.parse(row.data);
+        _hydrateState(obj);
+        _normalizeSettingsDefaults();
+        console.log("[Persistence] State loaded from SQLite");
+        return { ok: true, loaded: true, backend: "sqlite", savedAt: row.saved_at };
+      }
+      // No snapshot yet — fall through to JSON check for migration
+      console.log("[Persistence] No SQLite snapshot yet, checking JSON for migration...");
+    } catch (e) {
+      console.error("[Persistence] SQLite state load failed:", e.message);
+    }
+  }
+
+  // JSON file fallback (dev mode or migration source)
+  try {
+    if (!fs.existsSync(STATE_PATH)) return { ok: true, loaded: false, path: STATE_PATH, backend: "json" };
     const raw = fs.readFileSync(STATE_PATH, "utf-8");
     const obj = JSON.parse(raw);
     _hydrateState(obj);
-    // Normalize settings defaults that depend on environment
-    try {
-      if (STATE && STATE.settings) {
-        // If not explicitly set, default LLM usage based on env key presence / LLM_DEFAULT override
-        if (typeof STATE.settings.llmDefault !== "boolean") STATE.settings.llmDefault = DEFAULT_LLM_ON;
+    _normalizeSettingsDefaults();
 
-        // Truth calibration defaults
-        if (typeof STATE.settings.interpretiveTruthMin !== "number") STATE.settings.interpretiveTruthMin = 0.35;
-        if (typeof STATE.settings.interpretiveTruthMax !== "number") STATE.settings.interpretiveTruthMax = 0.85;
-        if (typeof STATE.settings.speculativeGateEnabled !== "boolean") STATE.settings.speculativeGateEnabled = false;
-
-        // Canonical-only is a safe default; keep it true unless explicitly set false
-        if (typeof STATE.settings.canonicalOnly !== "boolean") STATE.settings.canonicalOnly = true;
+    // If SQLite is available and we loaded from JSON, migrate data to SQLite
+    if (USE_SQLITE_STATE) {
+      try {
+        const stmt = db.prepare("INSERT OR REPLACE INTO state_snapshots (id, data, version, saved_at) VALUES (1, ?, ?, ?)");
+        stmt.run(raw, obj.version || VERSION, nowISO());
+        console.log("[Persistence] Migrated JSON state to SQLite");
+      } catch (migErr) {
+        console.error("[Persistence] Migration to SQLite failed:", migErr.message);
       }
-    } catch {}
+    }
 
-    return { ok: true, loaded: true, path: STATE_PATH, savedAt: obj.savedAt || null };
+    return { ok: true, loaded: true, path: STATE_PATH, backend: USE_SQLITE_STATE ? "sqlite (migrated)" : "json", savedAt: obj.savedAt || null };
   } catch (e) {
-    return { ok: false, loaded: false, path: STATE_PATH, error: String(e?.message || e) };
+    return { ok: false, loaded: false, path: STATE_PATH, backend: "json", error: String(e?.message || e) };
   }
 }
 
@@ -4384,16 +4462,23 @@ function saveStateDebounced() {
     clearTimeout(_saveTimer);
     _saveTimer = setTimeout(() => {
       try {
-        // ---- Atomic Write (Category 3: Data Integrity) ----
-        // Write to temp file then rename to prevent corrupt partial writes on crash
-        const tmpPath = STATE_PATH + ".tmp";
-        const data = JSON.stringify(_serializeState(), null, 2);
-        fs.writeFileSync(tmpPath, data, "utf-8");
-        fs.renameSync(tmpPath, STATE_PATH); // Atomic on POSIX
+        const data = JSON.stringify(_serializeState(), null, USE_SQLITE_STATE ? 0 : 2);
+
+        if (USE_SQLITE_STATE) {
+          // SQLite: single-row upsert inside WAL transaction — crash-safe
+          const stmt = db.prepare("INSERT OR REPLACE INTO state_snapshots (id, data, version, saved_at) VALUES (1, ?, ?, ?)");
+          stmt.run(data, VERSION, nowISO());
+        } else {
+          // JSON: atomic write via temp file + rename
+          const tmpPath = STATE_PATH + ".tmp";
+          fs.writeFileSync(tmpPath, data, "utf-8");
+          fs.renameSync(tmpPath, STATE_PATH);
+        }
       } catch (e) {
         console.error("STATE save failed:", e);
-        // Attempt cleanup of temp file
-        try { fs.unlinkSync(STATE_PATH + ".tmp"); } catch {}
+        if (!USE_SQLITE_STATE) {
+          try { fs.unlinkSync(STATE_PATH + ".tmp"); } catch {}
+        }
       }
     }, 250);
   } catch {}
@@ -4558,6 +4643,7 @@ function toOptionADTU(seedLike) {
     },
     machine,
     cretiHuman: "",
+    scope: seedLike.scope || "local",  // Scope Separation: default to local
     source: seedLike.source || "seed",
     meta: seedLike.meta && typeof seedLike.meta==="object" ? seedLike.meta : {},
     createdAt: seedLike.createdAt || nowISO(),
@@ -4579,6 +4665,7 @@ function seedGenesisRealityAnchor(){
       id,
       title: "Genesis Reality Anchor v1",
       kind: "genesis",
+      scope: "global",  // Scope Separation: genesis anchor is canonical Global knowledge
       createdAt: nowISO(),
       updatedAt: nowISO(),
       lineage: { root: id, parents: [] },
@@ -4608,13 +4695,16 @@ async function seedIfEmpty() {
   if (!seeds.length) return { ok:false, seeded:false, error: SEED_INFO.error || "no seeds" };
   let n=0;
   for (const s of seeds) {
+    // Scope Separation: seed DTUs load into Global scope — they are canonical knowledge.
+    // Each instance cherry-picks which Global DTUs to pull into Local.
+    s.scope = "global";
     const d = toOptionADTU(s);
     STATE.dtus.set(d.id, d);
     n++;
   }
   saveStateDebounced();
-  log("seed", "Seeded DTUs from dtus.js", { count:n });
-  return { ok:true, seeded:true, count:n };
+  log("seed", "Seeded DTUs from dtus.js into Global scope", { count:n, scope:"global" });
+  return { ok:true, seeded:true, count:n, scope:"global" };
 }
 await seedIfEmpty();
 seedGenesisRealityAnchor();
@@ -10442,6 +10532,7 @@ register("dtu", "create", async (ctx, input) => {
     },
     machine: { ...machineIn },
     cretiHuman: "",
+    scope: "local",  // Scope Separation: all new DTUs start in Local scope
     createdAt: nowISO(),
     updatedAt: nowISO(),
     authority: { model: "council", score: 0, votes: {} },
@@ -12009,179 +12100,125 @@ register("quality", "preview", (_ctx, input) => {
   };
 }, { description: "Preview which quality pipeline patterns would apply to a query" });
 
-// System domain (dream/autogen/evolution/synthesize)
+// System domain (dream/autogen/evolution/synthesize) — powered by 6-stage autogen pipeline
 register("system", "dream", async (ctx, input) => {
-  // Dream (Council Synthesis): DTU-first, produces 2 high-value DTUs (human-readable), machine notes kept internal.
-  const seed = normalizeText(input.seed || "Dream");
-  const pool = dtusArray().slice(-20);
-  if (!pool.length) return { ok:false, error:"No DTUs to dream from. Seed dtus.js first." };
+  // Dream: gap-filling + creative hypotheses via 6-stage pipeline
+  if (!STATE.dtus.size) return { ok: false, error: "No DTUs to dream from. Seed dtus.js first." };
 
-  const freq = new Map();
-  for (const d of pool) for (const t of (d.tags||[])) freq.set(t, (freq.get(t)||0)+1);
-  const tagHints = Array.from(freq.entries()).sort((a,b)=>b[1]-a[1]).slice(0,6).map(x=>x[0]).filter(Boolean);
-  const parents = pool.slice(-8).map(d=>d.id);
+  const ollamaCallback = LLM_PIPELINE?.providers?.ollama?.enabled
+    ? async (prompt, opts) => callOllama(opts?.system ? `${opts.system}\n\n${prompt}` : prompt, opts)
+    : null;
 
-  function synthDTU(kind) {
-    const definitions = [];
-    const invariants = [];
-    const examples = [];
-    const claims = [];
-    const nextActions = [];
+  const result = await ctx.macro.run("emergent", "pipeline.run", {
+    variant: "dream",
+    callOllama: ollamaCallback,
+    seed: input.seed,
+  });
 
-    for (const d of pool.slice(-8)) {
-      const c = d.core || {};
-      for (const x of (c.definitions||[])) if (definitions.length<4) definitions.push(x);
-      for (const x of (c.invariants||[])) if (invariants.length<4) invariants.push(x);
-      for (const x of (c.examples||[])) if (examples.length<4) examples.push(x);
-      for (const x of (c.claims||[])) if (claims.length<4) claims.push(x);
-      for (const x of (c.nextActions||[])) if (nextActions.length<4) nextActions.push(x);
-    }
-
-    if (definitions.length<2) definitions.push(`Definition: ${seed} — a working lens built from your current DTUs and tags (${tagHints.join(", ") || "none"}).`);
-    if (invariants.length<1) invariants.push("Invariant: Separate facts, inferences, and hypotheses before committing any DTU.");
-    if (examples.length<1) examples.push(`Example: Use ${seed} to synthesize the last 8 DTUs into one actionable plan.`);
-    if (nextActions.length<1) nextActions.push("Run: synthesize → merge duplicates → promote to mega when cluster is stable.");
-
-    const title = kind === "synthesis" ? `Council Synthesis: ${seed}` : `Dream Insight: ${seed}`;
-    const summary = kind === "synthesis"
-      ? `Synthesis built from recent DTUs (tags: ${tagHints.join(", ") || "none"}).`
-      : `Insight derived from your DTU substrate; structured for action and clarity.`;
-
-    return {
-      title,
-      tags: Array.from(new Set(["dream","council", ...tagHints])).slice(0,20),
-      tier: "regular",
-      lineage: parents,
-      core: { definitions, invariants, examples, claims, nextActions },
-      human: { summary, bullets: [
-        `Parents: ${parents.length} DTUs`,
-        `Tag hints: ${tagHints.join(", ") || "none"}`,
-        "Output is human projection; raw notes remain internal."
-      ]},
-      machine: { notes: `DREAM seed=${seed}; parents=${parents.join(",")}` }
-    };
+  if (!result?.ok || !result.candidate) {
+    return { ok: false, error: result?.error || "Pipeline produced no candidate", trace: result?.trace };
   }
 
-  const out = [];
-  for (const kind of ["synthesis","insight"]) {
-    const spec = synthDTU(kind);
-    const r = await ctx.macro.run("dtu","create",{ ...spec, source:"system.dream", allowRewrite:true });
-    if (r?.ok) out.push(r.dtu);
-  }
+  // Commit the pipeline candidate as a DTU
+  const spec = {
+    ...result.candidate,
+    source: "system.dream",
+    allowRewrite: true,
+    scope: "local",
+  };
+  const r = await ctx.macro.run("dtu", "create", spec);
 
-  return { ok:true, dtus: out };
+  return { ok: true, dtus: r?.ok ? [r.dtu] : [], trace: result.trace, writePolicy: result.writePolicy };
 });
 
-register("system", "autogen", (_ctx, _input) => {
-  // Autogen: DTU-first continuity, produces 2 structured DTUs every run (no blob templates).
-  const pool = dtusArray().slice(-30);
-  if (!pool.length) return { ok:false, error:"No DTUs to autogen from." };
+register("system", "autogen", async (ctx, input) => {
+  // Autogen: signal-driven 6-stage pipeline (no longer "last 8 DTUs")
+  if (!STATE.dtus.size) return { ok: false, error: "No DTUs to autogen from." };
 
-  // QUEUE_AUTOGEN: system autogen proposes DTUs into queues.notifications (or maintenance) to avoid flooding the library
-  ensureQueues();
-  const _enqueueAutogen = (spec, why) => {
-    const item = { id: uid('q_autogen'), type: 'dtu_proposal', payload: spec, why: why||'', createdAt: nowISO(), status:'queued' };
-    // Knowledge proposals go to notifications by default; maintenance can be reviewed separately
-    enqueueNotification(item);
-    return item.id;
-  };
+  const ollamaCallback = LLM_PIPELINE?.providers?.ollama?.enabled
+    ? async (prompt, opts) => callOllama(opts?.system ? `${opts.system}\n\n${prompt}` : prompt, opts)
+    : null;
 
+  // Run pipeline without a variant — picks best intent from lattice signals
+  const result = await ctx.macro.run("emergent", "pipeline.run", {
+    callOllama: ollamaCallback,
+  });
 
-  const recentTitles = pool.slice(-10).map(d=>d.title);
-  const allTags = pool.flatMap(d=>d.tags||[]);
-  const tagFreq = new Map();
-  for (const t of allTags) tagFreq.set(t, (tagFreq.get(t)||0)+1);
-  const topTags = Array.from(tagFreq.entries()).sort((a,b)=>b[1]-a[1]).slice(0,8).map(x=>x[0]);
-
-  const parents = pool.slice(-10).map(d=>d.id);
-
-  const continuity = {
-    title: `Continuity: ${new Date().toISOString().slice(0,10)}`,
-    tags: ["autogen","continuity", ...topTags].slice(0,20),
-    tier: "regular",
-    lineage: parents,
-    core: {
-      definitions: ["Definition: Continuity DTU — captures what changed recently so Concord stays coherent over time."],
-      invariants: ["Invariant: No invented claims; only summarize state/logs/DTUs that exist."],
-      examples: [`Example: Recent DTUs include: ${recentTitles.slice(0,5).join(" | ")}`],
-      claims: ["Claim: The DTU library is the substrate; generators must cite parent DTUs."],
-      nextActions: ["Next: Run evolution on top clusters; promote to mega when stable; keep humans seeing only human projections."]
-    },
-    human: {
-      summary: "A compact continuity snapshot derived from recent DTUs.",
-      bullets: [
-        `Recent titles: ${recentTitles.slice(0,6).join(" | ")}`,
-        `Top tags: ${topTags.join(", ") || "none"}`,
-        `Parents: ${parents.length}`
-      ]
-    },
-    machine: { notes: `AUTOGEN continuity parents=${parents.join(",")}` }
-  };
-
-  const gaps = {
-    title: `Missing Pieces: ${new Date().toISOString().slice(0,10)}`,
-    tags: ["autogen","gaps", ...topTags].slice(0,20),
-    tier: "regular",
-    lineage: parents,
-    core: {
-      definitions: ["Definition: Gap DTU — describes what is missing for completeness and what to generate next."],
-      invariants: ["Invariant: Prefer creating DTUs that add definitions, invariants, examples, or actionable steps."],
-      examples: ["Example: If a cluster has many claims but few invariants, generate invariants DTUs."],
-      claims: ["Claim: Low-value blobs are rejected by council gate (value threshold)."],
-      nextActions: [
-        "Create 1–2 DTUs filling missing definitions for the top tag.",
-        "Create 1 DTU that reconciles contradictions between the last 8 DTUs."
-      ]
-    },
-    human: {
-      summary: "Actionable gaps detected from current DTU substrate.",
-      bullets: [
-        "Focus: definitions/invariants/examples over prose.",
-        "If duplicates appear, merge lineage instead of creating new DTUs."
-      ]
-    },
-    machine: { notes: `AUTOGEN gaps topTags=${topTags.join(",")}` }
-  };
-
-  const created = [];
-  for (const spec of [continuity, gaps]) {
-    const r = (function(){ _enqueueAutogen({ ...spec, source:"system.autogen", allowRewrite:true }, 'system.autogen'); return { ok:true }; })();
-    if (r?.ok) created.push(r.dtu);
+  if (!result?.ok || !result.candidate) {
+    return { ok: false, error: result?.error || "Pipeline produced no candidate", trace: result?.trace };
   }
-  return { ok:true, dtus: created };
+
+  // Queue proposal instead of direct commit (preserves old queue behavior)
+  ensureQueues();
+  const proposal = {
+    id: uid("q_autogen"),
+    type: "dtu_proposal",
+    payload: { ...result.candidate, source: "system.autogen", scope: "local" },
+    why: `pipeline:${result.candidate.meta?.autogenIntent || "auto"}`,
+    createdAt: nowISO(),
+    status: "queued",
+    writePolicy: result.writePolicy,
+    trace: result.trace,
+  };
+  enqueueNotification(proposal);
+
+  return { ok: true, dtus: [], queued: true, proposal, trace: result.trace, writePolicy: result.writePolicy };
 });
 
 register("system", "evolution", async (ctx, input) => {
-  // Evolution: cluster DTUs and promote biggest cluster into a MEGA DTU
-  const clusters = await ctx.macro.run("dtu","cluster",{ threshold: input.threshold ?? 0.38 });
-  const best = clusters.clusters?.[0];
-  const minCluster = Number(input.minCluster ?? 100);
-  if (!best || !best.ids?.length) return { ok:false, error:"No cluster found to evolve." };
-  if ((best.ids?.length||0) < minCluster) {
-    ensureQueues();
-    const proposal = { id: uid("mega_candidate"), type:"mega_candidate", cluster: best, minCluster, createdAt: nowISO(), status:"queued" };
-    STATE.queues.synthesis.push(proposal);
-    ctx.log("system.evolution", "Cluster below minCluster; queued candidate", { size: best.ids?.length||0, minCluster });
-    return { ok:true, queued:true, proposal };
-  }
+  // Evolution: cluster compression + mega DTU rollup via 6-stage pipeline
+  if (!STATE.dtus.size) return { ok: false, error: "No DTUs to evolve." };
 
-  const inner = dtusByIds(best.ids);
-  const sigTags = (best.tagHints||[]).slice(0,8).join("|") || (best.titles||[])[0] || "cluster";
-  const existing = dtusArray().find(d=>d.tier==="mega" && (d.meta?.clusterSig===sigTags) && (d.meta?.clusterSize===best.ids.length));
-  if (existing) return { ok:true, mega: existing, reused:true, cluster: best };
-  const megaTitle = normalizeText(input.title || `MEGA: ${best.titles?.[0] || "Topic Cluster"}`.slice(0,120));
-  const creti = cretiPack({
-    title: megaTitle,
-    purpose: "MEGA DTU: compress a topic range into a single navigable node (with lineage).",
-    context: `Cluster size: ${inner.length}\nTag hints: ${(best.tagHints||[]).join(", ")}\n\nInner DTUs:\n${inner.map(d=>`- ${d.title} (${d.id})`).join("\n")}`,
-    procedure: "Synthesize shared core, keep lineage, avoid clutter.",
-    outputs: "Mega DTU with lineage referencing inner DTUs.",
-    tests: "Must not lose lineage; must remain readable.",
-    notes: "Mega DTUs can later be merged into Hyper DTUs."
+  const ollamaCallback = LLM_PIPELINE?.providers?.ollama?.enabled
+    ? async (prompt, opts) => callOllama(opts?.system ? `${opts.system}\n\n${prompt}` : prompt, opts)
+    : null;
+
+  const result = await ctx.macro.run("emergent", "pipeline.run", {
+    variant: "evolution",
+    callOllama: ollamaCallback,
   });
 
-  const r = await ctx.macro.run("dtu","create",{ title: megaTitle, creti, tags: best.tagHints || ["mega"], tier:"mega", lineage: best.ids, source:"system.evolution", meta:{ ...(input.meta||{}), clusterSig: sigTags, clusterSize: best.ids.length } });
-  return { ok:true, mega: r.dtu, cluster: best };
+  if (!result?.ok || !result.candidate) {
+    return { ok: false, error: result?.error || "Pipeline produced no candidate", trace: result?.trace };
+  }
+
+  // Evolution still uses cluster-based MEGA promotion for large clusters
+  const clusters = await ctx.macro.run("dtu", "cluster", { threshold: input.threshold ?? 0.38 });
+  const best = clusters.clusters?.[0];
+  const minCluster = Number(input.minCluster ?? 100);
+
+  if (best?.ids?.length >= minCluster) {
+    // Large cluster → MEGA DTU from cluster (original evolution path)
+    const inner = dtusByIds(best.ids);
+    const sigTags = (best.tagHints || []).slice(0, 8).join("|") || (best.titles || [])[0] || "cluster";
+    const existing = dtusArray().find(d => d.tier === "mega" && d.meta?.clusterSig === sigTags && d.meta?.clusterSize === best.ids.length);
+    if (existing) return { ok: true, mega: existing, reused: true, cluster: best, pipelineTrace: result.trace };
+
+    const megaTitle = normalizeText(input.title || `MEGA: ${best.titles?.[0] || "Topic Cluster"}`.slice(0, 120));
+    const creti = cretiPack({
+      title: megaTitle,
+      purpose: "MEGA DTU: compress a topic range into a single navigable node (with lineage).",
+      context: `Cluster size: ${inner.length}\nTag hints: ${(best.tagHints || []).join(", ")}\n\nInner DTUs:\n${inner.map(d => `- ${d.title} (${d.id})`).join("\n")}`,
+      procedure: "Synthesize shared core, keep lineage, avoid clutter.",
+      outputs: "Mega DTU with lineage referencing inner DTUs.",
+      tests: "Must not lose lineage; must remain readable.",
+      notes: "Mega DTUs can later be merged into Hyper DTUs."
+    });
+
+    const r = await ctx.macro.run("dtu", "create", { title: megaTitle, creti, tags: best.tagHints || ["mega"], tier: "mega", lineage: best.ids, source: "system.evolution", meta: { ...(input.meta || {}), clusterSig: sigTags, clusterSize: best.ids.length } });
+    return { ok: true, mega: r.dtu, cluster: best, pipelineTrace: result.trace };
+  }
+
+  // Small/no cluster → commit pipeline candidate as regular DTU
+  const spec = {
+    ...result.candidate,
+    source: "system.evolution",
+    allowRewrite: true,
+    scope: "local",
+  };
+  const r = await ctx.macro.run("dtu", "create", spec);
+
+  return { ok: true, dtus: r?.ok ? [r.dtu] : [], trace: result.trace, writePolicy: result.writePolicy };
 });
 
 
@@ -12287,28 +12324,56 @@ return { ok:true, simulation:true, createdCandidates: created.length, created, m
 }, { summary:"Automatic MEGA promotion pipeline tick (candidate->probation->MEGA) (v3)." });
 
 register("system", "synthesize", async (ctx, input) => {
-  // Synthesize: build a HYPER DTU from selected megas or from top megas
+  // Synthesize: conflict resolution + patch proposals via pipeline, or HYPER DTU from megas
   let megaIds = Array.isArray(input.megaIds) ? input.megaIds : [];
   if (megaIds.length === 0) {
-    megaIds = dtusArray().filter(d=>d.tier==="mega").slice(0, 6).map(d=>d.id);
+    megaIds = dtusArray().filter(d => d.tier === "mega").slice(0, 6).map(d => d.id);
   }
-  const megas = dtusByIds(megaIds).filter(d=>d.tier==="mega");
-  if (megas.length < 2) return { ok:false, error:"Need at least 2 mega DTUs to synthesize a hyper DTU." };
+  const megas = dtusByIds(megaIds).filter(d => d.tier === "mega");
 
-  const hyperTitle = normalizeText(input.title || `HYPER: ${megas[0].title} + ${megas[1].title}`.slice(0, 120));
-  const allLineage = Array.from(new Set(megas.flatMap(m => m.lineage || [])));
-  const creti = cretiPack({
-    title: hyperTitle,
-    purpose: "HYPER DTU: integrate multiple mega DTUs into a higher-order framework.",
-    context: `Megas:\n${megas.map(m=>`- ${m.title} (${m.id})`).join("\n")}\n\nTotal lineage DTUs: ${allLineage.length}`,
-    procedure: "Identify shared invariants, conflicts, and a unified map.",
-    outputs: "Hyper DTU with mega lineage and inner lineage.",
-    tests: "Must preserve lineage; label hypotheses; propose measurements.",
-    notes: "This is the top-level node for a domain."
+  // If we have enough megas, build a HYPER DTU
+  if (megas.length >= 2) {
+    const hyperTitle = normalizeText(input.title || `HYPER: ${megas[0].title} + ${megas[1].title}`.slice(0, 120));
+    const allLineage = Array.from(new Set(megas.flatMap(m => m.lineage || [])));
+    const creti = cretiPack({
+      title: hyperTitle,
+      purpose: "HYPER DTU: integrate multiple mega DTUs into a higher-order framework.",
+      context: `Megas:\n${megas.map(m => `- ${m.title} (${m.id})`).join("\n")}\n\nTotal lineage DTUs: ${allLineage.length}`,
+      procedure: "Identify shared invariants, conflicts, and a unified map.",
+      outputs: "Hyper DTU with mega lineage and inner lineage.",
+      tests: "Must preserve lineage; label hypotheses; propose measurements.",
+      notes: "This is the top-level node for a domain."
+    });
+
+    const r = await ctx.macro.run("dtu", "create", { title: hyperTitle, creti, tags: ["hyper"], tier: "hyper", lineage: megaIds, source: "system.synthesize", meta: { innerLineageCount: allLineage.length } });
+    return { ok: true, hyper: r.dtu, usedMegas: megas.map(m => ({ id: m.id, title: m.title })) };
+  }
+
+  // Otherwise, run synth variant of pipeline (conflict resolution + fill gaps)
+  if (!STATE.dtus.size) return { ok: false, error: "Need at least 2 mega DTUs to synthesize a hyper DTU, or DTUs for conflict resolution." };
+
+  const ollamaCallback = LLM_PIPELINE?.providers?.ollama?.enabled
+    ? async (prompt, opts) => callOllama(opts?.system ? `${opts.system}\n\n${prompt}` : prompt, opts)
+    : null;
+
+  const result = await ctx.macro.run("emergent", "pipeline.run", {
+    variant: "synth",
+    callOllama: ollamaCallback,
   });
 
-  const r = await ctx.macro.run("dtu","create",{ title: hyperTitle, creti, tags:["hyper"], tier:"hyper", lineage: megaIds, source:"system.synthesize", meta:{ innerLineageCount: allLineage.length } });
-  return { ok:true, hyper: r.dtu, usedMegas: megas.map(m=>({id:m.id,title:m.title})) };
+  if (!result?.ok || !result.candidate) {
+    return { ok: false, error: result?.error || "Pipeline produced no candidate", trace: result?.trace };
+  }
+
+  const spec = {
+    ...result.candidate,
+    source: "system.synthesize",
+    allowRewrite: true,
+    scope: "local",
+  };
+  const r = await ctx.macro.run("dtu", "create", spec);
+
+  return { ok: true, dtus: r?.ok ? [r.dtu] : [], trace: result.trace, writePolicy: result.writePolicy };
 });
 
 
@@ -13789,26 +13854,50 @@ register("global","publish", async (ctx, input) => {
     dtu.meta = dtu.meta || {};
     dtu.meta.globalId = gid;
     dtu.meta.globalPublishedAt = nowISO();
+    // Scope Separation: promote DTU to Global scope on publish
+    dtu.scope = "global";
+    dtu.meta.scopeHistory = dtu.meta.scopeHistory || [];
+    dtu.meta.scopeHistory.push({
+      from: dtu.scope === "global" ? "local" : (dtu.scope || "local"),
+      to: "global",
+      at: nowISO(),
+      by: ctx?.actor?.id || "council",
+      reason: "global_publish",
+    });
     saveStateDebounced();
-    return { ok:true, globalId: gid, dtuId, globalHash: out.globalHash };
+    return { ok:true, globalId: gid, dtuId, globalHash: out.globalHash, scope: "global" };
   }
   return { ok:false, error:"DTU missing after publish" };
-}, { summary:"Publish a DTU to Global (council-gated)." });
+}, { summary:"Publish a DTU to Global (council-gated, scope-enforced)." });
 
 // ---- Marketplace ----
 register("market","listingCreate", (ctx, input) => {
   const dtuId = String(input.dtuId||"");
   const dtu = STATE.dtus.get(dtuId);
   if (!dtu) return { ok:false, error:"DTU not found" };
+  // Scope Separation: validate DTU is suitable for marketplace listing
+  // DTU must be explicitly promoted to marketplace scope or listed from local with author intent
+  const dtuScope = dtu.scope || "local";
+  if (dtuScope === "global") {
+    return { ok:false, error:"Global DTUs cannot be listed on marketplace — they are canonical knowledge, not merchandise." };
+  }
+  // Block quarantined DTUs from marketplace
+  if (dtu.tags?.includes("quarantine:injection-review")) {
+    return { ok:false, error:"Quarantined DTUs cannot be listed on marketplace." };
+  }
   const price = Number(input.price||0);
   const currency = normalizeText(input.currency||"USD") || "USD";
   const license = normalizeText(input.license||"noncommercial") || "noncommercial";
   const id = uid("lst");
   const listing = { id, dtuId, orgId: ctx.actor.orgId, price, currency, license, status:"active", createdAt: nowISO() };
   STATE.listings.set(id, listing);
+  // Scope Separation: tag DTU as marketplace-listed for provenance
+  dtu.meta = dtu.meta || {};
+  dtu.meta.marketplaceListed = true;
+  dtu.meta.lastListingId = id;
   saveStateDebounced();
   return { ok:true, listing };
-}, { summary:"Create a marketplace listing for a DTU (local-first)." });
+}, { summary:"Create a marketplace listing for a DTU (scope-validated)." });
 
 register("market","list", (ctx, input) => {
   const limit = clamp(Number(input.limit||50), 1, 200);
@@ -15509,6 +15598,10 @@ app.get("/api/status", (req, res) => {
         ready: db ? true : false,
         path: db ? DB_PATH : AUTH_PATH
       },
+      stateBackend: {
+        type: USE_SQLITE_STATE ? "sqlite" : "json",
+        path: USE_SQLITE_STATE ? DB_PATH : STATE_PATH,
+      },
       auth: {
         enabled: AUTH_ENABLED,
         totalUsers: AuthDB.getUserCount(),
@@ -15612,6 +15705,8 @@ app.post("/api/reseed", requireRole("owner", "admin"), async (req, res) => {
     }
     let added = 0;
     for (const s of seeds) {
+      // Scope Separation: reseeded DTUs enter Global scope (canonical knowledge)
+      s.scope = "global";
       const d = toOptionADTU(s);
       if (!STATE.dtus.has(d.id)) {
         STATE.dtus.set(d.id, d);
@@ -15619,8 +15714,8 @@ app.post("/api/reseed", requireRole("owner", "admin"), async (req, res) => {
       }
     }
     saveStateDebounced();
-    log("reseed", "Manual reseed from dtus.js", { added, total: STATE.dtus.size });
-    return res.json({ ok: true, added, total: STATE.dtus.size, seedInfo: SEED_INFO });
+    log("reseed", "Manual reseed from dtus.js into Global scope", { added, total: STATE.dtus.size, scope: "global" });
+    return res.json({ ok: true, added, total: STATE.dtus.size, scope: "global", seedInfo: SEED_INFO });
   } catch (e) {
     return res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
@@ -16155,6 +16250,14 @@ app.post("/api/dimensional/scale", async (req,res)=> res.json(await runMacro("di
 app.post("/api/council/review-global", async (req,res)=> res.json(await runMacro("council","reviewGlobal", req.body||{}, makeCtx(req))));
 app.post("/api/council/weekly", async (req,res)=> res.json(await runMacro("council","weeklyDebateTick", req.body||{}, makeCtx(req))));
 
+// Scope Separation endpoints
+app.post("/api/scope/promote", async (req,res)=> res.json(await runMacro("emergent","scope.promote", req.body||{}, makeCtx(req))));
+app.post("/api/scope/validate-global", async (req,res)=> res.json(await runMacro("emergent","scope.validateGlobal", req.body||{}, makeCtx(req))));
+app.get("/api/scope/metrics", async (req,res)=> res.json(await runMacro("emergent","scope.metrics", {}, makeCtx(req))));
+app.get("/api/scope/dtus/:scope", async (req,res)=> res.json(await runMacro("emergent","scope.listByScope", { scope: req.params.scope, limit: Number(req.query.limit||50) }, makeCtx(req))));
+app.get("/api/scope/overrides", async (req,res)=> res.json(await runMacro("emergent","scope.overrideLog", { limit: Number(req.query.limit||50) }, makeCtx(req))));
+app.get("/api/scope/marketplace-analytics", async (req,res)=> res.json(await runMacro("emergent","scope.marketplaceAnalytics", { limit: Number(req.query.limit||50) }, makeCtx(req))));
+
 // Anonymous messaging (non-discoverable; requires manual contact exchange)
 app.post("/api/anon/create", async (req,res)=> res.json(await runMacro("anon","create", req.body||{}, makeCtx(req))));
 app.post("/api/anon/send", async (req,res)=> res.json(await runMacro("anon","send", req.body||{}, makeCtx(req))));
@@ -16168,18 +16271,23 @@ app.use((err, req, res, _next) => {
   res.status(500).json({ ok:false, error: msg });
 });
 
-// ---- heartbeat ----
+// ---- heartbeat (Scope Separation: Local tick + Global tick, no Marketplace tick) ----
 let heartbeatTimer = null;
 let weeklyTimer = null;
+let globalTickTimer = null;  // Scope Separation: separate 5-min Global tick
+
 function startHeartbeat() {
   if (heartbeatTimer) clearInterval(heartbeatTimer);
   if (weeklyTimer) clearInterval(weeklyTimer);
+  if (globalTickTimer) clearInterval(globalTickTimer);
+
+  // ── Local Scope Tick (existing cadence, 15s default) ──
   const ms = clamp(Number(STATE.settings.heartbeatMs || 15000), 2000, 120000);
   heartbeatTimer = setInterval(async () => {
     if (!STATE.settings.heartbeatEnabled) return;
     const ctx = makeCtx(null);
 
-    // process crawl queue once
+    // process crawl queue once (Local scope only — ingest is local activity)
     await runMacro("ingest","processQueueOnce", {}, ctx).catch(()=>{});
 
     if (STATE.settings.autogenEnabled) {
@@ -16198,7 +16306,22 @@ function startHeartbeat() {
     // v3: local self-upgrade (abstraction governor) at fixed cadence
     try { await maybeRunLocalUpgrade(); } catch {}
   }, ms);
-  log("heartbeat", "Heartbeat started", { ms });
+  log("heartbeat", "Local scope tick started", { ms });
+
+  // ── Global Scope Tick (5 minutes — slow, deliberate synthesis) ──
+  // Global tick can: generate DTU candidates from existing Global DTUs, update resonance.
+  // Global tick cannot: ingest local or marketplace DTUs, respond to local activity.
+  const globalMs = clamp(Number(STATE.settings.globalTickMs || 300000), 60000, 600000);
+  globalTickTimer = setInterval(async () => {
+    if (!STATE.settings.heartbeatEnabled) return;
+    try {
+      const ctx = makeCtx(null);
+      await runMacro("emergent","scope.globalTick", {}, ctx).catch(()=>{});
+    } catch { /* Global tick is best-effort */ }
+  }, globalMs);
+  log("heartbeat", "Global scope tick started", { ms: globalMs });
+
+  // Marketplace: ❌ No heartbeat — marketplace never generates DTUs, never mutates knowledge
 }
 startHeartbeat();
 
@@ -24340,12 +24463,16 @@ function getAdminStats() {
   };
 }
 
-// ---- Team Templates ----
-const TEAM_TEMPLATES = new Map(); // templateId -> { id, name, schema, workspaceId, createdBy }
+// ---- Team Templates — backed by STATE for persistence ----
+function ensureTeamTemplates() {
+  if (!STATE.teamTemplates) STATE.teamTemplates = new Map();
+  return STATE.teamTemplates;
+}
 
 function createTeamTemplate(workspaceId, template, createdBy) {
+  const templates = ensureTeamTemplates();
   const id = uid("tmpl");
-  TEAM_TEMPLATES.set(id, {
+  templates.set(id, {
     id,
     name: template.name,
     description: template.description || "",
@@ -24353,19 +24480,40 @@ function createTeamTemplate(workspaceId, template, createdBy) {
     tags: template.tags || [],
     workspaceId,
     createdBy,
-    createdAt: nowISO()
+    createdAt: nowISO(),
+    updatedAt: nowISO(),
   });
   return { ok: true, templateId: id };
 }
 
+function updateTeamTemplate(templateId, updates) {
+  const templates = ensureTeamTemplates();
+  const tmpl = templates.get(templateId);
+  if (!tmpl) return { ok: false, error: "not_found" };
+  if (updates.name) tmpl.name = updates.name;
+  if (updates.description !== undefined) tmpl.description = updates.description;
+  if (updates.content !== undefined) tmpl.content = updates.content;
+  if (updates.tags) tmpl.tags = updates.tags;
+  tmpl.updatedAt = nowISO();
+  return { ok: true, template: tmpl };
+}
+
+function deleteTeamTemplate(templateId) {
+  const templates = ensureTeamTemplates();
+  if (!templates.has(templateId)) return { ok: false, error: "not_found" };
+  templates.delete(templateId);
+  return { ok: true };
+}
+
 function getWorkspaceTemplates(workspaceId) {
-  const templates = [];
-  for (const [, tmpl] of TEAM_TEMPLATES) {
+  const templates = ensureTeamTemplates();
+  const result = [];
+  for (const [, tmpl] of templates) {
     if (tmpl.workspaceId === workspaceId) {
-      templates.push(tmpl);
+      result.push(tmpl);
     }
   }
-  return { ok: true, templates };
+  return { ok: true, templates: result };
 }
 
 // ---- SSO Placeholder (would need passport.js for full implementation) ----
@@ -24773,6 +24921,14 @@ app.get("/api/workspaces/:id/templates", (req, res) => {
   res.json(getWorkspaceTemplates(req.params.id));
 });
 
+app.put("/api/workspaces/:id/templates/:templateId", (req, res) => {
+  res.json(updateTeamTemplate(req.params.templateId, req.body));
+});
+
+app.delete("/api/workspaces/:id/templates/:templateId", (req, res) => {
+  res.json(deleteTeamTemplate(req.params.templateId));
+});
+
 // ---- Wave 15: Ecosystem Endpoints ----
 app.post("/api/cli", async (req, res) => {
   const result = await executeCLICommand(req.body.command);
@@ -24946,24 +25102,106 @@ app.get("/api/quests/mine", async (req, res) => {
   }
 });
 
-// Physics simulation (stub)
-const PHYSICS_STATE = { enabled: false, params: { gravity: 9.81, friction: 0.5 }, bodies: [] };
+// Physics simulation — backed by STATE for persistence
+function ensurePhysicsState() {
+  if (!STATE.physics) {
+    STATE.physics = {
+      enabled: false,
+      params: { gravity: 9.81, friction: 0.5, timeStep: 1/60, restitution: 0.3 },
+      bodies: new Map(), // bodyId -> { id, label, mass, position, velocity, forces }
+      stepCount: 0,
+      lastStepAt: null,
+    };
+  }
+  return STATE.physics;
+}
+
 app.get("/api/physics/simulation", (req, res) => {
-  res.json({ ok: true, ...PHYSICS_STATE });
+  const ps = ensurePhysicsState();
+  res.json({
+    ok: true,
+    enabled: ps.enabled,
+    params: ps.params,
+    bodies: Array.from(ps.bodies.values()),
+    bodyCount: ps.bodies.size,
+    stepCount: ps.stepCount,
+    lastStepAt: ps.lastStepAt,
+  });
 });
 
 app.post("/api/physics/toggle", (req, res) => {
-  PHYSICS_STATE.enabled = !PHYSICS_STATE.enabled;
-  res.json({ ok: true, enabled: PHYSICS_STATE.enabled });
+  const ps = ensurePhysicsState();
+  ps.enabled = !ps.enabled;
+  res.json({ ok: true, enabled: ps.enabled });
 });
 
 app.post("/api/physics/params", (req, res) => {
-  Object.assign(PHYSICS_STATE.params, req.body);
-  res.json({ ok: true, params: PHYSICS_STATE.params });
+  const ps = ensurePhysicsState();
+  const { gravity, friction, timeStep, restitution } = req.body;
+  if (typeof gravity === 'number') ps.params.gravity = gravity;
+  if (typeof friction === 'number') ps.params.friction = Math.max(0, Math.min(1, friction));
+  if (typeof timeStep === 'number' && timeStep > 0) ps.params.timeStep = timeStep;
+  if (typeof restitution === 'number') ps.params.restitution = Math.max(0, Math.min(1, restitution));
+  res.json({ ok: true, params: ps.params });
+});
+
+app.post("/api/physics/bodies", (req, res) => {
+  const ps = ensurePhysicsState();
+  const { label, mass, position, velocity } = req.body;
+  const id = `body_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const body = {
+    id,
+    label: label || id,
+    mass: typeof mass === 'number' && mass > 0 ? mass : 1.0,
+    position: { x: position?.x || 0, y: position?.y || 0, z: position?.z || 0 },
+    velocity: { x: velocity?.x || 0, y: velocity?.y || 0, z: velocity?.z || 0 },
+    forces: [],
+    createdAt: nowISO(),
+  };
+  ps.bodies.set(id, body);
+  res.json({ ok: true, body });
+});
+
+app.delete("/api/physics/bodies/:id", (req, res) => {
+  const ps = ensurePhysicsState();
+  if (!ps.bodies.has(req.params.id)) return res.status(404).json({ ok: false, error: "body not found" });
+  ps.bodies.delete(req.params.id);
+  res.json({ ok: true });
+});
+
+app.post("/api/physics/step", (req, res) => {
+  const ps = ensurePhysicsState();
+  if (!ps.enabled) return res.json({ ok: false, error: "simulation not enabled" });
+  const dt = ps.params.timeStep;
+  const g = ps.params.gravity;
+  const friction = ps.params.friction;
+  for (const body of ps.bodies.values()) {
+    // Apply gravity (downward on y-axis)
+    body.velocity.y -= g * dt;
+    // Apply friction damping
+    body.velocity.x *= (1 - friction * dt);
+    body.velocity.z *= (1 - friction * dt);
+    // Integrate position
+    body.position.x += body.velocity.x * dt;
+    body.position.y += body.velocity.y * dt;
+    body.position.z += body.velocity.z * dt;
+    // Simple ground collision at y=0
+    if (body.position.y < 0) {
+      body.position.y = 0;
+      body.velocity.y = -body.velocity.y * ps.params.restitution;
+    }
+  }
+  ps.stepCount++;
+  ps.lastStepAt = nowISO();
+  res.json({ ok: true, stepCount: ps.stepCount, bodyCount: ps.bodies.size });
 });
 
 app.post("/api/physics/reset", (req, res) => {
-  PHYSICS_STATE.bodies = [];
+  const ps = ensurePhysicsState();
+  ps.bodies.clear();
+  ps.stepCount = 0;
+  ps.lastStepAt = null;
+  ps.enabled = false;
   res.json({ ok: true });
 });
 
@@ -25010,32 +25248,48 @@ app.get("/api/lattice/resonance", async (req, res) => {
   }
 });
 
-// ML endpoints - backed by real embedding/inference state
-if (!STATE.mlJobs) STATE.mlJobs = new Map();
-if (!STATE.mlModels) STATE.mlModels = new Map([
-  ["embeddings", { id: "embeddings", name: "Text Embeddings", status: typeof globalThis.getEmbedding === "function" ? "active" : "unavailable", type: "embedding", requestCount: 0 }],
-  ["classifier", { id: "classifier", name: "Intent Classifier", status: "active", type: "classification", requestCount: 0 }],
-]);
+// ML endpoints — dynamically discover available models from runtime capabilities
+function ensureMlState() {
+  if (!STATE.mlJobs) STATE.mlJobs = new Map();
+  if (!STATE.mlModels) STATE.mlModels = new Map();
+  // Discover models from runtime capabilities each time
+  const embeddingAvailable = typeof globalThis.getEmbedding === "function";
+  const classifierAvailable = typeof classifyIntent === "function";
+  if (embeddingAvailable && !STATE.mlModels.has("embeddings")) {
+    STATE.mlModels.set("embeddings", { id: "embeddings", name: "Text Embeddings", status: "active", type: "embedding", requestCount: 0, discoveredAt: nowISO() });
+  } else if (!embeddingAvailable && STATE.mlModels.has("embeddings")) {
+    STATE.mlModels.get("embeddings").status = "unavailable";
+  }
+  if (classifierAvailable && !STATE.mlModels.has("classifier")) {
+    STATE.mlModels.set("classifier", { id: "classifier", name: "Intent Classifier", status: "active", type: "classification", requestCount: 0, discoveredAt: nowISO() });
+  } else if (!classifierAvailable && STATE.mlModels.has("classifier")) {
+    STATE.mlModels.get("classifier").status = "unavailable";
+  }
+  return { mlModels: STATE.mlModels, mlJobs: STATE.mlJobs };
+}
 
 app.get("/api/ml/models", (req, res) => {
-  const models = Array.from(STATE.mlModels.values());
-  res.json({ ok: true, models });
+  const { mlModels } = ensureMlState();
+  const models = Array.from(mlModels.values());
+  res.json({ ok: true, models, discoveredAt: new Date().toISOString() });
 });
 
 app.get("/api/ml/jobs", (req, res) => {
-  const jobs = Array.from(STATE.mlJobs.values())
+  const { mlJobs } = ensureMlState();
+  const jobs = Array.from(mlJobs.values())
     .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""))
     .slice(0, 50);
-  res.json({ ok: true, jobs, total: STATE.mlJobs.size });
+  res.json({ ok: true, jobs, total: mlJobs.size });
 });
 
 app.get("/api/ml/metrics", (req, res) => {
+  const { mlModels } = ensureMlState();
   const latencyStats = _LATENCY.stats();
   let totalRequests = 0;
-  for (const m of STATE.mlModels.values()) totalRequests += m.requestCount || 0;
+  for (const m of mlModels.values()) totalRequests += m.requestCount || 0;
   res.json({
     ok: true,
-    models: Array.from(STATE.mlModels.values()).map(m => ({ id: m.id, status: m.status, requests: m.requestCount })),
+    models: Array.from(mlModels.values()).map(m => ({ id: m.id, status: m.status, requests: m.requestCount })),
     latency: latencyStats.p50,
     throughput: totalRequests,
     embeddingsAvailable: typeof globalThis.getEmbedding === "function",
@@ -25052,26 +25306,32 @@ app.post("/api/ml/infer", async (req, res) => {
   }
 
   try {
-    const modelEntry = STATE.mlModels.get(model);
-    if (modelEntry) modelEntry.requestCount = (modelEntry.requestCount || 0) + 1;
+    const { mlModels, mlJobs } = ensureMlState();
+    const modelEntry = mlModels.get(model);
+    if (!modelEntry) {
+      return res.json({ ok: false, error: `Model '${model}' not registered. Available: ${Array.from(mlModels.keys()).join(", ")}` });
+    }
+    if (modelEntry.status === "unavailable") {
+      return res.json({ ok: false, error: `Model '${model}' is currently unavailable` });
+    }
+    modelEntry.requestCount = (modelEntry.requestCount || 0) + 1;
 
     // Track as a job
     const jobId = uid("mljob");
-    STATE.mlJobs.set(jobId, { id: jobId, model, status: "running", createdAt: nowISO() });
+    mlJobs.set(jobId, { id: jobId, model, status: "running", createdAt: nowISO() });
 
     if (model === "embeddings" && typeof globalThis.getEmbedding === "function") {
       const embedding = await globalThis.getEmbedding(text);
-      STATE.mlJobs.get(jobId).status = "completed";
+      mlJobs.get(jobId).status = "completed";
       return res.json({ ok: true, jobId, embedding });
     }
-    if (model === "classifier") {
-      // Use the built-in intent classifier
+    if (model === "classifier" && typeof classifyIntent === "function") {
       const intent = classifyIntent(text);
-      STATE.mlJobs.get(jobId).status = "completed";
+      mlJobs.get(jobId).status = "completed";
       return res.json({ ok: true, jobId, result: intent });
     }
-    STATE.mlJobs.get(jobId).status = "failed";
-    res.json({ ok: false, error: `Model '${model}' not available` });
+    mlJobs.get(jobId).status = "failed";
+    res.json({ ok: false, error: `Model '${model}' handler not available at runtime` });
   } finally {
     _CONCURRENCY.release("ml_infer");
   }
@@ -25758,6 +26018,7 @@ process.on("SIGINT", () => {
   console.log("\nShutting down Concord…");
   if (heartbeatTimer) clearInterval(heartbeatTimer);
   if (weeklyTimer) clearInterval(weeklyTimer);
+  if (globalTickTimer) clearInterval(globalTickTimer);
   server.close(() => process.exit(0));
 })
 // ---- OrganMaturationKernel + Growth OS (v2 upgrade) ----
