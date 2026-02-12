@@ -33,6 +33,21 @@ import { spawnSync } from "child_process";
 import { initAll as initLoaf } from "./loaf/index.js";
 import { init as initEmergent } from "./emergent/index.js";
 
+// ---- Atlas + Platform Upgrade Imports (v2) ----
+import { DOMAIN_TYPES as ATLAS_DOMAIN_TYPES, EPISTEMIC_CLASSES, DOMAIN_TYPE_SET, EPISTEMIC_CLASS_SET, computeAtlasScores, explainScores, validateAtlasDtu, getThresholds, initAtlasState, getAtlasState } from "./emergent/atlas-epistemic.js";
+import { createAtlasDtu, getAtlasDtu, searchAtlasDtus, promoteAtlasDtu, addAtlasLink, getScoreExplanation, recomputeScores, registerEntity, getEntity, getContradictions, getAtlasMetrics, contentHash } from "./emergent/atlas-store.js";
+import { detectLineageCycle, detectSupportRing, analyzeSourceUniqueness, checkAuthorInfluence, computeSimilarity, findNearDuplicates, runAntiGamingScan, getAntiGamingMetrics } from "./emergent/atlas-antigaming.js";
+import { runAutogenV2, selectInputDtus, getAutogenRun, acceptAutogenOutput, mergeAutogenOutput, propagateConfidence, getAutogenV2Metrics } from "./emergent/atlas-autogen-v2.js";
+import { councilResolve, getCouncilQueue, councilRequestSources, councilMerge, getCouncilActions, getCouncilMetrics } from "./emergent/atlas-council.js";
+import { upsertProfile, getProfile, listProfiles, followUser, unfollowUser, getFollowers, getFollowing, publishDtu, unpublishDtu, recordCitation, getCitedBy, getFeed, computeTrending, discoverUsers, getSocialMetrics } from "./emergent/social-layer.js";
+import { createWorkspace as collabCreateWorkspace, getWorkspace as collabGetWorkspace, listWorkspaces as collabListWorkspaces, addWorkspaceMember as collabAddWorkspaceMember, removeWorkspaceMember as collabRemoveWorkspaceMember, addDtuToWorkspace as collabAddDtuToWorkspace, addComment as collabAddComment, getComments as collabGetComments, editComment as collabEditComment, resolveComment as collabResolveComment, proposeRevision, getRevisionProposals, voteOnRevision, applyRevision, startEditSession, recordEdit, endEditSession, getCollabMetrics } from "./emergent/collaboration.js";
+import { ROLES, createOrgWorkspace, getOrgWorkspace, assignRole, revokeRole, getUserRole, getOrgMembers, checkPermission, getUserPermissions, assignOrgLens, revokeOrgLens, getOrgLenses, setResourceACL, checkResourceAccess, exportAuditLog, getRbacMetrics } from "./emergent/rbac.js";
+import { takeSnapshot as takeAnalyticsSnapshot, getPersonalAnalytics, getDtuGrowthTrends, getCitationAnalytics, getMarketplaceAnalytics as getMarketAnalytics, getKnowledgeDensity, getAtlasDomainAnalytics, getDashboardSummary } from "./emergent/analytics-dashboard.js";
+import { registerWebhook as registerWh, getWebhook, listWebhooks, deactivateWebhook, deleteWebhook, dispatchWebhookEvent, processPendingDeliveries, getDeliveryHistory, checkApiRateLimit, getApiMetrics, WEBHOOK_EVENTS } from "./emergent/public-api.js";
+import { tagDataRegion, getDataRegion, checkRegionAccess, setExportControls, checkExportAllowed, exportData, createDataPartition, getDataPartition, setRetentionPolicy, getRetentionPolicy, getComplianceLog, recordDPA, getComplianceStatus } from "./emergent/compliance.js";
+import { startOnboarding as startOnboardingV2, getOnboardingProgress as getOnboardingProgressV2, completeOnboardingStep as completeOnboardingStepV2, skipOnboarding as skipOnboardingV2, getOnboardingHints, getOnboardingMetrics } from "./emergent/onboarding.js";
+import { recordSubstrateReuse, recordLlmCall, recordCacheEvent, getEfficiencyDashboard, takeEfficiencySnapshot, getEfficiencyHistory } from "./emergent/compute-efficiency.js";
+
 // ---- Ensure iconv-lite encodings are loaded (fixes ESM/CJS interop in CI) ----
 try { const _iconv = await import("iconv-lite"); _iconv.default?.encodingExists?.("utf8"); } catch { /* transitive dep via body-parser; ok if absent */ }
 
@@ -26194,6 +26209,514 @@ app.get("/api/affect/health", (req, res) => {
 });
 
 console.log("[Concord] ATS: Affect API endpoints registered");
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CONCORD GLOBAL ATLAS + PLATFORM UPGRADES v2
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ---- Initialize Atlas State ----
+try { initAtlasState(STATE); console.log("[Concord] Atlas: Epistemic engine initialized"); } catch (e) { console.warn("[Atlas] Init skipped:", e.message); }
+
+// ---- Atlas: Core DTU Endpoints ----
+app.post("/api/atlas/dtu", async (req, res) => {
+  try {
+    const result = createAtlasDtu(STATE, req.body || {});
+    if (!result.ok) return res.status(400).json(result);
+    dispatchWebhookEvent(STATE, "atlas:dtu:created", { dtuId: result.dtu.id, title: result.dtu.title });
+    res.json(result);
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/atlas/dtu/:id", (req, res) => {
+  try { res.json(getAtlasDtu(STATE, req.params.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/atlas/dtu/:id/promote", (req, res) => {
+  try {
+    const { targetStatus, actor } = req.body || {};
+    const result = promoteAtlasDtu(STATE, req.params.id, targetStatus, actor || req.user?.id || "api");
+    if (!result.ok) return res.status(400).json(result);
+    if (targetStatus === "VERIFIED") dispatchWebhookEvent(STATE, "atlas:dtu:verified", { dtuId: req.params.id });
+    if (targetStatus === "DISPUTED") dispatchWebhookEvent(STATE, "atlas:dtu:disputed", { dtuId: req.params.id });
+    res.json(result);
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/atlas/dtu/:id/link", (req, res) => {
+  try {
+    const { targetDtuId, linkType, ...meta } = req.body || {};
+    res.json(addAtlasLink(STATE, req.params.id, targetDtuId, linkType, meta));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/atlas/search", (req, res) => {
+  try {
+    res.json(searchAtlasDtus(STATE, {
+      domainType: req.query.domainType,
+      epistemicClass: req.query.epistemicClass,
+      status: req.query.status,
+      entity: req.query.entity,
+      minConfidence: req.query.minConfidence ? Number(req.query.minConfidence) : undefined,
+      limit: Number(req.query.limit || 50),
+      offset: Number(req.query.offset || 0),
+    }));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/atlas/entity/:id", (req, res) => {
+  try { res.json(getEntity(STATE, req.params.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/atlas/entity", (req, res) => {
+  try {
+    const { entityId, label, type } = req.body || {};
+    res.json(registerEntity(STATE, entityId, label, type));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/atlas/contradictions/:id", (req, res) => {
+  try { res.json(getContradictions(STATE, req.params.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/atlas/score-explain/:id", (req, res) => {
+  try { res.json(getScoreExplanation(STATE, req.params.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/atlas/dtu/:id/recompute-scores", (req, res) => {
+  try { res.json(recomputeScores(STATE, req.params.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/atlas/metrics", (req, res) => {
+  try { res.json(getAtlasMetrics(STATE)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/atlas/domains", (req, res) => {
+  res.json({ ok: true, domainTypes: Object.values(ATLAS_DOMAIN_TYPES), epistemicClasses: Object.values(EPISTEMIC_CLASSES) });
+});
+
+// ---- Atlas: Anti-Gaming ----
+app.get("/api/atlas/antigaming/scan/:id", (req, res) => {
+  try { res.json(runAntiGamingScan(STATE, req.params.id, req.user?.id || "unknown")); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/atlas/antigaming/metrics", (req, res) => {
+  try { res.json(getAntiGamingMetrics()); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- Atlas: Autogen v2 ----
+app.post("/api/atlas/autogen/run", (req, res) => {
+  try {
+    const result = runAutogenV2(STATE, req.body || {});
+    res.json(result);
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/atlas/autogen/run/:runId", (req, res) => {
+  try { res.json(getAutogenRun(STATE, req.params.runId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/atlas/autogen/accept/:dtuId", (req, res) => {
+  try { res.json(acceptAutogenOutput(STATE, req.params.dtuId, req.user?.id || "api")); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/atlas/autogen/merge/:dtuId", (req, res) => {
+  try {
+    const { targetDtuId } = req.body || {};
+    res.json(mergeAutogenOutput(STATE, req.params.dtuId, targetDtuId, req.user?.id || "api"));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/atlas/autogen/propagate/:dtuId", (req, res) => {
+  try {
+    const { maxHops, dampingFactor } = req.body || {};
+    res.json(propagateConfidence(STATE, req.params.dtuId, maxHops || 2, dampingFactor || 0.5));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/atlas/autogen/metrics", (req, res) => {
+  try { res.json(getAutogenV2Metrics(STATE)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- Atlas: Council Protocol ----
+app.post("/api/atlas/council/resolve", (req, res) => {
+  try { res.json(councilResolve(STATE, req.body || {})); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/atlas/council/queue", (req, res) => {
+  try { res.json(getCouncilQueue(STATE, { limit: Number(req.query.limit || 50), domainType: req.query.domainType })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/atlas/council/request-sources", (req, res) => {
+  try {
+    const { dtuId, claimIds, reason, actor } = req.body || {};
+    res.json(councilRequestSources(STATE, dtuId, claimIds || [], reason, actor || req.user?.id));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/atlas/council/merge", (req, res) => {
+  try {
+    const { sourceDtuId, targetDtuId, reason } = req.body || {};
+    res.json(councilMerge(STATE, sourceDtuId, targetDtuId, reason, req.user?.id || "api"));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/atlas/council/actions", (req, res) => {
+  try { res.json(getCouncilActions(STATE, { dtuId: req.query.dtuId, actionType: req.query.actionType, limit: Number(req.query.limit || 50) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/atlas/council/metrics", (req, res) => {
+  try { res.json(getCouncilMetrics(STATE)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- Social Layer ----
+app.post("/api/social/profile", (req, res) => {
+  try { res.json(upsertProfile(STATE, req.body?.userId || req.user?.id, req.body || {})); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/profile/:userId", (req, res) => {
+  try { res.json(getProfile(STATE, req.params.userId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/profiles", (req, res) => {
+  try { res.json(listProfiles(STATE, { sortBy: req.query.sortBy, limit: Number(req.query.limit || 50) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/social/follow", (req, res) => {
+  try { res.json(followUser(STATE, req.body?.followerId || req.user?.id, req.body?.followedId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/social/unfollow", (req, res) => {
+  try { res.json(unfollowUser(STATE, req.body?.followerId || req.user?.id, req.body?.followedId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/followers/:userId", (req, res) => {
+  try { res.json(getFollowers(STATE, req.params.userId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/following/:userId", (req, res) => {
+  try { res.json(getFollowing(STATE, req.params.userId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/feed", (req, res) => {
+  try { res.json(getFeed(STATE, req.query.userId || req.user?.id, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/trending", (req, res) => {
+  try { res.json(computeTrending(STATE, Number(req.query.limit || 20))); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/discover/:userId", (req, res) => {
+  try { res.json(discoverUsers(STATE, req.params.userId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/social/publish/:dtuId", (req, res) => {
+  try { res.json(publishDtu(STATE, req.params.dtuId, req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/social/unpublish/:dtuId", (req, res) => {
+  try { res.json(unpublishDtu(STATE, req.params.dtuId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/social/cite", (req, res) => {
+  try {
+    const result = recordCitation(STATE, req.body?.citedDtuId, req.body?.citingDtuId);
+    if (result.ok) dispatchWebhookEvent(STATE, "citation:added", { citedDtuId: req.body?.citedDtuId, citingDtuId: req.body?.citingDtuId });
+    res.json(result);
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/cited-by/:dtuId", (req, res) => {
+  try { res.json(getCitedBy(STATE, req.params.dtuId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/metrics", (req, res) => {
+  try { res.json(getSocialMetrics(STATE)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- Collaboration ----
+app.post("/api/collab/workspace", (req, res) => {
+  try { res.json(collabCreateWorkspace(STATE, { ...req.body, ownerId: req.body?.ownerId || req.user?.id })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/collab/workspace/:id", (req, res) => {
+  try { res.json(collabGetWorkspace(STATE, req.params.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/collab/workspaces", (req, res) => {
+  try { res.json(collabListWorkspaces(STATE, req.query.userId || req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/collab/workspace/:id/member", (req, res) => {
+  try { res.json(collabAddWorkspaceMember(STATE, req.params.id, req.body?.userId, req.body?.role, req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.delete("/api/collab/workspace/:id/member/:userId", (req, res) => {
+  try { res.json(collabRemoveWorkspaceMember(STATE, req.params.id, req.params.userId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/collab/workspace/:id/dtu", (req, res) => {
+  try { res.json(collabAddDtuToWorkspace(STATE, req.params.id, req.body?.dtuId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/collab/comment", (req, res) => {
+  try {
+    const result = collabAddComment(STATE, req.body?.dtuId, req.body?.userId || req.user?.id, req.body?.text, req.body?.parentCommentId);
+    if (result.ok) dispatchWebhookEvent(STATE, "comment:added", { dtuId: req.body?.dtuId, commentId: result.comment?.id });
+    res.json(result);
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/collab/comments/:dtuId", (req, res) => {
+  try { res.json(collabGetComments(STATE, req.params.dtuId, { tree: req.query.tree === "true", limit: Number(req.query.limit || 50) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.put("/api/collab/comment/:id", (req, res) => {
+  try { res.json(collabEditComment(STATE, req.params.id, req.body?.userId || req.user?.id, req.body?.text)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/collab/comment/:id/resolve", (req, res) => {
+  try { res.json(collabResolveComment(STATE, req.params.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/collab/revision", (req, res) => {
+  try {
+    const result = proposeRevision(STATE, req.body?.dtuId, req.body?.userId || req.user?.id, req.body?.changes, req.body?.reason);
+    if (result.ok) dispatchWebhookEvent(STATE, "revision:proposed", { dtuId: req.body?.dtuId, proposalId: result.proposal?.id });
+    res.json(result);
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/collab/revisions/:dtuId", (req, res) => {
+  try { res.json(getRevisionProposals(STATE, req.params.dtuId, req.query.status)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/collab/revision/:id/vote", (req, res) => {
+  try { res.json(voteOnRevision(STATE, req.params.id, req.body?.userId || req.user?.id, req.body?.vote)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/collab/revision/:id/apply", (req, res) => {
+  try { res.json(applyRevision(STATE, req.params.id, req.user?.id || "api")); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/collab/edit-session/:dtuId/start", (req, res) => {
+  try { res.json(startEditSession(STATE, req.params.dtuId, req.body?.userId || req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/collab/edit-session/:dtuId/edit", (req, res) => {
+  try { res.json(recordEdit(STATE, req.params.dtuId, req.body?.userId || req.user?.id, req.body?.field, req.body?.oldValue, req.body?.newValue)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/collab/edit-session/:dtuId/end", (req, res) => {
+  try { res.json(endEditSession(STATE, req.params.dtuId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/collab/metrics", (req, res) => {
+  try { res.json(getCollabMetrics(STATE)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- RBAC & Enterprise Access Controls ----
+app.post("/api/rbac/org", (req, res) => {
+  try { res.json(createOrgWorkspace(STATE, { ...req.body, ownerId: req.body?.ownerId || req.user?.id })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/rbac/org/:orgId", (req, res) => {
+  try { res.json(getOrgWorkspace(STATE, req.params.orgId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/rbac/role", (req, res) => {
+  try { res.json(assignRole(STATE, req.body?.orgId, req.body?.userId, req.body?.role, req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.delete("/api/rbac/role", (req, res) => {
+  try { res.json(revokeRole(STATE, req.body?.orgId, req.body?.userId, req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/rbac/role/:orgId/:userId", (req, res) => {
+  try { res.json(getUserRole(STATE, req.params.orgId, req.params.userId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/rbac/members/:orgId", (req, res) => {
+  try { res.json(getOrgMembers(STATE, req.params.orgId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/rbac/permissions/:orgId/:userId", (req, res) => {
+  try { res.json(getUserPermissions(STATE, req.params.orgId, req.params.userId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/rbac/check-permission", (req, res) => {
+  try { res.json(checkPermission(STATE, req.body?.orgId, req.body?.userId, req.body?.permission)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/rbac/org-lens", (req, res) => {
+  try { res.json(assignOrgLens(STATE, req.body?.orgId, req.body?.lensId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/rbac/org-lenses/:orgId", (req, res) => {
+  try { res.json(getOrgLenses(STATE, req.params.orgId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/rbac/audit-export/:orgId", (req, res) => {
+  try { res.json(exportAuditLog(STATE, req.params.orgId, { since: req.query.since, until: req.query.until, action: req.query.action, limit: Number(req.query.limit || 1000) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/rbac/metrics", (req, res) => {
+  try { res.json(getRbacMetrics(STATE)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- Analytics Dashboard ----
+app.get("/api/analytics/dashboard", (req, res) => {
+  try { res.json(getDashboardSummary(STATE)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/analytics/personal/:userId", (req, res) => {
+  try { res.json(getPersonalAnalytics(STATE, req.params.userId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/analytics/growth", (req, res) => {
+  try { res.json(getDtuGrowthTrends(STATE, { period: req.query.period || "24h" })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/analytics/citations", (req, res) => {
+  try { res.json(getCitationAnalytics(STATE, { limit: Number(req.query.limit || 20) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/analytics/marketplace", (req, res) => {
+  try { res.json(getMarketAnalytics(STATE)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/analytics/density", (req, res) => {
+  try { res.json(getKnowledgeDensity(STATE)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/analytics/atlas-domains", (req, res) => {
+  try { res.json(getAtlasDomainAnalytics(STATE)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- Public API & Webhooks ----
+app.post("/api/webhooks", (req, res) => {
+  try { res.json(registerWh(STATE, { ...req.body, ownerId: req.body?.ownerId || req.user?.id })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/webhooks", (req, res) => {
+  try { res.json(listWebhooks(STATE, req.query.ownerId || req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/webhooks/:id", (req, res) => {
+  try { res.json(getWebhook(STATE, req.params.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.delete("/api/webhooks/:id", (req, res) => {
+  try { res.json(deleteWebhook(STATE, req.params.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/webhooks/:id/deactivate", (req, res) => {
+  try { res.json(deactivateWebhook(STATE, req.params.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/webhooks/:id/deliveries", (req, res) => {
+  try { res.json(getDeliveryHistory(STATE, req.params.id, Number(req.query.limit || 50))); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/webhooks-metrics", (req, res) => {
+  try { res.json(getApiMetrics(STATE)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- Compliance ----
+app.post("/api/compliance/region-tag", (req, res) => {
+  try { res.json(tagDataRegion(STATE, req.body?.resourceId, req.body?.region, req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/compliance/region/:resourceId", (req, res) => {
+  try { res.json(getDataRegion(STATE, req.params.resourceId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/compliance/export-controls", (req, res) => {
+  try { res.json(setExportControls(STATE, req.body?.resourceId, req.body || {})); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/compliance/check-export", (req, res) => {
+  try { res.json(checkExportAllowed(STATE, req.body?.resourceId, req.body?.format, req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/compliance/export", (req, res) => {
+  try { res.json(exportData(STATE, req.body?.resourceId, req.body?.format || "json", req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/compliance/partition", (req, res) => {
+  try { res.json(createDataPartition(STATE, req.body?.orgId, req.body || {})); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/compliance/partition/:orgId", (req, res) => {
+  try { res.json(getDataPartition(STATE, req.params.orgId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/compliance/retention", (req, res) => {
+  try { res.json(setRetentionPolicy(STATE, req.body?.orgId, req.body || {})); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/compliance/retention/:orgId", (req, res) => {
+  try { res.json(getRetentionPolicy(STATE, req.params.orgId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/compliance/log", (req, res) => {
+  try { res.json(getComplianceLog(STATE, { action: req.query.action, since: req.query.since, limit: Number(req.query.limit || 100) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/compliance/status", (req, res) => {
+  try { res.json(getComplianceStatus(STATE)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- Onboarding ----
+app.post("/api/onboarding/start", (req, res) => {
+  try { res.json(startOnboardingV2(STATE, req.body?.userId || req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/onboarding/progress/:userId", (req, res) => {
+  try { res.json(getOnboardingProgressV2(STATE, req.params.userId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/onboarding/complete-step", (req, res) => {
+  try { res.json(completeOnboardingStepV2(STATE, req.body?.userId || req.user?.id, req.body?.stepId, req.body?.metadata)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/onboarding/skip", (req, res) => {
+  try { res.json(skipOnboardingV2(STATE, req.body?.userId || req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/onboarding/hints/:userId", (req, res) => {
+  try { res.json(getOnboardingHints(STATE, req.params.userId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/onboarding/metrics", (req, res) => {
+  try { res.json(getOnboardingMetrics(STATE)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- Compute Efficiency Visualizer ----
+app.get("/api/efficiency/dashboard", (req, res) => {
+  try { res.json(getEfficiencyDashboard(STATE)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/efficiency/history", (req, res) => {
+  try { res.json(getEfficiencyHistory(STATE, req.query.period || "24h")); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/efficiency/record-reuse", (req, res) => {
+  try { res.json(recordSubstrateReuse(STATE, req.body?.operation, req.body?.details)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/efficiency/record-llm-call", (req, res) => {
+  try { res.json(recordLlmCall(STATE, req.body?.operation, req.body?.details)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- Periodic Tasks (Analytics + Efficiency snapshots, Webhook delivery) ----
+setInterval(() => {
+  try { takeAnalyticsSnapshot(STATE); } catch {}
+  try { takeEfficiencySnapshot(STATE); } catch {}
+  try { processPendingDeliveries(STATE); } catch {}
+}, 300000); // Every 5 minutes
+
+console.log("[Concord] Atlas Global + Platform v2: All endpoints registered");
+console.log("[Concord] New modules: Atlas Epistemic Engine, Autogen v2, Council Protocol, Social Layer, Collaboration, RBAC, Analytics, Webhooks, Compliance, Onboarding, Compute Efficiency");
 
 // ═══════════════════════════════════════════════════════════════════════════════
 

@@ -1015,6 +1015,175 @@ export const apiHelpers = {
     latticeBeacon: () => api.get('/api/lattice/beacon'),
     resonance: () => api.get('/api/lattice/resonance'),
   },
+
+  // ═══════════════════════════════════════════════════════════════════
+  // ATLAS GLOBAL + PLATFORM v2
+  // ═══════════════════════════════════════════════════════════════════
+
+  atlas: {
+    createDtu: (data: Record<string, unknown>) => api.post('/api/atlas/dtu', data),
+    getDtu: (id: string) => api.get(`/api/atlas/dtu/${id}`),
+    promoteDtu: (id: string, targetStatus: string, actor?: string) =>
+      api.post(`/api/atlas/dtu/${id}/promote`, { targetStatus, actor }),
+    addLink: (id: string, data: Record<string, unknown>) =>
+      api.post(`/api/atlas/dtu/${id}/link`, data),
+    search: (params: Record<string, unknown>) => api.get('/api/atlas/search', { params }),
+    getEntity: (id: string) => api.get(`/api/atlas/entity/${id}`),
+    registerEntity: (data: Record<string, unknown>) => api.post('/api/atlas/entity', data),
+    getContradictions: (id: string) => api.get(`/api/atlas/contradictions/${id}`),
+    explainScore: (id: string) => api.get(`/api/atlas/score-explain/${id}`),
+    recomputeScores: (id: string) => api.post(`/api/atlas/dtu/${id}/recompute-scores`),
+    metrics: () => api.get('/api/atlas/metrics'),
+    domains: () => api.get('/api/atlas/domains'),
+    // Anti-gaming
+    antiGamingScan: (id: string) => api.get(`/api/atlas/antigaming/scan/${id}`),
+    antiGamingMetrics: () => api.get('/api/atlas/antigaming/metrics'),
+    // Autogen v2
+    autogenRun: (data: Record<string, unknown>) => api.post('/api/atlas/autogen/run', data),
+    autogenGetRun: (runId: string) => api.get(`/api/atlas/autogen/run/${runId}`),
+    autogenAccept: (dtuId: string) => api.post(`/api/atlas/autogen/accept/${dtuId}`),
+    autogenMerge: (dtuId: string, targetDtuId: string) =>
+      api.post(`/api/atlas/autogen/merge/${dtuId}`, { targetDtuId }),
+    autogenPropagate: (dtuId: string, maxHops?: number) =>
+      api.post(`/api/atlas/autogen/propagate/${dtuId}`, { maxHops }),
+    autogenMetrics: () => api.get('/api/atlas/autogen/metrics'),
+    // Council
+    councilResolve: (data: Record<string, unknown>) => api.post('/api/atlas/council/resolve', data),
+    councilQueue: (params?: Record<string, unknown>) => api.get('/api/atlas/council/queue', { params }),
+    councilRequestSources: (data: Record<string, unknown>) =>
+      api.post('/api/atlas/council/request-sources', data),
+    councilMerge: (data: Record<string, unknown>) => api.post('/api/atlas/council/merge', data),
+    councilActions: (params?: Record<string, unknown>) => api.get('/api/atlas/council/actions', { params }),
+    councilMetrics: () => api.get('/api/atlas/council/metrics'),
+  },
+
+  social: {
+    upsertProfile: (data: Record<string, unknown>) => api.post('/api/social/profile', data),
+    getProfile: (userId: string) => api.get(`/api/social/profile/${userId}`),
+    listProfiles: (params?: Record<string, unknown>) => api.get('/api/social/profiles', { params }),
+    follow: (followedId: string) => api.post('/api/social/follow', { followedId }),
+    unfollow: (followedId: string) => api.post('/api/social/unfollow', { followedId }),
+    getFollowers: (userId: string) => api.get(`/api/social/followers/${userId}`),
+    getFollowing: (userId: string) => api.get(`/api/social/following/${userId}`),
+    getFeed: (params?: Record<string, unknown>) => api.get('/api/social/feed', { params }),
+    getTrending: (limit?: number) => api.get('/api/social/trending', { params: { limit } }),
+    discover: (userId: string) => api.get(`/api/social/discover/${userId}`),
+    publishDtu: (dtuId: string) => api.post(`/api/social/publish/${dtuId}`),
+    unpublishDtu: (dtuId: string) => api.post(`/api/social/unpublish/${dtuId}`),
+    cite: (citedDtuId: string, citingDtuId: string) =>
+      api.post('/api/social/cite', { citedDtuId, citingDtuId }),
+    getCitedBy: (dtuId: string) => api.get(`/api/social/cited-by/${dtuId}`),
+    metrics: () => api.get('/api/social/metrics'),
+  },
+
+  collab: {
+    createWorkspace: (data: Record<string, unknown>) => api.post('/api/collab/workspace', data),
+    getWorkspace: (id: string) => api.get(`/api/collab/workspace/${id}`),
+    listWorkspaces: () => api.get('/api/collab/workspaces'),
+    addMember: (workspaceId: string, userId: string, role?: string) =>
+      api.post(`/api/collab/workspace/${workspaceId}/member`, { userId, role }),
+    removeMember: (workspaceId: string, userId: string) =>
+      api.delete(`/api/collab/workspace/${workspaceId}/member/${userId}`),
+    addDtu: (workspaceId: string, dtuId: string) =>
+      api.post(`/api/collab/workspace/${workspaceId}/dtu`, { dtuId }),
+    addComment: (dtuId: string, text: string, parentCommentId?: string) =>
+      api.post('/api/collab/comment', { dtuId, text, parentCommentId }),
+    getComments: (dtuId: string, tree?: boolean) =>
+      api.get(`/api/collab/comments/${dtuId}`, { params: { tree } }),
+    editComment: (id: string, text: string) => api.put(`/api/collab/comment/${id}`, { text }),
+    resolveComment: (id: string) => api.post(`/api/collab/comment/${id}/resolve`),
+    proposeRevision: (dtuId: string, changes: Record<string, unknown>, reason?: string) =>
+      api.post('/api/collab/revision', { dtuId, changes, reason }),
+    getRevisions: (dtuId: string) => api.get(`/api/collab/revisions/${dtuId}`),
+    voteRevision: (id: string, vote: 'approve' | 'reject') =>
+      api.post(`/api/collab/revision/${id}/vote`, { vote }),
+    applyRevision: (id: string) => api.post(`/api/collab/revision/${id}/apply`),
+    startEditSession: (dtuId: string) => api.post(`/api/collab/edit-session/${dtuId}/start`),
+    recordEdit: (dtuId: string, field: string, oldValue: unknown, newValue: unknown) =>
+      api.post(`/api/collab/edit-session/${dtuId}/edit`, { field, oldValue, newValue }),
+    endEditSession: (dtuId: string) => api.post(`/api/collab/edit-session/${dtuId}/end`),
+    metrics: () => api.get('/api/collab/metrics'),
+  },
+
+  rbac: {
+    createOrg: (data: Record<string, unknown>) => api.post('/api/rbac/org', data),
+    getOrg: (orgId: string) => api.get(`/api/rbac/org/${orgId}`),
+    assignRole: (orgId: string, userId: string, role: string) =>
+      api.post('/api/rbac/role', { orgId, userId, role }),
+    revokeRole: (orgId: string, userId: string) =>
+      api.delete('/api/rbac/role', { data: { orgId, userId } }),
+    getRole: (orgId: string, userId: string) => api.get(`/api/rbac/role/${orgId}/${userId}`),
+    getMembers: (orgId: string) => api.get(`/api/rbac/members/${orgId}`),
+    getPermissions: (orgId: string, userId: string) =>
+      api.get(`/api/rbac/permissions/${orgId}/${userId}`),
+    checkPermission: (orgId: string, userId: string, permission: string) =>
+      api.post('/api/rbac/check-permission', { orgId, userId, permission }),
+    assignOrgLens: (orgId: string, lensId: string) =>
+      api.post('/api/rbac/org-lens', { orgId, lensId }),
+    getOrgLenses: (orgId: string) => api.get(`/api/rbac/org-lenses/${orgId}`),
+    exportAudit: (orgId: string, params?: Record<string, unknown>) =>
+      api.get(`/api/rbac/audit-export/${orgId}`, { params }),
+    metrics: () => api.get('/api/rbac/metrics'),
+  },
+
+  analytics: {
+    dashboard: () => api.get('/api/analytics/dashboard'),
+    personal: (userId: string) => api.get(`/api/analytics/personal/${userId}`),
+    growth: (period?: string) => api.get('/api/analytics/growth', { params: { period } }),
+    citations: (limit?: number) => api.get('/api/analytics/citations', { params: { limit } }),
+    marketplace: () => api.get('/api/analytics/marketplace'),
+    density: () => api.get('/api/analytics/density'),
+    atlasDomains: () => api.get('/api/analytics/atlas-domains'),
+  },
+
+  webhooks: {
+    register: (data: Record<string, unknown>) => api.post('/api/webhooks', data),
+    list: () => api.get('/api/webhooks'),
+    get: (id: string) => api.get(`/api/webhooks/${id}`),
+    delete: (id: string) => api.delete(`/api/webhooks/${id}`),
+    deactivate: (id: string) => api.post(`/api/webhooks/${id}/deactivate`),
+    deliveries: (id: string) => api.get(`/api/webhooks/${id}/deliveries`),
+    metrics: () => api.get('/api/webhooks-metrics'),
+  },
+
+  compliance: {
+    tagRegion: (resourceId: string, region: string) =>
+      api.post('/api/compliance/region-tag', { resourceId, region }),
+    getRegion: (resourceId: string) => api.get(`/api/compliance/region/${resourceId}`),
+    setExportControls: (resourceId: string, controls: Record<string, unknown>) =>
+      api.post('/api/compliance/export-controls', { resourceId, ...controls }),
+    checkExport: (resourceId: string, format?: string) =>
+      api.post('/api/compliance/check-export', { resourceId, format }),
+    exportData: (resourceId: string, format?: string) =>
+      api.post('/api/compliance/export', { resourceId, format }),
+    createPartition: (orgId: string, config?: Record<string, unknown>) =>
+      api.post('/api/compliance/partition', { orgId, ...config }),
+    getPartition: (orgId: string) => api.get(`/api/compliance/partition/${orgId}`),
+    setRetention: (orgId: string, policy: Record<string, unknown>) =>
+      api.post('/api/compliance/retention', { orgId, ...policy }),
+    getRetention: (orgId: string) => api.get(`/api/compliance/retention/${orgId}`),
+    getLog: (params?: Record<string, unknown>) => api.get('/api/compliance/log', { params }),
+    status: () => api.get('/api/compliance/status'),
+  },
+
+  onboarding: {
+    start: () => api.post('/api/onboarding/start'),
+    progress: (userId: string) => api.get(`/api/onboarding/progress/${userId}`),
+    completeStep: (stepId: string, metadata?: Record<string, unknown>) =>
+      api.post('/api/onboarding/complete-step', { stepId, metadata }),
+    skip: () => api.post('/api/onboarding/skip'),
+    hints: (userId: string) => api.get(`/api/onboarding/hints/${userId}`),
+    metrics: () => api.get('/api/onboarding/metrics'),
+  },
+
+  efficiency: {
+    dashboard: () => api.get('/api/efficiency/dashboard'),
+    history: (period?: string) => api.get('/api/efficiency/history', { params: { period } }),
+    recordReuse: (operation: string, details?: Record<string, unknown>) =>
+      api.post('/api/efficiency/record-reuse', { operation, details }),
+    recordLlmCall: (operation: string, details?: Record<string, unknown>) =>
+      api.post('/api/efficiency/record-llm-call', { operation, details }),
+  },
 };
 
 // Initialize CSRF token on page load (browser only)
