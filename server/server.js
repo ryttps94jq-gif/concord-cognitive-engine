@@ -4659,6 +4659,7 @@ function seedGenesisRealityAnchor(){
       id,
       title: "Genesis Reality Anchor v1",
       kind: "genesis",
+      scope: "global",  // Scope Separation: genesis anchor is canonical Global knowledge
       createdAt: nowISO(),
       updatedAt: nowISO(),
       lineage: { root: id, parents: [] },
@@ -4688,13 +4689,16 @@ async function seedIfEmpty() {
   if (!seeds.length) return { ok:false, seeded:false, error: SEED_INFO.error || "no seeds" };
   let n=0;
   for (const s of seeds) {
+    // Scope Separation: seed DTUs load into Global scope — they are canonical knowledge.
+    // Each instance cherry-picks which Global DTUs to pull into Local.
+    s.scope = "global";
     const d = toOptionADTU(s);
     STATE.dtus.set(d.id, d);
     n++;
   }
   saveStateDebounced();
-  log("seed", "Seeded DTUs from dtus.js", { count:n });
-  return { ok:true, seeded:true, count:n };
+  log("seed", "Seeded DTUs from dtus.js into Global scope", { count:n, scope:"global" });
+  return { ok:true, seeded:true, count:n, scope:"global" };
 }
 await seedIfEmpty();
 seedGenesisRealityAnchor();
@@ -15721,6 +15725,8 @@ app.post("/api/reseed", requireRole("owner", "admin"), async (req, res) => {
     }
     let added = 0;
     for (const s of seeds) {
+      // Scope Separation: reseeded DTUs enter Global scope (canonical knowledge)
+      s.scope = "global";
       const d = toOptionADTU(s);
       if (!STATE.dtus.has(d.id)) {
         STATE.dtus.set(d.id, d);
@@ -15728,8 +15734,8 @@ app.post("/api/reseed", requireRole("owner", "admin"), async (req, res) => {
       }
     }
     saveStateDebounced();
-    log("reseed", "Manual reseed from dtus.js", { added, total: STATE.dtus.size });
-    return res.json({ ok: true, added, total: STATE.dtus.size, seedInfo: SEED_INFO });
+    log("reseed", "Manual reseed from dtus.js into Global scope", { added, total: STATE.dtus.size, scope: "global" });
+    return res.json({ ok: true, added, total: STATE.dtus.size, scope: "global", seedInfo: SEED_INFO });
   } catch (e) {
     return res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
