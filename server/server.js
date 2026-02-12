@@ -4273,6 +4273,7 @@ function _serializeState() {
     transactions: Array.from(STATE.transactions.values()),
     papers: Array.from(STATE.papers.values()),
     lensArtifacts: Array.from(STATE.lensArtifacts.values()),
+    _scopeSeparation: STATE._scopeSeparation || null,
   };
 }
 
@@ -4386,6 +4387,11 @@ function _hydrateState(obj) {
   if (Array.isArray(obj.lensArtifacts)) for (const a of obj.lensArtifacts) if (a && a.id) STATE.lensArtifacts.set(a.id, a);
   // Rebuild domain index
   _rebuildLensDomainIndex();
+
+  // Scope Separation state
+  if (obj._scopeSeparation && typeof obj._scopeSeparation === "object") {
+    STATE._scopeSeparation = obj._scopeSeparation;
+  }
 }
 
 
@@ -4631,6 +4637,7 @@ function toOptionADTU(seedLike) {
     },
     machine,
     cretiHuman: "",
+    scope: seedLike.scope || "local",  // Scope Separation: default to local
     source: seedLike.source || "seed",
     meta: seedLike.meta && typeof seedLike.meta==="object" ? seedLike.meta : {},
     createdAt: seedLike.createdAt || nowISO(),
@@ -10515,6 +10522,7 @@ register("dtu", "create", async (ctx, input) => {
     },
     machine: { ...machineIn },
     cretiHuman: "",
+    scope: "local",  // Scope Separation: all new DTUs start in Local scope
     createdAt: nowISO(),
     updatedAt: nowISO(),
     authority: { model: "council", score: 0, votes: {} },
@@ -13862,26 +13870,50 @@ register("global","publish", async (ctx, input) => {
     dtu.meta = dtu.meta || {};
     dtu.meta.globalId = gid;
     dtu.meta.globalPublishedAt = nowISO();
+    // Scope Separation: promote DTU to Global scope on publish
+    dtu.scope = "global";
+    dtu.meta.scopeHistory = dtu.meta.scopeHistory || [];
+    dtu.meta.scopeHistory.push({
+      from: dtu.scope === "global" ? "local" : (dtu.scope || "local"),
+      to: "global",
+      at: nowISO(),
+      by: ctx?.actor?.id || "council",
+      reason: "global_publish",
+    });
     saveStateDebounced();
-    return { ok:true, globalId: gid, dtuId, globalHash: out.globalHash };
+    return { ok:true, globalId: gid, dtuId, globalHash: out.globalHash, scope: "global" };
   }
   return { ok:false, error:"DTU missing after publish" };
-}, { summary:"Publish a DTU to Global (council-gated)." });
+}, { summary:"Publish a DTU to Global (council-gated, scope-enforced)." });
 
 // ---- Marketplace ----
 register("market","listingCreate", (ctx, input) => {
   const dtuId = String(input.dtuId||"");
   const dtu = STATE.dtus.get(dtuId);
   if (!dtu) return { ok:false, error:"DTU not found" };
+  // Scope Separation: validate DTU is suitable for marketplace listing
+  // DTU must be explicitly promoted to marketplace scope or listed from local with author intent
+  const dtuScope = dtu.scope || "local";
+  if (dtuScope === "global") {
+    return { ok:false, error:"Global DTUs cannot be listed on marketplace — they are canonical knowledge, not merchandise." };
+  }
+  // Block quarantined DTUs from marketplace
+  if (dtu.tags?.includes("quarantine:injection-review")) {
+    return { ok:false, error:"Quarantined DTUs cannot be listed on marketplace." };
+  }
   const price = Number(input.price||0);
   const currency = normalizeText(input.currency||"USD") || "USD";
   const license = normalizeText(input.license||"noncommercial") || "noncommercial";
   const id = uid("lst");
   const listing = { id, dtuId, orgId: ctx.actor.orgId, price, currency, license, status:"active", createdAt: nowISO() };
   STATE.listings.set(id, listing);
+  // Scope Separation: tag DTU as marketplace-listed for provenance
+  dtu.meta = dtu.meta || {};
+  dtu.meta.marketplaceListed = true;
+  dtu.meta.lastListingId = id;
   saveStateDebounced();
   return { ok:true, listing };
-}, { summary:"Create a marketplace listing for a DTU (local-first)." });
+}, { summary:"Create a marketplace listing for a DTU (scope-validated)." });
 
 register("market","list", (ctx, input) => {
   const limit = clamp(Number(input.limit||50), 1, 200);
@@ -16232,6 +16264,14 @@ app.post("/api/dimensional/scale", async (req,res)=> res.json(await runMacro("di
 app.post("/api/council/review-global", async (req,res)=> res.json(await runMacro("council","reviewGlobal", req.body||{}, makeCtx(req))));
 app.post("/api/council/weekly", async (req,res)=> res.json(await runMacro("council","weeklyDebateTick", req.body||{}, makeCtx(req))));
 
+// Scope Separation endpoints
+app.post("/api/scope/promote", async (req,res)=> res.json(await runMacro("emergent","scope.promote", req.body||{}, makeCtx(req))));
+app.post("/api/scope/validate-global", async (req,res)=> res.json(await runMacro("emergent","scope.validateGlobal", req.body||{}, makeCtx(req))));
+app.get("/api/scope/metrics", async (req,res)=> res.json(await runMacro("emergent","scope.metrics", {}, makeCtx(req))));
+app.get("/api/scope/dtus/:scope", async (req,res)=> res.json(await runMacro("emergent","scope.listByScope", { scope: req.params.scope, limit: Number(req.query.limit||50) }, makeCtx(req))));
+app.get("/api/scope/overrides", async (req,res)=> res.json(await runMacro("emergent","scope.overrideLog", { limit: Number(req.query.limit||50) }, makeCtx(req))));
+app.get("/api/scope/marketplace-analytics", async (req,res)=> res.json(await runMacro("emergent","scope.marketplaceAnalytics", { limit: Number(req.query.limit||50) }, makeCtx(req))));
+
 // Anonymous messaging (non-discoverable; requires manual contact exchange)
 app.post("/api/anon/create", async (req,res)=> res.json(await runMacro("anon","create", req.body||{}, makeCtx(req))));
 app.post("/api/anon/send", async (req,res)=> res.json(await runMacro("anon","send", req.body||{}, makeCtx(req))));
@@ -16245,18 +16285,23 @@ app.use((err, req, res, _next) => {
   res.status(500).json({ ok:false, error: msg });
 });
 
-// ---- heartbeat ----
+// ---- heartbeat (Scope Separation: Local tick + Global tick, no Marketplace tick) ----
 let heartbeatTimer = null;
 let weeklyTimer = null;
+let globalTickTimer = null;  // Scope Separation: separate 5-min Global tick
+
 function startHeartbeat() {
   if (heartbeatTimer) clearInterval(heartbeatTimer);
   if (weeklyTimer) clearInterval(weeklyTimer);
+  if (globalTickTimer) clearInterval(globalTickTimer);
+
+  // ── Local Scope Tick (existing cadence, 15s default) ──
   const ms = clamp(Number(STATE.settings.heartbeatMs || 15000), 2000, 120000);
   heartbeatTimer = setInterval(async () => {
     if (!STATE.settings.heartbeatEnabled) return;
     const ctx = makeCtx(null);
 
-    // process crawl queue once
+    // process crawl queue once (Local scope only — ingest is local activity)
     await runMacro("ingest","processQueueOnce", {}, ctx).catch(()=>{});
 
     if (STATE.settings.autogenEnabled) {
@@ -16275,7 +16320,22 @@ function startHeartbeat() {
     // v3: local self-upgrade (abstraction governor) at fixed cadence
     try { await maybeRunLocalUpgrade(); } catch {}
   }, ms);
-  log("heartbeat", "Heartbeat started", { ms });
+  log("heartbeat", "Local scope tick started", { ms });
+
+  // ── Global Scope Tick (5 minutes — slow, deliberate synthesis) ──
+  // Global tick can: generate DTU candidates from existing Global DTUs, update resonance.
+  // Global tick cannot: ingest local or marketplace DTUs, respond to local activity.
+  const globalMs = clamp(Number(STATE.settings.globalTickMs || 300000), 60000, 600000);
+  globalTickTimer = setInterval(async () => {
+    if (!STATE.settings.heartbeatEnabled) return;
+    try {
+      const ctx = makeCtx(null);
+      await runMacro("emergent","scope.globalTick", {}, ctx).catch(()=>{});
+    } catch { /* Global tick is best-effort */ }
+  }, globalMs);
+  log("heartbeat", "Global scope tick started", { ms: globalMs });
+
+  // Marketplace: ❌ No heartbeat — marketplace never generates DTUs, never mutates knowledge
 }
 startHeartbeat();
 
@@ -25972,6 +26032,7 @@ process.on("SIGINT", () => {
   console.log("\nShutting down Concord…");
   if (heartbeatTimer) clearInterval(heartbeatTimer);
   if (weeklyTimer) clearInterval(weeklyTimer);
+  if (globalTickTimer) clearInterval(globalTickTimer);
   server.close(() => process.exit(0));
 })
 // ---- OrganMaturationKernel + Growth OS (v2 upgrade) ----

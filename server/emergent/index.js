@@ -267,7 +267,22 @@ import {
   getFailureRates, getActionSlotMetrics,
 } from "./action-slots.js";
 
-const EMERGENT_VERSION = "5.1.0";
+// ── Scope Separation (Global / Marketplace / Local) ─────────────────────────
+
+import {
+  SCOPES, ALL_SCOPES, DTU_CLASSES, ALL_DTU_CLASSES,
+  HEARTBEAT_CONFIG,
+  checkInfluence, isValidScope, isUpwardPromotion,
+  ensureScopeState, assignScope, getDtuScope,
+  validateGlobalDtu, validateMarketplaceListing,
+  promoteDtu,
+  gateCreateDtu, gateHeartbeatOp, gateMarketplaceAnalytics,
+  recordMarketplaceAnalytics, runGlobalTick,
+  listDtusByScope, getPromotionHistory, getOverrideLog,
+  getMarketplaceAnalytics, getScopeMetrics,
+} from "./scope-separation.js";
+
+const EMERGENT_VERSION = "5.2.0";
 
 /**
  * Initialize the Emergent Agent Governance system.
@@ -1265,6 +1280,100 @@ function init({ register, STATE, helpers }) {
   }, { description: "Get action slot system metrics", public: true });
 
   // ══════════════════════════════════════════════════════════════════════════
+  // SCOPE SEPARATION (Global / Marketplace / Local)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // Initialize scope state
+  ensureScopeState(STATE);
+
+  register("emergent", "scope.checkInfluence", (_ctx, input = {}) => {
+    return { ok: true, ...checkInfluence(input.sourceScope, input.targetScope) };
+  }, { description: "Check if influence is allowed between scopes", public: true });
+
+  register("emergent", "scope.validate", (_ctx, input = {}) => {
+    return { ok: true, valid: isValidScope(input.scope), scope: input.scope };
+  }, { description: "Validate a scope value", public: true });
+
+  register("emergent", "scope.assign", (_ctx, input = {}) => {
+    const dtu = STATE.dtus.get(input.dtuId);
+    if (!dtu) return { ok: false, error: "dtu_not_found" };
+    const scope = input.scope || SCOPES.LOCAL;
+    if (isUpwardPromotion(getDtuScope(dtu), scope)) {
+      return { ok: false, error: "use_scope.promote_for_upward_movement" };
+    }
+    assignScope(dtu, scope);
+    dtu.updatedAt = new Date().toISOString();
+    return { ok: true, dtuId: input.dtuId, scope: dtu.scope };
+  }, { description: "Assign scope to a DTU (downward or same only)", public: false });
+
+  register("emergent", "scope.get", (_ctx, input = {}) => {
+    const dtu = STATE.dtus.get(input.dtuId);
+    if (!dtu) return { ok: false, error: "dtu_not_found" };
+    return { ok: true, dtuId: input.dtuId, scope: getDtuScope(dtu) };
+  }, { description: "Get the scope of a DTU", public: true });
+
+  register("emergent", "scope.promote", (_ctx, input = {}) => {
+    return promoteDtu(STATE, input.dtuId, input.targetScope, {
+      actorId: input.actorId || _ctx?.actor?.id,
+      override: input.override,
+      verified: input.verified,
+      reason: input.reason,
+    });
+  }, { description: "Promote a DTU to a higher scope (requires author intent + council)", public: false });
+
+  register("emergent", "scope.validateGlobal", (_ctx, input = {}) => {
+    const dtu = input.dtu || STATE.dtus.get(input.dtuId);
+    if (!dtu) return { ok: false, error: "dtu_not_found" };
+    return validateGlobalDtu(dtu);
+  }, { description: "Validate a DTU against Global scope requirements", public: true });
+
+  register("emergent", "scope.validateMarketplace", (_ctx, input = {}) => {
+    const dtu = input.dtu || STATE.dtus.get(input.dtuId);
+    if (!dtu) return { ok: false, error: "dtu_not_found" };
+    return validateMarketplaceListing(dtu, input.listing || {});
+  }, { description: "Validate a DTU for marketplace listing", public: true });
+
+  register("emergent", "scope.gateCreate", (_ctx, input = {}) => {
+    return gateCreateDtu(input.scope || SCOPES.LOCAL, input);
+  }, { description: "Check if DTU creation is allowed in scope", public: true });
+
+  register("emergent", "scope.gateHeartbeat", (_ctx, input = {}) => {
+    return gateHeartbeatOp(input.scope, input.operation);
+  }, { description: "Check if heartbeat operation is allowed in scope", public: true });
+
+  register("emergent", "scope.gateMarketplace", (_ctx, input = {}) => {
+    return gateMarketplaceAnalytics(input.operation);
+  }, { description: "Check if marketplace operation is allowed", public: true });
+
+  register("emergent", "scope.recordAnalytics", (_ctx, input = {}) => {
+    return recordMarketplaceAnalytics(STATE, input.eventType, input.payload || {});
+  }, { description: "Record marketplace analytics event", public: false });
+
+  register("emergent", "scope.globalTick", (_ctx) => {
+    return runGlobalTick(STATE);
+  }, { description: "Run the Global scope tick (slow, deliberate synthesis)", public: false });
+
+  register("emergent", "scope.listByScope", (_ctx, input = {}) => {
+    return listDtusByScope(STATE, input.scope, input);
+  }, { description: "List DTUs filtered by scope", public: true });
+
+  register("emergent", "scope.promotionHistory", (_ctx, input = {}) => {
+    return getPromotionHistory(STATE, input.dtuId);
+  }, { description: "Get promotion history for a DTU", public: true });
+
+  register("emergent", "scope.overrideLog", (_ctx, input = {}) => {
+    return getOverrideLog(STATE, input);
+  }, { description: "Get founder override audit log", public: true });
+
+  register("emergent", "scope.marketplaceAnalytics", (_ctx, input = {}) => {
+    return getMarketplaceAnalytics(STATE, input);
+  }, { description: "Get marketplace analytics data", public: true });
+
+  register("emergent", "scope.metrics", (_ctx) => {
+    return getScopeMetrics(STATE);
+  }, { description: "Get scope separation metrics", public: true });
+
+  // ══════════════════════════════════════════════════════════════════════════
   // AUDIT / STATUS
   // ══════════════════════════════════════════════════════════════════════════
 
@@ -1346,6 +1455,10 @@ function init({ register, STATE, helpers }) {
       // Action Slots additions
       slotPositions: ALL_SLOT_POSITIONS,
       resultStates: ALL_RESULT_STATES,
+      // Scope Separation additions
+      scopes: ALL_SCOPES,
+      dtuClasses: ALL_DTU_CLASSES,
+      heartbeatConfig: HEARTBEAT_CONFIG,
     };
   }, { description: "Get emergent system schema", public: true });
 
@@ -1353,13 +1466,13 @@ function init({ register, STATE, helpers }) {
   getConstitutionStore(STATE);
 
   if (helpers?.log) {
-    helpers.log("emergent.init", `Emergent Agent Governance v${EMERGENT_VERSION} initialized (stages 1-9 + hardening + action slots)`);
+    helpers.log("emergent.init", `Emergent Agent Governance v${EMERGENT_VERSION} initialized (stages 1-9 + hardening + action slots + scope separation)`);
   }
 
   return {
     ok: true,
     version: EMERGENT_VERSION,
-    macroCount: 223,
+    macroCount: 241,
   };
 }
 
