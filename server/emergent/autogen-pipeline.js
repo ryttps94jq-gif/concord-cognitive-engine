@@ -24,6 +24,7 @@
  */
 
 import crypto from "node:crypto";
+import { runEmpiricalGates } from "./empirical-gates.js";
 
 // ── Intent Types ─────────────────────────────────────────────────────────────
 
@@ -468,6 +469,17 @@ export function criticPhase(candidate, pack) {
     issues.push({ severity: "warning", rule: "conflicts_not_acknowledged" });
   }
 
+  // ── Empirical Gates (math / units / physical constants) ──────────────────
+  const empirical = runEmpiricalGates(candidate);
+  for (const ei of empirical.issues) {
+    issues.push({
+      severity: ei.severity,
+      rule: `empirical.${ei.gate}.${ei.rule}`,
+      detail: ei.detail,
+      gate: ei.gate,
+    });
+  }
+
   const hasCritical = issues.some(i => i.severity === "critical");
   const needsEscalation = hasCritical || unsupported.length > 3;
 
@@ -476,6 +488,7 @@ export function criticPhase(candidate, pack) {
     issues,
     hasCritical,
     needsEscalation,
+    empiricalStats: empirical.stats,
     escalationReason: needsEscalation
       ? (hasCritical ? ESCALATION_REASONS.INSUFFICIENT_SYNTHESIS : ESCALATION_REASONS.UNRESOLVABLE_CONFLICTS)
       : null,
@@ -823,6 +836,7 @@ export async function runPipeline(STATE, opts = {}) {
     issueCount: criticResult.issues.length,
     hasCritical: criticResult.hasCritical,
     issues: criticResult.issues,
+    empiricalStats: criticResult.empiricalStats,
   };
 
   //   Synthesizer
