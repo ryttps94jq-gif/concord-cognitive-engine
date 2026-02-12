@@ -306,7 +306,19 @@ import {
   getMarketplaceAnalytics, getScopeMetrics,
 } from "./scope-separation.js";
 
-const EMERGENT_VERSION = "5.4.0";
+// ── Capability Bridge (Cross-System Integration) ─────────────────────────────
+
+import {
+  autoHypothesisFromConflicts,
+  getPipelineStrategyHints, recordPipelineOutcomeToMetaLearning,
+  dedupGate, scanRecentDuplicates,
+  runBeaconCheck,
+  lensCheckScope, lensValidateEmpirically,
+  runHeartbeatBridgeTick, ensureBaselineStrategies,
+  getCapabilityBridgeInfo,
+} from "./capability-bridge.js";
+
+const EMERGENT_VERSION = "5.5.0";
 
 /**
  * Initialize the Emergent Agent Governance system.
@@ -1509,6 +1521,55 @@ function init({ register, STATE, helpers }) {
   }, { description: "Get empirical gate capabilities and supported units", public: true });
 
   // ══════════════════════════════════════════════════════════════════════════
+  // CAPABILITY BRIDGE (Cross-System Integration)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // Bootstrap meta-learning strategies for pipeline domains
+  ensureBaselineStrategies(STATE);
+
+  register("emergent", "bridge.hypothesisFromConflicts", (_ctx, input = {}) => {
+    return autoHypothesisFromConflicts(STATE, input.conflictPairs || [], input);
+  }, { description: "Auto-propose hypotheses from autogen conflict pairs", public: false });
+
+  register("emergent", "bridge.strategyHints", (_ctx, input = {}) => {
+    return getPipelineStrategyHints(STATE, input.domain || "autogen");
+  }, { description: "Get meta-learning strategy hints for pipeline", public: true });
+
+  register("emergent", "bridge.recordOutcome", (_ctx, input = {}) => {
+    return recordPipelineOutcomeToMetaLearning(STATE, input.strategyId, input.success, input.performance ?? 0.5);
+  }, { description: "Record pipeline outcome to meta-learning", public: false });
+
+  register("emergent", "bridge.dedupGate", (_ctx, input = {}) => {
+    if (!input.candidate) return { ok: false, error: "candidate_required" };
+    return dedupGate(STATE, input.candidate, input);
+  }, { description: "Check candidate against existing DTUs for duplicates", public: true });
+
+  register("emergent", "bridge.dedupScan", (_ctx, input = {}) => {
+    return scanRecentDuplicates(STATE, input);
+  }, { description: "Scan recent DTUs for near-duplicates", public: true });
+
+  register("emergent", "bridge.beacon", (_ctx) => {
+    return runBeaconCheck(STATE);
+  }, { description: "Run beacon/continuity check", public: true });
+
+  register("emergent", "bridge.lensScope", (_ctx, input = {}) => {
+    return lensCheckScope(input.artifact, input.operation || "create", { ...input, STATE });
+  }, { description: "Check lens artifact scope compliance", public: true });
+
+  register("emergent", "bridge.lensValidate", (_ctx, input = {}) => {
+    if (!input.artifact) return { ok: false, error: "artifact_required" };
+    return lensValidateEmpirically(input.artifact);
+  }, { description: "Run empirical gates on lens artifact claims", public: true });
+
+  register("emergent", "bridge.heartbeatTick", (_ctx, input = {}) => {
+    return runHeartbeatBridgeTick(STATE, input);
+  }, { description: "Run all bridge checks in one heartbeat cycle", public: false });
+
+  register("emergent", "bridge.info", (_ctx) => {
+    return getCapabilityBridgeInfo();
+  }, { description: "Get capability bridge information", public: true });
+
+  // ══════════════════════════════════════════════════════════════════════════
   // AUDIT / STATUS
   // ══════════════════════════════════════════════════════════════════════════
 
@@ -1601,6 +1662,8 @@ function init({ register, STATE, helpers }) {
       scopes: ALL_SCOPES,
       dtuClasses: ALL_DTU_CLASSES,
       heartbeatConfig: HEARTBEAT_CONFIG,
+      // Capability Bridge additions
+      bridgeModules: ["hypothesis_auto_propose", "metalearning_strategy", "dedup_gate", "dedup_scan", "beacon_check", "lens_scope", "lens_empirical", "heartbeat_bridge"],
     };
   }, { description: "Get emergent system schema", public: true });
 
@@ -1608,13 +1671,13 @@ function init({ register, STATE, helpers }) {
   getConstitutionStore(STATE);
 
   if (helpers?.log) {
-    helpers.log("emergent.init", `Emergent Agent Governance v${EMERGENT_VERSION} initialized (stages 1-9 + hardening + action slots + scope separation + autogen pipeline + empirical gates)`);
+    helpers.log("emergent.init", `Emergent Agent Governance v${EMERGENT_VERSION} initialized (stages 1-9 + hardening + action slots + scope separation + autogen pipeline + empirical gates + capability bridge)`);
   }
 
   return {
     ok: true,
     version: EMERGENT_VERSION,
-    macroCount: 259,
+    macroCount: 270,
   };
 }
 

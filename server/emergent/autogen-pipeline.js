@@ -813,6 +813,18 @@ export async function runPipeline(STATE, opts = {}) {
   trace.stages.targetSelection = { intent: intent.intent, score: intent.score, signal: intent.signal };
   ps.metrics.byIntent[intent.intent] = (ps.metrics.byIntent[intent.intent] || 0) + 1;
 
+  // Stash conflict pairs for capability bridge hypothesis engine
+  if (intent.intent === "resolve_conflicts" && intent.signal?.pairs?.length) {
+    if (!ps._recentConflicts) ps._recentConflicts = [];
+    for (const p of intent.signal.pairs) {
+      ps._recentConflicts.push(p);
+    }
+    // Keep bounded
+    if (ps._recentConflicts.length > 20) {
+      ps._recentConflicts = ps._recentConflicts.slice(-20);
+    }
+  }
+
   // Stage 1: Retrieval Pack
   const pack = buildRetrievalPack(STATE, intent);
   trace.stages.retrievalPack = pack.stats;
