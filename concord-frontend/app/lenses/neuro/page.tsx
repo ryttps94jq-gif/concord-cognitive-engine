@@ -19,9 +19,9 @@ interface NeuronData {
   type: 'input' | 'hidden' | 'output';
 }
 
-const SEED_NETWORKS = [];
+const SEED_NETWORKS: { title: string; data: Record<string, unknown> }[] = [];
 
-const SEED_NEURONS = [];
+const SEED_NEURONS: { title: string; data: Record<string, unknown> }[] = [];
 
 export default function NeuroLensPage() {
   useLensNav('neuro');

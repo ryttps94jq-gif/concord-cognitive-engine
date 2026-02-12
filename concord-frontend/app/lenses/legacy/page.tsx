@@ -12,7 +12,7 @@ interface MilestoneData {
   confidence: number;
 }
 
-const SEED_MILESTONES = [];
+const SEED_MILESTONES: { title: string; data: Record<string, unknown> }[] = [];
 
 export default function LegacyLensPage() {
   useLensNav('legacy');
