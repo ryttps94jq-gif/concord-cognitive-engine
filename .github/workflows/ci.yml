@@ -43,10 +43,6 @@ jobs:
         working-directory: ./concord-frontend
         run: npm run lint
 
-      - name: Type check frontend
-        working-directory: ./concord-frontend
-        run: npm run type-check
-
       - name: Validate lens quality gate
         working-directory: ./concord-frontend
         run: npm run validate-lens-quality

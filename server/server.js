@@ -19512,9 +19512,6 @@ _SCHEMA_REGISTRY.register("accounting", "invoice", 2, (data) => {
   return data;
 });
 
-// Patch lens.get to apply lazy migration
-const _origLensGet = LENS_ACTIONS.get("lens.get");
-
 // ============================================================================
 // FEDERATION TRUST MODEL (Tier 3)
 // ============================================================================
