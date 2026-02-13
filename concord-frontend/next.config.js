@@ -31,6 +31,14 @@ const nextConfig = {
   turbopack: {
     root: __dirname,
   },
+  typescript: {
+    // Keep strict checks by default; allow CI Docker build to opt out explicitly.
+    ignoreBuildErrors: process.env.CI_SKIP_TYPECHECK === '1',
+  },
+  eslint: {
+    // Keep strict checks by default; allow CI Docker build to opt out explicitly.
+    ignoreDuringBuilds: process.env.CI_SKIP_LINT_IN_BUILD === '1',
+  },
   // WebXR opts for AR lens
   webpack: (config, { isServer }) => {
     if (!isServer) {
