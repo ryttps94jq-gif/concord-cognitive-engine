@@ -2,7 +2,7 @@
 // Atomic transfer engine. All writes happen inside a single SQLite transaction.
 // If any step fails, nothing commits — no partial state.
 
-import { recordTransactionBatch, generateTxId } from "./ledger.js";
+import { recordTransactionBatch, generateTxId, checkRefIdProcessed } from "./ledger.js";
 import { calculateFee, PLATFORM_ACCOUNT_ID } from "./fees.js";
 import { validateTransfer, validateAmount, validateBalance } from "./validators.js";
 
@@ -20,7 +20,13 @@ import { validateTransfer, validateAmount, validateBalance } from "./validators.
  *
  * @returns {{ ok: boolean, transactions: array, error?: string }}
  */
-export function executeTransfer(db, { from, to, amount, type = "TRANSFER", metadata = {}, requestId, ip }) {
+export function executeTransfer(db, { from, to, amount, type = "TRANSFER", metadata = {}, refId, requestId, ip }) {
+  // Idempotency: if refId provided, check if already processed
+  if (refId) {
+    const existing = checkRefIdProcessed(db, refId);
+    if (existing.exists) return { ok: true, idempotent: true, entries: existing.entries };
+  }
+
   // 1. Validate
   const validation = validateTransfer(db, { from, to, amount });
   if (!validation.ok) return validation;
@@ -42,6 +48,7 @@ export function executeTransfer(db, { from, to, amount, type = "TRANSFER", metad
     fee,
     net,
     status: "complete",
+    refId,
     metadata: { ...metadata, batchId, role: "debit" },
     requestId,
     ip,
@@ -57,6 +64,7 @@ export function executeTransfer(db, { from, to, amount, type = "TRANSFER", metad
     fee: 0,
     net,
     status: "complete",
+    refId,
     metadata: { ...metadata, batchId, role: "credit" },
     requestId,
     ip,
@@ -73,19 +81,25 @@ export function executeTransfer(db, { from, to, amount, type = "TRANSFER", metad
       fee: 0,
       net: fee,
       status: "complete",
+      refId,
       metadata: { ...metadata, batchId, role: "fee", sourceType: type },
       requestId,
       ip,
     });
   }
 
-  // Execute atomically
+  // Execute atomically (with idempotency guard inside transaction)
   const doTransfer = db.transaction(() => {
+    if (refId) {
+      const dupe = checkRefIdProcessed(db, refId);
+      if (dupe.exists) return { idempotent: true, entries: dupe.entries };
+    }
     return recordTransactionBatch(db, entries);
   });
 
   try {
     const results = doTransfer();
+    if (results.idempotent) return { ok: true, idempotent: true, entries: results.entries };
     return {
       ok: true,
       batchId,
@@ -97,6 +111,9 @@ export function executeTransfer(db, { from, to, amount, type = "TRANSFER", metad
       to,
     };
   } catch (err) {
+    if (err.message?.includes('UNIQUE constraint') && refId) {
+      return { ok: true, idempotent: true };
+    }
     return { ok: false, error: "transaction_failed", detail: err.message };
   }
 }
@@ -105,7 +122,13 @@ export function executeTransfer(db, { from, to, amount, type = "TRANSFER", metad
  * Execute a token purchase (external money → tokens).
  * No sender — tokens are minted to the buyer, with a fee to platform.
  */
-export function executePurchase(db, { userId, amount, metadata = {}, requestId, ip }) {
+export function executePurchase(db, { userId, amount, metadata = {}, refId, requestId, ip }) {
+  // Idempotency: if refId provided, check if already processed
+  if (refId) {
+    const existing = checkRefIdProcessed(db, refId);
+    if (existing.exists) return { ok: true, idempotent: true, entries: existing.entries };
+  }
+
   const amountCheck = validateAmount(amount);
   if (!amountCheck.ok) return amountCheck;
 
@@ -125,6 +148,7 @@ export function executePurchase(db, { userId, amount, metadata = {}, requestId, 
       fee: 0,
       net,
       status: "complete",
+      refId,
       metadata: { ...metadata, batchId, role: "credit", grossAmount: amount },
       requestId,
       ip,
@@ -142,6 +166,7 @@ export function executePurchase(db, { userId, amount, metadata = {}, requestId, 
       fee: 0,
       net: fee,
       status: "complete",
+      refId,
       metadata: { ...metadata, batchId, role: "fee", sourceType: "TOKEN_PURCHASE" },
       requestId,
       ip,
@@ -149,13 +174,21 @@ export function executePurchase(db, { userId, amount, metadata = {}, requestId, 
   }
 
   const doPurchase = db.transaction(() => {
+    if (refId) {
+      const dupe = checkRefIdProcessed(db, refId);
+      if (dupe.exists) return { idempotent: true, entries: dupe.entries };
+    }
     return recordTransactionBatch(db, entries);
   });
 
   try {
     const results = doPurchase();
+    if (results.idempotent) return { ok: true, idempotent: true, entries: results.entries };
     return { ok: true, batchId, transactions: results, amount, fee, net };
   } catch (err) {
+    if (err.message?.includes('UNIQUE constraint') && refId) {
+      return { ok: true, idempotent: true };
+    }
     return { ok: false, error: "purchase_failed", detail: err.message };
   }
 }
@@ -163,7 +196,13 @@ export function executePurchase(db, { userId, amount, metadata = {}, requestId, 
 /**
  * Execute a marketplace purchase: buyer pays seller, platform takes fee.
  */
-export function executeMarketplacePurchase(db, { buyerId, sellerId, amount, listingId, metadata = {}, requestId, ip }) {
+export function executeMarketplacePurchase(db, { buyerId, sellerId, amount, listingId, metadata = {}, refId, requestId, ip }) {
+  // Idempotency: if refId provided, check if already processed
+  if (refId) {
+    const existing = checkRefIdProcessed(db, refId);
+    if (existing.exists) return { ok: true, idempotent: true, entries: existing.entries };
+  }
+
   // Validate buyer balance
   const balCheck = validateBalance(db, buyerId, amount);
   if (!balCheck.ok) return balCheck;
@@ -182,6 +221,7 @@ export function executeMarketplacePurchase(db, { buyerId, sellerId, amount, list
       fee,
       net,
       status: "complete",
+      refId,
       metadata: { ...metadata, batchId, listingId, role: "debit" },
       requestId,
       ip,
@@ -196,6 +236,7 @@ export function executeMarketplacePurchase(db, { buyerId, sellerId, amount, list
       fee: 0,
       net,
       status: "complete",
+      refId,
       metadata: { ...metadata, batchId, listingId, role: "credit" },
       requestId,
       ip,
@@ -213,6 +254,7 @@ export function executeMarketplacePurchase(db, { buyerId, sellerId, amount, list
       fee: 0,
       net: fee,
       status: "complete",
+      refId,
       metadata: { ...metadata, batchId, listingId, role: "fee", sourceType: "MARKETPLACE_PURCHASE" },
       requestId,
       ip,
@@ -220,13 +262,21 @@ export function executeMarketplacePurchase(db, { buyerId, sellerId, amount, list
   }
 
   const doMarketplace = db.transaction(() => {
+    if (refId) {
+      const dupe = checkRefIdProcessed(db, refId);
+      if (dupe.exists) return { idempotent: true, entries: dupe.entries };
+    }
     return recordTransactionBatch(db, entries);
   });
 
   try {
     const results = doMarketplace();
+    if (results.idempotent) return { ok: true, idempotent: true, entries: results.entries };
     return { ok: true, batchId, transactions: results, amount, fee, net, buyerId, sellerId, listingId };
   } catch (err) {
+    if (err.message?.includes('UNIQUE constraint') && refId) {
+      return { ok: true, idempotent: true };
+    }
     return { ok: false, error: "marketplace_purchase_failed", detail: err.message };
   }
 }

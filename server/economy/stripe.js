@@ -161,7 +161,7 @@ export async function handleWebhook(db, { rawBody, signature, requestId, ip }) {
       if (purpose === "TOKEN_PURCHASE" && userId && tokens) {
         const tokenCount = parseInt(tokens, 10);
         if (tokenCount > 0) {
-          // Credit tokens through the ledger (atomic)
+          // Credit tokens through the ledger (atomic, idempotent via refId)
           const result = executePurchase(db, {
             userId,
             amount: tokenCount,
@@ -170,6 +170,7 @@ export async function handleWebhook(db, { rawBody, signature, requestId, ip }) {
               stripeSessionId: session.id,
               stripePaymentIntentId: session.payment_intent,
             },
+            refId: `stripe_checkout:${event.id}`,
             requestId,
             ip,
           });

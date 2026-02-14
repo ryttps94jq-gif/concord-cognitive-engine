@@ -13,54 +13,42 @@ function nowISO() {
 }
 
 /**
+ * Check whether a ref_id has already been processed in the ledger.
+ * Used for idempotency: if the ref_id exists, the operation was already done.
+ * @param {object} db — better-sqlite3 instance
+ * @param {string} refId — the idempotency reference ID
+ * @returns {{ exists: boolean, entries?: object[] }}
+ */
+export function checkRefIdProcessed(db, refId) {
+  if (!refId) return { exists: false };
+  try {
+    const rows = db.prepare(
+      "SELECT id, type, amount, net, status, created_at FROM economy_ledger WHERE ref_id = ?"
+    ).all(refId);
+    if (rows.length > 0) return { exists: true, entries: rows };
+  } catch {
+    // ref_id column may not exist yet (pre-migration); treat as not processed
+  }
+  return { exists: false };
+}
+
+/**
  * Record a single ledger transaction.
  * @param {object} db — better-sqlite3 instance
- * @param {object} tx — transaction data
+ * @param {object} tx — transaction data (optional: tx.refId for idempotency)
  * @returns {{ id: string, createdAt: string }}
  */
 export function recordTransaction(db, tx) {
   const id = tx.id || uid();
   const createdAt = nowISO();
 
-  db.prepare(`
-    INSERT INTO economy_ledger
-      (id, type, from_user_id, to_user_id, amount, fee, net, status, metadata_json, request_id, ip, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    id,
-    tx.type,
-    tx.from || null,
-    tx.to || null,
-    tx.amount,
-    tx.fee ?? 0,
-    tx.net ?? (tx.amount - (tx.fee ?? 0)),
-    tx.status || "complete",
-    JSON.stringify(tx.metadata || {}),
-    tx.requestId || null,
-    tx.ip || null,
-    createdAt,
-  );
-
-  return { id, createdAt };
-}
-
-/**
- * Record multiple ledger entries atomically inside an existing transaction.
- * Caller must wrap this in db.transaction().
- */
-export function recordTransactionBatch(db, entries) {
-  const stmt = db.prepare(`
-    INSERT INTO economy_ledger
-      (id, type, from_user_id, to_user_id, amount, fee, net, status, metadata_json, request_id, ip, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  const now = nowISO();
-  const results = [];
-
-  for (const tx of entries) {
-    const id = tx.id || uid();
-    stmt.run(
+  // Try inserting with ref_id column; fall back to without if column doesn't exist yet
+  try {
+    db.prepare(`
+      INSERT INTO economy_ledger
+        (id, type, from_user_id, to_user_id, amount, fee, net, status, metadata_json, request_id, ip, created_at, ref_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
       id,
       tx.type,
       tx.from || null,
@@ -72,8 +60,78 @@ export function recordTransactionBatch(db, entries) {
       JSON.stringify(tx.metadata || {}),
       tx.requestId || null,
       tx.ip || null,
-      now,
+      createdAt,
+      tx.refId || null,
     );
+  } catch (e) {
+    if (e.message?.includes('ref_id')) {
+      // Fallback: column doesn't exist yet
+      db.prepare(`
+        INSERT INTO economy_ledger
+          (id, type, from_user_id, to_user_id, amount, fee, net, status, metadata_json, request_id, ip, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id, tx.type, tx.from || null, tx.to || null, tx.amount,
+        tx.fee ?? 0, tx.net ?? (tx.amount - (tx.fee ?? 0)),
+        tx.status || "complete", JSON.stringify(tx.metadata || {}),
+        tx.requestId || null, tx.ip || null, createdAt,
+      );
+    } else {
+      throw e;
+    }
+  }
+
+  return { id, createdAt };
+}
+
+/**
+ * Record multiple ledger entries atomically inside an existing transaction.
+ * Caller must wrap this in db.transaction().
+ * Each entry can optionally include a refId for idempotency tracking.
+ */
+export function recordTransactionBatch(db, entries) {
+  const now = nowISO();
+  const results = [];
+
+  // Try with ref_id column first; fall back if it doesn't exist
+  let useRefId = true;
+  let stmt;
+  try {
+    stmt = db.prepare(`
+      INSERT INTO economy_ledger
+        (id, type, from_user_id, to_user_id, amount, fee, net, status, metadata_json, request_id, ip, created_at, ref_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    // Test the statement is valid
+    stmt.bind(
+      "test", "TRANSFER", null, null, 1, 0, 1, "complete", "{}", null, null, now, null
+    );
+  } catch {
+    useRefId = false;
+    stmt = db.prepare(`
+      INSERT INTO economy_ledger
+        (id, type, from_user_id, to_user_id, amount, fee, net, status, metadata_json, request_id, ip, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+  }
+
+  for (const tx of entries) {
+    const id = tx.id || uid();
+    if (useRefId) {
+      stmt.run(
+        id, tx.type, tx.from || null, tx.to || null, tx.amount,
+        tx.fee ?? 0, tx.net ?? (tx.amount - (tx.fee ?? 0)),
+        tx.status || "complete", JSON.stringify(tx.metadata || {}),
+        tx.requestId || null, tx.ip || null, now, tx.refId || null,
+      );
+    } else {
+      stmt.run(
+        id, tx.type, tx.from || null, tx.to || null, tx.amount,
+        tx.fee ?? 0, tx.net ?? (tx.amount - (tx.fee ?? 0)),
+        tx.status || "complete", JSON.stringify(tx.metadata || {}),
+        tx.requestId || null, tx.ip || null, now,
+      );
+    }
     results.push({ id, createdAt: now });
   }
 

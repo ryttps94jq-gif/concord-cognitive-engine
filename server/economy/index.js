@@ -17,7 +17,7 @@ export function registerEconomyEndpoints(app, db) {
 export { getBalance, hasSufficientBalance } from "./balances.js";
 export { calculateFee, FEES, PLATFORM_ACCOUNT_ID } from "./fees.js";
 export { executeTransfer, executePurchase, executeMarketplacePurchase, executeReversal } from "./transfer.js";
-export { recordTransaction, recordTransactionBatch, getTransactions, generateTxId } from "./ledger.js";
+export { recordTransaction, recordTransactionBatch, getTransactions, generateTxId, checkRefIdProcessed } from "./ledger.js";
 export { requestWithdrawal, processWithdrawal } from "./withdrawals.js";
 export { adminOnly, authRequired, requireAdmin, requireUser } from "./guards.js";
 export { economyAudit, auditCtx } from "./audit.js";

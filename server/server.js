@@ -50,6 +50,7 @@ import {
   PLATFORM_ACCOUNT_ID,
   recordTransactionBatch,
   generateTxId,
+  checkRefIdProcessed,
   validateBalance as economyValidateBalance,
   economyAudit,
   auditCtx,
@@ -33682,32 +33683,62 @@ function getWallet(odId) {
   return STATE.economic.wallets.get(odId);
 }
 
-function creditWallet(odId, amount, reason = '') {
+function creditWallet(odId, amount, reason = '', refId = null) {
+  // Idempotency: if refId provided, check if already processed
+  if (db && refId) {
+    const existing = checkRefIdProcessed(db, refId);
+    if (existing.exists) return getWallet(odId); // already done, no-op
+  }
+
   const wallet = getWallet(odId);
   wallet.balance += amount;
   wallet.tokensEarned += amount;
   wallet.updatedAt = Date.now();
-  logTransaction({ type: 'credit', odId, amount, reason, balance: wallet.balance });
+  logTransaction({ type: 'credit', odId, amount, reason, balance: wallet.balance, refId });
   // Bridge to economy ledger if available
   if (db && amount > 0) {
     try {
-      const { recordTransaction } = require && false ? {} : { recordTransaction: null }; // avoid circular; use direct import
       db.prepare(`
-        INSERT INTO economy_ledger (id, type, from_user_id, to_user_id, amount, fee, net, status, metadata_json, request_id, ip, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO economy_ledger (id, type, from_user_id, to_user_id, amount, fee, net, status, metadata_json, request_id, ip, created_at, ref_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         generateTxId(), 'TRANSFER', null, odId, amount, 0, amount, 'complete',
-        JSON.stringify({ source: 'economic_wallet', reason, bridged: true }), null, null,
-        new Date().toISOString().replace('T', ' ').replace('Z', '')
+        JSON.stringify({ source: 'economic_wallet', reason, bridged: true }),
+        null, null, new Date().toISOString().replace('T', ' ').replace('Z', ''),
+        refId
       );
     } catch (e) {
-      console.error('[Economic→Ledger] Credit bridge failed:', e.message);
+      // If ref_id column doesn't exist yet (pre-migration), fall back
+      if (e.message?.includes('ref_id')) {
+        try {
+          db.prepare(`
+            INSERT INTO economy_ledger (id, type, from_user_id, to_user_id, amount, fee, net, status, metadata_json, request_id, ip, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            generateTxId(), 'TRANSFER', null, odId, amount, 0, amount, 'complete',
+            JSON.stringify({ source: 'economic_wallet', reason, bridged: true }),
+            null, null, new Date().toISOString().replace('T', ' ').replace('Z', '')
+          );
+        } catch (e2) {
+          console.error('[Economic→Ledger] Credit bridge failed (fallback):', e2.message);
+        }
+      } else if (e.message?.includes('UNIQUE constraint')) {
+        // Idempotent — already recorded
+      } else {
+        console.error('[Economic→Ledger] Credit bridge failed:', e.message);
+      }
     }
   }
   return wallet;
 }
 
-function debitWallet(odId, amount, reason = '') {
+function debitWallet(odId, amount, reason = '', refId = null) {
+  // Idempotency: if refId provided, check if already processed
+  if (db && refId) {
+    const existing = checkRefIdProcessed(db, refId);
+    if (existing.exists) return getWallet(odId); // already done, no-op
+  }
+
   const wallet = getWallet(odId);
   if (wallet.balance < amount) {
     throw new Error(`Insufficient balance: have ${wallet.balance}, need ${amount}`);
@@ -33715,20 +33746,38 @@ function debitWallet(odId, amount, reason = '') {
   wallet.balance -= amount;
   wallet.tokensSpent += amount;
   wallet.updatedAt = Date.now();
-  logTransaction({ type: 'debit', odId, amount, reason, balance: wallet.balance });
+  logTransaction({ type: 'debit', odId, amount, reason, balance: wallet.balance, refId });
   // Bridge to economy ledger if available
   if (db && amount > 0) {
     try {
       db.prepare(`
-        INSERT INTO economy_ledger (id, type, from_user_id, to_user_id, amount, fee, net, status, metadata_json, request_id, ip, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO economy_ledger (id, type, from_user_id, to_user_id, amount, fee, net, status, metadata_json, request_id, ip, created_at, ref_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         generateTxId(), 'TRANSFER', odId, null, amount, 0, amount, 'complete',
-        JSON.stringify({ source: 'economic_wallet', reason, bridged: true }), null, null,
-        new Date().toISOString().replace('T', ' ').replace('Z', '')
+        JSON.stringify({ source: 'economic_wallet', reason, bridged: true }),
+        null, null, new Date().toISOString().replace('T', ' ').replace('Z', ''),
+        refId
       );
     } catch (e) {
-      console.error('[Economic→Ledger] Debit bridge failed:', e.message);
+      if (e.message?.includes('ref_id')) {
+        try {
+          db.prepare(`
+            INSERT INTO economy_ledger (id, type, from_user_id, to_user_id, amount, fee, net, status, metadata_json, request_id, ip, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            generateTxId(), 'TRANSFER', odId, null, amount, 0, amount, 'complete',
+            JSON.stringify({ source: 'economic_wallet', reason, bridged: true }),
+            null, null, new Date().toISOString().replace('T', ' ').replace('Z', '')
+          );
+        } catch (e2) {
+          console.error('[Economic→Ledger] Debit bridge failed (fallback):', e2.message);
+        }
+      } else if (e.message?.includes('UNIQUE constraint')) {
+        // Idempotent — already recorded
+      } else {
+        console.error('[Economic→Ledger] Debit bridge failed:', e.message);
+      }
     }
   }
   return wallet;
@@ -34060,9 +34109,21 @@ app.patch('/api/economic/marketplace/listing/:listingId', (req, res) => {
 // Buy any asset
 app.post('/api/economic/marketplace/buy', (req, res) => {
   try {
-    const { odId, listingId } = req.body;
+    const { odId, listingId, purchaseId: clientPurchaseId } = req.body;
     if (!odId || !listingId) {
       return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    // Deterministic purchaseId for idempotency
+    const purchaseId = clientPurchaseId || `epur_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    const refId = `economic_purchase:${purchaseId}`;
+
+    // Idempotency check
+    if (db) {
+      const existing = checkRefIdProcessed(db, refId);
+      if (existing.exists) {
+        return res.json({ success: true, idempotent: true, purchaseId, message: 'Purchase already processed' });
+      }
     }
 
     ensureEconomicState();
@@ -34113,10 +34174,10 @@ app.post('/api/economic/marketplace/buy', (req, res) => {
     }
 
     // Debit buyer
-    debitWallet(odId, listing.price, `Purchase: ${listing.title}`);
+    debitWallet(odId, listing.price, `Purchase: ${listing.title}`, `${refId}:debit`);
 
     // Credit seller
-    creditWallet(listing.seller, creatorAmount, `Sale: ${listing.title}`);
+    creditWallet(listing.seller, creatorAmount, `Sale: ${listing.title}`, `${refId}:credit`);
 
     // Process royalty wheel (only for DTUs and other reference-able assets)
     if (royaltyAmount > 0 && listing.assetType === 'dtu') {
@@ -35783,8 +35844,31 @@ function computeCitationRoyaltyRate(usageCount) {
 app.post('/api/artistry/marketplace/purchase', (req, res) => {
   try {
     const art = ensureArtistryState();
-    const { buyerId, listingId, listingType, licenseType } = req.body;
+    const { buyerId, listingId, listingType, licenseType, purchaseId: clientPurchaseId } = req.body;
     if (!buyerId || !listingId) return res.status(400).json({ error: 'Missing buyerId or listingId' });
+
+    // ── Deterministic purchaseId ────────────────────────────────────────
+    // Client can send a purchaseId for idempotency; otherwise server generates one.
+    const purchaseId = clientPurchaseId || `pur_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    const refId = `purchase:${purchaseId}`;
+
+    // ── Idempotency check ───────────────────────────────────────────────
+    if (db) {
+      const existing = checkRefIdProcessed(db, refId);
+      if (existing.exists) {
+        // Already processed — return success with existing data
+        const existingLicense = Array.from(art.licenses.values()).find(
+          l => l.purchaseId === purchaseId
+        );
+        return res.json({
+          ok: true,
+          idempotent: true,
+          purchaseId,
+          license: existingLicense || null,
+          message: 'Purchase already processed',
+        });
+      }
+    }
 
     // ── Lookup listing ──────────────────────────────────────────────────
     const stores = { beat: art.beatStore, stems: art.stemStore, 'sample-pack': art.sampleStore, artwork: art.artStore };
@@ -35856,7 +35940,7 @@ app.post('/api/artistry/marketplace/purchase', (req, res) => {
       const sellerNet = Math.round((afterFee - totalRoyalties) * 100) / 100;
       const batchId = generateTxId();
 
-      // 4. Build all ledger entries atomically
+      // 4. Build all ledger entries atomically (all share the same refId for idempotency)
       const entries = [];
 
       // Debit: buyer pays full price
@@ -35869,10 +35953,11 @@ app.post('/api/artistry/marketplace/purchase', (req, res) => {
         fee: marketplaceFee,
         net: sellerNet,
         status: 'complete',
+        refId,
         metadata: {
           batchId, role: 'debit', listingId, listingType: listing.type,
           licenseType: licenseType || 'basic', source: 'artistry',
-          totalRoyalties, royaltyCount: royaltyEntries.length,
+          purchaseId, totalRoyalties, royaltyCount: royaltyEntries.length,
         },
       });
 
@@ -35886,7 +35971,8 @@ app.post('/api/artistry/marketplace/purchase', (req, res) => {
         fee: 0,
         net: sellerNet,
         status: 'complete',
-        metadata: { batchId, role: 'credit', listingId, source: 'artistry' },
+        refId,
+        metadata: { batchId, role: 'credit', listingId, source: 'artistry', purchaseId },
       });
 
       // Platform fee
@@ -35900,7 +35986,8 @@ app.post('/api/artistry/marketplace/purchase', (req, res) => {
           fee: 0,
           net: marketplaceFee,
           status: 'complete',
-          metadata: { batchId, role: 'fee', sourceType: 'MARKETPLACE_PURCHASE', listingId, source: 'artistry' },
+          refId,
+          metadata: { batchId, role: 'fee', sourceType: 'MARKETPLACE_PURCHASE', listingId, source: 'artistry', purchaseId },
         });
       }
 
@@ -35915,24 +36002,44 @@ app.post('/api/artistry/marketplace/purchase', (req, res) => {
           fee: 0,
           net: royalty.amount,
           status: 'complete',
+          refId,
           metadata: {
             batchId, role: 'citation_royalty', listingId,
             citedAssetId: royalty.citedId, citationSource: royalty.source,
             royaltyRate: royalty.rate, usageCount: royalty.usageCount,
-            source: 'artistry',
+            source: 'artistry', purchaseId,
           },
         });
       }
 
-      // 5. Execute atomically
+      // 5. Execute atomically — includes idempotency check inside the transaction
       const doSettlement = db.transaction(() => {
+        // Double-check inside transaction for race condition safety
+        const dupe = checkRefIdProcessed(db, refId);
+        if (dupe.exists) return { idempotent: true, entries: dupe.entries };
         return recordTransactionBatch(db, entries);
       });
 
       try {
         const txResults = doSettlement();
+
+        // If idempotent (already processed), return existing result
+        if (txResults.idempotent) {
+          const existingLicense = Array.from(art.licenses.values()).find(
+            l => l.purchaseId === purchaseId
+          );
+          return res.json({
+            ok: true,
+            idempotent: true,
+            purchaseId,
+            license: existingLicense || null,
+            message: 'Purchase already settled',
+          });
+        }
+
         settlement = {
           batchId,
+          purchaseId,
           transactions: txResults,
           price,
           marketplaceFee,
@@ -35944,6 +36051,19 @@ app.post('/api/artistry/marketplace/purchase', (req, res) => {
           })),
         };
       } catch (err) {
+        // Check if it's a UNIQUE constraint violation (duplicate ref_id) — treat as idempotent
+        if (err.message?.includes('UNIQUE constraint') && err.message?.includes('ref_id')) {
+          const existingLicense = Array.from(art.licenses.values()).find(
+            l => l.purchaseId === purchaseId
+          );
+          return res.json({
+            ok: true,
+            idempotent: true,
+            purchaseId,
+            license: existingLicense || null,
+            message: 'Purchase already settled (constraint)',
+          });
+        }
         console.error('[Artistry] Settlement failed:', err.message);
         return res.status(500).json({ error: 'settlement_failed', detail: err.message });
       }
@@ -35984,6 +36104,7 @@ app.post('/api/artistry/marketplace/purchase', (req, res) => {
       licenseType: licenseType || 'basic',
       price, terms: LICENSE_TYPES[licenseType || 'basic'] || LICENSE_TYPES.basic,
       status: 'active', purchasedAt: Date.now(),
+      purchaseId,
       settlementBatchId: settlement?.batchId || null,
     });
 
@@ -36002,10 +36123,12 @@ app.post('/api/artistry/marketplace/purchase', (req, res) => {
     // ── Response ────────────────────────────────────────────────────────
     res.json({
       ok: true,
+      purchaseId,
       license: art.licenses.get(licenseId),
       paid: price,
       settlement: settlement ? {
         batchId: settlement.batchId,
+        purchaseId,
         marketplaceFee: settlement.marketplaceFee,
         sellerNet: settlement.sellerNet,
         totalRoyalties: settlement.totalRoyalties,
