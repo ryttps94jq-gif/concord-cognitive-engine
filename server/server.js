@@ -54,6 +54,9 @@ import {
   validateBalance as economyValidateBalance,
   economyAudit,
   auditCtx,
+  createPurchase,
+  transitionPurchase,
+  recordSettlement,
 } from "./economy/index.js";
 
 // ---- Atlas + Platform Upgrade Imports (v2) ----
@@ -35884,14 +35887,39 @@ app.post('/api/artistry/marketplace/purchase', (req, res) => {
     if (!sellerId) return res.status(400).json({ error: 'Listing has no owner' });
     if (buyerId === sellerId) return res.status(400).json({ error: 'Cannot purchase your own listing' });
 
+    // ── State Machine: create purchase record ────────────────────────────
+    let purchaseRecord = null;
+    if (db) {
+      try {
+        purchaseRecord = createPurchase(db, {
+          purchaseId, buyerId, sellerId, listingId,
+          listingType: listingType || listing.type,
+          licenseType: licenseType || 'basic',
+          amount: price, source: 'artistry',
+        });
+      } catch (e) {
+        // If purchase_id already exists (idempotent retry), fetch existing
+        if (e.message?.includes('UNIQUE constraint')) {
+          // Already created — continue (idempotent)
+        } else {
+          console.error('[Artistry] Failed to create purchase record:', e.message);
+        }
+      }
+    }
+
     // ── Economy Settlement (atomic, through ledger) ─────────────────────
     let settlement = null;
     if (db && price > 0) {
       // 1. Validate buyer balance
       const balCheck = economyValidateBalance(db, buyerId, price);
       if (!balCheck.ok) {
+        // Transition to FAILED if purchase record exists
+        try { transitionPurchase(db, purchaseId, 'FAILED', { reason: 'insufficient_balance', actor: buyerId, errorMessage: balCheck.error }); } catch {}
         return res.status(400).json({ error: balCheck.error, balance: balCheck.balance, required: balCheck.required });
       }
+
+      // State Machine: transition to PAID (balance validated, about to settle)
+      try { transitionPurchase(db, purchaseId, 'PAID', { reason: 'balance_validated', actor: 'system' }); } catch {}
 
       // 2. Calculate marketplace fee (5%)
       const { fee: marketplaceFee } = calculateFee('MARKETPLACE_PURCHASE', price);
@@ -36050,6 +36078,23 @@ app.post('/api/artistry/marketplace/purchase', (req, res) => {
             rate: r.rate, source: r.source,
           })),
         };
+
+        // State Machine: transition to SETTLED + snapshot settlement details
+        try {
+          transitionPurchase(db, purchaseId, 'SETTLED', { reason: 'ledger_committed', actor: 'system' });
+          recordSettlement(db, purchaseId, {
+            settlementBatchId: batchId,
+            marketplaceFee,
+            sellerNet,
+            totalRoyalties,
+            royaltyDetails: royaltyEntries.map(r => ({
+              citedId: r.citedId, creatorId: r.creatorId, amount: r.amount,
+              rate: r.rate, source: r.source,
+            })),
+          });
+        } catch (smErr) {
+          console.error('[Artistry] State machine update failed (settlement succeeded):', smErr.message);
+        }
       } catch (err) {
         // Check if it's a UNIQUE constraint violation (duplicate ref_id) — treat as idempotent
         if (err.message?.includes('UNIQUE constraint') && err.message?.includes('ref_id')) {
@@ -36065,6 +36110,7 @@ app.post('/api/artistry/marketplace/purchase', (req, res) => {
           });
         }
         console.error('[Artistry] Settlement failed:', err.message);
+        try { transitionPurchase(db, purchaseId, 'FAILED', { reason: 'settlement_error', actor: 'system', errorMessage: err.message }); } catch {}
         return res.status(500).json({ error: 'settlement_failed', detail: err.message });
       }
 
@@ -36107,6 +36153,16 @@ app.post('/api/artistry/marketplace/purchase', (req, res) => {
       purchaseId,
       settlementBatchId: settlement?.batchId || null,
     });
+
+    // State Machine: transition to FULFILLED + record license ID
+    if (db) {
+      try {
+        transitionPurchase(db, purchaseId, 'FULFILLED', { reason: 'license_created', actor: 'system' });
+        recordSettlement(db, purchaseId, { licenseId });
+      } catch (smErr) {
+        console.error('[Artistry] State machine FULFILLED transition failed:', smErr.message);
+      }
+    }
 
     // ── Update listing stats ────────────────────────────────────────────
     listing.totalSales = (listing.totalSales || 0) + 1;

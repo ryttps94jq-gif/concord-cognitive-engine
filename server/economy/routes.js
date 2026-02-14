@@ -18,6 +18,13 @@ import {
   getConnectStatus, processStripeWithdrawal, STRIPE_ENABLED,
   MIN_WITHDRAW_TOKENS, MAX_WITHDRAW_TOKENS_PER_DAY,
 } from "./stripe.js";
+import {
+  getPurchase, getPurchaseByRefId, getUserPurchases, getPurchaseHistory,
+  transitionPurchase, findPurchasesByStatus,
+} from "./purchases.js";
+import {
+  runReconciliation, executeCorrection, getPurchaseReceipt, getReconciliationSummary,
+} from "./reconciliation.js";
 
 /**
  * Register all economy + Stripe routes on the Express app.
@@ -565,5 +572,204 @@ export function registerEconomyRoutes(app, db) {
       maxWithdrawalPerDay: MAX_WITHDRAW_TOKENS_PER_DAY,
       platformAccount: PLATFORM_ACCOUNT_ID,
     });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PURCHASE STATE MACHINE + SUPPORT SURFACE
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ── Purchase receipt / lookup ────────────────────────────────────────────
+
+  app.get("/api/economy/purchases/:purchaseId/receipt", (req, res) => {
+    try {
+      const result = getPurchaseReceipt(db, req.params.purchaseId);
+      if (!result.ok) return res.status(404).json(result);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ ok: false, error: "receipt_failed", detail: err.message });
+    }
+  });
+
+  // ── Purchase lookup by ID ────────────────────────────────────────────────
+
+  app.get("/api/economy/purchases/:purchaseId", (req, res) => {
+    try {
+      const purchase = getPurchase(db, req.params.purchaseId);
+      if (!purchase) return res.status(404).json({ ok: false, error: "purchase_not_found" });
+      res.json({ ok: true, purchase });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: "purchase_lookup_failed", detail: err.message });
+    }
+  });
+
+  // ── Purchase status history ──────────────────────────────────────────────
+
+  app.get("/api/economy/purchases/:purchaseId/history", (req, res) => {
+    try {
+      const history = getPurchaseHistory(db, req.params.purchaseId);
+      res.json({ ok: true, purchaseId: req.params.purchaseId, history });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: "history_failed", detail: err.message });
+    }
+  });
+
+  // ── User purchases (buyer or seller) ─────────────────────────────────────
+
+  app.get("/api/economy/purchases", (req, res) => {
+    try {
+      const userId = req.query.user_id || req.user?.id;
+      if (!userId) return res.status(400).json({ ok: false, error: "missing_user_id" });
+
+      const role = req.query.role === "seller" ? "seller" : "buyer";
+      const status = req.query.status || undefined;
+      const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+      const offset = parseInt(req.query.offset, 10) || 0;
+
+      const result = getUserPurchases(db, userId, { role, status, limit, offset });
+      res.json({ ok: true, userId, role, ...result });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: "purchases_list_failed", detail: err.message });
+    }
+  });
+
+  // ── Admin: Refund / reverse a purchase ───────────────────────────────────
+
+  app.post("/api/economy/admin/purchases/:purchaseId/refund", adminOnly, (req, res) => {
+    try {
+      const ctx = auditCtx(req);
+      const result = executeCorrection(db, {
+        correctionType: "REVERSAL",
+        purchaseId: req.params.purchaseId,
+        reason: req.body.reason || "admin_refund",
+        actor: ctx.userId || "admin",
+      });
+
+      if (!result.ok) return res.status(400).json(result);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ ok: false, error: "refund_failed", detail: err.message });
+    }
+  });
+
+  // ── Admin: Make-good for a failed/disputed purchase ──────────────────────
+
+  app.post("/api/economy/admin/purchases/:purchaseId/make-good", adminOnly, (req, res) => {
+    try {
+      const ctx = auditCtx(req);
+      const result = executeCorrection(db, {
+        correctionType: "MAKE_GOOD",
+        purchaseId: req.params.purchaseId,
+        reason: req.body.reason || "admin_make_good",
+        actor: ctx.userId || "admin",
+      });
+
+      if (!result.ok) return res.status(400).json(result);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ ok: false, error: "make_good_failed", detail: err.message });
+    }
+  });
+
+  // ── Admin: Adjustment correction ─────────────────────────────────────────
+
+  app.post("/api/economy/admin/purchases/:purchaseId/adjust", adminOnly, (req, res) => {
+    try {
+      const ctx = auditCtx(req);
+      const adjustmentAmount = parseFloat(req.body.amount);
+      if (!Number.isFinite(adjustmentAmount) || adjustmentAmount === 0) {
+        return res.status(400).json({ ok: false, error: "invalid_adjustment_amount" });
+      }
+      if (!req.body.user_id) {
+        return res.status(400).json({ ok: false, error: "missing_user_id" });
+      }
+
+      const result = executeCorrection(db, {
+        correctionType: "ADJUSTMENT",
+        purchaseId: req.params.purchaseId,
+        reason: req.body.reason || "admin_adjustment",
+        actor: ctx.userId || "admin",
+        adjustmentAmount,
+        adjustmentUserId: req.body.user_id,
+      });
+
+      if (!result.ok) return res.status(400).json(result);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ ok: false, error: "adjustment_failed", detail: err.message });
+    }
+  });
+
+  // ── Admin: Manually transition a purchase state ──────────────────────────
+
+  app.post("/api/economy/admin/purchases/:purchaseId/transition", adminOnly, (req, res) => {
+    try {
+      const { status, reason } = req.body;
+      if (!status) return res.status(400).json({ ok: false, error: "missing_target_status" });
+
+      const ctx = auditCtx(req);
+      const result = transitionPurchase(db, req.params.purchaseId, status, {
+        reason: reason || "admin_manual_transition",
+        actor: ctx.userId || "admin",
+      });
+
+      if (!result.ok) return res.status(400).json(result);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ ok: false, error: "transition_failed", detail: err.message });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // RECONCILIATION
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ── Admin: Run reconciliation sweep ──────────────────────────────────────
+
+  app.post("/api/economy/admin/reconciliation/run", adminOnly, (req, res) => {
+    try {
+      const dryRun = req.body.dry_run === true || req.query.dry_run === "true";
+      const staleCreatedMinutes = parseInt(req.body.stale_created_minutes, 10) || 30;
+      const stalePaidMinutes = parseInt(req.body.stale_paid_minutes, 10) || 15;
+      const staleSettledMinutes = parseInt(req.body.stale_settled_minutes, 10) || 15;
+
+      const result = runReconciliation(db, {
+        dryRun,
+        staleCreatedMinutes,
+        stalePaidMinutes,
+        staleSettledMinutes,
+      });
+
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ ok: false, error: "reconciliation_failed", detail: err.message });
+    }
+  });
+
+  // ── Admin: Reconciliation summary / dashboard ────────────────────────────
+
+  app.get("/api/economy/admin/reconciliation/summary", adminOnly, (req, res) => {
+    try {
+      const result = getReconciliationSummary(db);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ ok: false, error: "summary_failed", detail: err.message });
+    }
+  });
+
+  // ── Admin: Find purchases by status ──────────────────────────────────────
+
+  app.get("/api/economy/admin/purchases", adminOnly, (req, res) => {
+    try {
+      const status = req.query.status;
+      if (!status) return res.status(400).json({ ok: false, error: "missing_status_filter" });
+
+      const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500);
+      const olderThanMinutes = parseInt(req.query.older_than_minutes, 10) || undefined;
+
+      const purchases = findPurchasesByStatus(db, status, { limit, olderThanMinutes });
+      res.json({ ok: true, status, count: purchases.length, purchases });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: "purchases_query_failed", detail: err.message });
+    }
   });
 }
