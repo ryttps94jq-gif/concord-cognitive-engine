@@ -42,7 +42,19 @@ import { registerDurableEndpoints } from "./durable.js";
 import { registerGuidanceEndpoints } from "./guidance.js";
 
 // ---- Economy System: ledger, balances, transfers, withdrawals ----
-import { registerEconomyEndpoints } from "./economy/index.js";
+import {
+  registerEconomyEndpoints,
+  hasSufficientBalance,
+  calculateFee,
+  FEES,
+  PLATFORM_ACCOUNT_ID,
+  recordTransactionBatch,
+  generateTxId,
+  checkRefIdProcessed,
+  validateBalance as economyValidateBalance,
+  economyAudit,
+  auditCtx,
+} from "./economy/index.js";
 
 // ---- Atlas + Platform Upgrade Imports (v2) ----
 import { DOMAIN_TYPES as ATLAS_DOMAIN_TYPES, EPISTEMIC_CLASSES, DOMAIN_TYPE_SET, EPISTEMIC_CLASS_SET, computeAtlasScores, explainScores, validateAtlasDtu, getThresholds, initAtlasState, getAtlasState } from "./emergent/atlas-epistemic.js";
@@ -33671,16 +33683,62 @@ function getWallet(odId) {
   return STATE.economic.wallets.get(odId);
 }
 
-function creditWallet(odId, amount, reason = '') {
+function creditWallet(odId, amount, reason = '', refId = null) {
+  // Idempotency: if refId provided, check if already processed
+  if (db && refId) {
+    const existing = checkRefIdProcessed(db, refId);
+    if (existing.exists) return getWallet(odId); // already done, no-op
+  }
+
   const wallet = getWallet(odId);
   wallet.balance += amount;
   wallet.tokensEarned += amount;
   wallet.updatedAt = Date.now();
-  logTransaction({ type: 'credit', odId, amount, reason, balance: wallet.balance });
+  logTransaction({ type: 'credit', odId, amount, reason, balance: wallet.balance, refId });
+  // Bridge to economy ledger if available
+  if (db && amount > 0) {
+    try {
+      db.prepare(`
+        INSERT INTO economy_ledger (id, type, from_user_id, to_user_id, amount, fee, net, status, metadata_json, request_id, ip, created_at, ref_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        generateTxId(), 'TRANSFER', null, odId, amount, 0, amount, 'complete',
+        JSON.stringify({ source: 'economic_wallet', reason, bridged: true }),
+        null, null, new Date().toISOString().replace('T', ' ').replace('Z', ''),
+        refId
+      );
+    } catch (e) {
+      // If ref_id column doesn't exist yet (pre-migration), fall back
+      if (e.message?.includes('ref_id')) {
+        try {
+          db.prepare(`
+            INSERT INTO economy_ledger (id, type, from_user_id, to_user_id, amount, fee, net, status, metadata_json, request_id, ip, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            generateTxId(), 'TRANSFER', null, odId, amount, 0, amount, 'complete',
+            JSON.stringify({ source: 'economic_wallet', reason, bridged: true }),
+            null, null, new Date().toISOString().replace('T', ' ').replace('Z', '')
+          );
+        } catch (e2) {
+          console.error('[Economic→Ledger] Credit bridge failed (fallback):', e2.message);
+        }
+      } else if (e.message?.includes('UNIQUE constraint')) {
+        // Idempotent — already recorded
+      } else {
+        console.error('[Economic→Ledger] Credit bridge failed:', e.message);
+      }
+    }
+  }
   return wallet;
 }
 
-function debitWallet(odId, amount, reason = '') {
+function debitWallet(odId, amount, reason = '', refId = null) {
+  // Idempotency: if refId provided, check if already processed
+  if (db && refId) {
+    const existing = checkRefIdProcessed(db, refId);
+    if (existing.exists) return getWallet(odId); // already done, no-op
+  }
+
   const wallet = getWallet(odId);
   if (wallet.balance < amount) {
     throw new Error(`Insufficient balance: have ${wallet.balance}, need ${amount}`);
@@ -33688,7 +33746,40 @@ function debitWallet(odId, amount, reason = '') {
   wallet.balance -= amount;
   wallet.tokensSpent += amount;
   wallet.updatedAt = Date.now();
-  logTransaction({ type: 'debit', odId, amount, reason, balance: wallet.balance });
+  logTransaction({ type: 'debit', odId, amount, reason, balance: wallet.balance, refId });
+  // Bridge to economy ledger if available
+  if (db && amount > 0) {
+    try {
+      db.prepare(`
+        INSERT INTO economy_ledger (id, type, from_user_id, to_user_id, amount, fee, net, status, metadata_json, request_id, ip, created_at, ref_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        generateTxId(), 'TRANSFER', odId, null, amount, 0, amount, 'complete',
+        JSON.stringify({ source: 'economic_wallet', reason, bridged: true }),
+        null, null, new Date().toISOString().replace('T', ' ').replace('Z', ''),
+        refId
+      );
+    } catch (e) {
+      if (e.message?.includes('ref_id')) {
+        try {
+          db.prepare(`
+            INSERT INTO economy_ledger (id, type, from_user_id, to_user_id, amount, fee, net, status, metadata_json, request_id, ip, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            generateTxId(), 'TRANSFER', odId, null, amount, 0, amount, 'complete',
+            JSON.stringify({ source: 'economic_wallet', reason, bridged: true }),
+            null, null, new Date().toISOString().replace('T', ' ').replace('Z', '')
+          );
+        } catch (e2) {
+          console.error('[Economic→Ledger] Debit bridge failed (fallback):', e2.message);
+        }
+      } else if (e.message?.includes('UNIQUE constraint')) {
+        // Idempotent — already recorded
+      } else {
+        console.error('[Economic→Ledger] Debit bridge failed:', e.message);
+      }
+    }
+  }
   return wallet;
 }
 
@@ -34018,9 +34109,21 @@ app.patch('/api/economic/marketplace/listing/:listingId', (req, res) => {
 // Buy any asset
 app.post('/api/economic/marketplace/buy', (req, res) => {
   try {
-    const { odId, listingId } = req.body;
+    const { odId, listingId, purchaseId: clientPurchaseId } = req.body;
     if (!odId || !listingId) {
       return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    // Deterministic purchaseId for idempotency
+    const purchaseId = clientPurchaseId || `epur_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    const refId = `economic_purchase:${purchaseId}`;
+
+    // Idempotency check
+    if (db) {
+      const existing = checkRefIdProcessed(db, refId);
+      if (existing.exists) {
+        return res.json({ success: true, idempotent: true, purchaseId, message: 'Purchase already processed' });
+      }
     }
 
     ensureEconomicState();
@@ -34071,10 +34174,10 @@ app.post('/api/economic/marketplace/buy', (req, res) => {
     }
 
     // Debit buyer
-    debitWallet(odId, listing.price, `Purchase: ${listing.title}`);
+    debitWallet(odId, listing.price, `Purchase: ${listing.title}`, `${refId}:debit`);
 
     // Credit seller
-    creditWallet(listing.seller, creatorAmount, `Sale: ${listing.title}`);
+    creditWallet(listing.seller, creatorAmount, `Sale: ${listing.title}`, `${refId}:credit`);
 
     // Process royalty wheel (only for DTUs and other reference-able assets)
     if (royaltyAmount > 0 && listing.assetType === 'dtu') {
@@ -34121,6 +34224,22 @@ app.post('/api/economic/marketplace/buy', (req, res) => {
       treasuryAmount,
       marketplaceFee,
     });
+
+    // Bridge marketplace fee to economy ledger
+    if (db && marketplaceFee > 0) {
+      try {
+        const now = new Date().toISOString().replace('T', ' ').replace('Z', '');
+        db.prepare(`
+          INSERT INTO economy_ledger (id, type, from_user_id, to_user_id, amount, fee, net, status, metadata_json, request_id, ip, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          generateTxId(), 'FEE', null, PLATFORM_ACCOUNT_ID, marketplaceFee, 0, marketplaceFee, 'complete',
+          JSON.stringify({ source: 'economic_marketplace', listingId, sourceType: 'MARKETPLACE_PURCHASE', bridged: true }), null, null, now
+        );
+      } catch (e) {
+        console.error('[Economic→Ledger] Fee bridge failed:', e.message);
+      }
+    }
 
     res.json({
       success: true,
@@ -34950,6 +35069,7 @@ function ensureArtistryState() {
       aiSessions: new Map(),
       learningPaths: new Map(),
       genreProfiles: new Map(),
+      citationRoyaltyUsage: new Map(),  // citedAssetId → number of times royalties paid
       stats: {
         totalAssets: 0,
         totalProjects: 0,
@@ -34960,6 +35080,8 @@ function ensureArtistryState() {
       },
     };
   }
+  // Ensure citationRoyaltyUsage exists even if artistry state was created before this field was added
+  if (!STATE.artistry.citationRoyaltyUsage) STATE.artistry.citationRoyaltyUsage = new Map();
   return STATE.artistry;
 }
 
@@ -35487,22 +35609,28 @@ const LICENSE_TYPES = Object.freeze({
 });
 
 app.post('/api/artistry/marketplace/beats', (req, res) => {
-  const art = ensureArtistryState();
-  const { title, assetId, bpm, key, genre, tags, licenses, ownerId, previewAssetId } = req.body;
-  const listingId = `beat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  const listing = {
-    id: listingId, type: 'beat', title: title || 'Untitled Beat', assetId,
-    previewAssetId: previewAssetId || null, bpm: bpm || 120, key: key || null,
-    genre: genre || null, tags: tags || [], ownerId: ownerId || 'anon',
-    licenses: (licenses || ['basic', 'premium']).reduce((acc, lt) => {
-      if (LICENSE_TYPES[lt]) acc[lt] = { ...LICENSE_TYPES[lt], available: true };
-      return acc;
-    }, {}),
-    status: 'active', totalSales: 0, totalPlays: 0, rating: null, reviews: [],
-    createdAt: Date.now(), updatedAt: Date.now(),
-  };
-  art.beatStore.set(listingId, listing);
-  res.json({ ok: true, listing });
+  try {
+    const art = ensureArtistryState();
+    const { title, assetId, bpm, key, genre, tags, licenses, ownerId, previewAssetId } = req.body;
+    if (!ownerId) return res.status(400).json({ error: 'Missing ownerId' });
+    const listingId = `beat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const listing = {
+      id: listingId, type: 'beat', title: title || 'Untitled Beat', assetId,
+      previewAssetId: previewAssetId || null, bpm: bpm || 120, key: key || null,
+      genre: genre || null, tags: tags || [], ownerId: ownerId || 'anon',
+      licenses: (licenses || ['basic', 'premium']).reduce((acc, lt) => {
+        if (LICENSE_TYPES[lt]) acc[lt] = { ...LICENSE_TYPES[lt], available: true };
+        return acc;
+      }, {}),
+      status: 'active', totalSales: 0, totalPlays: 0, rating: null, reviews: [],
+      createdAt: Date.now(), updatedAt: Date.now(),
+    };
+    art.beatStore.set(listingId, listing);
+    res.json({ ok: true, listing });
+  } catch (err) {
+    console.error('[Artistry] Beat listing error:', err.message);
+    res.status(500).json({ error: 'listing_failed', detail: err.message });
+  }
 });
 
 app.get('/api/artistry/marketplace/beats', (req, res) => {
@@ -35523,16 +35651,23 @@ app.get('/api/artistry/marketplace/beats', (req, res) => {
 });
 
 app.post('/api/artistry/marketplace/stems', (req, res) => {
-  const art = ensureArtistryState();
-  const { title, assetIds, parentTrackId, genre, tags, price, ownerId } = req.body;
-  const listingId = `stem_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  art.stemStore.set(listingId, {
-    id: listingId, type: 'stems', title: title || 'Untitled Stems', assetIds: assetIds || [],
-    parentTrackId: parentTrackId || null, genre: genre || null, tags: tags || [],
-    price: price || 50, ownerId: ownerId || 'anon', status: 'active', totalSales: 0,
-    createdAt: Date.now(), updatedAt: Date.now(),
-  });
-  res.json({ ok: true, listing: art.stemStore.get(listingId) });
+  try {
+    const art = ensureArtistryState();
+    const { title, assetIds, parentTrackId, genre, tags, price, ownerId } = req.body;
+    if (!ownerId) return res.status(400).json({ error: 'Missing ownerId' });
+    if (price != null && (typeof price !== 'number' || price < 0)) return res.status(400).json({ error: 'Invalid price' });
+    const listingId = `stem_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    art.stemStore.set(listingId, {
+      id: listingId, type: 'stems', title: title || 'Untitled Stems', assetIds: assetIds || [],
+      parentTrackId: parentTrackId || null, genre: genre || null, tags: tags || [],
+      price: price || 50, ownerId: ownerId || 'anon', status: 'active', totalSales: 0,
+      createdAt: Date.now(), updatedAt: Date.now(),
+    });
+    res.json({ ok: true, listing: art.stemStore.get(listingId) });
+  } catch (err) {
+    console.error('[Artistry] Stem listing error:', err.message);
+    res.status(500).json({ error: 'listing_failed', detail: err.message });
+  }
 });
 
 app.get('/api/artistry/marketplace/stems', (req, res) => {
@@ -35542,16 +35677,23 @@ app.get('/api/artistry/marketplace/stems', (req, res) => {
 });
 
 app.post('/api/artistry/marketplace/samples', (req, res) => {
-  const art = ensureArtistryState();
-  const { title, assetIds, sampleCount, genre, tags, price, description, ownerId } = req.body;
-  const listingId = `samp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  art.sampleStore.set(listingId, {
-    id: listingId, type: 'sample-pack', title: title || 'Untitled Sample Pack', assetIds: assetIds || [],
-    sampleCount: sampleCount || 0, genre: genre || null, tags: tags || [], price: price || 25,
-    description: description || '', ownerId: ownerId || 'anon', status: 'active',
-    totalSales: 0, totalDownloads: 0, createdAt: Date.now(), updatedAt: Date.now(),
-  });
-  res.json({ ok: true, listing: art.sampleStore.get(listingId) });
+  try {
+    const art = ensureArtistryState();
+    const { title, assetIds, sampleCount, genre, tags, price, description, ownerId } = req.body;
+    if (!ownerId) return res.status(400).json({ error: 'Missing ownerId' });
+    if (price != null && (typeof price !== 'number' || price < 0)) return res.status(400).json({ error: 'Invalid price' });
+    const listingId = `samp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    art.sampleStore.set(listingId, {
+      id: listingId, type: 'sample-pack', title: title || 'Untitled Sample Pack', assetIds: assetIds || [],
+      sampleCount: sampleCount || 0, genre: genre || null, tags: tags || [], price: price || 25,
+      description: description || '', ownerId: ownerId || 'anon', status: 'active',
+      totalSales: 0, totalDownloads: 0, createdAt: Date.now(), updatedAt: Date.now(),
+    });
+    res.json({ ok: true, listing: art.sampleStore.get(listingId) });
+  } catch (err) {
+    console.error('[Artistry] Sample listing error:', err.message);
+    res.status(500).json({ error: 'listing_failed', detail: err.message });
+  }
 });
 
 app.get('/api/artistry/marketplace/samples', (req, res) => {
@@ -35561,17 +35703,24 @@ app.get('/api/artistry/marketplace/samples', (req, res) => {
 });
 
 app.post('/api/artistry/marketplace/art', (req, res) => {
-  const art = ensureArtistryState();
-  const { title, assetId, artType, style, tags, price, description, ownerId, dimensions } = req.body;
-  const listingId = `art_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  art.artStore.set(listingId, {
-    id: listingId, type: 'artwork', title: title || 'Untitled Artwork', assetId,
-    artType: artType || 'cover-art', style: style || 'digital', tags: tags || [],
-    price: price || 50, description: description || '', dimensions: dimensions || null,
-    ownerId: ownerId || 'anon', status: 'active', totalSales: 0,
-    createdAt: Date.now(), updatedAt: Date.now(),
-  });
-  res.json({ ok: true, listing: art.artStore.get(listingId) });
+  try {
+    const art = ensureArtistryState();
+    const { title, assetId, artType, style, tags, price, description, ownerId, dimensions } = req.body;
+    if (!ownerId) return res.status(400).json({ error: 'Missing ownerId' });
+    if (price != null && (typeof price !== 'number' || price < 0)) return res.status(400).json({ error: 'Invalid price' });
+    const listingId = `art_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    art.artStore.set(listingId, {
+      id: listingId, type: 'artwork', title: title || 'Untitled Artwork', assetId,
+      artType: artType || 'cover-art', style: style || 'digital', tags: tags || [],
+      price: price || 50, description: description || '', dimensions: dimensions || null,
+      ownerId: ownerId || 'anon', status: 'active', totalSales: 0,
+      createdAt: Date.now(), updatedAt: Date.now(),
+    });
+    res.json({ ok: true, listing: art.artStore.get(listingId) });
+  } catch (err) {
+    console.error('[Artistry] Art listing error:', err.message);
+    res.status(500).json({ error: 'listing_failed', detail: err.message });
+  }
 });
 
 app.get('/api/artistry/marketplace/art', (req, res) => {
@@ -35606,31 +35755,393 @@ app.get('/api/artistry/marketplace/licenses', (_req, res) => {
   res.json({ ok: true, licenseTypes: LICENSE_TYPES });
 });
 
-app.post('/api/artistry/marketplace/purchase', (req, res) => {
-  const art = ensureArtistryState();
-  const { buyerId, listingId, listingType, licenseType } = req.body;
-  if (!buyerId || !listingId) return res.status(400).json({ error: 'Missing buyerId or listingId' });
-  const stores = { beat: art.beatStore, stems: art.stemStore, 'sample-pack': art.sampleStore, artwork: art.artStore };
-  const store = stores[listingType || 'beat'];
-  const listing = store?.get(listingId);
-  if (!listing) return res.status(404).json({ error: 'Listing not found' });
-  const price = listing.licenses ? (listing.licenses[licenseType || 'basic']?.price || listing.price || 0) : (listing.price || 0);
-  const licenseId = `lic_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  art.licenses.set(licenseId, {
-    id: licenseId, buyerId, listingId, listingType: listing.type, licenseType: licenseType || 'basic',
-    price, terms: LICENSE_TYPES[licenseType || 'basic'] || LICENSE_TYPES.basic,
-    status: 'active', purchasedAt: Date.now(),
-  });
-  listing.totalSales++;
-  const split = Array.from(art.splits.values()).find(s => s.assetId === listing.assetId);
-  if (split) {
-    for (const p of split.participants) { p.totalEarned = (p.totalEarned || 0) + Math.floor(price * p.percentage / 100); }
-    split.totalDistributed += price;
+// ── Citation Royalty Constants ───────────────────────────────────────────────
+const CITATION_ROYALTY_BASE_RATE = 0.30;    // 30% initial royalty for cited creators
+const CITATION_ROYALTY_DECAY = 0.85;        // Decay factor per usage
+const CITATION_ROYALTY_MIN_RATE = 0.00001;  // 0.001% minimum royalty rate
+
+/**
+ * Resolve all citation references for an asset.
+ * Checks both Concord Global (DTU references + social citations) and
+ * Artistry Global (asset cross-references).
+ * Returns array of { citedId, creatorId, source }.
+ */
+function resolveAssetCitations(listingAssetId) {
+  const citations = [];
+  const seen = new Set();
+
+  // 1. Concord Global — DTU references
+  const dtu = STATE.dtus?.get(listingAssetId);
+  if (dtu?.references?.length > 0) {
+    for (const refId of dtu.references) {
+      if (seen.has(refId)) continue;
+      const refDtu = STATE.dtus?.get(refId);
+      if (refDtu?.authorId) {
+        citations.push({ citedId: refId, creatorId: refDtu.authorId, source: 'concord_global' });
+        seen.add(refId);
+      }
+    }
   }
-  res.json({ ok: true, license: art.licenses.get(licenseId), paid: price });
+
+  // 2. Concord Global — Social layer cited-by (reverse: what does THIS asset cite?)
+  const social = STATE.social;
+  if (social?.citedBy) {
+    for (const [citedId, citers] of social.citedBy.entries()) {
+      if (seen.has(citedId)) continue;
+      if (citers.has(listingAssetId)) {
+        const citedDtu = STATE.dtus?.get(citedId);
+        if (citedDtu?.authorId) {
+          citations.push({ citedId, creatorId: citedDtu.authorId, source: 'concord_global' });
+          seen.add(citedId);
+        }
+      }
+    }
+  }
+
+  // 3. Artistry Global — asset cross-references
+  const art = ensureArtistryState();
+  const thisAsset = art.assets?.get(listingAssetId);
+  if (thisAsset?.references?.length > 0) {
+    for (const refId of thisAsset.references) {
+      if (seen.has(refId)) continue;
+      const refAsset = art.assets.get(refId);
+      if (refAsset?.ownerId) {
+        citations.push({ citedId: refId, creatorId: refAsset.ownerId, source: 'artistry_global' });
+        seen.add(refId);
+      }
+    }
+  }
+
+  // 4. Artistry Global — check remix lineage
+  if (art.remixes) {
+    for (const [, remix] of art.remixes.entries()) {
+      if (remix.derivedFrom === listingAssetId || remix.sourceId === listingAssetId) continue;
+      if (remix.derivedFrom && !seen.has(remix.derivedFrom)) {
+        // Check if current listing is a remix of another asset
+        const sourceAsset = art.assets?.get(remix.derivedFrom);
+        if (sourceAsset?.ownerId && remix.remixId === listingAssetId) {
+          citations.push({ citedId: remix.derivedFrom, creatorId: sourceAsset.ownerId, source: 'artistry_remix' });
+          seen.add(remix.derivedFrom);
+        }
+      }
+    }
+  }
+
+  return citations;
+}
+
+/**
+ * Compute the royalty rate for a cited asset based on how many times it has
+ * already generated royalties. Starts at 30%, decays per usage, never below 0.001%.
+ */
+function computeCitationRoyaltyRate(usageCount) {
+  return Math.max(
+    CITATION_ROYALTY_BASE_RATE * Math.pow(CITATION_ROYALTY_DECAY, usageCount),
+    CITATION_ROYALTY_MIN_RATE
+  );
+}
+
+app.post('/api/artistry/marketplace/purchase', (req, res) => {
+  try {
+    const art = ensureArtistryState();
+    const { buyerId, listingId, listingType, licenseType, purchaseId: clientPurchaseId } = req.body;
+    if (!buyerId || !listingId) return res.status(400).json({ error: 'Missing buyerId or listingId' });
+
+    // ── Deterministic purchaseId ────────────────────────────────────────
+    // Client can send a purchaseId for idempotency; otherwise server generates one.
+    const purchaseId = clientPurchaseId || `pur_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    const refId = `purchase:${purchaseId}`;
+
+    // ── Idempotency check ───────────────────────────────────────────────
+    if (db) {
+      const existing = checkRefIdProcessed(db, refId);
+      if (existing.exists) {
+        // Already processed — return success with existing data
+        const existingLicense = Array.from(art.licenses.values()).find(
+          l => l.purchaseId === purchaseId
+        );
+        return res.json({
+          ok: true,
+          idempotent: true,
+          purchaseId,
+          license: existingLicense || null,
+          message: 'Purchase already processed',
+        });
+      }
+    }
+
+    // ── Lookup listing ──────────────────────────────────────────────────
+    const stores = { beat: art.beatStore, stems: art.stemStore, 'sample-pack': art.sampleStore, artwork: art.artStore };
+    const store = stores[listingType || 'beat'];
+    const listing = store?.get(listingId);
+    if (!listing) return res.status(404).json({ error: 'Listing not found' });
+
+    const price = listing.licenses
+      ? (listing.licenses[licenseType || 'basic']?.price || listing.price || 0)
+      : (listing.price || 0);
+
+    const sellerId = listing.ownerId;
+    if (!sellerId) return res.status(400).json({ error: 'Listing has no owner' });
+    if (buyerId === sellerId) return res.status(400).json({ error: 'Cannot purchase your own listing' });
+
+    // ── Economy Settlement (atomic, through ledger) ─────────────────────
+    let settlement = null;
+    if (db && price > 0) {
+      // 1. Validate buyer balance
+      const balCheck = economyValidateBalance(db, buyerId, price);
+      if (!balCheck.ok) {
+        return res.status(400).json({ error: balCheck.error, balance: balCheck.balance, required: balCheck.required });
+      }
+
+      // 2. Calculate marketplace fee (5%)
+      const { fee: marketplaceFee } = calculateFee('MARKETPLACE_PURCHASE', price);
+      const afterFee = Math.round((price - marketplaceFee) * 100) / 100;
+
+      // 3. Resolve citations and compute royalties
+      const citations = resolveAssetCitations(listing.assetId);
+      const royaltyEntries = [];
+      let totalRoyalties = 0;
+
+      for (const citation of citations) {
+        // Skip if cited creator is the buyer (no self-royalty)
+        if (citation.creatorId === buyerId) continue;
+        // Skip if cited creator is the seller (already getting seller proceeds)
+        if (citation.creatorId === sellerId) continue;
+
+        const usageCount = art.citationRoyaltyUsage.get(citation.citedId) || 0;
+        const royaltyRate = computeCitationRoyaltyRate(usageCount);
+        const royaltyAmount = Math.max(Math.round(price * royaltyRate * 100) / 100, 0.01);
+
+        royaltyEntries.push({
+          citedId: citation.citedId,
+          creatorId: citation.creatorId,
+          source: citation.source,
+          amount: royaltyAmount,
+          rate: royaltyRate,
+          usageCount,
+        });
+        totalRoyalties += royaltyAmount;
+      }
+
+      // Cap total royalties so seller always gets at least 0.01
+      if (totalRoyalties > afterFee - 0.01) {
+        const scale = (afterFee - 0.01) / totalRoyalties;
+        totalRoyalties = 0;
+        for (const r of royaltyEntries) {
+          r.amount = Math.max(Math.round(r.amount * scale * 100) / 100, 0.01);
+          totalRoyalties += r.amount;
+        }
+        // Final cap: if still too much, trim last entries
+        while (totalRoyalties > afterFee - 0.01 && royaltyEntries.length > 0) {
+          totalRoyalties -= royaltyEntries.pop().amount;
+        }
+      }
+
+      const sellerNet = Math.round((afterFee - totalRoyalties) * 100) / 100;
+      const batchId = generateTxId();
+
+      // 4. Build all ledger entries atomically (all share the same refId for idempotency)
+      const entries = [];
+
+      // Debit: buyer pays full price
+      entries.push({
+        id: generateTxId(),
+        type: 'MARKETPLACE_PURCHASE',
+        from: buyerId,
+        to: sellerId,
+        amount: price,
+        fee: marketplaceFee,
+        net: sellerNet,
+        status: 'complete',
+        refId,
+        metadata: {
+          batchId, role: 'debit', listingId, listingType: listing.type,
+          licenseType: licenseType || 'basic', source: 'artistry',
+          purchaseId, totalRoyalties, royaltyCount: royaltyEntries.length,
+        },
+      });
+
+      // Credit: seller gets net (price - fee - royalties)
+      entries.push({
+        id: generateTxId(),
+        type: 'MARKETPLACE_PURCHASE',
+        from: null,
+        to: sellerId,
+        amount: sellerNet,
+        fee: 0,
+        net: sellerNet,
+        status: 'complete',
+        refId,
+        metadata: { batchId, role: 'credit', listingId, source: 'artistry', purchaseId },
+      });
+
+      // Platform fee
+      if (marketplaceFee > 0) {
+        entries.push({
+          id: generateTxId(),
+          type: 'FEE',
+          from: null,
+          to: PLATFORM_ACCOUNT_ID,
+          amount: marketplaceFee,
+          fee: 0,
+          net: marketplaceFee,
+          status: 'complete',
+          refId,
+          metadata: { batchId, role: 'fee', sourceType: 'MARKETPLACE_PURCHASE', listingId, source: 'artistry', purchaseId },
+        });
+      }
+
+      // Citation royalty payouts
+      for (const royalty of royaltyEntries) {
+        entries.push({
+          id: generateTxId(),
+          type: 'ROYALTY_PAYOUT',
+          from: null,
+          to: royalty.creatorId,
+          amount: royalty.amount,
+          fee: 0,
+          net: royalty.amount,
+          status: 'complete',
+          refId,
+          metadata: {
+            batchId, role: 'citation_royalty', listingId,
+            citedAssetId: royalty.citedId, citationSource: royalty.source,
+            royaltyRate: royalty.rate, usageCount: royalty.usageCount,
+            source: 'artistry', purchaseId,
+          },
+        });
+      }
+
+      // 5. Execute atomically — includes idempotency check inside the transaction
+      const doSettlement = db.transaction(() => {
+        // Double-check inside transaction for race condition safety
+        const dupe = checkRefIdProcessed(db, refId);
+        if (dupe.exists) return { idempotent: true, entries: dupe.entries };
+        return recordTransactionBatch(db, entries);
+      });
+
+      try {
+        const txResults = doSettlement();
+
+        // If idempotent (already processed), return existing result
+        if (txResults.idempotent) {
+          const existingLicense = Array.from(art.licenses.values()).find(
+            l => l.purchaseId === purchaseId
+          );
+          return res.json({
+            ok: true,
+            idempotent: true,
+            purchaseId,
+            license: existingLicense || null,
+            message: 'Purchase already settled',
+          });
+        }
+
+        settlement = {
+          batchId,
+          purchaseId,
+          transactions: txResults,
+          price,
+          marketplaceFee,
+          sellerNet,
+          totalRoyalties,
+          royalties: royaltyEntries.map(r => ({
+            citedId: r.citedId, creatorId: r.creatorId, amount: r.amount,
+            rate: r.rate, source: r.source,
+          })),
+        };
+      } catch (err) {
+        // Check if it's a UNIQUE constraint violation (duplicate ref_id) — treat as idempotent
+        if (err.message?.includes('UNIQUE constraint') && err.message?.includes('ref_id')) {
+          const existingLicense = Array.from(art.licenses.values()).find(
+            l => l.purchaseId === purchaseId
+          );
+          return res.json({
+            ok: true,
+            idempotent: true,
+            purchaseId,
+            license: existingLicense || null,
+            message: 'Purchase already settled (constraint)',
+          });
+        }
+        console.error('[Artistry] Settlement failed:', err.message);
+        return res.status(500).json({ error: 'settlement_failed', detail: err.message });
+      }
+
+      // Update citation usage counts (after successful settlement)
+      for (const royalty of royaltyEntries) {
+        art.citationRoyaltyUsage.set(
+          royalty.citedId,
+          (art.citationRoyaltyUsage.get(royalty.citedId) || 0) + 1
+        );
+      }
+
+      // Audit log (non-critical, don't fail the purchase if audit logging fails)
+      try {
+        economyAudit(db, {
+          action: 'artistry_marketplace_purchase',
+          userId: buyerId,
+          amount: price,
+          txId: batchId,
+          requestId: req.headers?.['x-request-id'],
+          ip: req.ip,
+          details: {
+            sellerId, listingId, listingType: listing.type,
+            licenseType: licenseType || 'basic',
+            marketplaceFee, sellerNet, totalRoyalties,
+            royaltyCount: royaltyEntries.length,
+          },
+        });
+      } catch (auditErr) {
+        console.error('[Artistry] Audit log failed (settlement succeeded):', auditErr.message);
+      }
+    }
+
+    // ── Entitlement (license creation) ──────────────────────────────────
+    const licenseId = `lic_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    art.licenses.set(licenseId, {
+      id: licenseId, buyerId, listingId, listingType: listing.type,
+      licenseType: licenseType || 'basic',
+      price, terms: LICENSE_TYPES[licenseType || 'basic'] || LICENSE_TYPES.basic,
+      status: 'active', purchasedAt: Date.now(),
+      purchaseId,
+      settlementBatchId: settlement?.batchId || null,
+    });
+
+    // ── Update listing stats ────────────────────────────────────────────
+    listing.totalSales = (listing.totalSales || 0) + 1;
+
+    // ── Split accounting (in-memory) ────────────────────────────────────
+    const split = Array.from(art.splits.values()).find(s => s.assetId === listing.assetId);
+    if (split) {
+      for (const p of split.participants) {
+        p.totalEarned = (p.totalEarned || 0) + Math.floor(price * p.percentage / 100);
+      }
+      split.totalDistributed = (split.totalDistributed || 0) + price;
+    }
+
+    // ── Response ────────────────────────────────────────────────────────
+    res.json({
+      ok: true,
+      purchaseId,
+      license: art.licenses.get(licenseId),
+      paid: price,
+      settlement: settlement ? {
+        batchId: settlement.batchId,
+        purchaseId,
+        marketplaceFee: settlement.marketplaceFee,
+        sellerNet: settlement.sellerNet,
+        totalRoyalties: settlement.totalRoyalties,
+        royalties: settlement.royalties,
+      } : null,
+    });
+  } catch (err) {
+    console.error('[Artistry] Purchase error:', err.message);
+    res.status(500).json({ error: 'purchase_failed', detail: err.message });
+  }
 });
 
-console.log('[Artistry] Phase 8: Marketplace expansion initialized');
+console.log('[Artistry] Phase 8: Marketplace expansion initialized (bridged to Economy ledger)');
 
 // ── Phase 9: Collaboration + Remix Mode + Project Sharing ───────────────────
 

@@ -161,7 +161,7 @@ export async function handleWebhook(db, { rawBody, signature, requestId, ip }) {
       if (purpose === "TOKEN_PURCHASE" && userId && tokens) {
         const tokenCount = parseInt(tokens, 10);
         if (tokenCount > 0) {
-          // Credit tokens through the ledger (atomic)
+          // Credit tokens through the ledger (atomic, idempotent via refId)
           const result = executePurchase(db, {
             userId,
             amount: tokenCount,
@@ -170,9 +170,15 @@ export async function handleWebhook(db, { rawBody, signature, requestId, ip }) {
               stripeSessionId: session.id,
               stripePaymentIntentId: session.payment_intent,
             },
+            refId: `stripe_checkout:${event.id}`,
             requestId,
             ip,
           });
+
+          if (!result.ok) {
+            console.error(`[Stripe Webhook] executePurchase failed for session ${session.id}:`, result.error, result.detail);
+            return { ok: false, error: "token_credit_failed", detail: result.error };
+          }
 
           economyAudit(db, {
             action: "token_purchase_completed",
