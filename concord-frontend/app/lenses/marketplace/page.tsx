@@ -420,6 +420,8 @@ export default function MarketplaceLensPage() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [featuredIdx, setFeaturedIdx] = useState(0);
   const [showNewListing, setShowNewListing] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   const { isError: isError, error: error, refetch: refetch, items: _listingItems, create: _createListing } = useLensData('marketplace', 'listing', {
     noSeed: true,
@@ -456,6 +458,21 @@ export default function MarketplaceLensPage() {
     queryKey: ['artistry-purchases'],
     queryFn: () => api.get('/api/artistry/marketplace/licenses').then(r => r.data).catch(() => ({ licenseTypes: {} })),
   });
+
+  // Economy balance
+  const { data: balanceData } = useQuery({
+    queryKey: ['economy-balance'],
+    queryFn: () => api.get('/api/economy/balance', { params: { user_id: 'current' } }).then(r => r.data).catch(() => ({ balance: 0 })),
+  });
+
+  // Fee schedule
+  const { data: feeData } = useQuery({
+    queryKey: ['economy-fees'],
+    queryFn: () => api.get('/api/economy/fees').then(r => r.data).catch(() => ({ fees: { MARKETPLACE_PURCHASE: 0.05 } })),
+  });
+
+  const marketplaceFeeRate = feeData?.fees?.MARKETPLACE_PURCHASE ?? 0.05;
+  const userBalance = balanceData?.balance ?? 0;
 
   // Merge real API data — no demo fallback
   const allItems = useMemo(() => {
@@ -521,15 +538,54 @@ export default function MarketplaceLensPage() {
 
   const closePreview = useCallback(() => { setPreviewItem(null); setIsPlaying(false); }, []);
 
-  // Checkout
-  const handleCheckout = useCallback(() => {
-    const newPurchases: Purchase[] = cart.map((c, i) => ({
-      id: `p-${Date.now()}-${i}`, item: c.item, license: c.license, price: c.price, purchasedAt: new Date().toISOString(),
-    }));
-    setPurchases(prev => [...newPurchases, ...prev]);
-    setCart([]);
-    setTab('purchases');
-  }, [cart]);
+  // Checkout — settles each cart item through the economy ledger
+  const handleCheckout = useCallback(async () => {
+    if (cart.length === 0 || checkoutLoading) return;
+    setCheckoutLoading(true);
+    setCheckoutError(null);
+
+    const completed: Purchase[] = [];
+    const errors: string[] = [];
+
+    for (const ci of cart) {
+      try {
+        const typeMap: Record<string, string> = { beat: 'beat', stem: 'stems', sample: 'sample-pack', artwork: 'artwork', plugin: 'beat', preset: 'beat' };
+        const resp = await api.post('/api/artistry/marketplace/purchase', {
+          buyerId: 'current',
+          listingId: ci.item.id,
+          listingType: typeMap[ci.item.type] || 'beat',
+          licenseType: ci.license,
+        });
+        const data = resp.data;
+        if (data.ok) {
+          completed.push({
+            id: data.license?.id || `p-${Date.now()}`,
+            item: ci.item,
+            license: ci.license,
+            price: data.paid ?? ci.price,
+            purchasedAt: new Date().toISOString(),
+          });
+        } else {
+          errors.push(`${ci.item.title}: ${data.error || 'Purchase failed'}`);
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Unknown error';
+        errors.push(`${ci.item.title}: ${msg}`);
+      }
+    }
+
+    if (completed.length > 0) {
+      setPurchases(prev => [...completed, ...prev]);
+      setCart(prev => prev.filter(c => !completed.some(p => p.item.id === c.item.id)));
+    }
+    if (errors.length > 0) {
+      setCheckoutError(errors.join('; '));
+    }
+    if (completed.length > 0 && errors.length === 0) {
+      setTab('purchases');
+    }
+    setCheckoutLoading(false);
+  }, [cart, checkoutLoading]);
 
   // Featured carousel auto-advance
   useEffect(() => {
@@ -863,15 +919,30 @@ export default function MarketplaceLensPage() {
                   <span>{formatPrice(cartTotal)}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm text-gray-400">
-                  <span>Platform fee</span>
-                  <span>$0</span>
+                  <span>Platform fee ({(marketplaceFeeRate * 100).toFixed(0)}%)</span>
+                  <span>{formatPrice(Math.round(cartTotal * marketplaceFeeRate * 100) / 100)}</span>
                 </div>
                 <div className="border-t border-lattice-border pt-3 flex items-center justify-between">
                   <span className="font-bold">Total</span>
                   <span className="text-neon-green text-xl font-bold">{formatPrice(cartTotal)}</span>
                 </div>
-                <button onClick={handleCheckout} className="btn-neon purple w-full py-3 text-sm font-semibold flex items-center justify-center gap-2">
-                  <Check className="w-4 h-4" /> Checkout
+                <div className="flex items-center justify-between text-xs text-gray-500">
+                  <span>Your balance</span>
+                  <span className={cn(userBalance < cartTotal ? 'text-red-400' : 'text-gray-400')}>
+                    {formatPrice(userBalance)}
+                  </span>
+                </div>
+                {checkoutError && (
+                  <p className="text-xs text-red-400 bg-red-400/10 rounded-lg px-3 py-2">{checkoutError}</p>
+                )}
+                <button onClick={handleCheckout} disabled={checkoutLoading}
+                  className={cn('btn-neon purple w-full py-3 text-sm font-semibold flex items-center justify-center gap-2',
+                    checkoutLoading && 'opacity-50 cursor-not-allowed')}>
+                  {checkoutLoading ? (
+                    <><span className="animate-spin">⟳</span> Processing...</>
+                  ) : (
+                    <><Check className="w-4 h-4" /> Checkout</>
+                  )}
                 </button>
               </div>
             </>

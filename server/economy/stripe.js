@@ -174,6 +174,11 @@ export async function handleWebhook(db, { rawBody, signature, requestId, ip }) {
             ip,
           });
 
+          if (!result.ok) {
+            console.error(`[Stripe Webhook] executePurchase failed for session ${session.id}:`, result.error, result.detail);
+            return { ok: false, error: "token_credit_failed", detail: result.error };
+          }
+
           economyAudit(db, {
             action: "token_purchase_completed",
             userId,
