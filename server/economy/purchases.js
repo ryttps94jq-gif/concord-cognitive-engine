@@ -93,31 +93,31 @@ export function transitionPurchase(db, purchaseId, toStatus, { reason, actor, me
 
 /**
  * Update settlement details on a purchase after successful ledger commit.
+ * Only updates fields that are explicitly provided (non-undefined).
+ * This prevents a later call (e.g., adding licenseId at FULFILLED)
+ * from zeroing out financial data recorded at SETTLED.
  */
 export function recordSettlement(db, purchaseId, {
   settlementBatchId, licenseId, marketplaceFee, sellerNet, totalRoyalties, royaltyDetails,
 }) {
   const now = nowISO();
-  db.prepare(`
-    UPDATE purchases SET
-      settlement_batch_id = ?,
-      license_id = ?,
-      marketplace_fee = ?,
-      seller_net = ?,
-      total_royalties = ?,
-      royalty_details_json = ?,
-      updated_at = ?
-    WHERE purchase_id = ?
-  `).run(
-    settlementBatchId || null,
-    licenseId || null,
-    marketplaceFee ?? 0,
-    sellerNet ?? 0,
-    totalRoyalties ?? 0,
-    JSON.stringify(royaltyDetails || []),
-    now,
-    purchaseId,
-  );
+  const updates = [];
+  const values = [];
+
+  if (settlementBatchId !== undefined) { updates.push("settlement_batch_id = ?"); values.push(settlementBatchId || null); }
+  if (licenseId !== undefined)          { updates.push("license_id = ?");          values.push(licenseId || null); }
+  if (marketplaceFee !== undefined)     { updates.push("marketplace_fee = ?");     values.push(marketplaceFee); }
+  if (sellerNet !== undefined)          { updates.push("seller_net = ?");          values.push(sellerNet); }
+  if (totalRoyalties !== undefined)     { updates.push("total_royalties = ?");     values.push(totalRoyalties); }
+  if (royaltyDetails !== undefined)     { updates.push("royalty_details_json = ?"); values.push(JSON.stringify(royaltyDetails)); }
+
+  if (updates.length === 0) return; // nothing to update
+
+  updates.push("updated_at = ?");
+  values.push(now);
+  values.push(purchaseId);
+
+  db.prepare(`UPDATE purchases SET ${updates.join(", ")} WHERE purchase_id = ?`).run(...values);
 }
 
 /**

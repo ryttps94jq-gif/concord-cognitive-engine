@@ -33693,12 +33693,7 @@ function creditWallet(odId, amount, reason = '', refId = null) {
     if (existing.exists) return getWallet(odId); // already done, no-op
   }
 
-  const wallet = getWallet(odId);
-  wallet.balance += amount;
-  wallet.tokensEarned += amount;
-  wallet.updatedAt = Date.now();
-  logTransaction({ type: 'credit', odId, amount, reason, balance: wallet.balance, refId });
-  // Bridge to economy ledger if available
+  // Bridge to economy ledger FIRST — if this fails, don't modify in-memory state
   if (db && amount > 0) {
     try {
       db.prepare(`
@@ -33732,6 +33727,12 @@ function creditWallet(odId, amount, reason = '', refId = null) {
       }
     }
   }
+
+  const wallet = getWallet(odId);
+  wallet.balance += amount;
+  wallet.tokensEarned += amount;
+  wallet.updatedAt = Date.now();
+  logTransaction({ type: 'credit', odId, amount, reason, balance: wallet.balance, refId });
   return wallet;
 }
 
@@ -33746,11 +33747,8 @@ function debitWallet(odId, amount, reason = '', refId = null) {
   if (wallet.balance < amount) {
     throw new Error(`Insufficient balance: have ${wallet.balance}, need ${amount}`);
   }
-  wallet.balance -= amount;
-  wallet.tokensSpent += amount;
-  wallet.updatedAt = Date.now();
-  logTransaction({ type: 'debit', odId, amount, reason, balance: wallet.balance, refId });
-  // Bridge to economy ledger if available
+
+  // Bridge to economy ledger FIRST — if this fails, don't modify in-memory state
   if (db && amount > 0) {
     try {
       db.prepare(`
@@ -33783,6 +33781,11 @@ function debitWallet(odId, amount, reason = '', refId = null) {
       }
     }
   }
+
+  wallet.balance -= amount;
+  wallet.tokensSpent += amount;
+  wallet.updatedAt = Date.now();
+  logTransaction({ type: 'debit', odId, amount, reason, balance: wallet.balance, refId });
   return wallet;
 }
 
@@ -35771,6 +35774,7 @@ const CITATION_ROYALTY_MIN_RATE = 0.00001;  // 0.001% minimum royalty rate
  */
 function resolveAssetCitations(listingAssetId) {
   const citations = [];
+  if (!listingAssetId) return citations;
   const seen = new Set();
 
   // 1. Concord Global — DTU references
@@ -35926,7 +35930,18 @@ app.post('/api/artistry/marketplace/purchase', (req, res) => {
       const afterFee = Math.round((price - marketplaceFee) * 100) / 100;
 
       // 3. Resolve citations and compute royalties
-      const citations = resolveAssetCitations(listing.assetId);
+      // Stems and sample packs use assetIds (plural array), not assetId
+      const primaryAssetId = listing.assetId || (listing.assetIds?.[0]) || null;
+      const citations = primaryAssetId ? resolveAssetCitations(primaryAssetId) : [];
+      // For multi-asset listings, also resolve citations from additional assets
+      if (listing.assetIds?.length > 1) {
+        const seen = new Set(citations.map(c => c.citedId));
+        for (let i = 1; i < listing.assetIds.length; i++) {
+          for (const c of resolveAssetCitations(listing.assetIds[i])) {
+            if (!seen.has(c.citedId)) { citations.push(c); seen.add(c.citedId); }
+          }
+        }
+      }
       const royaltyEntries = [];
       let totalRoyalties = 0;
 
@@ -36168,7 +36183,8 @@ app.post('/api/artistry/marketplace/purchase', (req, res) => {
     listing.totalSales = (listing.totalSales || 0) + 1;
 
     // ── Split accounting (in-memory) ────────────────────────────────────
-    const split = Array.from(art.splits.values()).find(s => s.assetId === listing.assetId);
+    const splitAssetId = listing.assetId || listing.assetIds?.[0];
+    const split = splitAssetId ? Array.from(art.splits.values()).find(s => s.assetId === splitAssetId) : null;
     if (split) {
       for (const p of split.participants) {
         p.totalEarned = (p.totalEarned || 0) + Math.floor(price * p.percentage / 100);

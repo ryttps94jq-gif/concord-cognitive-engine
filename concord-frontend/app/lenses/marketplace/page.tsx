@@ -550,16 +550,19 @@ export default function MarketplaceLensPage() {
     for (const ci of cart) {
       try {
         const typeMap: Record<string, string> = { beat: 'beat', stem: 'stems', sample: 'sample-pack', artwork: 'artwork', plugin: 'beat', preset: 'beat' };
+        // Generate a deterministic purchaseId for idempotency — safe to retry on network failure
+        const purchaseId = `pur_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
         const resp = await api.post('/api/artistry/marketplace/purchase', {
           buyerId: 'current',
           listingId: ci.item.id,
           listingType: typeMap[ci.item.type] || 'beat',
           licenseType: ci.license,
+          purchaseId,
         });
         const data = resp.data;
         if (data.ok) {
           completed.push({
-            id: data.license?.id || `p-${Date.now()}`,
+            id: data.purchaseId || data.license?.id || purchaseId,
             item: ci.item,
             license: ci.license,
             price: data.paid ?? ci.price,
@@ -919,7 +922,7 @@ export default function MarketplaceLensPage() {
                   <span>{formatPrice(cartTotal)}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm text-gray-400">
-                  <span>Platform fee ({(marketplaceFeeRate * 100).toFixed(0)}%)</span>
+                  <span>Platform fee ({(marketplaceFeeRate * 100).toFixed(0)}% from seller)</span>
                   <span>{formatPrice(Math.round(cartTotal * marketplaceFeeRate * 100) / 100)}</span>
                 </div>
                 <div className="border-t border-lattice-border pt-3 flex items-center justify-between">
