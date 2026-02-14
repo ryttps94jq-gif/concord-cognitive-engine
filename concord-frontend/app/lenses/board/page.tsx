@@ -1,8 +1,7 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -121,26 +120,49 @@ const assignees = ['Alex', 'Jordan', 'Maya', 'Rio', 'Sam'];
 const projects = ['Midnight Sessions EP', 'Summer Vibes Album', 'Neon Dreams Single'];
 
 // ---------------------------------------------------------------------------
-// Demo data
+// Seed data (auto-created on first use, then persisted via backend)
 // ---------------------------------------------------------------------------
 
-function buildDemoTasks(): Task[] {
-  return [
-    { id: generateId(), title: 'Late Night Groove', description: 'Chill beat with jazz samples and vinyl crackle.', status: 'idea_bank', priority: 'medium', type: 'beat', assignee: 'Alex', genre: 'Lo-Fi', progress: 10, dueDate: '2026-02-20', bpm: 85, musicalKey: 'Dm', attachments: 1, commentCount: 2, subtasks: [{ id: '1', title: 'Find jazz sample', done: true }, { id: '2', title: 'Chop & arrange', done: false }], comments: [{ id: 'c1', author: 'Maya', text: 'Love the vibe direction!', timestamp: '2026-02-05T10:30:00Z' }], activity: [{ id: 'a1', action: 'Task created', timestamp: '2026-02-04T09:00:00Z' }], files: ['jazz_sample_pack.zip'] },
-    { id: generateId(), title: 'Velvet Skyline', description: 'Dreamy R&B ballad with layered harmonies.', status: 'idea_bank', priority: 'low', type: 'song', assignee: 'Maya', genre: 'R&B', progress: 5, dueDate: '2026-03-01', bpm: 72, musicalKey: 'Ab', attachments: 0, commentCount: 0, subtasks: [], comments: [], activity: [{ id: 'a1', action: 'Task created', timestamp: '2026-02-06T14:00:00Z' }], files: [] },
-    { id: generateId(), title: 'Neon Pulse (Lyrics)', description: 'Write full lyrics for lead single. Theme: city lights at 2am.', status: 'writing', priority: 'high', type: 'song', assignee: 'Jordan', genre: 'Pop', progress: 45, dueDate: '2026-02-12', attachments: 2, commentCount: 3, subtasks: [{ id: '1', title: 'Verse 1 draft', done: true }, { id: '2', title: 'Chorus hook', done: true }, { id: '3', title: 'Bridge section', done: false }, { id: '4', title: 'Final review', done: false }], comments: [{ id: 'c1', author: 'Alex', text: 'Chorus is fire', timestamp: '2026-02-07T08:00:00Z' }], activity: [{ id: 'a1', action: 'Moved to Writing', timestamp: '2026-02-05T11:00:00Z' }], files: ['lyrics_v2.docx', 'reference_track.mp3'] },
-    { id: generateId(), title: 'Bass House Flip', description: 'Remix the original with heavy bass house elements.', status: 'writing', priority: 'medium', type: 'remix', assignee: 'Rio', genre: 'Electronic', progress: 30, dueDate: '2026-02-18', bpm: 128, musicalKey: 'Fm', attachments: 1, commentCount: 1, subtasks: [{ id: '1', title: 'Deconstruct original', done: true }, { id: '2', title: 'New bass design', done: false }], comments: [], activity: [], files: ['original_stems.zip'] },
-    { id: generateId(), title: 'Echoes (Vocal Session)', description: 'Record lead and background vocals with Maya.', status: 'recording', priority: 'urgent', type: 'song', assignee: 'Maya', genre: 'R&B', progress: 60, dueDate: '2026-02-08', attachments: 4, commentCount: 5, subtasks: [{ id: '1', title: 'Lead vocal take', done: true }, { id: '2', title: 'Harmonies', done: true }, { id: '3', title: 'Ad-libs', done: false }], comments: [{ id: 'c1', author: 'Sam', text: 'Studio B booked for Thursday', timestamp: '2026-02-06T16:00:00Z' }], activity: [{ id: 'a1', action: 'Priority changed to urgent', timestamp: '2026-02-07T07:00:00Z' }], files: ['vocal_take_01.wav', 'vocal_take_02.wav', 'comping_notes.pdf', 'session_photo.jpg'] },
-    { id: generateId(), title: 'Trap Symphony Beat', description: 'Orchestral trap beat with strings and 808s.', status: 'recording', priority: 'high', type: 'beat', assignee: 'Alex', genre: 'Hip-Hop', progress: 55, dueDate: '2026-02-14', bpm: 140, musicalKey: 'Cm', attachments: 2, commentCount: 1, subtasks: [{ id: '1', title: 'Program drums', done: true }, { id: '2', title: 'Record live strings', done: false }], comments: [], activity: [], files: ['808_pattern.mid', 'string_arrangement.pdf'] },
-    { id: generateId(), title: 'Midnight Drive Mix', description: 'Full mix session for the lead single. Focus on vocal clarity and low end.', status: 'mixing', priority: 'high', type: 'mix', assignee: 'Sam', genre: 'Pop', progress: 70, dueDate: '2026-02-10', bpm: 110, musicalKey: 'Eb', attachments: 3, commentCount: 4, subtasks: [{ id: '1', title: 'Balance levels', done: true }, { id: '2', title: 'EQ vocals', done: true }, { id: '3', title: 'Compression pass', done: true }, { id: '4', title: 'Spatial effects', done: false }, { id: '5', title: 'Client review', done: false }], comments: [{ id: 'c1', author: 'Jordan', text: 'Kick needs more punch around 60Hz', timestamp: '2026-02-07T15:00:00Z' }], activity: [{ id: 'a1', action: 'Mix revision 3 uploaded', timestamp: '2026-02-07T14:00:00Z' }], files: ['mix_v3.wav', 'mix_notes.txt', 'reference.wav'] },
-    { id: generateId(), title: 'Sunset Fade (Latin Mix)', description: 'Latin-infused pop track mix with live percussion.', status: 'mixing', priority: 'medium', type: 'song', assignee: 'Rio', genre: 'Latin', progress: 40, dueDate: '2026-02-22', bpm: 96, musicalKey: 'G', attachments: 1, commentCount: 0, subtasks: [{ id: '1', title: 'Rough mix', done: true }, { id: '2', title: 'Percussion balance', done: false }], comments: [], activity: [], files: ['rough_mix.wav'] },
-    { id: generateId(), title: 'Afterglow Master', description: 'Mastering for streaming platforms. Target -14 LUFS.', status: 'mastering', priority: 'high', type: 'song', assignee: 'Sam', genre: 'Pop', progress: 80, dueDate: '2026-02-09', attachments: 2, commentCount: 2, subtasks: [{ id: '1', title: 'Limiting pass', done: true }, { id: '2', title: 'Stereo imaging', done: true }, { id: '3', title: 'Format exports', done: false }], comments: [{ id: 'c1', author: 'Alex', text: 'Need WAV and MP3 versions', timestamp: '2026-02-08T09:00:00Z' }], activity: [{ id: 'a1', action: 'Moved to Mastering', timestamp: '2026-02-07T16:00:00Z' }], files: ['pre_master.wav', 'mastering_chain.pdf'] },
-    { id: generateId(), title: 'Album Cover Art', description: 'Design cover art for Midnight Sessions EP. Neon cityscape theme.', status: 'mastering', priority: 'medium', type: 'cover_art', assignee: 'Jordan', genre: 'Hip-Hop', progress: 65, dueDate: '2026-02-15', attachments: 5, commentCount: 3, subtasks: [{ id: '1', title: 'Concept sketches', done: true }, { id: '2', title: 'Color palette', done: true }, { id: '3', title: 'Final render', done: false }], comments: [{ id: 'c1', author: 'Maya', text: 'More purple tones please', timestamp: '2026-02-06T12:00:00Z' }], activity: [], files: ['sketch_v1.png', 'sketch_v2.png', 'palette.png', 'reference_1.jpg', 'reference_2.jpg'] },
-    { id: generateId(), title: 'City Lights (Released)', description: 'Single released on all platforms. Tracking performance.', status: 'released', priority: 'low', type: 'song', assignee: 'Alex', genre: 'Pop', progress: 100, dueDate: '2026-01-28', bpm: 120, musicalKey: 'C', attachments: 1, commentCount: 6, subtasks: [{ id: '1', title: 'Upload to distributor', done: true }, { id: '2', title: 'Social media promo', done: true }], comments: [], activity: [{ id: 'a1', action: 'Released to all platforms', timestamp: '2026-01-28T00:00:00Z' }], files: ['distribution_receipt.pdf'] },
-    { id: generateId(), title: 'Lyric Video - Echoes', description: 'Animated lyric video for YouTube premiere.', status: 'recording', priority: 'medium', type: 'video', assignee: 'Jordan', genre: 'R&B', progress: 25, dueDate: '2026-02-25', attachments: 2, commentCount: 1, subtasks: [{ id: '1', title: 'Storyboard', done: true }, { id: '2', title: 'Animation', done: false }, { id: '3', title: 'Final render', done: false }], comments: [], activity: [], files: ['storyboard.pdf', 'font_selection.zip'] },
-    { id: generateId(), title: 'Afrobeats Riddim', description: 'Upbeat afrobeats production with guitar loops.', status: 'idea_bank', priority: 'low', type: 'beat', assignee: 'Rio', genre: 'Afrobeats', progress: 0, dueDate: '2026-03-10', bpm: 105, musicalKey: 'Bb', attachments: 0, commentCount: 0, subtasks: [], comments: [], activity: [{ id: 'a1', action: 'Task created', timestamp: '2026-02-07T10:00:00Z' }], files: [] },
-    { id: generateId(), title: 'Lo-Fi Study Tape', description: 'Full lo-fi beat tape for streaming. 8 tracks.', status: 'released', priority: 'low', type: 'beat', assignee: 'Alex', genre: 'Lo-Fi', progress: 100, dueDate: '2026-01-15', bpm: 78, musicalKey: 'Am', attachments: 1, commentCount: 4, subtasks: [{ id: '1', title: 'Master all 8 tracks', done: true }, { id: '2', title: 'Upload', done: true }], comments: [], activity: [{ id: 'a1', action: 'Released', timestamp: '2026-01-15T00:00:00Z' }], files: ['tape_master.zip'] },
-  ];
+const SEED_TASKS: { title: string; data: Record<string, unknown> }[] = [
+  { title: 'Late Night Groove', data: { description: 'Chill beat with jazz samples and vinyl crackle.', status: 'idea_bank', priority: 'medium', type: 'beat', assignee: 'Alex', genre: 'Lo-Fi', progress: 10, dueDate: '2026-02-20', bpm: 85, musicalKey: 'Dm', attachments: 1, commentCount: 2, subtasks: [{ id: '1', title: 'Find jazz sample', done: true }, { id: '2', title: 'Chop & arrange', done: false }], comments: [{ id: 'c1', author: 'Maya', text: 'Love the vibe direction!', timestamp: '2026-02-05T10:30:00Z' }], activity: [{ id: 'a1', action: 'Task created', timestamp: '2026-02-04T09:00:00Z' }], files: ['jazz_sample_pack.zip'] } },
+  { title: 'Velvet Skyline', data: { description: 'Dreamy R&B ballad with layered harmonies.', status: 'idea_bank', priority: 'low', type: 'song', assignee: 'Maya', genre: 'R&B', progress: 5, dueDate: '2026-03-01', bpm: 72, musicalKey: 'Ab', attachments: 0, commentCount: 0, subtasks: [], comments: [], activity: [{ id: 'a1', action: 'Task created', timestamp: '2026-02-06T14:00:00Z' }], files: [] } },
+  { title: 'Neon Pulse (Lyrics)', data: { description: 'Write full lyrics for lead single. Theme: city lights at 2am.', status: 'writing', priority: 'high', type: 'song', assignee: 'Jordan', genre: 'Pop', progress: 45, dueDate: '2026-02-12', attachments: 2, commentCount: 3, subtasks: [{ id: '1', title: 'Verse 1 draft', done: true }, { id: '2', title: 'Chorus hook', done: true }, { id: '3', title: 'Bridge section', done: false }, { id: '4', title: 'Final review', done: false }], comments: [{ id: 'c1', author: 'Alex', text: 'Chorus is fire', timestamp: '2026-02-07T08:00:00Z' }], activity: [{ id: 'a1', action: 'Moved to Writing', timestamp: '2026-02-05T11:00:00Z' }], files: ['lyrics_v2.docx', 'reference_track.mp3'] } },
+  { title: 'Bass House Flip', data: { description: 'Remix the original with heavy bass house elements.', status: 'writing', priority: 'medium', type: 'remix', assignee: 'Rio', genre: 'Electronic', progress: 30, dueDate: '2026-02-18', bpm: 128, musicalKey: 'Fm', attachments: 1, commentCount: 1, subtasks: [{ id: '1', title: 'Deconstruct original', done: true }, { id: '2', title: 'New bass design', done: false }], comments: [], activity: [], files: ['original_stems.zip'] } },
+  { title: 'Echoes (Vocal Session)', data: { description: 'Record lead and background vocals with Maya.', status: 'recording', priority: 'urgent', type: 'song', assignee: 'Maya', genre: 'R&B', progress: 60, dueDate: '2026-02-08', attachments: 4, commentCount: 5, subtasks: [{ id: '1', title: 'Lead vocal take', done: true }, { id: '2', title: 'Harmonies', done: true }, { id: '3', title: 'Ad-libs', done: false }], comments: [{ id: 'c1', author: 'Sam', text: 'Studio B booked for Thursday', timestamp: '2026-02-06T16:00:00Z' }], activity: [{ id: 'a1', action: 'Priority changed to urgent', timestamp: '2026-02-07T07:00:00Z' }], files: ['vocal_take_01.wav', 'vocal_take_02.wav', 'comping_notes.pdf', 'session_photo.jpg'] } },
+  { title: 'Trap Symphony Beat', data: { description: 'Orchestral trap beat with strings and 808s.', status: 'recording', priority: 'high', type: 'beat', assignee: 'Alex', genre: 'Hip-Hop', progress: 55, dueDate: '2026-02-14', bpm: 140, musicalKey: 'Cm', attachments: 2, commentCount: 1, subtasks: [{ id: '1', title: 'Program drums', done: true }, { id: '2', title: 'Record live strings', done: false }], comments: [], activity: [], files: ['808_pattern.mid', 'string_arrangement.pdf'] } },
+  { title: 'Midnight Drive Mix', data: { description: 'Full mix session for the lead single. Focus on vocal clarity and low end.', status: 'mixing', priority: 'high', type: 'mix', assignee: 'Sam', genre: 'Pop', progress: 70, dueDate: '2026-02-10', bpm: 110, musicalKey: 'Eb', attachments: 3, commentCount: 4, subtasks: [{ id: '1', title: 'Balance levels', done: true }, { id: '2', title: 'EQ vocals', done: true }, { id: '3', title: 'Compression pass', done: true }, { id: '4', title: 'Spatial effects', done: false }, { id: '5', title: 'Client review', done: false }], comments: [{ id: 'c1', author: 'Jordan', text: 'Kick needs more punch around 60Hz', timestamp: '2026-02-07T15:00:00Z' }], activity: [{ id: 'a1', action: 'Mix revision 3 uploaded', timestamp: '2026-02-07T14:00:00Z' }], files: ['mix_v3.wav', 'mix_notes.txt', 'reference.wav'] } },
+  { title: 'Sunset Fade (Latin Mix)', data: { description: 'Latin-infused pop track mix with live percussion.', status: 'mixing', priority: 'medium', type: 'song', assignee: 'Rio', genre: 'Latin', progress: 40, dueDate: '2026-02-22', bpm: 96, musicalKey: 'G', attachments: 1, commentCount: 0, subtasks: [{ id: '1', title: 'Rough mix', done: true }, { id: '2', title: 'Percussion balance', done: false }], comments: [], activity: [], files: ['rough_mix.wav'] } },
+  { title: 'Afterglow Master', data: { description: 'Mastering for streaming platforms. Target -14 LUFS.', status: 'mastering', priority: 'high', type: 'song', assignee: 'Sam', genre: 'Pop', progress: 80, dueDate: '2026-02-09', attachments: 2, commentCount: 2, subtasks: [{ id: '1', title: 'Limiting pass', done: true }, { id: '2', title: 'Stereo imaging', done: true }, { id: '3', title: 'Format exports', done: false }], comments: [{ id: 'c1', author: 'Alex', text: 'Need WAV and MP3 versions', timestamp: '2026-02-08T09:00:00Z' }], activity: [{ id: 'a1', action: 'Moved to Mastering', timestamp: '2026-02-07T16:00:00Z' }], files: ['pre_master.wav', 'mastering_chain.pdf'] } },
+  { title: 'Album Cover Art', data: { description: 'Design cover art for Midnight Sessions EP. Neon cityscape theme.', status: 'mastering', priority: 'medium', type: 'cover_art', assignee: 'Jordan', genre: 'Hip-Hop', progress: 65, dueDate: '2026-02-15', attachments: 5, commentCount: 3, subtasks: [{ id: '1', title: 'Concept sketches', done: true }, { id: '2', title: 'Color palette', done: true }, { id: '3', title: 'Final render', done: false }], comments: [{ id: 'c1', author: 'Maya', text: 'More purple tones please', timestamp: '2026-02-06T12:00:00Z' }], activity: [], files: ['sketch_v1.png', 'sketch_v2.png', 'palette.png', 'reference_1.jpg', 'reference_2.jpg'] } },
+  { title: 'City Lights (Released)', data: { description: 'Single released on all platforms. Tracking performance.', status: 'released', priority: 'low', type: 'song', assignee: 'Alex', genre: 'Pop', progress: 100, dueDate: '2026-01-28', bpm: 120, musicalKey: 'C', attachments: 1, commentCount: 6, subtasks: [{ id: '1', title: 'Upload to distributor', done: true }, { id: '2', title: 'Social media promo', done: true }], comments: [], activity: [{ id: 'a1', action: 'Released to all platforms', timestamp: '2026-01-28T00:00:00Z' }], files: ['distribution_receipt.pdf'] } },
+  { title: 'Lyric Video - Echoes', data: { description: 'Animated lyric video for YouTube premiere.', status: 'recording', priority: 'medium', type: 'video', assignee: 'Jordan', genre: 'R&B', progress: 25, dueDate: '2026-02-25', attachments: 2, commentCount: 1, subtasks: [{ id: '1', title: 'Storyboard', done: true }, { id: '2', title: 'Animation', done: false }, { id: '3', title: 'Final render', done: false }], comments: [], activity: [], files: ['storyboard.pdf', 'font_selection.zip'] } },
+  { title: 'Afrobeats Riddim', data: { description: 'Upbeat afrobeats production with guitar loops.', status: 'idea_bank', priority: 'low', type: 'beat', assignee: 'Rio', genre: 'Afrobeats', progress: 0, dueDate: '2026-03-10', bpm: 105, musicalKey: 'Bb', attachments: 0, commentCount: 0, subtasks: [], comments: [], activity: [{ id: 'a1', action: 'Task created', timestamp: '2026-02-07T10:00:00Z' }], files: [] } },
+  { title: 'Lo-Fi Study Tape', data: { description: 'Full lo-fi beat tape for streaming. 8 tracks.', status: 'released', priority: 'low', type: 'beat', assignee: 'Alex', genre: 'Lo-Fi', progress: 100, dueDate: '2026-01-15', bpm: 78, musicalKey: 'Am', attachments: 1, commentCount: 4, subtasks: [{ id: '1', title: 'Master all 8 tracks', done: true }, { id: '2', title: 'Upload', done: true }], comments: [], activity: [{ id: 'a1', action: 'Released', timestamp: '2026-01-15T00:00:00Z' }], files: ['tape_master.zip'] } },
+];
+
+/** Convert a LensItem to the local Task type */
+function lensItemToTask(item: LensItem<Record<string, unknown>>): Task {
+  const d = item.data || {};
+  return {
+    id: item.id,
+    title: item.title || (d.title as string) || 'Untitled',
+    description: (d.description as string) || '',
+    status: (d.status as ColumnId) || 'idea_bank',
+    priority: (d.priority as Priority) || 'medium',
+    type: (d.type as TaskType) || 'song',
+    assignee: (d.assignee as string) || '',
+    genre: (d.genre as string) || '',
+    progress: (d.progress as number) || 0,
+    dueDate: (d.dueDate as string) || new Date().toISOString().split('T')[0],
+    bpm: d.bpm as number | undefined,
+    musicalKey: d.musicalKey as string | undefined,
+    attachments: (d.attachments as number) || 0,
+    commentCount: (d.commentCount as number) || 0,
+    subtasks: (d.subtasks as Subtask[]) || [],
+    comments: (d.comments as Comment[]) || [],
+    activity: (d.activity as ActivityEntry[]) || [],
+    files: (d.files as string[]) || [],
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -170,8 +192,13 @@ function avatarColor(name: string): string {
 export default function BoardLensPage() {
   useLensNav('board');
 
-  const _queryClient = useQueryClient();
-  const [tasks, setTasks] = useState<Task[]>(buildDemoTasks);
+  // Persist tasks via real backend lens artifacts (auto-seeds on first use)
+  const { items: lensItems, isLoading: tasksLoading, isSeeding, create: createLens, update: updateLens, remove: removeLens } = useLensData<Record<string, unknown>>('board', 'task', {
+    seed: SEED_TASKS,
+  });
+
+  const tasks: Task[] = useMemo(() => lensItems.map(lensItemToTask), [lensItems]);
+
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('board');
   const [activeProject, setActiveProject] = useState(projects[0]);
@@ -188,14 +215,6 @@ export default function BoardLensPage() {
   const [filterGenre, setFilterGenre] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
-
-  // Keep API query for real backend data (falls back to local demo data)
-  useQuery({
-    queryKey: ['board-tasks'],
-    queryFn: () => api.get('/api/board/tasks').then((r) => r.data),
-    retry: false,
-    refetchOnWindowFocus: false,
-  });
 
   // --- filtered tasks ---
   const filteredTasks = useMemo(() => {
@@ -245,70 +264,76 @@ export default function BoardLensPage() {
   const handleDrop = useCallback((e: React.DragEvent, targetCol: ColumnId) => {
     e.preventDefault();
     const taskId = e.dataTransfer.getData('taskId');
-    setTasks((prev) =>
-      prev.map((t) =>
-        t.id === taskId
-          ? { ...t, status: targetCol, progress: targetCol === 'released' ? 100 : t.progress }
-          : t
-      )
-    );
+    const task = tasks.find((t) => t.id === taskId);
+    if (task) {
+      const newProgress = targetCol === 'released' ? 100 : task.progress;
+      updateLens(taskId, { data: { ...task, status: targetCol, progress: newProgress, id: undefined, title: undefined } as unknown as Record<string, unknown> });
+    }
     setDragOverColumn(null);
-  }, []);
+  }, [tasks, updateLens]);
 
   // --- quick add ---
   const handleQuickAdd = useCallback((colId: ColumnId) => {
     const title = quickAddInputs[colId]?.trim();
     if (!title) return;
-    const newTask: Task = {
-      id: generateId(),
+    createLens({
       title,
-      description: '',
-      status: colId,
-      priority: 'medium',
-      type: 'song',
-      assignee: assignees[Math.floor(Math.random() * assignees.length)],
-      genre: genres[Math.floor(Math.random() * genres.length)],
-      progress: 0,
-      dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      attachments: 0,
-      commentCount: 0,
-      subtasks: [],
-      comments: [],
-      activity: [{ id: generateId(), action: 'Task created', timestamp: new Date().toISOString() }],
-      files: [],
-    };
-    setTasks((prev) => [...prev, newTask]);
+      data: {
+        description: '',
+        status: colId,
+        priority: 'medium',
+        type: 'song',
+        assignee: assignees[0],
+        genre: genres[0],
+        progress: 0,
+        dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        attachments: 0,
+        commentCount: 0,
+        subtasks: [],
+        comments: [],
+        activity: [{ id: generateId(), action: 'Task created', timestamp: new Date().toISOString() }],
+        files: [],
+      } as unknown as Partial<Record<string, unknown>>,
+    });
     setQuickAddInputs((prev) => ({ ...prev, [colId]: '' }));
-  }, [quickAddInputs]);
+  }, [quickAddInputs, createLens]);
 
-  // --- task detail updates ---
+  // --- task detail updates (persisted via backend) ---
   const updateTask = useCallback((taskId: string, patch: Partial<Task>) => {
-    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, ...patch } : t)));
+    // Optimistically update the selected task panel
     setSelectedTask((prev) => (prev && prev.id === taskId ? { ...prev, ...patch } : prev));
-  }, []);
+    // Persist to backend
+    const { id: _id, ...patchData } = patch as Record<string, unknown>;
+    updateLens(taskId, { data: patchData as Record<string, unknown> });
+  }, [updateLens]);
 
   const toggleSubtask = useCallback((taskId: string, subtaskId: string) => {
-    setTasks((prev) =>
-      prev.map((t) => {
-        if (t.id !== taskId) return t;
-        const updatedSubs = t.subtasks.map((s) => (s.id === subtaskId ? { ...s, done: !s.done } : s));
-        const doneCount = updatedSubs.filter((s) => s.done).length;
-        const progress = updatedSubs.length > 0 ? Math.round((doneCount / updatedSubs.length) * 100) : t.progress;
-        return { ...t, subtasks: updatedSubs, progress };
-      })
-    );
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task) return;
+    const updatedSubs = task.subtasks.map((s) => (s.id === subtaskId ? { ...s, done: !s.done } : s));
+    const doneCount = updatedSubs.filter((s) => s.done).length;
+    const progress = updatedSubs.length > 0 ? Math.round((doneCount / updatedSubs.length) * 100) : task.progress;
+    updateLens(taskId, { data: { subtasks: updatedSubs, progress } as unknown as Record<string, unknown> });
     setSelectedTask((prev) => {
       if (!prev || prev.id !== taskId) return prev;
-      const updatedSubs = prev.subtasks.map((s) => (s.id === subtaskId ? { ...s, done: !s.done } : s));
-      const doneCount = updatedSubs.filter((s) => s.done).length;
-      const progress = updatedSubs.length > 0 ? Math.round((doneCount / updatedSubs.length) * 100) : prev.progress;
       return { ...prev, subtasks: updatedSubs, progress };
     });
-  }, []);
+  }, [tasks, updateLens]);
 
   // -----------------------------------------------------------------------
   // Render
   // -----------------------------------------------------------------------
+
+  if (tasksLoading || isSeeding) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-purple-400 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">{isSeeding ? 'Setting up board data...' : 'Loading board...'}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full overflow-hidden">
