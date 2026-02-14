@@ -754,8 +754,8 @@ export function registerDurableEndpoints(app, db) {
           const artifactId = uid("art");
           const versionId = uid("artv");
           const now = nowISO();
-          const fakeBuf = Buffer.alloc(1024); // Placeholder
-          storage.put(`renders/${artifactId}/v1/render.${format}`, fakeBuf, format === "mp3" ? "audio/mpeg" : "audio/wav").then((putResult) => {
+          const pendingBuf = Buffer.alloc(1024); // Stub artifact — replaced when real audio worker processes the job
+          storage.put(`renders/${artifactId}/v1/render.${format}`, pendingBuf, format === "mp3" ? "audio/mpeg" : "audio/wav").then((putResult) => {
             const tx = db.transaction(() => {
               db.prepare(
                 "INSERT INTO artifacts (id, owner_user_id, type, title, metadata_json, visibility, created_at, updated_at) VALUES (?, ?, 'render', ?, ?, 'private', ?, ?)"
@@ -838,9 +838,9 @@ export function registerDurableEndpoints(app, db) {
       const artifactId = uid("art");
       const versionId = uid("artv");
       const now = nowISO();
-      const fakeBuf = Buffer.alloc(512);
+      const pendingBuf = Buffer.alloc(512); // Stub artifact — replaced when real audio worker processes the job
 
-      storage.put(`processed/${artifactId}/v1/processed.wav`, fakeBuf, "audio/wav").then((putResult) => {
+      storage.put(`processed/${artifactId}/v1/processed.wav`, pendingBuf, "audio/wav").then((putResult) => {
         const tx = db.transaction(() => {
           db.prepare(
             "INSERT INTO artifacts (id, owner_user_id, type, title, metadata_json, visibility, created_at, updated_at) VALUES (?, ?, 'audio', 'Processed Vocal', ?, 'private', ?, ?)"
@@ -872,9 +872,9 @@ export function registerDurableEndpoints(app, db) {
       const artifactId = uid("art");
       const versionId = uid("artv");
       const now = nowISO();
-      const fakeBuf = Buffer.alloc(1024);
+      const pendingBuf = Buffer.alloc(1024);
 
-      storage.put(`mastered/${artifactId}/v1/master.${format}`, fakeBuf, format === "mp3" ? "audio/mpeg" : "audio/wav").then((putResult) => {
+      storage.put(`mastered/${artifactId}/v1/master.${format}`, pendingBuf, format === "mp3" ? "audio/mpeg" : "audio/wav").then((putResult) => {
         const tx = db.transaction(() => {
           db.prepare(
             "INSERT INTO artifacts (id, owner_user_id, type, title, metadata_json, visibility, created_at, updated_at) VALUES (?, ?, 'master', 'Mastered Audio', ?, 'private', ?, ?)"
