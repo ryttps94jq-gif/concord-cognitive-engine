@@ -408,6 +408,107 @@ export const apiHelpers = {
     get: () => api.get('/api/schema/version'),
   },
 
+  // ═══════════════════════════════════════════════════════════════
+  // Guidance Layer v1
+  // ═══════════════════════════════════════════════════════════════
+
+  guidance: {
+    // System health
+    health: () => api.get('/api/system/health'),
+
+    // Enhanced paginated events with scope/type filters
+    eventsPaginated: (params?: { type?: string; scope?: string; entityType?: string; entityId?: string; limit?: number; offset?: number }) =>
+      api.get('/api/events/paginated', { params }),
+
+    // Object Inspector
+    inspect: (entityType: string, entityId: string) =>
+      api.get(`/api/inspect/${entityType}/${entityId}`),
+
+    // Undo
+    undo: (undoToken: string, userId?: string) =>
+      api.post('/api/undo', { undoToken, user_id: userId }),
+
+    // Action preview (dry-run)
+    previewAction: (data: { action: string; entityType?: string; entityId?: string; params?: Record<string, unknown> }) =>
+      api.post('/api/preview-action', data),
+
+    // Context suggestions
+    suggestions: (lens?: string, userId?: string) =>
+      api.get('/api/guidance/suggestions', { params: { lens, user_id: userId } }),
+
+    // First-win wizard status
+    firstWin: () => api.get('/api/guidance/first-win'),
+
+    // Guided DTU CRUD (with undo tokens)
+    createDtu: (data: { title?: string; body?: Record<string, unknown>; tags?: string[]; visibility?: string; tier?: string; owner_user_id?: string }) =>
+      api.post('/api/dtus/guided', data),
+    updateDtu: (id: string, data: Record<string, unknown>) =>
+      api.put(`/api/dtus/guided/${id}`, data),
+    deleteDtu: (id: string) =>
+      api.delete(`/api/dtus/guided/${id}`),
+
+    // Guided lens sync (with undo)
+    syncLensItem: (data: { lens_id: string; artifact_id?: string; dtu_id?: string; owner_user_id?: string; metadata?: Record<string, unknown> }) =>
+      api.post('/api/lens-items/guided-sync', data),
+
+    // Guided marketplace publish (with undo)
+    publishListing: (listingId: string) =>
+      api.post(`/api/marketplace/listings/${listingId}/guided-publish`),
+  },
+
+  // ═══════════════════════════════════════════════════════════════
+  // Economy System
+  // ═══════════════════════════════════════════════════════════════
+
+  economy: {
+    // Balance
+    balance: (userId?: string) =>
+      api.get('/api/economy/balance', { params: { user_id: userId } }),
+
+    // Transaction history
+    history: (params?: { user_id?: string; type?: string; limit?: number; offset?: number }) =>
+      api.get('/api/economy/history', { params }),
+
+    // Token purchase
+    buy: (data: { user_id?: string; amount: number; source?: string }) =>
+      api.post('/api/economy/buy', data),
+
+    // Transfer
+    transfer: (data: { from?: string; to: string; amount: number; metadata?: Record<string, unknown> }) =>
+      api.post('/api/economy/transfer', data),
+
+    // Marketplace purchase
+    marketplacePurchase: (data: { buyer_id?: string; seller_id: string; amount: number; listing_id?: string }) =>
+      api.post('/api/economy/marketplace-purchase', data),
+
+    // Withdrawals
+    withdraw: (data: { user_id?: string; amount: number }) =>
+      api.post('/api/economy/withdraw', data),
+    withdrawals: (params?: { user_id?: string; limit?: number; offset?: number }) =>
+      api.get('/api/economy/withdrawals', { params }),
+    cancelWithdrawal: (withdrawalId: string, userId?: string) =>
+      api.post(`/api/economy/withdrawals/${withdrawalId}/cancel`, { user_id: userId }),
+
+    // Info
+    fees: () => api.get('/api/economy/fees'),
+    platformBalance: () => api.get('/api/economy/platform-balance'),
+    integrity: () => api.get('/api/economy/integrity'),
+
+    // Admin
+    adminTransactions: (params?: { type?: string; status?: string; limit?: number; offset?: number }) =>
+      api.get('/api/economy/admin/transactions', { params }),
+    adminWithdrawals: (params?: { status?: string; limit?: number; offset?: number }) =>
+      api.get('/api/economy/admin/withdrawals', { params }),
+    adminApproveWithdrawal: (withdrawalId: string, reviewerId?: string) =>
+      api.post(`/api/economy/admin/withdrawals/${withdrawalId}/approve`, { reviewer_id: reviewerId }),
+    adminRejectWithdrawal: (withdrawalId: string, reviewerId?: string) =>
+      api.post(`/api/economy/admin/withdrawals/${withdrawalId}/reject`, { reviewer_id: reviewerId }),
+    adminProcessWithdrawal: (withdrawalId: string) =>
+      api.post(`/api/economy/admin/withdrawals/${withdrawalId}/process`),
+    adminReverse: (transactionId: string, reason?: string) =>
+      api.post('/api/economy/admin/reverse', { transaction_id: transactionId, reason }),
+  },
+
   // Macros
   macros: {
     run: (recipeName: string, ctx?: Record<string, unknown>) =>
