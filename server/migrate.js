@@ -122,7 +122,7 @@ export async function runMigrations(existingDb = null) {
 /**
  * Show current schema status.
  */
-export async function migrationStatus(existingDb = null) {
+export function migrationStatus(existingDb = null) {
   if (!Database && !existingDb) {
     return { currentVersion: 0, migrations: [], error: "no-sqlite" };
   }
