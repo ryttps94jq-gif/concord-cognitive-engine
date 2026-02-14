@@ -23,3 +23,8 @@ export { adminOnly, authRequired, requireAdmin, requireUser } from "./guards.js"
 export { economyAudit, auditCtx } from "./audit.js";
 export { validateAmount, validateBalance } from "./validators.js";
 export { STRIPE_ENABLED, createCheckoutSession, handleWebhook, createConnectOnboarding, getConnectStatus } from "./stripe.js";
+export {
+  createPurchase, transitionPurchase, recordSettlement, getPurchase,
+  getPurchaseByRefId, getUserPurchases, findPurchasesByStatus, getPurchaseHistory, TRANSITIONS,
+} from "./purchases.js";
+export { runReconciliation, executeCorrection, getPurchaseReceipt, getReconciliationSummary } from "./reconciliation.js";
