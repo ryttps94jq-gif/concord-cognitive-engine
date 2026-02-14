@@ -144,6 +144,8 @@ check "Transfer" "/api/economy/transfer" "POST" "$TRANSFER_BODY"
 WITHDRAW_BODY='{"user_id":"smoke-user","amount":5}'
 check "Withdrawal request" "/api/economy/withdraw" "POST" "$WITHDRAW_BODY"
 check "Platform balance" "/api/economy/platform-balance"
+check "Economy config" "/api/economy/config"
+check "Connect status" "/api/stripe/connect/status?user_id=smoke-user"
 
 # ── Results ──────────────────────────────────────────────
 echo ""
