@@ -32,6 +32,7 @@ import path from "path";
 import { spawnSync } from "child_process";
 import { initAll as initLoaf } from "./loaf/index.js";
 import { init as initEmergent } from "./emergent/index.js";
+import { init as initGRC, formatAndValidate as grcFormatAndValidate, getGRCSystemPrompt } from "./grc/index.js";
 
 // ---- Atlas + Platform Upgrade Imports (v2) ----
 import { DOMAIN_TYPES as ATLAS_DOMAIN_TYPES, EPISTEMIC_CLASSES, DOMAIN_TYPE_SET, EPISTEMIC_CLASS_SET, computeAtlasScores, explainScores, validateAtlasDtu, getThresholds, initAtlasState, getAtlasState } from "./emergent/atlas-epistemic.js";
@@ -8563,6 +8564,31 @@ async function llmChat(messagesOrCtx, messagesOrOptions = {}, maybeOptions = {})
     return result;
   }
 
+  // GRC: Format through Grounded Recursive Closure pipeline
+  let grcResult = null;
+  if (GRC_MODULE && options.grc !== false) {
+    try {
+      grcResult = grcFormatAndValidate(
+        result.content,
+        {
+          dtuRefs: options.dtuRefs || [],
+          macroRefs: options.macroRefs || [],
+          stateRefs: options.stateRefs || [],
+          mode: options.grcMode || "governed-response",
+          invariantsApplied: options.invariantsApplied || [],
+          realitySnapshot: options.realitySnapshot || null,
+        },
+        {
+          inLatticeReality,
+          STATE,
+          affectState: null,
+        }
+      );
+    } catch (e) {
+      console.error("[GRC] Format failed, returning raw:", e?.message);
+    }
+  }
+
   // Format response to match OpenAI chat format (for compatibility)
   return {
     ok: true,
@@ -8572,7 +8598,10 @@ async function llmChat(messagesOrCtx, messagesOrOptions = {}, maybeOptions = {})
     }],
     source: result.source,
     polished: result.polished,
-    tokens: result.tokens
+    tokens: result.tokens,
+    grc: grcResult?.grc || null,
+    grcValid: grcResult?.ok || false,
+    grcRepairs: grcResult?.repairs || [],
   };
 }
 
@@ -11523,10 +11552,15 @@ let localReply = formatCrispResponse({
       _affSafety.strictness > 0.7 ? "Be cautious with uncertain claims." : "",
       _affCog.exploration > 0.6 ? "Explore alternative viewpoints." : "",
     ].filter(Boolean).join(" ") : "";
+    // GRC: Inject Grounded Recursive Closure system prompt when module is available
+    const _dtuTitles = focus.map(d => d.title || d.id).filter(Boolean);
+    const _grcSystemPrompt = GRC_MODULE
+      ? getGRCSystemPrompt({ dtus: _dtuTitles, mode })
+      : "";
     const system =
 `You are ConcordOS. Be natural, concise but not dry. Use DTUs as memory. Never pretend features exist.
 Mode: ${mode}.${_affectGuidance ? `\nTone: ${_affectGuidance}` : ""}
-When helpful, reference DTU titles in plain language (do not dump ids unless asked).`;
+When helpful, reference DTU titles in plain language (do not dump ids unless asked).${_grcSystemPrompt ? `\n\n${_grcSystemPrompt}` : ""}`;
     // Use fused context from quality pipeline if available; otherwise fall back to original assembly
     const dtuContext = (_fusedContext && _fusedContext.fusedContext)
       ? _fusedContext.fusedContext
@@ -11537,7 +11571,12 @@ When helpful, reference DTU titles in plain language (do not dump ids unless ask
     const messages = [
       { role: "user", content: `User prompt:\n${prompt}\n\nRelevant DTUs:\n${dtuContext}${_pipelineMeta}\n\nRespond naturally and propose next actions.` }
     ];
-    const r = await ctx.llm.chat({ system, messages, temperature: _llmTemp, maxTokens: _llmMaxTokens });
+    const r = await ctx.llm.chat({
+      system, messages, temperature: _llmTemp, maxTokens: _llmMaxTokens,
+      dtuRefs: _dtuTitles,
+      macroRefs: ["chat.respond"],
+      grcMode: mode,
+    });
     if (r.ok) {
       finalReply = r.content.trim() || localReply;
       llmUsed = true;
@@ -11583,8 +11622,32 @@ When helpful, reference DTU titles in plain language (do not dump ids unless ask
   // persist session + any state mutations from this turn
   saveStateDebounced();
 
-  return { ok: true, reply: finalReply, sessionId, mode, llmUsed, semanticUsed, relevant: relevant.map(d=>({ id:d.id, title:d.title, tier:d.tier })) };
-}, { description: "Mode-aware chat with DTU retrieval; optional LLM enhancement." });
+  // GRC: Format the final reply through the GRC pipeline (for both LLM and local responses)
+  let _grcOutput = null;
+  if (GRC_MODULE) {
+    try {
+      const _dtuTitlesForGRC = relevant.map(d => d.title || d.id).filter(Boolean);
+      const grcResult = grcFormatAndValidate(
+        finalReply,
+        {
+          dtuRefs: _dtuTitlesForGRC,
+          macroRefs: ["chat.respond"],
+          mode: mode,
+          invariantsApplied: ["NoNegativeValence", "RealityGateBeforeEffects"],
+          realitySnapshot: {
+            facts: relevant.length > 0 ? [`${relevant.length} DTU(s) retrieved for context`] : ["No DTUs matched query"],
+            assumptions: llmUsed ? ["LLM enhancement applied"] : ["Local-only deterministic response"],
+            unknowns: [],
+          },
+        },
+        { inLatticeReality, STATE }
+      );
+      _grcOutput = grcResult.ok ? grcResult.grc : null;
+    } catch {}
+  }
+
+  return { ok: true, reply: finalReply, sessionId, mode, llmUsed, semanticUsed, relevant: relevant.map(d=>({ id:d.id, title:d.title, tier:d.tier })), grc: _grcOutput };
+}, { description: "Mode-aware chat with DTU retrieval; optional LLM enhancement. Outputs GRC v1 envelope." });
 
 // ===== USER FEEDBACK → EXPERIENCE LEARNING =====
 // Records thumbs up/down and ratings, feeds into experience memory + affect
@@ -14619,6 +14682,26 @@ try {
 }
 // ===== END EMERGENT =====
 
+// ===== GRC: Grounded Recursive Closure v1 =====
+let GRC_MODULE = null;
+try {
+  const grcCtx = {
+    register,
+    STATE,
+    helpers: {
+      inLatticeReality,
+    },
+  };
+  GRC_MODULE = await initGRC(grcCtx);
+  if (GRC_MODULE) {
+    log("grc.init", `GRC v${GRC_MODULE.version} initialized: ${GRC_MODULE.macros.length} macros`);
+  }
+} catch (e) {
+  console.error("[GRC] Initialization failed:", e);
+  log("grc.init", "GRC initialization failed", { error: String(e?.message || e) });
+}
+// ===== END GRC =====
+
 const app = express();
 
 // ---- Production Middleware ----
@@ -16299,6 +16382,33 @@ app.post("/api/macros/run", async (req, res) => {
     kernelTick({ type: "ERROR", meta: { path: req.path, domain, name }, signals: { error: 0.4 } });
     return res.status(404).json({ ok:false, reply: String(e?.message || e), error: String(e?.message || e) });
   }
+});
+
+// GRC v1 endpoints
+app.get("/api/grc/schema", async (req, res) => {
+  const ctx = makeCtx(req);
+  const out = await runMacro("grc", "schema", {}, ctx);
+  res.json(out);
+});
+app.get("/api/grc/invariants", async (req, res) => {
+  const ctx = makeCtx(req);
+  const out = await runMacro("grc", "invariants", {}, ctx);
+  res.json(out);
+});
+app.get("/api/grc/metrics", async (req, res) => {
+  const ctx = makeCtx(req);
+  const out = await runMacro("grc", "metrics", {}, ctx);
+  res.json(out);
+});
+app.post("/api/grc/format", async (req, res) => {
+  const ctx = makeCtx(req);
+  const out = await runMacro("grc", "format", req.body || {}, ctx);
+  res.json(out);
+});
+app.post("/api/grc/validate", async (req, res) => {
+  const ctx = makeCtx(req);
+  const out = await runMacro("grc", "validate", req.body || {}, ctx);
+  res.json(out);
 });
 
 // Interface + logs
