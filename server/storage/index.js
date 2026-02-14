@@ -10,7 +10,6 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { Readable } from "stream";
-import { pipeline } from "stream/promises";
 
 /**
  * @typedef {Object} PutResult
@@ -24,23 +23,23 @@ import { pipeline } from "stream/promises";
  * All adapters must implement: putStream, getStream, delete, exists
  */
 export class StorageAdapter {
-  /** @param {string} storagePath @param {Readable|Buffer} data @param {string} contentType @returns {Promise<PutResult>} */
-  async put(storagePath, data, contentType) {
+  /** @param {string} _storagePath @param {Readable|Buffer} _data @param {string} _contentType @returns {Promise<PutResult>} */
+  put(_storagePath, _data, _contentType) {
     throw new Error("Not implemented");
   }
 
-  /** @param {string} uri @returns {Promise<{stream: Readable, contentType: string, size: number}>} */
-  async get(uri) {
+  /** @param {string} _uri @returns {Promise<{stream: Readable, contentType: string, size: number}>} */
+  get(_uri) {
     throw new Error("Not implemented");
   }
 
-  /** @param {string} uri @returns {Promise<boolean>} */
-  async remove(uri) {
+  /** @param {string} _uri @returns {Promise<boolean>} */
+  remove(_uri) {
     throw new Error("Not implemented");
   }
 
-  /** @param {string} uri @returns {Promise<boolean>} */
-  async exists(uri) {
+  /** @param {string} _uri @returns {Promise<boolean>} */
+  exists(_uri) {
     throw new Error("Not implemented");
   }
 }
@@ -66,7 +65,7 @@ export class LocalVolumeAdapter extends StorageAdapter {
     return `local:///${relative.replace(/\\/g, "/")}`;
   }
 
-  async put(storagePath, data, contentType = "application/octet-stream") {
+  async put(storagePath, data, _contentType = "application/octet-stream") {
     const fullPath = path.join(this.basePath, storagePath);
     fs.mkdirSync(path.dirname(fullPath), { recursive: true });
 

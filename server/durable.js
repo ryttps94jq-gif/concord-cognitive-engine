@@ -78,8 +78,8 @@ export function registerDurableEndpoints(app, db) {
    * Build a paginated query with optional search, filters, and facets.
    */
   function paginatedQuery(table, { q, limit = 50, offset = 0, filters = {}, searchCols = [], orderBy = "created_at DESC" }) {
-    let where = [];
-    let params = [];
+    const where = [];
+    const params = [];
 
     if (q && searchCols.length > 0) {
       const searchWhere = searchCols.map((col) => `${col} LIKE ?`).join(" OR ");
@@ -114,7 +114,7 @@ export function registerDurableEndpoints(app, db) {
   // GET /api/dtus/paginated
   app.get("/api/dtus/paginated", (req, res) => {
     try {
-      const { q, limit, offset, tags, visibility, tier } = req.query;
+      const { q, limit, offset, visibility, tier } = req.query;
       const filters = {};
       if (visibility) filters.visibility = visibility;
       if (tier) filters.tier = tier;
@@ -730,7 +730,7 @@ export function registerDurableEndpoints(app, db) {
   // ═══════════════════════════════════════════════════════════════
 
   // POST /api/studio/:projectId/render
-  app.post("/api/studio/:projectId/render", async (req, res) => {
+  app.post("/api/studio/:projectId/render", (req, res) => {
     try {
       const project = db.prepare("SELECT * FROM studio_projects WHERE id = ?").get(req.params.projectId);
       if (!project) return res.status(404).json({ error: "Project not found" });
@@ -1042,7 +1042,7 @@ export function registerDurableEndpoints(app, db) {
       const row = db.prepare("SELECT MAX(version) as v FROM schema_version").get();
       const migrations = db.prepare("SELECT * FROM schema_version ORDER BY version").all();
       res.json({ ok: true, current_version: row?.v || 0, migrations });
-    } catch (e) {
+    } catch {
       res.json({ ok: true, current_version: 0, migrations: [], note: "schema_version table not found" });
     }
   });
