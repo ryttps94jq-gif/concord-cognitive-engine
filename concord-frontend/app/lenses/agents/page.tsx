@@ -43,7 +43,7 @@ type ViewMode = 'dashboard' | 'detail' | 'builder' | 'logs' | 'workflows';
 type AgentFilter = 'all' | 'active' | 'dormant' | 'error';
 
 // --- Seed Data (persisted via backend on first use) ---
-const SEED_AGENTS: Agent[] = [
+const INITIAL_AGENTS: Agent[] = [
   {
     id: 'agent-001', name: 'Research Sentinel', type: 'research', enabled: true,
     description: 'Monitors external sources for new music theory research, production techniques, and industry trends. Synthesizes findings into DTUs.',
@@ -196,7 +196,7 @@ export default function AgentsLensPage() {
 
   // Persist agents via lens data (auto-seeds on first use)
   const { items: lensAgentItems, isLoading, isError, error, isSeeding, refetch, create: createLensAgent, update: updateLensAgent, remove: removeLensAgent } = useLensData<Record<string, unknown>>('agents', 'agent', {
-    seed: SEED_AGENTS.map(a => ({ title: a.name, data: a as unknown as Record<string, unknown> })),
+    seed: INITIAL_AGENTS.map(a => ({ title: a.name, data: a as unknown as Record<string, unknown> })),
   });
   const isError2 = isError; const error2 = error; const refetch2 = refetch;
 
