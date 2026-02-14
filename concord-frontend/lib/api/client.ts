@@ -146,7 +146,7 @@ api.interceptors.response.use(
     }
 
     if (typeof window !== 'undefined') {
-      const data = error.response?.data as { error?: string; reason?: string; code?: string } | undefined;
+      const data = error.response?.data as { ok?: boolean; error?: string; reason?: string; code?: string } | undefined;
       const requestId = (error.response?.headers?.['x-request-id'] as string | undefined) ||
         (error.response?.headers?.['X-Request-ID'] as string | undefined);
       const reason = data?.reason || data?.error || (error.response?.status === 401 ? 'Login required' : error.message);
@@ -160,8 +160,27 @@ api.interceptors.response.use(
         reason,
       });
 
-      if (error.response?.status === 401 && data?.code === 'AUTH_REQUIRED' && reason.toLowerCase().includes('api key')) {
-        useUIStore.getState().addToast({ type: 'warning', message: 'API key missing. Add x-api-key or switch AUTH_MODE.' });
+      // Surface API errors as visible toasts so users never get silent failures
+      const store = useUIStore.getState();
+      const toastStatus = error.response?.status;
+
+      if (toastStatus === 401) {
+        if (data?.code === 'AUTH_REQUIRED' && reason.toLowerCase().includes('api key')) {
+          store.addToast({ type: 'warning', message: 'API key missing. Add x-api-key or switch AUTH_MODE.' });
+        } else {
+          store.addToast({ type: 'warning', message: 'Authentication required. Please log in.' });
+        }
+      } else if (toastStatus === 403) {
+        store.addToast({ type: 'error', message: reason?.includes('Origin') ? 'Site config issue: origin not allowed' : 'Access denied' });
+      } else if (toastStatus === 429) {
+        store.addToast({ type: 'warning', message: 'Rate limited. Please slow down.' });
+      } else if (toastStatus && toastStatus >= 500) {
+        store.addToast({ type: 'error', message: `Server error: ${data?.error || 'Something went wrong'}` });
+      } else if (!error.response) {
+        store.addToast({ type: 'error', message: 'Network error: could not reach server' });
+      } else if (data?.ok === false && data?.error) {
+        // Economy/API errors with { ok: false, error: "..." }
+        store.addToast({ type: 'error', message: data.error.replace(/_/g, ' ') });
       }
     }
     return Promise.reject(error);
@@ -507,6 +526,19 @@ export const apiHelpers = {
       api.post(`/api/economy/admin/withdrawals/${withdrawalId}/process`),
     adminReverse: (transactionId: string, reason?: string) =>
       api.post('/api/economy/admin/reverse', { transaction_id: transactionId, reason }),
+
+    // Stripe Checkout
+    createCheckout: (tokens: number, userId?: string) =>
+      api.post('/api/economy/buy/checkout', { tokens, user_id: userId }),
+
+    // Economy config (Stripe enabled, fee schedule, limits)
+    config: () => api.get('/api/economy/config'),
+
+    // Stripe Connect
+    connectStripe: (userId?: string) =>
+      api.post('/api/stripe/connect/onboard', { user_id: userId }),
+    connectStatus: (userId?: string) =>
+      api.get('/api/stripe/connect/status', { params: { user_id: userId } }),
   },
 
   // Macros

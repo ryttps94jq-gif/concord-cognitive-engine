@@ -2586,7 +2586,7 @@ const STATE = {
 // ============================================================================
 
 // ---- SQLite Database for Auth & Audit ----
-const DB_PATH = path.join(DATA_DIR, "concord.db");
+const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "concord.db");
 let db = null;
 
 function initDatabase() {
@@ -2596,7 +2596,8 @@ function initDatabase() {
   }
 
   try {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+    // Ensure the DB parent directory exists (handles both /data/concord.db and /data/db/concord.db)
+    fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
     db = new Database(DB_PATH);
     db.pragma("journal_mode = WAL"); // Better performance
     db.pragma("foreign_keys = ON");

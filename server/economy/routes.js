@@ -1,7 +1,8 @@
 // economy/routes.js
 // HTTP endpoints for the economy system.
-// All routes are mounted under /api/economy.
+// All routes are mounted under /api/economy and /api/stripe.
 
+import express from "express";
 import { getBalance } from "./balances.js";
 import { getTransactions, getAllTransactions } from "./ledger.js";
 import { FEES, PLATFORM_ACCOUNT_ID } from "./fees.js";
@@ -10,17 +11,26 @@ import {
   requestWithdrawal, approveWithdrawal, rejectWithdrawal,
   processWithdrawal, cancelWithdrawal, getUserWithdrawals, getAllWithdrawals,
 } from "./withdrawals.js";
+import { adminOnly } from "./guards.js";
+import { economyAudit, auditCtx } from "./audit.js";
+import {
+  createCheckoutSession, handleWebhook, createConnectOnboarding,
+  getConnectStatus, processStripeWithdrawal, STRIPE_ENABLED,
+  MIN_WITHDRAW_TOKENS, MAX_WITHDRAW_TOKENS_PER_DAY,
+} from "./stripe.js";
 
 /**
- * Register all economy routes on the Express app.
+ * Register all economy + Stripe routes on the Express app.
  * @param {import('express').Express} app
  * @param {import('better-sqlite3').Database} db
  */
 export function registerEconomyRoutes(app, db) {
 
-  // ═══════════════════════════════════════════════════════════
-  // Balance
-  // ═══════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ECONOMY ENDPOINTS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ── Balance ────────────────────────────────────────────────────────────────
 
   app.get("/api/economy/balance", (req, res) => {
     try {
@@ -34,9 +44,7 @@ export function registerEconomyRoutes(app, db) {
     }
   });
 
-  // ═══════════════════════════════════════════════════════════
-  // Transaction History
-  // ═══════════════════════════════════════════════════════════
+  // ── Transaction History ────────────────────────────────────────────────────
 
   app.get("/api/economy/history", (req, res) => {
     try {
@@ -54,8 +62,9 @@ export function registerEconomyRoutes(app, db) {
     }
   });
 
-  // Admin: all transactions
-  app.get("/api/economy/admin/transactions", (req, res) => {
+  // ── Admin: all transactions ────────────────────────────────────────────────
+
+  app.get("/api/economy/admin/transactions", adminOnly, (req, res) => {
     try {
       const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500);
       const offset = parseInt(req.query.offset, 10) || 0;
@@ -69,11 +78,9 @@ export function registerEconomyRoutes(app, db) {
     }
   });
 
-  // ═══════════════════════════════════════════════════════════
-  // Token Purchase (mint tokens)
-  // ═══════════════════════════════════════════════════════════
+  // ── Token Purchase (direct ledger mint, no Stripe) ─────────────────────────
 
-  app.post("/api/economy/buy", (req, res) => {
+  app.post("/api/economy/buy", adminOnly, (req, res) => {
     try {
       const userId = req.body.user_id || req.user?.id;
       const amount = parseFloat(req.body.amount);
@@ -83,24 +90,32 @@ export function registerEconomyRoutes(app, db) {
         return res.status(400).json({ ok: false, error: "invalid_amount" });
       }
 
+      const ctx = auditCtx(req);
       const result = executePurchase(db, {
         userId,
         amount,
-        metadata: { source: req.body.source || "api" },
-        requestId: req.headers["x-request-id"],
-        ip: req.ip,
+        metadata: { source: req.body.source || "admin_api" },
+        requestId: ctx.requestId,
+        ip: ctx.ip,
       });
 
       if (!result.ok) return res.status(400).json(result);
+
+      economyAudit(db, {
+        action: "admin_token_mint",
+        userId,
+        amount,
+        txId: result.batchId,
+        ...ctx,
+      });
+
       res.json(result);
     } catch (err) {
       res.status(500).json({ ok: false, error: "purchase_failed", detail: err.message });
     }
   });
 
-  // ═══════════════════════════════════════════════════════════
-  // Transfer (user → user)
-  // ═══════════════════════════════════════════════════════════
+  // ── Transfer (user → user) ─────────────────────────────────────────────────
 
   app.post("/api/economy/transfer", (req, res) => {
     try {
@@ -114,26 +129,35 @@ export function registerEconomyRoutes(app, db) {
         return res.status(400).json({ ok: false, error: "invalid_amount" });
       }
 
+      const ctx = auditCtx(req);
       const result = executeTransfer(db, {
         from,
         to,
         amount,
         type: req.body.type || "TRANSFER",
         metadata: req.body.metadata || {},
-        requestId: req.headers["x-request-id"],
-        ip: req.ip,
+        requestId: ctx.requestId,
+        ip: ctx.ip,
       });
 
       if (!result.ok) return res.status(400).json(result);
+
+      economyAudit(db, {
+        action: "transfer",
+        userId: from,
+        amount,
+        txId: result.batchId,
+        details: { to, fee: result.fee, net: result.net },
+        ...ctx,
+      });
+
       res.json(result);
     } catch (err) {
       res.status(500).json({ ok: false, error: "transfer_failed", detail: err.message });
     }
   });
 
-  // ═══════════════════════════════════════════════════════════
-  // Marketplace Purchase (buyer → seller, with fee)
-  // ═══════════════════════════════════════════════════════════
+  // ── Marketplace Purchase (buyer → seller, with fee) ────────────────────────
 
   app.post("/api/economy/marketplace-purchase", (req, res) => {
     try {
@@ -148,26 +172,37 @@ export function registerEconomyRoutes(app, db) {
         return res.status(400).json({ ok: false, error: "invalid_amount" });
       }
 
+      const ctx = auditCtx(req);
       const result = executeMarketplacePurchase(db, {
         buyerId,
         sellerId,
         amount,
         listingId,
         metadata: req.body.metadata || {},
-        requestId: req.headers["x-request-id"],
-        ip: req.ip,
+        requestId: ctx.requestId,
+        ip: ctx.ip,
       });
 
       if (!result.ok) return res.status(400).json(result);
+
+      economyAudit(db, {
+        action: "marketplace_purchase",
+        userId: buyerId,
+        amount,
+        txId: result.batchId,
+        details: { sellerId, listingId, fee: result.fee, net: result.net },
+        ...ctx,
+      });
+
       res.json(result);
     } catch (err) {
       res.status(500).json({ ok: false, error: "marketplace_purchase_failed", detail: err.message });
     }
   });
 
-  // ═══════════════════════════════════════════════════════════
-  // Withdrawals
-  // ═══════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
+  // WITHDRAWALS
+  // ═══════════════════════════════════════════════════════════════════════════
 
   app.post("/api/economy/withdraw", (req, res) => {
     try {
@@ -179,15 +214,37 @@ export function registerEconomyRoutes(app, db) {
         return res.status(400).json({ ok: false, error: "invalid_amount" });
       }
 
+      // Enforce minimum withdrawal
+      if (amount < MIN_WITHDRAW_TOKENS) {
+        return res.status(400).json({ ok: false, error: "below_minimum_withdrawal", min: MIN_WITHDRAW_TOKENS });
+      }
+
+      // Check Stripe Connect account if Stripe is enabled
+      if (STRIPE_ENABLED) {
+        const connectStatus = getConnectStatus(db, userId);
+        if (!connectStatus.connected || !connectStatus.onboardingComplete) {
+          return res.status(400).json({ ok: false, error: "stripe_connect_required" });
+        }
+      }
+
+      const ctx = auditCtx(req);
       const result = requestWithdrawal(db, { userId, amount });
       if (!result.ok) return res.status(400).json(result);
+
+      economyAudit(db, {
+        action: "withdrawal_requested",
+        userId,
+        amount,
+        details: { withdrawalId: result.withdrawal?.id },
+        ...ctx,
+      });
+
       res.json(result);
     } catch (err) {
       res.status(500).json({ ok: false, error: "withdrawal_request_failed", detail: err.message });
     }
   });
 
-  // Get user's withdrawals
   app.get("/api/economy/withdrawals", (req, res) => {
     try {
       const userId = req.query.user_id || req.user?.id;
@@ -203,7 +260,6 @@ export function registerEconomyRoutes(app, db) {
     }
   });
 
-  // Cancel pending withdrawal
   app.post("/api/economy/withdrawals/:id/cancel", (req, res) => {
     try {
       const userId = req.body.user_id || req.user?.id;
@@ -217,38 +273,68 @@ export function registerEconomyRoutes(app, db) {
     }
   });
 
-  // Admin: approve withdrawal
-  app.post("/api/economy/admin/withdrawals/:id/approve", (req, res) => {
+  // ── Admin: Withdrawal management ──────────────────────────────────────────
+
+  app.post("/api/economy/admin/withdrawals/:id/approve", adminOnly, (req, res) => {
     try {
       const reviewerId = req.body.reviewer_id || req.user?.id || "system";
+      const ctx = auditCtx(req);
       const result = approveWithdrawal(db, { withdrawalId: req.params.id, reviewerId });
       if (!result.ok) return res.status(400).json(result);
+
+      economyAudit(db, {
+        action: "withdrawal_approved",
+        userId: reviewerId,
+        details: { withdrawalId: req.params.id },
+        ...ctx,
+      });
+
       res.json(result);
     } catch (err) {
       res.status(500).json({ ok: false, error: "approve_failed", detail: err.message });
     }
   });
 
-  // Admin: reject withdrawal
-  app.post("/api/economy/admin/withdrawals/:id/reject", (req, res) => {
+  app.post("/api/economy/admin/withdrawals/:id/reject", adminOnly, (req, res) => {
     try {
       const reviewerId = req.body.reviewer_id || req.user?.id || "system";
+      const ctx = auditCtx(req);
       const result = rejectWithdrawal(db, { withdrawalId: req.params.id, reviewerId });
       if (!result.ok) return res.status(400).json(result);
+
+      economyAudit(db, {
+        action: "withdrawal_rejected",
+        userId: reviewerId,
+        details: { withdrawalId: req.params.id },
+        ...ctx,
+      });
+
       res.json(result);
     } catch (err) {
       res.status(500).json({ ok: false, error: "reject_failed", detail: err.message });
     }
   });
 
-  // Admin: process approved withdrawal
-  app.post("/api/economy/admin/withdrawals/:id/process", (req, res) => {
+  app.post("/api/economy/admin/withdrawals/:id/process", adminOnly, async (req, res) => {
     try {
-      const result = processWithdrawal(db, {
-        withdrawalId: req.params.id,
-        requestId: req.headers["x-request-id"],
-        ip: req.ip,
-      });
+      const ctx = auditCtx(req);
+
+      // Use Stripe Connect if enabled, otherwise local-only processing
+      let result;
+      if (STRIPE_ENABLED) {
+        result = await processStripeWithdrawal(db, {
+          withdrawalId: req.params.id,
+          requestId: ctx.requestId,
+          ip: ctx.ip,
+        });
+      } else {
+        result = processWithdrawal(db, {
+          withdrawalId: req.params.id,
+          requestId: ctx.requestId,
+          ip: ctx.ip,
+        });
+      }
+
       if (!result.ok) return res.status(400).json(result);
       res.json(result);
     } catch (err) {
@@ -256,8 +342,7 @@ export function registerEconomyRoutes(app, db) {
     }
   });
 
-  // Admin: list all withdrawals
-  app.get("/api/economy/admin/withdrawals", (req, res) => {
+  app.get("/api/economy/admin/withdrawals", adminOnly, (req, res) => {
     try {
       const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
       const offset = parseInt(req.query.offset, 10) || 0;
@@ -270,38 +355,48 @@ export function registerEconomyRoutes(app, db) {
     }
   });
 
-  // ═══════════════════════════════════════════════════════════
-  // Reversals (admin)
-  // ═══════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
+  // REVERSALS (admin only)
+  // ═══════════════════════════════════════════════════════════════════════════
 
-  app.post("/api/economy/admin/reverse", (req, res) => {
+  app.post("/api/economy/admin/reverse", adminOnly, (req, res) => {
     try {
       const { transaction_id, reason } = req.body;
       if (!transaction_id) return res.status(400).json({ ok: false, error: "missing_transaction_id" });
 
+      const ctx = auditCtx(req);
       const result = executeReversal(db, {
         originalTxId: transaction_id,
         reason: reason || "admin_reversal",
-        requestId: req.headers["x-request-id"],
-        ip: req.ip,
+        requestId: ctx.requestId,
+        ip: ctx.ip,
       });
 
       if (!result.ok) return res.status(400).json(result);
+
+      economyAudit(db, {
+        action: "reversal",
+        userId: req.user?.id,
+        txId: result.batchId,
+        details: { originalTxId: transaction_id, reason },
+        ...ctx,
+      });
+
       res.json(result);
     } catch (err) {
       res.status(500).json({ ok: false, error: "reversal_failed", detail: err.message });
     }
   });
 
-  // ═══════════════════════════════════════════════════════════
-  // Fee Schedule + Platform Info
-  // ═══════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
+  // FEE SCHEDULE + PLATFORM INFO
+  // ═══════════════════════════════════════════════════════════════════════════
 
   app.get("/api/economy/fees", (_req, res) => {
     res.json({ ok: true, fees: FEES, platformAccount: PLATFORM_ACCOUNT_ID });
   });
 
-  app.get("/api/economy/platform-balance", (_req, res) => {
+  app.get("/api/economy/platform-balance", adminOnly, (_req, res) => {
     try {
       const result = getBalance(db, PLATFORM_ACCOUNT_ID);
       res.json({ ok: true, platformAccount: PLATFORM_ACCOUNT_ID, ...result });
@@ -310,46 +405,39 @@ export function registerEconomyRoutes(app, db) {
     }
   });
 
-  // ═══════════════════════════════════════════════════════════
-  // Ledger Integrity Check
-  // ═══════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
+  // LEDGER INTEGRITY
+  // ═══════════════════════════════════════════════════════════════════════════
 
-  app.get("/api/economy/integrity", (_req, res) => {
+  app.get("/api/economy/integrity", (req, res) => {
     try {
-      // Total credits across system
       const totalCredits = db.prepare(`
         SELECT COALESCE(SUM(net), 0) as total FROM economy_ledger
         WHERE to_user_id IS NOT NULL AND status = 'complete'
       `).get()?.total || 0;
 
-      // Total debits across system
       const totalDebits = db.prepare(`
         SELECT COALESCE(SUM(amount), 0) as total FROM economy_ledger
         WHERE from_user_id IS NOT NULL AND status = 'complete'
       `).get()?.total || 0;
 
-      // Total minted (purchases — credits with no from)
       const totalMinted = db.prepare(`
         SELECT COALESCE(SUM(net), 0) as total FROM economy_ledger
         WHERE type = 'TOKEN_PURCHASE' AND status = 'complete'
       `).get()?.total || 0;
 
-      // Total withdrawn
       const totalWithdrawn = db.prepare(`
         SELECT COALESCE(SUM(amount), 0) as total FROM economy_ledger
         WHERE type = 'WITHDRAWAL' AND status = 'complete'
       `).get()?.total || 0;
 
-      // Platform fees collected
       const platformFees = db.prepare(`
         SELECT COALESCE(SUM(net), 0) as total FROM economy_ledger
         WHERE type = 'FEE' AND to_user_id = ? AND status = 'complete'
       `).get(PLATFORM_ACCOUNT_ID)?.total || 0;
 
-      // Transaction count
       const txCount = db.prepare("SELECT COUNT(*) as c FROM economy_ledger").get()?.c || 0;
 
-      // Pending withdrawals
       const pendingWithdrawals = db.prepare(`
         SELECT COUNT(*) as c, COALESCE(SUM(amount), 0) as total
         FROM economy_withdrawals WHERE status IN ('pending', 'approved', 'processing')
@@ -371,5 +459,111 @@ export function registerEconomyRoutes(app, db) {
     } catch (err) {
       res.status(500).json({ ok: false, error: "integrity_check_failed", detail: err.message });
     }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // STRIPE ENDPOINTS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ── Buy tokens via Stripe Checkout ─────────────────────────────────────────
+
+  app.post("/api/economy/buy/checkout", async (req, res) => {
+    try {
+      if (!STRIPE_ENABLED) {
+        return res.status(503).json({ ok: false, error: "stripe_not_configured" });
+      }
+
+      const userId = req.body.user_id || req.user?.id;
+      const tokens = parseInt(req.body.tokens, 10);
+
+      if (!userId) return res.status(400).json({ ok: false, error: "missing_user_id" });
+      if (!Number.isInteger(tokens) || tokens <= 0) {
+        return res.status(400).json({ ok: false, error: "invalid_token_amount" });
+      }
+
+      const ctx = auditCtx(req);
+      const result = await createCheckoutSession(db, {
+        userId,
+        tokens,
+        requestId: ctx.requestId,
+        ip: ctx.ip,
+      });
+
+      if (!result.ok) return res.status(400).json(result);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ ok: false, error: "checkout_failed", detail: err.message });
+    }
+  });
+
+  // ── Stripe Webhook ─────────────────────────────────────────────────────────
+  // IMPORTANT: webhook needs raw body for signature verification.
+  // This route must be registered BEFORE express.json() body parser,
+  // OR use express.raw() locally.
+
+  app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async (req, res) => {
+    try {
+      const result = await handleWebhook(db, {
+        rawBody: req.body,
+        signature: req.headers["stripe-signature"],
+        requestId: req.headers["x-request-id"],
+        ip: req.ip,
+      });
+
+      if (!result.ok) return res.status(400).json(result);
+      res.json({ received: true, ...result });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: "webhook_failed", detail: err.message });
+    }
+  });
+
+  // ── Stripe Connect ─────────────────────────────────────────────────────────
+
+  app.post("/api/stripe/connect/onboard", async (req, res) => {
+    try {
+      if (!STRIPE_ENABLED) {
+        return res.status(503).json({ ok: false, error: "stripe_not_configured" });
+      }
+
+      const userId = req.body.user_id || req.user?.id;
+      if (!userId) return res.status(400).json({ ok: false, error: "missing_user_id" });
+
+      const ctx = auditCtx(req);
+      const result = await createConnectOnboarding(db, {
+        userId,
+        requestId: ctx.requestId,
+        ip: ctx.ip,
+      });
+
+      if (!result.ok) return res.status(400).json(result);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ ok: false, error: "connect_onboard_failed", detail: err.message });
+    }
+  });
+
+  app.get("/api/stripe/connect/status", (req, res) => {
+    try {
+      const userId = req.query.user_id || req.user?.id;
+      if (!userId) return res.status(400).json({ ok: false, error: "missing_user_id" });
+
+      const result = getConnectStatus(db, userId);
+      res.json({ ok: true, userId, ...result });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: "connect_status_failed", detail: err.message });
+    }
+  });
+
+  // ── Stripe configuration status ────────────────────────────────────────────
+
+  app.get("/api/economy/config", (_req, res) => {
+    res.json({
+      ok: true,
+      stripeEnabled: STRIPE_ENABLED,
+      fees: FEES,
+      minWithdrawal: MIN_WITHDRAW_TOKENS,
+      maxWithdrawalPerDay: MAX_WITHDRAW_TOKENS_PER_DAY,
+      platformAccount: PLATFORM_ACCOUNT_ID,
+    });
   });
 }
