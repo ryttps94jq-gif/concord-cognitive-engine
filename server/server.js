@@ -10437,7 +10437,9 @@ async function maybeRunLocalUpgrade() {
 
   // Upgrade = deterministic retune + enforce budgets + auto-promotion + conservation check.
   enforceTierBudgets();
-  try { await runAutoPromotion(makeCtx(null), { maxNewMegas: 3, maxNewHypers: 1 }); } catch {}
+  const _upCtx = makeCtx(null);
+  _upCtx.actor = { userId: "system", orgId: "internal", role: "owner", scopes: ["*"] };
+  try { await runAutoPromotion(_upCtx, { maxNewMegas: 3, maxNewHypers: 1 }); } catch {}
   const bp = applyConservationBackpressure();
   // Opportunistic self-repair: schedule maintenance if needed
   if (STATE.queues.maintenance.length < 25) {
@@ -15751,8 +15753,8 @@ async function runJob(j) {
   saveStateDebounced();
 
   const ctx = makeCtx(null);
-  // adopt actor context if present
-  if (j.actor) ctx.actor = j.actor;
+  // adopt actor context if present; default to system actor for internal jobs
+  ctx.actor = j.actor || { userId: "system", orgId: "internal", role: "owner", scopes: ["*"] };
 
   try {
     const [domain, name] = String(j.kind).split(".");
@@ -16925,6 +16927,7 @@ function startWeeklyCouncil() {
   weeklyTimer = setInterval(async () => {
     if (STATE.settings.weeklyDebateEnabled === false) return;
     const ctx = makeCtx(null);
+    ctx.actor = { userId: "system", orgId: "internal", role: "owner", scopes: ["*"] };
     await runMacro("council","weeklyDebateTick",{ topic: STATE.settings.weeklyDebateTopic || "Concord Weekly Synthesis" }, ctx).catch(()=>{});
   }, weekMs);
   log("council.weekly", "Weekly Council scheduler started", { everyMs: weekMs });
@@ -27271,12 +27274,15 @@ try { await tryInitWebSockets(server); } catch {}
 // ---- Auto-promotion scheduler (offline-first, deterministic) ----
 try {
   // Run once shortly after boot, then every 6 hours.
+  const _promoActor = { userId: "system", orgId: "internal", role: "owner", scopes: ["*"] };
   setTimeout(async () => {
-    try { await runAutoPromotion(makeCtx(null), { maxNewMegas: 3, maxNewHypers: 1 }); } catch {}
+    const c = makeCtx(null); c.actor = _promoActor;
+    try { await runAutoPromotion(c, { maxNewMegas: 3, maxNewHypers: 1 }); } catch {}
   }, 15_000);
 
   setInterval(async () => {
-    try { await runAutoPromotion(makeCtx(null), { maxNewMegas: 2, maxNewHypers: 0 }); } catch {}
+    const c = makeCtx(null); c.actor = _promoActor;
+    try { await runAutoPromotion(c, { maxNewMegas: 2, maxNewHypers: 0 }); } catch {}
   }, 6 * 60 * 60 * 1000);
 } catch {}
 
