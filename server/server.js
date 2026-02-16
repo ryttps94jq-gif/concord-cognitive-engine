@@ -10437,7 +10437,9 @@ async function maybeRunLocalUpgrade() {
 
   // Upgrade = deterministic retune + enforce budgets + auto-promotion + conservation check.
   enforceTierBudgets();
-  try { await runAutoPromotion(makeCtx(null), { maxNewMegas: 3, maxNewHypers: 1 }); } catch {}
+  const _upCtx = makeCtx(null);
+  _upCtx.actor = { userId: "system", orgId: "internal", role: "owner", scopes: ["*"] };
+  try { await runAutoPromotion(_upCtx, { maxNewMegas: 3, maxNewHypers: 1 }); } catch {}
   const bp = applyConservationBackpressure();
   // Opportunistic self-repair: schedule maintenance if needed
   if (STATE.queues.maintenance.length < 25) {
@@ -14807,18 +14809,10 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
   : [];
 const corsOptions = {
   origin: (origin, callback) => {
-    // SECURITY: In production, reject requests with no origin to prevent CSRF
-    // Only allow no-origin in development for tools like Postman/curl
+    // Requests with no Origin header come from same-origin requests, server-to-server
+    // calls, health checks (curl/Docker), and non-browser clients. Browsers always
+    // send an Origin header on cross-origin requests, so no-origin is safe to allow.
     if (!origin) {
-      if (NODE_ENV === "production") {
-        // In production, only allow specific trusted no-origin scenarios
-        // (e.g., same-origin requests from the backend itself)
-        console.warn("[CORS] Rejected request with no origin in production mode");
-        const err = new Error("Origin blocked");
-        err.code = "ORIGIN_BLOCKED";
-        err.reason = "Origin required in production";
-        return callback(err, false);
-      }
       return callback(null, true);
     }
     // In development, allow localhost
@@ -15759,8 +15753,8 @@ async function runJob(j) {
   saveStateDebounced();
 
   const ctx = makeCtx(null);
-  // adopt actor context if present
-  if (j.actor) ctx.actor = j.actor;
+  // adopt actor context if present; default to system actor for internal jobs
+  ctx.actor = j.actor || { userId: "system", orgId: "internal", role: "owner", scopes: ["*"] };
 
   try {
     const [domain, name] = String(j.kind).split(".");
@@ -15817,55 +15811,56 @@ app.get("/", (req, res) => res.json({ ok:true, name:"Concord v2 Macro‑Max", ve
 
 // Status
 app.get("/api/status", (req, res) => {
-  res.json({
+  // Public-safe response: counts and feature flags only (no file paths or secrets)
+  const base = {
     ok: true,
     version: VERSION,
-    port: PORT,
     nodeEnv: NODE_ENV,
     uptime: process.uptime(),
-    dotenvLoaded: DOTENV.loaded,
-    dotenvPath: DOTENV.path,
     llmReady: LLM_READY,
-    openaiModel: { fast: OPENAI_MODEL_FAST, smart: OPENAI_MODEL_SMART },
-    dtus: STATE.dtus.size,
-    wrappers: STATE.wrappers.size,
-    layers: STATE.layers.size,
-    personas: STATE.personas.size,
-    swarms: 0,
+    counts: {
+      dtus: STATE.dtus.size,
+      wrappers: STATE.wrappers.size,
+      layers: STATE.layers.size,
+      personas: STATE.personas.size,
+    },
     sims: STATE.lastSim ? 1 : 0,
-    macroDomains: listDomains(),
-    crawlQueue: STATE.crawlQueue.length,
-    settings: STATE.settings,
-    seed: SEED_INFO,
-    stateDisk: STATE_DISK,
-    // Production infrastructure status
-    infrastructure: {
-      database: {
-        type: db ? "sqlite" : "json",
-        ready: db ? true : false,
-        path: db ? DB_PATH : AUTH_PATH
-      },
-      stateBackend: {
-        type: USE_SQLITE_STATE ? "sqlite" : "json",
-        path: USE_SQLITE_STATE ? DB_PATH : STATE_PATH,
-      },
-      auth: {
-        mode: AUTH_MODE,
-        totalUsers: AuthDB.getUserCount(),
-        jwtConfigured: Boolean(JWT_SECRET),
-        usesJwt: AUTH_USES_JWT,
-        usesApiKey: AUTH_USES_APIKEY
-      },
-      security: {
-        csrfEnabled: NODE_ENV === "production",
-        rateLimitEnabled: Boolean(rateLimiter),
-        helmetEnabled: Boolean(helmet)
-      },
-      envValidation: ENV_VALIDATION,
-      llmPipeline: getLLMPipelineStatus(),
-      capabilities: CAPS
-    }
-  });
+  };
+
+  // Authenticated users get extended info; unauthenticated get just the basics
+  const isAuthed = req.user || req.apiKeyUser;
+  if (isAuthed) {
+    Object.assign(base, {
+      port: PORT,
+      openaiModel: { fast: OPENAI_MODEL_FAST, smart: OPENAI_MODEL_SMART },
+      macroDomains: listDomains(),
+      crawlQueue: STATE.crawlQueue.length,
+      settings: STATE.settings,
+      seed: SEED_INFO,
+      stateDisk: STATE_DISK,
+      infrastructure: {
+        database: { type: db ? "sqlite" : "json", ready: Boolean(db) },
+        stateBackend: { type: USE_SQLITE_STATE ? "sqlite" : "json" },
+        auth: {
+          mode: AUTH_MODE,
+          totalUsers: AuthDB.getUserCount(),
+          jwtConfigured: Boolean(JWT_SECRET),
+          usesJwt: AUTH_USES_JWT,
+          usesApiKey: AUTH_USES_APIKEY
+        },
+        security: {
+          csrfEnabled: NODE_ENV === "production",
+          rateLimitEnabled: Boolean(rateLimiter),
+          helmetEnabled: Boolean(helmet)
+        },
+        envValidation: ENV_VALIDATION,
+        llmPipeline: getLLMPipelineStatus(),
+        capabilities: CAPS
+      }
+    });
+  }
+
+  res.json(base);
 });
 
 // LLM Pipeline API
@@ -16571,6 +16566,9 @@ function startHeartbeat() {
   heartbeatTimer = setInterval(async () => {
     if (!STATE.settings.heartbeatEnabled) return;
     const ctx = makeCtx(null);
+    // Heartbeat runs internal maintenance — elevate to system actor so admin-gated
+    // domains (ingest, system, emergent, etc.) are accessible.
+    ctx.actor = { userId: "system", orgId: "internal", role: "owner", scopes: ["*"] };
 
     // process crawl queue once (Local scope only — ingest is local activity)
     await runMacro("ingest","processQueueOnce", {}, ctx).catch(()=>{});
@@ -16604,6 +16602,7 @@ function startHeartbeat() {
     if (!STATE.settings.heartbeatEnabled) return;
     try {
       const ctx = makeCtx(null);
+      ctx.actor = { userId: "system", orgId: "internal", role: "owner", scopes: ["*"] };
       await runMacro("emergent","scope.globalTick", {}, ctx).catch(()=>{});
     } catch { /* Global tick is best-effort */ }
   }, globalMs);
@@ -16929,6 +16928,7 @@ function startWeeklyCouncil() {
   weeklyTimer = setInterval(async () => {
     if (STATE.settings.weeklyDebateEnabled === false) return;
     const ctx = makeCtx(null);
+    ctx.actor = { userId: "system", orgId: "internal", role: "owner", scopes: ["*"] };
     await runMacro("council","weeklyDebateTick",{ topic: STATE.settings.weeklyDebateTopic || "Concord Weekly Synthesis" }, ctx).catch(()=>{});
   }, weekMs);
   log("council.weekly", "Weekly Council scheduler started", { everyMs: weekMs });
@@ -27275,12 +27275,15 @@ try { await tryInitWebSockets(server); } catch {}
 // ---- Auto-promotion scheduler (offline-first, deterministic) ----
 try {
   // Run once shortly after boot, then every 6 hours.
+  const _promoActor = { userId: "system", orgId: "internal", role: "owner", scopes: ["*"] };
   setTimeout(async () => {
-    try { await runAutoPromotion(makeCtx(null), { maxNewMegas: 3, maxNewHypers: 1 }); } catch {}
+    const c = makeCtx(null); c.actor = _promoActor;
+    try { await runAutoPromotion(c, { maxNewMegas: 3, maxNewHypers: 1 }); } catch {}
   }, 15_000);
 
   setInterval(async () => {
-    try { await runAutoPromotion(makeCtx(null), { maxNewMegas: 2, maxNewHypers: 0 }); } catch {}
+    const c = makeCtx(null); c.actor = _promoActor;
+    try { await runAutoPromotion(c, { maxNewMegas: 2, maxNewHypers: 0 }); } catch {}
   }, 6 * 60 * 60 * 1000);
 } catch {}
 

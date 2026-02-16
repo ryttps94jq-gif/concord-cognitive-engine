@@ -166,21 +166,16 @@ api.interceptors.response.use(
       const toastStatus = error.response?.status;
 
       if (toastStatus === 401) {
-        if (data?.code === 'AUTH_REQUIRED' && reason.toLowerCase().includes('api key')) {
-          store.addToast({ type: 'warning', message: 'API key missing. Add x-api-key or switch AUTH_MODE.' });
-        } else {
-          store.addToast({ type: 'warning', message: 'Authentication required. Please log in.' });
-        }
+        store.addToast({ type: 'warning', message: 'Session expired. Please log in again.' });
       } else if (toastStatus === 403) {
-        store.addToast({ type: 'error', message: reason?.includes('Origin') ? 'Site config issue: origin not allowed' : 'Access denied' });
+        store.addToast({ type: 'error', message: "You don't have permission to do that." });
       } else if (toastStatus === 429) {
-        store.addToast({ type: 'warning', message: 'Rate limited. Please slow down.' });
+        store.addToast({ type: 'warning', message: 'Too many requests. Please wait a moment.' });
       } else if (toastStatus && toastStatus >= 500) {
-        store.addToast({ type: 'error', message: `Server error: ${data?.error || 'Something went wrong'}` });
+        store.addToast({ type: 'error', message: 'Something went wrong on our end. Please try again.' });
       } else if (!error.response) {
-        store.addToast({ type: 'error', message: 'Network error: could not reach server' });
+        store.addToast({ type: 'error', message: 'Unable to connect. Check your internet and try again.' });
       } else if (data?.ok === false && data?.error) {
-        // Economy/API errors with { ok: false, error: "..." }
         store.addToast({ type: 'error', message: data.error.replace(/_/g, ' ') });
       }
     }
