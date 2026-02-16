@@ -15811,55 +15811,56 @@ app.get("/", (req, res) => res.json({ ok:true, name:"Concord v2 Macro‑Max", ve
 
 // Status
 app.get("/api/status", (req, res) => {
-  res.json({
+  // Public-safe response: counts and feature flags only (no file paths or secrets)
+  const base = {
     ok: true,
     version: VERSION,
-    port: PORT,
     nodeEnv: NODE_ENV,
     uptime: process.uptime(),
-    dotenvLoaded: DOTENV.loaded,
-    dotenvPath: DOTENV.path,
     llmReady: LLM_READY,
-    openaiModel: { fast: OPENAI_MODEL_FAST, smart: OPENAI_MODEL_SMART },
-    dtus: STATE.dtus.size,
-    wrappers: STATE.wrappers.size,
-    layers: STATE.layers.size,
-    personas: STATE.personas.size,
-    swarms: 0,
+    counts: {
+      dtus: STATE.dtus.size,
+      wrappers: STATE.wrappers.size,
+      layers: STATE.layers.size,
+      personas: STATE.personas.size,
+    },
     sims: STATE.lastSim ? 1 : 0,
-    macroDomains: listDomains(),
-    crawlQueue: STATE.crawlQueue.length,
-    settings: STATE.settings,
-    seed: SEED_INFO,
-    stateDisk: STATE_DISK,
-    // Production infrastructure status
-    infrastructure: {
-      database: {
-        type: db ? "sqlite" : "json",
-        ready: db ? true : false,
-        path: db ? DB_PATH : AUTH_PATH
-      },
-      stateBackend: {
-        type: USE_SQLITE_STATE ? "sqlite" : "json",
-        path: USE_SQLITE_STATE ? DB_PATH : STATE_PATH,
-      },
-      auth: {
-        mode: AUTH_MODE,
-        totalUsers: AuthDB.getUserCount(),
-        jwtConfigured: Boolean(JWT_SECRET),
-        usesJwt: AUTH_USES_JWT,
-        usesApiKey: AUTH_USES_APIKEY
-      },
-      security: {
-        csrfEnabled: NODE_ENV === "production",
-        rateLimitEnabled: Boolean(rateLimiter),
-        helmetEnabled: Boolean(helmet)
-      },
-      envValidation: ENV_VALIDATION,
-      llmPipeline: getLLMPipelineStatus(),
-      capabilities: CAPS
-    }
-  });
+  };
+
+  // Authenticated users get extended info; unauthenticated get just the basics
+  const isAuthed = req.user || req.apiKeyUser;
+  if (isAuthed) {
+    Object.assign(base, {
+      port: PORT,
+      openaiModel: { fast: OPENAI_MODEL_FAST, smart: OPENAI_MODEL_SMART },
+      macroDomains: listDomains(),
+      crawlQueue: STATE.crawlQueue.length,
+      settings: STATE.settings,
+      seed: SEED_INFO,
+      stateDisk: STATE_DISK,
+      infrastructure: {
+        database: { type: db ? "sqlite" : "json", ready: Boolean(db) },
+        stateBackend: { type: USE_SQLITE_STATE ? "sqlite" : "json" },
+        auth: {
+          mode: AUTH_MODE,
+          totalUsers: AuthDB.getUserCount(),
+          jwtConfigured: Boolean(JWT_SECRET),
+          usesJwt: AUTH_USES_JWT,
+          usesApiKey: AUTH_USES_APIKEY
+        },
+        security: {
+          csrfEnabled: NODE_ENV === "production",
+          rateLimitEnabled: Boolean(rateLimiter),
+          helmetEnabled: Boolean(helmet)
+        },
+        envValidation: ENV_VALIDATION,
+        llmPipeline: getLLMPipelineStatus(),
+        capabilities: CAPS
+      }
+    });
+  }
+
+  res.json(base);
 });
 
 // LLM Pipeline API

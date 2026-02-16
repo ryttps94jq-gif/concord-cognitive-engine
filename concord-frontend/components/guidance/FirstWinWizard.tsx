@@ -51,15 +51,29 @@ export function FirstWinWizard() {
   const router = useRouter();
   const [dismissed, setDismissed] = useState(false);
 
-  const { data } = useQuery<FirstWinData>({
+  const { data, isError } = useQuery<FirstWinData>({
     queryKey: ['guidance-first-win'],
     queryFn: async () => (await api.get('/api/guidance/first-win')).data,
     refetchInterval: 15_000,
+    retry: 1,
   });
 
-  if (!data || data.allDone || dismissed) return null;
+  // Static fallback when guidance API is unavailable (e.g. no SQLite)
+  const FALLBACK_DATA: FirstWinData = {
+    ok: true,
+    steps: [
+      { id: 'create_dtu', label: 'Create your first DTU', completed: false },
+      { id: 'create_artifact', label: 'Generate or upload an artifact', completed: false },
+      { id: 'view_global', label: 'View it in Global', completed: false },
+    ],
+    allDone: false,
+    completedCount: 0,
+  };
+  const resolved = data || (isError ? FALLBACK_DATA : null);
 
-  const currentStep = data.steps.find((s) => !s.completed) || data.steps[data.steps.length - 1];
+  if (!resolved || resolved.allDone || dismissed) return null;
+
+  const currentStep = resolved.steps.find((s) => !s.completed) || resolved.steps[resolved.steps.length - 1];
 
   return (
     <div className="fixed bottom-4 right-4 z-40 w-80 bg-lattice-surface border border-neon-blue/30 rounded-lg shadow-lg overflow-hidden">
@@ -71,7 +85,7 @@ export function FirstWinWizard() {
         </span>
         <div className="flex items-center gap-2">
           <span className="text-xs text-gray-500">
-            {data.completedCount}/{data.steps.length}
+            {resolved.completedCount}/{resolved.steps.length}
           </span>
           <button onClick={() => setDismissed(true)} className="text-gray-500 hover:text-white">
             <X className="w-3.5 h-3.5" />
@@ -83,13 +97,13 @@ export function FirstWinWizard() {
       <div className="h-1 bg-lattice-border">
         <div
           className="h-full bg-neon-blue transition-all duration-500"
-          style={{ width: `${(data.completedCount / data.steps.length) * 100}%` }}
+          style={{ width: `${(resolved.completedCount / resolved.steps.length) * 100}%` }}
         />
       </div>
 
       {/* Steps */}
       <div className="p-3 space-y-2">
-        {data.steps.map((step) => {
+        {resolved.steps.map((step) => {
           const Icon = STEP_ICONS[step.id] || Circle;
           const isCurrent = step.id === currentStep.id && !step.completed;
 
