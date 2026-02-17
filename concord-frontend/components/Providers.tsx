@@ -3,13 +3,16 @@
 import { useState, useEffect } from 'react';
 import { QueryClient, QueryClientProvider, MutationCache } from '@tanstack/react-query';
 import { AppShell } from '@/components/shell/AppShell';
+import { PermissionProvider } from '@/components/common/PermissionGate';
 import { observeWebVitals } from '@/lib/perf';
+import { connectSocket, disconnectSocket } from '@/lib/realtime/socket';
+import { api } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
 
 /**
  * Client-side providers wrapper.
  * Extracted from root layout so layout.tsx can remain a Server Component (FE-002).
- * Initializes Web Vitals observation (FE-018).
+ * Initializes Web Vitals observation (FE-018), WebSocket connection, and permission context.
  */
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -35,14 +38,41 @@ export function Providers({ children }: { children: React.ReactNode }) {
       })
   );
 
+  const [userScopes, setUserScopes] = useState<string[]>([]);
+
   // FE-018: Start performance observation
   useEffect(() => {
     observeWebVitals();
   }, []);
 
+  // Connect WebSocket and fetch user scopes on mount (if authenticated)
+  useEffect(() => {
+    const entered = localStorage.getItem('concord_entered');
+    if (!entered) return;
+
+    // Connect WebSocket with existing session cookie
+    connectSocket();
+
+    // Fetch user scopes for PermissionGate
+    api.get('/api/auth/me')
+      .then((res) => {
+        const scopes = res.data?.scopes || res.data?.permissions || [];
+        if (Array.isArray(scopes)) setUserScopes(scopes);
+      })
+      .catch(() => {
+        // Not authenticated — middleware will redirect
+      });
+
+    return () => {
+      disconnectSocket();
+    };
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
-      <AppShell>{children}</AppShell>
+      <PermissionProvider scopes={userScopes}>
+        <AppShell>{children}</AppShell>
+      </PermissionProvider>
     </QueryClientProvider>
   );
 }

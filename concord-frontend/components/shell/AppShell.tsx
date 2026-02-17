@@ -21,6 +21,13 @@ export function AppShell({ children }: AppShellProps) {
 
   useEffect(() => {
     setMounted(true);
+
+    // Register service worker for PWA support
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {
+        // SW registration failed — offline caching won't work
+      });
+    }
   }, []);
 
   useEffect(() => {
@@ -39,7 +46,12 @@ export function AppShell({ children }: AppShellProps) {
   }, [commandPaletteOpen, setCommandPaletteOpen]);
 
   if (!mounted) {
-    return null;
+    // Minimal shell during hydration to prevent CLS flash
+    return (
+      <div className="flex h-screen overflow-hidden bg-lattice-void">
+        <div className="flex-1" />
+      </div>
+    );
   }
 
   // Full page mode: render children without shell chrome (for landing page, etc.)
