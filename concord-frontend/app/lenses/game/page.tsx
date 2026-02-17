@@ -226,13 +226,13 @@ export default function GameLensPage() {
   // Fetch profile from backend, fall back to initial data
   const { data: profileData, isError: isError3, error: error3, refetch: refetch3 } = useQuery({
     queryKey: ['game-profile'],
-    queryFn: () => api.get('/api/game/profile').then(r => r.data).catch(() => INITIAL_PROFILE),
+    queryFn: () => api.get('/api/game/profile').then(r => r.data?.profile || r.data || INITIAL_PROFILE).catch(() => INITIAL_PROFILE),
   });
 
   // Fetch leaderboard from backend
   const { data: leaderboardData, isError: isError4, error: error4, refetch: refetch4 } = useQuery({
     queryKey: ['game-leaderboard', lbPeriod],
-    queryFn: () => api.get('/api/game/leaderboard', { params: { period: lbPeriod } }).then(r => r.data?.players || []).catch(() => []),
+    queryFn: () => api.get('/api/game/leaderboard', { params: { period: lbPeriod } }).then(r => r.data?.leaderboard || r.data?.players || []).catch(() => []),
   });
 
   // Sync profile data into local state when available
