@@ -15949,35 +15949,7 @@ app.post("/api/quality-pipeline/preview", (req, res) => {
   }
 });
 
-// Force reseed DTUs from dtus.js (useful for debugging empty state)
-// SECURITY: Requires owner/admin role to prevent unauthorized state resets
-app.post("/api/reseed", requireRole("owner", "admin"), async (req, res) => {
-  try {
-    const force = req.body?.force === true;
-    if (!force && STATE.dtus.size > 0) {
-      return res.json({ ok: false, error: "DTUs already exist. Pass { force: true } to reseed anyway.", currentCount: STATE.dtus.size });
-    }
-    const seeds = await tryLoadSeedDTUs();
-    if (!seeds.length) {
-      return res.json({ ok: false, error: SEED_INFO.error || "No seeds found in dtus.js", seedInfo: SEED_INFO });
-    }
-    let added = 0;
-    for (const s of seeds) {
-      // Scope Separation: reseeded DTUs enter Global scope (canonical knowledge)
-      s.scope = "global";
-      const d = toOptionADTU(s);
-      if (!STATE.dtus.has(d.id)) {
-        STATE.dtus.set(d.id, d);
-        added++;
-      }
-    }
-    saveStateDebounced();
-    log("reseed", "Manual reseed from dtus.js into Global scope", { added, total: STATE.dtus.size, scope: "global" });
-    return res.json({ ok: true, added, total: STATE.dtus.size, scope: "global", seedInfo: SEED_INFO });
-  } catch (e) {
-    return res.status(500).json({ ok: false, error: String(e?.message || e) });
-  }
-});
+// Reseed endpoint extracted to routes/operations.js
 
 // Time (authoritative; never uses LLM)
 app.get("/api/time", (req, res) => {
@@ -16030,98 +16002,9 @@ app.get("/api/state/latest", (req, res) => {
   }
 });
 
-// Abstraction governor status / controls
-app.get("/api/abstraction", (req, res) => {
-  try {
-    const snap = computeAbstractionSnapshot();
-    res.json({ ok:true, abstraction: { ...STATE.abstraction, metrics: { ...STATE.abstraction.metrics, ...snap } } });
-  } catch (e) {
-    res.json({ ok:false, error: String(e?.message||e) });
-  }
-});
+// Abstraction endpoints extracted to routes/operations.js
 
-app.post("/api/abstraction/upgrade", async (req, res) => {
-  try {
-    // force a local upgrade now
-    STATE.abstraction.lastUpgradeAt = null;
-    const r = await maybeRunLocalUpgrade();
-    res.json({ ok:true, result: r, abstraction: STATE.abstraction });
-  } catch (e) {
-    res.json({ ok:false, error: String(e?.message||e) });
-  }
-});
-
-// Manual consolidation trigger - creates MEGAs/HYPERs immediately
-app.post("/api/abstraction/consolidate", requireRole("owner", "admin"), async (req, res) => {
-  try {
-    const { maxMegas = 5, maxHypers = 2, force = false } = req.body || {};
-
-    // Optionally bypass usage requirement for testing/manual consolidation
-    if (force) {
-      STATE.abstraction.metrics = STATE.abstraction.metrics || {};
-      STATE.abstraction.metrics.totalUses = Math.max(STATE.abstraction.metrics.totalUses || 0, 30);
-    }
-
-    const ctx = makeCtx(req);
-    const result = await runAutoPromotion(ctx, { maxNewMegas: maxMegas, maxNewHypers: maxHypers });
-
-    res.json({
-      ok: true,
-      result,
-      message: result.made?.megas?.length || result.made?.hypers?.length
-        ? `Created ${result.made?.megas?.length || 0} MEGAs and ${result.made?.hypers?.length || 0} HYPERs`
-        : "No consolidation needed (insufficient clusters or already at budget)"
-    });
-  } catch (e) {
-    res.json({ ok: false, error: String(e?.message || e) });
-  }
-});
-
-// ---- Queues (proposals + maintenance; never flood DTU library) ----
-app.get("/api/queues", (req,res)=>{
-  ensureQueues();
-  res.json({ ok:true, queues: Object.fromEntries(Object.entries(STATE.queues).map(([k,v])=>[k, v.slice(-500)])) });
-});
-
-app.post("/api/queues/:queue/propose", (req,res)=>{
-  ensureQueues();
-  const q = String(req.params.queue||"");
-  if (!STATE.queues[q]) return res.status(404).json({ ok:false, error:`Unknown queue: ${q}` });
-  const raw = (req.body&&typeof req.body==='object') ? req.body : {};
-  const { title, description, content, tags, priority, meta, proposerOrganId, type: itemType } = raw;
-  const item = { id: uid(`q_${q}`), createdAt: nowISO(), status: "queued", title, description, content, tags, priority, meta, proposerOrganId, type: itemType };
-  STATE.queues[q].push(item);
-  saveStateDebounced();
-  res.json({ ok:true, item });
-});
-
-app.post("/api/queues/:queue/decide", async (req,res)=>{
-  ensureQueues();
-  const q = String(req.params.queue||"");
-  if (!STATE.queues[q]) return res.status(404).json({ ok:false, error:`Unknown queue: ${q}` });
-  const { id, decision, note } = req.body||{};
-  const item = STATE.queues[q].find(x=>x && x.id===id);
-  if (!item) return res.status(404).json({ ok:false, error:"Queue item not found" });
-  const dec = String(decision||"").toLowerCase();
-  if (!['approve','decline','revise','promote'].includes(dec)) return res.status(400).json({ ok:false, error:"decision must be approve/decline/revise/promote" });
-
-  item.status = dec;
-  item.decidedAt = nowISO();
-  item.decisionNote = note || "";
-
-  // Promotion hook: approved DTU proposals become DTUs (lineage preserved)
-  let promoted = null;
-  if ((dec==='approve' || dec==='promote') && item.type === 'dtu_proposal' && item.payload && typeof item.payload==='object') {
-    const ctx = makeCtx(req);
-    const spec = { ...item.payload, source: item.payload.source || `queue.${q}`, allowRewrite: true };
-    const r = await runMacro('dtu','create', spec, ctx).catch(e=>({ ok:false, error:String(e?.message||e) }));
-    promoted = r;
-    item.promoted = r?.ok ? { dtuId: r.id || r.dtu?.id || null } : null;
-  }
-
-  saveStateDebounced();
-  res.json({ ok:true, item, promoted });
-});
+// Queues endpoints extracted to routes/operations.js
 
 
 // ---- DTU Endpoints (extracted to routes/dtus.js — mounted below after chat routes) ----
@@ -16444,11 +16327,7 @@ startWeeklyCouncil();
 
 
 // ---- listen ----
-// ---- Pipeline proposals endpoints (organism install ledger) ----
-app.get("/api/proposals", (req,res) => {
-  const limit = Math.max(1, Math.min(200, Number(req.query.limit||50)));
-  res.json({ ok:true, proposals: pipeListProposals(limit), total: PIPE.proposals.size });
-});
+// Pipeline proposals endpoint extracted to routes/operations.js
 
 
 // ============================================================================
