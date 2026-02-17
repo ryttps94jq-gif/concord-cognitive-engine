@@ -2812,7 +2812,8 @@ initTokens({ jwt, bcrypt, db, EFFECTIVE_JWT_SECRET, JWT_EXPIRES_IN, BCRYPT_ROUND
 if (db) {
   try {
     const migrationResult = await runSchemaMigrations(db);
-    console.log(`[Concord] Schema version: ${migrationResult.currentVersion} (${migrationResult.appliedCount} new migrations)`);
+    const totalRun = migrationResult.applied.length + migrationResult.alreadyRun.length;
+    console.log(`[Concord] Migrations: ${totalRun} total, ${migrationResult.applied.length} newly applied`);
   } catch (e) {
     console.error("[Concord] Migration failed:", e.message);
   }
