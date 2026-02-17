@@ -76,7 +76,7 @@ jobs:
           NODE_ENV: test
           JWT_SECRET: test-secret-for-ci-only-do-not-use-in-production
           ADMIN_PASSWORD: testpassword123
-        run: node --test tests/*.test.js
+        run: node --test 'tests/**/*.test.js' 'tests/**/*-tests.js'
 
   security-scan:
     name: Security Scan
@@ -192,7 +192,7 @@ jobs:
             fi
             sleep 1
           done
-          cat server/server.log
+          cat ./server/server.log || true
           exit 1
 
       - name: Run smoke tests
@@ -299,6 +299,13 @@ jobs:
       - name: Install Playwright browsers
         working-directory: ./concord-frontend
         run: npx playwright install --with-deps chromium
+
+      - name: Build frontend for E2E
+        working-directory: ./concord-frontend
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:5050
+          CI_SKIP_LINT_IN_BUILD: '1'
+        run: npm run build
 
       - name: Start server
         working-directory: ./server
