@@ -1,7 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { ReactNode } from 'react';
 
 // Mock lucide-react
 vi.mock('lucide-react', () => ({
@@ -20,8 +18,19 @@ vi.mock('@/lib/utils', () => ({
 // Mock API client
 vi.mock('@/lib/api/client', () => ({
   api: {
-    get: vi.fn().mockResolvedValue({ data: { ok: true, version: '5.0.0', infrastructure: { auth: { mode: 'jwt' } } } }),
+    get: vi.fn().mockResolvedValue({ data: { ok: true, version: '5.0.0' } }),
   },
+}));
+
+// Control useQuery return value
+const mockQueryReturn = {
+  data: { ok: true, version: '5.0.0', infrastructure: { auth: { mode: 'jwt' } } } as any,
+  isError: false,
+  error: null as any,
+};
+
+vi.mock('@tanstack/react-query', () => ({
+  useQuery: () => mockQueryReturn,
 }));
 
 // Mock UI store
@@ -38,33 +47,22 @@ vi.mock('@/store/ui', () => ({
 
 import { SystemStatus } from '@/components/common/SystemStatus';
 
-function createWrapper() {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false },
-    },
-  });
-  return ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-  );
-}
-
 describe('SystemStatus', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUIStoreState.requestErrors = [];
+    mockQueryReturn.data = { ok: true, version: '5.0.0', infrastructure: { auth: { mode: 'jwt' } } };
+    mockQueryReturn.isError = false;
+    mockQueryReturn.error = null;
   });
 
-  it('renders the "System OK" button when healthy and no errors', async () => {
-    render(<SystemStatus />, { wrapper: createWrapper() });
-
-    // Before query resolves, component renders in some state
-    // The "System OK" button shows when isHealthy and no errors
+  it('renders the "System OK" button when healthy and no errors', () => {
+    render(<SystemStatus />);
     expect(screen.getByText('System OK')).toBeInTheDocument();
   });
 
-  it('expands on click of System OK button', async () => {
-    render(<SystemStatus />, { wrapper: createWrapper() });
+  it('expands on click of System OK button', () => {
+    render(<SystemStatus />);
 
     const okButton = screen.getByText('System OK');
     fireEvent.click(okButton);
@@ -73,13 +71,42 @@ describe('SystemStatus', () => {
   });
 
   it('shows expanded panel with auth mode info', () => {
-    render(<SystemStatus />, { wrapper: createWrapper() });
+    render(<SystemStatus />);
 
     // Click to expand
     fireEvent.click(screen.getByText('System OK'));
 
     // Should show auth mode
     expect(screen.getByText('Auth Mode:')).toBeInTheDocument();
+    expect(screen.getByText('jwt')).toBeInTheDocument();
+  });
+
+  it('shows version in expanded view', () => {
+    render(<SystemStatus />);
+
+    fireEvent.click(screen.getByText('System OK'));
+
+    expect(screen.getByText('Version:')).toBeInTheDocument();
+    expect(screen.getByText('5.0.0')).toBeInTheDocument();
+  });
+
+  it('shows backend connected in expanded view', () => {
+    render(<SystemStatus />);
+
+    fireEvent.click(screen.getByText('System OK'));
+
+    expect(screen.getByText('Backend:')).toBeInTheDocument();
+    expect(screen.getByText('Connected')).toBeInTheDocument();
+  });
+
+  it('shows "Backend Unreachable" when backend is down', () => {
+    mockQueryReturn.data = null;
+    mockQueryReturn.isError = true;
+    mockQueryReturn.error = new Error('Network error');
+
+    render(<SystemStatus />);
+
+    expect(screen.getByText('Backend Unreachable')).toBeInTheDocument();
   });
 
   it('shows error count badge when there are errors', () => {
@@ -87,9 +114,9 @@ describe('SystemStatus', () => {
       { id: 'err-1', at: new Date().toISOString(), message: 'Error 1', status: 500, method: 'GET', path: '/api/test', reason: 'Server error' },
     ];
 
-    render(<SystemStatus />, { wrapper: createWrapper() });
+    render(<SystemStatus />);
 
-    // With errors the full panel should show, not just "System OK" button
+    // With errors the full panel should show, and the badge count
     expect(screen.getByText('1')).toBeInTheDocument();
   });
 
@@ -98,7 +125,7 @@ describe('SystemStatus', () => {
       { id: 'err-1', at: new Date().toISOString(), message: 'Bad request', status: 400, method: 'POST', path: '/api/dtus', reason: 'Invalid payload' },
     ];
 
-    render(<SystemStatus />, { wrapper: createWrapper() });
+    render(<SystemStatus />);
 
     // Click to expand
     const header = screen.getByText('System Status');
@@ -114,7 +141,7 @@ describe('SystemStatus', () => {
       { id: 'err-1', at: new Date().toISOString(), message: 'Error', status: 500, method: 'GET', path: '/test', reason: 'fail' },
     ];
 
-    render(<SystemStatus />, { wrapper: createWrapper() });
+    render(<SystemStatus />);
 
     // Expand
     const header = screen.getByText('System Status');
@@ -127,7 +154,7 @@ describe('SystemStatus', () => {
   });
 
   it('collapses when Collapse button is clicked', () => {
-    render(<SystemStatus />, { wrapper: createWrapper() });
+    render(<SystemStatus />);
 
     // Expand first
     fireEvent.click(screen.getByText('System OK'));
@@ -136,5 +163,19 @@ describe('SystemStatus', () => {
     // Collapse
     fireEvent.click(screen.getByText('Collapse'));
     expect(screen.queryByText('Collapse')).not.toBeInTheDocument();
+  });
+
+  it('shows error message when backend is unreachable and expanded', () => {
+    mockQueryReturn.data = null;
+    mockQueryReturn.isError = true;
+    mockQueryReturn.error = new Error('Connection refused');
+
+    render(<SystemStatus />);
+
+    // Click to expand
+    const header = screen.getByText('Backend Unreachable');
+    fireEvent.click(header.closest('button')!);
+
+    expect(screen.getByText('Connection refused')).toBeInTheDocument();
   });
 });

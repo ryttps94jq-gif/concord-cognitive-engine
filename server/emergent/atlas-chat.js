@@ -29,10 +29,9 @@
  *   → THEN it enters atlas.index.applyWrite() and strictness kicks in.
  */
 
-import { CHAT_PROFILE, SCOPES, RETRIEVAL_POLICY } from "./atlas-config.js";
+import { CHAT_PROFILE, SCOPES } from "./atlas-config.js";
 import { retrieve as atlasRetrieve } from "./atlas-retrieval.js";
 import { getAtlasState } from "./atlas-epistemic.js";
-import { getDtuScope } from "./atlas-scope-router.js";
 import { scopedWrite, createSubmission } from "./atlas-scope-router.js";
 import { WRITE_OPS } from "./atlas-write-guard.js";
 

@@ -5,7 +5,6 @@
  * spam throttles, and duplicate detection to prevent gaming of the Atlas.
  */
 
-import crypto from "crypto";
 import { getAtlasState } from "./atlas-epistemic.js";
 
 // ── Configuration ────────────────────────────────────────────────────────

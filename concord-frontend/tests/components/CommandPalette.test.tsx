@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 
+// Mock scrollIntoView which jsdom doesn't implement
+Element.prototype.scrollIntoView = vi.fn();
+
 // Mock next/navigation
 const mockPush = vi.fn();
 vi.mock('next/navigation', () => ({
@@ -14,41 +17,42 @@ vi.mock('next/navigation', () => ({
   }),
 }));
 
-// Mock lens-registry
-const MockIcon = ({ className }: { className?: string }) => <span data-testid="mock-icon" className={className}>I</span>;
-
-vi.mock('@/lib/lens-registry', () => ({
-  getCommandPaletteLenses: () => [
-    {
-      id: 'resonance',
-      name: 'Resonance',
-      description: 'View system resonance',
-      path: '/lenses/resonance',
-      icon: MockIcon,
-      category: 'core',
+// Mock lens-registry — icon must be defined inside the factory since vi.mock is hoisted
+vi.mock('@/lib/lens-registry', () => {
+  const Icon = (props: any) => Object.assign(document.createElement('span'), { className: props?.className || '' });
+  return {
+    getCommandPaletteLenses: () => [
+      {
+        id: 'resonance',
+        name: 'Resonance',
+        description: 'View system resonance',
+        path: '/lenses/resonance',
+        icon: ({ className }: { className?: string }) => <span data-testid="mock-icon" className={className}>I</span>,
+        category: 'core',
+      },
+      {
+        id: 'marketplace',
+        name: 'Marketplace',
+        description: 'Browse the marketplace',
+        path: '/lenses/marketplace',
+        icon: ({ className }: { className?: string }) => <span data-testid="mock-icon" className={className}>I</span>,
+        category: 'governance',
+      },
+    ],
+    getParentCoreLens: (id: string) => {
+      if (id === 'marketplace') return 'board';
+      return null;
     },
-    {
-      id: 'marketplace',
-      name: 'Marketplace',
-      description: 'Browse the marketplace',
-      path: '/lenses/marketplace',
-      icon: MockIcon,
-      category: 'governance',
+    getCoreLensConfig: (id: string) => {
+      if (id === 'board') return { name: 'Board' };
+      return null;
     },
-  ],
-  getParentCoreLens: (id: string) => {
-    if (id === 'marketplace') return 'board';
-    return null;
-  },
-  getCoreLensConfig: (id: string) => {
-    if (id === 'board') return { name: 'Board' };
-    return null;
-  },
-  LENS_CATEGORIES: {
-    core: { label: 'Core' },
-    governance: { label: 'Governance' },
-  },
-}));
+    LENS_CATEGORIES: {
+      core: { label: 'Core' },
+      governance: { label: 'Governance' },
+    },
+  };
+});
 
 // Mock lucide-react
 vi.mock('lucide-react', () => ({
