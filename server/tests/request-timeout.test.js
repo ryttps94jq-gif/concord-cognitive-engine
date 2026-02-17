@@ -3,7 +3,7 @@
  * Ensures hung requests are properly terminated and healthy requests complete.
  */
 
-import { describe, it, beforeEach, afterEach, mock } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 
@@ -105,7 +105,7 @@ describe("Request Timeout Middleware", () => {
   });
 
   describe("timeout behavior", () => {
-    it("classifies /api/chat as LLM route (120s timeout)", (t) => {
+    it("classifies /api/chat as LLM route (120s timeout)", () => {
       const req = makeReq({ path: "/api/chat" });
       const res = makeRes();
       requestTimeoutMiddleware(req, res, () => {});
@@ -184,7 +184,7 @@ describe("Request Timeout Middleware", () => {
 
       res.on("finish", () => clearTimeout(timer));
 
-      await new Promise(resolve => setTimeout(resolve, SHORT_TIMEOUT + 20));
+      await new Promise(resolve => { setTimeout(resolve, SHORT_TIMEOUT + 20); });
 
       assert.equal(res._statusCode, 503);
       assert.equal(res._body.ok, false);

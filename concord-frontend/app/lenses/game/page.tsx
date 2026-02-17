@@ -477,7 +477,7 @@ export default function GameLensPage() {
           <div className="panel p-4">
             <h3 className="text-sm font-semibold text-gray-300 mb-3">This Week&apos;s XP</h3>
             <div className="flex items-end gap-2 h-32">
-              {xpHistory.map((d) => (
+              {xpHistory.map((d: { day: string; xp: number }) => (
                 <div key={d.day} className="flex-1 flex flex-col items-center gap-1">
                   <span className="text-xs text-gray-500 font-mono">{d.xp}</span>
                   <motion.div
@@ -819,9 +819,9 @@ export default function GameLensPage() {
           {/* Bar Chart */}
           <div className="panel p-6">
             <h3 className="font-semibold text-white mb-1">XP Earned This Week</h3>
-            <p className="text-xs text-gray-400 mb-6">Total: {xpHistory.reduce((s, d) => s + d.xp, 0).toLocaleString()} XP</p>
+            <p className="text-xs text-gray-400 mb-6">Total: {xpHistory.reduce((s: number, d: { xp: number }) => s + d.xp, 0).toLocaleString()} XP</p>
             <div className="flex items-end gap-3 h-48">
-              {xpHistory.map((d, i) => (
+              {xpHistory.map((d: { day: string; xp: number }, i: number) => (
                 <div key={d.day} className="flex-1 flex flex-col items-center gap-2">
                   <span className="text-xs text-gray-400 font-mono">{d.xp}</span>
                   <motion.div
