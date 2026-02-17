@@ -286,13 +286,13 @@ export default function ChatLensPage() {
     },
   });
 
-  const handleRegenerate = () => {
+  const handleRegenerate = useCallback(() => {
     // Find the last user message to resend
     const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
     if (lastUserMsg && !regenerateMutation.isPending) {
       regenerateMutation.mutate(lastUserMsg.content);
     }
-  };
+  }, [messages, regenerateMutation]);
 
   // Feedback mutation — sends thumbs up/down to backend
   const feedbackMutation = useMutation({

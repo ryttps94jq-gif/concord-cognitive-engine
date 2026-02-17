@@ -125,7 +125,7 @@ const NAMES = [
   'InkFlow', 'PixelDrift', 'VocalFire', 'SynthLord',
 ];
 
-function makePart(idx: number, role: ParticipantRole, online = true): Participant {
+function _makePart(idx: number, role: ParticipantRole, online = true): Participant {
   return {
     id: `p-${idx}`,
     name: NAMES[idx % NAMES.length],
