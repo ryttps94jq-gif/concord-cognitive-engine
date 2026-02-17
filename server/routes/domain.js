@@ -28,7 +28,8 @@ module.exports = function registerDomainRoutes(app, {
   fs,
   ensureExperienceLearning,
   ensureAttentionManager,
-  ensureReflectionEngine
+  ensureReflectionEngine,
+  validate
 }) {
 
   // ---- Cognitive Status ----
@@ -62,15 +63,15 @@ module.exports = function registerDomainRoutes(app, {
   });
 
   // ---- Forge ----
-  app.post("/api/forge/manual", async (req,res)=> {
+  app.post("/api/forge/manual", validate("forgeManual"), async (req,res)=> {
     const out = await runMacro("forge","manual", req.body||{}, makeCtx(req));
     return res.json(_withAck(out, req, ["dtus","state","logs"], ["/api/dtus","/api/state/latest","/api/logs"], null, { panel: "forge_manual" }));
   });
-  app.post("/api/forge/hybrid", async (req,res)=> {
+  app.post("/api/forge/hybrid", validate("forgeAuto"), async (req,res)=> {
     const out = await runMacro("forge","hybrid", req.body||{}, makeCtx(req));
     return res.json(_withAck(out, req, ["dtus","state","logs"], ["/api/dtus","/api/state/latest","/api/logs"], null, { panel: "forge_hybrid" }));
   });
-  app.post("/api/forge/auto", async (req,res)=> {
+  app.post("/api/forge/auto", validate("forgeAuto"), async (req,res)=> {
     const out = await runMacro("forge","auto", req.body||{}, makeCtx(req));
     return res.json(_withAck(out, req, ["dtus","state","logs"], ["/api/dtus","/api/state/latest","/api/logs"], null, { panel: "forge_auto" }));
   });

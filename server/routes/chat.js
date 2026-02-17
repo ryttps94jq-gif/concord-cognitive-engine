@@ -16,11 +16,12 @@ module.exports = function registerChatRoutes(app, {
   clamp,
   nowISO,
   saveStateDebounced,
-  ETHOS_INVARIANTS
+  ETHOS_INVARIANTS,
+  validate
 }) {
 
   // Chat + Ask
-  app.post("/api/chat", async (req, res) => {
+  app.post("/api/chat", validate("chat"), async (req, res) => {
     const errorId = uid("err");
     try {
       req.body = enforceRequestInvariants(req, req.body || {});

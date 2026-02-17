@@ -3806,23 +3806,152 @@ if (z) {
     offset: z.coerce.number().min(0).optional().default(0),
     q: z.string().max(500).optional()
   });
+
+  // Chat endpoint validation
+  schemas.chat = z.object({
+    message: z.string().min(1).max(50000),
+    mode: z.string().max(50).optional(),
+    context: z.record(z.unknown()).optional(),
+    stream: z.union([z.boolean(), z.string()]).optional(),
+    sessionId: z.string().max(100).optional(),
+    personaId: z.string().max(100).optional()
+  });
+
+  // Forge endpoint validation (manual DTU creation)
+  schemas.forgeManual = z.object({
+    title: z.string().min(1).max(500),
+    content: z.string().max(100000).optional(),
+    tier: z.enum(["regular", "mega", "hyper"]).optional(),
+    tags: z.array(z.string().max(50)).max(40).optional(),
+    creti: z.string().max(50000).optional(),
+    source: z.string().max(100).optional(),
+    template: z.string().max(100).optional()
+  });
+
+  // Forge hybrid/auto (LLM-assisted creation)
+  schemas.forgeAuto = z.object({
+    prompt: z.string().min(1).max(50000).optional(),
+    title: z.string().max(500).optional(),
+    content: z.string().max(100000).optional(),
+    tier: z.enum(["regular", "mega", "hyper"]).optional(),
+    tags: z.array(z.string().max(50)).max(40).optional(),
+    source: z.string().max(200).optional()
+  });
+
+  // DTU comment
+  schemas.dtuComment = z.object({
+    text: z.string().min(1).max(5000),
+    author: z.string().max(100).optional()
+  });
+
+  // DTU vote/like
+  schemas.dtuVote = z.object({
+    direction: z.enum(["up", "down"]).optional(),
+    value: z.number().min(-1).max(1).optional()
+  });
+
+  // Council debate
+  schemas.councilDebate = z.object({
+    topic: z.string().min(1).max(5000),
+    rounds: z.number().min(1).max(20).optional(),
+    participants: z.array(z.string().max(100)).max(10).optional()
+  });
+
+  // Marketplace submission
+  schemas.marketplaceSubmit = z.object({
+    dtuId: z.string().min(1).max(200),
+    price: z.number().min(0).max(999999).optional(),
+    license: z.string().max(100).optional(),
+    description: z.string().max(5000).optional()
+  });
+
+  // Marketplace install
+  schemas.marketplaceInstall = z.object({
+    listingId: z.string().min(1).max(200)
+  });
+
+  // Schema operations
+  schemas.schemaCreate = z.object({
+    name: z.string().min(1).max(200),
+    fields: z.array(z.object({
+      name: z.string().min(1).max(100),
+      type: z.string().min(1).max(50),
+      required: z.boolean().optional()
+    })).max(100).optional(),
+    description: z.string().max(2000).optional()
+  });
+
+  // Settings update
+  schemas.settingsUpdate = z.object({}).passthrough();
+
+  // DTU restore
+  schemas.dtuRestore = z.object({
+    version: z.number().int().min(0)
+  });
 }
 
 // Validation middleware factory
-function validate(schemaName) {
+function validate(schemaName, source = "body") {
   return (req, res, next) => {
     if (!z || !schemas[schemaName]) return next();
-    const result = schemas[schemaName].safeParse(req.body);
+    const data = source === "query" ? req.query : req.body;
+    const result = schemas[schemaName].safeParse(data);
     if (!result.success) {
       return res.status(400).json({
         ok: false,
         error: "Validation failed",
-        details: result.error.errors
+        code: "VALIDATION_ERROR",
+        details: result.error.errors.map(e => ({
+          path: e.path.join("."),
+          message: e.message,
+          code: e.code
+        }))
       });
     }
-    req.validated = result.data;
+    if (source === "query") {
+      req.validatedQuery = result.data;
+    } else {
+      req.validated = result.data;
+    }
     next();
   };
+}
+
+// ---- Request Timeout Middleware ----
+// Prevents hung requests from consuming connections indefinitely.
+// Configurable per-route via X-Timeout-Ms header or defaults below.
+const DEFAULT_TIMEOUT_MS = parseInt(process.env.REQUEST_TIMEOUT_MS, 10) || 30000;
+const LLM_TIMEOUT_MS = parseInt(process.env.LLM_REQUEST_TIMEOUT_MS, 10) || 120000;
+
+// Routes that involve LLM calls get longer timeouts
+const _LLM_ROUTE_PREFIXES = ["/api/chat", "/api/forge", "/api/ask", "/api/swarm", "/api/sim", "/api/council/debate"];
+
+function requestTimeoutMiddleware(req, res, next) {
+  // Skip for SSE/streaming (they manage their own lifecycle)
+  const accept = String(req.headers.accept || "");
+  if (accept.includes("text/event-stream")) return next();
+  // Skip for health/ready checks
+  if (req.path === "/health" || req.path === "/ready" || req.path === "/metrics") return next();
+
+  const isLLMRoute = _LLM_ROUTE_PREFIXES.some(p => req.path.startsWith(p));
+  const timeoutMs = isLLMRoute ? LLM_TIMEOUT_MS : DEFAULT_TIMEOUT_MS;
+
+  const timer = setTimeout(() => {
+    if (!res.headersSent) {
+      res.status(503).json({
+        ok: false,
+        error: "Request timeout",
+        code: "REQUEST_TIMEOUT",
+        timeoutMs,
+        requestId: req.id
+      });
+    }
+  }, timeoutMs);
+
+  // Clean up timer when response finishes
+  res.on("finish", () => clearTimeout(timer));
+  res.on("close", () => clearTimeout(timer));
+  next();
 }
 
 // ---- Metrics (Prometheus) ----
@@ -15156,6 +15285,7 @@ configureMiddleware(app, {
   requestIdMiddleware,
   requestLoggerMiddleware,
   sanitizationMiddleware,
+  requestTimeoutMiddleware,
   metricsMiddleware,
   cookieParserMiddleware,
   authMiddleware,
@@ -15709,20 +15839,21 @@ console.log(`- authMode: ${AUTH_MODE} (jwt=${AUTH_USES_JWT}, apikey=${AUTH_USES_
 
 
 // ---- DTU Endpoints (extracted to routes/dtus.js) ----
-require("./routes/dtus")(app, { STATE, makeCtx, runMacro, dtuForClient, dtusArray, _withAck, saveStateDebounced });
+require("./routes/dtus")(app, { STATE, makeCtx, runMacro, dtuForClient, dtusArray, _withAck, saveStateDebounced, validate });
 
 // ---- Chat + Ask Endpoints (extracted to routes/chat.js) ----
 require("./routes/chat")(app, {
   STATE, makeCtx, runMacro, enforceRequestInvariants, enforceEthosInvariant,
   uid, kernelTick, uiJson, _withAck, _extractReply, clamp, nowISO,
-  saveStateDebounced, ETHOS_INVARIANTS
+  saveStateDebounced, ETHOS_INVARIANTS, validate
 });
 
 // ---- Domain Routes (extracted to routes/domain.js) ----
 require("./routes/domain")(app, {
   STATE, makeCtx, runMacro, _withAck, kernelTick, uiJson, listDomains, listMacros,
   dtusArray, normalizeText, clamp, nowISO, saveStateDebounced, retrieveDTUs,
-  isShadowDTU, fs, ensureExperienceLearning, ensureAttentionManager, ensureReflectionEngine
+  isShadowDTU, fs, ensureExperienceLearning, ensureAttentionManager, ensureReflectionEngine,
+  validate
 });
 
 // Error handler
@@ -17246,8 +17377,8 @@ register("marketplace", "installed", (_ctx, _input) => {
 });
 
 app.get("/api/marketplace/browse", asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "browse", { category: req.query.category, search: req.query.search, sort: req.query.sort, page: req.query.page, pageSize: req.query.pageSize }, makeCtx(req)))));
-app.post("/api/marketplace/submit", asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "submit", req.body, makeCtx(req)))));
-app.post("/api/marketplace/install", asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "install", req.body, makeCtx(req)))));
+app.post("/api/marketplace/submit", validate("marketplaceSubmit"), asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "submit", req.body, makeCtx(req)))));
+app.post("/api/marketplace/install", validate("marketplaceInstall"), asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "install", req.body, makeCtx(req)))));
 app.post("/api/marketplace/review", asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "review", req.body, makeCtx(req)))));
 app.get("/api/marketplace/installed", asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "installed", {}, makeCtx(req)))));
 
@@ -17511,7 +17642,7 @@ const DEFAULT_SCHEMAS = [
 ];
 setTimeout(() => { for (const s of DEFAULT_SCHEMAS) { if (!SCHEMA_REGISTRY.has(s.name)) SCHEMA_REGISTRY.set(s.name, { ...s, id: uid("schema"), version: 1, createdAt: nowISO(), usageCount: 0, evolves: true }); } }, 100);
 
-app.post("/api/schema", asyncHandler(async (req, res) => res.json(await runMacro("schema", "create", req.body, makeCtx(req)))));
+app.post("/api/schema", validate("schemaCreate"), asyncHandler(async (req, res) => res.json(await runMacro("schema", "create", req.body, makeCtx(req)))));
 app.get("/api/schema", asyncHandler(async (req, res) => res.json(await runMacro("schema", "list", {}, makeCtx(req)))));
 app.post("/api/schema/validate", asyncHandler(async (req, res) => res.json(await runMacro("schema", "validate", req.body, makeCtx(req)))));
 app.post("/api/schema/apply", asyncHandler(async (req, res) => res.json(await runMacro("schema", "apply", req.body, makeCtx(req)))));
@@ -21172,7 +21303,7 @@ app.get("/api/dtus/:id/versions", (req, res) => {
   res.json({ ok: true, versions });
 });
 
-app.post("/api/dtus/:id/restore", (req, res) => {
+app.post("/api/dtus/:id/restore", validate("dtuRestore"), (req, res) => {
   const result = restoreDTUVersion(req.params.id, Number(req.body.version));
   res.json(result);
 });
@@ -21337,7 +21468,7 @@ app.get("/api/dtus/:id/comments", (req, res) => {
   res.json(result);
 });
 
-app.post("/api/dtus/:id/comments", (req, res) => {
+app.post("/api/dtus/:id/comments", validate("dtuComment"), (req, res) => {
   const userId = req.user?.id || "anonymous";
   const result = addComment(req.params.id, userId, req.body.content, req.body.parentId);
   res.json(result);
@@ -21362,7 +21493,7 @@ app.post("/api/dtus/:id/share", (req, res) => {
 });
 
 // POST /api/dtus/:id/vote — up/down vote a DTU (forum)
-app.post("/api/dtus/:id/vote", (req, res) => {
+app.post("/api/dtus/:id/vote", validate("dtuVote"), (req, res) => {
   try {
     const dtu = STATE.dtus?.get?.(req.params.id) || (Array.isArray(STATE.dtuList) ? STATE.dtuList.find(d => d.id === req.params.id) : null);
     if (!dtu) return res.status(404).json({ ok: false, error: "DTU not found" });
@@ -23588,7 +23719,7 @@ app.get("/api/lenses/templates", (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Council debate - structured debate sessions
-app.post("/api/council/debate", (req, res) => {
+app.post("/api/council/debate", validate("councilDebate"), (req, res) => {
   const { topic, participants, rounds = 3 } = req.body || {};
   if (!topic) return res.status(400).json({ ok: false, error: "topic required" });
 

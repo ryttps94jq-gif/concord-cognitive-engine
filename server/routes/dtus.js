@@ -2,7 +2,7 @@
  * DTU routes — extracted from server.js
  * Registered directly on app (mixed prefixes)
  */
-module.exports = function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuForClient, dtusArray, _withAck, saveStateDebounced }) {
+module.exports = function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuForClient, dtusArray, _withAck, saveStateDebounced, validate }) {
 
   // CRETI-first DTU view (no raw JSON by default)
   app.get("/api/dtu_view/:id", (req, res) => {
@@ -35,7 +35,7 @@ module.exports = function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtu
       res.status(msg.startsWith("forbidden") ? 403 : 500).json({ ok: false, error: msg });
     }
   });
-  app.post("/api/dtus", async (req, res) => {
+  app.post("/api/dtus", validate("dtuCreate"), async (req, res) => {
     try {
       const ctx = makeCtx(req);
       const out = await runMacro("dtu","create", req.body || {}, ctx);
@@ -72,7 +72,7 @@ module.exports = function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtu
   });
 
   // Extended DTU endpoints
-  app.put("/api/dtus/:id", async (req, res) => {
+  app.put("/api/dtus/:id", validate("dtuUpdate"), async (req, res) => {
     const out = await runMacro("dtu", "update", { id: req.params.id, ...req.body }, makeCtx(req));
     return res.json(out);
   });

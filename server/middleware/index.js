@@ -23,6 +23,7 @@ import crypto from "crypto";
  * @param {Function} deps.requestIdMiddleware - Request ID middleware
  * @param {Function} deps.requestLoggerMiddleware - Structured logging middleware
  * @param {Function} deps.sanitizationMiddleware - Input sanitization middleware
+ * @param {Function|null} deps.requestTimeoutMiddleware - Request timeout middleware (optional)
  * @param {Function} deps.metricsMiddleware - Prometheus metrics middleware
  * @param {Function} deps.cookieParserMiddleware - Cookie parsing middleware
  * @param {Function} deps.authMiddleware - Authentication middleware
@@ -41,6 +42,7 @@ export default function configureMiddleware(app, deps) {
     requestIdMiddleware,
     requestLoggerMiddleware,
     sanitizationMiddleware,
+    requestTimeoutMiddleware,
     metricsMiddleware,
     cookieParserMiddleware,
     authMiddleware,
@@ -160,6 +162,9 @@ export default function configureMiddleware(app, deps) {
   app.use(requestIdMiddleware);       // Add request ID to all requests
   app.use(requestLoggerMiddleware);   // Structured JSON logging
   app.use(sanitizationMiddleware);    // Sanitize input
+
+  // ---- Request Timeouts ----
+  if (requestTimeoutMiddleware) app.use(requestTimeoutMiddleware);
 
   // ---- Rate Limiting ----
   if (rateLimiter) app.use(rateLimiter);
