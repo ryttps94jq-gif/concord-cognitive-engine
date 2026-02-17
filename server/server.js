@@ -16542,6 +16542,33 @@ app.post("/api/chat/feedback", async (req, res) => {
   }
 });
 
+// GET /api/chat/conversations — list chat sessions for thread view
+app.get("/api/chat/conversations", (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 50, 200);
+    const conversations = Array.from(STATE.sessions.entries())
+      .map(([id, sess]) => {
+        const msgs = sess.messages || [];
+        const lastMsg = msgs[msgs.length - 1];
+        const firstUserMsg = msgs.find(m => m.role === "user");
+        return {
+          id,
+          title: firstUserMsg?.content?.slice(0, 80) || `Session ${id.slice(0, 8)}`,
+          summary: lastMsg?.content?.slice(0, 120) || "",
+          lastMessage: lastMsg?.content?.slice(0, 200) || "",
+          messageCount: msgs.length,
+          createdAt: sess.createdAt || nowISO(),
+          updatedAt: lastMsg?.ts || sess.createdAt || nowISO(),
+        };
+      })
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+      .slice(0, limit);
+    res.json({ ok: true, conversations });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
 // GET /api/cognitive/status — combined status for all cognitive systems
 app.get("/api/cognitive/status", (req, res) => {
   try {
@@ -24525,6 +24552,34 @@ app.post("/api/dtus/:id/share", (req, res) => {
   res.json(result);
 });
 
+// POST /api/dtus/:id/vote — up/down vote a DTU (forum)
+app.post("/api/dtus/:id/vote", (req, res) => {
+  try {
+    const dtu = STATE.dtus?.get?.(req.params.id) || (Array.isArray(STATE.dtuList) ? STATE.dtuList.find(d => d.id === req.params.id) : null);
+    if (!dtu) return res.status(404).json({ ok: false, error: "DTU not found" });
+    const vote = Number(req.body?.vote) || 0;
+    if (!dtu.meta) dtu.meta = {};
+    dtu.meta.score = (dtu.meta.score || 0) + vote;
+    dtu.meta.votes = (dtu.meta.votes || 0) + 1;
+    res.json({ ok: true, score: dtu.meta.score, votes: dtu.meta.votes });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+// POST /api/dtus/:id/like — like a DTU (feed/timeline)
+app.post("/api/dtus/:id/like", (req, res) => {
+  try {
+    const dtu = STATE.dtus?.get?.(req.params.id) || (Array.isArray(STATE.dtuList) ? STATE.dtuList.find(d => d.id === req.params.id) : null);
+    if (!dtu) return res.status(404).json({ ok: false, error: "DTU not found" });
+    if (!dtu.meta) dtu.meta = {};
+    dtu.meta.likes = (dtu.meta.likes || 0) + 1;
+    res.json({ ok: true, likes: dtu.meta.likes });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
 app.get("/api/shared/:token", (req, res) => {
   const result = accessShareLink(req.params.token);
   if (!result.ok) return res.status(404).json(result);
@@ -26334,6 +26389,26 @@ app.get("/api/game/leaderboard", (req, res) => {
     .sort((a, b) => b.xp - a.xp)
     .slice(0, 20);
   res.json({ ok: true, leaderboard: entries });
+});
+
+// POST /api/game/quests/:questId/complete — mark a quest complete and grant XP
+app.post("/api/game/quests/:questId/complete", (req, res) => {
+  try {
+    const userId = req.user?.id || "default";
+    if (!STATE.gameProfiles) STATE.gameProfiles = new Map();
+    if (!STATE.gameProfiles.has(userId)) {
+      STATE.gameProfiles.set(userId, { userId, xp: 0, level: 1, questsCompleted: 0, badges: [] });
+    }
+    const profile = STATE.gameProfiles.get(userId);
+    const xpGain = Number(req.body?.xpReward) || 100;
+    profile.xp = (profile.xp || 0) + xpGain;
+    profile.questsCompleted = (profile.questsCompleted || 0) + 1;
+    // Level up every 1000 XP
+    profile.level = Math.floor(profile.xp / 1000) + 1;
+    res.json({ ok: true, profile });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 // Notifications - sourced from real notification queue
