@@ -16007,9 +16007,15 @@ app.get("/api/state/latest", (req, res) => {
 // Queues endpoints extracted to routes/operations.js
 
 
-// ---- DTU Endpoints (extracted to routes/dtus.js — mounted below after chat routes) ----
+// ---- DTU Endpoints (extracted to routes/dtus.js) ----
+require("./routes/dtus")(app, { STATE, makeCtx, runMacro, dtuForClient, dtusArray, _withAck, saveStateDebounced });
 
-// ---- Chat + Ask Endpoints (extracted to routes/chat.js — mounted below) ----
+// ---- Chat + Ask Endpoints (extracted to routes/chat.js) ----
+require("./routes/chat")(app, {
+  STATE, makeCtx, runMacro, enforceRequestInvariants, enforceEthosInvariant,
+  uid, kernelTick, uiJson, _withAck, _extractReply, clamp, nowISO,
+  saveStateDebounced, ETHOS_INVARIANTS
+});
 
 // GET /api/cognitive/status — combined status for all cognitive systems
 app.get("/api/cognitive/status", (req, res) => {
@@ -16281,7 +16287,14 @@ function startHeartbeat() {
 }
 startHeartbeat();
 
-// ---- Operations Endpoints (extracted to routes/operations.js — mounted below) ----
+// ---- Operations Endpoints (extracted to routes/operations.js) ----
+require("./routes/operations")(app, {
+  STATE, makeCtx, runMacro, _withAck, ensureOrganRegistry, ensureQueues,
+  dtusArray, uid, sha256Hex, nowISO, saveStateDebounced, requireRole,
+  PIPE, TEMPORAL_FRAMES, pipeListProposals, computeAbstractionSnapshot,
+  maybeRunLocalUpgrade, runAutoPromotion, tryLoadSeedDTUs, toOptionADTU,
+  SEED_INFO, kernelTick, uiJson
+});
 
 app.get("/api/metrics", (req, res) => {
   ensureOrganRegistry();
