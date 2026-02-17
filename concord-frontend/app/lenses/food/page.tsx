@@ -10,8 +10,8 @@ import {
   BarChart3, ArrowUpRight, Thermometer, Timer, ShoppingCart, Percent,
   TrendingUp, Flame, Leaf, Scale, DollarSign, ClipboardList, CalendarDays,
   Star, Puzzle, TrendingDown, Package, FileText, UserCheck, MapPin,
-  ArrowDown, ArrowUp, Minus, Hash, Utensils, Coffee, CircleDot, Layers,
-  RotateCcw, Eye, Zap, Target, PieChart, Table2, Armchair, AlertCircle,
+  ArrowDown, ArrowUp, Minus, Hash, CircleDot, Layers,
+  RotateCcw, Zap, Target, PieChart, Armchair,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -147,7 +147,7 @@ const WASTE_REASONS: { value: WasteReason; label: string }[] = [
   { value: 'dropped', label: 'Dropped/Damaged' },
   { value: 'other', label: 'Other' },
 ];
-const DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const _DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 const seedData: { title: string; data: Record<string, unknown> }[] = [];
 
@@ -199,7 +199,7 @@ export default function FoodLensPage() {
   ]);
   const [wasteItemName, setWasteItemName] = useState('');
   const [wasteQty, setWasteQty] = useState('');
-  const [wasteUnit, setWasteUnit] = useState('lb');
+  const [wasteUnit, _setWasteUnit] = useState('lb');
   const [wasteReason, setWasteReason] = useState<WasteReason>('expired');
   const [wasteCost, setWasteCost] = useState('');
   const [wasteNotes, setWasteNotes] = useState('');

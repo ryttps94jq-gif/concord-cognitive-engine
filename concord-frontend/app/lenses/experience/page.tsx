@@ -261,7 +261,7 @@ export default function ExperienceLensPage() {
       cats[s.category].push(s);
     }
     return cats;
-  }, []);
+  }, [skills]);
 
   const TABS: { id: TabId; label: string }[] = [
     { id: 'portfolio', label: 'Portfolio' },

@@ -382,7 +382,7 @@ export default function EducationLensPage() {
       upcomingAssignments: upcomingAssignments.slice(0, 5),
       expiringCerts,
     };
-  }, [items, students, courses, assignments, grades, certifications, attendanceRecords]);
+  }, [students, courses, assignments, grades, certifications, attendanceRecords]);
 
   /* ---------- gradebook computed ---------- */
   const gradeBookStudents = useMemo(() => {

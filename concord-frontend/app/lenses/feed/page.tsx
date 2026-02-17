@@ -485,7 +485,7 @@ export default function FeedLensPage() {
   const [activeTab, setActiveTab] = useState<FeedTab>('for-you');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const { isError: isError, error: error, refetch: refetch, items: postLensItems, create: createLensPost } = useLensData<Record<string, unknown>>('feed', 'post', {
+  const { isError: isError, error: error, refetch: refetch, items: postLensItems, create: _createLensPost } = useLensData<Record<string, unknown>>('feed', 'post', {
     seed: INITIAL_POSTS.map(p => ({ title: p.content?.slice(0, 80) || p.id, data: p as unknown as Record<string, unknown> })),
   });
 

@@ -3,7 +3,7 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useLensData } from '@/lib/hooks/use-lens-data';
+
 import { api } from '@/lib/api/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import {

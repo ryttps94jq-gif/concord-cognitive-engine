@@ -10,9 +10,7 @@ import {
   TreePine,
   MapPin,
   Bug,
-  ClipboardList,
   Footprints,
-  Thermometer,
   Plus,
   Search,
   Filter,
@@ -24,7 +22,6 @@ import {
   TrendingDown,
   BarChart3,
   ListChecks,
-  Clock,
   AlertTriangle,
   ChevronDown,
   ChevronRight,
@@ -34,41 +31,19 @@ import {
   Globe,
   Shield,
   ShieldCheck,
-  ShieldAlert,
-  FileText,
   Calendar,
-  Eye,
   Camera,
   Waves,
   Trees,
   Building2,
   Fish,
-  Navigation,
   Recycle,
-  Truck,
-  Scale,
   CheckCircle2,
-  XCircle,
   AlertOctagon,
-  Activity,
-  Gauge,
-  Beaker,
   FlaskConical,
-  Wind,
-  Sun,
-  CloudRain,
-  Milestone,
-  Wrench,
   Users,
-  Hash,
   Clipboard,
-  BookOpen,
-  CircleDot,
-  Layers,
-  ArrowUpRight,
-  ArrowDownRight,
   Minus,
-  Info,
   Zap,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -288,7 +263,7 @@ export default function EnvironmentLensPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [view, setView] = useState<'library' | 'dashboard' | 'actions'>('library');
   const [detailItem, setDetailItem] = useState<string | null>(null);
-  const [showActionPanel, setShowActionPanel] = useState(false);
+  const [_showActionPanel, _setShowActionPanel] = useState(false);
   const [selectedAction, setSelectedAction] = useState<string | null>(null);
 
   const [formTitle, setFormTitle] = useState('');

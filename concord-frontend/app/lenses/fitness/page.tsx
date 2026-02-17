@@ -7,14 +7,13 @@ import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { ds } from '@/lib/design-system';
 import { cn } from '@/lib/utils';
 import {
-  Dumbbell, Users, ListChecks, Flame, CalendarDays, Shield, Medal,
+  Dumbbell, Users, ListChecks, CalendarDays, Shield, Medal,
   Plus, Search, X, Trash2, Target, Timer, Zap, User, Calendar,
-  TrendingUp, Award, Activity, Heart, BarChart3, Clock,
-  ChevronRight, ChevronDown, Copy, Save, RotateCcw,
-  DollarSign, Percent, Calculator, Play, Pause, CheckCircle2,
-  AlertCircle, Star, MapPin, Phone, Mail, Weight, Ruler,
+  TrendingUp, Award, Activity,
+  ChevronRight, DollarSign, Calculator,
+  MapPin, Phone, Mail,
   Brain, Layers, ArrowUpRight, ArrowDownRight, Minus,
-  ClipboardList, UserPlus, Eye, FileText, Hash,
+  ClipboardList, UserPlus, Eye, FileText,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 
