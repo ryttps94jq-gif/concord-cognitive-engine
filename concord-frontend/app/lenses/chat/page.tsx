@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
-import { CoreLensNav } from '@/components/common/CoreLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, apiHelpers } from '@/lib/api/client';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -287,7 +286,6 @@ export default function ChatLensPage() {
   }
   return (
     <div className="h-full flex flex-col bg-lattice-bg">
-      <CoreLensNav coreLensId="chat" />
       <div className="flex-1 flex overflow-hidden">
       {/* Sidebar */}
       <aside className="w-80 border-r border-lattice-border flex flex-col bg-lattice-surface">

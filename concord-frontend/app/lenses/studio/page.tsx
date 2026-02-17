@@ -2,7 +2,6 @@
 
 import { useState, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
-import { CoreLensNav } from '@/components/common/CoreLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
@@ -627,7 +626,7 @@ export default function StudioLensPage() {
   // No project selected view
   if (!activeProjectId) {
     return (
-      <div className="h-[calc(100vh-4rem)] flex flex-col bg-gradient-to-b from-cyan-900/10 to-black">
+      <div className="h-full flex flex-col bg-gradient-to-b from-cyan-900/10 to-black">
         <div className="flex items-center justify-between border-b border-white/10 px-6 py-3">
           <div className="flex items-center gap-2">
             <Headphones className="w-6 h-6 text-neon-cyan" />
@@ -718,8 +717,7 @@ export default function StudioLensPage() {
     );
   }
   return (
-    <div className="h-[calc(100vh-4rem)] flex flex-col bg-gradient-to-b from-cyan-900/10 to-black">
-      <CoreLensNav coreLensId="studio" />
+    <div className="h-full flex flex-col bg-gradient-to-b from-cyan-900/10 to-black">
       {renderTransportBar()}
       {studioView === 'arrange' && renderArrangeView()}
       {studioView === 'mixer' && renderMixerView()}

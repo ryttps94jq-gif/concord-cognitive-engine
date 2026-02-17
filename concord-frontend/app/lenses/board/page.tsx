@@ -1,7 +1,6 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
-import { CoreLensNav } from '@/components/common/CoreLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -338,7 +337,6 @@ export default function BoardLensPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <CoreLensNav coreLensId="board" />
       <div className="flex flex-1 overflow-hidden">
       {/* Main content area */}
       <div className={cn('flex-1 flex flex-col overflow-hidden transition-all', selectedTask ? 'mr-0' : '')}>
