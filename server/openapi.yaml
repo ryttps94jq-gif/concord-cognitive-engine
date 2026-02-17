@@ -63,6 +63,32 @@ tags:
     description: Data governance and export controls
   - name: Webhooks
     description: Webhook registration and delivery
+  - name: LLM
+    description: LLM pipeline management
+  - name: Emergent
+    description: Emergent agent governance
+  - name: Ingest
+    description: Content ingestion
+  - name: Verify
+    description: Verification and validation
+  - name: Jobs
+    description: Background job management
+  - name: Agents
+    description: AI agent management
+  - name: Queues
+    description: Proposal and maintenance queues
+  - name: System
+    description: System operations
+  - name: Backup
+    description: Backup and restore
+  - name: Temporal
+    description: Temporal reasoning
+  - name: Abstraction
+    description: Abstraction hierarchy
+  - name: GRC
+    description: Governance, risk, and compliance
+  - name: Organs
+    description: System organs and growth
 
 paths:
   /health:
@@ -326,6 +352,81 @@ paths:
         '403':
           description: Admin access required
 
+  /api/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh access token
+      description: Exchange a valid refresh token for a new access token pair
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refreshToken:
+                  type: string
+                  description: The refresh token from a previous login
+      responses:
+        '200':
+          description: Token refreshed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Invalid or expired refresh token
+
+  /api/auth/revoke-all-sessions:
+    post:
+      tags: [Auth]
+      summary: Revoke all sessions
+      description: Invalidate all active sessions for the current user
+      responses:
+        '200':
+          description: All sessions revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  revoked:
+                    type: integer
+                    description: Number of sessions revoked
+
+  /api/auth/change-password:
+    post:
+      tags: [Auth]
+      summary: Change password
+      description: Change the current user's password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword:
+                  type: string
+                newPassword:
+                  type: string
+                  minLength: 8
+      responses:
+        '200':
+          description: Password changed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+        '401':
+          description: Current password incorrect
+
   /api/dtus:
     get:
       tags: [DTUs]
@@ -369,6 +470,432 @@ paths:
       responses:
         '201':
           description: DTU created
+
+  /api/dtus/{id}:
+    put:
+      tags: [DTUs]
+      summary: Update DTU
+      description: Full replacement update of an existing DTU
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DTUCreate'
+      responses:
+        '200':
+          description: DTU updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  dtu:
+                    $ref: '#/components/schemas/DTU'
+        '404':
+          description: DTU not found
+    patch:
+      tags: [DTUs]
+      summary: Partial update DTU
+      description: Partially update fields on an existing DTU
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                tags:
+                  type: array
+                  items:
+                    type: string
+                core:
+                  type: object
+      responses:
+        '200':
+          description: DTU partially updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  dtu:
+                    $ref: '#/components/schemas/DTU'
+        '404':
+          description: DTU not found
+    delete:
+      tags: [DTUs]
+      summary: Delete DTU
+      description: Permanently delete a DTU by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: DTU deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+        '404':
+          description: DTU not found
+
+  /api/dtu_view/{id}:
+    get:
+      tags: [DTUs]
+      summary: CRETI-first DTU view
+      description: Returns a DTU rendered with CRETI-first view structure
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: DTU view
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  dtu:
+                    $ref: '#/components/schemas/DTU'
+        '404':
+          description: DTU not found
+
+  /api/dtus/saveSuggested:
+    post:
+      tags: [DTUs]
+      summary: Save suggested DTU
+      description: Save a DTU that was suggested by the system or LLM
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [dtu]
+              properties:
+                dtu:
+                  $ref: '#/components/schemas/DTUCreate'
+                source:
+                  type: string
+                  description: Origin of the suggestion
+      responses:
+        '201':
+          description: Suggested DTU saved
+
+  /api/dtus/dedupe:
+    post:
+      tags: [DTUs]
+      summary: Deduplicate DTUs
+      description: Find and merge duplicate DTUs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                threshold:
+                  type: number
+                  description: Similarity threshold (0-1)
+                  default: 0.85
+                dryRun:
+                  type: boolean
+                  default: true
+      responses:
+        '200':
+          description: Deduplication results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  duplicates:
+                    type: array
+                    items:
+                      type: object
+                  merged:
+                    type: integer
+
+  /api/dtus/cluster:
+    post:
+      tags: [DTUs]
+      summary: Cluster similar DTUs
+      description: Group DTUs into clusters based on semantic similarity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                k:
+                  type: integer
+                  description: Number of clusters
+                algorithm:
+                  type: string
+                  enum: [kmeans, dbscan, hierarchical]
+      responses:
+        '200':
+          description: Clustering results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  clusters:
+                    type: array
+                    items:
+                      type: object
+
+  /api/dtus/reconcile:
+    post:
+      tags: [DTUs]
+      summary: Reconcile DTU conflicts
+      description: Resolve conflicting information between DTUs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [dtuIds]
+              properties:
+                dtuIds:
+                  type: array
+                  items:
+                    type: string
+                strategy:
+                  type: string
+                  enum: [merge, newest, credibility]
+      responses:
+        '200':
+          description: Reconciliation result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  resolved:
+                    $ref: '#/components/schemas/DTU'
+
+  /api/dtus/define:
+    post:
+      tags: [DTUs]
+      summary: Define new DTU
+      description: Create a new DTU from a definition prompt with auto-structuring
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [term, definition]
+              properties:
+                term:
+                  type: string
+                definition:
+                  type: string
+                tags:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '201':
+          description: Definition DTU created
+
+  /api/dtus/shadow:
+    get:
+      tags: [DTUs]
+      summary: List shadow DTUs
+      description: Returns DTUs in shadow state awaiting promotion
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Shadow DTU list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  dtus:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DTU'
+
+  /api/dtus/gap-promote:
+    post:
+      tags: [DTUs]
+      summary: Promote gap DTU
+      description: Promote a gap-identified DTU to full status
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [dtuId]
+              properties:
+                dtuId:
+                  type: string
+      responses:
+        '200':
+          description: DTU promoted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  dtu:
+                    $ref: '#/components/schemas/DTU'
+
+  /api/megas:
+    get:
+      tags: [DTUs]
+      summary: List mega DTUs
+      description: Returns all mega-tier DTUs (consolidated higher-order units)
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Mega DTU list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  dtus:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DTU'
+
+  /api/hypers:
+    get:
+      tags: [DTUs]
+      summary: List hyper DTUs
+      description: Returns all hyper-tier DTUs (top-level consolidations)
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Hyper DTU list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  dtus:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DTU'
+
+  /api/definitions:
+    get:
+      tags: [DTUs]
+      summary: List definitions
+      description: Returns all definition DTUs
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+      responses:
+        '200':
+          description: Definition list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  definitions:
+                    type: array
+                    items:
+                      type: object
+
+  /api/definitions/{term}:
+    get:
+      tags: [DTUs]
+      summary: Get definition by term
+      description: Returns the definition DTU for a specific term
+      parameters:
+        - name: term
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Definition found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  definition:
+                    type: object
+        '404':
+          description: Term not defined
 
   /api/forge/manual:
     post:

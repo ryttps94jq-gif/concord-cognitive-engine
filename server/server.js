@@ -3271,40 +3271,144 @@ function verifyToken(token) {
 }
 
 // ---- Token Blacklist (Tier 1: Auth Hardening) ----
-// In-memory blacklist with SQLite persistence when available
+// In-memory blacklist with Redis support (when available) and SQLite persistence
 const _TOKEN_BLACKLIST = {
-  revoked: new Map(), // jti -> { revokedAt, expiresAt }
+  revoked: new Map(), // jti -> { revokedAt, expiresAt, userId }
 
-  revoke(jti, expiresAt) {
-    this.revoked.set(jti, { revokedAt: Date.now(), expiresAt: expiresAt || Date.now() + 7 * 86400000 });
-    // Persist to DB if available
+  /**
+   * Revoke a single token by JTI.
+   * Writes to in-memory Map (primary, synchronous), Redis (if connected), and SQLite (if available).
+   * @param {string} jti - Token identifier
+   * @param {number} [expiresAt] - Token expiry timestamp in ms
+   * @param {string} [userId] - User who owns this token (needed for revokeAllForUser)
+   */
+  revoke(jti, expiresAt, userId) {
+    const now = Date.now();
+    const exp = expiresAt || now + 7 * 86400000;
+    const entry = { revokedAt: now, expiresAt: exp, userId: userId || null };
+
+    // Primary: in-memory (synchronous — keeps verifyToken fast)
+    this.revoked.set(jti, entry);
+
+    // Redis: write-through for multi-instance consistency
+    if (redisClient) {
+      const ttlMs = exp - now;
+      if (ttlMs > 0) {
+        const redisKey = REDIS_CONFIG.prefix + "blacklist:" + jti;
+        const ttlSec = Math.ceil(ttlMs / 1000);
+        redisClient.setEx(redisKey, ttlSec, JSON.stringify(entry)).catch(err => {
+          console.error("[auth] Redis token blacklist write failed:", err.message);
+        });
+        // Track JTI in per-user set so revokeAllForUser can find them
+        if (userId) {
+          const userSetKey = REDIS_CONFIG.prefix + "user-tokens:" + userId;
+          redisClient.sAdd(userSetKey, jti).catch(() => {});
+          // Set TTL on the user set to auto-clean (use longest reasonable token lifetime)
+          redisClient.expire(userSetKey, Math.ceil(ttlMs / 1000) + 3600).catch(() => {});
+        }
+      }
+    }
+
+    // SQLite persistence
     if (db) {
       try {
         const stmt = db.prepare("UPDATE sessions SET is_revoked = 1 WHERE token_hash = ?");
         stmt.run(jti);
-      } catch (err) { console.error('[auth] Token revocation failed:', err); }
+      } catch (err) { console.error("[auth] Token revocation failed:", err); }
     }
   },
 
+  /**
+   * Check if a token is revoked — synchronous, uses in-memory Map only.
+   * Redis data is synced into the Map on startup and on every revoke() call,
+   * so the in-memory Map is always authoritative for this process.
+   */
   isRevoked(jti) {
     return this.revoked.has(jti);
   },
 
-  // Revoke all tokens for a user (e.g., password change, security incident)
+  /**
+   * Revoke all tokens for a user (e.g., password change, security incident).
+   * Walks in-memory Map and (if Redis available) the per-user token set.
+   */
   revokeAllForUser(userId) {
+    const now = Date.now();
+
+    // SQLite: bulk revoke
     if (db) {
       try {
         const stmt = db.prepare("UPDATE sessions SET is_revoked = 1 WHERE user_id = ?");
         stmt.run(userId);
-      } catch (err) { console.error('[auth] Bulk token revocation failed for user:', err); }
+      } catch (err) { console.error("[auth] Bulk token revocation failed for user:", err); }
     }
-    // Mark in-memory
+
+    // In-memory: mark all entries belonging to this user
     for (const [jti, entry] of this.revoked) {
-      if (entry.userId === userId) this.revoked.set(jti, { ...entry, revokedAt: Date.now() });
+      if (entry.userId === userId) {
+        this.revoked.set(jti, { ...entry, revokedAt: now });
+      }
+    }
+
+    // Redis: look up the user's token set and revoke each JTI
+    if (redisClient) {
+      const userSetKey = REDIS_CONFIG.prefix + "user-tokens:" + userId;
+      redisClient.sMembers(userSetKey).then(jtis => {
+        for (const jti of jtis) {
+          // Update the blacklist entry in Redis (keep existing TTL)
+          const redisKey = REDIS_CONFIG.prefix + "blacklist:" + jti;
+          redisClient.get(redisKey).then(raw => {
+            if (raw) {
+              try {
+                const entry = JSON.parse(raw);
+                entry.revokedAt = now;
+                const ttlSec = Math.max(1, Math.ceil((entry.expiresAt - now) / 1000));
+                redisClient.setEx(redisKey, ttlSec, JSON.stringify(entry)).catch(() => {});
+              } catch {}
+            }
+          }).catch(() => {});
+          // Also ensure it's in our in-memory Map
+          if (!this.revoked.has(jti)) {
+            this.revoked.set(jti, { revokedAt: now, expiresAt: now + 7 * 86400000, userId });
+          }
+        }
+      }).catch(err => {
+        console.error("[auth] Redis bulk revocation lookup failed:", err.message);
+      });
     }
   },
 
-  // Cleanup expired entries (tokens past their expiry don't need blacklisting)
+  /**
+   * Sync blacklisted tokens from Redis into the in-memory Map.
+   * Called once after Redis connects so this process knows about tokens
+   * revoked by other instances.
+   */
+  async syncFromRedis() {
+    if (!redisClient) return;
+    try {
+      const pattern = REDIS_CONFIG.prefix + "blacklist:*";
+      const keys = await redisClient.keys(pattern);
+      if (keys.length === 0) return;
+      const prefixLen = (REDIS_CONFIG.prefix + "blacklist:").length;
+      let synced = 0;
+      for (const key of keys) {
+        try {
+          const raw = await redisClient.get(key);
+          if (!raw) continue;
+          const entry = JSON.parse(raw);
+          const jti = key.slice(prefixLen);
+          if (!this.revoked.has(jti)) {
+            this.revoked.set(jti, entry);
+            synced++;
+          }
+        } catch {}
+      }
+      if (synced > 0) console.log(`[auth] Synced ${synced} revoked tokens from Redis`);
+    } catch (err) {
+      console.error("[auth] Failed to sync token blacklist from Redis:", err.message);
+    }
+  },
+
+  // Cleanup expired entries from in-memory Map (Redis handles its own TTL expiry)
   cleanup() {
     const now = Date.now();
     for (const [jti, entry] of this.revoked) {
@@ -3313,7 +3417,7 @@ const _TOKEN_BLACKLIST = {
   }
 };
 
-// Cleanup blacklist every hour
+// Cleanup in-memory blacklist every hour (Redis keys expire via TTL automatically)
 setInterval(() => _TOKEN_BLACKLIST.cleanup(), 3600000);
 
 // ---- Refresh Token Family Tracking (detects token theft via reuse) ----
@@ -23928,7 +24032,11 @@ app.get("/api/redis/stats", async (req, res) => res.json(await runMacro("redis",
 
 setTimeout(async () => {
   if (PG_CONFIG.enabled) { const pg = await initPostgres(); if (pg.ok) await runMigrations(); }
-  if (REDIS_CONFIG.enabled) await initRedis();
+  if (REDIS_CONFIG.enabled) {
+    await initRedis();
+    // Sync revoked tokens from Redis into in-memory blacklist for multi-instance consistency
+    if (redisClient) await _TOKEN_BLACKLIST.syncFromRedis();
+  }
 }, 1000);
 
 console.log("[Concord] Wave 9: Database Integrations loaded");
