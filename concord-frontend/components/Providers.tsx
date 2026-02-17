@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { QueryClient, QueryClientProvider, MutationCache, QueryCache } from '@tanstack/react-query';
 import { AppShell } from '@/components/shell/AppShell';
+import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { observeWebVitals } from '@/lib/perf';
 import { useUIStore } from '@/store/ui';
 
@@ -46,8 +47,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <AppShell>{children}</AppShell>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <AppShell>{children}</AppShell>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }

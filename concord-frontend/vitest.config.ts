@@ -14,6 +14,12 @@ export default defineConfig({
       reporter: ['text', 'json', 'html', 'lcov'],
       include: ['components/**/*.{ts,tsx}', 'lib/**/*.{ts,tsx}', 'hooks/**/*.{ts,tsx}'],
       exclude: ['**/*.d.ts', '**/node_modules/**', '**/*.test.{ts,tsx}'],
+      thresholds: {
+        statements: 30,
+        branches: 25,
+        functions: 25,
+        lines: 30,
+      },
     },
   },
   resolve: {
