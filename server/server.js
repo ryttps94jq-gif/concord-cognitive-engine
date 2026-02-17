@@ -4868,7 +4868,48 @@ try {
 const SEED_INFO = { ok:false, loaded:false, count:0, path:"./dtus.js", error:null, source:"none" };
 
 async function tryLoadSeedDTUs() {
-  // 1. Try JSONL pack format first (preferred for large corpora)
+  // 1. Try JSON seed packs first (preferred — fastest, grouped by part)
+  const seedDir = path.join(DATA_DIR, "seed");
+  const seedManifestPath = path.join(seedDir, "manifest.json");
+  if (fs.existsSync(seedManifestPath)) {
+    try {
+      const t0 = Date.now();
+      const manifest = JSON.parse(fs.readFileSync(seedManifestPath, "utf-8"));
+      if (manifest.format === "seed-packs" && Array.isArray(manifest.packs)) {
+        const dtus = [];
+        let errors = 0;
+        for (const pack of manifest.packs) {
+          const packPath = path.join(seedDir, pack.file);
+          if (!fs.existsSync(packPath)) { errors++; continue; }
+          const content = fs.readFileSync(packPath, "utf-8");
+          const hash = crypto.createHash("sha256").update(content).digest("hex");
+          if (hash !== pack.sha256) {
+            console.warn(`[Seed-Pack] Hash mismatch: ${pack.file} (expected ${pack.sha256.slice(0,12)}, got ${hash.slice(0,12)})`);
+            errors++;
+            continue;
+          }
+          try {
+            const entries = JSON.parse(content);
+            if (Array.isArray(entries)) {
+              for (const entry of entries) dtus.push(entry);
+            }
+          } catch { errors++; }
+        }
+        if (dtus.length > 0) {
+          SEED_INFO.ok = true; SEED_INFO.loaded = true;
+          SEED_INFO.count = dtus.length; SEED_INFO.source = "seed-packs";
+          SEED_INFO.path = seedDir;
+          if (errors) SEED_INFO.error = `${errors} seed-pack error(s)`;
+          console.log(`[Seed-Pack] Loaded ${dtus.length} DTUs from ${manifest.packs.length} JSON packs in ${Date.now() - t0}ms`);
+          return dtus;
+        }
+      }
+    } catch (e) {
+      console.warn(`[Seed-Pack] Failed to load seed packs: ${e.message}`);
+    }
+  }
+
+  // 2. Try legacy JSONL pack format (data/dtu-packs/)
   const packDir = path.join(DATA_DIR, "dtu-packs");
   const manifestPath = path.join(packDir, "manifest.json");
   if (fs.existsSync(manifestPath)) {
@@ -4876,7 +4917,7 @@ async function tryLoadSeedDTUs() {
       const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
       const dtus = [];
       let errors = 0;
-      for (const chunk of manifest.chunks) {
+      for (const chunk of (manifest.chunks || [])) {
         const chunkPath = path.join(packDir, chunk.file);
         if (!fs.existsSync(chunkPath)) { errors++; continue; }
         const content = fs.readFileSync(chunkPath, "utf-8");
@@ -4896,17 +4937,18 @@ async function tryLoadSeedDTUs() {
         SEED_INFO.count = dtus.length; SEED_INFO.source = "dtu-packs";
         SEED_INFO.path = packDir;
         if (errors) SEED_INFO.error = `${errors} pack error(s)`;
-        console.log(`[DTU-Pack] Loaded ${dtus.length} DTUs from ${manifest.chunks.length} chunks`);
+        console.log(`[DTU-Pack] Loaded ${dtus.length} DTUs from ${manifest.chunks.length} JSONL chunks`);
         return dtus;
       }
     } catch (e) {
       console.warn(`[DTU-Pack] Failed to load packs: ${e.message}`);
     }
   }
-  // 2. Fallback to dtus.js monolithic import (deferred — logs startup tax)
+
+  // 3. Fallback to dtus.js monolithic import (deprecated — logs startup tax)
   try {
-    console.warn("[Seed] JSONL packs not found — falling back to monolithic dtus.js import.");
-    console.warn("[Seed] To reduce startup time + memory, run: node server/scripts/convert-dtus-to-packs.js");
+    console.warn("[Seed] JSON packs not found — falling back to monolithic dtus.js import (deprecated).");
+    console.warn("[Seed] To reduce startup time + memory, run: node server/scripts/convert-dtus-to-seed-packs.js");
     const t0 = Date.now();
     const mod = await import("./dtus.js");
     const seed = (mod?.dtus ?? mod?.default ?? mod?.DTUS ?? null);
@@ -4916,7 +4958,7 @@ async function tryLoadSeedDTUs() {
     SEED_INFO.loaded = true;
     SEED_INFO.count = arr.length;
     SEED_INFO.source = "dtus.js";
-    console.log(`[Seed] Loaded ${arr.length} DTUs from dtus.js in ${Date.now() - t0}ms`);
+    console.log(`[Seed] Loaded ${arr.length} DTUs from dtus.js in ${Date.now() - t0}ms (deprecated path)`);
     return arr;
   } catch (e) {
     SEED_INFO.ok = false;
