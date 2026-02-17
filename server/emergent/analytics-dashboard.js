@@ -255,7 +255,7 @@ export function getCitationAnalytics(STATE, options = {}) {
 // ── Marketplace Analytics ────────────────────────────────────────────────
 
 export function getMarketplaceAnalytics(STATE) {
-  const analytics = getAnalyticsState(STATE);
+  const _analytics = getAnalyticsState(STATE);
 
   const listingCount = STATE.listings?.size || 0;
   const transactionCount = STATE.transactions?.size || 0;
@@ -292,9 +292,9 @@ export function getMarketplaceAnalytics(STATE) {
 // ── Knowledge Density Metrics ────────────────────────────────────────────
 
 export function getKnowledgeDensity(STATE) {
-  let totalDtus = STATE.dtus?.size || 0;
+  const totalDtus = STATE.dtus?.size || 0;
   let totalEdges = 0;
-  let totalTags = new Set();
+  const totalTags = new Set();
   let totalClaims = 0;
 
   // Count edges/relationships
