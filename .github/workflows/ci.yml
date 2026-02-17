@@ -2,9 +2,13 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, 'claude/**']
   pull_request:
-    branches: [main]
+    branches: [main, develop]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   NODE_VERSION: '20'
@@ -42,6 +46,10 @@ jobs:
       - name: Lint frontend
         working-directory: ./concord-frontend
         run: npm run lint
+
+      - name: TypeScript type-check
+        working-directory: ./concord-frontend
+        run: npm run type-check
 
       - name: Validate lens quality gate
         working-directory: ./concord-frontend
