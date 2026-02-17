@@ -7,7 +7,7 @@
  * Hub link, and a collapsible Extensions section.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, memo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useUIStore } from '@/store/ui';
@@ -199,7 +199,7 @@ export function Sidebar() {
 }
 
 /** Core lens nav item with expandable absorbed sub-lenses */
-function CoreLensNavItem({
+const CoreLensNavItem = memo(function CoreLensNavItem({
   core,
   pathname,
   showLabel,
@@ -279,10 +279,10 @@ function CoreLensNavItem({
       )}
     </div>
   );
-}
+});
 
 /** Collapsible list of extension lenses */
-function ExtensionsList({ pathname }: { pathname: string }) {
+const ExtensionsList = memo(function ExtensionsList({ pathname }: { pathname: string }) {
   const extensions = getExtensionLenses();
 
   // Group by category for display, but keep it compact
@@ -327,4 +327,4 @@ function ExtensionsList({ pathname }: { pathname: string }) {
       </Link>
     </div>
   );
-}
+});

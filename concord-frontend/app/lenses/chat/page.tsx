@@ -81,6 +81,7 @@ export default function ChatLensPage() {
   const [showModeSelect, setShowModeSelect] = useState(false);
   const [localMessages, setLocalMessages] = useState<Message[]>([]);
   const [feedbackState, setFeedbackState] = useState<Record<string, 'up' | 'down'>>({});
+  const [chatSidebarOpen, setChatSidebarOpen] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -286,21 +287,40 @@ export default function ChatLensPage() {
   }
   return (
     <div className="h-full flex flex-col bg-lattice-bg">
-      <div className="flex-1 flex overflow-hidden">
-      {/* Sidebar */}
-      <aside className="w-80 border-r border-lattice-border flex flex-col bg-lattice-surface">
+      <div className="flex-1 flex overflow-hidden relative">
+      {/* Mobile sidebar backdrop */}
+      {chatSidebarOpen && (
+        <div
+          className="lg:hidden fixed inset-0 bg-black/50 z-30"
+          onClick={() => setChatSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar — hidden on mobile by default, overlay when open */}
+      <aside
+        className={cn(
+          'w-80 border-r border-lattice-border flex flex-col bg-lattice-surface z-40 transition-transform duration-200',
+          'fixed inset-y-0 left-0 lg:relative lg:translate-x-0',
+          chatSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        )}
+        role="complementary"
+        aria-label="Conversation list"
+      >
         <div className="p-4 border-b border-lattice-border">
           <div className="flex items-center justify-between mb-4">
-            <h1 className="text-xl font-bold text-white flex items-center gap-2">
+            <h2 className="text-xl font-bold text-white flex items-center gap-2">
               <Bot className="w-6 h-6 text-neon-cyan" />
               Chat
-            </h1>
-            <button className="p-2 hover:bg-lattice-bg rounded-lg transition-colors">
+            </h2>
+            <button
+              className="p-2 hover:bg-lattice-bg rounded-lg transition-colors"
+              aria-label="Chat settings"
+            >
               <Settings className="w-5 h-5 text-gray-400" />
             </button>
           </div>
           <button
-            onClick={startNewChat}
+            onClick={() => { startNewChat(); setChatSidebarOpen(false); }}
             className="w-full flex items-center justify-center gap-2 py-2.5 bg-neon-cyan text-black font-medium rounded-lg hover:bg-neon-cyan/90 transition-colors"
           >
             <Plus className="w-4 h-4" />
@@ -314,20 +334,23 @@ export default function ChatLensPage() {
             <input
               type="text"
               placeholder="Search conversations..."
+              aria-label="Search conversations"
               className="w-full pl-10 pr-4 py-2 bg-lattice-bg border border-lattice-border rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-neon-cyan"
             />
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto" role="list" aria-label="Conversations">
           {conversations?.map((conv: Conversation) => (
             <button
               key={conv.id}
-              onClick={() => setSelectedConversation(conv.id)}
+              onClick={() => { setSelectedConversation(conv.id); setChatSidebarOpen(false); }}
               className={cn(
                 'w-full p-4 text-left hover:bg-lattice-bg transition-colors border-b border-lattice-border/50',
                 selectedConversation === conv.id && 'bg-neon-cyan/10 border-l-2 border-l-neon-cyan'
               )}
+              role="listitem"
+              aria-current={selectedConversation === conv.id ? 'true' : undefined}
             >
               <div className="flex items-start gap-3">
                 <div className="w-10 h-10 rounded-lg bg-lattice-bg flex items-center justify-center flex-shrink-0">
@@ -344,9 +367,17 @@ export default function ChatLensPage() {
       </aside>
 
       {/* Main Chat Area */}
-      <main className="flex-1 flex flex-col">
-        <header className="px-6 py-4 border-b border-lattice-border flex items-center justify-between bg-lattice-surface">
-          <div className="flex items-center gap-4">
+      <main className="flex-1 flex flex-col" aria-label="Chat messages">
+        <header className="px-4 lg:px-6 py-4 border-b border-lattice-border flex items-center justify-between bg-lattice-surface">
+          <div className="flex items-center gap-3 lg:gap-4">
+            {/* Mobile: toggle conversation sidebar */}
+            <button
+              onClick={() => setChatSidebarOpen(true)}
+              className="lg:hidden p-2 -ml-2 rounded-lg hover:bg-lattice-bg text-gray-400 hover:text-white transition-colors"
+              aria-label="Open conversation list"
+            >
+              <MessageSquare className="w-5 h-5" />
+            </button>
             <div className="relative">
               <button
                 onClick={() => setShowModeSelect(!showModeSelect)}
@@ -432,7 +463,7 @@ export default function ChatLensPage() {
         </header>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-6" role="log" aria-label="Chat messages" aria-live="polite">
           {messages.length === 0 && (
             <div className="h-full flex flex-col items-center justify-center text-center">
               <div className="w-20 h-20 rounded-full bg-neon-cyan/10 flex items-center justify-center mb-6">
@@ -559,7 +590,7 @@ export default function ChatLensPage() {
           ))}
 
           {(sendMutation.isPending || regenerateMutation.isPending) && (
-            <div className="flex gap-4">
+            <div className="flex gap-4" role="status" aria-label="AI is thinking">
               <div className="w-10 h-10 rounded-lg bg-neon-cyan/20 flex items-center justify-center flex-shrink-0">
                 <Bot className="w-5 h-5 text-neon-cyan animate-pulse" />
               </div>
@@ -570,6 +601,7 @@ export default function ChatLensPage() {
                     <div className="w-2 h-2 bg-neon-cyan rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
                     <div className="w-2 h-2 bg-neon-cyan rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                   </div>
+                  <span className="sr-only">AI is generating a response...</span>
                 </div>
               </div>
             </div>
