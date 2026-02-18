@@ -17,14 +17,12 @@
 import {
   SCOPES,
   SCOPE_SET,
-  getStrictnessProfile,
-  getInitialStatus,
   RETRIEVAL_POLICY,
   DEFAULT_RETRIEVAL_POLICY,
 } from "./atlas-config.js";
-import { applyWrite, WRITE_OPS, runAutoPromoteGate, guardedDtuWrite, ingestAutogenCandidate } from "./atlas-write-guard.js";
+import { applyWrite, WRITE_OPS } from "./atlas-write-guard.js";
 import { getAtlasState } from "./atlas-epistemic.js";
-import { searchAtlasDtus, getAtlasDtu, contentHash } from "./atlas-store.js";
+import { searchAtlasDtus, contentHash } from "./atlas-store.js";
 import crypto from "crypto";
 import { assertInvariant } from "./atlas-invariants.js";
 import { validateMarketplaceListing, resolveLicense } from "./atlas-rights.js";
@@ -93,7 +91,7 @@ export function scopedWrite(STATE, scope, op, payload, ctx = {}) {
  * Scope-aware retrieval. Results are labeled with their source scope.
  * Mixing is only allowed by explicit policy, and labels are always applied.
  */
-export function scopedRetrieve(STATE, scopePolicy, query, ctx = {}) {
+export function scopedRetrieve(STATE, scopePolicy, query, _ctx = {}) {
   const policy = scopePolicy || DEFAULT_RETRIEVAL_POLICY;
   const scopeState = getScopeState(STATE);
 
@@ -165,7 +163,6 @@ export function scopedRetrieve(STATE, scopePolicy, query, ctx = {}) {
 // ── Internal: retrieve from a single scope ──────────────────────────────────
 
 function _retrieveFromScope(STATE, scopeState, scope, query) {
-  const atlas = getAtlasState(STATE);
   const dtuScope = scopeState.dtuScope;
 
   // Use Atlas search if available, then filter by scope
@@ -508,7 +505,6 @@ export function getLocalQualityHints(STATE, dtuId) {
   }
 
   // Possible contradiction with global
-  const globalAtlas = getAtlasState(STATE);
   const contras = (dtu.links?.contradicts || []);
   if (contras.length > 0) {
     hints.push({
@@ -522,7 +518,7 @@ export function getLocalQualityHints(STATE, dtuId) {
 
   // Near-duplicate detection
   try {
-    const { findNearDuplicates: findDupes } = await_free_import_dupes();
+    const { findNearDuplicates: _findDupes } = await_free_import_dupes();
     // Inline check since we can't async import in sync function
   } catch { /* skip */ }
 

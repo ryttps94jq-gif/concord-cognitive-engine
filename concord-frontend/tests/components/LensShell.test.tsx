@@ -43,10 +43,11 @@ vi.mock('lucide-react', () => ({
   X: ({ className }: { className?: string }) => <span data-testid="x-icon" className={className} />,
 }));
 
+import type { LucideIcon } from 'lucide-react';
 import { LensShell, StatusBadge, ItemList } from '@/components/common/LensShell';
 import type { LensTab } from '@/components/common/LensShell';
 
-const MockTabIcon = ({ className }: { className?: string }) => <span data-testid="tab-icon" className={className}>T</span>;
+const MockTabIcon = (({ className }: { className?: string }) => <span data-testid="tab-icon" className={className}>T</span>) as LucideIcon;
 
 describe('LensShell', () => {
   beforeEach(() => {
@@ -117,8 +118,8 @@ describe('LensShell', () => {
 
   it('renders tabs when provided', () => {
     const tabs: LensTab[] = [
-      { id: 'all', icon: MockTabIcon as any, label: 'All Items' },
-      { id: 'active', icon: MockTabIcon as any, label: 'Active' },
+      { id: 'all', icon: MockTabIcon, label: 'All Items' },
+      { id: 'active', icon: MockTabIcon, label: 'Active' },
     ];
     const onTabChange = vi.fn();
 
@@ -134,8 +135,8 @@ describe('LensShell', () => {
 
   it('calls onTabChange when a tab is clicked', () => {
     const tabs: LensTab[] = [
-      { id: 'all', icon: MockTabIcon as any, label: 'All' },
-      { id: 'active', icon: MockTabIcon as any, label: 'Active' },
+      { id: 'all', icon: MockTabIcon, label: 'All' },
+      { id: 'active', icon: MockTabIcon, label: 'Active' },
     ];
     const onTabChange = vi.fn();
 
@@ -150,7 +151,7 @@ describe('LensShell', () => {
   });
 
   it('uses tab.id as label when tab.label is not provided', () => {
-    const tabs: LensTab[] = [{ id: 'my-tab', icon: MockTabIcon as any }];
+    const tabs: LensTab[] = [{ id: 'my-tab', icon: MockTabIcon }];
 
     render(
       <LensShell domain="test" title="Test" tabs={tabs} activeTab="my-tab">

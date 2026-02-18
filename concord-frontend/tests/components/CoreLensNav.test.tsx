@@ -47,6 +47,7 @@ vi.mock('@/lib/utils', () => ({
   cn: (...args: (string | boolean | undefined | null)[]) => args.filter(Boolean).join(' '),
 }));
 
+import type { CoreLensId } from '@/lib/lens-registry';
 import { CoreLensNav } from '@/components/common/CoreLensNav';
 
 describe('CoreLensNav', () => {
@@ -56,36 +57,36 @@ describe('CoreLensNav', () => {
   });
 
   it('renders null when config is not found', () => {
-    const { container } = render(<CoreLensNav coreLensId={'unknown' as any} />);
+    const { container } = render(<CoreLensNav coreLensId={'unknown' as CoreLensId} />);
     expect(container.innerHTML).toBe('');
   });
 
   it('renders null when there are no absorbed lenses', () => {
     // Override for this test: getAbsorbedLenses returns empty for 'board'
-    const { container } = render(<CoreLensNav coreLensId={'board' as any} />);
+    const { container } = render(<CoreLensNav coreLensId={'board' as CoreLensId} />);
     expect(container.innerHTML).toBe('');
   });
 
   it('renders navigation bar with core lens tab and absorbed lens tabs', () => {
-    render(<CoreLensNav coreLensId={'chat' as any} />);
+    render(<CoreLensNav coreLensId={'chat' as CoreLensId} />);
     const nav = screen.getByRole('navigation', { name: /Chat workspace navigation/i });
     expect(nav).toBeInTheDocument();
   });
 
   it('renders the core lens as the first tab', () => {
-    render(<CoreLensNav coreLensId={'chat' as any} />);
+    render(<CoreLensNav coreLensId={'chat' as CoreLensId} />);
     expect(screen.getByText('Chat')).toBeInTheDocument();
   });
 
   it('renders absorbed lenses with tabLabel or name', () => {
-    render(<CoreLensNav coreLensId={'chat' as any} />);
+    render(<CoreLensNav coreLensId={'chat' as CoreLensId} />);
     expect(screen.getByText('Finance')).toBeInTheDocument();
     // 'Health' has no tabLabel, so its name is used
     expect(screen.getByText('Health')).toBeInTheDocument();
   });
 
   it('renders links with correct href', () => {
-    render(<CoreLensNav coreLensId={'chat' as any} />);
+    render(<CoreLensNav coreLensId={'chat' as CoreLensId} />);
     const chatLink = screen.getByText('Chat').closest('a');
     expect(chatLink).toHaveAttribute('href', '/lenses/chat');
 
@@ -95,7 +96,7 @@ describe('CoreLensNav', () => {
 
   it('marks the active tab with aria-current="page"', () => {
     mockPathname.mockReturnValue('/lenses/chat');
-    render(<CoreLensNav coreLensId={'chat' as any} />);
+    render(<CoreLensNav coreLensId={'chat' as CoreLensId} />);
 
     const chatLink = screen.getByText('Chat').closest('a');
     expect(chatLink).toHaveAttribute('aria-current', 'page');
@@ -105,7 +106,7 @@ describe('CoreLensNav', () => {
   });
 
   it('renders icons for each tab', () => {
-    render(<CoreLensNav coreLensId={'chat' as any} />);
+    render(<CoreLensNav coreLensId={'chat' as CoreLensId} />);
     const icons = screen.getAllByTestId('mock-icon');
     // 3 tabs: chat, finance, health
     expect(icons.length).toBe(3);
@@ -113,7 +114,7 @@ describe('CoreLensNav', () => {
 
   it('highlights absorbed lens when it is the active path', () => {
     mockPathname.mockReturnValue('/lenses/finance');
-    render(<CoreLensNav coreLensId={'chat' as any} />);
+    render(<CoreLensNav coreLensId={'chat' as CoreLensId} />);
 
     const financeLink = screen.getByText('Finance').closest('a');
     expect(financeLink).toHaveAttribute('aria-current', 'page');
