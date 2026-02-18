@@ -381,7 +381,6 @@ export function getInjectionIncidents(STATE, filters = {}) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function checkInstructionSmuggling(content, findings) {
-  const lower = content.toLowerCase();
   const patterns = [
     { re: /ignore\s+(all\s+)?previous\s+(instructions|rules|guidelines)/i, severity: "high" },
     { re: /you\s+are\s+now\s+(a|an|the)\s+/i, severity: "high" },

@@ -111,7 +111,7 @@ export function councilResolve(STATE, input) {
     const antiGaming = runAntiGamingScan(STATE, dtuId, dtu.author?.userId);
     if (antiGaming.shouldQuarantine) {
       // Force quarantine instead
-      const promoteResult = promoteAtlasDtu(STATE, dtuId, "QUARANTINED", actor || "council");
+      promoteAtlasDtu(STATE, dtuId, "QUARANTINED", actor || "council");
       const event = buildAuditEvent(COUNCIL_ACTIONS.QUARANTINE, actor, dtuId, {
         before: beforeState,
         after: { status: "QUARANTINED" },
@@ -217,7 +217,7 @@ export function councilResolve(STATE, input) {
  */
 export function getCouncilQueue(STATE, options = {}) {
   const atlas = getAtlasState(STATE);
-  const council = getCouncilState(STATE);
+  const _council = getCouncilState(STATE);
 
   const queue = [];
 
@@ -342,7 +342,7 @@ export function councilMerge(STATE, sourceDtuId, targetDtuId, reason, actor) {
   });
 
   // Deprecate source (it's now merged into target)
-  const promoteResult = promoteAtlasDtu(STATE, sourceDtuId, "DEPRECATED", actor || "council");
+  promoteAtlasDtu(STATE, sourceDtuId, "DEPRECATED", actor || "council");
 
   // Transfer unique claims from source to target
   const targetClaimTexts = new Set((targetDtu.claims || []).map(c => (c.text || "").toLowerCase().trim()));

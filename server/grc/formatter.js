@@ -9,7 +9,7 @@
  * This is the single exit gate for all Concord LLM responses.
  */
 
-import { validateGRC, TONE_LOCK_OPENERS, FORBIDDEN_PATTERNS, WORD_LIMITS } from "./schema.js";
+import { validateGRC, FORBIDDEN_PATTERNS } from "./schema.js";
 
 // ---- Formatting ----
 

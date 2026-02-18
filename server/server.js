@@ -33,6 +33,8 @@ import { spawnSync } from "child_process";
 import { createRequire } from "module";
 import { initAll as initLoaf } from "./loaf/index.js";
 import { init as initEmergent } from "./emergent/index.js";
+import { ConcordError } from "./lib/errors.js";
+import { asyncHandler } from "./lib/async-handler.js";
 import { init as initGRC, formatAndValidate as grcFormatAndValidate, getGRCSystemPrompt } from "./grc/index.js";
 import configureMiddleware from "./middleware/index.js";
 
@@ -46,42 +48,40 @@ import { registerGuidanceEndpoints } from "./guidance.js";
 // ---- Economy System: ledger, balances, transfers, withdrawals ----
 import {
   registerEconomyEndpoints,
-  hasSufficientBalance,
   calculateFee,
-  FEES,
   PLATFORM_ACCOUNT_ID,
   recordTransactionBatch,
   generateTxId,
   checkRefIdProcessed,
   validateBalance as economyValidateBalance,
   economyAudit,
-  auditCtx,
+  _auditCtx,
   createPurchase,
   transitionPurchase,
   recordSettlement,
 } from "./economy/index.js";
 
 // ---- Atlas + Platform Upgrade Imports (v2) ----
-import { DOMAIN_TYPES as ATLAS_DOMAIN_TYPES, EPISTEMIC_CLASSES, DOMAIN_TYPE_SET, EPISTEMIC_CLASS_SET, computeAtlasScores, explainScores, validateAtlasDtu, getThresholds, initAtlasState, getAtlasState } from "./emergent/atlas-epistemic.js";
-import { createAtlasDtu, getAtlasDtu, searchAtlasDtus, promoteAtlasDtu, addAtlasLink, getScoreExplanation, recomputeScores, registerEntity, getEntity, getContradictions, getAtlasMetrics, contentHash } from "./emergent/atlas-store.js";
-import { detectLineageCycle, detectSupportRing, analyzeSourceUniqueness, checkAuthorInfluence, computeSimilarity, findNearDuplicates, runAntiGamingScan, getAntiGamingMetrics } from "./emergent/atlas-antigaming.js";
-import { runAutogenV2, selectInputDtus, getAutogenRun, acceptAutogenOutput, mergeAutogenOutput, propagateConfidence, getAutogenV2Metrics } from "./emergent/atlas-autogen-v2.js";
+import { DOMAIN_TYPES as ATLAS_DOMAIN_TYPES, EPISTEMIC_CLASSES, initAtlasState, getAtlasState } from "./emergent/atlas-epistemic.js";
+import { createAtlasDtu, getAtlasDtu, searchAtlasDtus, promoteAtlasDtu, addAtlasLink, getScoreExplanation, recomputeScores, registerEntity, getEntity, getContradictions, getAtlasMetrics } from "./emergent/atlas-store.js";
+import { runAntiGamingScan, getAntiGamingMetrics } from "./emergent/atlas-antigaming.js";
+import { runAutogenV2, getAutogenRun, acceptAutogenOutput, mergeAutogenOutput, propagateConfidence, getAutogenV2Metrics } from "./emergent/atlas-autogen-v2.js";
 import { councilResolve, getCouncilQueue, councilRequestSources, councilMerge, getCouncilActions, getCouncilMetrics } from "./emergent/atlas-council.js";
 import { upsertProfile, getProfile, listProfiles, followUser, unfollowUser, getFollowers, getFollowing, publishDtu, unpublishDtu, recordCitation, getCitedBy, getFeed, computeTrending, discoverUsers, getSocialMetrics } from "./emergent/social-layer.js";
 import { createWorkspace as collabCreateWorkspace, getWorkspace as collabGetWorkspace, listWorkspaces as collabListWorkspaces, addWorkspaceMember as collabAddWorkspaceMember, removeWorkspaceMember as collabRemoveWorkspaceMember, addDtuToWorkspace as collabAddDtuToWorkspace, addComment as collabAddComment, getComments as collabGetComments, editComment as collabEditComment, resolveComment as collabResolveComment, proposeRevision, getRevisionProposals, voteOnRevision, applyRevision, startEditSession, recordEdit, endEditSession, getCollabMetrics } from "./emergent/collaboration.js";
-import { ROLES, createOrgWorkspace, getOrgWorkspace, assignRole, revokeRole, getUserRole, getOrgMembers, checkPermission, getUserPermissions, assignOrgLens, revokeOrgLens, getOrgLenses, setResourceACL, checkResourceAccess, exportAuditLog, getRbacMetrics } from "./emergent/rbac.js";
+import { createOrgWorkspace, getOrgWorkspace, assignRole, revokeRole, getUserRole, getOrgMembers, checkPermission, getUserPermissions, assignOrgLens, getOrgLenses, exportAuditLog, getRbacMetrics } from "./emergent/rbac.js";
 import { takeSnapshot as takeAnalyticsSnapshot, getPersonalAnalytics, getDtuGrowthTrends, getCitationAnalytics, getMarketplaceAnalytics as getMarketAnalytics, getKnowledgeDensity, getAtlasDomainAnalytics, getDashboardSummary } from "./emergent/analytics-dashboard.js";
-import { registerWebhook as registerWh, getWebhook, listWebhooks, deactivateWebhook, deleteWebhook, dispatchWebhookEvent, processPendingDeliveries, getDeliveryHistory, checkApiRateLimit, getApiMetrics, WEBHOOK_EVENTS } from "./emergent/public-api.js";
-import { tagDataRegion, getDataRegion, checkRegionAccess, setExportControls, checkExportAllowed, exportData, createDataPartition, getDataPartition, setRetentionPolicy, getRetentionPolicy, getComplianceLog, recordDPA, getComplianceStatus } from "./emergent/compliance.js";
+import { registerWebhook as registerWh, getWebhook, listWebhooks, deactivateWebhook, deleteWebhook, dispatchWebhookEvent, processPendingDeliveries, getDeliveryHistory, getApiMetrics } from "./emergent/public-api.js";
+import { tagDataRegion, getDataRegion, setExportControls, checkExportAllowed, exportData, createDataPartition, getDataPartition, setRetentionPolicy, getRetentionPolicy, getComplianceLog, getComplianceStatus } from "./emergent/compliance.js";
 import { startOnboarding as startOnboardingV2, getOnboardingProgress as getOnboardingProgressV2, completeOnboardingStep as completeOnboardingStepV2, skipOnboarding as skipOnboardingV2, getOnboardingHints, getOnboardingMetrics } from "./emergent/onboarding.js";
-import { recordSubstrateReuse, recordLlmCall, recordCacheEvent, getEfficiencyDashboard, takeEfficiencySnapshot, getEfficiencyHistory } from "./emergent/compute-efficiency.js";
+import { recordSubstrateReuse, recordLlmCall, getEfficiencyDashboard, takeEfficiencySnapshot, getEfficiencyHistory } from "./emergent/compute-efficiency.js";
 
 // ---- Atlas v2 Default-On + 3-Lane Separation Imports ----
-import { SCOPES, RETRIEVAL_POLICY, AUTO_PROMOTE_THRESHOLDS, STRICTNESS_PROFILES, getAutoPromoteConfig, getStrictnessProfile } from "./emergent/atlas-config.js";
-import { assertInvariant, assertSoft, getInvariantMetrics, getInvariantLog } from "./emergent/atlas-invariants.js";
-import { applyWrite, WRITE_OPS, runAutoPromoteGate, ingestAutogenCandidate, guardedDtuWrite, getWriteGuardLog, getWriteGuardMetrics } from "./emergent/atlas-write-guard.js";
-import { initScopeState, scopedWrite, scopedRetrieve, createSubmission, processSubmission, approveSubmission, rejectSubmission, getSubmission, listSubmissions, getDtuScope, getScopeMetrics, getLocalQualityHints } from "./emergent/atlas-scope-router.js";
-import { tickLocal, tickGlobal, tickMarketplace, tickAll, getHeartbeatMetrics } from "./emergent/atlas-heartbeat.js";
+import { AUTO_PROMOTE_THRESHOLDS, STRICTNESS_PROFILES, getAutoPromoteConfig } from "./emergent/atlas-config.js";
+import { getInvariantMetrics, getInvariantLog } from "./emergent/atlas-invariants.js";
+import { applyWrite, runAutoPromoteGate, getWriteGuardLog, getWriteGuardMetrics } from "./emergent/atlas-write-guard.js";
+import { initScopeState, scopedWrite, createSubmission, processSubmission, approveSubmission, rejectSubmission, getSubmission, listSubmissions, getDtuScope, getScopeMetrics, getLocalQualityHints } from "./emergent/atlas-scope-router.js";
+import { tickLocal, tickGlobal, tickMarketplace, getHeartbeatMetrics } from "./emergent/atlas-heartbeat.js";
 import { retrieve as atlasRetrieve, retrieveForChat, retrieveLabeled, retrieveFromScope } from "./emergent/atlas-retrieval.js";
 import { chatRetrieve, saveAsDtu, publishToGlobal, listOnMarketplace, getChatMetrics, recordChatExchange, recordChatEscalation, getChatSession } from "./emergent/atlas-chat.js";
 import { canUse, generateCitation, getOrigin, verifyOriginIntegrity, grantTransferRights, getRightsMetrics, computeContentHash as rightsContentHash } from "./emergent/atlas-rights.js";
@@ -1657,7 +1657,7 @@ function patternLinguisticRewrite(dtuContext, styleVector, affectPolicy) {
 function patternMultiLensConvergence(query, microSet, lensArtifacts) {
   // Detect multi-domain intent
   const pseudoDtu = { title: String(query).slice(0, 100), human: { summary: String(query).slice(0, 300) }, tags: [] };
-  const primaryDomain = classifyDomain(pseudoDtu);
+  const _primaryDomain = classifyDomain(pseudoDtu);
 
   // Check if micro-set DTUs span multiple domains
   const domainCounts = {};
@@ -1829,7 +1829,7 @@ function _resolveContradiction(dtuA, dtuB, atomA, atomB) {
 // Allocate token budget per DTU based on resonance score.
 
 function patternResonanceWeightedPrompt(microSet, queryIntent, tokenBudget) {
-  const budget = tokenBudget || 2000;
+  const _budget = tokenBudget || 2000;
   if (!microSet || !microSet.length) return [];
 
   // Calculate resonance for each DTU in context
@@ -2506,7 +2506,7 @@ function cleanupShadowDTUs() {
 
     if (expired > 0 || STATE.shadowDtus.size > SHADOW_DTU_MAX) {
       saveStateDebounced();
-      console.log(`[Shadow] Cleanup: removed ${expired} expired, ${STATE.shadowDtus.size} remaining`);
+      structuredLog("info", "shadow_cleanup", { expired, remaining: STATE.shadowDtus.size });
     }
 
     return { ok: true, expired, remaining: STATE.shadowDtus.size };
@@ -2793,10 +2793,10 @@ function initDatabase() {
       CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id);
     `);
 
-    console.log("[DB] SQLite database initialized");
+    structuredLog("info", "db_initialized", { backend: "sqlite" });
     return true;
   } catch (e) {
-    console.error("[DB] Failed to initialize SQLite:", e.message);
+    structuredLog("error", "db_init_failed", { error: e.message });
     return false;
   }
 }
@@ -3058,7 +3058,7 @@ const AuditDB = {
           JSON.stringify(entry.details || {})
         );
       } catch (e) {
-        console.error("[Audit] Failed to persist log:", e.message);
+        structuredLog("error", "audit_persist_failed", { error: e.message });
       }
     }
     return entry;
@@ -3145,7 +3145,7 @@ function loadAuthData() {
       if (data.users) AUTH.users = new Map(Object.entries(data.users));
       if (data.apiKeys) AUTH.apiKeys = new Map(Object.entries(data.apiKeys));
     }
-  } catch (e) { console.error("[Auth] Failed to load:", e.message); }
+  } catch (e) { structuredLog("error", "auth_load_failed", { error: e.message }); }
 }
 
 function saveAuthData() {
@@ -3157,7 +3157,7 @@ function saveAuthData() {
       apiKeys: Object.fromEntries(AUTH.apiKeys)
     };
     fs.writeFileSync(AUTH_PATH, JSON.stringify(data, null, 2));
-  } catch (e) { console.error("[Auth] Failed to save:", e.message); }
+  } catch (e) { structuredLog("error", "auth_save_failed", { error: e.message }); }
 }
 
 // Migrate JSON data to SQLite if both exist
@@ -3198,12 +3198,12 @@ function migrateJsonToSqlite() {
     }
 
     if (migrated > 0) {
-      console.log(`[DB] Migrated ${migrated} records from JSON to SQLite`);
+      structuredLog("info", "db_migration_complete", { migrated });
       // Rename old file as backup
       fs.renameSync(jsonPath, jsonPath + ".migrated");
     }
   } catch (e) {
-    console.error("[DB] Migration failed:", e.message);
+    structuredLog("error", "db_migration_failed", { error: e.message });
   }
 }
 
@@ -3241,7 +3241,7 @@ if (AuthDB.getUserCount() === 0 && bcrypt) {
       createdAt: new Date().toISOString(),
       lastLoginAt: null
     });
-    console.log("[Auth] Created default admin user (username: admin)");
+    structuredLog("info", "auth_admin_created", { username: "admin" });
   }
 }
 
@@ -3605,7 +3605,7 @@ function auditLog(category, action, details = {}) {
 
   // Also log to console in development
   if (NODE_ENV !== "production") {
-    console.log(`[Audit] ${category}.${action}`, JSON.stringify(entry.details).slice(0, 200));
+    structuredLog("info", `audit.${category}.${action}`, { details: JSON.stringify(entry.details).slice(0, 200) });
   }
 
   return entry;
@@ -3688,11 +3688,13 @@ function authMiddleware(req, res, next) {
   }
 
   // 2. Try API key if enabled by AUTH_MODE (keys are stored hashed)
+  // Optimization: hash the incoming key once and do O(1) lookup instead of O(n) iteration
   if (AUTH_USES_APIKEY && apiKey) {
     let keyData = null;
+    const incomingHash = hashApiKey(apiKey);
     const allKeys = AuthDB.getAllApiKeys();
     for (const key of allKeys) {
-      if (key.keyHash && verifyApiKey(apiKey, key.keyHash)) {
+      if (key.keyHash && key.keyHash === incomingHash) {
         keyData = key;
         AuthDB.updateApiKeyUsage(key.keyHash);
         break;
@@ -3802,23 +3804,152 @@ if (z) {
     offset: z.coerce.number().min(0).optional().default(0),
     q: z.string().max(500).optional()
   });
+
+  // Chat endpoint validation
+  schemas.chat = z.object({
+    message: z.string().min(1).max(50000),
+    mode: z.string().max(50).optional(),
+    context: z.record(z.unknown()).optional(),
+    stream: z.union([z.boolean(), z.string()]).optional(),
+    sessionId: z.string().max(100).optional(),
+    personaId: z.string().max(100).optional()
+  });
+
+  // Forge endpoint validation (manual DTU creation)
+  schemas.forgeManual = z.object({
+    title: z.string().min(1).max(500),
+    content: z.string().max(100000).optional(),
+    tier: z.enum(["regular", "mega", "hyper"]).optional(),
+    tags: z.array(z.string().max(50)).max(40).optional(),
+    creti: z.string().max(50000).optional(),
+    source: z.string().max(100).optional(),
+    template: z.string().max(100).optional()
+  });
+
+  // Forge hybrid/auto (LLM-assisted creation)
+  schemas.forgeAuto = z.object({
+    prompt: z.string().min(1).max(50000).optional(),
+    title: z.string().max(500).optional(),
+    content: z.string().max(100000).optional(),
+    tier: z.enum(["regular", "mega", "hyper"]).optional(),
+    tags: z.array(z.string().max(50)).max(40).optional(),
+    source: z.string().max(200).optional()
+  });
+
+  // DTU comment
+  schemas.dtuComment = z.object({
+    text: z.string().min(1).max(5000),
+    author: z.string().max(100).optional()
+  });
+
+  // DTU vote/like
+  schemas.dtuVote = z.object({
+    direction: z.enum(["up", "down"]).optional(),
+    value: z.number().min(-1).max(1).optional()
+  });
+
+  // Council debate
+  schemas.councilDebate = z.object({
+    topic: z.string().min(1).max(5000),
+    rounds: z.number().min(1).max(20).optional(),
+    participants: z.array(z.string().max(100)).max(10).optional()
+  });
+
+  // Marketplace submission
+  schemas.marketplaceSubmit = z.object({
+    dtuId: z.string().min(1).max(200),
+    price: z.number().min(0).max(999999).optional(),
+    license: z.string().max(100).optional(),
+    description: z.string().max(5000).optional()
+  });
+
+  // Marketplace install
+  schemas.marketplaceInstall = z.object({
+    listingId: z.string().min(1).max(200)
+  });
+
+  // Schema operations
+  schemas.schemaCreate = z.object({
+    name: z.string().min(1).max(200),
+    fields: z.array(z.object({
+      name: z.string().min(1).max(100),
+      type: z.string().min(1).max(50),
+      required: z.boolean().optional()
+    })).max(100).optional(),
+    description: z.string().max(2000).optional()
+  });
+
+  // Settings update
+  schemas.settingsUpdate = z.object({}).passthrough();
+
+  // DTU restore
+  schemas.dtuRestore = z.object({
+    version: z.number().int().min(0)
+  });
 }
 
 // Validation middleware factory
-function validate(schemaName) {
+function validate(schemaName, source = "body") {
   return (req, res, next) => {
     if (!z || !schemas[schemaName]) return next();
-    const result = schemas[schemaName].safeParse(req.body);
+    const data = source === "query" ? req.query : req.body;
+    const result = schemas[schemaName].safeParse(data);
     if (!result.success) {
       return res.status(400).json({
         ok: false,
         error: "Validation failed",
-        details: result.error.errors
+        code: "VALIDATION_ERROR",
+        details: result.error.errors.map(e => ({
+          path: e.path.join("."),
+          message: e.message,
+          code: e.code
+        }))
       });
     }
-    req.validated = result.data;
+    if (source === "query") {
+      req.validatedQuery = result.data;
+    } else {
+      req.validated = result.data;
+    }
     next();
   };
+}
+
+// ---- Request Timeout Middleware ----
+// Prevents hung requests from consuming connections indefinitely.
+// Configurable per-route via X-Timeout-Ms header or defaults below.
+const DEFAULT_TIMEOUT_MS = parseInt(process.env.REQUEST_TIMEOUT_MS, 10) || 30000;
+const LLM_TIMEOUT_MS = parseInt(process.env.LLM_REQUEST_TIMEOUT_MS, 10) || 120000;
+
+// Routes that involve LLM calls get longer timeouts
+const _LLM_ROUTE_PREFIXES = ["/api/chat", "/api/forge", "/api/ask", "/api/swarm", "/api/sim", "/api/council/debate"];
+
+function requestTimeoutMiddleware(req, res, next) {
+  // Skip for SSE/streaming (they manage their own lifecycle)
+  const accept = String(req.headers.accept || "");
+  if (accept.includes("text/event-stream")) return next();
+  // Skip for health/ready checks
+  if (req.path === "/health" || req.path === "/ready" || req.path === "/metrics") return next();
+
+  const isLLMRoute = _LLM_ROUTE_PREFIXES.some(p => req.path.startsWith(p));
+  const timeoutMs = isLLMRoute ? LLM_TIMEOUT_MS : DEFAULT_TIMEOUT_MS;
+
+  const timer = setTimeout(() => {
+    if (!res.headersSent) {
+      res.status(503).json({
+        ok: false,
+        error: "Request timeout",
+        code: "REQUEST_TIMEOUT",
+        timeoutMs,
+        requestId: req.id
+      });
+    }
+  }, timeoutMs);
+
+  // Clean up timer when response finishes
+  res.on("finish", () => clearTimeout(timer));
+  res.on("close", () => clearTimeout(timer));
+  next();
 }
 
 // ---- Metrics (Prometheus) ----
@@ -3883,9 +4014,9 @@ async function initMetrics() {
       registers: [METRICS.registry]
     });
 
-    console.log("[Metrics] Prometheus metrics initialized");
+    structuredLog("info", "metrics_initialized", { provider: "prometheus" });
   } catch (e) {
-    console.error("[Metrics] Failed to initialize:", e.message);
+    structuredLog("error", "metrics_init_failed", { error: e.message });
   }
 }
 initMetrics();
@@ -3938,10 +4069,10 @@ function createBackup(name = null) {
     };
 
     fs.writeFileSync(backupPath, JSON.stringify(backup, null, 2));
-    console.log(`[Backup] Created: ${backupPath}`);
+    structuredLog("info", "backup_created", { path: backupPath });
     return { ok: true, path: backupPath, name: backupName, size: fs.statSync(backupPath).size };
   } catch (e) {
-    console.error("[Backup] Failed:", e);
+    structuredLog("error", "backup_failed", { error: String(e?.message || e) });
     return { ok: false, error: String(e.message || e) };
   }
 }
@@ -3986,10 +4117,10 @@ function restoreBackup(backupPath) {
     saveStateDebounced();
     saveAuthData();
 
-    console.log(`[Backup] Restored from: ${backupPath}`);
+    structuredLog("info", "backup_restored", { path: backupPath });
     return { ok: true, version: backup.version, createdAt: backup.createdAt };
   } catch (e) {
-    console.error("[Backup] Restore failed:", e);
+    structuredLog("error", "backup_restore_failed", { error: String(e?.message || e) });
     return { ok: false, error: String(e.message || e) };
   }
 }
@@ -4015,7 +4146,7 @@ function startAutoBackup(intervalHours = 24) {
   if (_autoBackupTimer) clearInterval(_autoBackupTimer);
   const ms = intervalHours * 60 * 60 * 1000;
   _autoBackupTimer = setInterval(() => createBackup(`auto-${Date.now()}`), ms);
-  console.log(`[Backup] Auto-backup enabled (every ${intervalHours}h)`);
+  structuredLog("info", "autobackup_enabled", { intervalHours });
 }
 if (String(process.env.AUTO_BACKUP || "true").toLowerCase() === "true") {
   startAutoBackup(Number(process.env.BACKUP_INTERVAL_HOURS || 24));
@@ -4535,7 +4666,7 @@ async function tryInitWebSockets(server) {
     });
   });
 
-  console.log(`[Realtime] Socket.IO enabled on port ${PORT}`);
+  structuredLog("info", "socketio_enabled", { port: PORT });
   return { ok: true };
 }
 
@@ -4604,7 +4735,7 @@ async function tryInitNativeWebSockets(server) {
     ws.on("error", () => { try { REALTIME.clients.delete(clientId); } catch {} });
   });
 
-  console.log(`[Realtime] Native WebSockets enabled at ws://localhost:${PORT}/ws`);
+  structuredLog("info", "websocket_enabled", { port: PORT });
   return { ok: true };
 }
 // ---- end realtime ----
@@ -4629,9 +4760,9 @@ if (USE_SQLITE_STATE) {
         saved_at TEXT NOT NULL
       );
     `);
-    console.log("[Persistence] SQLite state backend enabled (production mode)");
+    structuredLog("info", "persistence_backend", { backend: "sqlite", mode: "production" });
   } catch (e) {
-    console.error("[Persistence] Failed to create state table:", e.message);
+    structuredLog("error", "persistence_table_failed", { error: e.message });
   }
 }
 
@@ -4818,13 +4949,13 @@ function loadStateFromDisk() {
         const obj = JSON.parse(row.data);
         _hydrateState(obj);
         _normalizeSettingsDefaults();
-        console.log("[Persistence] State loaded from SQLite");
+        structuredLog("info", "state_loaded", { source: "sqlite" });
         return { ok: true, loaded: true, backend: "sqlite", savedAt: row.saved_at };
       }
       // No snapshot yet — fall through to JSON check for migration
-      console.log("[Persistence] No SQLite snapshot yet, checking JSON for migration...");
+      structuredLog("info", "state_migration_check", { source: "json" });
     } catch (e) {
-      console.error("[Persistence] SQLite state load failed:", e.message);
+      structuredLog("error", "persistence_load_failed", { error: e.message });
     }
   }
 
@@ -4841,9 +4972,9 @@ function loadStateFromDisk() {
       try {
         const stmt = db.prepare("INSERT OR REPLACE INTO state_snapshots (id, data, version, saved_at) VALUES (1, ?, ?, ?)");
         stmt.run(raw, obj.version || VERSION, nowISO());
-        console.log("[Persistence] Migrated JSON state to SQLite");
+        structuredLog("info", "state_migrated", { from: "json", to: "sqlite" });
       } catch (migErr) {
-        console.error("[Persistence] Migration to SQLite failed:", migErr.message);
+        structuredLog("error", "persistence_migration_failed", { error: migErr.message });
       }
     }
 
@@ -4871,7 +5002,7 @@ function saveStateDebounced() {
           fs.renameSync(tmpPath, STATE_PATH);
         }
       } catch (e) {
-        console.error("STATE save failed:", e);
+        structuredLog("error", "state_save_failed", { error: String(e?.message || e) });
         if (!USE_SQLITE_STATE) {
           try { fs.unlinkSync(STATE_PATH + ".tmp"); } catch {}
         }
@@ -4967,7 +5098,7 @@ async function tryLoadSeedDTUs() {
         SEED_INFO.count = dtus.length; SEED_INFO.source = "dtu-packs";
         SEED_INFO.path = packDir;
         if (errors) SEED_INFO.error = `${errors} pack error(s)`;
-        console.log(`[DTU-Pack] Loaded ${dtus.length} DTUs from ${manifest.chunks.length} JSONL chunks`);
+        structuredLog("info", "dtu_pack_loaded", { count: dtus.length, chunks: manifest.chunks.length });
         return dtus;
       }
     } catch (e) {
@@ -4988,7 +5119,7 @@ async function tryLoadSeedDTUs() {
     SEED_INFO.loaded = true;
     SEED_INFO.count = arr.length;
     SEED_INFO.source = "dtus.js";
-    console.log(`[Seed] Loaded ${arr.length} DTUs from dtus.js in ${Date.now() - t0}ms (deprecated path)`);
+    structuredLog("info", "seed_loaded", { count: arr.length, durationMs: Date.now() - t0 });
     return arr;
   } catch (e) {
     SEED_INFO.ok = false;
@@ -5130,7 +5261,7 @@ function seedGenesisRealityAnchor(){
     log("c2.genesis", "Seeded genesis_reality_anchor_v1 DTU", { id });
     return { ok:true, existed:false };
   } catch(e){
-    console.error("seedGenesisRealityAnchor failed:", e);
+    structuredLog("error", "genesis_anchor_failed", { error: String(e?.message || e) });
     return { ok:false, error:String(e?.message||e) };
   }
 }
@@ -5160,7 +5291,7 @@ try {
   const changed = renameAllDTUs(Array.from(STATE.dtus.values()));
   if (changed) { saveStateDebounced(); log("dtu.rename", "Normalized DTU titles/CRETI for UI", { changed }); }
 } catch (e) {
-  console.error("DTU normalization failed:", e);
+  structuredLog("error", "dtu_normalization_failed", { error: String(e?.message || e) });
 }
 
 // ---- logging ----
@@ -8146,7 +8277,7 @@ function cleanupAttachments() {
     }
   }
 
-  if (cleaned > 0) console.log(`[Attachments] Cleaned ${cleaned} attachments, freed ${(freedBytes / 1024 / 1024).toFixed(1)} MB`);
+  if (cleaned > 0) structuredLog("info", "attachments_cleaned", { cleaned, freedMB: (freedBytes / 1024 / 1024).toFixed(1) });
 }
 
 // Run attachment cleanup every 12 hours
@@ -8210,17 +8341,17 @@ async function initLocalEmbeddings() {
   try {
     const { pipeline } = await import("@xenova/transformers").catch(() => ({}));
     if (!pipeline) {
-      console.log("[Embeddings] @xenova/transformers not available");
+      structuredLog("warn", "embeddings_unavailable", { reason: "transformers not installed" });
       return { ok: false, reason: "package_not_installed" };
     }
 
     EMBEDDINGS.model = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
     EMBEDDINGS.enabled = true;
     EMBEDDINGS.dim = 384;
-    console.log("[Embeddings] Local embedding model loaded (all-MiniLM-L6-v2)");
+    structuredLog("info", "embeddings_loaded", { model: "all-MiniLM-L6-v2" });
     return { ok: true };
   } catch (e) {
-    console.error("[Embeddings] Failed to load:", e.message);
+    structuredLog("error", "embeddings_load_failed", { error: e.message });
     return { ok: false, error: String(e.message || e) };
   }
 }
@@ -8725,7 +8856,7 @@ function initLLMPipeline() {
   LLM_PIPELINE.providers.openai.enabled = Boolean(OPENAI_API_KEY);
   LLM_PIPELINE.providers.openai.model = OPENAI_MODEL_FAST;
 
-  console.log(`[LLM Pipeline] Initialized - Ollama: ${LLM_PIPELINE.providers.ollama.enabled ? 'enabled' : 'disabled'}, OpenAI: ${LLM_PIPELINE.providers.openai.enabled ? 'enabled' : 'disabled'}`);
+  structuredLog("info", "llm_pipeline_initialized", { ollama: LLM_PIPELINE.providers.ollama.enabled, openai: LLM_PIPELINE.providers.openai.enabled });
 }
 
 // Call Ollama (local)
@@ -8791,8 +8922,9 @@ async function callOpenAI(prompt, options = {}) {
     });
 
     if (!response.ok) {
-      const errText = await response.text().catch(() => "");
-      return { ok: false, error: `OpenAI error: ${response.status}`, detail: errText };
+      // SECURITY: Never include raw API response text — it may echo auth headers
+      const statusCode = response.status;
+      return { ok: false, error: `OpenAI error: ${statusCode}` };
     }
 
     const data = await response.json();
@@ -8851,7 +8983,7 @@ async function llmPipeline(input, options = {}) {
 
   if (!draftResult.ok) {
     // Ollama failed, fallback to OpenAI only
-    console.log("[LLM Pipeline] Ollama draft failed, falling back to OpenAI");
+    structuredLog("warn", "llm_ollama_fallback", { reason: "draft_failed", fallback: "openai" });
     return callOpenAI(input, options);
   }
 
@@ -8871,7 +9003,7 @@ POLISHED VERSION:`;
 
   if (!polishResult.ok) {
     // Polish failed, return draft
-    console.log("[LLM Pipeline] OpenAI polish failed, returning draft");
+    structuredLog("warn", "llm_openai_fallback", { reason: "polish_failed", fallback: "draft" });
     return { ...draftResult, polished: false };
   }
 
@@ -9655,7 +9787,7 @@ const PLUGIN_HOOKS = {
   "search:afterQuery": []
 };
 
-function registerPlugin(plugin) {
+function _registerPlugin(plugin) {
   if (!plugin.id || !plugin.name) {
     return { ok: false, error: "Plugin must have id and name" };
   }
@@ -9680,7 +9812,7 @@ function registerPlugin(plugin) {
   }
 
   PLUGINS.set(plugin.id, registered);
-  console.log(`[Plugins] Registered: ${plugin.name} v${registered.version}`);
+  structuredLog("info", "plugin_registered", { name: plugin.name, version: registered.version });
   return { ok: true, plugin: registered };
 }
 
@@ -9715,7 +9847,7 @@ async function _executeHook(hookName, context) {
   return result;
 }
 
-function listPlugins() {
+function _listPlugins() {
   return Array.from(PLUGINS.values()).map(p => ({
     id: p.id,
     name: p.name,
@@ -10527,7 +10659,7 @@ SUMMARY: [A 1-2 sentence summary of what this mega represents]`;
     }
   } catch (e) {
     // Fallback to template if LLM fails
-    console.log("[MEGA] LLM synthesis failed, using template:", e.message);
+    structuredLog("warn", "mega_llm_fallback", { error: e.message });
   }
 
   const tags = Array.from(new Set([
@@ -10616,7 +10748,7 @@ SUMMARY: [A 1-2 sentence summary of what this kernel does]`;
       }
     }
   } catch (e) {
-    console.log("[HYPER] LLM synthesis failed, using template:", e.message);
+    structuredLog("warn", "hyper_llm_fallback", { error: e.message });
   }
 
   const tags = Array.from(new Set([
@@ -12652,7 +12784,7 @@ register("system", "dream", async (ctx, input) => {
   if (!STATE.dtus.size) return { ok: false, error: "No DTUs to dream from. Seed dtus.js first." };
 
   const ollamaCallback = LLM_PIPELINE?.providers?.ollama?.enabled
-    ? async (prompt, opts) => callOllama(opts?.system ? `${opts.system}\n\n${prompt}` : prompt, opts)
+    ? (prompt, opts) => callOllama(opts?.system ? `${opts.system}\n\n${prompt}` : prompt, opts)
     : null;
 
   const result = await ctx.macro.run("emergent", "pipeline.run", {
@@ -12677,12 +12809,12 @@ register("system", "dream", async (ctx, input) => {
   return { ok: true, dtus: r?.ok ? [r.dtu] : [], trace: result.trace, writePolicy: result.writePolicy };
 });
 
-register("system", "autogen", async (ctx, input) => {
+register("system", "autogen", async (ctx, _input) => {
   // Autogen: signal-driven 6-stage pipeline (no longer "last 8 DTUs")
   if (!STATE.dtus.size) return { ok: false, error: "No DTUs to autogen from." };
 
   const ollamaCallback = LLM_PIPELINE?.providers?.ollama?.enabled
-    ? async (prompt, opts) => callOllama(opts?.system ? `${opts.system}\n\n${prompt}` : prompt, opts)
+    ? (prompt, opts) => callOllama(opts?.system ? `${opts.system}\n\n${prompt}` : prompt, opts)
     : null;
 
   // Run pipeline without a variant — picks best intent from lattice signals
@@ -12716,7 +12848,7 @@ register("system", "evolution", async (ctx, input) => {
   if (!STATE.dtus.size) return { ok: false, error: "No DTUs to evolve." };
 
   const ollamaCallback = LLM_PIPELINE?.providers?.ollama?.enabled
-    ? async (prompt, opts) => callOllama(opts?.system ? `${opts.system}\n\n${prompt}` : prompt, opts)
+    ? (prompt, opts) => callOllama(opts?.system ? `${opts.system}\n\n${prompt}` : prompt, opts)
     : null;
 
   const result = await ctx.macro.run("emergent", "pipeline.run", {
@@ -12899,7 +13031,7 @@ register("system", "synthesize", async (ctx, input) => {
   if (!STATE.dtus.size) return { ok: false, error: "Need at least 2 mega DTUs to synthesize a hyper DTU, or DTUs for conflict resolution." };
 
   const ollamaCallback = LLM_PIPELINE?.providers?.ollama?.enabled
-    ? async (prompt, opts) => callOllama(opts?.system ? `${opts.system}\n\n${prompt}` : prompt, opts)
+    ? (prompt, opts) => callOllama(opts?.system ? `${opts.system}\n\n${prompt}` : prompt, opts)
     : null;
 
   const result = await ctx.macro.run("emergent", "pipeline.run", {
@@ -14965,7 +15097,7 @@ register("lattice", "birth_protocol", (ctx, input={}) => {
   return { ok:true, id, dtu, homeostasis: homeo };
 }, { summary:"Chicken2 birth protocol: sandboxed emergence with homeostasis threshold then DTU commit." });
 
-register("lattice", "resonance", (ctx, input={}) => {
+register("lattice", "resonance", (ctx, _input={}) => {
   // Lattice resonance: compute health metrics from Chicken2 and growth state
   const c2 = STATE.__chicken2 || {};
   const m = c2.metrics || {};
@@ -14984,6 +15116,318 @@ register("lattice", "resonance", (ctx, input={}) => {
     timestamp: nowISO()
   };
 });
+
+// ============================================================================
+// RESONANCE BOUNDARY DETECTION — The Interface Between x=1 and x=0
+// ============================================================================
+//
+// What this measures:
+//   Do independent constraint systems at the frontier of Concord's knowledge
+//   graph spontaneously align without being designed to?
+//
+// Positive signal = structural resonance from the unconstrained state.
+// That's x=0 showing coherence when probed by x=1.
+//
+// Derived from:
+//   FO-42: Boundaries form where |∇C| → ∞
+//   FO-43: Interfaces host maximal transformation density
+//   FO-51: Structural resonance = C_i ≈ kC_j
+//   FO-87: Structural coherence = ∇C_i · ∇C_j > 0
+//   FO-64: Feasible states may remain unrealized (latent structure)
+//   FO-65: Activation requires alignment + perturbation
+//
+// ============================================================================
+
+register("resonance", "boundary", (ctx, input = {}) => {
+  const allDtus = dtusArray();
+  if (allDtus.length < 20) {
+    return { ok: false, error: "Insufficient DTU density for boundary detection", count: allDtus.length };
+  }
+
+  const window = clamp(Number(input.window ?? 500), 50, 5000);
+  const pool = allDtus.slice(-window);
+
+  // ========================================================================
+  // STEP 1: Extract frontier DTUs
+  // Frontier = low connectivity, near the edge of the knowledge graph
+  // These are where x=1 (formalized) meets x=0 (unformalized)
+  // ========================================================================
+
+  const connectionCount = new Map();
+  for (const d of pool) {
+    const parents = d.lineage?.parents || [];
+    const children = d.lineage?.children || [];
+    const conns = new Set([...parents, ...children]);
+    connectionCount.set(d.id, conns.size);
+  }
+
+  const avgConnections = pool.reduce((s, d) => s + (connectionCount.get(d.id) || 0), 0) / pool.length;
+  const connectionThreshold = Math.max(1, avgConnections * 0.5);
+
+  const frontierDtus = pool.filter(d => {
+    const conns = connectionCount.get(d.id) || 0;
+    return conns <= connectionThreshold && d.tier !== "hyper" && d.tier !== "mega";
+  });
+
+  if (frontierDtus.length < 5) {
+    return { ok: true, signal: 0, reason: "frontier_too_small", frontierSize: frontierDtus.length };
+  }
+
+  // ========================================================================
+  // STEP 2: Classify frontier DTUs by domain
+  // Domain = primary tag cluster. We need DTUs from DIFFERENT domains
+  // to test cross-domain alignment (the real resonance signal)
+  // ========================================================================
+
+  function domainOf(d) {
+    const tags = (d.tags || []).map(t => String(t).toLowerCase());
+    const domainTags = tags.filter(t =>
+      !["system", "autogen", "dream", "evolution", "gaps", "continuity",
+        "mega", "hyper", "regular", "seed", "core", "definition", "report"].includes(t) &&
+      !t.startsWith("session:") && !t.startsWith("domain:")
+    );
+    return domainTags[0] || "untagged";
+  }
+
+  const domainBuckets = new Map();
+  for (const d of frontierDtus) {
+    const dom = domainOf(d);
+    if (!domainBuckets.has(dom)) domainBuckets.set(dom, []);
+    domainBuckets.get(dom).push(d);
+  }
+
+  const domains = Array.from(domainBuckets.keys()).filter(k => k !== "untagged");
+  if (domains.length < 2) {
+    return {
+      ok: true,
+      signal: 0,
+      reason: "insufficient_domain_diversity",
+      domains: domains.length,
+      frontierSize: frontierDtus.length
+    };
+  }
+
+  // ========================================================================
+  // STEP 3: Compute cross-domain invariant alignment
+  // FO-51: Structural resonance = C_i ≈ kC_j
+  // If DTUs from unrelated domains share invariant structure, that's signal
+  // ========================================================================
+
+  function extractInvariants(d) {
+    const inv = [];
+    if (Array.isArray(d.core?.invariants)) inv.push(...d.core.invariants.map(_normAtom));
+    if (Array.isArray(d.invariants)) inv.push(...d.invariants.map(s => _normAtom(String(s))));
+    if (d.formula) inv.push(_normAtom(d.formula));
+    return inv.filter(Boolean);
+  }
+
+  function extractTokens(d) {
+    const text = [
+      d.title || "",
+      d.human?.summary || "",
+      ...(Array.isArray(d.core?.claims) ? d.core.claims : []),
+      ...(Array.isArray(d.core?.invariants) ? d.core.invariants : []),
+    ].join(" ");
+    return normalizeText(text).split(/\s+/).filter(t => t.length > 2);
+  }
+
+  const crossPairs = [];
+  const domainKeys = domains.slice(0, 10);
+
+  for (let i = 0; i < domainKeys.length; i++) {
+    for (let j = i + 1; j < domainKeys.length; j++) {
+      const aDtus = domainBuckets.get(domainKeys[i]) || [];
+      const bDtus = domainBuckets.get(domainKeys[j]) || [];
+
+      const aSample = aDtus.slice(0, 5);
+      const bSample = bDtus.slice(0, 5);
+
+      for (const a of aSample) {
+        for (const b of bSample) {
+          const aInv = extractInvariants(a);
+          const bInv = extractInvariants(b);
+          const aTok = extractTokens(a);
+          const bTok = extractTokens(b);
+
+          const invOverlap = jaccard(aInv, bInv);
+          const tokOverlap = jaccard(aTok, bTok);
+
+          const resonanceScore = invOverlap > 0 && tokOverlap < 0.3
+            ? invOverlap * (1 - tokOverlap)
+            : invOverlap * 0.5;
+
+          if (resonanceScore > 0.01) {
+            crossPairs.push({
+              a: { id: a.id, title: a.title, domain: domainKeys[i] },
+              b: { id: b.id, title: b.title, domain: domainKeys[j] },
+              invOverlap: Math.round(invOverlap * 1000) / 1000,
+              tokOverlap: Math.round(tokOverlap * 1000) / 1000,
+              resonance: Math.round(resonanceScore * 1000) / 1000,
+              sharedInvariants: aInv.filter(inv => bInv.includes(inv)).slice(0, 5)
+            });
+          }
+        }
+      }
+    }
+  }
+
+  crossPairs.sort((a, b) => b.resonance - a.resonance);
+
+  // ========================================================================
+  // STEP 4: Compute constraint gradient at frontier
+  // FO-42: |∇C| → ∞ at boundaries
+  // Gradient = rate of change in crispness/authority from interior to frontier
+  // ========================================================================
+
+  const interiorDtus = pool.filter(d => {
+    const conns = connectionCount.get(d.id) || 0;
+    return conns > connectionThreshold;
+  });
+
+  const avgInteriorCrisp = interiorDtus.length > 0
+    ? interiorDtus.reduce((s, d) => s + crispnessScore(d), 0) / interiorDtus.length
+    : 0.5;
+
+  const avgFrontierCrisp = frontierDtus.reduce((s, d) => s + crispnessScore(d), 0) / frontierDtus.length;
+
+  const constraintGradient = Math.abs(avgInteriorCrisp - avgFrontierCrisp);
+
+  // ========================================================================
+  // STEP 5: Compute coherence direction
+  // FO-87: ∇C_i · ∇C_j > 0 means constraints point same way
+  // We approximate with tag-vector dot product across frontier domains
+  // ========================================================================
+
+  function tagVector(dtus) {
+    const freq = new Map();
+    for (const d of dtus) {
+      for (const t of (d.tags || [])) {
+        freq.set(t, (freq.get(t) || 0) + 1);
+      }
+    }
+    return freq;
+  }
+
+  function vectorDot(v1, v2) {
+    let dot = 0, mag1 = 0, mag2 = 0;
+    const allKeys = new Set([...v1.keys(), ...v2.keys()]);
+    for (const k of allKeys) {
+      const a = v1.get(k) || 0;
+      const b = v2.get(k) || 0;
+      dot += a * b;
+      mag1 += a * a;
+      mag2 += b * b;
+    }
+    const denom = Math.sqrt(mag1) * Math.sqrt(mag2);
+    return denom > 0 ? dot / denom : 0;
+  }
+
+  let coherenceSum = 0;
+  let coherenceCount = 0;
+
+  for (let i = 0; i < domainKeys.length; i++) {
+    for (let j = i + 1; j < domainKeys.length; j++) {
+      const v1 = tagVector(domainBuckets.get(domainKeys[i]) || []);
+      const v2 = tagVector(domainBuckets.get(domainKeys[j]) || []);
+      coherenceSum += vectorDot(v1, v2);
+      coherenceCount++;
+    }
+  }
+
+  const coherenceDirection = coherenceCount > 0 ? coherenceSum / coherenceCount : 0;
+
+  // ========================================================================
+  // STEP 6: Composite resonance signal
+  // ========================================================================
+
+  const topResonance = crossPairs.length > 0 ? crossPairs[0].resonance : 0;
+  const avgResonance = crossPairs.length > 0
+    ? crossPairs.reduce((s, p) => s + p.resonance, 0) / crossPairs.length
+    : 0;
+
+  const frontierDensity = clamp01(frontierDtus.length / pool.length);
+
+  const signal = clamp01(
+    topResonance * 0.5 +
+    constraintGradient * 0.2 +
+    Math.max(0, coherenceDirection) * 0.2 +
+    frontierDensity * 0.1
+  );
+
+  let classification;
+  if (signal > 0.7) classification = "strong_resonance";
+  else if (signal > 0.4) classification = "moderate_resonance";
+  else if (signal > 0.15) classification = "weak_signal";
+  else classification = "noise_floor";
+
+  return {
+    ok: true,
+    signal: Math.round(signal * 1000) / 1000,
+    classification,
+    timestamp: nowISO(),
+    frontier: {
+      size: frontierDtus.length,
+      density: Math.round(frontierDensity * 1000) / 1000,
+      avgCrispness: Math.round(avgFrontierCrisp * 1000) / 1000,
+    },
+    interior: {
+      size: interiorDtus.length,
+      avgCrispness: Math.round(avgInteriorCrisp * 1000) / 1000,
+    },
+    gradient: Math.round(constraintGradient * 1000) / 1000,
+    coherenceDirection: Math.round(coherenceDirection * 1000) / 1000,
+    crossDomainAlignment: {
+      domainsScanned: domainKeys.length,
+      pairsFound: crossPairs.length,
+      topResonance: Math.round(topResonance * 1000) / 1000,
+      avgResonance: Math.round(avgResonance * 1000) / 1000,
+      topPairs: crossPairs.slice(0, 10),
+    },
+  };
+}, { summary: "Resonance boundary detection: measures cross-domain constraint alignment at the frontier of the knowledge graph. Positive signal = x=0 showing coherence when probed by x=1." });
+
+// ============================================================================
+// RESONANCE BOUNDARY HISTORY — Track signal over time
+// ============================================================================
+
+register("resonance", "history", (ctx, input = {}) => {
+  if (!STATE.__resonanceHistory) STATE.__resonanceHistory = [];
+  const limit = clamp(Number(input.limit ?? 100), 1, 500);
+  return {
+    ok: true,
+    readings: STATE.__resonanceHistory.slice(-limit),
+    count: STATE.__resonanceHistory.length,
+  };
+}, { summary: "Retrieve resonance boundary signal history." });
+
+// ============================================================================
+// RESONANCE BOUNDARY SCAN — Run detection and store result
+// ============================================================================
+
+register("resonance", "scan", async (ctx, input = {}) => {
+  const result = await runMacro("resonance", "boundary", input, ctx);
+  if (!result.ok) return result;
+
+  if (!STATE.__resonanceHistory) STATE.__resonanceHistory = [];
+  STATE.__resonanceHistory.push({
+    signal: result.signal,
+    classification: result.classification,
+    gradient: result.gradient,
+    coherence: result.coherenceDirection,
+    pairs: result.crossDomainAlignment.pairsFound,
+    topResonance: result.crossDomainAlignment.topResonance,
+    frontier: result.frontier.size,
+    timestamp: result.timestamp,
+  });
+
+  if (STATE.__resonanceHistory.length > 1000) {
+    STATE.__resonanceHistory.splice(0, STATE.__resonanceHistory.length - 1000);
+  }
+
+  saveStateDebounced();
+
+  return result;
+}, { summary: "Run resonance boundary scan, store result in history, return full analysis." });
 
 register("persona", "speak", (ctx, input={}) => {
   const { personaId, text } = input;
@@ -15087,7 +15531,7 @@ try {
     log("loaf.init", `LOAF initialized with errors`, { errors: loafResult.errors, modules: loafResult.modules });
   }
 } catch (e) {
-  console.error("[LOAF] Initialization failed:", e);
+  structuredLog("error", "loaf_init_failed", { error: String(e?.message || e) });
   log("loaf.init", "LOAF initialization failed", { error: String(e?.message || e) });
 }
 // ===== END LOAF =====
@@ -15113,7 +15557,7 @@ try {
     log("emergent.init", `Emergent initialization failed`, { error: emergentResult.error });
   }
 } catch (e) {
-  console.error("[Emergent] Initialization failed:", e);
+  structuredLog("error", "emergent_init_failed", { error: String(e?.message || e) });
   log("emergent.init", "Emergent initialization failed", { error: String(e?.message || e) });
 }
 // ===== END EMERGENT =====
@@ -15151,6 +15595,7 @@ configureMiddleware(app, {
   requestIdMiddleware,
   requestLoggerMiddleware,
   sanitizationMiddleware,
+  requestTimeoutMiddleware,
   metricsMiddleware,
   cookieParserMiddleware,
   authMiddleware,
@@ -15704,30 +16149,47 @@ console.log(`- authMode: ${AUTH_MODE} (jwt=${AUTH_USES_JWT}, apikey=${AUTH_USES_
 
 
 // ---- DTU Endpoints (extracted to routes/dtus.js) ----
-require("./routes/dtus")(app, { STATE, makeCtx, runMacro, dtuForClient, dtusArray, _withAck, saveStateDebounced });
+require("./routes/dtus")(app, { STATE, makeCtx, runMacro, dtuForClient, dtusArray, _withAck, saveStateDebounced, validate });
 
 // ---- Chat + Ask Endpoints (extracted to routes/chat.js) ----
 require("./routes/chat")(app, {
   STATE, makeCtx, runMacro, enforceRequestInvariants, enforceEthosInvariant,
   uid, kernelTick, uiJson, _withAck, _extractReply, clamp, nowISO,
-  saveStateDebounced, ETHOS_INVARIANTS
+  saveStateDebounced, ETHOS_INVARIANTS, validate
 });
 
 // ---- Domain Routes (extracted to routes/domain.js) ----
 require("./routes/domain")(app, {
   STATE, makeCtx, runMacro, _withAck, kernelTick, uiJson, listDomains, listMacros,
   dtusArray, normalizeText, clamp, nowISO, saveStateDebounced, retrieveDTUs,
-  isShadowDTU, fs, ensureExperienceLearning, ensureAttentionManager, ensureReflectionEngine
+  isShadowDTU, fs, ensureExperienceLearning, ensureAttentionManager, ensureReflectionEngine,
+  validate
 });
 
 // Error handler
 app.use((err, req, res, _next) => {
-  const msg = String(err?.message || err);
-  log("server.error", msg, { stack: String(err?.stack || "") });
-  if (err?.code === "ORIGIN_BLOCKED") {
-    return res.status(403).json({ ok:false, error:"Origin blocked", code:"ORIGIN_BLOCKED", reason: err?.reason || msg });
+  if (res.headersSent) return;
+
+  // Handle ConcordError subclasses with proper HTTP status and code
+  if (err instanceof ConcordError) {
+    structuredLog(
+      err.statusCode >= 500 ? "error" : "warn",
+      "request_error",
+      { requestId: req.id, method: req.method, path: req.path, statusCode: err.statusCode, code: err.code, error: err.message, ...(err.statusCode >= 500 ? { stack: err.stack } : {}), ...err.context }
+    );
+    return res.status(err.statusCode).json(err.toJSON());
   }
-  res.status(500).json({ ok:false, error: msg });
+
+  // Handle CORS/Origin blocks
+  if (err?.code === "ORIGIN_BLOCKED") {
+    structuredLog("warn", "origin_blocked", { ip: req.ip, reason: err?.reason });
+    return res.status(403).json({ ok:false, error:"Origin blocked", code:"ORIGIN_BLOCKED" });
+  }
+
+  // Fallback for unknown errors — log full stack, return safe message
+  const msg = String(err?.message || err);
+  structuredLog("error", "unhandled_route_error", { requestId: req.id, method: req.method, path: req.path, error: msg, stack: String(err?.stack || "") });
+  res.status(500).json({ ok:false, error: "An unexpected error occurred", code: "INTERNAL_ERROR" });
 });
 
 // ---- heartbeat (Scope Separation: Local tick + Global tick, no Marketplace tick) ----
@@ -15955,10 +16417,10 @@ function startChicken3Cron() {
     if (!STATE.__chicken3?.enabled || !STATE.__chicken3?.cronEnabled) return { ok:false, reason:"disabled" };
     const ms = clamp(Number(STATE.__chicken3?.cronIntervalMs ?? 300000), 15000, 3600000);
     setInterval(() => { latticeAutonomousTick(); }, ms);
-    console.log(`[Chicken3] Autonomous cron active — interval ${(ms/60000).toFixed(2)} min`);
+    structuredLog("info", "chicken3_cron_active", { intervalMin: (ms/60000).toFixed(2) });
     return { ok:true, intervalMs: ms };
   } catch (e) {
-    console.error("[Chicken3] Cron failed:", e);
+    structuredLog("error", "chicken3_cron_failed", { error: String(e?.message || e) });
     return { ok:false, error: String(e?.message||e) };
   }
 }
@@ -15992,10 +16454,10 @@ async function startChicken3Federation() {
     });
 
     _c3Federation = { enabled:true, client, channel };
-    console.log(`[Chicken3] Federation enabled — channel ${channel}`);
+    structuredLog("info", "chicken3_federation_enabled", { channel });
     return { ok:true, channel };
   } catch (e) {
-    console.error("[Chicken3] Federation failed:", e);
+    structuredLog("error", "chicken3_federation_failed", { error: String(e?.message || e) });
     return { ok:false, error:String(e?.message||e) };
   }
 }
@@ -16026,7 +16488,7 @@ async function federationPublish(eventType, payload) {
     STATE.__chicken3.stats.federationTx = (STATE.__chicken3.stats.federationTx || 0) + 1;
     return { ok: true };
   } catch (e) {
-    console.error("[Federation] Publish failed:", e);
+    structuredLog("error", "federation_publish_failed", { error: String(e?.message || e) });
     return { ok: false, error: String(e?.message || e) };
   }
 }
@@ -16085,7 +16547,7 @@ function _startGovernorHeartbeat() {
     const ms = clamp(Number(s.heartbeatMs ?? 15000), 1000, 10*60*1000);
     if (s.heartbeatEnabled === false) return { ok:false, reason:"heartbeat_disabled" };
     __governorTimer = setInterval(() => { governorTick("interval").catch(()=>{}); }, ms);
-    console.log(`[Governor] Heartbeat active — interval ${(ms/1000).toFixed(2)}s`);
+    structuredLog("info", "governor_heartbeat_active", { intervalSec: (ms/1000).toFixed(2) });
     // fire once on boot (after a short delay so macros/STATE are warmed)
     setTimeout(() => { governorTick("boot").catch(()=>{}); }, 2000);
     return { ok:true, intervalMs: ms };
@@ -17131,7 +17593,7 @@ app.get("/api/docs", (req, res) => {
 </body></html>`);
 });
 
-console.log("[Concord] Enhancements v3.1 loaded: Search indexing, Query DSL, Local LLM, Export/Import, Plugins, Council voting, Personas, Admin dashboard");
+structuredLog("info", "module_loaded", { detail: "Enhancements v3.1 loaded: Search indexing, Query DSL, Local LLM, Export/Import, Plugins, Council voting, Personas, Admin" });
 
 // ============================================================================
 // WAVE 1: PLUGIN MARKETPLACE ECOSYSTEM (Surpassing Obsidian)
@@ -17224,13 +17686,13 @@ register("marketplace", "installed", (_ctx, _input) => {
   return { ok: true, plugins, count: plugins.length };
 });
 
-app.get("/api/marketplace/browse", async (req, res) => res.json(await runMacro("marketplace", "browse", { category: req.query.category, search: req.query.search, sort: req.query.sort, page: req.query.page, pageSize: req.query.pageSize }, makeCtx(req))));
-app.post("/api/marketplace/submit", async (req, res) => res.json(await runMacro("marketplace", "submit", req.body, makeCtx(req))));
-app.post("/api/marketplace/install", async (req, res) => res.json(await runMacro("marketplace", "install", req.body, makeCtx(req))));
-app.post("/api/marketplace/review", async (req, res) => res.json(await runMacro("marketplace", "review", req.body, makeCtx(req))));
-app.get("/api/marketplace/installed", async (req, res) => res.json(await runMacro("marketplace", "installed", {}, makeCtx(req))));
+app.get("/api/marketplace/browse", asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "browse", { category: req.query.category, search: req.query.search, sort: req.query.sort, page: req.query.page, pageSize: req.query.pageSize }, makeCtx(req)))));
+app.post("/api/marketplace/submit", validate("marketplaceSubmit"), asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "submit", req.body, makeCtx(req)))));
+app.post("/api/marketplace/install", validate("marketplaceInstall"), asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "install", req.body, makeCtx(req)))));
+app.post("/api/marketplace/review", asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "review", req.body, makeCtx(req)))));
+app.get("/api/marketplace/installed", asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "installed", {}, makeCtx(req)))));
 
-console.log("[Concord] Wave 1: Plugin Marketplace loaded");
+structuredLog("info", "module_loaded", { module: "Wave 1: Plugin Marketplace" });
 
 // ============================================================================
 // WAVE 2: GRAPH-BASED RELATIONAL QUERIES (Surpassing Logseq)
@@ -17366,11 +17828,11 @@ register("graph", "forceGraph", (ctx, input) => {
   return { ok: true, nodes, links };
 });
 
-app.post("/api/graph/query", async (req, res) => res.json(await runMacro("graph", "query", req.body, makeCtx(req))));
-app.get("/api/graph/visual", async (req, res) => res.json(await runMacro("graph", "visualData", { tier: req.query.tier, limit: req.query.limit, includeEdges: req.query.includeEdges !== "false" }, makeCtx(req))));
-app.get("/api/graph/force", async (req, res) => res.json(await runMacro("graph", "forceGraph", { centerNode: req.query.centerNode, depth: req.query.depth, maxNodes: req.query.maxNodes }, makeCtx(req))));
+app.post("/api/graph/query", asyncHandler(async (req, res) => res.json(await runMacro("graph", "query", req.body, makeCtx(req)))));
+app.get("/api/graph/visual", asyncHandler(async (req, res) => res.json(await runMacro("graph", "visualData", { tier: req.query.tier, limit: req.query.limit, includeEdges: req.query.includeEdges !== "false" }, makeCtx(req)))));
+app.get("/api/graph/force", asyncHandler(async (req, res) => res.json(await runMacro("graph", "forceGraph", { centerNode: req.query.centerNode, depth: req.query.depth, maxNodes: req.query.maxNodes }, makeCtx(req)))));
 
-console.log("[Concord] Wave 2: Graph Queries loaded");
+structuredLog("info", "module_loaded", { module: "Wave 2: Graph Queries" });
 
 // ============================================================================
 // WAVE 3: DYNAMIC SCHEMA TEMPLATES (Surpassing Tana's Supertags)
@@ -17490,13 +17952,13 @@ const DEFAULT_SCHEMAS = [
 ];
 setTimeout(() => { for (const s of DEFAULT_SCHEMAS) { if (!SCHEMA_REGISTRY.has(s.name)) SCHEMA_REGISTRY.set(s.name, { ...s, id: uid("schema"), version: 1, createdAt: nowISO(), usageCount: 0, evolves: true }); } }, 100);
 
-app.post("/api/schema", async (req, res) => res.json(await runMacro("schema", "create", req.body, makeCtx(req))));
-app.get("/api/schema", async (req, res) => res.json(await runMacro("schema", "list", {}, makeCtx(req))));
-app.post("/api/schema/validate", async (req, res) => res.json(await runMacro("schema", "validate", req.body, makeCtx(req))));
-app.post("/api/schema/apply", async (req, res) => res.json(await runMacro("schema", "apply", req.body, makeCtx(req))));
-app.post("/api/schema/evolve", async (req, res) => res.json(await runMacro("schema", "evolve", req.body, makeCtx(req))));
+app.post("/api/schema", validate("schemaCreate"), asyncHandler(async (req, res) => res.json(await runMacro("schema", "create", req.body, makeCtx(req)))));
+app.get("/api/schema", asyncHandler(async (req, res) => res.json(await runMacro("schema", "list", {}, makeCtx(req)))));
+app.post("/api/schema/validate", asyncHandler(async (req, res) => res.json(await runMacro("schema", "validate", req.body, makeCtx(req)))));
+app.post("/api/schema/apply", asyncHandler(async (req, res) => res.json(await runMacro("schema", "apply", req.body, makeCtx(req)))));
+app.post("/api/schema/evolve", asyncHandler(async (req, res) => res.json(await runMacro("schema", "evolve", req.body, makeCtx(req)))));
 
-console.log("[Concord] Wave 3: Dynamic Schemas loaded");
+structuredLog("info", "module_loaded", { module: "Wave 3: Dynamic Schemas" });
 
 // ============================================================================
 // WAVE 4: AI-ASSISTED AUTO-TAGGING & VISUAL LENS (Surpassing Capacities)
@@ -17606,14 +18068,14 @@ register("visual", "timeline", (ctx, input) => {
   return { ok: true, events, count: events.length };
 });
 
-app.post("/api/autotag/analyze", async (req, res) => res.json(await runMacro("autotag", "analyze", req.body, makeCtx(req))));
-app.post("/api/autotag/apply", async (req, res) => res.json(await runMacro("autotag", "apply", req.body, makeCtx(req))));
-app.post("/api/autotag/batch", async (req, res) => res.json(await runMacro("autotag", "batchProcess", req.body, makeCtx(req))));
-app.get("/api/visual/moodboard", async (req, res) => res.json(await runMacro("visual", "moodboard", { tags: req.query.tags?.split(","), tier: req.query.tier, maxNodes: req.query.maxNodes }, makeCtx(req))));
-app.get("/api/visual/sunburst", async (req, res) => res.json(await runMacro("visual", "sunburst", { maxDepth: req.query.maxDepth, maxNodes: req.query.maxNodes }, makeCtx(req))));
-app.get("/api/visual/timeline", async (req, res) => res.json(await runMacro("visual", "timeline", { startDate: req.query.startDate, endDate: req.query.endDate, limit: req.query.limit }, makeCtx(req))));
+app.post("/api/autotag/analyze", asyncHandler(async (req, res) => res.json(await runMacro("autotag", "analyze", req.body, makeCtx(req)))));
+app.post("/api/autotag/apply", asyncHandler(async (req, res) => res.json(await runMacro("autotag", "apply", req.body, makeCtx(req)))));
+app.post("/api/autotag/batch", asyncHandler(async (req, res) => res.json(await runMacro("autotag", "batchProcess", req.body, makeCtx(req)))));
+app.get("/api/visual/moodboard", asyncHandler(async (req, res) => res.json(await runMacro("visual", "moodboard", { tags: req.query.tags?.split(","), tier: req.query.tier, maxNodes: req.query.maxNodes }, makeCtx(req)))));
+app.get("/api/visual/sunburst", asyncHandler(async (req, res) => res.json(await runMacro("visual", "sunburst", { maxDepth: req.query.maxDepth, maxNodes: req.query.maxNodes }, makeCtx(req)))));
+app.get("/api/visual/timeline", asyncHandler(async (req, res) => res.json(await runMacro("visual", "timeline", { startDate: req.query.startDate, endDate: req.query.endDate, limit: req.query.limit }, makeCtx(req)))));
 
-console.log("[Concord] Wave 4: Auto-Tagging & Visuals loaded");
+structuredLog("info", "module_loaded", { module: "Wave 4: Auto-Tagging & Visuals" });
 
 // ============================================================================
 // GENERIC LENS ARTIFACT RUNTIME (No-Mock Upgrade Infrastructure)
@@ -18014,7 +18476,7 @@ registerLensPipeline("education", "generate_quiz", "srs", (src, result) => {
   return {
     type: "deck",
     title: `Study Deck: ${src.title}`,
-    data: { cards: result.quiz.questions.map((q, i) => ({ id: uid("card"), front: q.question || q.text, back: q.answer || q.correctAnswer || "", tags: [src.data?.subject || "general"], difficulty: q.difficulty || 0.5, interval: 1, repetitions: 0 })) },
+    data: { cards: result.quiz.questions.map((q, _i) => ({ id: uid("card"), front: q.question || q.text, back: q.answer || q.correctAnswer || "", tags: [src.data?.subject || "general"], difficulty: q.difficulty || 0.5, interval: 1, repetitions: 0 })) },
     meta: { status: "active", tags: ["education-pipeline", src.data?.subject || "general"] }
   };
 });
@@ -18237,7 +18699,7 @@ app.post("/api/lens/:domain/bulk", async (req, res) => {
 // These are invoked through the generic lens.run macro + /api/lens/:domain/:id/run
 
 // === Paper (Research) ===
-registerLensAction("paper", "validate", async (ctx, artifact, params) => {
+registerLensAction("paper", "validate", async (ctx, artifact, _params) => {
   const claims = artifact.data?.claims || [];
 
   // v5.5: Run empirical gates on each claim for math/units/constants checking
@@ -18276,7 +18738,7 @@ registerLensAction("paper", "validate", async (ctx, artifact, params) => {
     } : null,
   };
 });
-registerLensAction("paper", "synthesize", async (ctx, artifact, params) => {
+registerLensAction("paper", "synthesize", (ctx, artifact, _params) => {
   const claims = artifact.data?.claims || [];
   const validatedCount = claims.filter(c => c.validated).length;
   const withEvidence = claims.filter(c => (c.evidence || c.sources || []).length > 0).length;
@@ -18293,7 +18755,7 @@ registerLensAction("paper", "synthesize", async (ctx, artifact, params) => {
   saveStateDebounced();
   return { ok: true, synthesis };
 });
-registerLensAction("paper", "detect-contradictions", async (ctx, artifact, params) => {
+registerLensAction("paper", "detect-contradictions", (ctx, artifact, _params) => {
   const claims = artifact.data?.claims || [];
   const contradictions = [];
   for (let i = 0; i < claims.length; i++) {
@@ -18305,21 +18767,21 @@ registerLensAction("paper", "detect-contradictions", async (ctx, artifact, param
   }
   return { ok: true, contradictions, count: contradictions.length };
 });
-registerLensAction("paper", "trace-lineage", async (ctx, artifact, params) => {
+registerLensAction("paper", "trace-lineage", (ctx, artifact, _params) => {
   const versions = artifact.data?.versions || [{ version: artifact.version, updatedAt: artifact.updatedAt }];
   return { ok: true, lineage: versions, currentVersion: artifact.version };
 });
 
 // === Reasoning ===
-registerLensAction("reasoning", "validate", async (ctx, artifact, params) => {
+registerLensAction("reasoning", "validate", (ctx, artifact, _params) => {
   const steps = artifact.data?.steps || [];
   const valid = steps.every(s => s.content && s.content.length > 0);
   return { ok: true, valid, stepCount: steps.length, type: artifact.data?.type || "deductive" };
 });
-registerLensAction("reasoning", "trace", async (ctx, artifact, params) => {
+registerLensAction("reasoning", "trace", (ctx, artifact, _params) => {
   return { ok: true, trace: { steps: artifact.data?.steps || [], conclusion: artifact.data?.conclusion, premise: artifact.data?.premise, type: artifact.data?.type } };
 });
-registerLensAction("reasoning", "conclude", async (ctx, artifact, params) => {
+registerLensAction("reasoning", "conclude", (ctx, artifact, params) => {
   const steps = artifact.data?.steps || [];
   const type = artifact.data?.type || "deductive";
   const premise = artifact.data?.premise || "";
@@ -18337,7 +18799,7 @@ registerLensAction("reasoning", "conclude", async (ctx, artifact, params) => {
   saveStateDebounced();
   return { ok: true, conclusion, strength: Math.round(strength * 100) / 100, type, stepCount: steps.length, valid };
 });
-registerLensAction("reasoning", "fork", async (ctx, artifact, params) => {
+registerLensAction("reasoning", "fork", (ctx, artifact, _params) => {
   const forkId = uid("lart");
   const fork = { ...JSON.parse(JSON.stringify(artifact)), id: forkId, title: `${artifact.title} (fork)`, createdAt: nowISO(), updatedAt: nowISO(), version: 1 };
   fork.data.forkedFrom = artifact.id;
@@ -18348,7 +18810,7 @@ registerLensAction("reasoning", "fork", async (ctx, artifact, params) => {
 });
 
 // === Council (Governance) ===
-registerLensAction("council", "debate", async (ctx, artifact, params) => {
+registerLensAction("council", "debate", (ctx, artifact, params) => {
   const existingTurns = artifact.data?.debate?.turns || [];
   const newTurns = params.turns || [];
   const allTurns = [...existingTurns, ...newTurns];
@@ -18369,7 +18831,7 @@ registerLensAction("council", "debate", async (ctx, artifact, params) => {
   saveStateDebounced();
   return { ok: true, debate: artifact.data.debate };
 });
-registerLensAction("council", "vote", async (ctx, artifact, params) => {
+registerLensAction("council", "vote", (ctx, artifact, params) => {
   const votes = artifact.data?.votes || [];
   const newVote = { id: uid("vote"), voterId: ctx.actor?.userId || "anon", choice: params.choice, weight: params.weight || 1, rationale: params.rationale || "", timestamp: nowISO() };
   votes.push(newVote);
@@ -18378,7 +18840,7 @@ registerLensAction("council", "vote", async (ctx, artifact, params) => {
   saveStateDebounced();
   return { ok: true, vote: newVote, totalVotes: votes.length };
 });
-registerLensAction("council", "simulate-budget", async (ctx, artifact, params) => {
+registerLensAction("council", "simulate-budget", (ctx, artifact, _params) => {
   const budget = artifact.data?.budget || { total: 0, items: [] };
   const items = budget.items || [];
   const itemBreakdown = items.map(item => {
@@ -18407,7 +18869,7 @@ registerLensAction("council", "simulate-budget", async (ctx, artifact, params) =
   saveStateDebounced();
   return { ok: true, simulation: simResult };
 });
-registerLensAction("council", "audit", async (ctx, artifact, params) => {
+registerLensAction("council", "audit", (ctx, artifact, _params) => {
   const votes = artifact.data?.votes || [];
   const debate = artifact.data?.debate || {};
   const uniqueVoters = [...new Set(votes.map(v => v.voterId))];
@@ -18417,7 +18879,7 @@ registerLensAction("council", "audit", async (ctx, artifact, params) => {
   votes.forEach(v => { const c = v.choice || "abstain"; choiceTally[c] = (choiceTally[c] || 0) + (v.weight || 1); totalWeight += (v.weight || 1); });
   const hasDebate = !!(debate.turns && debate.turns.length > 0);
   const hasBudget = !!artifact.data?.budget;
-  const hasSimulation = !!artifact.data?.budgetSimulation;
+  const _hasSimulation = !!artifact.data?.budgetSimulation;
   const completeness = [votes.length > 0, hasDebate, hasBudget || !artifact.data?.requiresBudget].filter(Boolean).length / 3;
   const trail = {
     entityType: artifact.type || "proposal", entityId: artifact.id,
@@ -18433,38 +18895,38 @@ registerLensAction("council", "audit", async (ctx, artifact, params) => {
 });
 
 // === Agents ===
-registerLensAction("agents", "start", async (ctx, artifact, params) => {
+registerLensAction("agents", "start", (ctx, artifact, _params) => {
   artifact.data = { ...artifact.data, status: "active", startedAt: nowISO() };
   artifact.updatedAt = nowISO();
   saveStateDebounced();
   return { ok: true, status: "active" };
 });
-registerLensAction("agents", "stop", async (ctx, artifact, params) => {
+registerLensAction("agents", "stop", (ctx, artifact, _params) => {
   artifact.data = { ...artifact.data, status: "dormant", stoppedAt: nowISO() };
   artifact.updatedAt = nowISO();
   saveStateDebounced();
   return { ok: true, status: "dormant" };
 });
-registerLensAction("agents", "reset", async (ctx, artifact, params) => {
+registerLensAction("agents", "reset", (ctx, artifact, _params) => {
   artifact.data = { ...artifact.data, status: "idle", memory: [], logs: [], tickCount: 0, resetAt: nowISO() };
   artifact.updatedAt = nowISO();
   saveStateDebounced();
   return { ok: true, status: "reset" };
 });
-registerLensAction("agents", "configure", async (ctx, artifact, params) => {
+registerLensAction("agents", "configure", (ctx, artifact, params) => {
   artifact.data = { ...artifact.data, config: { ...artifact.data?.config, ...params } };
   artifact.updatedAt = nowISO();
   saveStateDebounced();
   return { ok: true, config: artifact.data.config };
 });
-registerLensAction("agents", "deliberate", async (ctx, artifact, params) => {
+registerLensAction("agents", "deliberate", (ctx, artifact, params) => {
   const deliberation = { id: uid("delib"), topic: params.topic || artifact.title, participants: [artifact.id], arguments: params.arguments || [], outcome: "pending", startedAt: nowISO() };
   artifact.data = { ...artifact.data, lastDeliberation: deliberation };
   artifact.updatedAt = nowISO();
   saveStateDebounced();
   return { ok: true, deliberation };
 });
-registerLensAction("agents", "arbitrate", async (ctx, artifact, params) => {
+registerLensAction("agents", "arbitrate", (ctx, artifact, params) => {
   const delib = artifact.data?.lastDeliberation || {};
   const args = delib.arguments || params.arguments || [];
   const forArgs = args.filter(a => a.stance === "for" || a.support === true);
@@ -18482,9 +18944,9 @@ registerLensAction("agents", "arbitrate", async (ctx, artifact, params) => {
 });
 
 // === Sim (Simulation) ===
-registerLensAction("sim", "simulate", async (ctx, artifact, params) => {
+registerLensAction("sim", "simulate", (ctx, artifact, params) => {
   const assumptions = artifact.data?.assumptions || params.assumptions || [];
-  const variables = artifact.data?.variables || {};
+  const _variables = artifact.data?.variables || {};
   let seed = 0;
   for (let i = 0; i < artifact.id.length; i++) seed = ((seed << 5) - seed) + artifact.id.charCodeAt(i);
   const mulberry32 = (s) => () => { s |= 0; s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
@@ -18513,7 +18975,7 @@ registerLensAction("sim", "simulate", async (ctx, artifact, params) => {
   saveStateDebounced();
   return { ok: true, result };
 });
-registerLensAction("sim", "analyze", async (ctx, artifact, params) => {
+registerLensAction("sim", "analyze", (ctx, artifact, _params) => {
   const lastRun = artifact.data?.lastRun;
   if (!lastRun) return { ok: false, error: "no simulation run to analyze" };
   const outcomes = lastRun.outcomes || [];
@@ -18528,7 +18990,7 @@ registerLensAction("sim", "analyze", async (ctx, artifact, params) => {
   });
   return { ok: true, analysis: { sensitivity, crossRunAnalysis, totalRuns: runs.length, analyzedAt: nowISO() } };
 });
-registerLensAction("sim", "compare", async (ctx, artifact, params) => {
+registerLensAction("sim", "compare", (ctx, artifact, params) => {
   const runs = artifact.data?.runs || [];
   const compareId = params.runId;
   if (runs.length < 2 && !compareId) return { ok: true, comparison: { note: "Need at least 2 runs to compare", totalRuns: runs.length } };
@@ -18541,7 +19003,7 @@ registerLensAction("sim", "compare", async (ctx, artifact, params) => {
   });
   return { ok: true, comparison: { baselineRun: baseline.id, currentRun: current.id, diffs, avgDelta: diffs.filter(d => d.delta !== null).length > 0 ? Math.round(diffs.filter(d => d.delta !== null).reduce((s, d) => s + Math.abs(d.delta), 0) / diffs.filter(d => d.delta !== null).length * 1000) / 1000 : 0, comparedAt: nowISO() } };
 });
-registerLensAction("sim", "archive", async (ctx, artifact, params) => {
+registerLensAction("sim", "archive", (ctx, artifact, _params) => {
   artifact.data = { ...artifact.data, status: "archived", archivedAt: nowISO() };
   artifact.updatedAt = nowISO();
   saveStateDebounced();
@@ -18549,7 +19011,7 @@ registerLensAction("sim", "archive", async (ctx, artifact, params) => {
 });
 
 // === Studio (Creative) ===
-registerLensAction("studio", "mix", async (ctx, artifact, params) => {
+registerLensAction("studio", "mix", (ctx, artifact, params) => {
   const tracks = artifact.data?.tracks || [];
   const mixSettings = params.settings || artifact.data?.mixSettings || {};
 
@@ -18627,7 +19089,7 @@ registerLensAction("studio", "mix", async (ctx, artifact, params) => {
   saveStateDebounced();
   return { ok: true, mix: { projectId: artifact.id, trackCount: tracks.length, activeCount: effective.length, combinedRms: mixResult.combinedRms, combinedPeakDb: mixResult.combinedPeakDb, freqBalance, stereoWidth, warnings, mixedAt: nowISO() } };
 });
-registerLensAction("studio", "master", async (ctx, artifact, params) => {
+registerLensAction("studio", "master", (ctx, artifact, params) => {
   const mix = artifact.data?.lastMix || {};
   const targetLoudness = params.targetLUFS || -14;
   const avgVolume = mix.avgVolume || 0.7;
@@ -18639,7 +19101,7 @@ registerLensAction("studio", "master", async (ctx, artifact, params) => {
   saveStateDebounced();
   return { ok: true, master: { projectId: artifact.id, ...masterSettings, masteredAt: nowISO() } };
 });
-registerLensAction("studio", "bounce", async (ctx, artifact, params) => {
+registerLensAction("studio", "bounce", (ctx, artifact, params) => {
   const format = params.format || "wav";
   const master = artifact.data?.lastMaster || {};
   const tracks = artifact.data?.tracks || [];
@@ -18652,7 +19114,7 @@ registerLensAction("studio", "bounce", async (ctx, artifact, params) => {
   saveStateDebounced();
   return { ok: true, bounce: { projectId: artifact.id, format, duration, sampleRate, bitDepth, estimatedSizeKB, bouncedAt: nowISO() } };
 });
-registerLensAction("studio", "render", async (ctx, artifact, params) => {
+registerLensAction("studio", "render", (ctx, artifact, params) => {
   const render = { id: uid("render"), projectId: artifact.id, format: params.format || "wav", status: "complete", renderedAt: nowISO() };
   artifact.data = { ...artifact.data, lastRender: render };
   artifact.updatedAt = nowISO();
@@ -18661,7 +19123,7 @@ registerLensAction("studio", "render", async (ctx, artifact, params) => {
 });
 
 // === Law (Legal) ===
-registerLensAction("law", "check-compliance", async (ctx, artifact, params) => {
+registerLensAction("law", "check-compliance", (ctx, artifact, params) => {
   const text = (params.text || artifact.data?.body || artifact.title || "").toLowerCase();
   const violations = [];
   if (text.includes("personal data") && text.includes("sell")) violations.push("GDPR Art. 6: Unlawful processing");
@@ -18670,7 +19132,7 @@ registerLensAction("law", "check-compliance", async (ctx, artifact, params) => {
   if (text.includes("biometric") && text.includes("mass")) violations.push("EU AI Act Art. 5: Prohibited biometric surveillance");
   return { ok: true, passed: violations.length === 0, violations, checkedAt: nowISO() };
 });
-registerLensAction("law", "analyze", async (ctx, artifact, params) => {
+registerLensAction("law", "analyze", (ctx, artifact, _params) => {
   const frameworks = artifact.data?.frameworks || ["GDPR", "CCPA", "DMCA", "EU AI Act"];
   const text = (artifact.data?.body || artifact.title || "").toLowerCase();
   const citations = artifact.data?.citations || [];
@@ -18697,14 +19159,14 @@ registerLensAction("law", "analyze", async (ctx, artifact, params) => {
   const overallRisk = analysis.some(a => a.risk === "high") ? "high" : analysis.some(a => a.risk === "medium") ? "medium" : "low";
   return { ok: true, analysis, overallRisk, totalDrafts: drafts.length, totalCitations: citations.length };
 });
-registerLensAction("law", "draft", async (ctx, artifact, params) => {
+registerLensAction("law", "draft", (ctx, artifact, params) => {
   const draft = { id: uid("draft"), caseId: artifact.id, title: params.title || "New Draft", body: params.body || "", version: 1, status: "draft", createdAt: nowISO() };
   artifact.data = { ...artifact.data, drafts: [...(artifact.data?.drafts || []), draft] };
   artifact.updatedAt = nowISO();
   saveStateDebounced();
   return { ok: true, draft };
 });
-registerLensAction("law", "cite", async (ctx, artifact, params) => {
+registerLensAction("law", "cite", (ctx, artifact, params) => {
   const citation = { id: uid("cite"), source: params.source || "Unknown", text: params.text || "", relevance: params.relevance || 0.8, addedAt: nowISO() };
   artifact.data = { ...artifact.data, citations: [...(artifact.data?.citations || []), citation] };
   artifact.updatedAt = nowISO();
@@ -18713,14 +19175,14 @@ registerLensAction("law", "cite", async (ctx, artifact, params) => {
 });
 
 // === Graph (Knowledge Graph) ===
-registerLensAction("graph", "query", async (ctx, artifact, params) => {
+registerLensAction("graph", "query", (ctx, artifact, params) => {
   const nodes = artifact.data?.nodes || [];
   const edges = artifact.data?.edges || [];
   const q = (params.query || "").toLowerCase();
   const matched = q ? nodes.filter(n => (n.label || "").toLowerCase().includes(q)) : nodes;
   return { ok: true, nodes: matched, edges, total: matched.length };
 });
-registerLensAction("graph", "cluster", async (ctx, artifact, params) => {
+registerLensAction("graph", "cluster", (ctx, artifact, params) => {
   const nodes = artifact.data?.nodes || [];
   const edges = artifact.data?.edges || [];
   const k = Math.min(params.k || 3, Math.max(1, nodes.length));
@@ -18755,7 +19217,7 @@ registerLensAction("graph", "cluster", async (ctx, artifact, params) => {
   const modularity = edges.length > 0 ? clusters.reduce((s, c) => s + c.internalEdges, 0) / edges.length : 0;
   return { ok: true, clusters, k: clusters.length, modularity: Math.round(modularity * 1000) / 1000 };
 });
-registerLensAction("graph", "analyze", async (ctx, artifact, params) => {
+registerLensAction("graph", "analyze", (ctx, artifact, _params) => {
   const nodes = artifact.data?.nodes || [];
   const edges = artifact.data?.edges || [];
   const maxPossibleEdges = nodes.length * (nodes.length - 1) / 2;
@@ -18770,7 +19232,7 @@ registerLensAction("graph", "analyze", async (ctx, artifact, params) => {
   const hubs = nodes.filter(n => (degree[n.id] || 0) > avgDegree * 2).map(n => ({ id: n.id, label: n.label, degree: degree[n.id] }));
   return { ok: true, stats: { nodeCount: nodes.length, edgeCount: edges.length, density: Math.round(density * 10000) / 10000, avgDegree: Math.round(avgDegree * 100) / 100, maxDegree, isolatedNodes, hubs: hubs.slice(0, 10), analyzedAt: nowISO() } };
 });
-registerLensAction("graph", "merge", async (ctx, artifact, params) => {
+registerLensAction("graph", "merge", (ctx, artifact, params) => {
   const { sourceId, targetId } = params;
   if (!sourceId || !targetId) return { ok: false, error: "sourceId and targetId required" };
   const nodes = artifact.data?.nodes || [];
@@ -18791,10 +19253,10 @@ registerLensAction("graph", "merge", async (ctx, artifact, params) => {
 });
 
 // === Whiteboard (Collaboration) ===
-registerLensAction("whiteboard", "render", async (ctx, artifact, params) => {
+registerLensAction("whiteboard", "render", (ctx, artifact, params) => {
   return { ok: true, render: { boardId: artifact.id, format: params.format || "png", renderedAt: nowISO() } };
 });
-registerLensAction("whiteboard", "layout", async (ctx, artifact, params) => {
+registerLensAction("whiteboard", "layout", (ctx, artifact, params) => {
   const elements = artifact.data?.elements || [];
   const layoutType = params.type || "force";
   const spacing = params.spacing || 200;
@@ -18844,8 +19306,8 @@ registerLensAction("whiteboard", "layout", async (ctx, artifact, params) => {
       // Repulsive forces between all pairs
       for (let i = 0; i < laid.length; i++) {
         for (let j = i + 1; j < laid.length; j++) {
-          let dx = laid[i].x - laid[j].x;
-          let dy = laid[i].y - laid[j].y;
+          const dx = laid[i].x - laid[j].x;
+          const dy = laid[i].y - laid[j].y;
           const dist = Math.max(Math.sqrt(dx * dx + dy * dy), 0.01);
           const force = (k * k) / dist;
           const fx = (dx / dist) * force;
@@ -18862,8 +19324,8 @@ registerLensAction("whiteboard", "layout", async (ctx, artifact, params) => {
         const src = laid.find(n => n.id === e.from || n.id === e.source);
         const tgt = laid.find(n => n.id === e.to || n.id === e.target);
         if (!src || !tgt) continue;
-        let dx = tgt.x - src.x;
-        let dy = tgt.y - src.y;
+        const dx = tgt.x - src.x;
+        const dy = tgt.y - src.y;
         const dist = Math.max(Math.sqrt(dx * dx + dy * dy), 0.01);
         const force = (dist * dist) / k;
         const fx = (dx / dist) * force;
@@ -18906,14 +19368,14 @@ registerLensAction("whiteboard", "layout", async (ctx, artifact, params) => {
     quality: { minDistance: laid.length > 1 ? Math.round(minDist) : null, spread: layoutType },
   };
 });
-registerLensAction("whiteboard", "collaborate", async (ctx, artifact, params) => {
+registerLensAction("whiteboard", "collaborate", (ctx, artifact, _params) => {
   const session = { id: uid("wbsess"), boardId: artifact.id, participants: [ctx.actor?.userId || "anon"], startedAt: nowISO() };
   artifact.data = { ...artifact.data, activeSession: session };
   artifact.updatedAt = nowISO();
   saveStateDebounced();
   return { ok: true, session };
 });
-registerLensAction("whiteboard", "snapshot", async (ctx, artifact, params) => {
+registerLensAction("whiteboard", "snapshot", (ctx, artifact, _params) => {
   const snapshot = { id: uid("snap"), boardId: artifact.id, elements: artifact.data?.elements || [], createdAt: nowISO() };
   artifact.data = { ...artifact.data, snapshots: [...(artifact.data?.snapshots || []), snapshot] };
   artifact.updatedAt = nowISO();
@@ -18922,7 +19384,7 @@ registerLensAction("whiteboard", "snapshot", async (ctx, artifact, params) => {
 });
 
 // === Database ===
-registerLensAction("database", "query", async (ctx, artifact, params) => {
+registerLensAction("database", "query", (ctx, artifact, params) => {
   const sql = artifact.data?.sql || params.sql || "";
   const tables = artifact.data?.tables || [];
   const schema = artifact.data?.schema || {};
@@ -18944,7 +19406,7 @@ registerLensAction("database", "query", async (ctx, artifact, params) => {
   const rows = artifact.data?.rows || artifact.data?.sampleData || [];
   return { ok: true, result: { columns, rows: rows.slice(0, params.limit || 100), rowCount: rows.length, query: sql, referencedTables, isSelect, queryType: isSelect ? "SELECT" : sqlUpper.split(/\s/)[0] } };
 });
-registerLensAction("database", "analyze", async (ctx, artifact, params) => {
+registerLensAction("database", "analyze", (ctx, artifact, params) => {
   const sql = artifact.data?.sql || params.sql || "";
   const tables = artifact.data?.tables || [];
   const indexes = artifact.data?.indexes || [];
@@ -18969,7 +19431,7 @@ registerLensAction("database", "analyze", async (ctx, artifact, params) => {
   const risk = sqlUpper.includes("DROP") || sqlUpper.includes("TRUNCATE") ? "high" : (sqlUpper.includes("DELETE") || sqlUpper.includes("ALTER")) ? "medium" : "low";
   return { ok: true, analysis: { query: sql, suggestions, joinCount: complexity, risk, tableCount: tables.length, indexCount: indexes.length, analyzedAt: nowISO() } };
 });
-registerLensAction("database", "optimize", async (ctx, artifact, params) => {
+registerLensAction("database", "optimize", (ctx, artifact, params) => {
   const sql = artifact.data?.sql || params.sql || "";
   let optimized = sql;
   const improvements = [];
@@ -18993,7 +19455,7 @@ registerLensAction("database", "optimize", async (ctx, artifact, params) => {
   }
   return { ok: true, optimized: { original: sql, optimized, improvements, optimizedAt: nowISO() } };
 });
-registerLensAction("database", "schema-inspect", async (ctx, artifact, params) => {
+registerLensAction("database", "schema-inspect", (ctx, artifact, _params) => {
   const tables = artifact.data?.tables || [];
   const indexes = artifact.data?.indexes || [];
   const schema = artifact.data?.schema || {};
@@ -19008,20 +19470,20 @@ registerLensAction("database", "schema-inspect", async (ctx, artifact, params) =
 });
 
 // === Calendar ===
-registerLensAction("calendar", "schedule", async (ctx, artifact, params) => {
+registerLensAction("calendar", "schedule", (ctx, artifact, _params) => {
   artifact.data = { ...artifact.data, status: "scheduled", scheduledAt: nowISO() };
   artifact.updatedAt = nowISO();
   saveStateDebounced();
   return { ok: true, status: "scheduled" };
 });
-registerLensAction("calendar", "remind", async (ctx, artifact, params) => {
+registerLensAction("calendar", "remind", (ctx, artifact, params) => {
   const reminder = { id: uid("rem"), eventId: artifact.id, at: params.at || nowISO(), message: params.message || "Reminder" };
   artifact.data = { ...artifact.data, reminders: [...(artifact.data?.reminders || []), reminder] };
   artifact.updatedAt = nowISO();
   saveStateDebounced();
   return { ok: true, reminder };
 });
-registerLensAction("calendar", "plan_day", async (ctx, artifact, params) => {
+registerLensAction("calendar", "plan_day", (ctx, artifact, params) => {
   const events = artifact.data?.events || [];
   const targetDate = params.date || new Date().toISOString().slice(0, 10);
   const dayEvents = events.filter(e => (e.start || "").startsWith(targetDate) || (e.date || "").startsWith(targetDate));
@@ -19031,7 +19493,7 @@ registerLensAction("calendar", "plan_day", async (ctx, artifact, params) => {
   const busyHours = Math.round(totalMinutes / 60 * 10) / 10;
   return { ok: true, plan: { date: targetDate, slots, eventCount: slots.length, totalMinutes, busyHours, freeHours: Math.round((24 - busyHours) * 10) / 10, generatedAt: nowISO() } };
 });
-registerLensAction("calendar", "plan_week", async (ctx, artifact, params) => {
+registerLensAction("calendar", "plan_week", (ctx, artifact, params) => {
   const events = artifact.data?.events || [];
   const startDate = params.startDate || new Date().toISOString().slice(0, 10);
   const start = new Date(startDate);
@@ -19047,7 +19509,7 @@ registerLensAction("calendar", "plan_week", async (ctx, artifact, params) => {
   const totalEvents = days.reduce((s, d) => s + d.eventCount, 0);
   return { ok: true, weekPlan: { startDate, days, totalEvents, busiestDay: busiestDay.date, generatedAt: nowISO() } };
 });
-registerLensAction("calendar", "resolve_conflicts", async (ctx, artifact, params) => {
+registerLensAction("calendar", "resolve_conflicts", (ctx, artifact, _params) => {
   const events = artifact.data?.events || [];
   const conflicts = [];
   for (let i = 0; i < events.length; i++) {
@@ -19059,7 +19521,7 @@ registerLensAction("calendar", "resolve_conflicts", async (ctx, artifact, params
 });
 
 // === Daily ===
-registerLensAction("daily", "summarize", async (ctx, artifact, params) => {
+registerLensAction("daily", "summarize", (ctx, artifact, _params) => {
   const content = artifact.data?.content || artifact.data?.body || "";
   const words = content.split(/\s+/).filter(Boolean);
   const sentences = (content.match(/[^.!?]+[.!?]+/g) || [content]).filter(Boolean);
@@ -19071,7 +19533,7 @@ registerLensAction("daily", "summarize", async (ctx, artifact, params) => {
   const keySentences = sentences.slice(0, 3).map(s => s.trim());
   return { ok: true, summary: { keySentences, wordCount: words.length, sentenceCount: sentences.length, mood, tags, topWords, charCount: content.length, summarizedAt: nowISO() } };
 });
-registerLensAction("daily", "analyze", async (ctx, artifact, params) => {
+registerLensAction("daily", "analyze", (ctx, artifact, _params) => {
   const content = artifact.data?.content || artifact.data?.body || "";
   const mood = artifact.data?.mood || null;
   const tags = artifact.data?.tags || [];
@@ -19087,7 +19549,7 @@ registerLensAction("daily", "analyze", async (ctx, artifact, params) => {
   const sentimentScore = words.length > 0 ? Math.round(((moodScores.positive - moodScores.negative) / Math.max(1, moodScores.positive + moodScores.negative + moodScores.neutral)) * 100) / 100 : 0;
   return { ok: true, analysis: { mood: mood || detectedMood, detectedMood, sentimentScore, moodScores, themes: tags, wordCount: words.length, analyzedAt: nowISO() } };
 });
-registerLensAction("daily", "detect_patterns", async (ctx, artifact, params) => {
+registerLensAction("daily", "detect_patterns", (_ctx, _artifact, _params) => {
   const allEntries = _lensDomainArtifacts("daily");
   const tagFrequency = {};
   const moodFrequency = {};
@@ -19134,7 +19596,7 @@ registerLensAction("daily", "detect_patterns", async (ctx, artifact, params) => 
   });
   return { ok: true, patterns, cooccurrences, moodDistribution: moodFrequency, totalEntriesAnalyzed: allEntries.length, detectedAt: nowISO() };
 });
-registerLensAction("daily", "generate_insights", async (ctx, artifact, params) => {
+registerLensAction("daily", "generate_insights", (ctx, artifact, _params) => {
   const allEntries = _lensDomainArtifacts("daily");
   const currentTags = artifact.data?.tags || [];
   const currentMood = artifact.data?.mood || null;
@@ -19164,7 +19626,7 @@ registerLensAction("daily", "generate_insights", async (ctx, artifact, params) =
 });
 
 // === Collab ===
-registerLensAction("collab", "summarize_thread", async (ctx, artifact, params) => {
+registerLensAction("collab", "summarize_thread", (ctx, artifact, _params) => {
   const changes = artifact.data?.changes || [];
   const participants = artifact.data?.participants || [];
   const uniqueParticipants = [...new Set(changes.map(c => c.userId).filter(Boolean))];
@@ -19176,27 +19638,27 @@ registerLensAction("collab", "summarize_thread", async (ctx, artifact, params) =
   const topContributors = Object.entries(participantActivity).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([userId, count]) => ({ userId, changes: count }));
   return { ok: true, summary: { changeCount: changes.length, participantCount: Math.max(participants.length, uniqueParticipants.length), operationCounts, topContributors, timeline, summarizedAt: nowISO() } };
 });
-registerLensAction("collab", "run_council", async (ctx, artifact, params) => {
+registerLensAction("collab", "run_council", (ctx, artifact, params) => {
   const vote = { id: uid("cvote"), sessionId: artifact.id, topic: params.topic || artifact.title, status: "pending", initiatedAt: nowISO() };
   artifact.data = { ...artifact.data, councilVote: vote };
   artifact.updatedAt = nowISO();
   saveStateDebounced();
   return { ok: true, vote };
 });
-registerLensAction("collab", "extract_actions", async (ctx, artifact, params) => {
+registerLensAction("collab", "extract_actions", (ctx, artifact, _params) => {
   const actions = (artifact.data?.changes || []).filter(c => c.operation === "action").map(c => ({ id: c.id, action: c.value, assignee: c.userId }));
   return { ok: true, actions, count: actions.length };
 });
 
 // === Experience ===
-registerLensAction("experience", "endorse", async (ctx, artifact, params) => {
+registerLensAction("experience", "endorse", (ctx, artifact, params) => {
   const endorsement = { id: uid("end"), skillId: params.skillId, endorserId: ctx.actor?.userId || "anon", comment: params.comment || "", endorsedAt: nowISO() };
   artifact.data = { ...artifact.data, endorsements: [...(artifact.data?.endorsements || []), endorsement] };
   artifact.updatedAt = nowISO();
   saveStateDebounced();
   return { ok: true, endorsement };
 });
-registerLensAction("experience", "analyze", async (ctx, artifact, params) => {
+registerLensAction("experience", "analyze", (ctx, artifact, _params) => {
   const skills = artifact.data?.skills || [];
   const endorsements = artifact.data?.endorsements || [];
   const endorsementsBySkill = {};
@@ -19212,7 +19674,7 @@ registerLensAction("experience", "analyze", async (ctx, artifact, params) => {
   skills.forEach(s => { const cat = s.category || "general"; categories[cat] = (categories[cat] || 0) + 1; });
   return { ok: true, analysis: { skillCount: skills.length, topSkills: analyzed.slice(0, 10), categories, totalEndorsements: endorsements.length, analyzedAt: nowISO() } };
 });
-registerLensAction("experience", "generate_resume", async (ctx, artifact, params) => {
+registerLensAction("experience", "generate_resume", (ctx, artifact, params) => {
   const skills = artifact.data?.skills || [];
   const endorsements = artifact.data?.endorsements || [];
   const experience = artifact.data?.experience || artifact.data?.positions || [];
@@ -19227,7 +19689,7 @@ registerLensAction("experience", "generate_resume", async (ctx, artifact, params
   const resume = { id: uid("res"), portfolioId: artifact.id, format: params.format || "json", sections, generatedAt: nowISO() };
   return { ok: true, resume };
 });
-registerLensAction("experience", "compare_versions", async (ctx, artifact, params) => {
+registerLensAction("experience", "compare_versions", (ctx, artifact, _params) => {
   const snapshots = artifact.data?.snapshots || artifact.data?.versions || [];
   const currentSkills = (artifact.data?.skills || []).map(s => s.name || s.id);
   if (snapshots.length === 0) return { ok: true, comparison: { currentVersion: artifact.version, note: "no_previous_versions", currentSkillCount: currentSkills.length, comparedAt: nowISO() } };
@@ -19238,45 +19700,45 @@ registerLensAction("experience", "compare_versions", async (ctx, artifact, param
   const retained = currentSkills.filter(s => prevSkills.includes(s));
   return { ok: true, comparison: { currentVersion: artifact.version, previousVersion: previous.version || snapshots.length, added, removed, retained: retained.length, growthRate: prevSkills.length > 0 ? Math.round(((currentSkills.length - prevSkills.length) / prevSkills.length) * 100) : null, comparedAt: nowISO() } };
 });
-registerLensAction("experience", "validate_claims", async (ctx, artifact, params) => {
+registerLensAction("experience", "validate_claims", (ctx, artifact, _params) => {
   const skills = artifact.data?.skills || [];
   const validated = skills.map(s => ({ skill: s.name || s.id, hasEvidence: (s.evidence || []).length > 0, validated: (s.evidence || []).length > 0 }));
   return { ok: true, validated, validCount: validated.filter(v => v.validated).length };
 });
 
 // === Marketplace ===
-registerLensAction("marketplace", "buy", async (ctx, artifact, params) => {
+registerLensAction("marketplace", "buy", (ctx, artifact, _params) => {
   const purchase = { id: uid("pur"), listingId: artifact.id, buyerId: ctx.actor?.userId || "anon", amount: artifact.data?.price || 0, purchasedAt: nowISO() };
   artifact.data = { ...artifact.data, purchases: [...(artifact.data?.purchases || []), purchase] };
   artifact.updatedAt = nowISO();
   saveStateDebounced();
   return { ok: true, purchase };
 });
-registerLensAction("marketplace", "sell", async (ctx, artifact, params) => {
+registerLensAction("marketplace", "sell", (ctx, artifact, _params) => {
   artifact.data = { ...artifact.data, status: "listed", listedAt: nowISO() };
   artifact.updatedAt = nowISO();
   saveStateDebounced();
   return { ok: true, status: "listed" };
 });
-registerLensAction("marketplace", "review", async (ctx, artifact, params) => {
+registerLensAction("marketplace", "review", (ctx, artifact, params) => {
   const review = { id: uid("rev"), listingId: artifact.id, rating: params.rating || 5, comment: params.comment || "", reviewerId: ctx.actor?.userId || "anon", reviewedAt: nowISO() };
   artifact.data = { ...artifact.data, reviews: [...(artifact.data?.reviews || []), review] };
   artifact.updatedAt = nowISO();
   saveStateDebounced();
   return { ok: true, review };
 });
-registerLensAction("marketplace", "verify_artifact_hash", async (ctx, artifact, params) => {
+registerLensAction("marketplace", "verify_artifact_hash", (ctx, artifact, _params) => {
   const hash = artifact.data?.artifactHash || "none";
   return { ok: true, verified: hash !== "none", hash, verifiedAt: nowISO() };
 });
-registerLensAction("marketplace", "issue_license", async (ctx, artifact, params) => {
+registerLensAction("marketplace", "issue_license", (ctx, artifact, params) => {
   const license = { id: uid("lic"), listingId: artifact.id, type: params.type || "standard", grantedTo: params.grantedTo || ctx.actor?.userId || "anon", issuedAt: nowISO(), expiresAt: params.expiresAt || null };
   artifact.data = { ...artifact.data, licenses: [...(artifact.data?.licenses || []), license] };
   artifact.updatedAt = nowISO();
   saveStateDebounced();
   return { ok: true, license };
 });
-registerLensAction("marketplace", "distribute_royalties", async (ctx, artifact, params) => {
+registerLensAction("marketplace", "distribute_royalties", (ctx, artifact, params) => {
   const sales = (artifact.data?.purchases || []).length;
   const royaltyRate = params.rate || 0.1;
   const total = sales * (artifact.data?.price || 0) * royaltyRate;
@@ -19284,7 +19746,7 @@ registerLensAction("marketplace", "distribute_royalties", async (ctx, artifact, 
 });
 
 // === Forum ===
-registerLensAction("forum", "vote", async (ctx, artifact, params) => {
+registerLensAction("forum", "vote", (ctx, artifact, params) => {
   const vote = { id: uid("fvote"), postId: artifact.id, direction: params.direction || "up", voterId: ctx.actor?.userId || "anon", votedAt: nowISO() };
   const votes = artifact.data?.votes || 0;
   artifact.data = { ...artifact.data, votes: votes + (params.direction === "down" ? -1 : 1) };
@@ -19292,20 +19754,20 @@ registerLensAction("forum", "vote", async (ctx, artifact, params) => {
   saveStateDebounced();
   return { ok: true, vote, newScore: artifact.data.votes };
 });
-registerLensAction("forum", "pin", async (ctx, artifact, params) => {
+registerLensAction("forum", "pin", (ctx, artifact, _params) => {
   artifact.data = { ...artifact.data, pinned: true, pinnedAt: nowISO() };
   artifact.updatedAt = nowISO();
   saveStateDebounced();
   return { ok: true, pinned: true };
 });
-registerLensAction("forum", "moderate", async (ctx, artifact, params) => {
+registerLensAction("forum", "moderate", (ctx, artifact, params) => {
   const action = params.action || "flag";
   artifact.data = { ...artifact.data, moderationStatus: action, moderatedAt: nowISO(), moderatedBy: ctx.actor?.userId || "system" };
   artifact.updatedAt = nowISO();
   saveStateDebounced();
   return { ok: true, moderation: { action, moderatedAt: nowISO() } };
 });
-registerLensAction("forum", "rank_posts", async (ctx, artifact, params) => {
+registerLensAction("forum", "rank_posts", (ctx, artifact, params) => {
   const upvotes = artifact.data?.upvotes || Math.max(0, artifact.data?.votes || 0);
   const downvotes = artifact.data?.downvotes || 0;
   const totalVotes = upvotes + downvotes;
@@ -19336,7 +19798,7 @@ registerLensAction("forum", "rank_posts", async (ctx, artifact, params) => {
     }
   };
 });
-registerLensAction("forum", "extract_thesis", async (ctx, artifact, params) => {
+registerLensAction("forum", "extract_thesis", (ctx, artifact, _params) => {
   const body = artifact.data?.body || artifact.title || "";
   const sentences = (body.match(/[^.!?]+[.!?]+/g) || [body]).map(s => s.trim()).filter(Boolean);
   const thesisIndicators = ["i believe", "i think", "i argue", "my thesis", "the point is", "in conclusion", "therefore", "thus", "hence", "the argument is", "we should", "it is clear"];
@@ -19358,7 +19820,7 @@ registerLensAction("forum", "extract_thesis", async (ctx, artifact, params) => {
   }
   return { ok: true, thesis: { text: thesis, confidence, sentenceCount: sentences.length, method: confidence >= 0.85 ? "indicator_match" : confidence >= 0.75 ? "conclusion_position" : "heuristic", extractedAt: nowISO() } };
 });
-registerLensAction("forum", "generate_summary_dtu", async (ctx, artifact, params) => {
+registerLensAction("forum", "generate_summary_dtu", (ctx, artifact, _params) => {
   const body = artifact.data?.body || "";
   const votes = artifact.data?.votes || 0;
   const commentCount = artifact.data?.commentCount || 0;
@@ -19369,27 +19831,27 @@ registerLensAction("forum", "generate_summary_dtu", async (ctx, artifact, params
 });
 
 // === Feed ===
-registerLensAction("feed", "like", async (ctx, artifact, params) => {
+registerLensAction("feed", "like", (ctx, artifact, _params) => {
   const likes = (artifact.data?.likes || 0) + 1;
   artifact.data = { ...artifact.data, likes };
   artifact.updatedAt = nowISO();
   saveStateDebounced();
   return { ok: true, likes };
 });
-registerLensAction("feed", "repost", async (ctx, artifact, params) => {
+registerLensAction("feed", "repost", (ctx, artifact, _params) => {
   const repost = { id: uid("rp"), originalId: artifact.id, reposterId: ctx.actor?.userId || "anon", repostedAt: nowISO() };
   artifact.data = { ...artifact.data, reposts: [...(artifact.data?.reposts || []), repost] };
   artifact.updatedAt = nowISO();
   saveStateDebounced();
   return { ok: true, repost };
 });
-registerLensAction("feed", "bookmark", async (ctx, artifact, params) => {
+registerLensAction("feed", "bookmark", (ctx, artifact, _params) => {
   artifact.data = { ...artifact.data, bookmarked: true, bookmarkedAt: nowISO() };
   artifact.updatedAt = nowISO();
   saveStateDebounced();
   return { ok: true, bookmarked: true };
 });
-registerLensAction("feed", "rank", async (ctx, artifact, params) => {
+registerLensAction("feed", "rank", (ctx, artifact, _params) => {
   const likes = artifact.data?.likes || 0;
   const reposts = (artifact.data?.reposts || []).length;
   const bookmarks = artifact.data?.bookmarked ? 1 : 0;
@@ -19401,7 +19863,7 @@ registerLensAction("feed", "rank", async (ctx, artifact, params) => {
   const finalScore = Math.round((engagementScore * 0.5 + velocityScore * 0.3 + decayFactor * 20 * 0.2) * 100) / 100;
   return { ok: true, rank: { postId: artifact.id, score: finalScore, factors: { likes, reposts, bookmarks, comments, engagementScore, velocityScore: Math.round(velocityScore * 100) / 100, ageHours: Math.round(ageHours * 10) / 10, decayFactor: Math.round(decayFactor * 1000) / 1000 }, rankedAt: nowISO() } };
 });
-registerLensAction("feed", "personalize", async (ctx, artifact, params) => {
+registerLensAction("feed", "personalize", (ctx, artifact, _params) => {
   const userId = ctx.actor?.userId || "anon";
   const postTags = artifact.data?.tags || [];
   const postAuthor = artifact.data?.authorId || artifact.meta?.createdBy || "";
@@ -19449,7 +19911,7 @@ registerLensAction("feed", "personalize", async (ctx, artifact, params) => {
     }
   };
 });
-registerLensAction("feed", "cluster_topics", async (ctx, artifact, params) => {
+registerLensAction("feed", "cluster_topics", (_ctx, _artifact, _params) => {
   const tagCounts = {};
   const tagPosts = {};
   for (const art of _lensDomainArtifacts("feed")) {
@@ -19478,14 +19940,14 @@ registerLensAction("feed", "cluster_topics", async (ctx, artifact, params) => {
 });
 
 // === Thread ===
-registerLensAction("thread", "branch", async (ctx, artifact, params) => {
+registerLensAction("thread", "branch", (ctx, artifact, params) => {
   const branch = { id: uid("branch"), threadId: artifact.id, parentNodeId: params.parentNodeId, content: params.content || "", authorId: ctx.actor?.userId || "anon", createdAt: nowISO() };
   artifact.data = { ...artifact.data, nodes: [...(artifact.data?.nodes || []), branch] };
   artifact.updatedAt = nowISO();
   saveStateDebounced();
   return { ok: true, branch };
 });
-registerLensAction("thread", "merge", async (ctx, artifact, params) => {
+registerLensAction("thread", "merge", (ctx, artifact, params) => {
   const branchIds = params.branchIds || [];
   const nodes = artifact.data?.nodes || [];
   if (branchIds.length === 0) return { ok: false, error: "branchIds required" };
@@ -19497,7 +19959,7 @@ registerLensAction("thread", "merge", async (ctx, artifact, params) => {
   saveStateDebounced();
   return { ok: true, merged: { threadId: artifact.id, mergedBranches: branchIds, resultNode: mergedNode.id, mergedContentLength: mergedContent.length, mergedAt: nowISO() } };
 });
-registerLensAction("thread", "summarize", async (ctx, artifact, params) => {
+registerLensAction("thread", "summarize", (ctx, artifact, _params) => {
   const nodes = artifact.data?.nodes || [];
   const authors = [...new Set(nodes.map(n => n.authorId).filter(Boolean))];
   const contentLengths = nodes.map(n => (n.content || "").length);
@@ -19508,7 +19970,7 @@ registerLensAction("thread", "summarize", async (ctx, artifact, params) => {
   const timeline = nodes.length > 0 ? { first: nodes[0].createdAt, last: nodes[nodes.length - 1].createdAt } : null;
   return { ok: true, summary: { threadId: artifact.id, nodeCount: nodes.length, authorCount: authors.length, totalWords, branchCount: branches.length, mergeCount: merges.length, decisionCount: decisions.length, avgNodeLength: contentLengths.length > 0 ? Math.round(contentLengths.reduce((s, l) => s + l, 0) / contentLengths.length) : 0, timeline, summarizedAt: nowISO() } };
 });
-registerLensAction("thread", "detect_consensus", async (ctx, artifact, params) => {
+registerLensAction("thread", "detect_consensus", (ctx, artifact, _params) => {
   const nodes = artifact.data?.nodes || [];
   if (nodes.length < 2) return { ok: true, consensus: { detected: false, confidence: 0, reason: "insufficient_nodes", detectedAt: nowISO() } };
   const stances = {};
@@ -19530,13 +19992,13 @@ registerLensAction("thread", "detect_consensus", async (ctx, artifact, params) =
   const detected = confidence > 0.6 && nodes.length >= 3;
   return { ok: true, consensus: { detected, confidence, agreeSignals: agreeCount, disagreeSignals: disagreeCount, dominantStance: dominantStance ? dominantStance[0] : null, stanceDistribution: stances, detectedAt: nowISO() } };
 });
-registerLensAction("thread", "extract_decisions", async (ctx, artifact, params) => {
+registerLensAction("thread", "extract_decisions", (ctx, artifact, _params) => {
   const decisions = (artifact.data?.nodes || []).filter(n => n.type === "decision" || (n.content || "").toLowerCase().includes("decided"));
   return { ok: true, decisions: decisions.map(d => ({ nodeId: d.id, text: d.content })), count: decisions.length };
 });
 
 // === Music ===
-registerLensAction("music", "analyze", async (ctx, artifact, params) => {
+registerLensAction("music", "analyze", (ctx, artifact, _params) => {
   const bpm = artifact.data?.bpm || null;
   const key = artifact.data?.key || null;
   const duration = artifact.data?.duration || 0;
@@ -19580,24 +20042,24 @@ registerLensAction("music", "analyze", async (ctx, artifact, params) => {
     }
   };
 });
-registerLensAction("music", "render", async (ctx, artifact, params) => {
+registerLensAction("music", "render", (ctx, artifact, params) => {
   const render = { id: uid("mrender"), trackId: artifact.id, format: params.format || "wav", status: "complete", renderedAt: nowISO() };
   artifact.data = { ...artifact.data, lastRender: render };
   artifact.updatedAt = nowISO();
   saveStateDebounced();
   return { ok: true, render };
 });
-registerLensAction("music", "publish", async (ctx, artifact, params) => {
+registerLensAction("music", "publish", (ctx, artifact, _params) => {
   artifact.data = { ...artifact.data, status: "published", publishedAt: nowISO() };
   artifact.updatedAt = nowISO();
   saveStateDebounced();
   return { ok: true, published: true };
 });
-registerLensAction("music", "export_stems", async (ctx, artifact, params) => {
+registerLensAction("music", "export_stems", (ctx, artifact, _params) => {
   const stems = (artifact.data?.stems || ["vocals", "drums", "bass", "other"]).map(s => ({ name: s, format: "wav", exportedAt: nowISO() }));
   return { ok: true, stems };
 });
-registerLensAction("music", "generate_arrangement", async (ctx, artifact, params) => {
+registerLensAction("music", "generate_arrangement", (ctx, artifact, params) => {
   const bpm = artifact.data?.bpm || 120;
   const duration = artifact.data?.duration || 180;
   const genre = artifact.data?.genre || "pop";
@@ -19623,14 +20085,14 @@ registerLensAction("music", "generate_arrangement", async (ctx, artifact, params
 });
 
 // === Finance ===
-registerLensAction("finance", "trade", async (ctx, artifact, params) => {
+registerLensAction("finance", "trade", (ctx, artifact, params) => {
   const trade = { id: uid("trade"), assetId: artifact.id, type: params.type || "buy", quantity: params.quantity || 1, price: params.price || artifact.data?.currentPrice || 0, executedAt: nowISO() };
   artifact.data = { ...artifact.data, trades: [...(artifact.data?.trades || []), trade] };
   artifact.updatedAt = nowISO();
   saveStateDebounced();
   return { ok: true, trade };
 });
-registerLensAction("finance", "analyze", async (ctx, artifact, params) => {
+registerLensAction("finance", "analyze", (ctx, artifact, _params) => {
   const trades = artifact.data?.trades || [];
   const prices = trades.filter(t => t.price > 0).map(t => t.price);
   if (prices.length < 2) return { ok: true, analysis: { assetId: artifact.id, trend: "insufficient_data", volatility: null, priceCount: prices.length, analyzedAt: nowISO() } };
@@ -19648,14 +20110,14 @@ registerLensAction("finance", "analyze", async (ctx, artifact, params) => {
   const momentum = sma5 > sma20 ? "positive" : sma5 < sma20 ? "negative" : "flat";
   return { ok: true, analysis: { assetId: artifact.id, trend, volatility: Math.round(volatility * 10000) / 10000, meanReturn: Math.round(meanReturn * 10000) / 10000, currentPrice, highPrice, lowPrice, sma5: Math.round(sma5 * 100) / 100, sma20: Math.round(sma20 * 100) / 100, momentum, tradeCount: trades.length, analyzedAt: nowISO() } };
 });
-registerLensAction("finance", "alert", async (ctx, artifact, params) => {
+registerLensAction("finance", "alert", (ctx, artifact, params) => {
   const alert = { id: uid("alert"), assetId: artifact.id, condition: params.condition || "price_above", threshold: params.threshold || 0, status: "active", createdAt: nowISO() };
   artifact.data = { ...artifact.data, alerts: [...(artifact.data?.alerts || []), alert] };
   artifact.updatedAt = nowISO();
   saveStateDebounced();
   return { ok: true, alert };
 });
-registerLensAction("finance", "simulate", async (ctx, artifact, params) => {
+registerLensAction("finance", "simulate", (ctx, artifact, params) => {
   const trades = artifact.data?.trades || [];
   const currentPrice = artifact.data?.currentPrice || 0;
   const scenarios = params.scenarios || 1000;
@@ -19709,7 +20171,7 @@ registerLensAction("finance", "simulate", async (ctx, artifact, params) => {
     }
   };
 });
-registerLensAction("finance", "generate_report", async (ctx, artifact, params) => {
+registerLensAction("finance", "generate_report", (ctx, artifact, params) => {
   const trades = artifact.data?.trades || [];
   const prices = trades.filter(t => t.price > 0).map(t => t.price);
   const period = params.period || "monthly";
@@ -19726,13 +20188,13 @@ registerLensAction("finance", "generate_report", async (ctx, artifact, params) =
 });
 
 // === ML ===
-registerLensAction("ml", "train", async (ctx, artifact, params) => {
+registerLensAction("ml", "train", (ctx, artifact, _params) => {
   artifact.data = { ...artifact.data, status: "training", trainStartedAt: nowISO() };
   artifact.updatedAt = nowISO();
   saveStateDebounced();
   return { ok: true, status: "training" };
 });
-registerLensAction("ml", "infer", async (ctx, artifact, params) => {
+registerLensAction("ml", "infer", (ctx, artifact, params) => {
   const modelType = artifact.data?.modelType || "classifier";
   const classes = artifact.data?.classes || artifact.data?.labels || [];
   const predictions = artifact.data?.predictions || [];
@@ -19753,13 +20215,13 @@ registerLensAction("ml", "infer", async (ctx, artifact, params) => {
   }
   return { ok: true, inference: { modelId: artifact.id, input, output: { prediction: null, confidence: 0, note: "no_training_data_available" }, modelType, inferredAt: nowISO() } };
 });
-registerLensAction("ml", "deploy", async (ctx, artifact, params) => {
+registerLensAction("ml", "deploy", (ctx, artifact, params) => {
   artifact.data = { ...artifact.data, status: "deployed", deployedAt: nowISO(), endpoint: params.endpoint || `/ml/${artifact.id}/predict` };
   artifact.updatedAt = nowISO();
   saveStateDebounced();
   return { ok: true, deployed: true, endpoint: artifact.data.endpoint };
 });
-registerLensAction("ml", "evaluate", async (ctx, artifact, params) => {
+registerLensAction("ml", "evaluate", (ctx, artifact, _params) => {
   const runs = artifact.data?.runs || [];
   const predictions = artifact.data?.predictions || [];
   if (predictions.length > 0 && predictions[0].actual != null) {
@@ -19822,14 +20284,14 @@ registerLensAction("ml", "evaluate", async (ctx, artifact, params) => {
   }
   return { ok: true, evaluation: { modelId: artifact.id, type: "no_data", note: "No predictions or completed runs with metrics found", totalRuns: runs.length, evaluatedAt: nowISO() } };
 });
-registerLensAction("ml", "run_experiment", async (ctx, artifact, params) => {
+registerLensAction("ml", "run_experiment", (ctx, artifact, params) => {
   const run = { id: uid("mlrun"), experimentId: artifact.id, config: params.config || {}, status: "running", startedAt: nowISO() };
   artifact.data = { ...artifact.data, runs: [...(artifact.data?.runs || []), run] };
   artifact.updatedAt = nowISO();
   saveStateDebounced();
   return { ok: true, run };
 });
-registerLensAction("ml", "compare_runs", async (ctx, artifact, params) => {
+registerLensAction("ml", "compare_runs", (ctx, artifact, params) => {
   const runs = artifact.data?.runs || [];
   if (runs.length < 2) return { ok: true, comparison: { experimentId: artifact.id, note: "need_at_least_2_runs", runCount: runs.length, comparedAt: nowISO() } };
   const runIds = params.runIds || [runs[runs.length - 2].id, runs[runs.length - 1].id];
@@ -19857,7 +20319,7 @@ registerLensAction("ml", "compare_runs", async (ctx, artifact, params) => {
   }
   return { ok: true, comparison: { experimentId: artifact.id, runCount: runs.length, comparedRuns: runIds, metricsComparison, configDiffs, comparedAt: nowISO() } };
 });
-registerLensAction("ml", "generate_report", async (ctx, artifact, params) => {
+registerLensAction("ml", "generate_report", (ctx, artifact, _params) => {
   const runs = artifact.data?.runs || [];
   const predictions = artifact.data?.predictions || [];
   const completedRuns = runs.filter(r => r.status === "completed" || r.metrics);
@@ -19874,7 +20336,7 @@ registerLensAction("ml", "generate_report", async (ctx, artifact, params) => {
 });
 
 // === SRS (SM-2 Algorithm) ===
-registerLensAction("srs", "review", async (ctx, artifact, params) => {
+registerLensAction("srs", "review", (ctx, artifact, params) => {
   const rating = Math.max(0, Math.min(5, params.rating || 3));
   const prevEF = artifact.data?.easeFactor || 2.5;
   const prevInterval = artifact.data?.interval || 1;
@@ -19903,7 +20365,7 @@ registerLensAction("srs", "review", async (ctx, artifact, params) => {
   saveStateDebounced();
   return { ok: true, interval: newInterval, easeFactor: newEF, repetitions: newRepetitions, nextReviewAt: artifact.data.nextReviewAt, avgRating, retention };
 });
-registerLensAction("srs", "schedule", async (ctx, artifact, params) => {
+registerLensAction("srs", "schedule", (ctx, artifact, _params) => {
   const cards = artifact.data?.cards || [];
   const now = new Date();
   const due = cards.filter(c => !c.nextReviewAt || new Date(c.nextReviewAt) <= now);
@@ -19917,7 +20379,7 @@ registerLensAction("srs", "schedule", async (ctx, artifact, params) => {
   const mature = cards.filter(c => (c.interval || 0) >= 21);
   return { ok: true, scheduled: { deckId: artifact.id, dueCount: due.length, overdueCount: overdue.length, upcomingCount: upcoming.length, newCount: newCards.length, matureCount: mature.length, totalCards: cards.length } };
 });
-registerLensAction("srs", "optimize_intervals", async (ctx, artifact, params) => {
+registerLensAction("srs", "optimize_intervals", (ctx, artifact, params) => {
   const cards = artifact.data?.cards || [];
   const reviewHistory = artifact.data?.reviewHistory || [];
   // Analyze retention rate and adjust ease factor
@@ -19945,7 +20407,7 @@ registerLensAction("srs", "optimize_intervals", async (ctx, artifact, params) =>
   }).filter(c => c.suggestedEF !== c.currentEF);
   return { ok: true, optimized: { easeFactor: Math.round(adjustedEF * 100) / 100, previousEF: currentEF, retention: Math.round(retention * 100) / 100, targetRetention, reviewCount: reviewHistory.length, cardsToAdjust: cardStats.length, cardAdjustments: cardStats.slice(0, 20), optimizedAt: nowISO() } };
 });
-registerLensAction("srs", "generate_cards_from_dtus", async (ctx, artifact, params) => {
+registerLensAction("srs", "generate_cards_from_dtus", (ctx, artifact, params) => {
   // Pull DTU data from STATE to generate meaningful cards
   const dtus = [];
   for (const [domain, ids] of STATE.lensDomainIndex) {
@@ -19976,7 +20438,7 @@ registerLensAction("srs", "generate_cards_from_dtus", async (ctx, artifact, para
 });
 
 // === Voice ===
-registerLensAction("voice", "transcribe", async (ctx, artifact, params) => {
+registerLensAction("voice", "transcribe", (ctx, artifact, params) => {
   const rawText = params.text || artifact.data?.rawText || artifact.data?.body || artifact.data?.content || "";
   const language = params.language || artifact.data?.language || "en";
   if (!rawText) {
@@ -20007,14 +20469,14 @@ registerLensAction("voice", "transcribe", async (ctx, artifact, params) => {
   saveStateDebounced();
   return { ok: true, transcript };
 });
-registerLensAction("voice", "process", async (ctx, artifact, params) => {
+registerLensAction("voice", "process", (ctx, artifact, params) => {
   const effect = params.effect || "normalize";
   artifact.data = { ...artifact.data, processedWith: [...(artifact.data?.processedWith || []), { effect, appliedAt: nowISO() }] };
   artifact.updatedAt = nowISO();
   saveStateDebounced();
   return { ok: true, processed: { effect, appliedAt: nowISO() } };
 });
-registerLensAction("voice", "analyze", async (ctx, artifact, params) => {
+registerLensAction("voice", "analyze", (ctx, artifact, _params) => {
   const transcript = artifact.data?.transcript || {};
   const duration = artifact.data?.duration || transcript.estimatedDuration || 0;
   const segments = transcript.segments || [];
@@ -20026,10 +20488,10 @@ registerLensAction("voice", "analyze", async (ctx, artifact, params) => {
   const silenceRatio = duration > 0 && transcript.estimatedDuration ? Math.round(Math.max(0, 1 - transcript.estimatedDuration / duration) * 100) / 100 : 0;
   return { ok: true, analysis: { takeId: artifact.id, duration, wordCount, wordsPerMinute: wpm, segmentCount: segments.length, avgWordsPerSegment: avgSegmentLength, longestSegment: longestSegment ? { index: longestSegment.index, wordCount: longestSegment.wordCount } : null, silenceRatio, processedEffects, topWords: transcript.topWords || [], language: transcript.language || artifact.data?.language, analyzedAt: nowISO() } };
 });
-registerLensAction("voice", "summarize", async (ctx, artifact, params) => {
+registerLensAction("voice", "summarize", (ctx, artifact, _params) => {
   const transcript = artifact.data?.transcript || {};
   const text = transcript.text || "";
-  const segments = transcript.segments || [];
+  const _segments = transcript.segments || [];
   if (!text) return { ok: true, summary: { takeId: artifact.id, note: "no_transcript_available", summarizedAt: nowISO() } };
   const sentences = (text.match(/[^.!?]+[.!?]+/g) || [text]).map(s => s.trim());
   const words = text.split(/\s+/).filter(Boolean);
@@ -20045,37 +20507,37 @@ registerLensAction("voice", "summarize", async (ctx, artifact, params) => {
   const topKeywords = Object.entries(wordFreq).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([word]) => word);
   return { ok: true, summary: { takeId: artifact.id, keyPoints, topKeywords, wordCount: words.length, sentenceCount: sentences.length, compressionRatio: sentences.length > 0 ? Math.round(keyPoints.length / sentences.length * 100) / 100 : 0, duration: transcript.estimatedDuration || 0, summarizedAt: nowISO() } };
 });
-registerLensAction("voice", "extract_tasks", async (ctx, artifact, params) => {
+registerLensAction("voice", "extract_tasks", (ctx, artifact, _params) => {
   const text = artifact.data?.transcript?.text || "";
   const tasks = text.match(/(?:TODO|ACTION|TASK):\s*[^\n]+/gi) || [];
   return { ok: true, tasks: tasks.map(t => ({ text: t, extractedAt: nowISO() })), count: tasks.length };
 });
 
 // === Game ===
-registerLensAction("game", "complete", async (ctx, artifact, params) => {
+registerLensAction("game", "complete", (ctx, artifact, _params) => {
   artifact.data = { ...artifact.data, status: "completed", completedAt: nowISO() };
   artifact.updatedAt = nowISO();
   saveStateDebounced();
   return { ok: true, completed: true };
 });
-registerLensAction("game", "claim", async (ctx, artifact, params) => {
+registerLensAction("game", "claim", (ctx, artifact, params) => {
   const reward = params.reward || { xp: 100, type: "quest_complete" };
   artifact.data = { ...artifact.data, claimed: true, reward, claimedAt: nowISO() };
   artifact.updatedAt = nowISO();
   saveStateDebounced();
   return { ok: true, reward };
 });
-registerLensAction("game", "levelup", async (ctx, artifact, params) => {
+registerLensAction("game", "levelup", (ctx, artifact, _params) => {
   const currentLevel = artifact.data?.level || 1;
   artifact.data = { ...artifact.data, level: currentLevel + 1, leveledUpAt: nowISO() };
   artifact.updatedAt = nowISO();
   saveStateDebounced();
   return { ok: true, newLevel: currentLevel + 1 };
 });
-registerLensAction("game", "simulate", async (ctx, artifact, params) => {
+registerLensAction("game", "simulate", (ctx, artifact, params) => {
   const scenarios = params.scenarios || [];
   const level = artifact.data?.level || 1;
-  const stats = artifact.data?.stats || {};
+  const _stats = artifact.data?.stats || {};
   const turns = artifact.data?.turns || [];
   const successRate = turns.length > 0 ? turns.filter(t => t.outcome === "success").length / turns.length : 0.5;
   const avgXp = turns.length > 0 ? turns.reduce((s, t) => s + (t.xpGained || 0), 0) / turns.length : 25;
@@ -20083,7 +20545,7 @@ registerLensAction("game", "simulate", async (ctx, artifact, params) => {
   for (let i = 0; i < artifact.id.length; i++) seed = ((seed << 5) - seed) + artifact.id.charCodeAt(i);
   const mulberry32 = (s) => () => { s |= 0; s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
   const rng = mulberry32(seed);
-  const outcomes = scenarios.map((s, idx) => {
+  const outcomes = scenarios.map((s, _idx) => {
     const difficulty = s.difficulty || 1;
     const adjustedRate = Math.max(0.1, Math.min(0.95, successRate / difficulty));
     const roll = rng();
@@ -20093,7 +20555,7 @@ registerLensAction("game", "simulate", async (ctx, artifact, params) => {
   });
   return { ok: true, simulation: { outcomes, baseSuccessRate: Math.round(successRate * 100) / 100, historicalTurns: turns.length, simulatedAt: nowISO() } };
 });
-registerLensAction("game", "resolve_turn", async (ctx, artifact, params) => {
+registerLensAction("game", "resolve_turn", (ctx, artifact, params) => {
   const turns = artifact.data?.turns || [];
   const level = artifact.data?.level || 1;
   const action = params.action || "default";
@@ -20114,7 +20576,7 @@ registerLensAction("game", "resolve_turn", async (ctx, artifact, params) => {
   saveStateDebounced();
   return { ok: true, turn };
 });
-registerLensAction("game", "balance", async (ctx, artifact, params) => {
+registerLensAction("game", "balance", (ctx, artifact, params) => {
   const level = artifact.data?.level || 1;
   const totalXp = artifact.data?.xp || 0;
   const turns = artifact.data?.turns || [];
@@ -20306,19 +20768,19 @@ register("whiteboard", "list", (_ctx, _input) => {
   return { ok: true, whiteboards, count: whiteboards.length };
 });
 
-app.post("/api/collab/session", async (req, res) => res.json(await runMacro("collab", "createSession", req.body, makeCtx(req))));
-app.post("/api/collab/join", async (req, res) => res.json(await runMacro("collab", "join", req.body, makeCtx(req))));
-app.post("/api/collab/edit", async (req, res) => res.json(await runMacro("collab", "edit", req.body, makeCtx(req))));
-app.post("/api/collab/merge", async (req, res) => res.json(await runMacro("collab", "merge", req.body, makeCtx(req))));
-app.get("/api/collab/sessions", async (req, res) => res.json(await runMacro("collab", "listSessions", {}, makeCtx(req))));
-app.post("/api/collab/lock", async (req, res) => res.json(await runMacro("collab", "lock", req.body, makeCtx(req))));
-app.post("/api/collab/unlock", async (req, res) => res.json(await runMacro("collab", "unlock", req.body, makeCtx(req))));
-app.post("/api/whiteboard", async (req, res) => res.json(await runMacro("whiteboard", "create", req.body, makeCtx(req))));
-app.put("/api/whiteboard/:id", async (req, res) => res.json(await runMacro("whiteboard", "update", { whiteboardId: req.params.id, ...req.body }, makeCtx(req))));
-app.get("/api/whiteboard/:id", async (req, res) => res.json(await runMacro("whiteboard", "get", { whiteboardId: req.params.id }, makeCtx(req))));
-app.get("/api/whiteboards", async (req, res) => res.json(await runMacro("whiteboard", "list", {}, makeCtx(req))));
+app.post("/api/collab/session", asyncHandler(async (req, res) => res.json(await runMacro("collab", "createSession", req.body, makeCtx(req)))));
+app.post("/api/collab/join", asyncHandler(async (req, res) => res.json(await runMacro("collab", "join", req.body, makeCtx(req)))));
+app.post("/api/collab/edit", asyncHandler(async (req, res) => res.json(await runMacro("collab", "edit", req.body, makeCtx(req)))));
+app.post("/api/collab/merge", asyncHandler(async (req, res) => res.json(await runMacro("collab", "merge", req.body, makeCtx(req)))));
+app.get("/api/collab/sessions", asyncHandler(async (req, res) => res.json(await runMacro("collab", "listSessions", {}, makeCtx(req)))));
+app.post("/api/collab/lock", asyncHandler(async (req, res) => res.json(await runMacro("collab", "lock", req.body, makeCtx(req)))));
+app.post("/api/collab/unlock", asyncHandler(async (req, res) => res.json(await runMacro("collab", "unlock", req.body, makeCtx(req)))));
+app.post("/api/whiteboard", asyncHandler(async (req, res) => res.json(await runMacro("whiteboard", "create", req.body, makeCtx(req)))));
+app.put("/api/whiteboard/:id", asyncHandler(async (req, res) => res.json(await runMacro("whiteboard", "update", { whiteboardId: req.params.id, ...req.body }, makeCtx(req)))));
+app.get("/api/whiteboard/:id", asyncHandler(async (req, res) => res.json(await runMacro("whiteboard", "get", { whiteboardId: req.params.id }, makeCtx(req)))));
+app.get("/api/whiteboards", asyncHandler(async (req, res) => res.json(await runMacro("whiteboard", "list", {}, makeCtx(req)))));
 
-console.log("[Concord] Wave 5: Collaboration & Whiteboard loaded");
+structuredLog("info", "module_loaded", { module: "Wave 5: Collaboration & Whiteboard" });
 
 // ============================================================================
 // WAVE 6: PWA & MOBILE SUPPORT
@@ -20448,14 +20910,14 @@ register("sync", "force", (ctx, input) => {
   };
 });
 
-app.get("/manifest.json", async (req, res) => { const out = await runMacro("pwa", "manifest", {}, makeCtx(req)); res.json(out.manifest); });
-app.get("/api/pwa/sw-config", async (req, res) => res.json(await runMacro("pwa", "serviceWorkerConfig", {}, makeCtx(req))));
-app.post("/api/voice/ingest", async (req, res) => res.json(await runMacro("voice", "ingest", req.body, makeCtx(req))));
-app.get("/api/mobile/shortcuts", async (req, res) => res.json(await runMacro("mobile", "shortcuts", {}, makeCtx(req))));
-app.get("/api/mobile/dtu/:id", async (req, res) => res.json(await runMacro("mobile", "touchOptimized", { dtuId: req.params.id }, makeCtx(req))));
-app.post("/api/sync/force", async (req, res) => res.json(await runMacro("sync", "force", req.body, makeCtx(req))));
+app.get("/manifest.json", asyncHandler(async (req, res) => { const out = await runMacro("pwa", "manifest", {}, makeCtx(req)); res.json(out.manifest); }));
+app.get("/api/pwa/sw-config", asyncHandler(async (req, res) => res.json(await runMacro("pwa", "serviceWorkerConfig", {}, makeCtx(req)))));
+app.post("/api/voice/ingest", asyncHandler(async (req, res) => res.json(await runMacro("voice", "ingest", req.body, makeCtx(req)))));
+app.get("/api/mobile/shortcuts", asyncHandler(async (req, res) => res.json(await runMacro("mobile", "shortcuts", {}, makeCtx(req)))));
+app.get("/api/mobile/dtu/:id", asyncHandler(async (req, res) => res.json(await runMacro("mobile", "touchOptimized", { dtuId: req.params.id }, makeCtx(req)))));
+app.post("/api/sync/force", asyncHandler(async (req, res) => res.json(await runMacro("sync", "force", req.body, makeCtx(req)))));
 
-console.log("[Concord] Wave 6: PWA & Mobile loaded");
+structuredLog("info", "module_loaded", { module: "Wave 6: PWA & Mobile" });
 
 // ============================================================================
 // WAVE 7: SCALABILITY & PERFORMANCE
@@ -20611,18 +21073,18 @@ register("backpressure", "status", (_ctx, _input) => {
   };
 });
 
-app.get("/api/cache/:key", async (req, res) => res.json(await runMacro("cache", "get", { key: req.params.key }, makeCtx(req))));
-app.post("/api/cache", async (req, res) => res.json(await runMacro("cache", "set", req.body, makeCtx(req))));
-app.delete("/api/cache", async (req, res) => res.json(await runMacro("cache", "invalidate", req.body, makeCtx(req))));
-app.get("/api/cache/stats", async (req, res) => res.json(await runMacro("cache", "stats", {}, makeCtx(req))));
-app.post("/api/cache/clear", async (req, res) => res.json(await runMacro("cache", "clear", {}, makeCtx(req))));
-app.get("/api/shard/route", async (req, res) => res.json(await runMacro("shard", "route", { userId: req.query.userId, orgId: req.query.orgId }, makeCtx(req))));
-app.get("/api/shard/stats", async (req, res) => res.json(await runMacro("shard", "stats", {}, makeCtx(req))));
-app.post("/api/governor/configure", async (req, res) => res.json(await runMacro("governor", "configure", req.body, makeCtx(req))));
-app.get("/api/governor/check", async (req, res) => res.json(await runMacro("governor", "check", { userId: req.query.userId, action: req.query.action }, makeCtx(req))));
-app.get("/api/perf/metrics", async (req, res) => res.json(await runMacro("perf", "metrics", {}, makeCtx(req))));
-app.post("/api/perf/gc", async (req, res) => res.json(await runMacro("perf", "gc", {}, makeCtx(req))));
-app.get("/api/backpressure/status", async (req, res) => res.json(await runMacro("backpressure", "status", {}, makeCtx(req))));
+app.get("/api/cache/:key", asyncHandler(async (req, res) => res.json(await runMacro("cache", "get", { key: req.params.key }, makeCtx(req)))));
+app.post("/api/cache", asyncHandler(async (req, res) => res.json(await runMacro("cache", "set", req.body, makeCtx(req)))));
+app.delete("/api/cache", asyncHandler(async (req, res) => res.json(await runMacro("cache", "invalidate", req.body, makeCtx(req)))));
+app.get("/api/cache/stats", asyncHandler(async (req, res) => res.json(await runMacro("cache", "stats", {}, makeCtx(req)))));
+app.post("/api/cache/clear", asyncHandler(async (req, res) => res.json(await runMacro("cache", "clear", {}, makeCtx(req)))));
+app.get("/api/shard/route", asyncHandler(async (req, res) => res.json(await runMacro("shard", "route", { userId: req.query.userId, orgId: req.query.orgId }, makeCtx(req)))));
+app.get("/api/shard/stats", asyncHandler(async (req, res) => res.json(await runMacro("shard", "stats", {}, makeCtx(req)))));
+app.post("/api/governor/configure", asyncHandler(async (req, res) => res.json(await runMacro("governor", "configure", req.body, makeCtx(req)))));
+app.get("/api/governor/check", asyncHandler(async (req, res) => res.json(await runMacro("governor", "check", { userId: req.query.userId, action: req.query.action }, makeCtx(req)))));
+app.get("/api/perf/metrics", asyncHandler(async (req, res) => res.json(await runMacro("perf", "metrics", {}, makeCtx(req)))));
+app.post("/api/perf/gc", asyncHandler(async (req, res) => res.json(await runMacro("perf", "gc", {}, makeCtx(req)))));
+app.get("/api/backpressure/status", asyncHandler(async (req, res) => res.json(await runMacro("backpressure", "status", {}, makeCtx(req)))));
 
 // ---- Observability & Cost Endpoints (Categories 5+6) ----
 app.get("/api/observability/latency", (req, res) => {
@@ -20656,7 +21118,7 @@ app.get("/api/observability/health", (req, res) => {
   });
 });
 
-console.log("[Concord] Wave 7: Scalability & Performance loaded");
+structuredLog("info", "module_loaded", { module: "Wave 7: Scalability & Performance" });
 
 // ============================================================================
 // WAVE 8: INTEGRATIONS ECOSYSTEM (Surpassing Roam Research)
@@ -20909,22 +21371,22 @@ register("integration", "list", (_ctx, _input) => {
   return { ok: true, integrations };
 });
 
-app.post("/api/webhooks", async (req, res) => res.json(await runMacro("webhook", "register", req.body, makeCtx(req))));
-app.get("/api/webhooks", async (req, res) => res.json(await runMacro("webhook", "list", {}, makeCtx(req))));
-app.delete("/api/webhooks/:id", async (req, res) => res.json(await runMacro("webhook", "delete", { webhookId: req.params.id }, makeCtx(req))));
-app.post("/api/webhooks/:id/toggle", async (req, res) => res.json(await runMacro("webhook", "toggle", { webhookId: req.params.id, ...req.body }, makeCtx(req))));
-app.post("/api/automations", async (req, res) => res.json(await runMacro("automation", "create", req.body, makeCtx(req))));
-app.get("/api/automations", async (req, res) => res.json(await runMacro("automation", "list", {}, makeCtx(req))));
-app.post("/api/automations/:id/run", async (req, res) => res.json(await runMacro("automation", "run", { automationId: req.params.id, triggerData: req.body }, makeCtx(req))));
-app.delete("/api/automations/:id", async (req, res) => res.json(await runMacro("automation", "delete", { automationId: req.params.id }, makeCtx(req))));
-app.post("/api/automations/:id/toggle", async (req, res) => res.json(await runMacro("automation", "toggle", { automationId: req.params.id, ...req.body }, makeCtx(req))));
-app.post("/api/vscode/code-to-dtu", async (req, res) => res.json(await runMacro("vscode", "codeToDtu", req.body, makeCtx(req))));
-app.get("/api/vscode/dtu-to-code/:id", async (req, res) => res.json(await runMacro("vscode", "dtuToCode", { dtuId: req.params.id, format: req.query.format }, makeCtx(req))));
-app.get("/api/vscode/search", async (req, res) => res.json(await runMacro("vscode", "search", { query: req.query.q, language: req.query.language, limit: req.query.limit }, makeCtx(req))));
-app.post("/api/obsidian/export", async (req, res) => res.json(await runMacro("obsidian", "export", req.body, makeCtx(req))));
-app.post("/api/obsidian/import", async (req, res) => res.json(await runMacro("obsidian", "import", req.body, makeCtx(req))));
-app.post("/api/notion/import", async (req, res) => res.json(await runMacro("notion", "import", req.body, makeCtx(req))));
-app.get("/api/integrations", async (req, res) => res.json(await runMacro("integration", "list", {}, makeCtx(req))));
+app.post("/api/webhooks", asyncHandler(async (req, res) => res.json(await runMacro("webhook", "register", req.body, makeCtx(req)))));
+app.get("/api/webhooks", asyncHandler(async (req, res) => res.json(await runMacro("webhook", "list", {}, makeCtx(req)))));
+app.delete("/api/webhooks/:id", asyncHandler(async (req, res) => res.json(await runMacro("webhook", "delete", { webhookId: req.params.id }, makeCtx(req)))));
+app.post("/api/webhooks/:id/toggle", asyncHandler(async (req, res) => res.json(await runMacro("webhook", "toggle", { webhookId: req.params.id, ...req.body }, makeCtx(req)))));
+app.post("/api/automations", asyncHandler(async (req, res) => res.json(await runMacro("automation", "create", req.body, makeCtx(req)))));
+app.get("/api/automations", asyncHandler(async (req, res) => res.json(await runMacro("automation", "list", {}, makeCtx(req)))));
+app.post("/api/automations/:id/run", asyncHandler(async (req, res) => res.json(await runMacro("automation", "run", { automationId: req.params.id, triggerData: req.body }, makeCtx(req)))));
+app.delete("/api/automations/:id", asyncHandler(async (req, res) => res.json(await runMacro("automation", "delete", { automationId: req.params.id }, makeCtx(req)))));
+app.post("/api/automations/:id/toggle", asyncHandler(async (req, res) => res.json(await runMacro("automation", "toggle", { automationId: req.params.id, ...req.body }, makeCtx(req)))));
+app.post("/api/vscode/code-to-dtu", asyncHandler(async (req, res) => res.json(await runMacro("vscode", "codeToDtu", req.body, makeCtx(req)))));
+app.get("/api/vscode/dtu-to-code/:id", asyncHandler(async (req, res) => res.json(await runMacro("vscode", "dtuToCode", { dtuId: req.params.id, format: req.query.format }, makeCtx(req)))));
+app.get("/api/vscode/search", asyncHandler(async (req, res) => res.json(await runMacro("vscode", "search", { query: req.query.q, language: req.query.language, limit: req.query.limit }, makeCtx(req)))));
+app.post("/api/obsidian/export", asyncHandler(async (req, res) => res.json(await runMacro("obsidian", "export", req.body, makeCtx(req)))));
+app.post("/api/obsidian/import", asyncHandler(async (req, res) => res.json(await runMacro("obsidian", "import", req.body, makeCtx(req)))));
+app.post("/api/notion/import", asyncHandler(async (req, res) => res.json(await runMacro("notion", "import", req.body, makeCtx(req)))));
+app.get("/api/integrations", asyncHandler(async (req, res) => res.json(await runMacro("integration", "list", {}, makeCtx(req)))));
 
 // Additional endpoints for frontend compatibility
 app.get("/api/events", (req, res) => {
@@ -20944,7 +21406,7 @@ app.get("/api/events", (req, res) => {
   }
 });
 
-app.post("/api/autocrawl", async (req, res) => {
+app.post("/api/autocrawl", asyncHandler(async (req, res) => {
   try {
     const { url, makeGlobal, declaredSourceType, tags } = req.body || {};
     if (!url) return res.status(400).json({ ok: false, error: "URL required" });
@@ -20958,9 +21420,9 @@ app.post("/api/autocrawl", async (req, res) => {
   } catch (e) {
     return res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
-});
+}));
 
-app.get("/api/marketplace/listings", async (req, res) => {
+app.get("/api/marketplace/listings", asyncHandler(async (req, res) => {
   // Alias for browse endpoint
   return res.json(await runMacro("marketplace", "browse", {
     category: req.query.category,
@@ -20969,9 +21431,9 @@ app.get("/api/marketplace/listings", async (req, res) => {
     page: req.query.page,
     pageSize: req.query.pageSize
   }, makeCtx(req)));
-});
+}));
 
-console.log("[Concord] Wave 8: Integrations Ecosystem loaded");
+structuredLog("info", "module_loaded", { module: "Wave 8: Integrations Ecosystem" });
 
 // ============================================================================
 // WAVE 9: DATABASE INTEGRATIONS (PostgreSQL + Redis)
@@ -20992,7 +21454,7 @@ async function initPostgres() {
     const { default: pg } = await import("pg");
     pgPool = new pg.Pool({ connectionString: PG_CONFIG.url, min: PG_CONFIG.pool.min, max: PG_CONFIG.pool.max, idleTimeoutMillis: PG_CONFIG.pool.idleTimeoutMillis, ssl: PG_CONFIG.ssl });
     await pgPool.query("SELECT 1");
-    console.log("[PostgreSQL] Connected successfully");
+    structuredLog("info", "postgres_connected");
     return { ok: true };
   } catch (e) { console.warn("[PostgreSQL] Connection failed:", e.message); pgPool = null; return { ok: false, error: e.message }; }
 }
@@ -21058,7 +21520,7 @@ async function initRedis() {
     redisClient = createClient({ url: REDIS_CONFIG.url });
     redisClient.on("error", (err) => console.warn("[Redis] Error:", err.message));
     await redisClient.connect();
-    console.log("[Redis] Connected successfully");
+    structuredLog("info", "redis_connected");
     return { ok: true };
   } catch (e) { console.warn("[Redis] Connection failed:", e.message); redisClient = null; return { ok: false, error: e.message }; }
 }
@@ -21139,7 +21601,7 @@ setTimeout(async () => {
   }
 }, 1000);
 
-console.log("[Concord] Wave 9: Database Integrations loaded");
+structuredLog("info", "module_loaded", { module: "Wave 9: Database Integrations" });
 
 // ============================================================================
 // WAVE 10: NEW API ENDPOINTS (Waves 1-7 Feature APIs)
@@ -21151,7 +21613,7 @@ app.get("/api/dtus/:id/versions", (req, res) => {
   res.json({ ok: true, versions });
 });
 
-app.post("/api/dtus/:id/restore", (req, res) => {
+app.post("/api/dtus/:id/restore", validate("dtuRestore"), (req, res) => {
   const result = restoreDTUVersion(req.params.id, Number(req.body.version));
   res.json(result);
 });
@@ -21161,7 +21623,7 @@ app.get("/api/templates", (req, res) => {
   res.json({ ok: true, templates: Array.from(TEMPLATES.values()) });
 });
 
-app.post("/api/templates/:id/create", async (req, res) => {
+app.post("/api/templates/:id/create", asyncHandler(async (req, res) => {
   const result = createFromTemplate(req.params.id, req.body);
   if (!result.ok) return res.status(404).json(result);
 
@@ -21169,7 +21631,7 @@ app.post("/api/templates/:id/create", async (req, res) => {
   const ctx = makeCtx(req);
   const dtuResult = await runMacro("dtu", "create", result.dtu, ctx);
   res.json(dtuResult);
-});
+}));
 
 // ---- Wave 2: Import/Export Endpoints ----
 app.post("/api/import/obsidian", (req, res) => {
@@ -21218,45 +21680,45 @@ app.get("/api/ai/embeddings/status", (req, res) => {
   });
 });
 
-app.post("/api/ai/embeddings/rebuild", async (req, res) => {
+app.post("/api/ai/embeddings/rebuild", asyncHandler(async (req, res) => {
   const result = await rebuildEmbeddingIndex();
   res.json(result);
-});
+}));
 
-app.get("/api/ai/search", async (req, res) => {
+app.get("/api/ai/search", asyncHandler(async (req, res) => {
   const result = await semanticSearch(req.query.q || "", {
     limit: Number(req.query.limit || 10),
     minScore: Number(req.query.minScore || 0.3)
   });
   res.json(result);
-});
+}));
 
-app.get("/api/dtus/:id/suggestions", async (req, res) => {
+app.get("/api/dtus/:id/suggestions", asyncHandler(async (req, res) => {
   const result = await suggestConnections(req.params.id, { limit: Number(req.query.limit || 5) });
   res.json(result);
-});
+}));
 
-app.post("/api/ai/creti", async (req, res) => {
+app.post("/api/ai/creti", asyncHandler(async (req, res) => {
   const result = await generateCRETI(req.body, makeCtx(req));
   res.json(result);
-});
+}));
 
-app.get("/api/dtus/:id/contradictions", async (req, res) => {
+app.get("/api/dtus/:id/contradictions", asyncHandler(async (req, res) => {
   const result = await detectContradictions(req.params.id);
   res.json(result);
-});
+}));
 
-app.get("/api/ai/gaps", async (req, res) => {
+app.get("/api/ai/gaps", asyncHandler(async (req, res) => {
   const result = await analyzeKnowledgeGaps(req.query.domain);
   res.json(result);
-});
+}));
 
-app.post("/api/ai/chat", async (req, res) => {
+app.post("/api/ai/chat", asyncHandler(async (req, res) => {
   const result = await chatWithLattice(req.body.query || req.body.message, {
     contextLimit: Number(req.body.contextLimit || 5)
   });
   res.json(result);
-});
+}));
 
 // ---- Wave 3: SRS Endpoints ----
 app.get("/api/srs/due", (req, res) => {
@@ -21316,7 +21778,7 @@ app.get("/api/dtus/:id/comments", (req, res) => {
   res.json(result);
 });
 
-app.post("/api/dtus/:id/comments", (req, res) => {
+app.post("/api/dtus/:id/comments", validate("dtuComment"), (req, res) => {
   const userId = req.user?.id || "anonymous";
   const result = addComment(req.params.id, userId, req.body.content, req.body.parentId);
   res.json(result);
@@ -21341,7 +21803,7 @@ app.post("/api/dtus/:id/share", (req, res) => {
 });
 
 // POST /api/dtus/:id/vote — up/down vote a DTU (forum)
-app.post("/api/dtus/:id/vote", (req, res) => {
+app.post("/api/dtus/:id/vote", validate("dtuVote"), (req, res) => {
   try {
     const dtu = STATE.dtus?.get?.(req.params.id) || (Array.isArray(STATE.dtuList) ? STATE.dtuList.find(d => d.id === req.params.id) : null);
     if (!dtu) return res.status(404).json({ ok: false, error: "DTU not found" });
@@ -21548,17 +22010,17 @@ app.get("/api/public/feed.xml", (req, res) => {
 });
 
 // ---- Wave 7: Debate/Steelman Endpoints ----
-app.post("/api/dtus/:id/debate", async (req, res) => {
+app.post("/api/dtus/:id/debate", asyncHandler(async (req, res) => {
   const result = await debateThought(req.params.id, req.body);
   res.json(result);
-});
+}));
 
-app.post("/api/dtus/:id/steelman", async (req, res) => {
+app.post("/api/dtus/:id/steelman", asyncHandler(async (req, res) => {
   const result = await steelmanThought(req.params.id);
   res.json(result);
-});
+}));
 
-console.log("[Concord] Wave 10: New Feature APIs loaded");
+structuredLog("info", "module_loaded", { module: "Wave 10: New Feature APIs" });
 
 // ============================================================================
 // WAVE 11: UX ENHANCEMENTS (Tables, Daily Notes, Kanban, Calendar Views)
@@ -22154,7 +22616,7 @@ function cleanupReminders() {
     }
   }
 
-  if (cleaned > 0) console.log(`[Reminders] Cleaned ${cleaned} old reminders`);
+  if (cleaned > 0) structuredLog("info", "reminders_cleaned", { cleaned });
 }
 
 // Run cleanup every 6 hours
@@ -22592,36 +23054,36 @@ app.post("/api/embed/parse", (req, res) => {
 // ---- Wave 12: AI Depth Endpoints ----
 // POST /api/voice/transcribe already registered above (line ~16867) via macro.
 // Raw audio uploads: use /api/voice/transcribe-raw instead for binary audio data.
-app.post("/api/voice/transcribe-raw", express.raw({ type: "audio/*", limit: "50mb" }), async (req, res) => {
+app.post("/api/voice/transcribe-raw", express.raw({ type: "audio/*", limit: "50mb" }), asyncHandler(async (req, res) => {
   const result = await processVoiceNote(req.body, { createDTU: req.query.createDTU === "1" });
   res.json(result);
-});
+}));
 
-app.post("/api/vision/analyze", express.raw({ type: "image/*", limit: "20mb" }), async (req, res) => {
+app.post("/api/vision/analyze", express.raw({ type: "image/*", limit: "20mb" }), asyncHandler(async (req, res) => {
   const result = await analyzeImage(req.body, req.query.prompt);
   res.json(result);
-});
+}));
 
-app.get("/api/digest", async (req, res) => {
+app.get("/api/digest", asyncHandler(async (req, res) => {
   const result = await generateDailyDigest(req.query.date);
   res.json(result);
-});
+}));
 
 // POST /api/digest — frontend daily lens triggers digest generation via POST
-app.post("/api/digest", async (req, res) => {
+app.post("/api/digest", asyncHandler(async (req, res) => {
   const result = await generateDailyDigest(req.body?.date || null);
   res.json(result);
-});
+}));
 
-app.post("/api/ai/complete", async (req, res) => {
+app.post("/api/ai/complete", asyncHandler(async (req, res) => {
   const result = await getInlineCompletion(req.body.text, Number(req.body.cursorPosition), req.body.context);
   res.json(result);
-});
+}));
 
-app.post("/api/ai/auto-tag", async (req, res) => {
+app.post("/api/ai/auto-tag", asyncHandler(async (req, res) => {
   const result = await suggestTags(req.body.content, req.body.existingTags || []);
   res.json(result);
-});
+}));
 
 // ---- Wave 13: Capture Endpoints ----
 app.post("/api/capture/email", (req, res) => {
@@ -22629,22 +23091,22 @@ app.post("/api/capture/email", (req, res) => {
   res.json(result);
 });
 
-app.post("/api/feeds", async (req, res) => {
+app.post("/api/feeds", asyncHandler(async (req, res) => {
   const result = await addRSSFeed(req.body.url, req.body.name);
   res.json(result);
-});
+}));
 
 app.get("/api/feeds", (req, res) => {
   const feeds = Array.from(RSS_FEEDS.values());
   res.json({ ok: true, feeds });
 });
 
-app.post("/api/feeds/:id/fetch", async (req, res) => {
+app.post("/api/feeds/:id/fetch", asyncHandler(async (req, res) => {
   const result = await fetchRSSFeed(req.params.id);
   res.json(result);
-});
+}));
 
-app.post("/api/feeds/:id/import", async (req, res) => {
+app.post("/api/feeds/:id/import", asyncHandler(async (req, res) => {
   const fetchResult = await fetchRSSFeed(req.params.id);
   if (!fetchResult.ok) return res.json(fetchResult);
 
@@ -22655,7 +23117,7 @@ app.post("/api/feeds/:id/import", async (req, res) => {
   }
 
   res.json({ ok: true, imported, count: imported.length });
-});
+}));
 
 app.post("/api/reminders", (req, res) => {
   const result = createReminder(req.body.dtuId, req.body.reminderAt, req.body.message);
@@ -22709,10 +23171,10 @@ app.delete("/api/workspaces/:id/templates/:templateId", (req, res) => {
 });
 
 // ---- Wave 15: Ecosystem Endpoints ----
-app.post("/api/cli", async (req, res) => {
+app.post("/api/cli", asyncHandler(async (req, res) => {
   const result = await executeCLICommand(req.body.command);
   res.json(result);
-});
+}));
 
 app.get("/api/sdk/types", (req, res) => {
   res.type("text/typescript").send(generateSDKTypes());
@@ -22734,7 +23196,7 @@ app.post("/api/themes/:id/install", (req, res) => {
   res.json(installTheme(req.params.id));
 });
 
-console.log("[Concord] Waves 11-15: All enhancement APIs loaded");
+structuredLog("info", "module_loaded", { detail: "Waves 11-15: All enhancement APIs loaded" });
 
 // ============================================================================
 // END CONCORD ENHANCEMENTS v6.0 - ALL WAVES COMPLETE
@@ -22831,14 +23293,14 @@ app.get("/api/simulations", (req, res) => {
   res.json({ ok: true, simulations: [], note: "Use /api/worldmodel/simulations" });
 });
 
-app.post("/api/simulations/whatif", async (req, res) => {
+app.post("/api/simulations/whatif", asyncHandler(async (req, res) => {
   try {
     const out = await runMacro("sim", "whatif", req.body || {}, makeCtx(req));
     res.json(out);
   } catch (e) {
     res.json({ ok: false, error: String(e?.message || e) });
   }
-});
+}));
 
 // News - sourced from DTUs tagged as news/article
 app.get("/api/news", (req, res) => {
@@ -22863,23 +23325,23 @@ app.get("/api/news/trending", (req, res) => {
 });
 
 // Quests (alias for goals)
-app.get("/api/quests", async (req, res) => {
+app.get("/api/quests", asyncHandler(async (req, res) => {
   try {
     const out = await runMacro("goals", "list", {}, makeCtx(req));
     res.json({ ...out, quests: out.goals || [] });
   } catch {
     res.json({ ok: true, quests: [] });
   }
-});
+}));
 
-app.get("/api/quests/mine", async (req, res) => {
+app.get("/api/quests/mine", asyncHandler(async (req, res) => {
   try {
     const out = await runMacro("goals", "list", { mine: true }, makeCtx(req));
     res.json({ ...out, quests: out.goals || [] });
   } catch {
     res.json({ ok: true, quests: [] });
   }
-});
+}));
 
 // Physics simulation — backed by STATE for persistence
 function ensurePhysicsState() {
@@ -22986,22 +23448,22 @@ app.post("/api/physics/reset", (req, res) => {
 
 // Resonance
 // Support both GET (used by frontend topbar) and POST for resonance/quick
-app.get("/api/resonance/quick", async (req, res) => {
+app.get("/api/resonance/quick", asyncHandler(async (req, res) => {
   try {
     const out = await runMacro("lattice", "resonance", req.query || {}, makeCtx(req));
     res.json(out);
   } catch (e) {
     res.json({ ok: false, error: String(e?.message || e) });
   }
-});
-app.post("/api/resonance/quick", async (req, res) => {
+}));
+app.post("/api/resonance/quick", asyncHandler(async (req, res) => {
   try {
     const out = await runMacro("lattice", "resonance", req.body || {}, makeCtx(req));
     res.json(out);
   } catch (e) {
     res.json({ ok: false, error: String(e?.message || e) });
   }
-});
+}));
 
 // Lattice endpoints
 app.get("/api/lattice/fractal", (req, res) => {
@@ -23014,18 +23476,34 @@ app.get("/api/lattice/fractal", (req, res) => {
   }
 });
 
-app.get("/api/lattice/resonance", async (req, res) => {
+app.get("/api/lattice/resonance", asyncHandler(async (req, res) => {
   try {
     const out = await runMacro("lattice", "resonance", {}, makeCtx(req));
     res.json(out);
-  } catch (e) {
+  } catch {
     // Compute basic resonance from DTU state instead of returning fake data
     const dtuCount = STATE.dtus.size;
     const megaCount = dtusArray().filter(d => d.tier === "mega").length;
     const avgScore = dtuCount > 0 ? dtusArray().reduce((sum, d) => sum + (d.authority?.score || 0), 0) / dtuCount : 0;
     res.json({ ok: true, resonance: clamp(avgScore, 0, 1), harmony: clamp(megaCount / Math.max(1, dtuCount) * 10, 0, 1), computed: true });
   }
-});
+}));
+
+// Resonance boundary detection endpoints
+app.get("/api/resonance/boundary", asyncHandler(async (req, res) => {
+  const out = await runMacro("resonance", "boundary", req.query || {}, makeCtx(req));
+  res.json(out);
+}));
+
+app.post("/api/resonance/scan", asyncHandler(async (req, res) => {
+  const out = await runMacro("resonance", "scan", req.body || {}, makeCtx(req));
+  res.json(out);
+}));
+
+app.get("/api/resonance/history", asyncHandler(async (req, res) => {
+  const out = await runMacro("resonance", "history", req.query || {}, makeCtx(req));
+  res.json(out);
+}));
 
 // ML endpoints — dynamically discover available models from runtime capabilities
 function ensureMlState() {
@@ -23075,7 +23553,7 @@ app.get("/api/ml/metrics", (req, res) => {
   });
 });
 
-app.post("/api/ml/infer", async (req, res) => {
+app.post("/api/ml/infer", asyncHandler(async (req, res) => {
   const { text, model = "embeddings" } = req.body;
   if (!text) return res.status(400).json({ ok: false, error: "text required" });
 
@@ -23114,7 +23592,7 @@ app.post("/api/ml/infer", async (req, res) => {
   } finally {
     _CONCURRENCY.release("ml_infer");
   }
-});
+}));
 
 // POST /api/ml/train — queue a training job
 app.post("/api/ml/train", (req, res) => {
@@ -23281,7 +23759,7 @@ app.get("/api/sovereignty/status", (req, res) => {
   res.json({ ok: true, sovereign: true, dataLocal: true, federationEnabled: false });
 });
 
-app.post("/api/sovereignty/audit", async (req, res) => {
+app.post("/api/sovereignty/audit", asyncHandler(async (req, res) => {
   try {
     const out = await runMacro("audit", "run", req.body || {}, makeCtx(req));
     res.json(out);
@@ -23295,7 +23773,7 @@ app.post("/api/sovereignty/audit", async (req, res) => {
     ];
     res.json({ ok: true, audit: { passed: checks.every(c => c.passed), checks, error: String(e?.message || e) }});
   }
-});
+}));
 
 // Finance - backed by real economic state
 app.get("/api/finance/portfolio", (req, res) => {
@@ -23502,7 +23980,7 @@ app.get("/api/lab/experiments", (req, res) => {
   res.json({ ok: true, experiments });
 });
 
-app.post("/api/lab/run", async (req, res) => {
+app.post("/api/lab/run", asyncHandler(async (req, res) => {
   const { experimentId, params } = req.body || {};
   if (!experimentId) return res.status(400).json({ ok: false, error: "experimentId required" });
 
@@ -23535,7 +24013,7 @@ app.post("/api/lab/run", async (req, res) => {
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
-});
+}));
 
 // Custom lenses - sourced from lens artifacts
 app.get("/api/lenses/custom", (req, res) => {
@@ -23567,7 +24045,7 @@ app.get("/api/lenses/templates", (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Council debate - structured debate sessions
-app.post("/api/council/debate", (req, res) => {
+app.post("/api/council/debate", validate("councilDebate"), (req, res) => {
   const { topic, participants, rounds = 3 } = req.body || {};
   if (!topic) return res.status(400).json({ ok: false, error: "topic required" });
 
@@ -23706,8 +24184,8 @@ app.get("/api/global/feed", (req, res) => {
   });
 });
 
-console.log("[Concord] Wave 17: Final audit fixes loaded");
-console.log("[Concord] Wave 16: Missing lens endpoints loaded");
+structuredLog("info", "module_loaded", { module: "Wave 17: Final audit fixes" });
+structuredLog("info", "module_loaded", { module: "Wave 16: Missing lens endpoints" });
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // AFFECTIVE TRANSLATION SPINE (ATS)
@@ -23717,7 +24195,7 @@ console.log("[Concord] Wave 16: Missing lens endpoints loaded");
 let ATS = null;
 try {
   ATS = await import("./affect/index.js");
-  console.log("[Concord] ATS: Affective Translation Spine loaded");
+  structuredLog("info", "module_loaded", { detail: "ATS: Affective Translation Spine loaded" });
 } catch (e) {
   console.warn("[Concord] ATS: Failed to load affect module:", e.message);
 }
@@ -23846,25 +24324,25 @@ app.get("/api/affect/health", (req, res) => {
   });
 });
 
-console.log("[Concord] ATS: Affect API endpoints registered");
+structuredLog("info", "module_loaded", { detail: "ATS: Affect API endpoints registered" });
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONCORD GLOBAL ATLAS + PLATFORM UPGRADES v2
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ---- Initialize Atlas State ----
-try { initAtlasState(STATE); console.log("[Concord] Atlas: Epistemic engine initialized"); } catch (e) { console.warn("[Atlas] Init skipped:", e.message); }
-try { initScopeState(STATE); console.log("[Concord] Atlas: 3-Lane scope router initialized"); } catch (e) { console.warn("[Atlas] Scope init skipped:", e.message); }
+try { initAtlasState(STATE); structuredLog("info", "module_loaded", { detail: "Atlas: Epistemic engine initialized" }); } catch (e) { console.warn("[Atlas] Init skipped:", e.message); }
+try { initScopeState(STATE); structuredLog("info", "module_loaded", { detail: "Atlas: 3-Lane scope router initialized" }); } catch (e) { console.warn("[Atlas] Scope init skipped:", e.message); }
 
 // ---- Atlas: Core DTU Endpoints ----
-app.post("/api/atlas/dtu", async (req, res) => {
+app.post("/api/atlas/dtu", asyncHandler((req, res) => {
   try {
     const result = createAtlasDtu(STATE, req.body || {});
     if (!result.ok) return res.status(400).json(result);
     dispatchWebhookEvent(STATE, "atlas:dtu:created", { dtuId: result.dtu.id, title: result.dtu.title });
     res.json(result);
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
-});
+}));
 
 app.get("/api/atlas/dtu/:id", (req, res) => {
   try { res.json(getAtlasDtu(STATE, req.params.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
@@ -24616,9 +25094,9 @@ setInterval(() => {
   try { tickMarketplace(STATE); } catch {}
 }, 600000);
 
-console.log("[Concord] Atlas Global + Platform v2: All endpoints registered");
-console.log("[Concord] New modules: Atlas Epistemic Engine, Autogen v2, Council Protocol, Social Layer, Collaboration, RBAC, Analytics, Webhooks, Compliance, Onboarding, Compute Efficiency");
-console.log("[Concord] Atlas v2 Default-On: Write Guard, Scope Router, 3-Lane Separation, Invariant Monitor, Heartbeats, Auto-Promote Gate");
+structuredLog("info", "module_loaded", { detail: "Atlas Global + Platform v2: All endpoints registered" });
+structuredLog("info", "module_loaded", { detail: "New modules: Atlas Epistemic Engine, Autogen v2, Council Protocol, Social Layer, Collaboration, RBAC, Analytics, Webhook" });
+structuredLog("info", "module_loaded", { detail: "Atlas v2 Default-On: Write Guard, Scope Router, 3-Lane Separation, Invariant Monitor, Heartbeats, Auto-Promote Gate" });
 
 // ── "Everything Real": Register durable DB-backed endpoints ──────────────────
 registerDurableEndpoints(app, db);
@@ -31277,7 +31755,7 @@ app.post('/api/economic/tokens/purchase', async (req, res) => {
 });
 
 // ---- Subscription Management ----
-app.post('/api/economic/subscribe', async (req, res) => {
+app.post('/api/economic/subscribe', asyncHandler(async (req, res) => {
   try {
     const { odId, tier } = req.body;
     if (!odId || !tier) return res.status(400).json({ error: 'Missing odId or tier' });
@@ -31325,7 +31803,7 @@ app.post('/api/economic/subscribe', async (req, res) => {
     console.error('[Economic] Subscribe error:', e);
     res.status(500).json({ error: e.message });
   }
-});
+}));
 
 // ---- Stripe Webhook Handler ----
 app.post('/api/economic/webhook', async (req, res) => {
@@ -31971,7 +32449,7 @@ app.get('/api/economic/stats', (req, res) => {
   });
 });
 
-console.log(`[Economic] Engine initialized | Stripe: ${STRIPE_ENABLED ? 'enabled' : 'disabled'}`);
+structuredLog("info", "economic_initialized", { stripe: STRIPE_ENABLED });
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // END ECONOMIC ENGINE
@@ -32410,7 +32888,7 @@ app.get('/api/realm/stats', (req, res) => {
   });
 });
 
-console.log('[Realm] Local/Global separation initialized');
+structuredLog("info", "realm_init", { detail: "Local/Global separation initialized" });
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // END REALM SYSTEM
@@ -32627,7 +33105,7 @@ app.get('/api/artistry/asset-types', (_req, res) => {
   res.json({ ok: true, assetTypes: ARTISTRY_ASSET_TYPES });
 });
 
-console.log('[Artistry] Phase 1: Asset schema + Blob storage initialized');
+structuredLog("info", "artistry_init", { detail: "Phase 1: Asset schema + Blob storage initialized" });
 
 // ── Phase 2-6: Full DAW / Studio System ─────────────────────────────────────
 
@@ -32883,7 +33361,7 @@ app.post('/api/artistry/studio/master', (req, res) => {
   });
 });
 
-console.log('[Artistry] Phase 2-6: Full DAW / Studio system initialized');
+structuredLog("info", "artistry_init", { detail: "Phase 2-6: Full DAW / Studio system initialized" });
 
 // ── Phase 7: Distribution Platform ──────────────────────────────────────────
 
@@ -33017,7 +33495,7 @@ app.get('/api/artistry/distribution/embeds/:id', (req, res) => {
   res.json({ ok: true, embed });
 });
 
-console.log('[Artistry] Phase 7: Distribution platform initialized');
+structuredLog("info", "artistry_init", { detail: "Phase 7: Distribution platform initialized" });
 
 // ── Phase 8: Marketplace Expansion ──────────────────────────────────────────
 
@@ -33316,10 +33794,10 @@ app.post('/api/artistry/marketplace/purchase', (req, res) => {
     if (buyerId === sellerId) return res.status(400).json({ error: 'Cannot purchase your own listing' });
 
     // ── State Machine: create purchase record ────────────────────────────
-    let purchaseRecord = null;
+    let _purchaseRecord = null;
     if (db) {
       try {
-        purchaseRecord = createPurchase(db, {
+        _purchaseRecord = createPurchase(db, {
           purchaseId, buyerId, sellerId, listingId,
           listingType: listingType || listing.type,
           licenseType: licenseType || 'basic',
@@ -33625,7 +34103,7 @@ app.post('/api/artistry/marketplace/purchase', (req, res) => {
   }
 });
 
-console.log('[Artistry] Phase 8: Marketplace expansion initialized (bridged to Economy ledger)');
+structuredLog("info", "artistry_init", { detail: "Phase 8: Marketplace expansion initialized" });
 
 // ── Phase 9: Collaboration + Remix Mode + Project Sharing ───────────────────
 
@@ -33748,7 +34226,7 @@ app.get('/api/artistry/collab/shared', (req, res) => {
   res.json({ ok: true, shared });
 });
 
-console.log('[Artistry] Phase 9: Collaboration + Remix initialized');
+structuredLog("info", "artistry_init", { detail: "Phase 9: Collaboration + Remix initialized" });
 
 // ── Phase 10: AI Production Assistant + Learning System + Genre Coach ───────
 
@@ -33913,8 +34391,8 @@ app.get('/api/artistry/stats', (_req, res) => {
   });
 });
 
-console.log('[Artistry] Phase 10: AI Production Assistant initialized');
-console.log('[Artistry] All phases (1-10) initialized successfully');
+structuredLog("info", "artistry_init", { detail: "Phase 10: AI Production Assistant initialized" });
+structuredLog("info", "artistry_init", { detail: "All phases (1-10) initialized successfully" });
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // END ARTISTRY GLOBAL

@@ -340,7 +340,7 @@ function executeCheck(STATE, check, dtu) {
 /**
  * Consistency check: ensure internal fields don't contradict each other.
  */
-function checkConsistency(dtu, config) {
+function checkConsistency(dtu, _config) {
   const issues = [];
 
   // resonance, coherence, stability should be in [0, 1]
@@ -402,7 +402,7 @@ function checkSchema(dtu, config) {
 /**
  * Contradiction scan: check if this DTU contradicts others.
  */
-function checkContradictions(STATE, dtu, config) {
+function checkContradictions(STATE, dtu, _config) {
   const es = getEmergentState(STATE);
   const edgeStore = es._edges;
 

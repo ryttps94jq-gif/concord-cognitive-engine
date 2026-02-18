@@ -107,10 +107,10 @@ export function formatAndValidate(rawContent, context = {}, opts = {}) {
 /**
  * Initialize GRC module and register macros.
  */
-export async function init({ register, STATE, helpers }) {
+export function init({ register, STATE, helpers }) {
   // Register GRC macros
 
-  register("grc", "format", async (ctx, input) => {
+  register("grc", "format", (ctx, input) => {
     const { content, dtuRefs, macroRefs, stateRefs, mode, invariantsApplied, realitySnapshot } = input;
     const result = formatAndValidate(
       content,
@@ -143,33 +143,33 @@ export async function init({ register, STATE, helpers }) {
     },
   });
 
-  register("grc", "validate", async (ctx, input) => {
+  register("grc", "validate", (ctx, input) => {
     const { grc } = input;
     return validateGRC(grc);
   }, {
     description: "Validate a GRC output object against the spec",
   });
 
-  register("grc", "systemPrompt", async (ctx, input) => {
+  register("grc", "systemPrompt", (ctx, input) => {
     const { anchors } = input || {};
     return { ok: true, prompt: getGRCSystemPrompt(anchors) };
   }, {
     description: "Get the GRC system prompt for LLM instruction",
   });
 
-  register("grc", "metrics", async () => {
+  register("grc", "metrics", () => {
     return { ok: true, metrics: { ...GRC_METRICS } };
   }, {
     description: "Get GRC pipeline metrics",
   });
 
-  register("grc", "schema", async () => {
+  register("grc", "schema", () => {
     return { ok: true, schema: GRC_JSON_SCHEMA };
   }, {
     description: "Get the GRC JSON schema for external validation",
   });
 
-  register("grc", "invariants", async () => {
+  register("grc", "invariants", () => {
     return { ok: true, invariants: CORE_INVARIANTS };
   }, {
     description: "List core GRC invariants",

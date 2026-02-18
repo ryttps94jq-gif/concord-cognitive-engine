@@ -36,7 +36,7 @@ module.exports = function registerSystemRoutes(app, {
   clamp,
   dtusArray,
   isShadowDTU,
-  saveStateDebounced,
+  _saveStateDebounced,
   listDomains,
   getLLMPipelineStatus,
   setLLMPipelineMode,
@@ -54,7 +54,7 @@ module.exports = function registerSystemRoutes(app, {
   CRETI_PROJECTION_RULES,
   searchIndexed,
   paginateResults,
-  auditLog
+  _auditLog
 }) {
 
   // ---- Root ----

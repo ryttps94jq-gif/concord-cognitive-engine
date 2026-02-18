@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { QueryClient, QueryClientProvider, MutationCache } from '@tanstack/react-query';
 import { AppShell } from '@/components/shell/AppShell';
+import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { PermissionProvider } from '@/components/common/PermissionGate';
 import { observeWebVitals } from '@/lib/perf';
 import { connectSocket, disconnectSocket } from '@/lib/realtime/socket';
@@ -69,10 +70,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <PermissionProvider scopes={userScopes}>
-        <AppShell>{children}</AppShell>
-      </PermissionProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <PermissionProvider scopes={userScopes}>
+          <AppShell>{children}</AppShell>
+        </PermissionProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }

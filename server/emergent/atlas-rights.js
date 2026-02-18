@@ -30,7 +30,6 @@ import {
   LICENSE_PROFILES,
   DEFAULT_LICENSE_BY_LANE,
   RIGHTS_ACTIONS,
-  DERIVATION_TYPES,
 } from "./atlas-config.js";
 import { getAtlasState } from "./atlas-epistemic.js";
 import { getDtuScope } from "./atlas-scope-router.js";

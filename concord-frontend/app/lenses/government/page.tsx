@@ -32,13 +32,10 @@ import {
   Users,
   Calendar,
   CheckCircle2,
-  XCircle,
   Timer,
   Gauge,
   Play,
   Eye,
-  Building2,
-  Scale,
   Shield,
   Truck,
   Zap,
@@ -46,7 +43,6 @@ import {
   ClipboardList,
   ArrowRight,
   ChevronRight,
-  Hash,
   Percent,
   Lock,
   Unlock,
@@ -54,7 +50,6 @@ import {
   CalendarClock,
   CircleDot,
   Target,
-  Wrench,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { cn } from '@/lib/utils';

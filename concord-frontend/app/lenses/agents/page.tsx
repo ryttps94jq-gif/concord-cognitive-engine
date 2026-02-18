@@ -1,8 +1,8 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
-import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -176,7 +176,7 @@ const AVAILABLE_TOOLS = [
 export default function AgentsLensPage() {
   useLensNav('agents');
 
-  const queryClient = useQueryClient();
+  const _queryClient = useQueryClient();
   const [_view, setView] = useState<ViewMode>('dashboard');
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -195,7 +195,7 @@ export default function AgentsLensPage() {
   const [newMaxTokens, setNewMaxTokens] = useState(4096);
 
   // Persist agents via lens data (auto-seeds on first use)
-  const { items: lensAgentItems, isLoading, isError, error, isSeeding, refetch, create: createLensAgent, update: updateLensAgent, remove: removeLensAgent } = useLensData<Record<string, unknown>>('agents', 'agent', {
+  const { items: lensAgentItems, isLoading, isError, error, isSeeding: _isSeeding, refetch, create: createLensAgent, update: updateLensAgent, remove: _removeLensAgent } = useLensData<Record<string, unknown>>('agents', 'agent', {
     seed: INITIAL_AGENTS.map(a => ({ title: a.name, data: a as unknown as Record<string, unknown> })),
   });
   const isError2 = isError; const error2 = error; const refetch2 = refetch;

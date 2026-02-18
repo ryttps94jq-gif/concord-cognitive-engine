@@ -43,7 +43,7 @@ function sha256(data) {
 }
 
 // ---- Verify mode ----
-async function verifyPacks() {
+function verifyPacks() {
   const manifestPath = path.join(OUTPUT_DIR, 'manifest.json');
   if (!fs.existsSync(manifestPath)) {
     console.error('No manifest.json found at', manifestPath);
@@ -165,7 +165,7 @@ async function convert() {
 
 // ---- Add streaming pack loader to server ----
 // This function can be imported by server.js to load DTUs from packs
-export async function loadDtuPacks(packDir) {
+export function loadDtuPacks(packDir) {
   const manifestPath = path.join(packDir, 'manifest.json');
   if (!fs.existsSync(manifestPath)) {
     return { ok: false, error: 'No manifest.json found', dtus: [] };

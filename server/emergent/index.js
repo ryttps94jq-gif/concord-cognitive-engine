@@ -24,10 +24,8 @@
  */
 
 import {
-  EMERGENT_ROLES,
   ALL_ROLES,
   CAPABILITIES,
-  CONFIDENCE_LABELS,
   ALL_CONFIDENCE_LABELS,
   INTENT_TYPES,
   SESSION_LIMITS,
@@ -87,14 +85,14 @@ import {
 } from "./lattice-ops.js";
 
 import {
-  EDGE_TYPES, ALL_EDGE_TYPES,
+  ALL_EDGE_TYPES,
   createEdge, getEdge, queryEdges, updateEdge, removeEdge,
   getNeighborhood, findPaths, getEdgeMetrics,
 } from "./edges.js";
 
 import {
   activate, spreadActivation, getWorkingSet,
-  getGlobalActivation, decaySession, clearSessionActivation,
+  getGlobalActivation, decaySession,
   getActivationMetrics,
 } from "./activation.js";
 
@@ -120,10 +118,10 @@ import {
 // ── Cognition Scheduler imports ─────────────────────────────────────────────
 
 import {
-  WORK_ITEM_TYPES, ALL_WORK_ITEM_TYPES, STOP_REASONS,
+  ALL_WORK_ITEM_TYPES, STOP_REASONS,
   DEFAULT_WEIGHTS, DEFAULT_BUDGET,
   createWorkItem, scanAndCreateWorkItems,
-  computePriority, rescoreQueue, updateWeights,
+  rescoreQueue, updateWeights,
   checkBudget, getBudgetStatus, updateBudget,
   allocate, getAllocation, recordTurn, recordProposal,
   completeAllocation,
@@ -135,7 +133,7 @@ import {
 // ── Outcome Signals + Scheduler Learning (Stage 1-2) ────────────────────────
 
 import {
-  OUTCOME_SIGNALS, ALL_OUTCOME_SIGNALS,
+  ALL_OUTCOME_SIGNALS,
   recordOutcome, getOutcomesForWorkItem, getOutcomesForAllocation,
   getOutcomesForEmergent, getOutcomeStats,
   runWeightLearning, getAssignmentRecommendations, getWeightHistory,
@@ -144,7 +142,7 @@ import {
 // ── Skill Formation (Stage 3) ───────────────────────────────────────────────
 
 import {
-  SKILL_TYPES, ALL_SKILL_TYPES, SKILL_MATURITY,
+  ALL_SKILL_TYPES, SKILL_MATURITY,
   createReasoningTemplate, createMacroPlaybook, createTestBundle,
   recordSkillApplication, getSkill, querySkills, findMatchingSkills,
   distillPatternsToSkills, deprecateSkill, getSkillMetrics,
@@ -163,7 +161,7 @@ import {
 // ── Institutional Memory (Stage 5) ──────────────────────────────────────────
 
 import {
-  MEMORY_CATEGORIES, ALL_MEMORY_CATEGORIES,
+  ALL_MEMORY_CATEGORIES,
   recordObservation, recordFailure, recordSuccess,
   createAdvisory, getActiveAdvisories, acknowledgeAdvisory, dismissAdvisory,
   queryObservations, getFailureRates, getRecurrences, getStabilityMap,
@@ -173,7 +171,7 @@ import {
 // ── Evidence Objects + Truth Maintenance (Stage 6) ──────────────────────────
 
 import {
-  EPISTEMIC_STATUS, ALL_EPISTEMIC_STATUSES, EVIDENCE_TYPES, ALL_EVIDENCE_TYPES,
+  ALL_EPISTEMIC_STATUSES, ALL_EVIDENCE_TYPES,
   attachEvidence, getEvidenceForDtu, supersedeEvidence,
   recomputeEpistemicStatus, deprecateDtu, retractDtu,
   getMaintenanceHistory, getDtusByStatus, getConfidenceMap, getEvidenceMetrics,
@@ -182,7 +180,7 @@ import {
 // ── Verification Pipelines (Stage 6) ────────────────────────────────────────
 
 import {
-  CHECK_TYPES, ALL_CHECK_TYPES, CHECK_RESULTS,
+  ALL_CHECK_TYPES, CHECK_RESULTS,
   createPipeline, getPipeline, listPipelines,
   runPipeline, verifyDtu, getVerificationHistory, getVerificationMetrics,
 } from "./verification-pipeline.js";
@@ -190,7 +188,7 @@ import {
 // ── Goal Formation (Stage 8) ────────────────────────────────────────────────
 
 import {
-  GOAL_TYPES, ALL_GOAL_TYPES,
+  ALL_GOAL_TYPES,
   scanForGoals, scheduleGoal, completeGoal, dismissGoal,
   getActiveGoals, updateThresholds, getGoalMetrics,
 } from "./goals.js";
@@ -198,7 +196,7 @@ import {
 // ── Constitution / Norms & Invariants (Stage 9) ─────────────────────────────
 
 import {
-  RULE_TIERS, ALL_RULE_TIERS, RULE_CATEGORIES, VIOLATION_SEVERITY,
+  ALL_RULE_TIERS, RULE_CATEGORIES, VIOLATION_SEVERITY,
   getConstitutionStore,
   addRule, amendRule, deactivateRule,
   checkRules, getRules, getRule,
@@ -208,8 +206,8 @@ import {
 // ── Threat Surface Hardening (Risk Category 1) ──────────────────────────────
 
 import {
-  COST_TIERS, ALL_COST_TIERS,
-  registerRouteCost, registerRouteCosts, getRouteCost,
+  ALL_COST_TIERS,
+  registerRouteCost, registerRouteCosts,
   checkRateLimit, checkCostBudget,
   auditEndpoints, analyzeUserActivity,
   blockUser, unblockUser, updateThreatConfig, getThreatMetrics,
@@ -218,7 +216,7 @@ import {
 // ── Injection Defense (Risk Category 2) ─────────────────────────────────────
 
 import {
-  INJECTION_TYPES, ALL_INJECTION_TYPES, THREAT_LEVELS,
+  ALL_INJECTION_TYPES, THREAT_LEVELS,
   scanContent, scanDtu, checkCrossLensLeak,
   addCustomPattern, getInjectionMetrics, getInjectionIncidents,
 } from "./injection-defense.js";
@@ -226,7 +224,7 @@ import {
 // ── Drift Monitor (Risk Category 3) ─────────────────────────────────────────
 
 import {
-  DRIFT_TYPES, ALL_DRIFT_TYPES, DRIFT_SEVERITY,
+  ALL_DRIFT_TYPES, DRIFT_SEVERITY,
   runDriftScan, getDriftAlerts, updateDriftThresholds,
   getDriftMetrics, getSnapshots,
 } from "./drift-monitor.js";
@@ -251,16 +249,16 @@ import {
 // ── Content Shield (Risk Category 6) ────────────────────────────────────────
 
 import {
-  PII_TYPES, ALL_PII_TYPES, ADVICE_DOMAINS, ALL_ADVICE_DOMAINS, CONTENT_RISK,
+  ALL_PII_TYPES, ALL_ADVICE_DOMAINS, CONTENT_RISK,
   detectPii, detectCopyrightSignals, checkAdviceFraming, scanContentFull,
-  setDisclaimer, getDisclaimer, getAllDisclaimers,
+  setDisclaimer, getAllDisclaimers,
   updateContentShieldConfig, getContentShieldMetrics,
 } from "./content-shield.js";
 
 // ── Action Slots (UX Architecture) ──────────────────────────────────────────
 
 import {
-  SLOT_POSITIONS, ALL_SLOT_POSITIONS, RESULT_STATES, ALL_RESULT_STATES,
+  ALL_SLOT_POSITIONS, ALL_RESULT_STATES,
   registerSlotConfig, getSlotConfig, getAllSlotConfigs, getSlotLabel,
   recordInvocation, makeResult, unregisterSlotConfig,
   getInvocations, getResultDistribution, auditSlotCoverage,
@@ -270,11 +268,10 @@ import {
 // ── Autogen Pipeline (6-Stage Knowledge Synthesis) ───────────────────────────
 
 import {
-  INTENTS, ALL_INTENTS, VARIANT_INTENTS, ESCALATION_REASONS,
+  ALL_INTENTS, VARIANT_INTENTS, ESCALATION_REASONS,
   ensurePipelineState,
   selectIntent, buildRetrievalPack,
   builderPhase, criticPhase, synthesizerPhase,
-  buildOllamaPrompt, applyOllamaShaping,
   noveltyCheck, determineWritePolicy,
   runPipeline as runAutogenPipeline,
   getPipelineMetrics,
@@ -287,14 +284,13 @@ import {
   checkUnits, invarianceCheck,
   PHYS_CONSTANTS,
   extractNumericClaims, extractMathExpressions, extractConstantReferences,
-  mathGate, unitGate, constantsGate,
   runEmpiricalGates, getEmpiricalGateInfo,
 } from "./empirical-gates.js";
 
 // ── Scope Separation (Global / Marketplace / Local) ─────────────────────────
 
 import {
-  SCOPES, ALL_SCOPES, DTU_CLASSES, ALL_DTU_CLASSES,
+  SCOPES, ALL_SCOPES, ALL_DTU_CLASSES,
   HEARTBEAT_CONFIG,
   checkInfluence, isValidScope, isUpwardPromotion,
   ensureScopeState, assignScope, getDtuScope,
@@ -1451,7 +1447,7 @@ function init({ register, STATE, helpers }) {
     return { ok: true, ...determineWritePolicy(input.candidate, input.criticResult, input.noveltyResult) };
   }, { description: "Determine write policy for candidate (shadow-first)", public: true });
 
-  register("emergent", "pipeline.run", async (_ctx, input = {}) => {
+  register("emergent", "pipeline.run", (_ctx, input = {}) => {
     return runAutogenPipeline(STATE, input);
   }, { description: "Run full 6-stage autogen pipeline", public: false });
 

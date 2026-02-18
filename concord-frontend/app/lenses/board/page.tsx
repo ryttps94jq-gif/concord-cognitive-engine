@@ -193,7 +193,7 @@ export default function BoardLensPage() {
   useLensNav('board');
 
   // Persist tasks via real backend lens artifacts (auto-seeds on first use)
-  const { items: lensItems, isLoading: tasksLoading, isSeeding, create: createLens, update: updateLens, remove: removeLens } = useLensData<Record<string, unknown>>('board', 'task', {
+  const { items: lensItems, isLoading: tasksLoading, isSeeding, create: createLens, update: updateLens, remove: _removeLens } = useLensData<Record<string, unknown>>('board', 'task', {
     seed: SEED_TASKS,
   });
 

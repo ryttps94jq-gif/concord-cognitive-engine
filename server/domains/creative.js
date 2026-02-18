@@ -1,6 +1,5 @@
 export default function registerCreativeActions(registerLensAction) {
-  registerLensAction("creative", "shotListGenerate", async (ctx, artifact, params) => {
-    const brief = artifact.data?.brief || params.brief || artifact.title;
+  registerLensAction("creative", "shotListGenerate", (_ctx, artifact, _params) => {
     const type = artifact.data?.type || 'photo';
     const shots = [];
     const defaultShots = type === 'video'
@@ -14,7 +13,7 @@ export default function registerCreativeActions(registerLensAction) {
     return { ok: true, shots, count: shots.length };
   });
 
-  registerLensAction("creative", "assetOrganize", async (ctx, artifact, params) => {
+  registerLensAction("creative", "assetOrganize", (_ctx, artifact, _params) => {
     const assets = artifact.data?.assets || [];
     const organized = {};
     for (const asset of assets) {
@@ -26,7 +25,7 @@ export default function registerCreativeActions(registerLensAction) {
     return { ok: true, categories: summary, totalAssets: assets.length };
   });
 
-  registerLensAction("creative", "budgetTrack", async (ctx, artifact, params) => {
+  registerLensAction("creative", "budgetTrack", (_ctx, artifact, _params) => {
     const budget = artifact.data?.budget || 0;
     const expenses = artifact.data?.expenses || [];
     const totalSpent = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
@@ -40,7 +39,7 @@ export default function registerCreativeActions(registerLensAction) {
     return { ok: true, budget, totalSpent, remaining, percentUsed, byCategory, overBudget: remaining < 0 };
   });
 
-  registerLensAction("creative", "distributionChecklist", async (ctx, artifact, params) => {
+  registerLensAction("creative", "distributionChecklist", (ctx, artifact, params) => {
     const type = artifact.data?.type || params.type || 'general';
     let checklist = [];
     if (type === 'podcast') {

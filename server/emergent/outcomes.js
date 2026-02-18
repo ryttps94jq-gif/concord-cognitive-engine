@@ -20,7 +20,7 @@
  */
 
 import { getEmergentState } from "./store.js";
-import { getScheduler, computePriority, rescoreQueue } from "./scheduler.js";
+import { getScheduler, rescoreQueue } from "./scheduler.js";
 
 // ── Outcome Signal Types ─────────────────────────────────────────────────────
 

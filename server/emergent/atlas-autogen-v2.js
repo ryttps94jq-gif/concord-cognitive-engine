@@ -7,9 +7,9 @@
  */
 
 import crypto from "crypto";
-import { getAtlasState, EPISTEMIC_CLASSES, areDomainsCompatible, computeAtlasScores } from "./atlas-epistemic.js";
+import { getAtlasState, areDomainsCompatible, computeAtlasScores } from "./atlas-epistemic.js";
 import { createAtlasDtu, contentHash, addAtlasLink } from "./atlas-store.js";
-import { detectLineageCycle, findNearDuplicates, checkContentHashDedup, checkSpamThrottle } from "./atlas-antigaming.js";
+import { detectLineageCycle, findNearDuplicates, checkContentHashDedup } from "./atlas-antigaming.js";
 
 // ── Autogen Configuration ────────────────────────────────────────────────
 
@@ -214,7 +214,7 @@ function checkDomainMixing(inputDtus) {
  * Keeps claim lanes separate: facts vs interpretations vs model outputs.
  */
 function synthesizeCandidate(inputDtus, domainTarget, run) {
-  const now = new Date().toISOString();
+  const _now = new Date().toISOString();
 
   // Separate claims by type
   const factClaims = [];
@@ -546,7 +546,7 @@ export function runAutogenV2(STATE, options = {}) {
     }
 
     // Output enters as PROPOSED (not directly VERIFIED)
-    const promoteResult = await_free_promote(STATE, result.dtu.id);
+    await_free_promote(STATE, result.dtu.id);
 
     outputs.push({
       dtuId: result.dtu.id,

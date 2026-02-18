@@ -132,7 +132,7 @@ const INITIAL_USERS: Record<string, UserProfile> = {};
 
 const INITIAL_COMMUNITIES: Community[] = [];
 
-function mkComment(id: string, author: string, content: string, score: number, replies: Comment[] = []): Comment {
+function _mkComment(id: string, author: string, content: string, score: number, replies: Comment[] = []): Comment {
   const hrs = Math.floor(Math.random() * 48) + 1;
   return { id, author: INITIAL_USERS[author], content, score, userVote: 0, createdAt: new Date(Date.now() - hrs * 3600000).toISOString(), awards: score > 80 ? ['\uD83D\uDD25'] : [], replies, collapsed: false };
 }
@@ -203,7 +203,7 @@ export default function ForumLensPage() {
   const [replyContent, setReplyContent] = useState('');
   const [postReplyContent, setPostReplyContent] = useState('');
 
-  const { isError: isError, error: error, refetch: refetch, items: postItems, create: createForumPost } = useLensData('forum', 'post', {
+  const { isError: isError, error: error, refetch: refetch, items: postItems, create: _createForumPost } = useLensData('forum', 'post', {
     seed: INITIAL_POSTS.map(p => ({ title: p.title, data: p as unknown as Record<string, unknown> })),
   });
   const { isError: isError2, error: error2, refetch: refetch2, items: communityItems } = useLensData('forum', 'community', {

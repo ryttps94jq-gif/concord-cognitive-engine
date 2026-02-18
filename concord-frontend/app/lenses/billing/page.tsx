@@ -74,7 +74,7 @@ export default function BillingPage() {
     },
   });
 
-  const tiers = config?.tiers || {};
+  const _tiers = config?.tiers || {};
   const tokenPackages = config?.tokenPackages || [];
 
 

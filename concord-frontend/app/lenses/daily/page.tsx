@@ -119,13 +119,13 @@ export default function DailyLensPage() {
     const d = new Date(); return { year: d.getFullYear(), month: d.getMonth() };
   });
 
-  const { isError: isError, error: error, refetch: refetch, items: entryItems, create: createEntry } = useLensData('daily', 'entry', {
+  const { isError: isError, error: error, refetch: refetch, items: _entryItems, create: _createEntry } = useLensData('daily', 'entry', {
     seed: INITIAL_ENTRIES.map(e => ({ title: e.date, data: e as unknown as Record<string, unknown> })),
   });
-  const { isError: isError2, error: error2, refetch: refetch2, items: sessionItems, create: createSession } = useLensData('daily', 'session', {
+  const { isError: isError2, error: error2, refetch: refetch2, items: sessionItems, create: _createSession } = useLensData('daily', 'session', {
     seed: INITIAL_SESSIONS.map(s => ({ title: s.project, data: s as unknown as Record<string, unknown> })),
   });
-  const { isError: isError3, error: error3, refetch: refetch3, items: reminderItems, create: createReminder } = useLensData('daily', 'reminder', {
+  const { isError: isError3, error: error3, refetch: refetch3, items: reminderItems, create: _createReminder } = useLensData('daily', 'reminder', {
     seed: INITIAL_REMINDERS.map(r => ({ title: r.title, data: r as unknown as Record<string, unknown> })),
   });
 
