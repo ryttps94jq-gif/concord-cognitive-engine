@@ -6,7 +6,6 @@
  */
 
 import crypto from "crypto";
-import { getEmergentState as _getEmergentState } from "./store.js";
 import {
   ATLAS_STATUS, DOMAIN_TYPE_SET, EPISTEMIC_CLASS_SET, canTransition,
   computeAtlasScores, explainScores, validateAtlasDtu,

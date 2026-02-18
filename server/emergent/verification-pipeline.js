@@ -402,7 +402,7 @@ function checkSchema(dtu, config) {
 /**
  * Contradiction scan: check if this DTU contradicts others.
  */
-function checkContradictions(STATE, dtu, config) {
+function checkContradictions(STATE, dtu, _config) {
   const es = getEmergentState(STATE);
   const edgeStore = es._edges;
 
