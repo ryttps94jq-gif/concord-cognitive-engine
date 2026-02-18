@@ -9,7 +9,7 @@ const mockSocketInstance = {
   disconnect: vi.fn(),
   connected: false,
   id: 'test-socket-id',
-  auth: {} as Record<string, any>,
+  auth: {} as Record<string, unknown>,
 };
 
 // Mock socket.io-client
@@ -59,7 +59,7 @@ describe('socket', () => {
 
     it('registers connect, disconnect, connect_error, and hello event handlers', () => {
       socketModule.getSocket();
-      const events = mockSocketInstance.on.mock.calls.map((c: any[]) => c[0]);
+      const events = mockSocketInstance.on.mock.calls.map((c: unknown[]) => c[0]);
       expect(events).toContain('connect');
       expect(events).toContain('disconnect');
       expect(events).toContain('connect_error');
@@ -115,7 +115,7 @@ describe('socket', () => {
 
       // Find the orderedCallback that was registered
       const registeredCallback = mockSocketInstance.on.mock.calls.find(
-        (c: any[]) => c[0] === 'dtu:created'
+        (c: unknown[]) => c[0] === 'dtu:created'
       )?.[1];
 
       // Simulate receiving data
@@ -128,7 +128,7 @@ describe('socket', () => {
       socketModule.subscribe('dtu:updated', callback);
 
       const registeredCallback = mockSocketInstance.on.mock.calls.find(
-        (c: any[]) => c[0] === 'dtu:updated'
+        (c: unknown[]) => c[0] === 'dtu:updated'
       )?.[1];
 
       // Send event with seq 5
@@ -149,7 +149,7 @@ describe('socket', () => {
       socketModule.subscribe('system:alert', callback);
 
       const registeredCallback = mockSocketInstance.on.mock.calls.find(
-        (c: any[]) => c[0] === 'system:alert'
+        (c: unknown[]) => c[0] === 'system:alert'
       )?.[1];
 
       registeredCallback?.({ message: 'alert!' });

@@ -133,7 +133,7 @@ import {
 // ── Outcome Signals + Scheduler Learning (Stage 1-2) ────────────────────────
 
 import {
-  OUTCOME_SIGNALS, ALL_OUTCOME_SIGNALS,
+  ALL_OUTCOME_SIGNALS,
   recordOutcome, getOutcomesForWorkItem, getOutcomesForAllocation,
   getOutcomesForEmergent, getOutcomeStats,
   runWeightLearning, getAssignmentRecommendations, getWeightHistory,
@@ -142,7 +142,7 @@ import {
 // ── Skill Formation (Stage 3) ───────────────────────────────────────────────
 
 import {
-  SKILL_TYPES, ALL_SKILL_TYPES, SKILL_MATURITY,
+  ALL_SKILL_TYPES, SKILL_MATURITY,
   createReasoningTemplate, createMacroPlaybook, createTestBundle,
   recordSkillApplication, getSkill, querySkills, findMatchingSkills,
   distillPatternsToSkills, deprecateSkill, getSkillMetrics,
@@ -161,7 +161,7 @@ import {
 // ── Institutional Memory (Stage 5) ──────────────────────────────────────────
 
 import {
-  MEMORY_CATEGORIES, ALL_MEMORY_CATEGORIES,
+  ALL_MEMORY_CATEGORIES,
   recordObservation, recordFailure, recordSuccess,
   createAdvisory, getActiveAdvisories, acknowledgeAdvisory, dismissAdvisory,
   queryObservations, getFailureRates, getRecurrences, getStabilityMap,
@@ -171,7 +171,7 @@ import {
 // ── Evidence Objects + Truth Maintenance (Stage 6) ──────────────────────────
 
 import {
-  EPISTEMIC_STATUS, ALL_EPISTEMIC_STATUSES, EVIDENCE_TYPES, ALL_EVIDENCE_TYPES,
+  ALL_EPISTEMIC_STATUSES, ALL_EVIDENCE_TYPES,
   attachEvidence, getEvidenceForDtu, supersedeEvidence,
   recomputeEpistemicStatus, deprecateDtu, retractDtu,
   getMaintenanceHistory, getDtusByStatus, getConfidenceMap, getEvidenceMetrics,
@@ -180,7 +180,7 @@ import {
 // ── Verification Pipelines (Stage 6) ────────────────────────────────────────
 
 import {
-  CHECK_TYPES, ALL_CHECK_TYPES, CHECK_RESULTS,
+  ALL_CHECK_TYPES, CHECK_RESULTS,
   createPipeline, getPipeline, listPipelines,
   runPipeline, verifyDtu, getVerificationHistory, getVerificationMetrics,
 } from "./verification-pipeline.js";
@@ -188,7 +188,7 @@ import {
 // ── Goal Formation (Stage 8) ────────────────────────────────────────────────
 
 import {
-  GOAL_TYPES, ALL_GOAL_TYPES,
+  ALL_GOAL_TYPES,
   scanForGoals, scheduleGoal, completeGoal, dismissGoal,
   getActiveGoals, updateThresholds, getGoalMetrics,
 } from "./goals.js";
@@ -196,7 +196,7 @@ import {
 // ── Constitution / Norms & Invariants (Stage 9) ─────────────────────────────
 
 import {
-  RULE_TIERS, ALL_RULE_TIERS, RULE_CATEGORIES, VIOLATION_SEVERITY,
+  ALL_RULE_TIERS, RULE_CATEGORIES, VIOLATION_SEVERITY,
   getConstitutionStore,
   addRule, amendRule, deactivateRule,
   checkRules, getRules, getRule,
@@ -206,8 +206,8 @@ import {
 // ── Threat Surface Hardening (Risk Category 1) ──────────────────────────────
 
 import {
-  COST_TIERS, ALL_COST_TIERS,
-  registerRouteCost, registerRouteCosts, getRouteCost,
+  ALL_COST_TIERS,
+  registerRouteCost, registerRouteCosts,
   checkRateLimit, checkCostBudget,
   auditEndpoints, analyzeUserActivity,
   blockUser, unblockUser, updateThreatConfig, getThreatMetrics,

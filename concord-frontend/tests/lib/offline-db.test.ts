@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 // Mock Dexie before importing the module
 vi.mock('dexie', () => {
@@ -46,7 +46,7 @@ vi.mock('dexie', () => {
       };
     }
 
-    constructor(name: string) {
+    constructor(_name: string) {
       // no-op
     }
   }
@@ -67,7 +67,7 @@ import {
   onOnlineStatusChange,
   updateClockOffset,
   getNormalizedTimestamp,
-  type ConflictRecord,
+
 } from '@/lib/offline/db';
 
 describe('getDB', () => {

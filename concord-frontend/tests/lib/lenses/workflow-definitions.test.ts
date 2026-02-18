@@ -8,7 +8,7 @@ import {
   getInitialState,
   getDomainsWithWorkflows,
 } from '@/lib/lenses/workflow-definitions';
-import type { WorkflowDef, WorkflowState, WorkflowTransition } from '@/lib/lenses/workflow-definitions';
+
 
 describe('WORKFLOW_DEFINITIONS', () => {
   it('is a non-empty array', () => {

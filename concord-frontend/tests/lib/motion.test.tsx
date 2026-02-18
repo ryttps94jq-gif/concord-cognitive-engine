@@ -11,7 +11,6 @@ import {
   PageTransition,
   StaggerList,
   StaggerItem,
-  StaggerList as StaggerListComponent,
   AnimatedCard,
   Presence,
   AnimatedNumber,
