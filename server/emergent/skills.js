@@ -340,9 +340,10 @@ export function querySkills(STATE, filters = {}) {
 
   if (filters.type) results = results.filter(s => s.type === filters.type);
   if (filters.domain) results = results.filter(s => s.domain === "*" || s.domain === filters.domain);
-  if (filters.role) results = results.filter(s =>
-    s.applicableRoles.includes("*") || s.applicableRoles.includes(filters.role)
-  );
+  if (filters.role) {
+    results = results.filter(s =>
+      s.applicableRoles.includes("*") || s.applicableRoles.includes(filters.role));
+  }
   if (filters.workType) results = results.filter(s => !s.workType || s.workType === filters.workType);
   if (filters.maturity) results = results.filter(s => s.maturity === filters.maturity);
   if (filters.minMaturity) {

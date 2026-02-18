@@ -5,8 +5,7 @@
  * cited-by counters, trending DTUs, discovery loops.
  */
 
-import crypto from "crypto";
-import { getEmergentState } from "./store.js";
+
 
 // ── Social State ─────────────────────────────────────────────────────────
 
@@ -202,7 +201,7 @@ export function getFollowing(STATE, userId, limit = 50) {
 /**
  * Mark a DTU as public (visible in feeds and search).
  */
-export function publishDtu(STATE, dtuId, userId) {
+export function publishDtu(STATE, dtuId, _userId) {
   const social = getSocialState(STATE);
 
   // Verify ownership

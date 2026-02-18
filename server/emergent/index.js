@@ -1447,7 +1447,7 @@ function init({ register, STATE, helpers }) {
     return { ok: true, ...determineWritePolicy(input.candidate, input.criticResult, input.noveltyResult) };
   }, { description: "Determine write policy for candidate (shadow-first)", public: true });
 
-  register("emergent", "pipeline.run", async (_ctx, input = {}) => {
+  register("emergent", "pipeline.run", (_ctx, input = {}) => {
     return runAutogenPipeline(STATE, input);
   }, { description: "Run full 6-stage autogen pipeline", public: false });
 

@@ -340,7 +340,7 @@ function executeCheck(STATE, check, dtu) {
 /**
  * Consistency check: ensure internal fields don't contradict each other.
  */
-function checkConsistency(dtu, config) {
+function checkConsistency(dtu, _config) {
   const issues = [];
 
   // resonance, coherence, stability should be in [0, 1]

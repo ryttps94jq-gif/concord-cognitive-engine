@@ -267,7 +267,7 @@ export function migrateDtu(STATE, dtu) {
  * @returns {{ ok: boolean, needsMigration: number, byVersion: Object }}
  */
 export function scanForMigrations(STATE) {
-  const store = getSchemaGuardStore(STATE);
+  const _store = getSchemaGuardStore(STATE);
   const byVersion = {};
   let needsMigration = 0;
 
