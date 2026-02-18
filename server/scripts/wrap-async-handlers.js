@@ -19,7 +19,7 @@ const serverPath = path.resolve("server.js");
 const lines = fs.readFileSync(serverPath, "utf-8").split("\n");
 
 let modified = 0;
-let braceStack = []; // track which lines we wrapped (need to close with extra paren)
+const _braceStack = []; // track which lines we wrapped (need to close with extra paren)
 
 // Pass 1: Find and wrap async handler openings
 for (let i = 0; i < lines.length; i++) {

@@ -152,11 +152,11 @@ const lines2 = src2.split("\n");
 function fixExtraParenForEndpoint(linesArr, routePattern) {
   let depth = 0;
   let inBlock = false;
-  let openLine = -1;
+  let _openLine = -1;
   for (let i = 0; i < linesArr.length; i++) {
     if (!inBlock && linesArr[i].includes(routePattern)) {
       inBlock = true;
-      openLine = i;
+      _openLine = i;
       depth = 0;
       // Count braces on this line
       for (const ch of linesArr[i]) {

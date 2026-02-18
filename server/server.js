@@ -33,7 +33,7 @@ import { spawnSync } from "child_process";
 import { createRequire } from "module";
 import { initAll as initLoaf } from "./loaf/index.js";
 import { init as initEmergent } from "./emergent/index.js";
-import { ConcordError, ValidationError, NotFoundError, AuthenticationError, AuthorizationError, ConflictError, RateLimitError, ServiceUnavailableError, DatabaseError } from "./lib/errors.js";
+import { ConcordError, NotFoundError, AuthenticationError, AuthorizationError, ConflictError, RateLimitError, ServiceUnavailableError, DatabaseError } from "./lib/errors.js";
 import { asyncHandler, createErrorMiddleware } from "./lib/async-handler.js";
 import { init as initGRC, formatAndValidate as grcFormatAndValidate, getGRCSystemPrompt } from "./grc/index.js";
 import configureMiddleware from "./middleware/index.js";
