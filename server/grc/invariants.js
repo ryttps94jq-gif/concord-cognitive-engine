@@ -34,7 +34,7 @@ export const CORE_INVARIANTS = [
  * @returns {{ ok: boolean, grc: object, repairs: string[], failures: string[] }}
  */
 export function runGRCInvariantChecks(grc, opts = {}) {
-  const { inLatticeReality, STATE, affectState } = opts;
+  const { inLatticeReality, affectState } = opts;
   const repairs = [];
   const failures = [];
   let output = { ...grc };
