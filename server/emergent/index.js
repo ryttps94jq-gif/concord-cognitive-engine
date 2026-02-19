@@ -164,6 +164,17 @@ import {
   getLensIntegrationMetrics,
 } from "./lens-integration.js";
 
+// ── Shadow Graph Upgrade ──────────────────────────────────────────────────────
+
+import {
+  getDTU as shadowGetDTU, hasDTU as shadowHasDTU, allDTUs as shadowAllDTUs,
+  getDTUSource, activateWithTier,
+  recordShadowInteraction, getShadowConversationRecord,
+  listPromotionCandidates, buildShadowConversationContext,
+  computeRichness, computeShadowTTL,
+  getShadowGraphMetrics,
+} from "./shadow-graph.js";
+
 // ── Bootstrap Ingestion ──────────────────────────────────────────────────────
 
 import {
@@ -927,6 +938,57 @@ function init({ register, STATE, helpers }) {
   register("emergent", "lens.integrationMetrics", (_ctx) => {
     return getLensIntegrationMetrics();
   }, { description: "Get lens integration metrics", public: true });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // SHADOW GRAPH — unified access, activation, conversation, promotion
+  // ══════════════════════════════════════════════════════════════════════════
+
+  register("emergent", "shadow.getDTU", (_ctx, input = {}) => {
+    const dtu = shadowGetDTU(STATE, input.dtuId);
+    if (!dtu) return { ok: false, error: "not_found" };
+    return { ok: true, dtu, source: getDTUSource(STATE, input.dtuId) };
+  }, { description: "Get DTU from canonical or shadow store (unified)", public: true });
+
+  register("emergent", "shadow.hasDTU", (_ctx, input = {}) => {
+    return { ok: true, exists: shadowHasDTU(STATE, input.dtuId), source: getDTUSource(STATE, input.dtuId) };
+  }, { description: "Check if DTU exists in either store", public: true });
+
+  register("emergent", "shadow.allDTUs", (_ctx, input = {}) => {
+    const dtus = shadowAllDTUs(STATE, { includeShadows: input.includeShadows !== false });
+    return { ok: true, count: dtus.length, dtus: dtus.slice(0, input.limit || 100).map(d => ({ id: d.id, title: d.title, tier: d.tier })) };
+  }, { description: "List all DTUs spanning both stores", public: true });
+
+  register("emergent", "shadow.activate", (_ctx, input = {}) => {
+    return activateWithTier(STATE, input.sessionId, input.dtuId, input.score, input.reason);
+  }, { description: "Activate DTU with tier-aware weighting (shadows at 0.6×)", public: true });
+
+  register("emergent", "shadow.interact", (_ctx, input = {}) => {
+    return recordShadowInteraction(STATE, input.dtuId, {
+      type: input.type,
+      userId: input.userId,
+      claim: input.claim,
+    });
+  }, { description: "Record conversation interaction with shadow DTU", public: true });
+
+  register("emergent", "shadow.conversationRecord", (_ctx, input = {}) => {
+    return getShadowConversationRecord(STATE, input.dtuId);
+  }, { description: "Get conversation record for a shadow DTU", public: true });
+
+  register("emergent", "shadow.promotionCandidates", (_ctx) => {
+    return listPromotionCandidates(STATE);
+  }, { description: "List shadow DTUs with enough promotion momentum", public: true });
+
+  register("emergent", "shadow.context", (_ctx, input = {}) => {
+    return buildShadowConversationContext(STATE, input.dtuId);
+  }, { description: "Build conversation context for a shadow DTU", public: true });
+
+  register("emergent", "shadow.richness", (_ctx, input = {}) => {
+    return { ok: true, dtuId: input.dtuId, richness: computeRichness(STATE, input.dtuId), ttlDays: computeShadowTTL(STATE, input.dtuId) };
+  }, { description: "Compute richness score and TTL for a shadow DTU", public: true });
+
+  register("emergent", "shadow.metrics", (_ctx) => {
+    return getShadowGraphMetrics(STATE);
+  }, { description: "Get shadow graph metrics", public: true });
 
   // ══════════════════════════════════════════════════════════════════════════
   // GRC FORMATTING FOR PIPELINE
