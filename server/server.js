@@ -37,6 +37,9 @@ import { ConcordError } from "./lib/errors.js";
 import { asyncHandler } from "./lib/async-handler.js";
 import { init as initGRC, formatAndValidate as grcFormatAndValidate, getGRCSystemPrompt } from "./grc/index.js";
 import configureMiddleware from "./middleware/index.js";
+import { createLLMQueue, PRIORITY } from "./lib/llm-queue.js";
+import { createBreakerRegistry } from "./lib/circuit-breaker.js";
+import { traceMiddleware, startSpan, storeTrace, getRecentTraces, getTraceMetrics } from "./lib/request-trace.js";
 
 // ---- "Everything Real" imports: migration runner + durable endpoints ----
 import { runMigrations as runSchemaMigrations } from "./migrate.js";
@@ -7927,6 +7930,11 @@ function upsertDTU(dtu, { broadcast = true, federate = false } = {}) {
     }).catch(() => {});
   }
 
+  // ── Incremental embedding index: index on create/update, not full rebuild ──
+  if (EMBEDDINGS.enabled) {
+    indexDTUEmbedding(dtu).catch(() => {}); // best-effort, async
+  }
+
   return dtu;
 }
 
@@ -8432,16 +8440,21 @@ async function initLocalEmbeddings() {
   }
 }
 
-// Generate embedding for text
+// Generate embedding for text (with circuit breaker)
 async function generateEmbedding(text) {
   if (!EMBEDDINGS.enabled || !EMBEDDINGS.model) {
     return { ok: false, error: "Embeddings not enabled" };
   }
 
   try {
-    const output = await EMBEDDINGS.model(text, { pooling: "mean", normalize: true });
-    const embedding = Array.from(output.data);
-    return { ok: true, embedding, dim: embedding.length };
+    return await _breakers.embeddings.call(
+      async () => {
+        const output = await EMBEDDINGS.model(text, { pooling: "mean", normalize: true });
+        const embedding = Array.from(output.data);
+        return { ok: true, embedding, dim: embedding.length };
+      },
+      () => ({ ok: false, error: "embeddings_circuit_open" })
+    );
   } catch (e) {
     return { ok: false, error: String(e.message || e) };
   }
@@ -8511,22 +8524,28 @@ async function semanticSearch(query, { limit = 10, minScore = 0.3 } = {}) {
 }
 
 // Build/rebuild embedding index (includes enriched shadows)
-async function rebuildEmbeddingIndex() {
+// Supports incremental mode: only index DTUs not already in the store
+async function rebuildEmbeddingIndex({ incremental = false } = {}) {
   if (!EMBEDDINGS.enabled) return { ok: false, reason: "disabled" };
 
   const dtus = dtusArray();
   // Also include shadow DTUs that have real core content
   const shadows = STATE.shadowDtus ? Array.from(STATE.shadowDtus.values()) : [];
   const allToIndex = dtus.concat(shadows);
-  let indexed = 0, errors = 0;
+  let indexed = 0, errors = 0, skippedExisting = 0;
 
   for (const dtu of allToIndex) {
+    // In incremental mode, skip DTUs already in the embedding store
+    if (incremental && EMBEDDINGS.store.has(dtu.id)) {
+      skippedExisting++;
+      continue;
+    }
     const result = await indexDTUEmbedding(dtu);
     if (result.ok && !result.skipped) indexed++;
     else if (!result.ok) errors++;
   }
 
-  return { ok: true, indexed, errors, total: allToIndex.length };
+  return { ok: true, indexed, errors, skippedExisting, total: allToIndex.length };
 }
 
 // ---- Auto-Linking (AI Suggests Connections) ----
@@ -9139,6 +9158,50 @@ function setLLMPipelineMode(mode) {
 
 // Initialize on startup
 setTimeout(() => initLLMPipeline(), 100);
+
+// ── LLM Queue + Circuit Breakers ──────────────────────────────────────────
+const _llmQueue = createLLMQueue({
+  concurrency: parseInt(process.env.LLM_CONCURRENCY || "2", 10),
+  maxQueueDepth: 200,
+  onReject: (priority, reason) => {
+    structuredLog("warn", "llm_queue_reject", { priority, reason });
+  },
+});
+
+const _breakers = createBreakerRegistry({
+  onStateChange: (name, from, to) => {
+    structuredLog("warn", "circuit_breaker_transition", { name, from, to });
+  },
+});
+
+// Wrap callOllama and callOpenAI through breakers
+const _rawCallOllama = callOllama;
+const _rawCallOpenAI = callOpenAI;
+
+async function callOllamaWithBreaker(prompt, options = {}) {
+  return _breakers.ollama.call(
+    () => _rawCallOllama(prompt, options),
+    () => ({ ok: false, error: "ollama_circuit_open", source: "ollama" })
+  );
+}
+
+async function callOpenAIWithBreaker(prompt, options = {}) {
+  return _breakers.openai.call(
+    () => _rawCallOpenAI(prompt, options),
+    () => ({ ok: false, error: "openai_circuit_open", source: "openai" })
+  );
+}
+
+// Queued + breakered versions for external use
+function queuedOllamaCall(prompt, options = {}) {
+  const priority = options._priority ?? PRIORITY.NORMAL;
+  return _llmQueue.enqueue(() => callOllamaWithBreaker(prompt, options), priority);
+}
+
+function queuedOpenAICall(prompt, options = {}) {
+  const priority = options._priority ?? PRIORITY.NORMAL;
+  return _llmQueue.enqueue(() => callOpenAIWithBreaker(prompt, options), priority);
+}
 
 // Global llmChat() wrapper - routes all LLM calls through the pipeline
 // This enables hybrid local/cloud AI for all DTU generation
@@ -11359,6 +11422,7 @@ register("dtu", "delete", (ctx, input) => {
   // Delete the DTU
   STATE.dtus.delete(id);
   SEARCH_INDEX.dirty = true;
+  EMBEDDINGS.store.delete(id); // Remove from embedding index
   saveStateDebounced();
 
   // Broadcast deletion via WebSocket
@@ -15703,6 +15767,16 @@ configureMiddleware(app, {
   NODE_ENV,
 });
 
+// ---- Request Tracing (unified observability across all subsystems) ----
+app.use(traceMiddleware);
+app.use((req, res, next) => {
+  // Store completed traces in the ring buffer for debugging
+  res.on("finish", () => {
+    if (req.trace) storeTrace(req.trace);
+  });
+  next();
+});
+
 // ---- Global Async Safety Net ----
 // Wraps all async route handlers to catch unhandled promise rejections.
 // Without this, any async handler that throws without try/catch will leave
@@ -18763,6 +18837,63 @@ app.post("/api/shadow/dtus/:id/interact", asyncHandler(async (req, res) => {
 
 app.get("/api/shadow/metrics", asyncHandler(async (req, res) => {
   res.json(getShadowGraphMetrics(STATE));
+}));
+
+// ── Operational Infrastructure REST Endpoints ──────────────────────────────
+
+// User feedback on DTU quality
+app.post("/api/feedback", asyncHandler(async (req, res) => {
+  const result = await runMacro("emergent", "feedback.record", {
+    dtuId: req.body.dtuId,
+    userId: req.user?.id || req.actor?.id || "anonymous",
+    helpful: req.body.helpful,
+    wrong: req.body.wrong,
+    context: req.body.context,
+    comment: req.body.comment,
+  }, makeCtx(req));
+  res.json(result);
+}));
+
+app.get("/api/feedback/:dtuId", asyncHandler(async (req, res) => {
+  const result = await runMacro("emergent", "feedback.get", { dtuId: req.params.dtuId }, makeCtx(req));
+  res.json(result);
+}));
+
+app.get("/api/feedback-review", asyncHandler(async (req, res) => {
+  const result = await runMacro("emergent", "feedback.reviewQueue", {}, makeCtx(req));
+  res.json(result);
+}));
+
+// LLM queue metrics
+app.get("/api/system/llm-queue", asyncHandler(async (req, res) => {
+  res.json({ ok: true, ..._llmQueue.getMetrics() });
+}));
+
+// Circuit breaker status
+app.get("/api/system/circuit-breakers", asyncHandler(async (req, res) => {
+  res.json({ ok: true, breakers: _breakers.getAllStatus() });
+}));
+
+app.post("/api/system/circuit-breakers/reset", asyncHandler(async (req, res) => {
+  const name = req.body.name;
+  if (name && _breakers[name]) {
+    _breakers[name].reset();
+    res.json({ ok: true, reset: name });
+  } else {
+    _breakers.resetAll();
+    res.json({ ok: true, reset: "all" });
+  }
+}));
+
+// Request traces
+app.get("/api/system/traces", asyncHandler(async (req, res) => {
+  const limit = parseInt(req.query.limit || "50", 10);
+  const minDurationMs = req.query.slow ? parseInt(req.query.slow, 10) : undefined;
+  res.json(getRecentTraces({ limit, minDurationMs }));
+}));
+
+app.get("/api/system/trace-metrics", asyncHandler(async (req, res) => {
+  res.json(getTraceMetrics());
 }));
 
 // Lens action registry for domain-specific engines
