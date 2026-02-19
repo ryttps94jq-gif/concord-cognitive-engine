@@ -156,6 +156,14 @@ import {
   getContextEngineMetrics,
 } from "./context-engine.js";
 
+// ── Lens Integration ────────────────────────────────────────────────────────
+
+import {
+  buildDTUConversationContext, getArtifactDTUs, getDTUArtifact,
+  checkEmergentLensAccess, executeEmergentLensAction,
+  getLensIntegrationMetrics,
+} from "./lens-integration.js";
+
 // ── Bootstrap Ingestion ──────────────────────────────────────────────────────
 
 import {
@@ -885,6 +893,40 @@ function init({ register, STATE, helpers }) {
   register("emergent", "context.metrics", (_ctx) => {
     return getContextEngineMetrics(STATE);
   }, { description: "Get context engine metrics", public: true });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // LENS INTEGRATION (Rich DTU Enrichment + Emergent Lens Actions)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  register("emergent", "lens.dtuContext", (_ctx, input = {}) => {
+    return buildDTUConversationContext(STATE, input.dtuId, { sessionId: input.sessionId });
+  }, { description: "Build conversation context for a DTU (DTU + artifact + edges)", public: true });
+
+  register("emergent", "lens.artifactDTUs", (_ctx, input = {}) => {
+    return getArtifactDTUs(STATE, input.artifactId);
+  }, { description: "Get all DTUs linked to an artifact", public: true });
+
+  register("emergent", "lens.dtuArtifact", (_ctx, input = {}) => {
+    return getDTUArtifact(STATE, input.dtuId);
+  }, { description: "Get the artifact linked to a DTU", public: true });
+
+  register("emergent", "lens.checkAccess", (_ctx, input = {}) => {
+    return { ok: true, ...checkEmergentLensAccess({ id: input.emergentId }, input.domain, input.action) };
+  }, { description: "Check if emergent can execute a lens action", public: true });
+
+  register("emergent", "lens.emergentAction", (_ctx, input = {}) => {
+    return executeEmergentLensAction(STATE, {
+      emergentId: input.emergentId,
+      artifactId: input.artifactId,
+      action: input.action,
+      params: input.params,
+      justification: input.justification,
+    });
+  }, { description: "Execute lens action on behalf of emergent agent", public: false });
+
+  register("emergent", "lens.integrationMetrics", (_ctx) => {
+    return getLensIntegrationMetrics();
+  }, { description: "Get lens integration metrics", public: true });
 
   // ══════════════════════════════════════════════════════════════════════════
   // GRC FORMATTING FOR PIPELINE

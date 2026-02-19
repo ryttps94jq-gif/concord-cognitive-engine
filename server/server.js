@@ -77,6 +77,11 @@ import { startOnboarding as startOnboardingV2, getOnboardingProgress as getOnboa
 import { recordSubstrateReuse, recordLlmCall, getEfficiencyDashboard, takeEfficiencySnapshot, getEfficiencyHistory } from "./emergent/compute-efficiency.js";
 import { runBootstrapIngestion, loadSeedPacks, getIngestionMetrics } from "./emergent/bootstrap-ingestion.js";
 import { processQuery as contextProcessQuery } from "./emergent/context-engine.js";
+import {
+  applyEnrichment, linkArtifactDTU, registerBuiltinEnrichers,
+  buildDTUConversationContext, getArtifactDTUs, getDTUArtifact,
+  recordEnrichmentMetric, getLensIntegrationMetrics,
+} from "./emergent/lens-integration.js";
 
 // ---- Atlas v2 Default-On + 3-Lane Separation Imports ----
 import { AUTO_PROMOTE_THRESHOLDS, STRICTNESS_PROFILES, getAutoPromoteConfig } from "./emergent/atlas-config.js";
@@ -18176,6 +18181,24 @@ function _lensEmitDTU(ctx, domain, action, artifactType, artifact, extra={}) {
       claims: extra.claims || [],
     };
     STATE.dtus.set(dtuId, dtu);
+
+    // Domain-aware enrichment: extract real claims, tags, edges from artifact data
+    const enrichResult = applyEnrichment(STATE, dtuId, artifact, action, extra);
+    if (enrichResult.enriched) {
+      recordEnrichmentMetric("enriched");
+      if (enrichResult.edgesCreated > 0) {
+        recordEnrichmentMetric("edgesCreated");
+      }
+    } else {
+      recordEnrichmentMetric("unenriched");
+    }
+
+    // Bidirectional linking: artifact ↔ DTU
+    if (artifact.id) {
+      linkArtifactDTU(STATE, artifact.id, dtuId);
+      recordEnrichmentMetric("linksCreated");
+    }
+
     saveStateDebounced();
     return dtuId;
   } catch { return null; }
@@ -18649,6 +18672,25 @@ app.get("/api/context/user/:userId", asyncHandler(async (req, res) => {
 
 app.get("/api/context/metrics", asyncHandler(async (req, res) => {
   res.json(await runMacro("emergent", "context.metrics", {}, makeCtx(req)));
+}));
+
+// ── Lens Integration API ──────────────────────────────────────────────────────
+
+app.get("/api/dtus/:id/context", asyncHandler(async (req, res) => {
+  const result = buildDTUConversationContext(STATE, req.params.id, { sessionId: req.query.sessionId });
+  res.json(result);
+}));
+
+app.get("/api/dtus/:id/artifact", asyncHandler(async (req, res) => {
+  res.json(getDTUArtifact(STATE, req.params.id));
+}));
+
+app.get("/api/lens/:domain/:id/dtus", asyncHandler(async (req, res) => {
+  res.json(getArtifactDTUs(STATE, req.params.id));
+}));
+
+app.get("/api/lens-integration/metrics", asyncHandler(async (req, res) => {
+  res.json(getLensIntegrationMetrics());
 }));
 
 // Lens action registry for domain-specific engines
@@ -25174,6 +25216,9 @@ registerGuidanceEndpoints(app, db);
 
 // ── Economy System: ledger, balances, transfers, withdrawals ─────────────────
 registerEconomyEndpoints(app, db);
+
+// ── Lens DTU Enrichment Initialization ──
+registerBuiltinEnrichers();
 
 // ═══════════════════════════════════════════════════════════════════════════════
 
