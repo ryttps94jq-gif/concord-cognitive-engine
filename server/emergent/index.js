@@ -144,6 +144,12 @@ import {
   getEmergedEntities, getEntityEmergenceMetrics,
 } from "./entity-emergence.js";
 
+// ── Bootstrap Ingestion ──────────────────────────────────────────────────────
+
+import {
+  runBootstrapIngestion, loadSeedPacks, getIngestionMetrics,
+} from "./bootstrap-ingestion.js";
+
 // ── Cognition Scheduler imports ─────────────────────────────────────────────
 
 import {
@@ -785,6 +791,27 @@ function init({ register, STATE, helpers }) {
   register("emergent", "persist.metrics", (_ctx) => {
     return getPersistenceMetrics();
   }, { description: "Get persistence layer metrics", public: true });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // BOOTSTRAP INGESTION
+  // ══════════════════════════════════════════════════════════════════════════
+
+  register("emergent", "ingest.run", (_ctx, input = {}) => {
+    const seeds = input.seeds || [];
+    return runBootstrapIngestion(STATE, seeds, {
+      dryRun: input.dryRun || false,
+      log: helpers?.log || (() => {}),
+    });
+  }, { description: "Run bootstrap ingestion pipeline on seed DTUs", public: false });
+
+  register("emergent", "ingest.loadSeeds", (_ctx, input = {}) => {
+    const dataDir = input.dataDir || "data";
+    return loadSeedPacks(dataDir);
+  }, { description: "Load seed DTU packs from disk", public: true });
+
+  register("emergent", "ingest.metrics", (_ctx) => {
+    return getIngestionMetrics(STATE);
+  }, { description: "Get bootstrap ingestion metrics", public: true });
 
   // ══════════════════════════════════════════════════════════════════════════
   // GRC FORMATTING FOR PIPELINE
