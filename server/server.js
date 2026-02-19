@@ -77,6 +77,18 @@ import { startOnboarding as startOnboardingV2, getOnboardingProgress as getOnboa
 import { recordSubstrateReuse, recordLlmCall, getEfficiencyDashboard, takeEfficiencySnapshot, getEfficiencyHistory } from "./emergent/compute-efficiency.js";
 import { runBootstrapIngestion, loadSeedPacks, getIngestionMetrics } from "./emergent/bootstrap-ingestion.js";
 import { processQuery as contextProcessQuery } from "./emergent/context-engine.js";
+import {
+  applyEnrichment, linkArtifactDTU, registerBuiltinEnrichers,
+  buildDTUConversationContext, getArtifactDTUs, getDTUArtifact,
+  recordEnrichmentMetric, getLensIntegrationMetrics,
+} from "./emergent/lens-integration.js";
+import {
+  getDTU as shadowGetDTU, getDTUSource,
+  wireShadowEdges_pattern, wireShadowEdges_linguistic,
+  enrichShadowCoreFields, cleanupShadowsByRichness,
+  recordShadowInteraction, buildShadowConversationContext,
+  getShadowGraphMetrics,
+} from "./emergent/shadow-graph.js";
 
 // ---- Atlas v2 Default-On + 3-Lane Separation Imports ----
 import { AUTO_PROMOTE_THRESHOLDS, STRICTNESS_PROFILES, getAutoPromoteConfig } from "./emergent/atlas-config.js";
@@ -2195,6 +2207,21 @@ function maybeShadowPromotion(dtu) {
   };
 
   STATE.shadowDtus.set(shadowId, shadowDtu);
+
+  // ── Shadow Graph Upgrade: wire edges + enrich core fields ──
+  // Collect matching DTU ids for edge wiring
+  const matchingIds = [];
+  for (const existing of STATE.dtus.values()) {
+    if (!existing || existing.id === dtu.id) continue;
+    const eInv = Array.isArray(existing.core?.invariants) ? existing.core.invariants.map(_normAtom) : [];
+    if (promotable.some(p => eInv.includes(p))) matchingIds.push(existing.id);
+    if (matchingIds.length >= 10) break;
+  }
+  try {
+    wireShadowEdges_pattern(STATE, shadowDtu, dtu.id, matchingIds);
+    enrichShadowCoreFields(STATE, shadowDtu, { sourceId: dtu.id, matchingIds });
+  } catch (_) { /* shadow graph wiring is best-effort */ }
+
   return { promoted: true, shadowId, invariants: promotable };
 }
 
@@ -2468,50 +2495,43 @@ function maybeWriteLinguisticShadowDTU({ phrase="", expands=[], topIds=[] } = {}
       hash: ""
     };
     STATE.shadowDtus.set(dtu.id, dtu);
+
+    // ── Shadow Graph Upgrade: wire edges to topIds + enrich core fields ──
+    try {
+      wireShadowEdges_linguistic(STATE, dtu, (topIds||[]).slice(0,12));
+      enrichShadowCoreFields(STATE, dtu, { topIds: (topIds||[]).slice(0,12) });
+    } catch (_) { /* shadow graph wiring is best-effort */ }
+
     saveStateDebounced();
     return { ok:true, id: dtu.id };
   } catch (e) {
     return { ok:false, error:String(e?.message||e) };
   }
 }
-// Shadow DTU cleanup - prevent unbounded memory growth
+// Shadow DTU cleanup — richness-based TTL (replaces flat 14-day expiry)
+// Shadows that have accumulated edges, claims, and conversations survive longer.
 const SHADOW_DTU_MAX = 2000; // Maximum shadow DTUs to keep
-const SHADOW_DTU_TTL_DAYS = 14; // Days before shadow DTU expires
 
 function cleanupShadowDTUs() {
   try {
-    const now = Date.now();
-    const ttlMs = SHADOW_DTU_TTL_DAYS * 24 * 60 * 60 * 1000;
-    const shadows = Array.from(STATE.shadowDtus.entries());
+    const result = cleanupShadowsByRichness(STATE, { maxShadows: SHADOW_DTU_MAX });
 
-    // Remove expired shadow DTUs
-    let expired = 0;
-    for (const [id, dtu] of shadows) {
-      const createdAt = new Date(dtu.createdAt || 0).getTime();
-      if (now - createdAt > ttlMs) {
-        STATE.shadowDtus.delete(id);
-        EMBEDDINGS.store.delete(id); // Also remove from embeddings
-        expired++;
+    // Also clean embeddings for removed shadows
+    if (result.expired > 0) {
+      for (const id of EMBEDDINGS.store.keys()) {
+        if (id.startsWith("shadow_") && !STATE.shadowDtus.has(id)) {
+          EMBEDDINGS.store.delete(id);
+        }
       }
-    }
-
-    // If still over max, remove oldest
-    if (STATE.shadowDtus.size > SHADOW_DTU_MAX) {
-      const sorted = Array.from(STATE.shadowDtus.entries())
-        .sort((a, b) => (a[1].createdAt || "").localeCompare(b[1].createdAt || ""));
-      const toRemove = sorted.slice(0, STATE.shadowDtus.size - SHADOW_DTU_MAX);
-      for (const [id] of toRemove) {
-        STATE.shadowDtus.delete(id);
-        EMBEDDINGS.store.delete(id);
-      }
-    }
-
-    if (expired > 0 || STATE.shadowDtus.size > SHADOW_DTU_MAX) {
       saveStateDebounced();
-      structuredLog("info", "shadow_cleanup", { expired, remaining: STATE.shadowDtus.size });
+      structuredLog("info", "shadow_cleanup", {
+        expired: result.expired,
+        remaining: result.remaining,
+        richestKept: result.richestKept,
+      });
     }
 
-    return { ok: true, expired, remaining: STATE.shadowDtus.size };
+    return result;
   } catch (e) {
     return { ok: false, error: String(e?.message || e) };
   }
@@ -18176,6 +18196,24 @@ function _lensEmitDTU(ctx, domain, action, artifactType, artifact, extra={}) {
       claims: extra.claims || [],
     };
     STATE.dtus.set(dtuId, dtu);
+
+    // Domain-aware enrichment: extract real claims, tags, edges from artifact data
+    const enrichResult = applyEnrichment(STATE, dtuId, artifact, action, extra);
+    if (enrichResult.enriched) {
+      recordEnrichmentMetric("enriched");
+      if (enrichResult.edgesCreated > 0) {
+        recordEnrichmentMetric("edgesCreated");
+      }
+    } else {
+      recordEnrichmentMetric("unenriched");
+    }
+
+    // Bidirectional linking: artifact ↔ DTU
+    if (artifact.id) {
+      linkArtifactDTU(STATE, artifact.id, dtuId);
+      recordEnrichmentMetric("linksCreated");
+    }
+
     saveStateDebounced();
     return dtuId;
   } catch { return null; }
@@ -18649,6 +18687,50 @@ app.get("/api/context/user/:userId", asyncHandler(async (req, res) => {
 
 app.get("/api/context/metrics", asyncHandler(async (req, res) => {
   res.json(await runMacro("emergent", "context.metrics", {}, makeCtx(req)));
+}));
+
+// ── Lens Integration API ──────────────────────────────────────────────────────
+
+app.get("/api/dtus/:id/context", asyncHandler(async (req, res) => {
+  const result = buildDTUConversationContext(STATE, req.params.id, { sessionId: req.query.sessionId });
+  res.json(result);
+}));
+
+app.get("/api/dtus/:id/artifact", asyncHandler(async (req, res) => {
+  res.json(getDTUArtifact(STATE, req.params.id));
+}));
+
+app.get("/api/lens/:domain/:id/dtus", asyncHandler(async (req, res) => {
+  res.json(getArtifactDTUs(STATE, req.params.id));
+}));
+
+app.get("/api/lens-integration/metrics", asyncHandler(async (req, res) => {
+  res.json(getLensIntegrationMetrics());
+}));
+
+// ── Shadow Graph API routes ──────────────────────────────────────────────────
+
+app.get("/api/shadow/dtus/:id", asyncHandler(async (req, res) => {
+  const dtu = shadowGetDTU(STATE, req.params.id);
+  if (!dtu) return res.status(404).json({ ok: false, error: "not_found" });
+  res.json({ ok: true, dtu, source: getDTUSource(STATE, req.params.id) });
+}));
+
+app.get("/api/shadow/dtus/:id/context", asyncHandler(async (req, res) => {
+  res.json(buildShadowConversationContext(STATE, req.params.id));
+}));
+
+app.post("/api/shadow/dtus/:id/interact", asyncHandler(async (req, res) => {
+  const result = recordShadowInteraction(STATE, req.params.id, {
+    type: req.body?.type,
+    userId: req.body?.userId,
+    claim: req.body?.claim,
+  });
+  res.json(result);
+}));
+
+app.get("/api/shadow/metrics", asyncHandler(async (req, res) => {
+  res.json(getShadowGraphMetrics(STATE));
 }));
 
 // Lens action registry for domain-specific engines
@@ -25174,6 +25256,9 @@ registerGuidanceEndpoints(app, db);
 
 // ── Economy System: ledger, balances, transfers, withdrawals ─────────────────
 registerEconomyEndpoints(app, db);
+
+// ── Lens DTU Enrichment Initialization ──
+registerBuiltinEnrichers();
 
 // ═══════════════════════════════════════════════════════════════════════════════
 

@@ -120,7 +120,12 @@ export function queryLattice(STATE, query = {}) {
   const ops = getLatticeOps(STATE);
   ops.metrics.reads++;
 
-  const allDtus = STATE.dtus ? Array.from(STATE.dtus.values()) : [];
+  const canonical = STATE.dtus ? Array.from(STATE.dtus.values()) : [];
+  // Include shadows when query.includeShadows is true (uniform graph traversal)
+  const shadows = query.includeShadows && STATE.shadowDtus
+    ? Array.from(STATE.shadowDtus.values())
+    : [];
+  const allDtus = canonical.concat(shadows);
   let results = allDtus;
 
   if (query.tags && Array.isArray(query.tags)) {
