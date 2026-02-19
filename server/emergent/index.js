@@ -239,6 +239,13 @@ import {
   detectStalePeers, getFederationPeeringMetrics,
 } from "./federation-peering.js";
 
+// ── User Feedback Loop ───────────────────────────────────────────────────────
+
+import {
+  recordFeedback, getDTUFeedback, getReviewQueue, dismissReview,
+  getLowestQualityDTUs, getFeedbackMetrics,
+} from "./user-feedback.js";
+
 // ── Bootstrap Ingestion ──────────────────────────────────────────────────────
 
 import {
@@ -1248,6 +1255,34 @@ function init({ register, STATE, helpers }) {
   register("emergent", "federation.metrics", (_ctx) => {
     return getFederationPeeringMetrics(STATE);
   }, { description: "Get federation peering metrics", public: true });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // USER FEEDBACK LOOP
+  // ══════════════════════════════════════════════════════════════════════════
+
+  register("emergent", "feedback.record", (_ctx, input = {}) => {
+    return recordFeedback(STATE, input);
+  }, { description: "Record user feedback on a DTU interaction", public: true });
+
+  register("emergent", "feedback.get", (_ctx, input = {}) => {
+    return getDTUFeedback(STATE, input.dtuId);
+  }, { description: "Get feedback summary for a DTU", public: true });
+
+  register("emergent", "feedback.reviewQueue", (_ctx) => {
+    return getReviewQueue(STATE);
+  }, { description: "Get DTUs flagged for review by users", public: true });
+
+  register("emergent", "feedback.dismissReview", (_ctx, input = {}) => {
+    return dismissReview(STATE, input.dtuId);
+  }, { description: "Dismiss a DTU from the review queue", public: false });
+
+  register("emergent", "feedback.lowestQuality", (_ctx, input = {}) => {
+    return getLowestQualityDTUs(STATE, input.limit);
+  }, { description: "Get lowest-quality DTUs by user feedback", public: true });
+
+  register("emergent", "feedback.metrics", (_ctx) => {
+    return getFeedbackMetrics(STATE);
+  }, { description: "Get user feedback metrics", public: true });
 
   // ══════════════════════════════════════════════════════════════════════════
   // GRC FORMATTING FOR PIPELINE
