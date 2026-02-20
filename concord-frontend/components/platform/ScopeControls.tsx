@@ -96,6 +96,9 @@ export default function ScopeControls() {
     queryKey: ['scope-dtus', activeScope],
     queryFn: () => {
       if (activeScope === 'all') return apiHelpers.dtus.list();
+      if (activeScope === 'local' || activeScope === 'global') {
+        return apiHelpers.dtus.list({ scope: activeScope });
+      }
       return apiHelpers.scope.dtus(activeScope);
     },
     refetchInterval: 30000,

@@ -205,6 +205,109 @@ export default function registerOperationRoutes(app, {
     }
   });
 
+  // ── Planetary Ingest Engine (tier-gated REST endpoints) ───────────────────
+  // These wire to ingest-engine.js for the full pipeline:
+  // URL → tier check → domain validation → fetch → extract → dedup → HLR → council gate → DTU
+
+  app.post("/api/ingest/submit", async (req, res) => {
+    try {
+      const url = String(req.body?.url || "").trim();
+      if (!url) return res.status(400).json({ ok: false, error: "url required" });
+
+      const userId = req.user?.id || req.body?.userId || "anon";
+      const tier = req.body?.tier || "free";
+
+      const mod = await import("../emergent/ingest-engine.js").catch(() => null);
+      if (!mod?.submitUrl) return res.status(501).json({ ok: false, error: "Ingest engine not available" });
+
+      const result = await mod.submitUrl(userId, url, tier);
+      if (!result.ok && result.error?.includes("rate limit")) {
+        return res.status(429).json(result);
+      }
+      return res.json(result);
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
+
+  app.get("/api/ingest/status/:id", async (req, res) => {
+    try {
+      const mod = await import("../emergent/ingest-engine.js").catch(() => null);
+      if (!mod?.getIngestStatus) return res.status(501).json({ ok: false, error: "Ingest engine not available" });
+      const result = mod.getIngestStatus(req.params.id);
+      if (!result) return res.status(404).json({ ok: false, error: "Ingest job not found" });
+      return res.json({ ok: true, job: result });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
+
+  app.get("/api/ingest/queue", async (req, res) => {
+    try {
+      const mod = await import("../emergent/ingest-engine.js").catch(() => null);
+      if (!mod?.getQueue) return res.json({ ok: true, queue: [], total: 0 });
+      const userId = req.user?.id || null;
+      const queue = mod.getQueue();
+      // Non-sovereign users only see their own items
+      const role = req.user?.role || "guest";
+      const isSovereign = ["owner", "admin", "founder"].includes(role);
+      const items = isSovereign ? queue : (queue || []).filter(j => j.userId === userId);
+      return res.json({ ok: true, queue: items, total: items.length });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
+
+  app.get("/api/ingest/history", async (req, res) => {
+    try {
+      const mod = await import("../emergent/ingest-engine.js").catch(() => null);
+      if (!mod?.getIngestMetrics) return res.json({ ok: true, history: [], metrics: {} });
+      const metrics = mod.getIngestMetrics();
+      return res.json({ ok: true, metrics });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
+
+  app.get("/api/ingest/stats", async (req, res) => {
+    try {
+      const mod = await import("../emergent/ingest-engine.js").catch(() => null);
+      if (!mod?.getIngestStats) return res.json({ ok: true, stats: {} });
+      const stats = mod.getIngestStats();
+      return res.json({ ok: true, ...stats });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
+
+  app.get("/api/ingest/allowlist", async (req, res) => {
+    try {
+      const mod = await import("../emergent/ingest-engine.js").catch(() => null);
+      if (!mod?.getAllowlist) return res.json({ ok: true, allowlist: [] });
+      return res.json({ ok: true, allowlist: mod.getAllowlist() });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
+
+  app.post("/api/ingest/allowlist", requireRole("owner", "admin", "founder"), async (req, res) => {
+    try {
+      const mod = await import("../emergent/ingest-engine.js").catch(() => null);
+      if (!mod) return res.status(501).json({ ok: false, error: "Ingest engine not available" });
+      const { action, domain } = req.body || {};
+      if (!domain) return res.status(400).json({ ok: false, error: "domain required" });
+      if (action === "remove" && mod.removeFromAllowlist) {
+        return res.json({ ok: true, ...mod.removeFromAllowlist(domain) });
+      }
+      if (mod.addToAllowlist) {
+        return res.json({ ok: true, ...mod.addToAllowlist(domain) });
+      }
+      return res.status(501).json({ ok: false, error: "Allowlist management not available" });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
+
   // Jobs status endpoint
   app.get("/api/jobs/status", (req, res) => {
     try {

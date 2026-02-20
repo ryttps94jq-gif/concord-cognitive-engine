@@ -20,9 +20,11 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { showToast } from '@/components/common/Toasts';
 import { cn } from '@/lib/utils';
 import { ds } from '@/lib/design-system';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiHelpers } from '@/lib/api/client';
 import {
   Globe, FileText, Package, Briefcase, Store,
-  ChevronLeft, ChevronRight, ArrowUpRight, Send,
+  ChevronLeft, ChevronRight, ArrowUpRight, Send, Download,
   Filter, Eye
 } from 'lucide-react';
 import type { LensTab } from '@/components/common/LensShell';
@@ -72,6 +74,8 @@ export default function GlobalPage() {
       };
       if (search) params.q = search;
       if (visibilityFilter) params.visibility = visibilityFilter;
+      // Global page should only show global-scope DTUs
+      if (activeTab === 'dtus') params.scope = 'global';
 
       const res = await api.get(endpointMap[activeTab], { params });
       return res.data;
@@ -83,6 +87,25 @@ export default function GlobalPage() {
   const total = data?.total || 0;
   const showing = items.length;
   const totalPages = Math.ceil(total / PAGE_SIZE);
+
+  const queryClient = useQueryClient();
+
+  const syncToLocalMutation = useMutation({
+    mutationFn: (dtuId: string) => apiHelpers.dtus.syncFromGlobal(dtuId),
+    onSuccess: (res) => {
+      const data = res.data;
+      if (data?.ok) {
+        showToast('success', 'Synced to your local inventory');
+        queryClient.invalidateQueries({ queryKey: ['dtus'] });
+        queryClient.invalidateQueries({ queryKey: ['scope-metrics'] });
+      } else {
+        showToast('error', data?.error === 'Already synced' ? 'Already in your local inventory' : (data?.error || 'Sync failed'));
+      }
+    },
+    onError: () => {
+      showToast('error', 'Failed to sync to local');
+    },
+  });
 
   const handleSyncToLens = useCallback(async (item: Record<string, unknown>) => {
     try {
@@ -227,6 +250,16 @@ export default function GlobalPage() {
               </div>
 
               <div className="flex items-center gap-1 ml-2">
+                {activeTab === 'dtus' && (
+                  <button
+                    onClick={() => syncToLocalMutation.mutate(item.id as string)}
+                    disabled={syncToLocalMutation.isPending}
+                    className="p-1.5 rounded text-gray-400 hover:text-neon-green hover:bg-neon-green/10 transition-colors disabled:opacity-30"
+                    title="Sync to your local inventory"
+                  >
+                    <Download className="w-4 h-4" />
+                  </button>
+                )}
                 <button
                   onClick={() => handleSyncToLens(item)}
                   className="p-1.5 rounded text-gray-400 hover:text-neon-cyan hover:bg-neon-cyan/10 transition-colors"

@@ -27,7 +27,7 @@ import { InspectorDrawer } from '@/components/guidance/InspectorDrawer';
 import { useUIStore } from '@/store/ui';
 import { CORE_LENSES } from '@/lib/lens-registry';
 import {
-  Activity, Zap, Compass, TrendingUp, Heart,
+  Activity, Zap, Compass, TrendingUp, Heart, Globe,
   MessageSquare, Layout, Share2, Code, Music,
 } from 'lucide-react';
 
@@ -106,6 +106,12 @@ function DashboardPage() {
   const { data: dtusData, isLoading: dtusLoading } = useQuery({
     queryKey: ['dtus'],
     queryFn: () => api.get('/api/dtus').then((r) => r.data),
+  });
+
+  const { data: scopeMetrics } = useQuery({
+    queryKey: ['scope-metrics'],
+    queryFn: () => apiHelpers.scope.metrics().then((r) => r.data),
+    refetchInterval: 30000,
   });
 
   const { data: eventsData } = useQuery({
@@ -234,18 +240,24 @@ function DashboardPage() {
       </header>
 
       {/* Metrics Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <MetricCard
-          label="Total DTUs"
-          value={statusLoading ? '...' : dtuCount}
+          label="My DTUs"
+          value={statusLoading ? '...' : (scopeMetrics?.localCount ?? dtuCount)}
           icon={<Zap className="w-5 h-5" />}
           color="blue"
+        />
+        <MetricCard
+          label="Global DTUs"
+          value={statusLoading ? '...' : (scopeMetrics?.globalCount ?? 0)}
+          icon={<Globe className="w-5 h-5" />}
+          color="purple"
         />
         <MetricCard
           label="Coherence"
           value={statusLoading ? '...' : `${(coherence * 100).toFixed(0)}%`}
           icon={<Activity className="w-5 h-5" />}
-          color="purple"
+          color="pink"
         />
         <MetricCard
           label="Events"
