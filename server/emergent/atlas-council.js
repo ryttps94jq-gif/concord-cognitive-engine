@@ -202,6 +202,14 @@ export function councilResolve(STATE, input) {
   // Qualia hook: council resolution completed
   try { globalThis.qualiaHooks?.hookCouncilVote(actor || "council", { agreement: targetStatus === "VERIFIED" ? 0.8 : 0.4, conflict: targetStatus === "DISPUTED" ? 0.7 : 0.2, confidence: 0.6 }); } catch { /* silent */ }
 
+  // Council voices: attach named perspective evaluations
+  try {
+    if (typeof globalThis._runCouncilVoices === "function") {
+      const qualiaState = globalThis.qualiaEngine?.getQualiaState(actor || "council");
+      event.voices = globalThis._runCouncilVoices(dtu, qualiaState);
+    }
+  } catch { /* silent */ }
+
   return {
     ok: true,
     dtuId,

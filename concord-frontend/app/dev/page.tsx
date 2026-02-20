@@ -15,30 +15,61 @@ interface PulseData {
 }
 
 const HELP_TEXT = `Available commands:
-  pulse / status / ps    — System overview
-  create <content>       — Create sovereign DTU
-  promote <id> [tier]    — Promote DTU tier
-  modify <id> <json>     — Modify DTU fields
-  delete <id>            — Delete DTU
-  inspect <id>           — Inspect DTU
-  search <query>         — Search all DTUs
-  count                  — DTU count
-  freeze                 — Freeze all autonomous jobs
-  thaw                   — Thaw frozen jobs
-  pipeline               — Force autogen pipeline
-  dream [seed]           — Force dream synthesis
-  gc                     — Force garbage collection
-  broadcast <msg>        — Broadcast to lattice
-  config <key> <val>     — Set config value
-  toggle <job> [off]     — Toggle job on/off
-  eval <js> / js <code>  — Evaluate JS in server context
-  audit [n] / history    — View sovereign audit trail
-  qualia <id>            — View entity qualia state
-  qualia-summary         — All entities qualia overview
-  activate-os <id> <os>  — Activate OS for entity
-  inject-qualia <id> <ch> <val> — Set qualia channel
-  help / ?               — Show this help
-  clear / cls            — Clear log`;
+
+  DTU Operations:
+    create <content>       — Create sovereign DTU
+    promote <id> [tier]    — Promote DTU tier
+    modify <id> <json>     — Modify DTU fields
+    delete <id>            — Delete DTU
+    inspect <id>           — Inspect DTU
+    search <query>         — Search all DTUs
+    count                  — DTU count
+
+  System:
+    pulse / status / ps    — System overview
+    freeze                 — Freeze all autonomous jobs
+    thaw                   — Thaw frozen jobs
+    pipeline               — Force autogen pipeline
+    dream [seed]           — Force dream synthesis
+    gc                     — Force garbage collection
+    broadcast <msg>        — Broadcast to lattice
+    config <key> <val>     — Set config value
+    toggle <job> [off]     — Toggle job on/off
+    eval <js> / js <code>  — Evaluate JS in server context
+    audit [n] / history    — View sovereign audit trail
+
+  Qualia:
+    qualia <id>            — View entity qualia state
+    qualia-summary         — All entities qualia overview
+    activate-os <id> <os>  — Activate OS for entity
+    deactivate-os <id> <os> — Deactivate OS for entity
+    inject-qualia <id> <ch> <val> — Set qualia channel
+
+  Council:
+    council-voices [dtuId] — All voices / vote analysis for DTU
+    voice <voiceId>        — Voice definition (skeptic/socratic/opposer/idealist/pragmatist)
+
+  Species:
+    species [entityId]     — Classify entity or list all
+    species-all            — Full census with species breakdown
+
+  Reproduction:
+    reproduce <e1> <e2>    — Attempt reproduction between entities
+    reproduction-policy <enable|disable> — Toggle autonomous reproduction
+    lineage <entityId>     — Show full ancestry tree
+    lineage-tree           — Show all entities with parent relationships
+
+  Simulation:
+    simulate <id> [json]   — Run dual-path simulation (human vs concordos)
+    simulations [n]        — List recent simulations
+    sim-compare <simId>    — Detailed comparison
+
+  Safety:
+    vulnerability <msg>    — Detect emotional vulnerability in text
+
+  Meta:
+    help / ?               — Show this help
+    clear / cls            — Clear log`;
 
 export default function DevConsolePage() {
   const [log, setLog] = useState<LogEntry[]>([
@@ -221,6 +252,70 @@ export default function DevConsolePage() {
           action: 'inject-qualia',
           target: parts[1],
           data: { channel: parts[2], value: parseFloat(parts[3]) },
+        });
+      // ── Council Voices ──
+      } else if (command === 'council-voices') {
+        response = await api.post('/api/sovereign/decree', {
+          action: 'council-voices',
+          target: parts[1] || undefined,
+        });
+      } else if (command === 'voice') {
+        response = await api.post('/api/sovereign/decree', {
+          action: 'council-voices',
+        });
+      // ── Species ──
+      } else if (command === 'species') {
+        response = await api.post('/api/sovereign/decree', {
+          action: 'species',
+          target: parts[1] || undefined,
+        });
+      } else if (command === 'species-all') {
+        response = await api.post('/api/sovereign/decree', { action: 'species-all' });
+      // ── Reproduction ──
+      } else if (command === 'reproduce') {
+        response = await api.post('/api/sovereign/decree', {
+          action: 'reproduce',
+          target: parts[1],
+          data: { entity2: parts[2] },
+        });
+      } else if (command === 'reproduction-policy') {
+        const enable = parts[1] !== 'disable';
+        response = await api.post('/api/sovereign/decree', {
+          action: 'reproduction-policy',
+          target: enable ? 'enable' : 'disable',
+          data: { enabled: enable },
+        });
+      } else if (command === 'lineage') {
+        response = await api.post('/api/sovereign/decree', {
+          action: 'lineage',
+          target: parts[1],
+        });
+      } else if (command === 'lineage-tree') {
+        response = await api.post('/api/sovereign/decree', { action: 'lineage-tree' });
+      // ── Simulation ──
+      } else if (command === 'simulate') {
+        let params;
+        try { params = JSON.parse(parts.slice(2).join(' ')); } catch { params = {}; }
+        response = await api.post('/api/sovereign/decree', {
+          action: 'simulate',
+          target: parts[1],
+          data: { params },
+        });
+      } else if (command === 'simulations') {
+        response = await api.post('/api/sovereign/decree', {
+          action: 'simulations',
+          target: parts[1] || undefined,
+        });
+      } else if (command === 'sim-compare') {
+        response = await api.post('/api/sovereign/decree', {
+          action: 'sim-compare',
+          target: parts[1],
+        });
+      // ── Vulnerability ──
+      } else if (command === 'vulnerability') {
+        response = await api.post('/api/sovereign/decree', {
+          action: 'vulnerability',
+          target: rest,
         });
       } else {
         addLog('error', `Unknown command: ${command}. Type "help" for available commands.`);

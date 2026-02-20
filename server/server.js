@@ -52,6 +52,11 @@ import registerOperationRoutes from "./routes/operations.js";
 import createQualiaRouter from "./routes/qualia.js";
 import createSovereignRouter from "./routes/sovereign.js";
 import { QualiaEngine, hooks as qualiaHooks } from "./existential/index.js";
+import { detectVulnerability, chooseDeliveryMode, hookVulnerability, assessAndAdapt } from "./emergent/vulnerability-engine.js";
+import { runCouncilVoices, getAllVoices as getAllCouncilVoices } from "./emergent/council-voices.js";
+import { attemptReproduction, getLineage, getLineageTree, enableReproduction, disableReproduction, isReproductionEnabled } from "./emergent/reproduction.js";
+import { classifyEntity, classifyAllEntities, getSpeciesCensus, getSpeciesRegistry, checkReproductionCompatibility, getSpecies } from "./emergent/species.js";
+import { runDualPathSimulation, getSimulation, listSimulations } from "./emergent/dual-path.js";
 
 // ---- "Everything Real" imports: migration runner + durable endpoints ----
 import { runMigrations as runSchemaMigrations } from "./migrate.js";
@@ -11752,10 +11757,24 @@ const _mentionsSelf = Array.from(_selfTokens).some(t => _pLow.includes(t));
   } catch {}
   // ===== END AFFECT → CHAT INTEGRATION =====
 
+  // ===== VULNERABILITY DETECTION =====
+  let _vulnerability = null;
+  let _deliveryMode = null;
+  try {
+    const _va = assessAndAdapt(prompt, sessionId);
+    _vulnerability = _va.vulnerability;
+    _deliveryMode = _va.delivery;
+    if (_vulnerability?.level === "high") {
+      localSettings._vulnerabilityPolicy = _deliveryMode.policy;
+      localSettings._vulnerabilityMode = "gentle";
+    }
+  } catch { /* silent */ }
+  // ===== END VULNERABILITY DETECTION =====
+
   const llm = typeof input.llm === "boolean" ? input.llm : localSettings.llmDefault;
 
   const sess = STATE.sessions.get(sessionId);
-  
+
 sess.messages.push({ role: "user", content: prompt, ts: nowISO() });
 
   // --- Per-user personality growth (style vector) ---
@@ -15810,6 +15829,17 @@ try {
 }
 // ===== END EXISTENTIAL OS =====
 
+// ===== SPECIES + VULNERABILITY + COUNCIL VOICES + DUAL-PATH + REPRODUCTION =====
+// Expose species module globally for reproduction compatibility checks
+try {
+  globalThis._concordSpecies = { checkReproductionCompatibility, classifyEntity, getSpecies };
+  globalThis._runCouncilVoices = runCouncilVoices;
+  log("species.init", "Species classification + council voices + reproduction loaded");
+} catch (e) {
+  log("species.init", "Species module load failed (non-fatal)", { error: String(e?.message || e) });
+}
+// ===== END SPECIES INIT =====
+
 // ===== PLUGIN SYSTEM =====
 try {
   const pluginResult = loadPluginsFromDisk(STATE, {
@@ -16753,6 +16783,51 @@ startWeeklyCouncil();
 app.use("/api/emergent", createEmergentRouter({ makeCtx, runMacro }));
 app.use("/api/qualia", createQualiaRouter());
 app.use("/api/sovereign", createSovereignRouter({ STATE, makeCtx, runMacro, saveStateDebounced }));
+
+// ===== SPECIES API =====
+app.get("/api/species/registry", (_req, res) => res.json({ ok: true, registry: getSpeciesRegistry() }));
+app.get("/api/species/census", (_req, res) => res.json({ ok: true, ...getSpeciesCensus(STATE) }));
+app.get("/api/species/all", (_req, res) => res.json({ ok: true, entities: classifyAllEntities(STATE) }));
+app.get("/api/species/:entityId", (req, res) => {
+  const emergents = STATE.emergents || STATE.__emergents;
+  const entity = emergents instanceof Map ? emergents.get(req.params.entityId) : emergents?.[req.params.entityId];
+  if (!entity) return res.json({ ok: false, error: "entity not found" });
+  const species = classifyEntity(entity);
+  return res.json({ ok: true, entityId: req.params.entityId, species, info: getSpecies(species) });
+});
+
+// ===== COUNCIL VOICES API =====
+app.get("/api/council/voices", (_req, res) => res.json({ ok: true, voices: getAllCouncilVoices() }));
+app.post("/api/council/voices/evaluate", (req, res) => {
+  const { proposal } = req.body || {};
+  if (!proposal) return res.status(400).json({ ok: false, error: "proposal required" });
+  const qualiaState = globalThis.qualiaEngine?.getQualiaState("council") || null;
+  const result = runCouncilVoices(proposal, qualiaState);
+  return res.json({ ok: true, ...result });
+});
+
+// ===== DUAL-PATH SIMULATION API =====
+app.post("/api/simulate/dual-path", (req, res) => {
+  const result = runDualPathSimulation(req.body || {});
+  return res.json({ ok: true, ...result });
+});
+app.get("/api/simulate/history", (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 20, 100);
+  return res.json({ ok: true, simulations: listSimulations(limit) });
+});
+app.get("/api/simulate/:simId", (req, res) => {
+  const sim = getSimulation(req.params.simId);
+  if (!sim) return res.json({ ok: false, error: "simulation not found" });
+  return res.json({ ok: true, ...sim });
+});
+
+// ===== VULNERABILITY API =====
+app.post("/api/vulnerability/detect", (req, res) => {
+  const { message } = req.body || {};
+  if (!message) return res.status(400).json({ ok: false, error: "message required" });
+  const result = assessAndAdapt(message, req.body.entityId);
+  return res.json({ ok: true, ...result });
+});
 
 // papers, forge/fromSource, crawl, audit, lattice, persona, skill, intent, chicken3 — extracted to routes/domain.js
 
