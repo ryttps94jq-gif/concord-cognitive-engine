@@ -2284,7 +2284,8 @@ function init({ register, STATE, helpers }) {
   }, { description: "Run the Global scope tick (slow, deliberate synthesis)", public: false });
 
   register("emergent", "scope.listByScope", (_ctx, input = {}) => {
-    return listDtusByScope(STATE, input.scope, input);
+    const userId = input.userId || _ctx?.actor?.id || _ctx?.actor?.odId || null;
+    return listDtusByScope(STATE, input.scope, { ...input, userId });
   }, { description: "List DTUs filtered by scope", public: true });
 
   register("emergent", "scope.promotionHistory", (_ctx, input = {}) => {
@@ -2300,7 +2301,8 @@ function init({ register, STATE, helpers }) {
   }, { description: "Get marketplace analytics data", public: true });
 
   register("emergent", "scope.metrics", (_ctx) => {
-    return getScopeMetrics(STATE);
+    const userId = _ctx?.actor?.id || _ctx?.actor?.odId || null;
+    return getScopeMetrics(STATE, { userId });
   }, { description: "Get scope separation metrics", public: true });
 
   // ══════════════════════════════════════════════════════════════════════════

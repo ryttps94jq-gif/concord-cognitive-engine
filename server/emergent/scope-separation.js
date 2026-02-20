@@ -629,11 +629,13 @@ export function listDtusByScope(STATE, scope, opts = {}) {
     return { ok: false, error: `invalid_scope: ${scope}` };
   }
   const limit = Math.min(Math.max(opts.limit || 50, 1), 500);
+  const userId = opts.userId || opts.actorId || null;
   const dtus = [];
   for (const dtu of STATE.dtus.values()) {
-    if (getDtuScope(dtu) === scope) {
-      dtus.push(dtu);
-    }
+    if (getDtuScope(dtu) !== scope) continue;
+    // For local scope, only show DTUs owned by this user (or unowned legacy DTUs)
+    if (scope === SCOPES.LOCAL && userId && dtu.ownerId && dtu.ownerId !== userId) continue;
+    dtus.push(dtu);
   }
   const sorted = dtus.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
   return { ok: true, scope, dtus: sorted.slice(0, limit), total: dtus.length };
@@ -679,19 +681,35 @@ export function getMarketplaceAnalytics(STATE, opts = {}) {
 /**
  * Get scope separation metrics.
  */
-export function getScopeMetrics(STATE) {
+export function getScopeMetrics(STATE, opts = {}) {
   const ss = ensureScopeState(STATE);
+  const userId = opts.userId || null;
 
-  // Count DTUs by scope
+  // Count DTUs by scope (total system counts)
   const scopeCounts = { [SCOPES.LOCAL]: 0, [SCOPES.MARKETPLACE]: 0, [SCOPES.GLOBAL]: 0 };
+  // User-specific local count (only DTUs owned by this user)
+  let userLocalCount = 0;
+  let userSyncedCount = 0;
+
   for (const dtu of STATE.dtus.values()) {
     const s = getDtuScope(dtu);
     scopeCounts[s] = (scopeCounts[s] || 0) + 1;
+    if (userId && s === SCOPES.LOCAL) {
+      if (!dtu.ownerId || dtu.ownerId === userId) {
+        userLocalCount++;
+        if (dtu.meta?.syncedFromGlobal) userSyncedCount++;
+      }
+    }
   }
 
   return {
     ok: true,
     scopeCounts,
+    // User-specific counts for the dashboard
+    globalCount: scopeCounts[SCOPES.GLOBAL],
+    localCount: userId ? userLocalCount : scopeCounts[SCOPES.LOCAL],
+    marketplaceCount: scopeCounts[SCOPES.MARKETPLACE],
+    userSyncedCount,
     globalTick: { ...ss.globalTick },
     metrics: { ...ss.metrics },
     influenceMatrix: INFLUENCE_MATRIX,

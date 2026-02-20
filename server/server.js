@@ -11354,6 +11354,7 @@ register("dtu", "create", async (ctx, input) => {
     lineage,
     source,
     meta,
+    ownerId: ctx?.actor?.id || ctx?.actor?.odId || null,
     core: {
       definitions: Array.isArray(coreIn.definitions) ? coreIn.definitions : [],
       invariants: Array.isArray(coreIn.invariants) ? coreIn.invariants : [],
@@ -11494,12 +11495,31 @@ register("dtu", "list", (ctx, input) => {
   const offset = clamp(Number(input.offset || 0), 0, 1e9);
   const tier = input.tier && ["regular","mega","hyper","any"].includes(input.tier) ? input.tier : "any";
   const q = tokenish(input.q || "");
+  const scopeFilter = input.scope || null; // "local", "global", or null (default: user's view)
+  const userId = ctx?.actor?.id || ctx?.actor?.odId || null;
+
   // Filter out shadow DTUs - they are internal and should not appear in user-facing lists
-  let items = dtusArray().filter(d => !isShadowDTU(d)).sort((a,b)=> (b.createdAt||"").localeCompare(a.createdAt||""));
+  let items = dtusArray().filter(d => !isShadowDTU(d));
+
+  // Scope-aware filtering:
+  // - scope="global" → only global DTUs (visible to everyone)
+  // - scope="local"  → only this user's local DTUs
+  // - no scope (default) → user's local DTUs + all global DTUs (the user's complete view)
+  if (scopeFilter === "global") {
+    items = items.filter(d => d.scope === "global");
+  } else if (scopeFilter === "local") {
+    items = items.filter(d => d.scope !== "global" && (!userId || !d.ownerId || d.ownerId === userId));
+  } else if (userId) {
+    // Default view: show user's own local DTUs + all global DTUs
+    items = items.filter(d => d.scope === "global" || !d.ownerId || d.ownerId === userId);
+  }
+
+  items = items.sort((a,b)=> (b.createdAt||"").localeCompare(a.createdAt||""));
   if (tier !== "any") items = items.filter(d => d.tier === tier);
   if (q) items = items.filter(d => tokenish(d.title).includes(q) || tokenish((d.tags||[]).join(" ")).includes(q) || tokenish((d.cretiHuman || d.creti || "")).includes(q));
+  const total = items.length;
   items = items.slice(offset, offset + limit);
-  return { ok: true, dtus: items, limit, offset, total: STATE.dtus.size };
+  return { ok: true, dtus: items, limit, offset, total };
 });
 register("dtu", "listShadow", (ctx, input) => {
   // Shadow DTUs are internal - only admins can view them
@@ -11516,7 +11536,45 @@ register("dtu", "listShadow", (ctx, input) => {
   return { ok: true, dtus: items, limit, offset, total: STATE.shadowDtus.size };
 }, { description: "List shadow DTUs (internal/hidden by default, admin only)." });
 
+register("dtu", "syncFromGlobal", (ctx, input) => {
+  const globalDtuId = String(input.dtuId || input.id || "");
+  if (!globalDtuId) return { ok: false, error: "dtuId required" };
 
+  const globalDtu = STATE.dtus.get(globalDtuId);
+  if (!globalDtu) return { ok: false, error: "DTU not found" };
+  if (globalDtu.scope !== "global") return { ok: false, error: "DTU is not in global scope" };
+
+  const userId = ctx?.actor?.id || ctx?.actor?.odId;
+  if (!userId) return { ok: false, error: "Authentication required to sync DTUs" };
+
+  // Check if user already has a local copy of this global DTU
+  for (const dtu of STATE.dtus.values()) {
+    if (dtu.ownerId === userId && dtu.meta?.syncedFromGlobal === globalDtuId) {
+      return { ok: false, error: "Already synced", existingId: dtu.id };
+    }
+  }
+
+  // Create a local copy owned by this user
+  const localCopy = {
+    ...structuredClone(globalDtu),
+    id: uid("dtu"),
+    scope: "local",
+    ownerId: userId,
+    source: "sync:global",
+    meta: {
+      ...(globalDtu.meta || {}),
+      syncedFromGlobal: globalDtuId,
+      syncedAt: nowISO(),
+    },
+    lineage: [...(globalDtu.lineage || []), globalDtuId],
+    createdAt: nowISO(),
+    updatedAt: nowISO(),
+  };
+
+  upsertDTU(localCopy, { broadcast: true });
+  ctx.log("dtu.syncFromGlobal", `Synced global DTU to local: ${localCopy.title}`, { globalId: globalDtuId, localId: localCopy.id, userId });
+  return { ok: true, dtu: localCopy, globalId: globalDtuId };
+}, { description: "Sync a global DTU into the user's local inventory" });
 
 register("dtu", "cluster", (ctx, input) => {
   // group DTUs by similarity (simple jaccard on title+tags)

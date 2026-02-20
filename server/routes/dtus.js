@@ -17,7 +17,7 @@ export default function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuFo
   app.get("/api/dtus", async (req, res) => {
     try {
       const ctx = makeCtx(req);
-      const out = await runMacro("dtu","list",{ q:req.query.q, tier:req.query.tier || "any", limit:req.query.limit, offset:req.query.offset }, ctx);
+      const out = await runMacro("dtu","list",{ q:req.query.q, tier:req.query.tier || "any", limit:req.query.limit, offset:req.query.offset, scope: req.query.scope || null }, ctx);
       res.json(out);
     } catch (e) {
       const msg = String(e?.message || e);
@@ -112,6 +112,19 @@ export default function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuFo
   app.post("/api/dtus/gap-promote", async (req, res) => {
     const out = await runMacro("dtu", "gapPromote", req.body, makeCtx(req));
     return res.json(_withAck(out, req, ["dtus", "state"], ["/api/dtus", "/api/state/latest"], null, { panel: "gap_promote" }));
+  });
+
+  // Sync a global DTU into the user's local inventory
+  app.post("/api/dtus/sync-from-global", async (req, res) => {
+    try {
+      const ctx = makeCtx(req);
+      const out = await runMacro("dtu", "syncFromGlobal", req.body || {}, ctx);
+      if (!out.ok) return res.status(out.error === "Authentication required to sync DTUs" ? 401 : 400).json(out);
+      res.json(out);
+    } catch (e) {
+      const msg = String(e?.message || e);
+      res.status(500).json({ ok: false, error: msg });
+    }
   });
 
   app.get("/api/definitions", (req, res) => {

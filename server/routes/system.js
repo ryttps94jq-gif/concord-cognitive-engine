@@ -418,7 +418,21 @@ export default function registerSystemRoutes(app, {
     const pageSize = clamp(Number(req.query.pageSize || 20), 1, 100);
     const tier = req.query.tier || null;
     const tag = req.query.tag || null;
+    const scopeFilter = req.query.scope || null;
+    const userId = req.user?.id || null;
+
     let dtus = dtusArray();
+
+    // Scope-aware filtering: same logic as dtu.list macro
+    if (scopeFilter === "global") {
+      dtus = dtus.filter(d => d.scope === "global");
+    } else if (scopeFilter === "local") {
+      dtus = dtus.filter(d => d.scope !== "global" && (!userId || !d.ownerId || d.ownerId === userId));
+    } else if (userId) {
+      // Default view: user's own local DTUs + all global DTUs
+      dtus = dtus.filter(d => d.scope === "global" || !d.ownerId || d.ownerId === userId);
+    }
+
     if (tier) dtus = dtus.filter(d => d.tier === tier);
     if (tag) dtus = dtus.filter(d => (d.tags || []).includes(tag));
     const result = paginateResults(dtus, { page, pageSize });

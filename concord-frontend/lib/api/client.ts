@@ -231,18 +231,21 @@ export const apiHelpers = {
 
   // DTU operations (note: endpoint is /api/dtus - plural)
   dtus: {
-    list: () => api.get('/api/dtus'),
+    list: (params?: { scope?: string }) => api.get('/api/dtus', { params }),
     paginated: (params: {
       limit?: number;
       offset?: number;
       query?: string;
       tags?: string;
       tier?: string;
+      scope?: string;
       page?: number;
       pageSize?: number;
     }) => api.get('/api/dtus/paginated', { params }),
     syncToLens: (id: string, data: { lens: string; scope?: string }) =>
       api.post(`/api/dtus/${id}/sync-lens`, data),
+    syncFromGlobal: (dtuId: string) =>
+      api.post('/api/dtus/sync-from-global', { dtuId }),
 
     create: (data: {
       title?: string;
