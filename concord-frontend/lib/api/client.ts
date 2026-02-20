@@ -4,6 +4,11 @@ import { useUIStore } from '@/store/ui';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5050';
 
+// Guard: prevent multiple parallel 401 responses from all triggering redirects.
+// When lens pages fire many useQuery hooks simultaneously, a single expired session
+// can produce a storm of 401s — each one calling window.location.href = '/login'.
+let _isRedirectingToLogin = false;
+
 /**
  * FE-004: Runtime validation of API base URL.
  * Warns visibly when the app is running against localhost in a non-localhost context,
@@ -146,11 +151,20 @@ api.interceptors.response.use(
       }
 
       if (status === 401 && typeof window !== 'undefined') {
-        // Redirect to login if not already on an auth page
-        // Session is managed via httpOnly cookies, cleared by server
         const path = window.location.pathname;
-        if (!path.includes('/login') && !path.includes('/register')) {
-          window.location.href = '/login';
+        // Skip redirect for auth probe requests (Providers.tsx checks /api/auth/me
+        // on mount — a 401 here just means "not logged in yet", not "session expired
+        // while browsing"). Also skip if we're already redirecting or on an auth page.
+        const isAuthProbe = error.config?.url?.includes('/api/auth/me');
+        const isAuthPage = path.includes('/login') || path.includes('/register');
+
+        if (!isAuthPage && !_isRedirectingToLogin && !isAuthProbe) {
+          _isRedirectingToLogin = true;
+          // Small delay batches parallel 401s into a single redirect.
+          // Use replace() to prevent back-button from returning to a broken state.
+          setTimeout(() => {
+            window.location.replace('/login');
+          }, 100);
         }
       }
       // ---- Version Conflict Detection (Category 2: Concurrency) ----

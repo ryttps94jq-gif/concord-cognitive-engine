@@ -51,17 +51,20 @@ export function Providers({ children }: { children: React.ReactNode }) {
     const entered = localStorage.getItem('concord_entered');
     if (!entered) return;
 
-    // Connect WebSocket with existing session cookie
-    connectSocket();
-
-    // Fetch user scopes for PermissionGate
+    // Fetch user scopes for PermissionGate, then connect socket.
+    // If /api/auth/me fails (401), the user simply has no scopes —
+    // the API interceptor no longer hard-redirects for this probe endpoint,
+    // so the app stays on the current page instead of redirect-looping.
     api.get('/api/auth/me')
       .then((res) => {
         const scopes = res.data?.scopes || res.data?.permissions || [];
         if (Array.isArray(scopes)) setUserScopes(scopes);
+        // Only connect WebSocket after confirming session is valid
+        connectSocket();
       })
       .catch(() => {
-        // Not authenticated — middleware will redirect
+        // Not authenticated — no redirect here; lens pages degrade gracefully
+        // (empty data) and the user can navigate to /login manually.
       });
 
     return () => {

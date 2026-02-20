@@ -38,7 +38,22 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check for session cookie (httpOnly cookie set by backend on login)
+  // Allow RSC (client-side soft navigation) requests through unconditionally.
+  // When the user navigates between lenses via <Link>, Next.js fetches an RSC
+  // payload from the server. These requests may not always carry httpOnly
+  // cookies reliably (especially behind reverse proxies). The user was already
+  // authenticated on initial page load, and API-level 401 handling will catch
+  // any expired sessions gracefully — no need to gate RSC fetches here.
+  const isRSC =
+    request.headers.get('RSC') === '1' ||
+    request.headers.has('Next-Router-State-Tree') ||
+    request.headers.has('Next-Router-Prefetch');
+
+  if (isRSC) {
+    return NextResponse.next();
+  }
+
+  // For full page loads, check for session cookie (httpOnly cookie set by backend on login)
   // The backend sets either 'concord_session' or 'token' cookie
   const hasSession =
     request.cookies.has('concord_session') ||
