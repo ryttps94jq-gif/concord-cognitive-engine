@@ -497,6 +497,171 @@ export default function createSovereignRouter({ STATE, makeCtx, runMacro, saveSt
           break;
         }
 
+        // ── Reproduction Operations ─────────────────────────────────
+        case "reproduce": {
+          if (!target || !data?.entity2) {
+            return res.json({ ok: false, error: "target (entity1) and data.entity2 required" });
+          }
+          try {
+            const { attemptReproduction, enableReproduction, disableReproduction, isReproductionEnabled } = await import("../emergent/reproduction.js");
+            const emergents = S.emergents || S.__emergents;
+            const e1 = emergents instanceof Map ? emergents.get(target) : emergents?.[target];
+            const e2 = emergents instanceof Map ? emergents.get(data.entity2) : emergents?.[data.entity2];
+            if (!e1) return res.json({ ok: false, error: `Entity ${target} not found` });
+            if (!e2) return res.json({ ok: false, error: `Entity ${data.entity2} not found` });
+            // Temporarily enable for sovereign decree
+            const wasEnabled = isReproductionEnabled();
+            if (!wasEnabled) enableReproduction();
+            result = attemptReproduction(e1, e2, S, null, null);
+            if (!wasEnabled) disableReproduction();
+          } catch (e) {
+            result = { ok: false, error: String(e?.message || e) };
+          }
+          break;
+        }
+
+        case "reproduction-policy": {
+          try {
+            const { enableReproduction, disableReproduction, isReproductionEnabled } = await import("../emergent/reproduction.js");
+            const enable = data?.enabled !== false && target !== "disable";
+            if (enable) {
+              enableReproduction();
+              result = { ok: true, reproductionEnabled: true };
+            } else {
+              disableReproduction();
+              result = { ok: true, reproductionEnabled: false };
+            }
+          } catch (e) {
+            result = { ok: false, error: String(e?.message || e) };
+          }
+          break;
+        }
+
+        case "lineage": {
+          if (!target) return res.json({ ok: false, error: "target (entity id) required" });
+          try {
+            const { getLineage } = await import("../emergent/reproduction.js");
+            result = { ok: true, lineage: getLineage(target, S) };
+          } catch (e) {
+            result = { ok: false, error: String(e?.message || e) };
+          }
+          break;
+        }
+
+        case "lineage-tree": {
+          try {
+            const { getLineageTree } = await import("../emergent/reproduction.js");
+            const tree = getLineageTree(S);
+            result = { ok: true, tree, count: tree.length };
+          } catch (e) {
+            result = { ok: false, error: String(e?.message || e) };
+          }
+          break;
+        }
+
+        // ── Species Operations ──────────────────────────────────────
+        case "species": {
+          try {
+            const speciesMod = await import("../emergent/species.js");
+            if (target) {
+              const emergents = S.emergents || S.__emergents;
+              const entity = emergents instanceof Map ? emergents.get(target) : emergents?.[target];
+              if (!entity) return res.json({ ok: false, error: `Entity ${target} not found` });
+              const sp = speciesMod.classifyEntity(entity);
+              result = { ok: true, entityId: target, species: sp, info: speciesMod.getSpecies(sp) };
+            } else {
+              result = { ok: true, entities: speciesMod.classifyAllEntities(S) };
+            }
+          } catch (e) {
+            result = { ok: false, error: String(e?.message || e) };
+          }
+          break;
+        }
+
+        case "species-all": {
+          try {
+            const speciesMod = await import("../emergent/species.js");
+            result = { ok: true, entities: speciesMod.classifyAllEntities(S), census: speciesMod.getSpeciesCensus(S) };
+          } catch (e) {
+            result = { ok: false, error: String(e?.message || e) };
+          }
+          break;
+        }
+
+        // ── Council Voices ──────────────────────────────────────────
+        case "council-voices": {
+          try {
+            const { runCouncilVoices } = await import("../emergent/council-voices.js");
+            if (target) {
+              // Evaluate specific DTU
+              const dtu = S.dtus?.get(target);
+              if (!dtu) return res.json({ ok: false, error: `DTU ${target} not found` });
+              const qualiaState = globalThis.qualiaEngine?.getQualiaState("council");
+              result = { ok: true, ...runCouncilVoices(dtu, qualiaState) };
+            } else {
+              const { getAllVoices } = await import("../emergent/council-voices.js");
+              result = { ok: true, voices: getAllVoices() };
+            }
+          } catch (e) {
+            result = { ok: false, error: String(e?.message || e) };
+          }
+          break;
+        }
+
+        // ── Dual-Path Simulation ────────────────────────────────────
+        case "simulate": {
+          try {
+            const { runDualPathSimulation } = await import("../emergent/dual-path.js");
+            const scenario = {
+              scenarioId: target || data?.scenarioId,
+              hypothesis: data?.hypothesis,
+              params: data?.params || data || {},
+              existentialOSChannels: data?.existentialOSChannels,
+            };
+            result = { ok: true, ...runDualPathSimulation(scenario) };
+          } catch (e) {
+            result = { ok: false, error: String(e?.message || e) };
+          }
+          break;
+        }
+
+        case "simulations": {
+          try {
+            const { listSimulations } = await import("../emergent/dual-path.js");
+            const limit = Number(target) || Number(data?.limit) || 20;
+            result = { ok: true, simulations: listSimulations(limit) };
+          } catch (e) {
+            result = { ok: false, error: String(e?.message || e) };
+          }
+          break;
+        }
+
+        case "sim-compare": {
+          if (!target) return res.json({ ok: false, error: "target (simId) required" });
+          try {
+            const { getSimulation } = await import("../emergent/dual-path.js");
+            const sim = getSimulation(target);
+            if (!sim) return res.json({ ok: false, error: `Simulation ${target} not found` });
+            result = { ok: true, comparison: sim.comparison, humanStability: sim.humanPath.stabilityScore, concordStability: sim.concordPath.stabilityScore };
+          } catch (e) {
+            result = { ok: false, error: String(e?.message || e) };
+          }
+          break;
+        }
+
+        // ── Vulnerability Detection ─────────────────────────────────
+        case "vulnerability": {
+          try {
+            const { assessAndAdapt } = await import("../emergent/vulnerability-engine.js");
+            const message = target || data?.message || "";
+            if (!message) return res.json({ ok: false, error: "target or data.message required" });
+            result = { ok: true, ...assessAndAdapt(message, data?.entityId) };
+          } catch (e) {
+            result = { ok: false, error: String(e?.message || e) };
+          }
+          break;
+        }
+
         default:
           result = { ok: false, error: `Unknown action: ${action}` };
       }
