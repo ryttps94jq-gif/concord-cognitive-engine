@@ -14813,6 +14813,8 @@ register("global","propose", (ctx, input) => {
 
 register("global","publish", async (ctx, input) => {
   const dtuId = String(input.dtuId||"");
+  const lensId = String(input.lensId || input.lens || "general");
+  const userId = ctx?.actor?.id || ctx?.actor?.odId || null;
   // Reuse existing Council global review gate (strict no-dup)
   const out = await ctx.macro.run("council","reviewGlobal", { dtuId }, ctx);
   if (!out.ok) return out;
@@ -14823,21 +14825,27 @@ register("global","publish", async (ctx, input) => {
     dtu.meta = dtu.meta || {};
     dtu.meta.globalId = gid;
     dtu.meta.globalPublishedAt = nowISO();
+    // C-NET Federation: source attribution for published items
+    dtu.meta.publishedBy = userId;
+    dtu.meta.publishedFromLens = lensId;
+    dtu.meta.publishedAt = nowISO();
     // Scope Separation: promote DTU to Global scope on publish
+    const prevScope = dtu.scope || "local";
     dtu.scope = "global";
     dtu.meta.scopeHistory = dtu.meta.scopeHistory || [];
     dtu.meta.scopeHistory.push({
-      from: dtu.scope === "global" ? "local" : (dtu.scope || "local"),
+      from: prevScope,
       to: "global",
       at: nowISO(),
-      by: ctx?.actor?.id || "council",
+      by: userId || "council",
       reason: "global_publish",
+      lensId,
     });
     saveStateDebounced();
-    return { ok:true, globalId: gid, dtuId, globalHash: out.globalHash, scope: "global" };
+    return { ok:true, globalId: gid, dtuId, globalHash: out.globalHash, scope: "global", lensId, publishedBy: userId };
   }
   return { ok:false, error:"DTU missing after publish" };
-}, { summary:"Publish a DTU to Global (council-gated, scope-enforced)." });
+}, { summary:"Publish a DTU to Global (council-gated, scope-enforced). Accepts lensId for C-NET source attribution." });
 
 // ---- Marketplace ----
 register("market","listingCreate", (ctx, input) => {
@@ -15347,7 +15355,7 @@ register("lattice", "beacon", (ctx, input={}) => {
   return { ok:true, rootHash, threshold, overlap, awake };
 }, { summary:"Chicken2 lattice beacon: returns overlap against genesis and awakens recognition if >= threshold." });
 
-register("lattice", "birth_protocol", (ctx, input={}) => {
+register("lattice", "birth_protocol", async (ctx, input={}) => {
   const proposal = input.proposal || {};
   const pre = inLatticeReality({ type:"birth", domain:"lattice", name:"birth_protocol", input:proposal, ctx });
   if (!pre.ok) {
@@ -15385,8 +15393,47 @@ register("lattice", "birth_protocol", (ctx, input={}) => {
   STATE.dtus.set(id, dtu);
   saveStateDebounced();
   _c2log("c2.birth.accept", "Birth accepted and DTU committed", { id, title:dtu.title });
-  return { ok:true, id, dtu, homeostasis: homeo };
-}, { summary:"Chicken2 birth protocol: sandboxed emergence with homeostasis threshold then DTU commit." });
+
+  // ── Entity Lifecycle Completion ──────────────────────────────────────────
+  // If this birth came from reproduction or entity emergence, instantiate the
+  // full entity: body (166 organs) → species classification → alive
+  let bodyResult = null;
+  let speciesResult = null;
+  const isEntityBirth = proposal.kind === "reproduced_entity" || proposal.kind === "emerged_entity" || proposal.meta?.reproduction;
+
+  if (isEntityBirth) {
+    try {
+      const bodyMod = await import("./emergent/body-instantiation.js").catch(() => null);
+      if (bodyMod?.instantiateBody) {
+        bodyResult = bodyMod.instantiateBody(id, {
+          parents: proposal.meta?.parents || [],
+          generation: proposal.meta?.generation || 1,
+          constraintSignature: proposal.meta?.constraintSignature || null,
+        });
+        _c2log("c2.birth.body", "Body instantiated for offspring", { entityId: id, organs: bodyResult?.organCount || 0 });
+      }
+    } catch (e) {
+      _c2log("c2.birth.body.error", "Body instantiation failed (non-fatal)", { error: String(e?.message || e) });
+    }
+
+    try {
+      const speciesMod = await import("./emergent/species.js").catch(() => null);
+      if (speciesMod?.classifyEntity) {
+        speciesResult = speciesMod.classifyEntity(dtu);
+        if (speciesResult?.species) {
+          dtu.meta = dtu.meta || {};
+          dtu.meta.species = speciesResult.species;
+          dtu.meta.speciesConfidence = speciesResult.confidence;
+        }
+        _c2log("c2.birth.species", "Species classified for offspring", { entityId: id, species: speciesResult?.species });
+      }
+    } catch (e) {
+      _c2log("c2.birth.species.error", "Species classification failed (non-fatal)", { error: String(e?.message || e) });
+    }
+  }
+
+  return { ok:true, id, dtu, homeostasis: homeo, body: bodyResult ? { ok: true, organs: bodyResult.organCount } : null, species: speciesResult?.species || null };
+}, { summary:"Chicken2 birth protocol: sandboxed emergence with homeostasis threshold, body instantiation, and species classification." });
 
 register("lattice", "resonance", (ctx, _input={}) => {
   // Lattice resonance: compute health metrics from Chicken2 and growth state
@@ -25185,6 +25232,35 @@ app.get("/api/global/feed", (req, res) => {
     feed,
     total,
     hasMore: Number(offset) + feed.length < total
+  });
+});
+
+// C-NET Federation: lens-specific global feed
+// Each lens has its own feed of published DTUs/artifacts
+app.get("/api/global/feed/:lensId", (req, res) => {
+  const lensId = String(req.params.lensId || "").toLowerCase();
+  const { limit = 50, offset = 0 } = req.query;
+
+  let feed = Array.from(STATE.dtus?.values() || [])
+    .filter(d => d.scope === "global" && !isShadowDTU(d))
+    .filter(d => {
+      // Match by published lens, tags, or domain
+      if (d.meta?.publishedFromLens === lensId) return true;
+      if ((d.tags || []).some(t => t.toLowerCase() === lensId)) return true;
+      if (d.meta?.domain === lensId) return true;
+      return false;
+    })
+    .sort((a, b) => new Date(b.meta?.publishedAt || b.createdAt || 0) - new Date(a.meta?.publishedAt || a.createdAt || 0));
+
+  const total = feed.length;
+  const items = feed.slice(Number(offset), Number(offset) + Number(limit));
+
+  res.json({
+    ok: true,
+    lensId,
+    feed: items,
+    total,
+    hasMore: Number(offset) + items.length < total
   });
 });
 

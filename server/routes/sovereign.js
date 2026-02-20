@@ -512,7 +512,7 @@ export default function createSovereignRouter({ STATE, makeCtx, runMacro, saveSt
             // Temporarily enable for sovereign decree
             const wasEnabled = isReproductionEnabled();
             if (!wasEnabled) enableReproduction();
-            result = attemptReproduction(e1, e2, S, null, null);
+            result = await attemptReproduction(e1, e2, S, runMacro, makeCtx);
             if (!wasEnabled) disableReproduction();
           } catch (e) {
             result = { ok: false, error: String(e?.message || e) };

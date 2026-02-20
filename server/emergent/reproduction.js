@@ -315,7 +315,7 @@ export function verifyGenesisOverlap(signature) {
  * @param {function} makeCtx - Context builder
  * @returns {object} Reproduction result
  */
-export function attemptReproduction(entity1, entity2, STATE, runMacro, makeCtx) {
+export async function attemptReproduction(entity1, entity2, STATE, runMacro, makeCtx) {
   if (!_reproductionEnabled) {
     return { ok: false, error: "Reproduction is disabled. Sovereign must enable it." };
   }
@@ -372,7 +372,7 @@ export function attemptReproduction(entity1, entity2, STATE, runMacro, makeCtx) 
     if (runMacro && makeCtx) {
       const ctx = makeCtx(null);
       ctx.actor = { userId: "system", role: "owner", scopes: ["*"] };
-      birthResult = runMacro("lattice", "birth_protocol", { proposal: birthProposal }, ctx);
+      birthResult = await runMacro("lattice", "birth_protocol", { proposal: birthProposal }, ctx);
     } else {
       birthResult = { ok: false, error: "runMacro not available" };
     }
