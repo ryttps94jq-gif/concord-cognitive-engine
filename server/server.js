@@ -60,6 +60,25 @@ import { attemptReproduction, getLineage, getLineageTree, enableReproduction, di
 import { classifyEntity, classifyAllEntities, getSpeciesCensus, getSpeciesRegistry, checkReproductionCompatibility, getSpecies } from "./emergent/species.js";
 import { runDualPathSimulation, getSimulation, listSimulations } from "./emergent/dual-path.js";
 
+// ---- Worker Pool: offload heavy macros to worker threads ----
+import { initPool, isHeavy, dispatch as dispatchToPool, syncState as syncPoolState, getPoolStats, shutdownPool } from "./workers/macro-pool.js";
+
+// ---- Repair Cortex: three-phase self-repair (Prophet + Surgeon + Guardian) ----
+import {
+  matchErrorPattern,
+  addToRepairMemory,
+  recordRepairSuccess,
+  recordRepairFailure,
+  getRepairMemoryStats,
+  getAllRepairPatterns,
+  getRecentRepairDTUs,
+  startGuardian,
+  stopGuardian,
+  getGuardianStatus,
+  runGuardianCheck,
+  runProphet,
+} from "./emergent/repair-cortex.js";
+
 // ---- "Everything Real" imports: migration runner + durable endpoints ----
 import { runMigrations as runSchemaMigrations } from "./migrate.js";
 import { registerDurableEndpoints } from "./durable.js";
@@ -565,10 +584,37 @@ process.on("uncaughtException", (err) => {
   structuredLog("fatal", "uncaught_exception", { error: err.message, stack: err.stack });
   gracefulShutdown("uncaughtException");
 });
-process.on("unhandledRejection", (reason, _promise) => {
-  structuredLog("fatal", "unhandled_rejection", { reason: String(reason), stack: String(reason?.stack || "") });
-  // In production, exit on unhandled rejection — the container orchestrator will restart us.
-  // Continuing after an unhandled rejection risks corrupted state.
+process.on("unhandledRejection", async (reason, _promise) => {
+  const errorStr = reason?.message || String(reason);
+  structuredLog("fatal", "unhandled_rejection", { reason: errorStr, stack: String(reason?.stack || "") });
+
+  // Consult Repair Cortex Surgeon before dying
+  try {
+    const diagnosis = matchErrorPattern(errorStr);
+    if (diagnosis?.fixes?.length) {
+      structuredLog("warn", "surgeon_intervention", {
+        error: errorStr,
+        fixes: diagnosis.fixes.map(f => f.name || f.pattern || "unknown"),
+        confidence: diagnosis.fixes[0]?.confidence,
+      });
+      addToRepairMemory(errorStr, diagnosis.fixes[0]);
+
+      // If high-confidence fix exists with an executor, apply and don't exit
+      if (diagnosis.fixes[0]?.confidence >= 0.9 && typeof diagnosis.fixes[0]?.executor === "function") {
+        try {
+          await diagnosis.fixes[0].executor();
+          recordRepairSuccess(errorStr);
+          structuredLog("info", "surgeon_fix_applied", { error: errorStr });
+          return; // Don't exit — fix was applied
+        } catch (fixErr) {
+          recordRepairFailure(errorStr);
+          structuredLog("error", "surgeon_fix_failed", { error: errorStr, fixError: String(fixErr?.message || fixErr) });
+        }
+      }
+    }
+  } catch { /* repair cortex itself must never crash the crash handler */ }
+
+  // No fix or low confidence — exit as before
   if ((process.env.NODE_ENV || "development") === "production") {
     console.error("[FATAL] Unhandled promise rejection in production — exiting to allow clean restart.");
     process.exit(1);
@@ -2750,6 +2796,9 @@ const STATE = {
     history: []
   },
 };
+
+// Expose STATE for modules that use globalThis (e.g. repair-cortex.js)
+globalThis._concordSTATE = STATE;
 
 // ============================================================================
 // WAVE 1: PRODUCTION READINESS
@@ -5554,7 +5603,7 @@ function listMacros(domain) {
   return Array.from(d.values()).map(x => x.spec);
 }
 
-function runMacro(domain, name, input, ctx) {
+async function runMacro(domain, name, input, ctx) {
   // v3: permissioned cognition (macro-level ACL). Defaults open for local-first dev.
   const actor = ctx?.actor || { role: "owner", scopes: ["*"] };
   if (typeof globalThis.canRunMacro === "function" && !globalThis.canRunMacro(actor, domain, name)) {
@@ -5630,6 +5679,27 @@ function runMacro(domain, name, input, ctx) {
         err.meta = { c2 };
         throw err;
       }
+    }
+  }
+
+  // Worker pool dispatch: offload heavy macros from HTTP requests to worker threads.
+  // Internal ticks (heartbeat, system actor without reqMeta) stay on main thread
+  // since the cognitive worker already handles pipeline tasks.
+  const isHttpRequest = !!ctx?.reqMeta?.path;
+  if (isHttpRequest && isHeavy(domain, name)) {
+    const actorInfo = { userId: actor?.userId, role: actor?.role, scopes: actor?.scopes };
+    try {
+      // fireHook before dispatch (best-effort)
+      try { fireHook(STATE, "macro:beforeExecute", { domain, name, input, offloaded: true }); } catch { /* best-effort */ }
+      const poolResult = await dispatchToPool(domain, name, input, actorInfo);
+      try { fireHook(STATE, "macro:afterExecute", { domain, name, result: poolResult, offloaded: true }); } catch { /* best-effort */ }
+      return poolResult;
+    } catch (poolErr) {
+      // If worker doesn't support this macro, fall through to main thread execution
+      if (!poolErr.message?.startsWith("worker_unsupported_macro")) {
+        throw poolErr;
+      }
+      // Fall through to local execution
     }
   }
 
@@ -25478,7 +25548,8 @@ structuredLog("info", "module_loaded", { module: "Wave 16: Missing lens endpoint
 
 let ATS = null;
 try {
-  ATS = await import("./affect/index.js");
+  const _atsModule = await import("./affect/index.js");
+  ATS = { ..._atsModule };
   structuredLog("info", "module_loaded", { detail: "ATS: Affective Translation Spine loaded" });
 
   // Bridge ATS → Existential OS: wrap emitAffectEvent to also fire qualia hookAffect
@@ -25619,6 +25690,44 @@ app.get("/api/affect/health", (req, res) => {
 });
 
 structuredLog("info", "module_loaded", { detail: "ATS: Affect API endpoints registered" });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// REPAIR CORTEX INITIALIZATION
+// Three-phase self-repair: Prophet (pre-build) + Surgeon (mid-error) + Guardian (runtime)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+try {
+  startGuardian();
+  structuredLog("info", "module_loaded", { detail: "Repair Cortex: Prophet + Surgeon + Guardian initialized" });
+} catch (e) {
+  console.warn("[Concord] Repair Cortex failed to initialize:", e.message);
+}
+
+// ---- Repair Cortex API ----
+app.get("/api/repair/stats", requireAuth(), requireRole("owner"), (_req, res) => {
+  try {
+    res.json({
+      ok: true,
+      memory: getRepairMemoryStats(),
+      patterns: getAllRepairPatterns()?.patterns?.length || 0,
+      recentDTUs: getRecentRepairDTUs(10),
+      guardian: getGuardianStatus(),
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+app.post("/api/repair/guardian/check", requireAuth(), requireRole("owner"), async (req, res) => {
+  try {
+    const { name } = req.body || {};
+    if (!name) return res.status(400).json({ ok: false, error: "name required" });
+    const result = await runGuardianCheck(name);
+    res.json({ ok: true, result });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONCORD GLOBAL ATLAS + PLATFORM UPGRADES v2
@@ -26405,6 +26514,55 @@ registerEconomyEndpoints(app, db);
 registerBuiltinEnrichers();
 
 // ═══════════════════════════════════════════════════════════════════════════════
+
+// ── Worker Pool Initialization ───────────────────────────────────────────────
+// Offloads CPU-intensive macro execution from HTTP requests to worker threads.
+try {
+  initPool();
+
+  // Build and sync STATE snapshot to workers for read operations
+  function buildPoolSnapshot() {
+    const dtuEntries = [];
+    for (const [id, dtu] of STATE.dtus) {
+      dtuEntries.push([id, {
+        id: dtu.id, title: dtu.title, tags: dtu.tags, tier: dtu.tier,
+        human: dtu.human, machine: dtu.machine, meta: dtu.meta,
+        source: dtu.source, createdAt: dtu.createdAt, creti: dtu.creti,
+        hash: dtu.hash, lineage: dtu.lineage, authority: dtu.authority,
+      }]);
+    }
+    return {
+      dtus: dtuEntries,
+      shadowDtus: Array.from((STATE.shadowDtus || new Map()).entries()).map(([id, d]) => [id, { id: d.id, title: d.title, tags: d.tags, tier: d.tier }]),
+      settings: { ...STATE.settings },
+      pipelineState: STATE._autogenPipeline ? JSON.parse(JSON.stringify(STATE._autogenPipeline)) : null,
+      governanceConfig: STATE._governanceConfig ? { ...STATE._governanceConfig } : null,
+    };
+  }
+
+  // Sync every 30 seconds
+  setInterval(() => {
+    try { syncPoolState(buildPoolSnapshot()); } catch { /* silent */ }
+  }, 30000);
+
+  // Initial sync after 5 seconds (let STATE populate)
+  setTimeout(() => {
+    try { syncPoolState(buildPoolSnapshot()); } catch { /* silent */ }
+  }, 5000);
+
+  structuredLog("info", "module_loaded", { detail: `Worker Pool: ${getPoolStats().poolSize} workers initialized` });
+} catch (e) {
+  console.warn("[Concord] Worker pool failed to initialize:", e.message);
+}
+
+// ---- Worker Pool Stats API ----
+app.get("/api/workers/stats", requireAuth(), requireRole("owner"), (_req, res) => {
+  try {
+    res.json({ ok: true, ...getPoolStats() });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
 
 const SHOULD_LISTEN = (String(process.env.CONCORD_NO_LISTEN || "").toLowerCase() !== "true") && (String(process.env.NODE_ENV || "").toLowerCase() !== "test");
 
