@@ -3576,12 +3576,24 @@ function verifyApiKey(rawKey, hashedKey) {
 // ============================================================================
 // SECURITY: Cookie Configuration
 // ============================================================================
+// sameSite "lax" provides CSRF protection (blocks cross-site POST) while allowing
+// cookies on same-site fetch requests and top-level navigations. "strict" breaks
+// initial page loads from external links (user arrives without cookies, API calls
+// fail, user appears logged out until they navigate within the site).
+//
+// COOKIE_DOMAIN: Set to ".concord-os.org" if API and frontend are on different
+// subdomains (e.g., api.concord-os.org + concord-os.org). Leave unset for
+// same-host deployments.
+const COOKIE_SAME_SITE = process.env.COOKIE_SAME_SITE || "lax";
+const COOKIE_DOMAIN = process.env.COOKIE_DOMAIN || undefined;
+
 const COOKIE_CONFIG = {
   httpOnly: true,
-  secure: NODE_ENV === "production", // HTTPS only in production
-  sameSite: "strict", // CSRF protection
+  secure: NODE_ENV === "production",
+  sameSite: COOKIE_SAME_SITE,
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-  path: "/"
+  path: "/",
+  ...(COOKIE_DOMAIN && { domain: COOKIE_DOMAIN }),
 };
 
 function setAuthCookie(res, token) {
@@ -3589,17 +3601,18 @@ function setAuthCookie(res, token) {
 }
 
 function clearAuthCookie(res) {
-  res.clearCookie("concord_auth", { path: "/" });
-  res.clearCookie(REFRESH_TOKEN_COOKIE, { path: "/" });
+  res.clearCookie("concord_auth", { path: "/", ...(COOKIE_DOMAIN && { domain: COOKIE_DOMAIN }) });
+  res.clearCookie(REFRESH_TOKEN_COOKIE, { path: "/", ...(COOKIE_DOMAIN && { domain: COOKIE_DOMAIN }) });
 }
 
 function setRefreshCookie(res, refreshToken) {
   res.cookie(REFRESH_TOKEN_COOKIE, refreshToken, {
     httpOnly: true,
     secure: NODE_ENV === "production",
-    sameSite: "strict",
+    sameSite: COOKIE_SAME_SITE,
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-    path: "/"
+    path: "/",
+    ...(COOKIE_DOMAIN && { domain: COOKIE_DOMAIN }),
   });
 }
 
@@ -16166,6 +16179,14 @@ try {
 // ===== END GRC =====
 
 const app = express();
+
+// ---- Trust Proxy ----
+// Required when behind a reverse proxy (nginx, traefik, Docker, Cloudflare).
+// Without this, Express thinks protocol is HTTP → secure cookies are not set,
+// req.ip returns the proxy IP, and rate limiting/CSRF break.
+if (NODE_ENV === "production" || process.env.TRUST_PROXY) {
+  app.set("trust proxy", process.env.TRUST_PROXY || 1);
+}
 
 // ---- Production Middleware (extracted to ./middleware/index.js) ----
 configureMiddleware(app, {
