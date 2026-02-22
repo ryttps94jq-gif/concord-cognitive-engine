@@ -125,7 +125,7 @@ export default function ArtLensPage() {
   });
 
   const uploadMutation = useMutation({
-    mutationFn: (data: Record<string, unknown>) => apiHelpers.artistry.assets.create(data),
+    mutationFn: (data: Record<string, unknown>) => apiHelpers.artistry.assets.create(data as { type: string; title?: string; description?: string; tags?: string[]; genre?: string; bpm?: number; key?: string; ownerId?: string; metadata?: Record<string, unknown> }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['art-assets'] });
       setShowUpload(false);

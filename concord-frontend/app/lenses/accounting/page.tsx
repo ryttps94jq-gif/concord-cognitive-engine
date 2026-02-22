@@ -531,7 +531,7 @@ export default function AccountingLensPage() {
             ) : (
               <span className="flex items-center gap-1 text-red-400 text-sm"><XCircle className="w-4 h-4" /> Unbalanced ({fmt(Math.abs(journalTotalDebits - journalTotalCredits))})</span>
             )}
-            <button onClick={() => { transactionData.create({ title: journalDesc, data: { description: journalDesc, entries: journalRows, date: new Date().toISOString(), type: 'journal', status: 'posted' } as unknown as Record<string, unknown> }); setJournalDesc(''); setJournalRows([{ account: '', debit: 0, credit: 0 }]); }} className={ds.btnPrimary} disabled={!journalBalanced || !journalDesc.trim()}>
+            <button onClick={() => { transactionData.create({ title: journalDesc, data: { description: journalDesc, entries: journalRows, date: new Date().toISOString(), type: 'journal', status: 'posted' } as unknown as Record<string, unknown> }); setJournalDesc(''); setJournalRows([{ id: uid(), account: '', debit: 0, credit: 0 }]); }} className={ds.btnPrimary} disabled={!journalBalanced || !journalDesc.trim()}>
               <CheckCircle className="w-4 h-4" /> Post Entry
             </button>
           </div>

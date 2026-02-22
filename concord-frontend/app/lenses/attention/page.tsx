@@ -493,7 +493,7 @@ export default function AttentionLensPage() {
                       <CheckCircle2 className="w-3 h-3 text-neon-green flex-shrink-0" />
                       <span className="text-gray-300 capitalize">{String(c.type || 'unknown')}</span>
                     </div>
-                    {c.completedAt && (
+                    {!!c.completedAt && (
                       <span className="text-gray-600 text-[10px]">
                         {new Date(c.completedAt as string).toLocaleTimeString()}
                       </span>

@@ -99,14 +99,14 @@ export default function AnonLensPage() {
           <div className="lens-card sovereignty-lock">
             <p className="text-xs text-gray-400 mb-1">Your Anon ID</p>
             <p className="font-mono text-sm break-all">
-              {identity?.anonId || 'Loading...'}
+              {String(identity?.anonId || 'Loading...')}
             </p>
           </div>
 
           <div className="lens-card">
             <p className="text-xs text-gray-400 mb-1">Public Key</p>
             <p className="font-mono text-xs break-all text-gray-300">
-              {identity?.publicKey?.slice(0, 32)}...
+              {String(identity?.publicKey || '').slice(0, 32)}...
             </p>
           </div>
 
@@ -193,12 +193,12 @@ export default function AnonLensPage() {
             </div>
 
             <div className="space-y-2">
-              {messages?.messages?.length === 0 ? (
+              {messages?.length === 0 ? (
                 <p className="text-center py-8 text-gray-500">
                   No messages yet. Your inbox is secure and empty.
                 </p>
               ) : showMessages ? (
-                messages?.messages?.map((msg: AnonMessage) => (
+                messages?.map((msg: AnonMessage) => (
                   <div key={msg.id} className="lens-card">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs text-gray-400">

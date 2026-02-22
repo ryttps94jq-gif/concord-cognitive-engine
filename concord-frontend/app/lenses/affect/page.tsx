@@ -968,7 +968,7 @@ export default function AffectLensPage() {
                                 p={typeof evt.polarity === 'number' ? evt.polarity.toFixed(2) : '--'}
                               </span>
                             </div>
-                            {(evt.trigger || evt.cause || evt.description) && (
+                            {!!(evt.trigger || evt.cause || evt.description) && (
                               <p className="text-xs text-gray-400 mt-0.5 truncate">
                                 {String(evt.trigger || evt.cause || evt.description)}
                               </p>
