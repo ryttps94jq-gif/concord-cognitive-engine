@@ -150,6 +150,8 @@ api.interceptors.response.use(
         // Session is managed via httpOnly cookies, cleared by server
         const path = window.location.pathname;
         if (!path.includes('/login') && !path.includes('/register')) {
+          // Clear entered flag to prevent redirect loop on next visit
+          try { localStorage.removeItem('concord_entered'); } catch {}
           window.location.href = '/login';
         }
       }

@@ -13,8 +13,6 @@ import { FirstWinWizard } from '@/components/guidance/FirstWinWizard';
 import { LensErrorBoundary } from '@/components/common/LensErrorBoundary';
 import { InstallPrompt } from '@/components/pwa/InstallPrompt';
 import { OfflineFallback } from '@/components/pwa/OfflineFallback';
-import { connectSocket } from '@/lib/realtime/socket';
-
 interface AppShellProps {
   children: React.ReactNode;
 }
@@ -26,8 +24,7 @@ export function AppShell({ children }: AppShellProps) {
   useEffect(() => {
     setMounted(true);
 
-    // Connect WebSocket for real-time updates
-    connectSocket();
+    // WebSocket is connected in Providers.tsx — no duplicate connectSocket() here.
 
     // Register service worker for PWA support
     if ('serviceWorker' in navigator) {

@@ -51,20 +51,24 @@ export function Providers({ children }: { children: React.ReactNode }) {
     const entered = localStorage.getItem('concord_entered');
     if (!entered) return;
 
+    let cancelled = false;
+
     // Connect WebSocket with existing session cookie
     connectSocket();
 
     // Fetch user scopes for PermissionGate
     api.get('/api/auth/me')
       .then((res) => {
+        if (cancelled) return;
         const scopes = res.data?.scopes || res.data?.permissions || [];
         if (Array.isArray(scopes)) setUserScopes(scopes);
       })
       .catch(() => {
-        // Not authenticated — middleware will redirect
+        // Not authenticated — the 401 interceptor will handle redirect
       });
 
     return () => {
+      cancelled = true;
       disconnectSocket();
     };
   }, []);
