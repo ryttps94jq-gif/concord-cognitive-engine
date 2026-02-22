@@ -51,6 +51,13 @@ import {
   BarChart3,
   BookMarked,
   ListChecks,
+  Library,
+  HelpCircle,
+  FileQuestion,
+  Video,
+  FileType,
+  ExternalLink,
+  Copy,
   type LucideIcon,
 } from 'lucide-react';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -60,12 +67,24 @@ import { ErrorState } from '@/components/common/EmptyState';
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-type ModeTab = 'Students' | 'Courses' | 'Assignments' | 'Grades' | 'Plans' | 'Certifications';
-type ArtifactType = 'Student' | 'Course' | 'Assignment' | 'Grade' | 'LessonPlan' | 'Certification';
+type ModeTab = 'Students' | 'Courses' | 'Assignments' | 'Grades' | 'Plans' | 'Certifications' | 'Resources' | 'Quizzes';
+type ArtifactType = 'Student' | 'Course' | 'Assignment' | 'Grade' | 'LessonPlan' | 'Certification' | 'Resource' | 'Quiz';
 type Status = 'enrolled' | 'active' | 'completed' | 'withdrawn' | 'graduated';
 type AttendanceStatus = 'present' | 'absent' | 'tardy' | 'excused';
 type SubmissionStatus = 'submitted' | 'late' | 'missing' | 'graded';
 type GradeCategory = 'homework' | 'exams' | 'projects' | 'participation';
+type ResourceType = 'textbook' | 'article' | 'video' | 'worksheet' | 'presentation' | 'link' | 'file' | 'other';
+type QuestionType = 'multiple_choice' | 'true_false' | 'short_answer';
+
+interface QuizQuestion {
+  id: string;
+  type: QuestionType;
+  question: string;
+  options?: string[];
+  correctAnswer: string;
+  points: number;
+  explanation?: string;
+}
 
 interface RubricCriterion {
   name: string;
@@ -133,6 +152,15 @@ interface EducationArtifact {
   syllabus?: string;
   expirationDate?: string;
   issuedBy?: string;
+  resourceType?: ResourceType;
+  resourceUrl?: string;
+  resourceCourse?: string;
+  resourceTopic?: string;
+  quizQuestions?: QuizQuestion[];
+  quizTimeLimit?: number;
+  quizShuffleQuestions?: boolean;
+  quizPassingScore?: number;
+  quizAttempts?: number;
   [key: string]: unknown;
 }
 
@@ -142,6 +170,8 @@ const MODE_TABS: { id: ModeTab; icon: LucideIcon; defaultType: ArtifactType }[] 
   { id: 'Assignments', icon: ClipboardList, defaultType: 'Assignment' },
   { id: 'Grades', icon: BarChart2, defaultType: 'Grade' },
   { id: 'Plans', icon: FileText, defaultType: 'LessonPlan' },
+  { id: 'Resources', icon: Library, defaultType: 'Resource' },
+  { id: 'Quizzes', icon: HelpCircle, defaultType: 'Quiz' },
   { id: 'Certifications', icon: Award, defaultType: 'Certification' },
 ];
 
@@ -292,6 +322,18 @@ export default function EducationLensPage() {
   const [peerReview, setPeerReview] = useState(false);
   const [plagiarismCheck, setPlagiarismCheck] = useState(false);
 
+  /* ---------- quiz builder state ---------- */
+  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
+  const [quizTimeLimit, setQuizTimeLimit] = useState(30);
+  const [quizShuffleQuestions, setQuizShuffleQuestions] = useState(false);
+  const [quizPassingScore, setQuizPassingScore] = useState(70);
+
+  /* ---------- resource form state ---------- */
+  const [formResourceType, setFormResourceType] = useState<ResourceType>('textbook');
+  const [formResourceUrl, setFormResourceUrl] = useState('');
+  const [formResourceCourse, setFormResourceCourse] = useState('');
+  const [formResourceTopic, setFormResourceTopic] = useState('');
+
   /* ---------- editor form state ---------- */
   const [formTitle, setFormTitle] = useState('');
   const [formType, setFormType] = useState<ArtifactType>('Student');
@@ -335,6 +377,8 @@ export default function EducationLensPage() {
   const assignments = useMemo(() => items.filter(i => (i.data as unknown as EducationArtifact).artifactType === 'Assignment'), [items]);
   const grades = useMemo(() => items.filter(i => (i.data as unknown as EducationArtifact).artifactType === 'Grade'), [items]);
   const certifications = useMemo(() => items.filter(i => (i.data as unknown as EducationArtifact).artifactType === 'Certification'), [items]);
+  const resources = useMemo(() => items.filter(i => (i.data as unknown as EducationArtifact).artifactType === 'Resource'), [items]);
+  const quizzes = useMemo(() => items.filter(i => (i.data as unknown as EducationArtifact).artifactType === 'Quiz'), [items]);
 
   const stats = useMemo(() => {
     const gradeItems = grades.filter(i => (i.data as unknown as EducationArtifact).score != null);
@@ -443,6 +487,14 @@ export default function EducationLensPage() {
     setRubricCriteria([]);
     setPeerReview(false);
     setPlagiarismCheck(false);
+    setQuizQuestions([]);
+    setQuizTimeLimit(30);
+    setQuizShuffleQuestions(false);
+    setQuizPassingScore(70);
+    setFormResourceType('textbook');
+    setFormResourceUrl('');
+    setFormResourceCourse('');
+    setFormResourceTopic('');
     setShowEditor(true);
   };
 
@@ -467,6 +519,14 @@ export default function EducationLensPage() {
     setRubricCriteria(d.rubric || []);
     setPeerReview(d.peerReview || false);
     setPlagiarismCheck(d.plagiarismCheck || false);
+    setQuizQuestions(d.quizQuestions || []);
+    setQuizTimeLimit(d.quizTimeLimit ?? 30);
+    setQuizShuffleQuestions(d.quizShuffleQuestions || false);
+    setQuizPassingScore(d.quizPassingScore ?? 70);
+    setFormResourceType(d.resourceType || 'textbook');
+    setFormResourceUrl(d.resourceUrl || '');
+    setFormResourceCourse(d.resourceCourse || '');
+    setFormResourceTopic(d.resourceTopic || '');
     setShowEditor(true);
   };
 
@@ -484,6 +544,14 @@ export default function EducationLensPage() {
         peerReview, plagiarismCheck,
         latePolicy: latePolicy || undefined,
         latePenalty: latePenalty || undefined,
+        resourceType: formType === 'Resource' ? formResourceType : undefined,
+        resourceUrl: formType === 'Resource' ? formResourceUrl : undefined,
+        resourceCourse: formType === 'Resource' ? formResourceCourse : undefined,
+        resourceTopic: formType === 'Resource' ? formResourceTopic : undefined,
+        quizQuestions: formType === 'Quiz' && quizQuestions.length > 0 ? quizQuestions : undefined,
+        quizTimeLimit: formType === 'Quiz' ? quizTimeLimit : undefined,
+        quizShuffleQuestions: formType === 'Quiz' ? quizShuffleQuestions : undefined,
+        quizPassingScore: formType === 'Quiz' ? quizPassingScore : undefined,
       } as unknown as Partial<EducationArtifact>,
       meta: { status: formStatus, tags: [formType] },
     };
@@ -594,6 +662,44 @@ export default function EducationLensPage() {
     setRubricCriteria(prev => prev.filter((_, i) => i !== index));
   };
 
+  /* ---------- quiz helpers ---------- */
+  const addQuizQuestion = (type: QuestionType) => {
+    const newQ: QuizQuestion = {
+      id: `q-${Date.now()}`,
+      type,
+      question: '',
+      options: type === 'multiple_choice' ? ['', '', '', ''] : type === 'true_false' ? ['True', 'False'] : undefined,
+      correctAnswer: '',
+      points: 10,
+      explanation: '',
+    };
+    setQuizQuestions(prev => [...prev, newQ]);
+  };
+
+  const updateQuizQuestion = (id: string, field: keyof QuizQuestion, value: unknown) => {
+    setQuizQuestions(prev => prev.map(q => q.id === id ? { ...q, [field]: value } : q));
+  };
+
+  const updateQuizOption = (questionId: string, optIndex: number, value: string) => {
+    setQuizQuestions(prev => prev.map(q => {
+      if (q.id !== questionId || !q.options) return q;
+      const newOptions = [...q.options];
+      newOptions[optIndex] = value;
+      return { ...q, options: newOptions };
+    }));
+  };
+
+  const addQuizOption = (questionId: string) => {
+    setQuizQuestions(prev => prev.map(q => {
+      if (q.id !== questionId || !q.options) return q;
+      return { ...q, options: [...q.options, ''] };
+    }));
+  };
+
+  const removeQuizQuestion = (id: string) => {
+    setQuizQuestions(prev => prev.filter(q => q.id !== id));
+  };
+
   /* ---------- student progress computed ---------- */
   const studentProgress = useMemo(() => {
     if (!selectedStudent) return null;
@@ -673,6 +779,17 @@ export default function EducationLensPage() {
   /* ================================================================== */
   /*  RENDER                                                             */
   /* ================================================================== */
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError) {
     return (
@@ -2015,6 +2132,197 @@ export default function EducationLensPage() {
       )}
 
       {/* ============================================================ */}
+      {/*  TAB: Resources (Resource Library)                            */}
+      {/* ============================================================ */}
+      {activeTab === 'Resources' && (
+        <section className={ds.panel}>
+          <div className={cn(ds.sectionHeader, 'mb-4')}>
+            <h2 className={ds.heading2}>Resource Library</h2>
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search resources..." className={cn(ds.input, 'pl-9 w-56')} />
+              </div>
+              <select value={filterStatus} onChange={e => setFilterStatus(e.target.value as Status | 'all')} className={cn(ds.select, 'w-40')}>
+                <option value="all">All statuses</option>
+                {ALL_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Resource Stats */}
+          <div className={cn(ds.grid4, 'mb-4')}>
+            {(['textbook', 'video', 'article', 'worksheet'] as ResourceType[]).map(type => {
+              const count = resources.filter(r => (r.data as unknown as EducationArtifact).resourceType === type).length;
+              const icons: Record<string, LucideIcon> = { textbook: BookOpen, video: Video, article: FileText, worksheet: FileType };
+              const Icon = icons[type] || FileText;
+              return (
+                <div key={type} className="flex items-center gap-3 p-3 rounded-lg bg-lattice-elevated">
+                  <Icon className="w-5 h-5 text-neon-cyan" />
+                  <div>
+                    <span className="text-lg font-bold text-white">{count}</span>
+                    <p className={cn(ds.textMuted, 'capitalize text-xs')}>{type}s</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {filtered.length === 0 ? (
+            <div className="text-center py-12">
+              <Library className="w-10 h-10 text-gray-600 mx-auto mb-3" />
+              <p className={ds.textMuted}>No resources found. Add textbooks, videos, articles, and more.</p>
+            </div>
+          ) : (
+            <div className={ds.grid3}>
+              {filtered.map(item => {
+                const d = item.data as unknown as EducationArtifact;
+                const typeIcons: Record<string, LucideIcon> = {
+                  textbook: BookOpen, article: FileText, video: Video,
+                  worksheet: FileType, presentation: Layers, link: ExternalLink,
+                  file: FileCheck, other: Library,
+                };
+                const ResIcon = typeIcons[d.resourceType || 'other'] || Library;
+                return (
+                  <div key={item.id} className={ds.panelHover} onClick={() => openEditEditor(item)}>
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <ResIcon className="w-5 h-5 text-neon-cyan shrink-0" />
+                        <h3 className={cn(ds.heading3, 'text-base truncate')}>{item.title}</h3>
+                      </div>
+                      <span className={ds.badge(STATUS_COLORS[d.status])}>{d.status}</span>
+                    </div>
+                    <p className={cn(ds.textMuted, 'line-clamp-2 mb-3')}>{d.description}</p>
+                    <div className="flex items-center gap-3 text-xs text-gray-500 flex-wrap">
+                      {d.resourceType && <span className={ds.badge('neon-cyan')}>{d.resourceType}</span>}
+                      {d.resourceCourse && <span className="flex items-center gap-1"><BookOpen className="w-3 h-3" /> {d.resourceCourse}</span>}
+                      {d.resourceTopic && <span className="flex items-center gap-1"><Layers className="w-3 h-3" /> {d.resourceTopic}</span>}
+                      {d.subject && <span className="flex items-center gap-1"><Target className="w-3 h-3" /> {d.subject}</span>}
+                    </div>
+                    {d.resourceUrl && (
+                      <div className="mt-2 flex items-center gap-1 text-xs text-neon-blue">
+                        <ExternalLink className="w-3 h-3" />
+                        <span className="truncate">{d.resourceUrl}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-1 mt-3">
+                      <button onClick={(e) => { e.stopPropagation(); openEditEditor(item); }} className={cn(ds.btnGhost, 'text-xs px-2 py-1')}>
+                        <Edit3 className="w-3 h-3" /> Edit
+                      </button>
+                      <button onClick={(e) => { e.stopPropagation(); remove(item.id); }} className={cn(ds.btnGhost, 'text-xs px-2 py-1 hover:text-red-400')}>
+                        <Trash2 className="w-3 h-3" /> Delete
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* ============================================================ */}
+      {/*  TAB: Quizzes (Quiz Builder)                                  */}
+      {/* ============================================================ */}
+      {activeTab === 'Quizzes' && (
+        <section className={ds.panel}>
+          <div className={cn(ds.sectionHeader, 'mb-4')}>
+            <h2 className={ds.heading2}>Quiz Builder</h2>
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search quizzes..." className={cn(ds.input, 'pl-9 w-56')} />
+              </div>
+              <select value={filterStatus} onChange={e => setFilterStatus(e.target.value as Status | 'all')} className={cn(ds.select, 'w-40')}>
+                <option value="all">All statuses</option>
+                {ALL_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Quiz Stats */}
+          <div className={cn(ds.grid4, 'mb-4')}>
+            <div className={ds.panel}>
+              <HelpCircle className="w-5 h-5 text-neon-blue mb-2" />
+              <p className="text-2xl font-bold text-white">{quizzes.length}</p>
+              <p className={ds.textMuted}>Total Quizzes</p>
+            </div>
+            <div className={ds.panel}>
+              <CheckCircle className="w-5 h-5 text-neon-green mb-2" />
+              <p className="text-2xl font-bold text-white">{quizzes.filter(q => (q.data as unknown as EducationArtifact).status === 'completed').length}</p>
+              <p className={ds.textMuted}>Published</p>
+            </div>
+            <div className={ds.panel}>
+              <FileQuestion className="w-5 h-5 text-amber-400 mb-2" />
+              <p className="text-2xl font-bold text-white">
+                {quizzes.reduce((sum, q) => sum + ((q.data as unknown as EducationArtifact).quizQuestions?.length || 0), 0)}
+              </p>
+              <p className={ds.textMuted}>Total Questions</p>
+            </div>
+            <div className={ds.panel}>
+              <Clock className="w-5 h-5 text-neon-cyan mb-2" />
+              <p className="text-2xl font-bold text-white">
+                {quizzes.length > 0 ? Math.round(quizzes.reduce((sum, q) => sum + ((q.data as unknown as EducationArtifact).quizTimeLimit || 0), 0) / quizzes.length) : 0}
+              </p>
+              <p className={ds.textMuted}>Avg Time (min)</p>
+            </div>
+          </div>
+
+          {filtered.length === 0 ? (
+            <div className="text-center py-12">
+              <HelpCircle className="w-10 h-10 text-gray-600 mx-auto mb-3" />
+              <p className={ds.textMuted}>No quizzes found. Create one with multiple choice, true/false, or short answer questions.</p>
+            </div>
+          ) : (
+            <div className={ds.grid3}>
+              {filtered.map(item => {
+                const d = item.data as unknown as EducationArtifact;
+                const qCount = d.quizQuestions?.length || 0;
+                const totalPoints = d.quizQuestions?.reduce((sum, q) => sum + q.points, 0) || 0;
+                const mcCount = d.quizQuestions?.filter(q => q.type === 'multiple_choice').length || 0;
+                const tfCount = d.quizQuestions?.filter(q => q.type === 'true_false').length || 0;
+                const saCount = d.quizQuestions?.filter(q => q.type === 'short_answer').length || 0;
+                return (
+                  <div key={item.id} className={ds.panelHover} onClick={() => openEditEditor(item)}>
+                    <div className="flex items-start justify-between mb-2">
+                      <h3 className={cn(ds.heading3, 'text-base truncate flex-1')}>{item.title}</h3>
+                      <span className={ds.badge(STATUS_COLORS[d.status])}>{d.status}</span>
+                    </div>
+                    <p className={cn(ds.textMuted, 'line-clamp-2 mb-3')}>{d.description}</p>
+                    <div className="flex items-center gap-3 text-xs text-gray-500 flex-wrap mb-2">
+                      {d.subject && <span className="flex items-center gap-1"><Layers className="w-3 h-3" /> {d.subject}</span>}
+                      {d.dueDate && <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {d.dueDate}</span>}
+                      <span className="flex items-center gap-1"><FileQuestion className="w-3 h-3" /> {qCount} questions</span>
+                      <span className="flex items-center gap-1"><Hash className="w-3 h-3" /> {totalPoints} pts</span>
+                    </div>
+                    {/* Question type breakdown */}
+                    <div className="flex items-center gap-2 mb-2">
+                      {mcCount > 0 && <span className={ds.badge('neon-blue')}>{mcCount} MC</span>}
+                      {tfCount > 0 && <span className={ds.badge('neon-green')}>{tfCount} T/F</span>}
+                      {saCount > 0 && <span className={ds.badge('amber-400')}>{saCount} SA</span>}
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-gray-500">
+                      {d.quizTimeLimit && <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {d.quizTimeLimit} min</span>}
+                      {d.quizPassingScore && <span className="flex items-center gap-1"><Target className="w-3 h-3" /> {d.quizPassingScore}% to pass</span>}
+                      {d.quizShuffleQuestions && <span className="flex items-center gap-1 text-neon-cyan"><Shuffle className="w-3 h-3" /> Shuffled</span>}
+                    </div>
+                    <div className="flex items-center gap-1 mt-3">
+                      <button onClick={(e) => { e.stopPropagation(); openEditEditor(item); }} className={cn(ds.btnGhost, 'text-xs px-2 py-1')}>
+                        <Edit3 className="w-3 h-3" /> Edit
+                      </button>
+                      <button onClick={(e) => { e.stopPropagation(); remove(item.id); }} className={cn(ds.btnGhost, 'text-xs px-2 py-1 hover:text-red-400')}>
+                        <Trash2 className="w-3 h-3" /> Delete
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* ============================================================ */}
       {/*  Editor Modal                                                 */}
       {/* ============================================================ */}
       {showEditor && (
@@ -2040,6 +2348,8 @@ export default function EducationLensPage() {
                       <option value="Assignment">Assignment</option>
                       <option value="Grade">Grade</option>
                       <option value="LessonPlan">Lesson Plan</option>
+                      <option value="Resource">Resource</option>
+                      <option value="Quiz">Quiz</option>
                       <option value="Certification">Certification</option>
                     </select>
                   </div>
@@ -2147,6 +2457,170 @@ export default function EducationLensPage() {
                           <button onClick={() => removeRubricCriterion(idx)} className="text-red-400 hover:text-red-300 p-1"><MinusCircle className="w-4 h-4" /></button>
                         </div>
                       ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Resource-specific fields */}
+                {formType === 'Resource' && (
+                  <div className="space-y-3 p-3 border border-lattice-border rounded-lg">
+                    <h4 className={cn(ds.heading3, 'text-sm')}>Resource Details</h4>
+                    <div className={ds.grid2}>
+                      <div>
+                        <label className={ds.label}>Resource Type</label>
+                        <select value={formResourceType} onChange={e => setFormResourceType(e.target.value as ResourceType)} className={ds.select}>
+                          {(['textbook', 'article', 'video', 'worksheet', 'presentation', 'link', 'file', 'other'] as ResourceType[]).map(t => (
+                            <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={ds.label}>Course</label>
+                        <input value={formResourceCourse} onChange={e => setFormResourceCourse(e.target.value)} className={ds.input} placeholder="Associated course" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className={ds.label}>Topic</label>
+                      <input value={formResourceTopic} onChange={e => setFormResourceTopic(e.target.value)} className={ds.input} placeholder="e.g. Algebra, US History" />
+                    </div>
+                    <div>
+                      <label className={ds.label}>URL / Link</label>
+                      <input value={formResourceUrl} onChange={e => setFormResourceUrl(e.target.value)} className={ds.input} placeholder="https://..." />
+                    </div>
+                  </div>
+                )}
+
+                {/* Quiz Builder fields in modal */}
+                {formType === 'Quiz' && (
+                  <div className="space-y-4 p-3 border border-lattice-border rounded-lg">
+                    <h4 className={cn(ds.heading3, 'text-sm')}>Quiz Settings</h4>
+                    <div className={ds.grid2}>
+                      <div>
+                        <label className={ds.label}>Time Limit (min)</label>
+                        <input type="number" value={quizTimeLimit} onChange={e => setQuizTimeLimit(parseInt(e.target.value) || 0)} className={ds.input} min={0} />
+                      </div>
+                      <div>
+                        <label className={ds.label}>Passing Score (%)</label>
+                        <input type="number" value={quizPassingScore} onChange={e => setQuizPassingScore(parseInt(e.target.value) || 0)} className={ds.input} min={0} max={100} />
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setQuizShuffleQuestions(!quizShuffleQuestions)}
+                      className={cn('flex items-center gap-2 text-sm', quizShuffleQuestions ? 'text-neon-green' : 'text-gray-400')}
+                    >
+                      {quizShuffleQuestions ? <ToggleRight className="w-5 h-5" /> : <ToggleLeft className="w-5 h-5" />}
+                      Shuffle Questions
+                    </button>
+
+                    {/* Question List */}
+                    <div>
+                      <div className={cn(ds.sectionHeader, 'mb-2')}>
+                        <label className={cn(ds.label, 'mb-0')}>Questions ({quizQuestions.length})</label>
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => addQuizQuestion('multiple_choice')} className={cn(ds.btnGhost, 'text-xs px-2 py-1')}>
+                            <PlusCircle className="w-3 h-3" /> MC
+                          </button>
+                          <button onClick={() => addQuizQuestion('true_false')} className={cn(ds.btnGhost, 'text-xs px-2 py-1')}>
+                            <PlusCircle className="w-3 h-3" /> T/F
+                          </button>
+                          <button onClick={() => addQuizQuestion('short_answer')} className={cn(ds.btnGhost, 'text-xs px-2 py-1')}>
+                            <PlusCircle className="w-3 h-3" /> Short
+                          </button>
+                        </div>
+                      </div>
+                      {quizQuestions.length === 0 ? (
+                        <p className={cn(ds.textMuted, 'text-xs py-2')}>No questions yet. Add Multiple Choice, True/False, or Short Answer questions.</p>
+                      ) : (
+                        <div className="space-y-3 max-h-96 overflow-y-auto">
+                          {quizQuestions.map((q, idx) => (
+                            <div key={q.id} className="p-3 bg-lattice-elevated rounded-lg space-y-2">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-semibold text-gray-400">
+                                  Q{idx + 1} - {q.type === 'multiple_choice' ? 'Multiple Choice' : q.type === 'true_false' ? 'True/False' : 'Short Answer'}
+                                </span>
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="number"
+                                    value={q.points}
+                                    onChange={e => updateQuizQuestion(q.id, 'points', parseInt(e.target.value) || 0)}
+                                    className={cn(ds.input, 'w-16 text-center text-xs py-1')}
+                                    min={0}
+                                  />
+                                  <span className="text-xs text-gray-500">pts</span>
+                                  <button onClick={() => removeQuizQuestion(q.id)} className="text-red-400 hover:text-red-300 p-1">
+                                    <MinusCircle className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+                              <input
+                                value={q.question}
+                                onChange={e => updateQuizQuestion(q.id, 'question', e.target.value)}
+                                placeholder="Question text..."
+                                className={cn(ds.input, 'text-sm')}
+                              />
+                              {q.type === 'multiple_choice' && q.options && (
+                                <div className="space-y-1">
+                                  {q.options.map((opt, oi) => (
+                                    <div key={oi} className="flex items-center gap-2">
+                                      <input
+                                        type="radio"
+                                        name={`correct-${q.id}`}
+                                        checked={q.correctAnswer === opt && opt !== ''}
+                                        onChange={() => updateQuizQuestion(q.id, 'correctAnswer', opt)}
+                                        className="text-neon-green"
+                                      />
+                                      <input
+                                        value={opt}
+                                        onChange={e => updateQuizOption(q.id, oi, e.target.value)}
+                                        placeholder={`Option ${String.fromCharCode(65 + oi)}`}
+                                        className={cn(ds.input, 'text-xs flex-1 py-1')}
+                                      />
+                                    </div>
+                                  ))}
+                                  <button onClick={() => addQuizOption(q.id)} className={cn(ds.btnGhost, 'text-xs px-2 py-0.5')}>
+                                    <PlusCircle className="w-3 h-3" /> Add Option
+                                  </button>
+                                </div>
+                              )}
+                              {q.type === 'true_false' && (
+                                <div className="flex items-center gap-4">
+                                  {['True', 'False'].map(val => (
+                                    <label key={val} className="flex items-center gap-2 cursor-pointer">
+                                      <input
+                                        type="radio"
+                                        name={`tf-${q.id}`}
+                                        checked={q.correctAnswer === val}
+                                        onChange={() => updateQuizQuestion(q.id, 'correctAnswer', val)}
+                                        className="text-neon-green"
+                                      />
+                                      <span className="text-sm text-gray-300">{val}</span>
+                                    </label>
+                                  ))}
+                                </div>
+                              )}
+                              {q.type === 'short_answer' && (
+                                <input
+                                  value={q.correctAnswer}
+                                  onChange={e => updateQuizQuestion(q.id, 'correctAnswer', e.target.value)}
+                                  placeholder="Expected answer..."
+                                  className={cn(ds.input, 'text-xs')}
+                                />
+                              )}
+                              <input
+                                value={q.explanation || ''}
+                                onChange={e => updateQuizQuestion(q.id, 'explanation', e.target.value)}
+                                placeholder="Explanation (shown after answering)..."
+                                className={cn(ds.input, 'text-xs')}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {quizQuestions.length > 0 && (
+                        <p className={cn(ds.textMuted, 'text-xs mt-2')}>
+                          Total: {quizQuestions.reduce((sum, q) => sum + q.points, 0)} points across {quizQuestions.length} questions
+                        </p>
+                      )}
                     </div>
                   </div>
                 )}

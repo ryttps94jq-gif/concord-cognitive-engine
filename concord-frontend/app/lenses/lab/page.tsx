@@ -1,8 +1,9 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiHelpers } from '@/lib/api/client';
+import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useState } from 'react';
 import { FlaskConical, Play, Square, History, Zap } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -14,24 +15,32 @@ export default function LabLensPage() {
   const [code, setCode] = useState('');
   const [selectedOrgan, setSelectedOrgan] = useState('abstraction_governor');
 
-  const { data: organs, isError: isError, error: error, refetch: refetch,} = useQuery({
-    queryKey: ['growth-organs'],
-    queryFn: () => api.get('/api/growth/organs').then((r) => r.data),
-  });
+  const { items: organItems, isLoading, isError: isError, error: error, refetch: refetch } = useLensData<Record<string, unknown>>('lab', 'organ', { seed: [] });
+  const organs = organItems.map(i => ({ id: i.id, ...(i.data || {}) })) as unknown as Record<string, unknown>[];
 
-  const { data: experiments, isError: isError2, error: error2, refetch: refetch2,} = useQuery({
-    queryKey: ['lab-experiments'],
-    queryFn: () => api.get('/api/lab/experiments').then((r) => r.data),
-  });
+  const { items: experimentItems, isError: isError2, error: error2, refetch: refetch2, create: createExperiment } = useLensData<Record<string, unknown>>('lab', 'experiment', { seed: [] });
+  const experiments = experimentItems.map(i => ({ id: i.id, ...(i.data || {}) })) as unknown as Record<string, unknown>[];
 
   const runExperiment = useMutation({
     mutationFn: (payload: { code: string; organ: string }) =>
-      api.post('/api/lab/run', payload),
+      createExperiment({ title: `experiment-${Date.now()}`, data: { ...payload, ranAt: new Date().toISOString() } }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['lab-experiments'] });
+      refetch2();
     },
+    onError: (err) => console.error('runExperiment failed:', err instanceof Error ? err.message : err),
   });
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-green border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2) {
     return (
@@ -67,7 +76,7 @@ export default function LabLensPage() {
               onChange={(e) => setSelectedOrgan(e.target.value)}
               className="input-lattice w-auto"
             >
-              {organs?.organs?.map((organ: Record<string, unknown>) => (
+              {organs?.map((organ: Record<string, unknown>) => (
                 <option key={organ.name as string} value={organ.name as string}>
                   {String(organ.name)}
                 </option>
@@ -108,7 +117,7 @@ export default function LabLensPage() {
             Growth Organs
           </h2>
           <div className="space-y-2">
-            {organs?.organs?.map((organ: Record<string, unknown>) => (
+            {organs?.map((organ: Record<string, unknown>) => (
               <div
                 key={organ.name as string}
                 className={`lens-card cursor-pointer ${
@@ -141,12 +150,12 @@ export default function LabLensPage() {
           Recent Experiments
         </h2>
         <div className="space-y-2">
-          {experiments?.experiments?.length === 0 ? (
+          {experiments?.length === 0 ? (
             <p className="text-center py-8 text-gray-500">
               No experiments yet. Run your first experiment!
             </p>
           ) : (
-            experiments?.experiments?.map((exp: Record<string, unknown>) => (
+            experiments?.map((exp: Record<string, unknown>) => (
               <div key={exp.id as string} className="lens-card">
                 <div className="flex items-center justify-between">
                   <span className="font-mono text-sm">{String(exp.organ)}</span>

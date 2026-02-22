@@ -17,7 +17,7 @@ export default function TransferLensPage() {
   const [classifyText, setClassifyText] = useState('');
   const [results, setResults] = useState<unknown>(null);
 
-  const { data: history, isError: isError, error: error, refetch: refetch,} = useQuery({
+  const { data: history, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
     queryKey: ['transfer-history'],
     queryFn: () => apiHelpers.transfer.history().then((r) => r.data),
   });
@@ -25,15 +25,28 @@ export default function TransferLensPage() {
   const findAnalogies = useMutation({
     mutationFn: () => apiHelpers.transfer.analogies({ source: sourceText, target: targetDomain || undefined }),
     onSuccess: (res) => setResults(res.data),
+    onError: (err) => console.error('findAnalogies failed:', err instanceof Error ? err.message : err),
   });
 
   const classifyDomain = useMutation({
     mutationFn: () => apiHelpers.transfer.classifyDomain({ content: classifyText }),
     onSuccess: (res) => setResults(res.data),
+    onError: (err) => console.error('classifyDomain failed:', err instanceof Error ? err.message : err),
   });
 
   const transfers = history?.transfers || history || [];
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError) {
     return (

@@ -52,9 +52,9 @@ import { ErrorState } from '@/components/common/EmptyState';
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-type ModeTab = 'Sites' | 'Species' | 'Sampling' | 'Trails' | 'Waste' | 'Compliance';
+type ModeTab = 'Sites' | 'Species' | 'Sampling' | 'Trails' | 'Waste' | 'Compliance' | 'Carbon' | 'Resources' | 'Goals';
 
-type ArtifactType = 'Site' | 'Species' | 'EnvironmentalSample' | 'TrailAsset' | 'WasteStream' | 'ComplianceRecord';
+type ArtifactType = 'Site' | 'Species' | 'EnvironmentalSample' | 'TrailAsset' | 'WasteStream' | 'ComplianceRecord' | 'CarbonEntry' | 'ResourceMetric' | 'SustainabilityGoal';
 type Status = 'active' | 'monitoring' | 'critical' | 'remediation' | 'closed' | 'seasonal';
 
 type SiteType = 'wetland' | 'forest' | 'urban' | 'marine' | 'river' | 'prairie' | 'brownfield';
@@ -175,7 +175,46 @@ interface ComplianceRecord {
   notes: string;
 }
 
-type ArtifactData = Site | SpeciesRecord | EnvironmentalSample | TrailAsset | WasteStream | ComplianceRecord;
+interface CarbonEntry {
+  category: string;
+  source: string;
+  emissionsTonsCO2e: number;
+  scope: string;
+  reportingPeriod: string;
+  methodology: string;
+  verificationStatus: string;
+  reductionTarget: number;
+  notes: string;
+}
+
+interface ResourceMetric {
+  resourceType: string;
+  metricName: string;
+  value: number;
+  unit: string;
+  measurementDate: string;
+  location: string;
+  baseline: number;
+  target: number;
+  trend: string;
+  notes: string;
+}
+
+interface SustainabilityGoal {
+  goalName: string;
+  category: string;
+  description: string;
+  targetDate: string;
+  targetValue: number;
+  currentValue: number;
+  unit: string;
+  progress: number;
+  responsible: string;
+  milestones: string;
+  notes: string;
+}
+
+type ArtifactData = Site | SpeciesRecord | EnvironmentalSample | TrailAsset | WasteStream | ComplianceRecord | CarbonEntry | ResourceMetric | SustainabilityGoal;
 
 const MODE_TABS: { id: ModeTab; icon: typeof TreePine; artifactType: ArtifactType; label: string }[] = [
   { id: 'Sites', icon: MapPin, artifactType: 'Site', label: 'Site Manager' },
@@ -184,6 +223,9 @@ const MODE_TABS: { id: ModeTab; icon: typeof TreePine; artifactType: ArtifactTyp
   { id: 'Trails', icon: Footprints, artifactType: 'TrailAsset', label: 'Trails & Assets' },
   { id: 'Waste', icon: Recycle, artifactType: 'WasteStream', label: 'Waste Mgmt' },
   { id: 'Compliance', icon: ShieldCheck, artifactType: 'ComplianceRecord', label: 'Compliance' },
+  { id: 'Carbon', icon: Globe, artifactType: 'CarbonEntry', label: 'Carbon Tracker' },
+  { id: 'Resources', icon: Droplets, artifactType: 'ResourceMetric', label: 'Resources' },
+  { id: 'Goals', icon: Leaf, artifactType: 'SustainabilityGoal', label: 'Goals' },
 ];
 
 const ALL_STATUSES: Status[] = ['active', 'monitoring', 'critical', 'remediation', 'closed', 'seasonal'];
@@ -240,6 +282,11 @@ const DOMAIN_ACTIONS = [
   { id: 'water_quality', label: 'Water Quality Summary', icon: Droplets, description: 'Summarize water quality parameters' },
 ];
 
+const CARBON_CATEGORIES = ['Transport', 'Energy', 'Waste', 'Industrial', 'Agriculture', 'Buildings', 'Other'];
+const CARBON_SCOPES = ['Scope 1 - Direct', 'Scope 2 - Indirect (Energy)', 'Scope 3 - Other Indirect'];
+const RESOURCE_TYPES = ['Water', 'Energy', 'Waste', 'Materials', 'Land'];
+const GOAL_CATEGORIES = ['Emissions Reduction', 'Water Conservation', 'Waste Diversion', 'Renewable Energy', 'Biodiversity', 'Sustainability Certification', 'Other'];
+
 const seedData: Record<ArtifactType, { title: string; data: Record<string, unknown>; meta: Record<string, unknown> }[]> = {
   Site: [],
   Species: [],
@@ -247,6 +294,9 @@ const seedData: Record<ArtifactType, { title: string; data: Record<string, unkno
   TrailAsset: [],
   WasteStream: [],
   ComplianceRecord: [],
+  CarbonEntry: [],
+  ResourceMetric: [],
+  SustainabilityGoal: [],
 };
 
 /* ------------------------------------------------------------------ */
@@ -284,6 +334,9 @@ export default function EnvironmentLensPage() {
   const { items: trailItems } = useLensData<TrailAsset>('environment', 'TrailAsset', { seed: [] });
   const { items: wasteItems } = useLensData<WasteStream>('environment', 'WasteStream', { seed: [] });
   const { items: complianceItems } = useLensData<ComplianceRecord>('environment', 'ComplianceRecord', { seed: [] });
+  const { items: carbonItems } = useLensData<CarbonEntry>('environment', 'CarbonEntry', { seed: [] });
+  const { items: resourceItems } = useLensData<ResourceMetric>('environment', 'ResourceMetric', { seed: [] });
+  const { items: goalItems } = useLensData<SustainabilityGoal>('environment', 'SustainabilityGoal', { seed: [] });
 
   const runAction = useRunArtifact('environment');
   const editingItem = items.find(i => i.id === editingId) || null;
@@ -412,6 +465,25 @@ export default function EnvironmentLensPage() {
       return new Date(d.expirationDate) < new Date();
     }).length;
 
+    const totalCarbon = carbonItems.reduce((sum, i) => {
+      const d = i.data as unknown as CarbonEntry;
+      return sum + (d.emissionsTonsCO2e || 0);
+    }, 0);
+    const carbonByCategory: Record<string, number> = {};
+    carbonItems.forEach(i => {
+      const d = i.data as unknown as CarbonEntry;
+      const cat = d.category || 'Other';
+      carbonByCategory[cat] = (carbonByCategory[cat] || 0) + (d.emissionsTonsCO2e || 0);
+    });
+    const totalGoals = goalItems.length;
+    const completedGoals = goalItems.filter(i => {
+      const d = i.data as unknown as SustainabilityGoal;
+      return (d.progress || 0) >= 100;
+    }).length;
+    const avgGoalProgress = goalItems.length > 0
+      ? goalItems.reduce((sum, i) => sum + ((i.data as unknown as SustainabilityGoal).progress || 0), 0) / goalItems.length
+      : 0;
+
     return {
       activeSites,
       totalSpecies,
@@ -425,8 +497,13 @@ export default function EnvironmentLensPage() {
       avgCompliance,
       upcomingInspections,
       expiredPermits,
+      totalCarbon,
+      carbonByCategory,
+      totalGoals,
+      completedGoals,
+      avgGoalProgress,
     };
-  }, [siteItems, speciesItems, sampleItems, trailItems, wasteItems, complianceItems]);
+  }, [siteItems, speciesItems, sampleItems, trailItems, wasteItems, complianceItems, carbonItems, goalItems]);
 
   /* ---- export geojson ---- */
   const exportGeoJSON = () => {
@@ -728,7 +805,7 @@ export default function EnvironmentLensPage() {
                 <label className={ds.label}>Photo Log Reference</label>
                 <div className="flex gap-2">
                   <input className={ds.input} value={(formData.photoLogRef as string) || ''} onChange={e => setFormData({ ...formData, photoLogRef: e.target.value })} placeholder="Photo ID or file ref" />
-                  <button className={ds.btnGhost} title="Attach photo placeholder"><Camera className="w-4 h-4" /></button>
+                  <button onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'; input.click(); }} className={ds.btnGhost} title="Attach photo"><Camera className="w-4 h-4" /></button>
                 </div>
               </div>
             </div>
@@ -1176,6 +1253,194 @@ export default function EnvironmentLensPage() {
           </div>
         );
 
+      case 'CarbonEntry':
+        return (
+          <div className="space-y-4">
+            <div className={ds.grid2}>
+              <div>
+                <label className={ds.label}>Category</label>
+                <select className={ds.select} value={(formData.category as string) || ''} onChange={e => setFormData({ ...formData, category: e.target.value })}>
+                  <option value="">Select category...</option>
+                  {CARBON_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={ds.label}>Scope</label>
+                <select className={ds.select} value={(formData.scope as string) || ''} onChange={e => setFormData({ ...formData, scope: e.target.value })}>
+                  <option value="">Select scope...</option>
+                  {CARBON_SCOPES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className={ds.label}>Emission Source</label>
+              <input className={ds.input} value={(formData.source as string) || ''} onChange={e => setFormData({ ...formData, source: e.target.value })} placeholder="e.g. Fleet vehicles, Office electricity" />
+            </div>
+            <div className={ds.grid2}>
+              <div>
+                <label className={ds.label}>Emissions (tons CO2e)</label>
+                <input type="number" step="0.01" className={ds.input} value={(formData.emissionsTonsCO2e as number) ?? ''} onChange={e => setFormData({ ...formData, emissionsTonsCO2e: parseFloat(e.target.value) || 0 })} />
+              </div>
+              <div>
+                <label className={ds.label}>Reduction Target (%)</label>
+                <input type="number" step="0.1" min="0" max="100" className={ds.input} value={(formData.reductionTarget as number) ?? ''} onChange={e => setFormData({ ...formData, reductionTarget: parseFloat(e.target.value) || 0 })} />
+              </div>
+            </div>
+            <div className={ds.grid2}>
+              <div>
+                <label className={ds.label}>Reporting Period</label>
+                <input className={ds.input} value={(formData.reportingPeriod as string) || ''} onChange={e => setFormData({ ...formData, reportingPeriod: e.target.value })} placeholder="e.g. Q1 2026, FY 2025" />
+              </div>
+              <div>
+                <label className={ds.label}>Methodology</label>
+                <input className={ds.input} value={(formData.methodology as string) || ''} onChange={e => setFormData({ ...formData, methodology: e.target.value })} placeholder="e.g. GHG Protocol, ISO 14064" />
+              </div>
+            </div>
+            <div>
+              <label className={ds.label}>Verification Status</label>
+              <select className={ds.select} value={(formData.verificationStatus as string) || ''} onChange={e => setFormData({ ...formData, verificationStatus: e.target.value })}>
+                <option value="">Select...</option>
+                <option value="Unverified">Unverified</option>
+                <option value="Self-assessed">Self-assessed</option>
+                <option value="Third-party Verified">Third-party Verified</option>
+                <option value="Audited">Audited</option>
+              </select>
+            </div>
+            <div>
+              <label className={ds.label}>Notes</label>
+              <textarea className={ds.textarea} rows={2} value={(formData.notes as string) || ''} onChange={e => setFormData({ ...formData, notes: e.target.value })} />
+            </div>
+          </div>
+        );
+
+      case 'ResourceMetric':
+        return (
+          <div className="space-y-4">
+            <div className={ds.grid2}>
+              <div>
+                <label className={ds.label}>Resource Type</label>
+                <select className={ds.select} value={(formData.resourceType as string) || ''} onChange={e => setFormData({ ...formData, resourceType: e.target.value })}>
+                  <option value="">Select...</option>
+                  {RESOURCE_TYPES.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={ds.label}>Metric Name</label>
+                <input className={ds.input} value={(formData.metricName as string) || ''} onChange={e => setFormData({ ...formData, metricName: e.target.value })} placeholder="e.g. Monthly Water Usage, kWh Consumed" />
+              </div>
+            </div>
+            <div className={ds.grid3}>
+              <div>
+                <label className={ds.label}>Value</label>
+                <input type="number" step="0.01" className={ds.input} value={(formData.value as number) ?? ''} onChange={e => setFormData({ ...formData, value: parseFloat(e.target.value) || 0 })} />
+              </div>
+              <div>
+                <label className={ds.label}>Unit</label>
+                <select className={ds.select} value={(formData.unit as string) || ''} onChange={e => setFormData({ ...formData, unit: e.target.value })}>
+                  <option value="">Select...</option>
+                  <option value="gallons">Gallons</option>
+                  <option value="liters">Liters</option>
+                  <option value="kWh">kWh</option>
+                  <option value="MWh">MWh</option>
+                  <option value="therms">Therms</option>
+                  <option value="tons">Tons</option>
+                  <option value="lbs">Pounds</option>
+                  <option value="cu ft">Cubic Feet</option>
+                  <option value="acres">Acres</option>
+                </select>
+              </div>
+              <div>
+                <label className={ds.label}>Measurement Date</label>
+                <input type="date" className={ds.input} value={(formData.measurementDate as string) || ''} onChange={e => setFormData({ ...formData, measurementDate: e.target.value })} />
+              </div>
+            </div>
+            <div>
+              <label className={ds.label}>Location</label>
+              <input className={ds.input} value={(formData.location as string) || ''} onChange={e => setFormData({ ...formData, location: e.target.value })} placeholder="Measurement location" />
+            </div>
+            <div className={ds.grid3}>
+              <div>
+                <label className={ds.label}>Baseline</label>
+                <input type="number" step="0.01" className={ds.input} value={(formData.baseline as number) ?? ''} onChange={e => setFormData({ ...formData, baseline: parseFloat(e.target.value) || 0 })} />
+              </div>
+              <div>
+                <label className={ds.label}>Target</label>
+                <input type="number" step="0.01" className={ds.input} value={(formData.target as number) ?? ''} onChange={e => setFormData({ ...formData, target: parseFloat(e.target.value) || 0 })} />
+              </div>
+              <div>
+                <label className={ds.label}>Trend</label>
+                <select className={ds.select} value={(formData.trend as string) || ''} onChange={e => setFormData({ ...formData, trend: e.target.value })}>
+                  <option value="">Select...</option>
+                  <option value="increasing">Increasing</option>
+                  <option value="stable">Stable</option>
+                  <option value="declining">Declining</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className={ds.label}>Notes</label>
+              <textarea className={ds.textarea} rows={2} value={(formData.notes as string) || ''} onChange={e => setFormData({ ...formData, notes: e.target.value })} />
+            </div>
+          </div>
+        );
+
+      case 'SustainabilityGoal':
+        return (
+          <div className="space-y-4">
+            <div>
+              <label className={ds.label}>Goal Name</label>
+              <input className={ds.input} value={(formData.goalName as string) || ''} onChange={e => setFormData({ ...formData, goalName: e.target.value })} placeholder="e.g. Net Zero by 2030" />
+            </div>
+            <div className={ds.grid2}>
+              <div>
+                <label className={ds.label}>Category</label>
+                <select className={ds.select} value={(formData.category as string) || ''} onChange={e => setFormData({ ...formData, category: e.target.value })}>
+                  <option value="">Select category...</option>
+                  {GOAL_CATEGORIES.map(g => <option key={g} value={g}>{g}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={ds.label}>Target Date</label>
+                <input type="date" className={ds.input} value={(formData.targetDate as string) || ''} onChange={e => setFormData({ ...formData, targetDate: e.target.value })} />
+              </div>
+            </div>
+            <div>
+              <label className={ds.label}>Description</label>
+              <textarea className={ds.textarea} rows={3} value={(formData.description as string) || ''} onChange={e => setFormData({ ...formData, description: e.target.value })} placeholder="Describe the sustainability goal..." />
+            </div>
+            <div className={ds.grid3}>
+              <div>
+                <label className={ds.label}>Target Value</label>
+                <input type="number" step="0.01" className={ds.input} value={(formData.targetValue as number) ?? ''} onChange={e => setFormData({ ...formData, targetValue: parseFloat(e.target.value) || 0 })} />
+              </div>
+              <div>
+                <label className={ds.label}>Current Value</label>
+                <input type="number" step="0.01" className={ds.input} value={(formData.currentValue as number) ?? ''} onChange={e => setFormData({ ...formData, currentValue: parseFloat(e.target.value) || 0 })} />
+              </div>
+              <div>
+                <label className={ds.label}>Unit</label>
+                <input className={ds.input} value={(formData.unit as string) || ''} onChange={e => setFormData({ ...formData, unit: e.target.value })} placeholder="e.g. tons CO2e, %, kWh" />
+              </div>
+            </div>
+            <div>
+              <label className={ds.label}>Progress (%)</label>
+              <input type="number" min="0" max="100" className={ds.input} value={(formData.progress as number) ?? ''} onChange={e => setFormData({ ...formData, progress: parseInt(e.target.value) || 0 })} />
+            </div>
+            <div>
+              <label className={ds.label}>Responsible Party</label>
+              <input className={ds.input} value={(formData.responsible as string) || ''} onChange={e => setFormData({ ...formData, responsible: e.target.value })} />
+            </div>
+            <div>
+              <label className={ds.label}>Milestones (comma-separated)</label>
+              <textarea className={ds.textarea} rows={2} value={(formData.milestones as string) || ''} onChange={e => setFormData({ ...formData, milestones: e.target.value })} placeholder="e.g. Phase 1: Audit complete, Phase 2: 25% reduction..." />
+            </div>
+            <div>
+              <label className={ds.label}>Notes</label>
+              <textarea className={ds.textarea} rows={2} value={(formData.notes as string) || ''} onChange={e => setFormData({ ...formData, notes: e.target.value })} />
+            </div>
+          </div>
+        );
+
       default:
         return null;
     }
@@ -1360,6 +1625,91 @@ export default function EnvironmentLensPage() {
                     <span className="truncate">{d.violationHistory as string}</span>
                   </div>
                 )}
+              </>
+            );
+          })()}
+
+          {currentType === 'CarbonEntry' && (
+            <>
+              <div className="flex items-center gap-2 flex-wrap">
+                {Boolean(d.category) && <span className={ds.badge('neon-cyan')}>{d.category as string}</span>}
+                {Boolean(d.scope) && <span className={ds.badge('neon-purple')}>{(d.scope as string).split(' - ')[0]}</span>}
+              </div>
+              <p className={ds.textMuted}>Source: {d.source as string || 'N/A'}</p>
+              <div className="flex items-center gap-3">
+                <div>
+                  <p className={cn(ds.textMuted, 'text-xs')}>Emissions</p>
+                  <p className={ds.heading3}>{(d.emissionsTonsCO2e as number || 0).toLocaleString()} <span className="text-xs text-gray-500">tCO2e</span></p>
+                </div>
+                {(d.reductionTarget as number) > 0 && (
+                  <div>
+                    <p className={cn(ds.textMuted, 'text-xs')}>Target Reduction</p>
+                    <p className={cn(ds.heading3, 'text-green-400')}>{d.reductionTarget as number}%</p>
+                  </div>
+                )}
+              </div>
+              {Boolean(d.reportingPeriod) && <p className={cn(ds.textMuted, 'text-xs')}>Period: {d.reportingPeriod as string}</p>}
+              {Boolean(d.verificationStatus) && <span className={ds.badge(d.verificationStatus === 'Third-party Verified' || d.verificationStatus === 'Audited' ? 'green-400' : 'orange-400')}>{d.verificationStatus as string}</span>}
+            </>
+          )}
+
+          {currentType === 'ResourceMetric' && (
+            <>
+              <div className="flex items-center gap-2 flex-wrap">
+                {Boolean(d.resourceType) && <span className={ds.badge(
+                  d.resourceType === 'Water' ? 'neon-blue' :
+                  d.resourceType === 'Energy' ? 'orange-400' :
+                  d.resourceType === 'Waste' ? 'neon-purple' : 'neon-cyan'
+                )}>{d.resourceType as string}</span>}
+                {Boolean(d.trend) && (() => {
+                  const trendInfo = TREND_ICONS[d.trend as PopulationTrend];
+                  if (!trendInfo) return null;
+                  const TrendIcon = trendInfo.icon;
+                  return <span className={cn('inline-flex items-center gap-1 text-xs', trendInfo.color)}><TrendIcon className="w-3.5 h-3.5" /> {d.trend as string}</span>;
+                })()}
+              </div>
+              <p className={ds.textMuted}>{d.metricName as string || 'N/A'}</p>
+              <div className={ds.grid2}>
+                <div>
+                  <p className={cn(ds.textMuted, 'text-xs')}>Current Value</p>
+                  <p className={ds.heading3}>{(d.value as number || 0).toLocaleString()} <span className="text-xs text-gray-500">{d.unit as string}</span></p>
+                </div>
+                {(d.target as number) > 0 && (
+                  <div>
+                    <p className={cn(ds.textMuted, 'text-xs')}>Target</p>
+                    <p className={cn(ds.heading3, 'text-neon-cyan')}>{(d.target as number).toLocaleString()} <span className="text-xs text-gray-500">{d.unit as string}</span></p>
+                  </div>
+                )}
+              </div>
+              {Boolean(d.measurementDate) && <p className={cn(ds.textMuted, 'text-xs')}>Measured: {d.measurementDate as string}</p>}
+              {Boolean(d.location) && <p className={cn(ds.textMuted, 'text-xs')}>{d.location as string}</p>}
+            </>
+          )}
+
+          {currentType === 'SustainabilityGoal' && (() => {
+            const progress = (d.progress as number) || 0;
+            return (
+              <>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {Boolean(d.category) && <span className={ds.badge('green-400')}>{d.category as string}</span>}
+                </div>
+                <p className={ds.textMuted}>{d.goalName as string || 'N/A'}</p>
+                {Boolean(d.description) && <p className={cn(ds.textMuted, 'text-xs line-clamp-2')}>{d.description as string}</p>}
+                <div className="mt-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className={cn(ds.textMuted, 'text-xs')}>Progress</span>
+                    <span className={cn('text-xs font-medium', progress >= 75 ? 'text-green-400' : progress >= 50 ? 'text-neon-cyan' : progress >= 25 ? 'text-orange-400' : 'text-red-400')}>{progress}%</span>
+                  </div>
+                  <div className="h-2 bg-lattice-elevated rounded-full overflow-hidden">
+                    <div className={cn('h-full rounded-full transition-all', progress >= 75 ? 'bg-green-400' : progress >= 50 ? 'bg-neon-cyan' : progress >= 25 ? 'bg-orange-400' : 'bg-red-400')} style={{ width: `${progress}%` }} />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between text-xs mt-1">
+                  <span className={ds.textMuted}>Current: {(d.currentValue as number || 0).toLocaleString()} {d.unit as string}</span>
+                  <span className={ds.textMuted}>Target: {(d.targetValue as number || 0).toLocaleString()} {d.unit as string}</span>
+                </div>
+                {Boolean(d.targetDate) && <p className={cn(ds.textMuted, 'text-xs')}>Due: {d.targetDate as string}</p>}
+                {Boolean(d.responsible) && <p className={cn(ds.textMuted, 'text-xs')}>Owner: {d.responsible as string}</p>}
               </>
             );
           })()}
@@ -1756,6 +2106,17 @@ export default function EnvironmentLensPage() {
   /* ================================================================ */
   /*  Main Render                                                      */
   /* ================================================================ */
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError) {
     return (

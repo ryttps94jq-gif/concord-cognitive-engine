@@ -30,7 +30,7 @@ export default function AuditLensPage() {
   const [searchQuery, setSearchQuery] = useState('');
 
   // Backend: GET /api/events
-  const { data: events, isError: isError, error: error, refetch: refetch,} = useQuery({
+  const { data: events, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
     queryKey: ['events'],
     queryFn: () => api.get('/api/events').then((r) => r.data),
   });
@@ -69,6 +69,17 @@ export default function AuditLensPage() {
     dtu: 'text-neon-pink',
   };
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError) {
     return (

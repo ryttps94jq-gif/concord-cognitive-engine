@@ -17,8 +17,17 @@ services:
       - DATA_DIR=/data
       - DB_PATH=/data/db/concord.db
       - STATE_PATH=/data/concord_state.json
-      - OLLAMA_HOST=${OLLAMA_HOST:-http://ollama:11434}
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://ollama-conscious:11434}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-https://concord-os.org}
+      # Four-Brain Cognitive Architecture
+      - BRAIN_CONSCIOUS_URL=${BRAIN_CONSCIOUS_URL:-http://ollama-conscious:11434}
+      - BRAIN_CONSCIOUS_MODEL=${BRAIN_CONSCIOUS_MODEL:-qwen2.5:7b}
+      - BRAIN_SUBCONSCIOUS_URL=${BRAIN_SUBCONSCIOUS_URL:-http://ollama-subconscious:11434}
+      - BRAIN_SUBCONSCIOUS_MODEL=${BRAIN_SUBCONSCIOUS_MODEL:-qwen2.5:1.5b}
+      - BRAIN_UTILITY_URL=${BRAIN_UTILITY_URL:-http://ollama-utility:11434}
+      - BRAIN_UTILITY_MODEL=${BRAIN_UTILITY_MODEL:-qwen2.5:3b}
+      - BRAIN_REPAIR_URL=${BRAIN_REPAIR_URL:-http://ollama-repair:11434}
+      - BRAIN_REPAIR_MODEL=${BRAIN_REPAIR_MODEL:-qwen2.5:0.5b}
       # Auth - MUST set these in .env file
       - JWT_SECRET=${JWT_SECRET}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
@@ -39,6 +48,15 @@ services:
       - FEDERATION_ENABLED=${FEDERATION_ENABLED:-false}
       # Unsafe surfaces — disabled by default in production
       - ENABLE_TERMINAL_EXEC=${ENABLE_TERMINAL_EXEC:-false}
+    depends_on:
+      ollama-conscious:
+        condition: service_healthy
+      ollama-subconscious:
+        condition: service_healthy
+      ollama-utility:
+        condition: service_healthy
+      ollama-repair:
+        condition: service_healthy
     volumes:
       - concord-data:/data
     networks:
@@ -71,7 +89,8 @@ services:
     environment:
       - NODE_ENV=production
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     volumes:
       - frontend-data:/data
     networks:
@@ -193,13 +212,14 @@ services:
           memory: 256M
           cpus: '0.15'
 
-  # Optional: Ollama for local LLM (comment out if using external)
-  ollama:
+  # ── Four-Brain Cognitive Architecture ──
+  # Brain 1: Conscious — chat and deep reasoning (7B, 4 cores, ~5GB RAM)
+  ollama-conscious:
     image: ollama/ollama
-    container_name: concord-ollama
+    container_name: concord-ollama-conscious
     restart: unless-stopped
     volumes:
-      - ollama-data:/root/.ollama
+      - ollama-conscious-data:/root/.ollama
     networks:
       - concord-network
     healthcheck:
@@ -208,23 +228,86 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
-    # Resource limits - adjust based on your server
     deploy:
       resources:
         limits:
+          memory: 6G
+          cpus: '4.0'
+        reservations:
           memory: 4G
-          cpus: '0.75'
+          cpus: '2.0'
+
+  # Brain 2: Subconscious — autogen, dream, evolution, synthesis, birth (1.5B, 2 cores, ~1GB RAM)
+  ollama-subconscious:
+    image: ollama/ollama
+    container_name: concord-ollama-subconscious
+    restart: unless-stopped
+    volumes:
+      - ollama-subconscious-data:/root/.ollama
+    networks:
+      - concord-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:11434/api/tags || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2.0'
+        reservations:
+          memory: 512M
+          cpus: '1.0'
+
+  # Brain 3: Utility — lens interactions, entity actions, quick domain tasks (3B, 2 cores, ~2.5GB RAM)
+  ollama-utility:
+    image: ollama/ollama
+    container_name: concord-ollama-utility
+    restart: unless-stopped
+    volumes:
+      - ollama-utility-data:/root/.ollama
+    networks:
+      - concord-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:11434/api/tags || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+          cpus: '2.0'
         reservations:
           memory: 1G
-          cpus: '0.25'
-    # Uncomment for GPU support:
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
+          cpus: '1.0'
+
+  # Brain 4: Repair — error detection, auto-fix (0.5B, shares cores with subconscious, ~512MB RAM)
+  ollama-repair:
+    image: ollama/ollama
+    container_name: concord-ollama-repair
+    restart: unless-stopped
+    volumes:
+      - ollama-repair-data:/root/.ollama
+    networks:
+      - concord-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:11434/api/tags || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '2.0'
+        reservations:
+          memory: 256M
+          cpus: '0.5'
 
 networks:
   concord-network:
@@ -233,7 +316,13 @@ networks:
 volumes:
   concord-data:
     driver: local
-  ollama-data:
+  ollama-conscious-data:
+    driver: local
+  ollama-subconscious-data:
+    driver: local
+  ollama-utility-data:
+    driver: local
+  ollama-repair-data:
     driver: local
   prometheus-data:
     driver: local

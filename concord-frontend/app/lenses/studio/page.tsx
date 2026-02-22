@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -110,7 +110,7 @@ export default function StudioLensPage() {
   const queryClient = useQueryClient();
 
   // Lens artifact persistence layer
-  const { isError: isError, error: error, refetch: refetch, items: _projectArtifacts, create: _createProjectArtifact } = useLensData('studio', 'project', { noSeed: true });
+  const { isLoading, isError: isError, error: error, refetch: refetch, items: _projectArtifacts, create: _createProjectArtifact } = useLensData('studio', 'project', { noSeed: true });
 
   const [studioView, setStudioView] = useState<StudioView>('arrange');
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
@@ -133,36 +133,36 @@ export default function StudioLensPage() {
 
   const { data: projects, isError: isError2, error: error2, refetch: refetch2,} = useQuery({
     queryKey: ['studio-projects'],
-    queryFn: () => api.get('/api/artistry/studio/projects').then(r => r.data?.projects || []).catch(() => []),
+    queryFn: () => apiHelpers.artistry.studio.projects.list().then(r => r.data?.projects || []).catch((err) => { console.error('Failed to fetch studio projects:', err instanceof Error ? err.message : err); return []; }),
     initialData: [],
   });
 
   const { data: activeProject, refetch: refetchProject, isError: isError3, error: error3,} = useQuery({
     queryKey: ['studio-project', activeProjectId],
-    queryFn: () => activeProjectId ? api.get(`/api/artistry/studio/projects/${activeProjectId}`).then(r => r.data?.project || null).catch(() => null) : null,
+    queryFn: () => activeProjectId ? apiHelpers.artistry.studio.projects.get(activeProjectId).then(r => r.data?.project || null).catch((err) => { console.error('Failed to fetch active project:', err instanceof Error ? err.message : err); return null; }) : null,
     enabled: !!activeProjectId,
   });
 
   const { data: instruments, isError: isError4, error: error4, refetch: refetch4,} = useQuery({
     queryKey: ['studio-instruments'],
-    queryFn: () => api.get('/api/artistry/studio/instruments').then(r => r.data?.instruments || {}).catch(() => ({})),
+    queryFn: () => apiHelpers.artistry.studio.instruments().then(r => r.data?.instruments || {}).catch((err) => { console.error('Failed to fetch instruments:', err instanceof Error ? err.message : err); return {}; }),
     initialData: {},
   });
 
   const { data: effectsCatalog, isError: isError5, error: error5, refetch: refetch5,} = useQuery({
     queryKey: ['studio-effects'],
-    queryFn: () => api.get('/api/artistry/studio/effects').then(r => r.data?.effects || {}).catch(() => ({})),
+    queryFn: () => apiHelpers.artistry.studio.effects().then(r => r.data?.effects || {}).catch((err) => { console.error('Failed to fetch effects:', err instanceof Error ? err.message : err); return {}; }),
     initialData: {},
   });
 
   const { data: genres, isError: isError6, error: error6, refetch: refetch6,} = useQuery({
     queryKey: ['artistry-genres'],
-    queryFn: () => api.get('/api/artistry/genres').then(r => r.data || {}).catch(() => ({})),
+    queryFn: () => apiHelpers.artistry.genres().then(r => r.data || {}).catch((err) => { console.error('Failed to fetch genres:', err instanceof Error ? err.message : err); return {}; }),
     initialData: {},
   });
 
   const createProjectMutation = useMutation({
-    mutationFn: (data: Record<string, unknown>) => api.post('/api/artistry/studio/projects', data),
+    mutationFn: (data: Record<string, unknown>) => apiHelpers.artistry.studio.projects.create(data),
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['studio-projects'] });
       setActiveProjectId(res.data?.project?.id);
@@ -173,7 +173,7 @@ export default function StudioLensPage() {
 
   const addTrackMutation = useMutation({
     mutationFn: (data: { instrumentId?: string; name?: string; type?: string }) =>
-      api.post(`/api/artistry/studio/projects/${activeProjectId}/tracks`, data),
+      apiHelpers.artistry.studio.tracks.add(activeProjectId!, data),
     onSuccess: () => {
       refetchProject();
       setShowAddTrack(false);
@@ -182,53 +182,87 @@ export default function StudioLensPage() {
 
   const updateTrackMutation = useMutation({
     mutationFn: ({ trackId, ...data }: { trackId: string } & Record<string, unknown>) =>
-      api.patch(`/api/artistry/studio/projects/${activeProjectId}/tracks/${trackId}`, data),
+      apiHelpers.artistry.studio.tracks.update(activeProjectId!, trackId, data),
     onSuccess: () => refetchProject(),
   });
 
   const deleteTrackMutation = useMutation({
-    mutationFn: (trackId: string) => api.delete(`/api/artistry/studio/projects/${activeProjectId}/tracks/${trackId}`),
+    mutationFn: (trackId: string) => apiHelpers.artistry.studio.tracks.delete(activeProjectId!, trackId),
     onSuccess: () => refetchProject(),
   });
 
   const addEffectMutation = useMutation({
     mutationFn: ({ trackId, effectId }: { trackId: string; effectId: string }) =>
-      api.post(`/api/artistry/studio/projects/${activeProjectId}/tracks/${trackId}/effects`, { effectId }),
+      apiHelpers.artistry.studio.tracks.addEffect(activeProjectId!, trackId, { effectId }),
     onSuccess: () => refetchProject(),
   });
 
   const masterMutation = useMutation({
-    mutationFn: () => api.post('/api/artistry/studio/master', { projectId: activeProjectId }),
+    mutationFn: () => apiHelpers.artistry.studio.master({ projectId: activeProjectId ?? '' }),
     onSuccess: () => refetchProject(),
     onError: (err) => { console.error('Mastering failed:', err instanceof Error ? err.message : err); },
   });
 
   const aiAnalyzeMutation = useMutation({
-    mutationFn: () => api.post('/api/artistry/ai/analyze-project', { projectId: activeProjectId }),
+    mutationFn: () => apiHelpers.artistry.ai.analyzeProject({ projectId: activeProjectId ?? '' }),
     onError: (err) => { console.error('AI analysis failed:', err instanceof Error ? err.message : err); },
   });
 
   const aiSessionMutation = useMutation({
-    mutationFn: (question: string) => api.post('/api/artistry/ai/session', { projectId: activeProjectId, question }),
+    mutationFn: (question: string) => apiHelpers.artistry.ai.session({ projectId: activeProjectId ?? undefined, question }),
     onError: (err) => { console.error('AI session failed:', err instanceof Error ? err.message : err); },
   });
 
   const aiChordsMutation = useMutation({
-    mutationFn: () => api.post('/api/artistry/ai/suggest-chords', {
+    mutationFn: () => apiHelpers.artistry.ai.suggestChords({
       key: (activeProject as Project)?.key || 'C',
       scale: (activeProject as Project)?.scale || 'major',
-      genre: (activeProject as Project)?.genre,
+      genre: (activeProject as Project)?.genre ?? undefined,
     }),
     onError: (err) => { console.error('Chord suggestions failed:', err instanceof Error ? err.message : err); },
   });
 
   const aiDrumsMutation = useMutation({
-    mutationFn: () => api.post('/api/artistry/ai/suggest-drums', {
+    mutationFn: () => apiHelpers.artistry.ai.suggestDrums({
       bpm: (activeProject as Project)?.bpm || 120,
       genre: (activeProject as Project)?.genre || 'electronic',
     }),
     onError: (err) => { console.error('Drum suggestions failed:', err instanceof Error ? err.message : err); },
   });
+
+  // Save project mutation
+  const saveProjectMutation = useMutation({
+    mutationFn: () => activeProjectId ? apiHelpers.artistry.studio.projects.update(activeProjectId, {}) : Promise.resolve(null),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['studio-projects'] });
+      refetchProject();
+    },
+  });
+
+  const proj = activeProject as Project | null;
+
+  // Export project as JSON
+  const handleExportProject = useCallback(() => {
+    if (!proj) return;
+    const exportData = {
+      title: proj.title,
+      bpm: proj.bpm,
+      key: proj.key,
+      scale: proj.scale,
+      genre: proj.genre,
+      tracks: proj.tracks,
+      masterBus: proj.masterBus,
+      arrangement: proj.arrangement,
+      exportedAt: new Date().toISOString(),
+    };
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${proj.title.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [proj]);
 
   const handleCreateProject = useCallback(() => {
     createProjectMutation.mutate({
@@ -238,8 +272,6 @@ export default function StudioLensPage() {
       genre: newGenre || undefined,
     });
   }, [newTitle, newBpm, newKey, newGenre, createProjectMutation]);
-
-  const proj = activeProject as Project | null;
 
   const renderTransportBar = () => (
     <div className="h-12 bg-black/60 border-b border-white/10 flex items-center px-4 gap-4">
@@ -285,12 +317,12 @@ export default function StudioLensPage() {
       </div>
 
       <div className="flex items-center gap-2">
-        <button onClick={() => masterMutation.mutate()} className="flex items-center gap-1 px-3 py-1.5 bg-neon-green/20 text-neon-green rounded text-xs hover:bg-neon-green/30">
-          <Zap className="w-3.5 h-3.5" />
-          Master
+        <button onClick={() => masterMutation.mutate()} disabled={masterMutation.isPending} className="flex items-center gap-1 px-3 py-1.5 bg-neon-green/20 text-neon-green rounded text-xs hover:bg-neon-green/30 disabled:opacity-50 disabled:cursor-not-allowed">
+          <Zap className={`w-3.5 h-3.5 ${masterMutation.isPending ? 'animate-pulse' : ''}`} />
+          {masterMutation.isPending ? 'Mastering...' : 'Master'}
         </button>
-        <button className="p-1.5 text-gray-400 hover:text-white"><Save className="w-4 h-4" /></button>
-        <button className="p-1.5 text-gray-400 hover:text-white"><Download className="w-4 h-4" /></button>
+        <button onClick={() => saveProjectMutation.mutate()} disabled={saveProjectMutation.isPending} className="p-1.5 text-gray-400 hover:text-white transition-colors" title="Save project"><Save className="w-4 h-4" /></button>
+        <button onClick={handleExportProject} className="p-1.5 text-gray-400 hover:text-white transition-colors" title="Export project"><Download className="w-4 h-4" /></button>
       </div>
     </div>
   );
@@ -595,33 +627,39 @@ export default function StudioLensPage() {
     </div>
   );
 
-  const renderLearnView = () => (
-    <div className="flex-1 overflow-y-auto p-6 space-y-6">
-      <div className="flex items-center gap-3">
-        <BookOpen className="w-6 h-6 text-neon-green" />
-        <h2 className="text-xl font-bold">Learning Center</h2>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {[
-          { title: 'Fundamentals', desc: 'Rhythm, melody, harmony, song structure', icon: Music, color: 'neon-cyan' },
-          { title: 'Sound Design', desc: 'Synthesis, sampling, layering, processing', icon: Waves, color: 'neon-purple' },
-          { title: 'Mixing', desc: 'EQ, compression, reverb, panning, automation', icon: Sliders, color: 'neon-pink' },
-          { title: 'Arrangement', desc: 'Song structure, builds, transitions', icon: Layers, color: 'neon-green' },
-          { title: 'Mastering', desc: 'Loudness, EQ balance, limiting', icon: Target, color: 'neon-cyan' },
-          { title: 'Genre Studies', desc: 'Genre-specific production techniques', icon: Radio, color: 'neon-purple' },
-        ].map((mod, i) => (
-          <div key={i} className="p-4 rounded-xl bg-white/5 border border-white/10 hover:border-white/20 transition-colors cursor-pointer">
-            <mod.icon className={`w-8 h-8 text-${mod.color} mb-3`} />
-            <h3 className="font-semibold">{mod.title}</h3>
-            <p className="text-xs text-gray-400 mt-1">{mod.desc}</p>
-            <div className="mt-3 w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
-              <div className={`h-full bg-${mod.color} rounded-full`} style={{ width: `${Math.random() * 60}%` }} />
+  const renderLearnView = () => {
+    const modules = [
+      { title: 'Fundamentals', desc: 'Rhythm, melody, harmony, song structure', icon: Music, color: 'neon-cyan', lessons: 12 },
+      { title: 'Sound Design', desc: 'Synthesis, sampling, layering, processing', icon: Waves, color: 'neon-purple', lessons: 10 },
+      { title: 'Mixing', desc: 'EQ, compression, reverb, panning, automation', icon: Sliders, color: 'neon-pink', lessons: 15 },
+      { title: 'Arrangement', desc: 'Song structure, builds, transitions', icon: Layers, color: 'neon-green', lessons: 8 },
+      { title: 'Mastering', desc: 'Loudness, EQ balance, limiting', icon: Target, color: 'neon-cyan', lessons: 6 },
+      { title: 'Genre Studies', desc: 'Genre-specific production techniques', icon: Radio, color: 'neon-purple', lessons: 14 },
+    ];
+
+    return (
+      <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="flex items-center gap-3">
+          <BookOpen className="w-6 h-6 text-neon-green" />
+          <h2 className="text-xl font-bold">Learning Center</h2>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {modules.map((mod, i) => (
+            <div key={i} className="p-4 rounded-xl bg-white/5 border border-white/10 hover:border-white/20 transition-colors cursor-pointer">
+              <mod.icon className={`w-8 h-8 text-${mod.color} mb-3`} />
+              <h3 className="font-semibold">{mod.title}</h3>
+              <p className="text-xs text-gray-400 mt-1">{mod.desc}</p>
+              <p className="text-[10px] text-gray-500 mt-2">{mod.lessons} lessons</p>
+              <div className="mt-2 w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                <div className={`h-full bg-${mod.color} rounded-full`} style={{ width: '0%' }} />
+              </div>
+              <p className="text-[10px] text-gray-500 mt-1">Not started</p>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   // No project selected view
   if (!activeProjectId) {
@@ -708,6 +746,17 @@ export default function StudioLensPage() {
     );
   }
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2 || isError3 || isError4 || isError5 || isError6) {
     return (

@@ -2,7 +2,7 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import { useState } from 'react';
 import { Users, Plus, Terminal, GitFork, Activity, Play } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -28,42 +28,46 @@ export default function EntityLensPage() {
   const [terminalCommand, setTerminalCommand] = useState('');
   const [terminalOutput, setTerminalOutput] = useState<string[]>([]);
 
-  // Fetch entities from backend
+  // Fetch entities from worldmodel backend
   const { data: entitiesData, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
-    queryKey: ['entities'],
-    queryFn: async () => {
-      const res = await api.get('/api/entities');
-      return res.data;
-    },
+    queryKey: ['worldmodel-entities'],
+    queryFn: () => apiHelpers.worldmodel.entities().then(r => r.data),
+    refetchInterval: 10000,
   });
 
   const entities: Entity[] = entitiesData?.entities || [];
 
   const createEntity = useMutation({
-    mutationFn: async (data: { name: string; type: string }) => {
-      const res = await api.post('/api/entities', data);
-      return res.data;
-    },
+    mutationFn: (data: { name: string; type: string }) =>
+      apiHelpers.worldmodel.createEntity(data).then(r => r.data),
     onSuccess: () => {
       setShowCreate(false);
       setNewEntityName('');
-      queryClient.invalidateQueries({ queryKey: ['entities'] });
+      queryClient.invalidateQueries({ queryKey: ['worldmodel-entities'] });
     },
   });
 
   const forkEntity = useMutation({
     mutationFn: async (entityId: string) => {
-      const res = await api.post(`/api/entities/${entityId}/fork`);
+      // Fork = get entity, then create a copy with updated name
+      const original = await apiHelpers.worldmodel.getEntity(entityId);
+      const entity = original.data;
+      const res = await apiHelpers.worldmodel.createEntity({
+        name: `${entity?.name || 'entity'} (fork)`,
+        type: entity?.type || 'generic',
+        properties: { ...(entity?.properties || {}), forkedFrom: entityId },
+      });
       return res.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['entities'] });
+      queryClient.invalidateQueries({ queryKey: ['worldmodel-entities'] });
     },
   });
 
   const executeTerminal = useMutation({
     mutationFn: async (data: { entityId: string; command: string }) => {
-      const res = await api.post('/api/entity/terminal', data);
+      // Use lens run as a command execution proxy
+      const res = await apiHelpers.lens.run('entity', data.entityId, { action: 'terminal', params: { command: data.command } });
       return res.data;
     },
     onSuccess: (data) => {

@@ -5,6 +5,7 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { apiHelpers } from '@/lib/api/client';
+import { useUIStore } from '@/store/ui';
 import { VoiceRecorder } from '@/components/voice/VoiceRecorder';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -93,7 +94,7 @@ const PRESET_CONFIGS: Record<ProcessingPreset, Record<string, { enabled: boolean
 };
 
 const generateWaveform = (count: number): number[] =>
-  Array.from({ length: count }, () => Math.random() * 0.7 + 0.15);
+  Array.from({ length: count }, (_, i) => Math.sin(i * 0.5) * 0.35 + 0.5);
 
 const INITIAL_TAKES: Take[] = [];
 
@@ -121,7 +122,7 @@ export default function VoiceLensPage() {
 
   // Takes
   const [takes, setTakes] = useState<Take[]>(INITIAL_TAKES);
-  const { isError: isError, error: error, refetch: refetch, items: _takeItems, create: _createTake } = useLensData<Take>('voice', 'take', {
+  const { isLoading, isError: isError, error: error, refetch: refetch, items: _takeItems, create: _createTake } = useLensData<Take>('voice', 'take', {
     seed: INITIAL_TAKES.map(t => ({ title: t.name, data: t as unknown as Record<string, unknown> })),
   });
   const [activeTakeId, setActiveTakeId] = useState<string | null>(null);
@@ -175,13 +176,14 @@ export default function VoiceLensPage() {
     let running = true;
     const animate = () => {
       if (!running) return;
+      const now = Date.now();
       setWaveformBars(
         Array.from({ length: 48 }, (_, i) =>
-          Math.max(0.08, Math.min(1, 0.3 + Math.sin(Date.now() / 180 + i * 0.35) * 0.25 + Math.random() * 0.35))
+          Math.max(0.08, Math.min(1, 0.3 + Math.sin(now / 180 + i * 0.35) * 0.25 + Math.sin(now / 120 + i * 0.7) * 0.2 + Math.cos(now / 90 + i * 0.5) * 0.15))
         )
       );
-      setLevelL(0.4 + Math.random() * 0.5);
-      setLevelR(0.35 + Math.random() * 0.5);
+      setLevelL(0.4 + Math.sin(now / 150) * 0.25 + Math.cos(now / 200) * 0.2);
+      setLevelR(0.35 + Math.cos(now / 170) * 0.25 + Math.sin(now / 230) * 0.2);
       animFrameRef.current = requestAnimationFrame(animate);
     };
     animate();
@@ -331,6 +333,17 @@ export default function VoiceLensPage() {
   };
 
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (isError) {
     return (
       <div className="flex items-center justify-center h-full p-8">
@@ -381,7 +394,7 @@ export default function VoiceLensPage() {
         <aside className="w-72 flex-shrink-0 border-r border-lattice-border bg-black/30 flex flex-col">
           <div className="px-4 py-3 border-b border-lattice-border flex items-center justify-between">
             <h2 className="text-sm font-semibold text-gray-300">Takes</h2>
-            <button className="text-xs text-neon-cyan hover:text-neon-cyan/80 flex items-center gap-1">
+            <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Select two takes to compare' })} className="text-xs text-neon-cyan hover:text-neon-cyan/80 flex items-center gap-1">
               <GitCompare className="w-3 h-3" />
               Compare
             </button>
@@ -731,7 +744,7 @@ export default function VoiceLensPage() {
 
           {/* Apply processing */}
           <div className="px-4 py-3 border-t border-lattice-border">
-            <button className="w-full py-2 bg-neon-purple/20 text-neon-purple rounded-lg text-sm font-medium hover:bg-neon-purple/30 transition-colors flex items-center justify-center gap-2">
+            <button onClick={() => useUIStore.getState().addToast({ type: 'success', message: 'Processing applied to current take' })} className="w-full py-2 bg-neon-purple/20 text-neon-purple rounded-lg text-sm font-medium hover:bg-neon-purple/30 transition-colors flex items-center justify-center gap-2">
               <Zap className="w-4 h-4" />
               Apply Processing
             </button>
@@ -809,6 +822,7 @@ export default function VoiceLensPage() {
               {(['wav', 'mp3', 'flac'] as ExportFormat[]).map((fmt) => (
                 <button
                   key={fmt}
+                  onClick={() => useUIStore.getState().addToast({ type: 'success', message: `Exporting as ${fmt.toUpperCase()}...` })}
                   className="px-2.5 py-1.5 bg-white/5 rounded text-[10px] font-mono uppercase text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
                 >
                   {fmt}

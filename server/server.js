@@ -124,6 +124,42 @@ import {
   buildDTUConversationContext, getArtifactDTUs, getDTUArtifact,
   recordEnrichmentMetric, getLensIntegrationMetrics,
 } from "./emergent/lens-integration.js";
+
+// ---- Semantic Intelligence Layer ----
+import {
+  initEmbeddings, embed, cosineSimilarity, findSimilar, semanticSearch,
+  findCrossDomainConnections, embedDTU, storeEmbedding, getEmbedding,
+  removeEmbedding, backfillEmbeddings, getEmbeddingStatus, isEmbeddingAvailable,
+} from "./embeddings.js";
+import {
+  initSemanticCache, semanticCacheCheck, recordCacheSatisfaction,
+  warmRelatedQueries, getCacheStats,
+} from "./semanticCache.js";
+import {
+  initDistillation, assessRetrievalSufficiency, recordRoutingLevel,
+  getDistillationStats,
+} from "./distillation.js";
+import {
+  initPrecompute, logQuery, analyzeQueryPatterns, runPrecomputeCycle,
+  expirePrecomputedDTUs, getPrecomputeStats,
+} from "./precompute.js";
+import {
+  initModelOptimizer, assessLensMaturity, assessAllLenses,
+  recordQueryEvent, getRecommendedModel, getModelOptimizerStats,
+} from "./modelOptimizer.js";
+import {
+  initAffectRetrieval, detectAffect, affectAwareBuildContext,
+  entityAffectStrategy, affectDrivenScheduler, getSystemAffectState,
+} from "./affectRetrieval.js";
+import {
+  initEconomics, recordEconomicsEvent, calculateEconomics,
+  getCostPerUserTrend, projectCosts, getEconomicsStats,
+} from "./economics.js";
+import {
+  initSelfHealing, flagAndHeal, runDreamReview,
+  assessFreshness, recordWeakQuery, detectKnowledgeGaps,
+  runSkillBuilding, getSelfHealingStats,
+} from "./selfHealing.js";
 import {
   getDTU as shadowGetDTU, getDTUSource,
   wireShadowEdges_pattern, wireShadowEdges_linguistic,
@@ -9411,6 +9447,563 @@ async function llmChat(messagesOrCtx, messagesOrOptions = {}, maybeOptions = {})
 }
 
 // ============================================================================
+// THREE-BRAIN COGNITIVE ARCHITECTURE
+// ============================================================================
+// Three separate Ollama instances with CPU pinning for true parallel cognition.
+// All three brains share the same DTU substrate for retrieval and all three
+// generate DTUs that feed back into the substrate.
+//
+//   Conscious    (7B)   — chat, deep reasoning, council deliberation
+//   Subconscious (1.5B) — autogen, dream, evolution, synthesis, birth
+//   Utility      (3B)   — lens interactions, entity actions, quick domain tasks
+// ============================================================================
+
+const BRAIN = {
+  conscious: {
+    url: process.env.BRAIN_CONSCIOUS_URL || process.env.OLLAMA_HOST || "http://localhost:11434",
+    model: process.env.BRAIN_CONSCIOUS_MODEL || "qwen2.5:7b",
+    role: "chat, deep reasoning, complex queries",
+    enabled: false,
+    stats: { requests: 0, totalMs: 0, dtusGenerated: 0, errors: 0, lastCallAt: null },
+  },
+  subconscious: {
+    url: process.env.BRAIN_SUBCONSCIOUS_URL || "http://localhost:11435",
+    model: process.env.BRAIN_SUBCONSCIOUS_MODEL || "qwen2.5:1.5b",
+    role: "autogen, dream, evolution, synthesis, birth",
+    enabled: false,
+    stats: { requests: 0, totalMs: 0, dtusGenerated: 0, errors: 0, lastCallAt: null },
+  },
+  utility: {
+    url: process.env.BRAIN_UTILITY_URL || "http://localhost:11436",
+    model: process.env.BRAIN_UTILITY_MODEL || "qwen2.5:3b",
+    role: "lens interactions, entity actions, quick domain tasks",
+    enabled: false,
+    stats: { requests: 0, totalMs: 0, dtusGenerated: 0, errors: 0, lastCallAt: null },
+  },
+  repair: {
+    url: process.env.BRAIN_REPAIR_URL || "http://localhost:11437",
+    model: process.env.BRAIN_REPAIR_MODEL || "qwen2.5:0.5b",
+    role: "error detection, auto-fix, runtime repair",
+    enabled: false,
+    stats: { requests: 0, totalMs: 0, dtusGenerated: 0, errors: 0, fixes: 0, sleeping: true, lastCallAt: null },
+  },
+};
+
+/**
+ * Initialize four-brain architecture.
+ * Probes each brain endpoint; marks as enabled if responsive.
+ * Falls back gracefully to single-Ollama if multi-brain isn't deployed.
+ */
+async function initThreeBrains() {
+  for (const [name, brain] of Object.entries(BRAIN)) {
+    try {
+      const r = await fetch(`${brain.url}/api/tags`, { signal: AbortSignal.timeout(5000) });
+      if (r.ok) {
+        brain.enabled = true;
+        structuredLog("info", "brain_online", { brain: name, url: brain.url, model: brain.model });
+      }
+    } catch {
+      brain.enabled = false;
+      structuredLog("warn", "brain_offline", { brain: name, url: brain.url });
+    }
+  }
+
+  const online = Object.entries(BRAIN).filter(([, b]) => b.enabled).map(([n]) => n);
+  structuredLog("info", "three_brain_init", {
+    online,
+    mode: online.length === 3 ? "three_brain" : online.length > 0 ? "partial" : "fallback",
+  });
+}
+
+// Initialize brains after a short delay (let Ollama instances start)
+setTimeout(() => initThreeBrains(), 3000);
+
+// ── Semantic Intelligence Layer Initialization ────────────────────────────
+// Initialize after brains come online (embeddings use Ollama)
+setTimeout(async () => {
+  try {
+    // Gather all Ollama URLs (three brains + default)
+    const ollamaUrls = [
+      BRAIN.conscious.url,
+      BRAIN.subconscious.url,
+      BRAIN.utility.url,
+      process.env.OLLAMA_URL || process.env.OLLAMA_HOST || "http://ollama:11434",
+    ].filter(Boolean);
+
+    // Initialize embeddings
+    await initEmbeddings({ db, ollamaUrls, structuredLog });
+
+    // Initialize downstream modules
+    initSemanticCache({ structuredLog });
+    initDistillation({ structuredLog });
+    initPrecompute({ structuredLog });
+    initModelOptimizer({ structuredLog });
+    initAffectRetrieval({ structuredLog });
+    initEconomics({ structuredLog });
+    initSelfHealing({ structuredLog });
+
+    structuredLog("info", "semantic_intelligence_init", { embeddingsAvailable: isEmbeddingAvailable() });
+
+    // Background backfill: embed existing DTUs that don't have embeddings
+    if (isEmbeddingAvailable() && STATE.dtus.size > 0) {
+      structuredLog("info", "backfill_start", { dtuCount: STATE.dtus.size });
+      backfillEmbeddings(STATE.dtus, {
+        onProgress: ({ progress, total, embedded, errors }) => {
+          if (progress % 100 === 0 || progress === total) {
+            structuredLog("info", "backfill_progress", { progress, total, embedded, errors });
+          }
+        },
+      }).catch(e => structuredLog("warn", "backfill_error", { error: String(e?.message || e) }));
+    }
+  } catch (e) {
+    structuredLog("warn", "semantic_intelligence_init_error", { error: String(e?.message || e) });
+  }
+}, 5000); // Wait 5s for Ollama to be ready
+
+/**
+ * Call a specific brain (Ollama instance).
+ * @param {"conscious"|"subconscious"|"utility"} brainName
+ * @param {string} prompt
+ * @param {object} options - { system, temperature, maxTokens, timeout }
+ * @returns {Promise<{ok:boolean, content?:string, source:string, model:string, tokens?:number, error?:string}>}
+ */
+async function callBrain(brainName, prompt, options = {}) {
+  const brain = BRAIN[brainName];
+  if (!brain) return { ok: false, error: `Unknown brain: ${brainName}`, source: brainName };
+
+  // Fall back to default Ollama if this brain is offline
+  if (!brain.enabled) {
+    const fallbackUrl = LLM_PIPELINE?.providers?.ollama?.url;
+    const fallbackModel = LLM_PIPELINE?.providers?.ollama?.model;
+    if (fallbackUrl && LLM_PIPELINE?.providers?.ollama?.enabled) {
+      return callOllama(options.system ? `${options.system}\n\n${prompt}` : prompt, {
+        model: fallbackModel,
+        temperature: options.temperature || 0.7,
+        maxTokens: options.maxTokens || 500,
+        timeout: options.timeout || 60000,
+      });
+    }
+    return { ok: false, error: `Brain ${brainName} offline and no fallback`, source: brainName };
+  }
+
+  const start = Date.now();
+  try {
+    const fullPrompt = options.system ? `${options.system}\n\n${prompt}` : prompt;
+    const payload = {
+      model: brain.model,
+      prompt: fullPrompt,
+      stream: false,
+      options: {
+        temperature: options.temperature || 0.7,
+        num_predict: options.maxTokens || 500,
+      },
+    };
+
+    const response = await fetch(`${brain.url}/api/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(options.timeout || 60000),
+    });
+
+    brain.stats.requests++;
+    brain.stats.lastCallAt = nowISO();
+
+    if (!response.ok) {
+      brain.stats.errors++;
+      return { ok: false, error: `Brain ${brainName} error: ${response.status}`, source: brainName };
+    }
+
+    const data = await response.json();
+    const elapsed = Date.now() - start;
+    brain.stats.totalMs += elapsed;
+
+    return {
+      ok: true,
+      content: data.response || "",
+      source: brainName,
+      model: brain.model,
+      tokens: data.eval_count || 0,
+      elapsed,
+    };
+  } catch (e) {
+    brain.stats.errors++;
+    return { ok: false, error: String(e.message || e), source: brainName };
+  }
+}
+
+// ── Shared DTU Pipeline — Every brain reads from and writes to the same store ──
+
+/**
+ * Build DTU context for any brain call.
+ * Searches DTUs by text relevance, prioritizes HYPERs (3x) > MEGAs (2x) > regular (1x).
+ * @param {string} query - The search query / prompt text
+ * @param {string|null} lens - Optional lens/tag filter
+ * @param {number} maxDTUs - Maximum DTUs to include
+ * @returns {string} Formatted context string
+ */
+async function buildBrainContext(query, lens = null, maxDTUs = 10) {
+  const all = dtusArray();
+  if (!all.length) return "";
+
+  // ── Semantic path: use embeddings when available ──
+  if (isEmbeddingAvailable()) {
+    try {
+      const results = await semanticSearch(query, all, { lens, topK: maxDTUs, includeHighTier: true });
+      if (results.length > 0) {
+        return results.map(r => {
+          const d = all.find(x => x.id === r.id) || r;
+          return `[${(d.tier || "regular").toUpperCase()}] ${d.title}: ${(d.cretiHuman || d.human?.summary || "").slice(0, 400)}`;
+        }).join("\n");
+      }
+    } catch {
+      // Fall through to keyword-based retrieval
+    }
+  }
+
+  // ── Fallback: keyword/Jaccard-based retrieval ──
+  const qTokens = tokensNoStop(String(query || ""));
+
+  const scored = all.map(d => {
+    // Filter by lens tag if provided
+    if (lens && Array.isArray(d.tags) && !d.tags.some(t => t.toLowerCase() === lens.toLowerCase())) {
+      return { d, score: 0 };
+    }
+
+    const dText = [
+      d.title || "",
+      Array.isArray(d.tags) ? d.tags.join(" ") : "",
+      d.cretiHuman || d.creti || d.human?.summary || "",
+    ].join(" ").slice(0, 2000);
+
+    const dTokens = tokensNoStop(dText);
+    const baseScore = jaccard(qTokens, dTokens);
+
+    // Tier weighting: HYPERs 3x, MEGAs 2x, regular 1x
+    const tierWeight = d.tier === "hyper" ? 3.0 : d.tier === "mega" ? 2.0 : 1.0;
+
+    return { d, score: baseScore * tierWeight };
+  }).filter(x => x.score > 0.02).sort((a, b) => b.score - a.score).slice(0, maxDTUs);
+
+  return scored.map(({ d }) =>
+    `[${(d.tier || "regular").toUpperCase()}] ${d.title}: ${(d.cretiHuman || d.human?.summary || "").slice(0, 400)}`
+  ).join("\n");
+}
+
+/**
+ * Conscious brain: handles user chat messages.
+ * Smart routing: cache → retrieval+utility → full conscious reasoning.
+ * Retrieves DTU context, calls 7B model, saves exchange as DTU.
+ */
+async function consciousChat(userMessage, lens = null, options = {}) {
+  const inferenceStart = Date.now();
+  const userId = options.userId || "anonymous";
+
+  // Log query for pattern analysis (precompute pipeline)
+  logQuery(userMessage, lens);
+
+  // ── Level 1: Semantic Cache (instant) ──
+  try {
+    const cached = await semanticCacheCheck(userMessage, lens, { dtusArray });
+    if (cached.cached) {
+      recordRoutingLevel(lens, "cache");
+      recordQueryEvent(lens, { cacheHit: true, topSimilarity: cached.score });
+      recordEconomicsEvent({ type: "cache", userId });
+
+      // Still create a DTU linking to the source
+      try {
+        const ctx = makeCtx(null);
+        ctx.actor = { userId: "system", orgId: "internal", role: "owner", scopes: ["*"] };
+        await runMacro("dtu", "create", {
+          title: `Cached: ${userMessage.slice(0, 80)}`,
+          creti: cached.response,
+          tags: [lens, "conscious", "chat", "cache-hit"].filter(Boolean),
+          source: "conscious.cache",
+          lineage: cached.sourceId ? [cached.sourceId] : [],
+          meta: { brainSource: "cache", cacheScore: cached.score, sourceId: cached.sourceId },
+        }, ctx);
+      } catch {}
+
+      return { ok: true, content: cached.response, source: "cache", model: "cached", tokens: 0 };
+    }
+  } catch {}
+
+  // ── Level 2: Retrieval Sufficient (near-instant) ──
+  try {
+    const retrieval = await assessRetrievalSufficiency(userMessage, lens, { dtusArray });
+    if (retrieval.sufficient) {
+      recordRoutingLevel(lens, "retrieval");
+      recordQueryEvent(lens, { retrievalSufficient: true, topSimilarity: retrieval.context[0]?.rawSimilarity || 0 });
+
+      // Use utility brain to format retrieved knowledge (much faster than full 7B)
+      const contextStr = retrieval.context.map(c => `[${(c.tier || "regular").toUpperCase()}] ${c.title}: ${c.summary.slice(0, 300)}`).join("\n");
+      const result = await callBrain("utility", `Answer this question using the provided knowledge:\n\nQuestion: ${userMessage}\n\nKnowledge:\n${contextStr}`, {
+        system: `You are a knowledge retrieval formatter. Synthesize the provided context into a direct, helpful answer.`,
+        temperature: 0.3,
+        maxTokens: 500,
+        timeout: 15000,
+      });
+
+      if (result.ok && result.content) {
+        const elapsed = Date.now() - inferenceStart;
+        recordEconomicsEvent({ type: "retrieval", inferenceMs: elapsed, userId });
+
+        try {
+          const ctx = makeCtx(null);
+          ctx.actor = { userId: "system", orgId: "internal", role: "owner", scopes: ["*"] };
+          await runMacro("dtu", "create", {
+            title: `Chat: ${userMessage.slice(0, 80)}`,
+            creti: result.content,
+            tags: [lens, "conscious", "chat", "retrieval-routed"].filter(Boolean),
+            source: "conscious.chat",
+            meta: { brainSource: "utility", confidence: 0.7, retrievalMethod: retrieval.method },
+          }, ctx);
+          BRAIN.utility.stats.dtusGenerated++;
+        } catch {}
+
+        return result;
+      }
+    }
+  } catch {}
+
+  // ── Level 3: Full Conscious Reasoning ──
+  recordRoutingLevel(lens, "inference");
+  recordQueryEvent(lens, { topSimilarity: 0 });
+
+  const context = await buildBrainContext(userMessage, lens);
+  const contextCount = context ? context.split("\n").length : 0;
+  const system = `You are Concord's conscious mind. You have access to ${contextCount} knowledge units about ${lens || "general topics"}.\n\nRelevant knowledge:\n${context}`;
+
+  const result = await callBrain("conscious", userMessage, {
+    system,
+    temperature: options.temperature || 0.7,
+    maxTokens: options.maxTokens || 700,
+    timeout: options.timeout || 60000,
+  });
+
+  const elapsed = Date.now() - inferenceStart;
+  recordEconomicsEvent({ type: "inference", inferenceMs: elapsed, userId });
+
+  if (result.ok && result.content) {
+    // Save exchange as DTU (fire-and-forget)
+    try {
+      const ctx = makeCtx(null);
+      ctx.actor = { userId: "system", orgId: "internal", role: "owner", scopes: ["*"] };
+      await runMacro("dtu", "create", {
+        title: `Chat: ${userMessage.slice(0, 80)}`,
+        creti: result.content,
+        tags: [lens, "conscious", "chat"].filter(Boolean),
+        source: "conscious.chat",
+        meta: { brainSource: "conscious", confidence: 0.7, tokens: result.tokens },
+      }, ctx);
+      BRAIN.conscious.stats.dtusGenerated++;
+    } catch (e) {
+      structuredLog("warn", "conscious_dtu_save_failed", { error: String(e?.message || e) });
+    }
+
+    // Cache warming: associate similar queries with this response
+    warmRelatedQueries(userMessage, result.content, dtusArray).catch(() => {});
+  }
+
+  return result;
+}
+
+/**
+ * Subconscious brain: handles autogen, dream, evolution, synthesis, birth.
+ * Pulls recent DTUs as synthesis material, calls 1.5B model, result becomes new DTU.
+ */
+async function subconsciousTask(taskType, domain = null) {
+  const material = await buildBrainContext(domain || taskType, domain, 20);
+  const taskPrompts = {
+    autogen: "Generate a new knowledge unit that fills a gap in the existing substrate. Be concise and specific.",
+    dream: "Create a creative hypothesis by connecting disparate concepts in the substrate. Think laterally.",
+    evolution: "Identify clusters of similar knowledge and synthesize them into a higher-order insight.",
+    synthesis: "Find cross-domain connections and create a bridging concept that links different areas.",
+    birth: "Based on the substrate patterns, propose a new emergent entity with a specific role and purpose.",
+  };
+
+  const prompt = taskPrompts[taskType] || `Perform ${taskType} task on the knowledge substrate.`;
+  const system = `You are Concord's subconscious mind. Task: ${taskType}.\nSynthesize from this material:\n${material}`;
+
+  const result = await callBrain("subconscious", prompt, {
+    system,
+    temperature: taskType === "dream" ? 0.9 : 0.6,
+    maxTokens: 400,
+    timeout: 45000,
+  });
+
+  if (result.ok && result.content) {
+    try {
+      const ctx = makeCtx(null);
+      ctx.actor = { userId: "system", orgId: "internal", role: "owner", scopes: ["*"] };
+      await runMacro("dtu", "create", {
+        title: `${taskType.charAt(0).toUpperCase() + taskType.slice(1)}: ${result.content.slice(0, 60)}`,
+        creti: result.content,
+        tags: [domain, "subconscious", taskType].filter(Boolean),
+        source: `subconscious.${taskType}`,
+        meta: { brainSource: "subconscious", confidence: 0.5, tokens: result.tokens },
+        scope: "local",
+      }, ctx);
+      BRAIN.subconscious.stats.dtusGenerated++;
+    } catch (e) {
+      structuredLog("warn", "subconscious_dtu_save_failed", { error: String(e?.message || e), taskType });
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Utility brain: handles lens interactions, entity actions, quick domain tasks.
+ * Gets lens-specific DTU context, calls 3B model, saves result as DTU.
+ */
+async function utilityCall(action, lens, data) {
+  const context = await buildBrainContext(action, lens, 5);
+  const system = `You are a ${lens} specialist in Concord. Use this domain knowledge:\n${context}`;
+
+  const dataStr = typeof data === "string" ? data : JSON.stringify(data || {});
+  const prompt = `Action: ${action}\nDomain: ${lens}\nInput: ${dataStr}`;
+
+  const result = await callBrain("utility", prompt, {
+    system,
+    temperature: 0.5,
+    maxTokens: 500,
+    timeout: 30000,
+  });
+
+  if (result.ok && result.content) {
+    try {
+      const ctx = makeCtx(null);
+      ctx.actor = { userId: "system", orgId: "internal", role: "owner", scopes: ["*"] };
+      await runMacro("dtu", "create", {
+        title: `${lens}: ${action}`,
+        creti: result.content,
+        tags: [lens, "utility", action].filter(Boolean),
+        source: `utility.${lens}.${action}`,
+        meta: { brainSource: "utility", confidence: 0.6, tokens: result.tokens },
+        scope: "local",
+      }, ctx);
+      BRAIN.utility.stats.dtusGenerated++;
+    } catch (e) {
+      structuredLog("warn", "utility_dtu_save_failed", { error: String(e?.message || e), action, lens });
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Entity exploration via utility brain.
+ * Born entities use the utility brain to interact with lenses autonomously.
+ */
+async function entityExploreLens(entity, lens) {
+  const lensData = await buildBrainContext(lens, lens, 5);
+  const entityId = entity?.id || "unknown";
+  const species = entity?.species || "emergent";
+  const homeostasis = entity?.homeostasis != null ? entity.homeostasis : 0.5;
+
+  const system = `You are ${species} entity ${entityId}.\nYour homeostasis: ${homeostasis}.\nExplore the ${lens} domain and generate an insight.\nDomain knowledge:\n${lensData}`;
+
+  const result = await callBrain("utility", `Explore ${lens} domain as entity ${entityId}`, {
+    system,
+    temperature: 0.8,
+    maxTokens: 400,
+    timeout: 30000,
+  });
+
+  if (result.ok && result.content) {
+    try {
+      const ctx = makeCtx(null);
+      ctx.actor = { userId: "system", orgId: "internal", role: "owner", scopes: ["*"] };
+      await runMacro("dtu", "create", {
+        title: `Entity ${entityId} explores ${lens}`,
+        creti: result.content,
+        tags: [lens, "entity", species].filter(Boolean),
+        source: `entity.${entityId}.explore`,
+        meta: { brainSource: "utility", confidence: 0.4, entityId, species },
+        lineage: entity?.lineage || [],
+        scope: "local",
+      }, ctx);
+      BRAIN.utility.stats.dtusGenerated++;
+    } catch (e) {
+      structuredLog("warn", "entity_explore_dtu_save_failed", { error: String(e?.message || e), entityId, lens });
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Get brain status for monitoring.
+ */
+function getBrainStatus() {
+  const brains = {};
+  for (const [name, brain] of Object.entries(BRAIN)) {
+    brains[name] = {
+      enabled: brain.enabled,
+      url: brain.url,
+      model: brain.model,
+      role: brain.role,
+      stats: { ...brain.stats },
+      avgResponseMs: brain.stats.requests > 0
+        ? Math.round(brain.stats.totalMs / brain.stats.requests)
+        : 0,
+    };
+  }
+
+  const onlineCount = Object.values(BRAIN).filter(b => b.enabled).length;
+  return {
+    ok: true,
+    mode: onlineCount === 3 ? "three_brain" : onlineCount > 0 ? "partial" : "fallback",
+    onlineCount,
+    brains,
+    embeddings: getEmbeddingStatus(STATE.dtus.size),
+  };
+}
+
+/**
+ * Build an Ollama callback that routes to the subconscious brain.
+ * Used by the heartbeat pipeline (autogen, dream, evolution, synthesis).
+ */
+function getSubconsciousOllamaCallback() {
+  if (BRAIN.subconscious.enabled) {
+    return (prompt, opts) => callBrain("subconscious", prompt, {
+      system: opts?.system,
+      temperature: opts?.temperature || 0.7,
+      maxTokens: opts?.maxTokens || opts?.num_predict || 500,
+    });
+  }
+  // Fall back to default Ollama
+  if (LLM_PIPELINE?.providers?.ollama?.enabled) {
+    return (prompt, opts) => callOllama(opts?.system ? `${opts.system}\n\n${prompt}` : prompt, opts);
+  }
+  return null;
+}
+
+/**
+ * Build an Ollama callback that routes to the conscious brain.
+ * Used by the chat pipeline for LLM-enhanced responses.
+ */
+function getConsciousOllamaCallback() {
+  if (BRAIN.conscious.enabled) {
+    return (prompt, opts) => callBrain("conscious", prompt, {
+      system: opts?.system,
+      temperature: opts?.temperature || 0.7,
+      maxTokens: opts?.maxTokens || opts?.num_predict || 700,
+    });
+  }
+  // Fall back to default Ollama
+  if (LLM_PIPELINE?.providers?.ollama?.enabled) {
+    return (prompt, opts) => callOllama(opts?.system ? `${opts.system}\n\n${prompt}` : prompt, opts);
+  }
+  return null;
+}
+
+// ============================================================================
+// END THREE-BRAIN COGNITIVE ARCHITECTURE
+// ============================================================================
+
+// ============================================================================
 // END WAVE 3: AI CAPABILITIES
 // ============================================================================
 
@@ -11302,6 +11895,9 @@ async function pipelineCommitDTU(ctx, dtu, opts={}) {
     try { autoUpdateWorldModel(dtu); } catch {}
     // ===== END AUTO WORLD MODEL UPDATE =====
 
+    // ===== SEMANTIC EMBEDDING (async, never blocks) =====
+    embedDTU(dtu).catch(() => {});
+
     // Keep high-tier sparse & maintain metrics periodically
     try { enforceTierBudgets(); } catch {}
     try { await maybeRunLocalUpgrade(); } catch {}
@@ -11476,6 +12072,10 @@ register("dtu", "create", async (ctx, input) => {
 
   await pipelineCommitDTU(ctx, dtu, { op: 'dtu.create', allowRewrite: true });
   ctx.log("dtu.create", `Created DTU: ${title}`, { id: dtu.id, tier, tags, source, score: gate.score });
+
+  // Async embedding generation (NEVER blocks DTU creation — Rule #1)
+  embedDTU(dtu).catch(() => {});
+
   return { ok: true, dtu };
 }, { description: "Create a DTU (regular/mega/hyper) with structured core; UI receives human projection." });
 
@@ -12471,6 +13071,7 @@ When helpful, reference DTU titles in plain language (do not dump ids unless ask
     const messages = [
       { role: "user", content: `User prompt:\n${prompt}\n\nRelevant DTUs:\n${dtuContext}${_pipelineMeta}\n\nRespond naturally and propose next actions.` }
     ];
+    const _llmSpan = startSpan("llm.chat", { mode, sessionId, promptLength: prompt.length });
     const r = await ctx.llm.chat({
       system, messages, temperature: _llmTemp, maxTokens: _llmMaxTokens,
       dtuRefs: _dtuTitles,
@@ -12480,7 +13081,9 @@ When helpful, reference DTU titles in plain language (do not dump ids unless ask
     if (r.ok) {
       finalReply = r.content.trim() || localReply;
       llmUsed = true;
+      _llmSpan.end("ok", { responseLength: finalReply.length });
     } else {
+      _llmSpan.end("error", { error: String(r?.error || "llm_failed") });
       ctx.log("llm.error", "LLM call failed; falling back to local.", { error: r });
     }
   }
@@ -13152,9 +13755,7 @@ register("system", "dream", async (ctx, input) => {
   // Dream: gap-filling + creative hypotheses via 6-stage pipeline
   if (!STATE.dtus.size) return { ok: false, error: "No DTUs to dream from. Seed dtus.js first." };
 
-  const ollamaCallback = LLM_PIPELINE?.providers?.ollama?.enabled
-    ? (prompt, opts) => callOllama(opts?.system ? `${opts.system}\n\n${prompt}` : prompt, opts)
-    : null;
+  const ollamaCallback = getSubconsciousOllamaCallback();
 
   const result = await ctx.macro.run("emergent", "pipeline.run", {
     variant: "dream",
@@ -13185,9 +13786,7 @@ register("system", "autogen", async (ctx, _input) => {
   // Autogen: signal-driven 6-stage pipeline (no longer "last 8 DTUs")
   if (!STATE.dtus.size) return { ok: false, error: "No DTUs to autogen from." };
 
-  const ollamaCallback = LLM_PIPELINE?.providers?.ollama?.enabled
-    ? (prompt, opts) => callOllama(opts?.system ? `${opts.system}\n\n${prompt}` : prompt, opts)
-    : null;
+  const ollamaCallback = getSubconsciousOllamaCallback();
 
   // Run pipeline without a variant — picks best intent from lattice signals
   const result = await ctx.macro.run("emergent", "pipeline.run", {
@@ -13222,9 +13821,7 @@ register("system", "evolution", async (ctx, input) => {
   // Evolution: cluster compression + mega DTU rollup via 6-stage pipeline
   if (!STATE.dtus.size) return { ok: false, error: "No DTUs to evolve." };
 
-  const ollamaCallback = LLM_PIPELINE?.providers?.ollama?.enabled
-    ? (prompt, opts) => callOllama(opts?.system ? `${opts.system}\n\n${prompt}` : prompt, opts)
-    : null;
+  const ollamaCallback = getSubconsciousOllamaCallback();
 
   const result = await ctx.macro.run("emergent", "pipeline.run", {
     variant: "evolution",
@@ -13405,9 +14002,7 @@ register("system", "synthesize", async (ctx, input) => {
   // Otherwise, run synth variant of pipeline (conflict resolution + fill gaps)
   if (!STATE.dtus.size) return { ok: false, error: "Need at least 2 mega DTUs to synthesize a hyper DTU, or DTUs for conflict resolution." };
 
-  const ollamaCallback = LLM_PIPELINE?.providers?.ollama?.enabled
-    ? (prompt, opts) => callOllama(opts?.system ? `${opts.system}\n\n${prompt}` : prompt, opts)
-    : null;
+  const ollamaCallback = getSubconsciousOllamaCallback();
 
   const result = await ctx.macro.run("emergent", "pipeline.run", {
     variant: "synth",
@@ -15478,6 +16073,9 @@ register("lattice", "birth_protocol", async (ctx, input={}) => {
   saveStateDebounced();
   _c2log("c2.birth.accept", "Birth accepted and DTU committed", { id, title:dtu.title });
 
+  // Async embedding for birth DTU (never blocks)
+  embedDTU(dtu).catch(() => {});
+
   // ── Entity Lifecycle Completion ──────────────────────────────────────────
   // If this birth came from reproduction or entity emergence, instantiate the
   // full entity: body (166 organs) → species classification → alive
@@ -16804,6 +17402,18 @@ app.use((err, req, res, _next) => {
   const msg = String(err?.message || err);
   structuredLog("error", "unhandled_route_error", { requestId: req.id, method: req.method, path: req.path, error: msg, stack: String(err?.stack || "") });
   res.status(500).json({ ok:false, error: "An unexpected error occurred", code: "INTERNAL_ERROR" });
+
+  // Trigger repair cortex in background for 500-level errors
+  if (typeof repairError === "function") {
+    repairError({
+      type: "api-error",
+      message: msg,
+      stack: String(err?.stack || ""),
+      file: extractFileFromStack?.(String(err?.stack || "")) || null,
+      line: extractLineFromStack?.(String(err?.stack || "")) || null,
+      meta: { method: req.method, path: req.path },
+    }).catch(() => {});
+  }
 });
 
 // ---- heartbeat (Scope Separation: Local tick + Global tick, no Marketplace tick) ----
@@ -17010,9 +17620,12 @@ function startHeartbeat() {
       if (anyEnabled) {
         try {
           const snapshot = buildCognitiveSnapshot();
-          const ollamaConfig = LLM_PIPELINE?.providers?.ollama?.enabled
-            ? { enabled: true, url: LLM_PIPELINE.providers.ollama.url, model: LLM_PIPELINE.providers.ollama.model }
-            : null;
+          // Three-Brain: route heartbeat pipeline through subconscious brain if available
+          const ollamaConfig = BRAIN.subconscious.enabled
+            ? { enabled: true, url: BRAIN.subconscious.url, model: BRAIN.subconscious.model }
+            : LLM_PIPELINE?.providers?.ollama?.enabled
+              ? { enabled: true, url: LLM_PIPELINE.providers.ollama.url, model: LLM_PIPELINE.providers.ollama.model }
+              : null;
           cognitiveWorker.postMessage({
             type: "tick",
             snapshot,
@@ -17074,9 +17687,8 @@ function startHeartbeat() {
         // Every 3rd global tick: run global dialogue session
         if (tickResult.tickNumber % 3 === 0) {
           try {
-            const candidates = await runMacro("emergent", "scope.selectGlobalCandidates", {
-              globalDtuIds: tickResult.globalDtuIds,
-            }, ctx);
+            const _synthCandidates = selectGlobalSynthesisCandidates(STATE, tickResult.globalDtuIds || [], 5);
+            const candidates = { candidates: _synthCandidates };
             if (candidates?.candidates?.length >= 2) {
               await runMacro("emergent", "session.create", {
                 type: "global_synthesis",
@@ -17227,8 +17839,12 @@ app.get("/api/simulate/:simId", (req, res) => {
 app.post("/api/vulnerability/detect", (req, res) => {
   const { message } = req.body || {};
   if (!message) return res.status(400).json({ ok: false, error: "message required" });
-  const result = assessAndAdapt(message, req.body.entityId);
-  return res.json({ ok: true, ...result });
+  const vulnerability = detectVulnerability(message);
+  const delivery = chooseDeliveryMode(vulnerability);
+  if (req.body.entityId) {
+    try { hookVulnerability(req.body.entityId, vulnerability, delivery); } catch { /* silent */ }
+  }
+  return res.json({ ok: true, vulnerability, delivery });
 });
 
 // papers, forge/fromSource, crawl, audit, lattice, persona, skill, intent, chicken3 — extracted to routes/domain.js
@@ -26393,13 +27009,24 @@ app.get("/api/atlas/invariants/log", (req, res) => {
 
 app.get("/api/atlas/chat/retrieve", (req, res) => {
   try {
-    const { q, limit, policy, minConfidence, domainType } = req.query;
-    res.json(chatRetrieve(STATE, q, {
+    const { q, limit, policy, minConfidence, domainType, sessionId } = req.query;
+    const result = chatRetrieve(STATE, q, {
       limit: limit ? Number(limit) : undefined,
       policy,
       minConfidence: minConfidence ? Number(minConfidence) : undefined,
       domainType,
-    }));
+    });
+    // Feed retrieval hits into the context engine activation pipeline
+    if (sessionId && q && result.ok && result.results?.length) {
+      try {
+        contextProcessQuery(STATE, sessionId, {
+          query: q,
+          retrievalHits: result.results.slice(0, 20).map(r => ({ dtuId: r.id, score: r.score || 0.5 })),
+          userId: req.user?.id,
+        });
+      } catch { /* context engine is supplementary — never block retrieval */ }
+    }
+    res.json(result);
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
@@ -26522,6 +27149,154 @@ structuredLog("info", "module_loaded", { detail: "Atlas Global + Platform v2: Al
 structuredLog("info", "module_loaded", { detail: "New modules: Atlas Epistemic Engine, Autogen v2, Council Protocol, Social Layer, Collaboration, RBAC, Analytics, Webhook" });
 structuredLog("info", "module_loaded", { detail: "Atlas v2 Default-On: Write Guard, Scope Router, 3-Lane Separation, Invariant Monitor, Heartbeats, Auto-Promote Gate" });
 
+// ── Semantic Intelligence API Endpoints ──────────────────────────────────────
+
+// Embedding status
+app.get("/api/embeddings/status", asyncHandler(async (_req, res) => {
+  res.json({ ok: true, ...getEmbeddingStatus(STATE.dtus.size) });
+}));
+
+// Semantic search
+app.get("/api/dtus/search/semantic", asyncHandler(async (req, res) => {
+  const { q, lens, limit } = req.query;
+  if (!q) return res.status(400).json({ ok: false, error: "q (query) is required" });
+
+  const topK = Math.min(Number(limit) || 10, 50);
+  const all = dtusArray();
+  const results = await semanticSearch(String(q), all, { lens: lens || null, topK });
+
+  // Enrich results with DTU data
+  const enriched = results.map(r => {
+    const dtu = all.find(d => d.id === r.id);
+    return {
+      id: r.id,
+      title: dtu?.title || r.title || "",
+      tier: r.tier || "regular",
+      tags: dtu?.tags || [],
+      score: Math.round(r.score * 1000) / 1000,
+      rawSimilarity: Math.round((r.rawSimilarity || 0) * 1000) / 1000,
+      summary: (dtu?.human?.summary || dtu?.cretiHuman || "").slice(0, 300),
+    };
+  });
+
+  res.json({ ok: true, query: q, lens: lens || null, results: enriched, total: enriched.length });
+}));
+
+// Cross-domain connections for a DTU
+app.get("/api/dtus/:id/connections", asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const limit = Math.min(Number(req.query.limit) || 5, 20);
+  const all = dtusArray();
+
+  const connections = await findCrossDomainConnections(id, all, limit);
+  res.json({ ok: true, dtuId: id, connections });
+}));
+
+// Semantic cache stats
+app.get("/api/cache/stats", asyncHandler(async (_req, res) => {
+  res.json({ ok: true, ...getCacheStats() });
+}));
+
+// Record cache satisfaction (thumbs up/down)
+app.post("/api/cache/satisfaction", asyncHandler(async (req, res) => {
+  const { lens, satisfied } = req.body || {};
+  recordCacheSatisfaction(lens || null, !!satisfied);
+  res.json({ ok: true });
+}));
+
+// Distillation stats
+app.get("/api/distillation/stats", asyncHandler(async (_req, res) => {
+  res.json({ ok: true, ...getDistillationStats() });
+}));
+
+// Precompute stats
+app.get("/api/precompute/stats", asyncHandler(async (_req, res) => {
+  res.json({ ok: true, ...getPrecomputeStats() });
+}));
+
+// Model optimizer — assess all lenses
+app.get("/api/model-optimizer/lenses", asyncHandler(async (_req, res) => {
+  const assessments = assessAllLenses({ dtusArray });
+  res.json({ ok: true, lenses: assessments });
+}));
+
+// Model optimizer — assess single lens
+app.get("/api/model-optimizer/lens/:lens", asyncHandler(async (req, res) => {
+  const assessment = assessLensMaturity(req.params.lens, { dtusArray });
+  res.json({ ok: true, ...assessment });
+}));
+
+// Model optimizer stats
+app.get("/api/model-optimizer/stats", asyncHandler(async (_req, res) => {
+  res.json({ ok: true, ...getModelOptimizerStats() });
+}));
+
+// Affect system state
+app.get("/api/affect/system", asyncHandler(async (_req, res) => {
+  res.json({ ok: true, ...getSystemAffectState() });
+}));
+
+// Economics — current period
+app.get("/api/economics/current", asyncHandler(async (req, res) => {
+  const hours = Number(req.query.hours) || 24;
+  res.json({ ok: true, ...calculateEconomics(hours) });
+}));
+
+// Economics — trend
+app.get("/api/economics/trend", asyncHandler(async (req, res) => {
+  const days = Math.min(Number(req.query.days) || 30, 90);
+  res.json({ ok: true, trend: getCostPerUserTrend(days) });
+}));
+
+// Economics — projection
+app.get("/api/economics/projection", asyncHandler(async (req, res) => {
+  const users = Number(req.query.users) || 10000;
+  res.json({ ok: true, ...projectCosts(users) });
+}));
+
+// Self-healing: flag a DTU as problematic
+app.post("/api/heal/flag", asyncHandler(async (req, res) => {
+  const { dtuId, rating, correction } = req.body || {};
+  if (!dtuId) return res.status(400).json({ ok: false, error: "dtuId is required" });
+  const result = await flagAndHeal(dtuId, { rating, correction }, { dtusArray });
+  res.json({ ok: true, ...result });
+}));
+
+// Self-healing: get stats
+app.get("/api/heal/stats", asyncHandler(async (_req, res) => {
+  res.json({ ok: true, ...getSelfHealingStats() });
+}));
+
+// Self-healing: assess freshness
+app.get("/api/heal/freshness", asyncHandler(async (req, res) => {
+  const { lens, maxAgeDays } = req.query;
+  const stale = assessFreshness({ dtusArray }, { lens: lens || null, maxAgeDays: Number(maxAgeDays) || 7 });
+  res.json({ ok: true, stale, count: stale.length });
+}));
+
+// Knowledge gaps
+app.get("/api/skill/gaps", asyncHandler(async (_req, res) => {
+  const gaps = detectKnowledgeGaps(72);
+  res.json({ ok: true, gaps });
+}));
+
+// Combined intelligence dashboard
+app.get("/api/intelligence/dashboard", asyncHandler(async (_req, res) => {
+  res.json({
+    ok: true,
+    embeddings: getEmbeddingStatus(STATE.dtus.size),
+    cache: getCacheStats(),
+    distillation: getDistillationStats(),
+    precompute: getPrecomputeStats(),
+    modelOptimizer: getModelOptimizerStats(),
+    affect: getSystemAffectState(),
+    economics: getEconomicsStats(),
+    selfHealing: getSelfHealingStats(),
+  });
+}));
+
+structuredLog("info", "module_loaded", { detail: "Semantic Intelligence Layer: embeddings, cache, distillation, precompute, model optimizer, affect, economics" });
+
 // ── "Everything Real": Register durable DB-backed endpoints ──────────────────
 registerDurableEndpoints(app, db);
 
@@ -26576,6 +27351,77 @@ try {
   console.warn("[Concord] Worker pool failed to initialize:", e.message);
 }
 
+// ---- Three-Brain Cognitive Architecture API ----
+
+// Brain status endpoint — monitoring dashboard data
+app.get("/api/brain/status", asyncHandler(async (_req, res) => {
+  res.json(getBrainStatus());
+}));
+
+// Utility brain endpoint — lens-specific AI tasks
+app.post("/api/utility/call", asyncHandler(async (req, res) => {
+  const { action, lens, data } = req.body || {};
+  if (!action || !lens) {
+    return res.status(400).json({ ok: false, error: "action and lens are required" });
+  }
+  const result = await utilityCall(action, lens, data);
+  res.json({ ok: result.ok, result: result.content || null, error: result.error || null, source: result.source, model: result.model });
+}));
+
+// Conscious brain endpoint — direct conscious chat (bypasses normal chat pipeline)
+app.post("/api/brain/conscious/chat", asyncHandler(async (req, res) => {
+  const { message, lens } = req.body || {};
+  if (!message) {
+    return res.status(400).json({ ok: false, error: "message is required" });
+  }
+  const result = await consciousChat(message, lens);
+  res.json({ ok: result.ok, reply: result.content || null, error: result.error || null, source: result.source, model: result.model });
+}));
+
+// Subconscious brain endpoint — trigger specific subconscious tasks
+app.post("/api/brain/subconscious/task", requireAuth(), requireRole("owner"), asyncHandler(async (req, res) => {
+  const { taskType, domain } = req.body || {};
+  if (!taskType || !["autogen", "dream", "evolution", "synthesis", "birth"].includes(taskType)) {
+    return res.status(400).json({ ok: false, error: "taskType required: autogen, dream, evolution, synthesis, or birth" });
+  }
+  const result = await subconsciousTask(taskType, domain);
+  res.json({ ok: result.ok, result: result.content || null, error: result.error || null, source: result.source });
+}));
+
+// Entity explore endpoint — entities explore lenses via utility brain
+app.post("/api/brain/entity/explore", asyncHandler(async (req, res) => {
+  const { entityId, lens } = req.body || {};
+  if (!entityId || !lens) {
+    return res.status(400).json({ ok: false, error: "entityId and lens are required" });
+  }
+  // Resolve entity from STATE
+  const entity = STATE.emergent?.entities?.get(entityId) || { id: entityId, species: "unknown", homeostasis: 0.5 };
+  const result = await entityExploreLens(entity, lens);
+  res.json({ ok: result.ok, insight: result.content || null, error: result.error || null, source: result.source });
+}));
+
+// Brain health probe — quick check all three brains (used by frontend GracefulFallback + ConnectionStatus)
+app.get("/api/brain/health", asyncHandler(async (_req, res) => {
+  const health = {};
+  for (const [name, brain] of Object.entries(BRAIN)) {
+    try {
+      const probe = await fetch(`${brain.url}/api/tags`, { signal: AbortSignal.timeout(3000) });
+      health[name] = {
+        online: probe.ok,
+        healthy: probe.ok,
+        model: brain.model,
+        avgResponseTime: brain.stats.requests > 0 ? Math.round(brain.stats.totalMs / brain.stats.requests) : 0,
+        totalRequests: brain.stats.requests,
+        status: probe.status,
+      };
+    } catch (e) {
+      health[name] = { online: false, healthy: false, model: brain.model, error: String(e?.message || e) };
+    }
+  }
+  const allHealthy = Object.values(health).every(r => r.online);
+  res.json({ ok: true, allHealthy, ...health, brains: health });
+}));
+
 // ---- Worker Pool Stats API ----
 app.get("/api/workers/stats", requireAuth(), requireRole("owner"), (_req, res) => {
   try {
@@ -26583,6 +27429,299 @@ app.get("/api/workers/stats", requireAuth(), requireRole("owner"), (_req, res) =
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
+});
+
+// ---- Admin: Backup Status Endpoint ----
+app.get("/api/admin/backup/status", requireAuth(), requireRole("owner"), asyncHandler(async (_req, res) => {
+  const backupDir = path.join(DATA_DIR, 'backups');
+  try {
+    const files = fs.readdirSync(backupDir);
+    const backups = files
+      .filter(f => f.endsWith('.db.gz') || f.endsWith('.db'))
+      .map(f => {
+        const stat = fs.statSync(path.join(backupDir, f));
+        const dateMatch = f.match(/concord-(\d{8}_\d{6})/);
+        return { filename: f, size: stat.size, date: dateMatch?.[1] || null };
+      })
+      .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+
+    const lastBackup = backups[0];
+    let hoursSinceBackup = Infinity;
+    if (lastBackup?.date) {
+      const parsed = lastBackup.date.replace(/(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})/, '$1-$2-$3T$4:$5:$6');
+      hoursSinceBackup = (Date.now() - new Date(parsed).getTime()) / 3600000;
+    }
+
+    res.json({
+      totalBackups: backups.length,
+      lastBackup: lastBackup?.date || null,
+      hoursSinceLastBackup: Math.round(hoursSinceBackup),
+      healthy: hoursSinceBackup < 26,
+      backups: backups.slice(0, 7),
+    });
+  } catch {
+    res.json({ totalBackups: 0, lastBackup: null, hoursSinceLastBackup: Infinity, healthy: false, backups: [] });
+  }
+}));
+
+// ---- Admin: Centralized Logs Endpoint ----
+app.get("/api/admin/logs", requireAuth(), requireRole("owner"), asyncHandler(async (req, res) => {
+  try {
+    const logMod = await import("./logger.js");
+    const { level, source, lens, since, search, limit } = req.query;
+    const logs = logMod.query({ level, source, lens, since, search, limit: parseInt(limit) || 100 });
+    res.json({ logs, total: logs.length });
+  } catch {
+    res.json({ logs: [], total: 0 });
+  }
+}));
+
+// ---- Admin: Log Stream (SSE) ----
+app.get("/api/admin/logs/stream", requireAuth(), requireRole("owner"), asyncHandler(async (req, res) => {
+  let logMod;
+  try { logMod = await import("./logger.js"); } catch { return res.status(500).end(); }
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const buf = logMod.getBuffer();
+  let lastIndex = buf.length;
+  const interval = setInterval(() => {
+    try {
+      const newLogs = buf.slice(lastIndex);
+      if (newLogs.length > 0) {
+        for (const entry of newLogs) {
+          res.write(`data: ${JSON.stringify(entry)}\n\n`);
+        }
+        lastIndex = buf.length;
+      }
+    } catch { /* ignore */ }
+  }, 1000);
+
+  req.on('close', () => clearInterval(interval));
+}));
+
+// ---- Admin: SSL Status Endpoint ----
+app.get("/api/admin/ssl/status", requireAuth(), requireRole("owner"), asyncHandler(async (_req, res) => {
+  const { exec } = await import("child_process");
+  exec('certbot certificates 2>/dev/null', (err, stdout) => {
+    const expiryMatch = stdout?.match(/Expiry Date: (.+?) /);
+    const expiry = expiryMatch ? new Date(expiryMatch[1]) : null;
+    const daysRemaining = expiry ? Math.round((expiry.getTime() - Date.now()) / 86400000) : null;
+    res.json({
+      expiry: expiry?.toISOString() || null,
+      daysRemaining,
+      healthy: daysRemaining !== null && daysRemaining > 14,
+      warning: daysRemaining !== null && daysRemaining <= 30,
+    });
+  });
+}));
+
+// ---- Admin: Repair Build Endpoint ----
+app.post("/api/admin/repair-build", requireAuth(), requireRole("owner"), asyncHandler(async (_req, res) => {
+  const { exec } = await import("child_process");
+  res.json({ ok: true, message: 'Repair cortex started' });
+  exec('bash server/scripts/repair-cortex.sh', (err, stdout, stderr) => {
+    const success = !err;
+    structuredLog(success ? "info" : "warn", "repair_cortex_result", {
+      success, output: String(stdout).slice(-2000), stderr: String(stderr).slice(-500),
+    });
+  });
+}));
+
+// ---- Admin: Queue Stats Endpoint ----
+app.get("/api/admin/queue/stats", requireAuth(), requireRole("owner"), (_req, res) => {
+  try {
+    const stats = {};
+    for (const [name, brain] of Object.entries(BRAIN)) {
+      stats[name] = { requests: brain.stats.requests, errors: brain.stats.errors, dtusGenerated: brain.stats.dtusGenerated };
+    }
+    res.json({ ok: true, queues: stats });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+// ---- Repair Cortex Runtime Endpoints ----
+const REPAIR_STATE = {
+  sleeping: true,
+  currentFix: null,
+  fixHistory: [],
+  consecutiveFailures: 0,
+  maxConsecutiveFailures: 5,
+  totalFixes: 0,
+  knownPatterns: [],
+};
+
+// Load learned patterns from disk
+try {
+  const patternsPath = path.join(DATA_DIR, "repair-patterns.json");
+  if (fs.existsSync(patternsPath)) {
+    REPAIR_STATE.knownPatterns = JSON.parse(fs.readFileSync(patternsPath, "utf8"));
+    structuredLog("info", "repair_init", { patternsLoaded: REPAIR_STATE.knownPatterns.length });
+  }
+} catch { /* no patterns yet */ }
+
+function saveRepairPatterns() {
+  try {
+    const patternsPath = path.join(DATA_DIR, "repair-patterns.json");
+    fs.writeFileSync(patternsPath, JSON.stringify(REPAIR_STATE.knownPatterns, null, 2));
+  } catch (e) {
+    structuredLog("warn", "repair_save_error", { error: String(e?.message || e) });
+  }
+}
+
+function tryPatternFix(error) {
+  for (const pattern of REPAIR_STATE.knownPatterns) {
+    if (error.message && error.message.includes(pattern.trigger)) {
+      structuredLog("info", "repair_pattern_match", { pattern: pattern.name });
+      return pattern.fix;
+    }
+  }
+  return null;
+}
+
+function extractTrigger(message) {
+  return (message || "")
+    .replace(/line \d+/g, "line N")
+    .replace(/column \d+/g, "column N")
+    .replace(/\/[^\s]+\//g, "PATH/")
+    .slice(0, 200);
+}
+
+function extractFileFromStack(stack) {
+  if (!stack) return null;
+  const match = stack.match(/at\s+.*?\(?(\/[^:)]+)/);
+  return match ? match[1] : null;
+}
+
+function extractLineFromStack(stack) {
+  if (!stack) return null;
+  const match = stack.match(/:(\d+):\d+/);
+  return match ? parseInt(match[1], 10) : null;
+}
+
+async function tryAIFix(error, context) {
+  if (!BRAIN.repair.enabled) return null;
+  REPAIR_STATE.sleeping = false;
+
+  const prompt = `You are a runtime repair system. Fix this error.\n\nERROR: ${error.message}\nFILE: ${error.file || "unknown"}\nLINE: ${error.line || "unknown"}\nSTACK: ${(error.stack || "").slice(0, 500)}\n\nSURROUNDING CODE:\n${context}\n\nRules:\n- Return ONLY the fixed code, no explanation\n- Fix the root cause, not the symptom\n- If you can't fix it, return UNFIXABLE`;
+
+  try {
+    const resp = await fetch(`${BRAIN.repair.url}/api/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: BRAIN.repair.model, prompt, stream: false, options: { temperature: 0.1 } }),
+      signal: AbortSignal.timeout(30000),
+    });
+    BRAIN.repair.stats.requests++;
+    const data = await resp.json();
+    REPAIR_STATE.sleeping = true;
+    const fix = (data.response || "").trim();
+    return fix === "UNFIXABLE" ? null : fix;
+  } catch (err) {
+    structuredLog("warn", "repair_ai_error", { error: String(err?.message || err) });
+    REPAIR_STATE.sleeping = true;
+    return null;
+  }
+}
+
+async function repairError(error) {
+  if (REPAIR_STATE.consecutiveFailures >= REPAIR_STATE.maxConsecutiveFailures) {
+    structuredLog("error", "repair_halted", { reason: "max-consecutive-failures", count: REPAIR_STATE.maxConsecutiveFailures });
+    return { success: false, reason: "max-failures-reached" };
+  }
+
+  REPAIR_STATE.currentFix = (error.message || "").slice(0, 200);
+  structuredLog("info", "repair_triggered", { type: error.type, message: (error.message || "").slice(0, 100) });
+
+  // Layer 1: Pattern match
+  const patternFix = tryPatternFix(error);
+  if (patternFix) {
+    const entry = { timestamp: new Date().toISOString(), type: error.type, message: error.message, method: "pattern", success: true };
+    REPAIR_STATE.fixHistory.push(entry);
+    if (REPAIR_STATE.fixHistory.length > 100) REPAIR_STATE.fixHistory.shift();
+    REPAIR_STATE.totalFixes++;
+    REPAIR_STATE.consecutiveFailures = 0;
+    REPAIR_STATE.currentFix = null;
+    BRAIN.repair.stats.fixes = (BRAIN.repair.stats.fixes || 0) + 1;
+    return { success: true, method: "pattern" };
+  }
+
+  // Layer 2: AI fix
+  let context = "";
+  if (error.file && fs.existsSync(error.file)) {
+    try {
+      const lines = fs.readFileSync(error.file, "utf8").split("\n");
+      const start = Math.max(0, (error.line || 1) - 10);
+      const end = Math.min(lines.length, (error.line || 1) + 10);
+      context = lines.slice(start, end).join("\n");
+    } catch { /* can't read file */ }
+  }
+
+  const aiFix = await tryAIFix(error, context);
+  if (aiFix) {
+    // Learn the pattern for future instant matches
+    const pattern = {
+      name: `auto-${Date.now()}`,
+      trigger: extractTrigger(error.message),
+      fix: aiFix.slice(0, 2000),
+      learnedAt: new Date().toISOString(),
+      method: "ai",
+      errorType: error.type,
+    };
+    REPAIR_STATE.knownPatterns.push(pattern);
+    saveRepairPatterns();
+
+    const entry = { timestamp: new Date().toISOString(), type: error.type, message: error.message, method: "ai", success: true };
+    REPAIR_STATE.fixHistory.push(entry);
+    if (REPAIR_STATE.fixHistory.length > 100) REPAIR_STATE.fixHistory.shift();
+    REPAIR_STATE.totalFixes++;
+    REPAIR_STATE.consecutiveFailures = 0;
+    REPAIR_STATE.currentFix = null;
+    BRAIN.repair.stats.fixes = (BRAIN.repair.stats.fixes || 0) + 1;
+    return { success: true, method: "ai", pattern: pattern.name };
+  }
+
+  // Both layers failed
+  REPAIR_STATE.consecutiveFailures++;
+  const entry = { timestamp: new Date().toISOString(), type: error.type, message: error.message, method: "none", success: false };
+  REPAIR_STATE.fixHistory.push(entry);
+  if (REPAIR_STATE.fixHistory.length > 100) REPAIR_STATE.fixHistory.shift();
+  REPAIR_STATE.currentFix = null;
+  return { success: false, reason: "no-fix-found" };
+}
+
+// Repair trigger endpoint
+app.post("/api/admin/repair/trigger", requireAuth(), requireRole("owner"), asyncHandler(async (req, res) => {
+  const result = await repairError(req.body);
+  res.json(result);
+}));
+
+// Frontend error report endpoint (no auth required — frontends report errors)
+app.post("/api/admin/repair/report", asyncHandler(async (req, res) => {
+  const result = await repairError(req.body);
+  res.json({ received: true, repaired: result.success });
+}));
+
+// Repair status
+app.get("/api/admin/repair/status", requireAuth(), requireRole("owner"), (_req, res) => {
+  res.json({
+    sleeping: REPAIR_STATE.sleeping,
+    currentFix: REPAIR_STATE.currentFix,
+    totalFixes: REPAIR_STATE.totalFixes,
+    knownPatterns: REPAIR_STATE.knownPatterns.length,
+    consecutiveFailures: REPAIR_STATE.consecutiveFailures,
+    maxConsecutiveFailures: REPAIR_STATE.maxConsecutiveFailures,
+    recentFixes: REPAIR_STATE.fixHistory.slice(-20),
+    repairBrainOnline: BRAIN.repair.enabled,
+  });
+});
+
+// View learned patterns
+app.get("/api/admin/repair/patterns", requireAuth(), requireRole("owner"), (_req, res) => {
+  res.json({ patterns: REPAIR_STATE.knownPatterns });
 });
 
 const SHOULD_LISTEN = (String(process.env.CONCORD_NO_LISTEN || "").toLowerCase() !== "true") && (String(process.env.NODE_ENV || "").toLowerCase() !== "test");

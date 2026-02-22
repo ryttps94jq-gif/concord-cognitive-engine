@@ -53,6 +53,7 @@ export default function InvariantLensPage() {
       });
       return data as { ok: boolean; passed: boolean; message: string; violations?: string[] };
     },
+    onError: (err) => console.error('testMut failed:', err instanceof Error ? err.message : err),
   });
 
   const handleTestAction = useCallback(async () => {

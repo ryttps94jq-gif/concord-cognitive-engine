@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Activity,
@@ -19,7 +19,13 @@ import {
   Target,
   Crosshair,
   Signal,
+  Download,
+  Info,
+  SlidersHorizontal,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
+import { ErrorState } from '@/components/common/EmptyState';
 
 // ============================================================================
 // Types
@@ -63,18 +69,200 @@ interface HistoryPoint {
   timestamp: string;
 }
 
+interface ThresholdConfig {
+  strongResonance: number;
+  moderateResonance: number;
+  weakSignal: number;
+}
+
 type ViewMode = 'live' | 'pairs' | 'history' | 'health';
 
 // ============================================================================
 // Constants
 // ============================================================================
 
-const CLASSIFICATION_META: Record<string, { label: string; color: string; glow: string }> = {
-  strong_resonance: { label: 'STRONG RESONANCE', color: '#00ffc8', glow: 'rgba(0, 255, 200, 0.4)' },
-  moderate_resonance: { label: 'MODERATE SIGNAL', color: '#a855f7', glow: 'rgba(168, 85, 247, 0.3)' },
-  weak_signal: { label: 'WEAK SIGNAL', color: '#eab308', glow: 'rgba(234, 179, 8, 0.2)' },
-  noise_floor: { label: 'NOISE FLOOR', color: '#6b7280', glow: 'rgba(107, 114, 128, 0.1)' },
+const CLASSIFICATION_META: Record<string, { label: string; color: string; glow: string; description: string }> = {
+  strong_resonance: {
+    label: 'STRONG RESONANCE',
+    color: '#00ffc8',
+    glow: 'rgba(0, 255, 200, 0.4)',
+    description: 'High cross-domain invariant alignment with low semantic overlap. Genuine structural correspondence detected.',
+  },
+  moderate_resonance: {
+    label: 'MODERATE SIGNAL',
+    color: '#a855f7',
+    glow: 'rgba(168, 85, 247, 0.3)',
+    description: 'Partial alignment across domains. Some shared constraint structure with moderate semantic distance.',
+  },
+  weak_signal: {
+    label: 'WEAK SIGNAL',
+    color: '#eab308',
+    glow: 'rgba(234, 179, 8, 0.2)',
+    description: 'Minimal cross-domain alignment. Low invariant overlap or high semantic similarity reducing signal.',
+  },
+  noise_floor: {
+    label: 'NOISE FLOOR',
+    color: '#6b7280',
+    glow: 'rgba(107, 114, 128, 0.1)',
+    description: 'No meaningful resonance detected. Signal indistinguishable from random alignment.',
+  },
 };
+
+const DEFAULT_THRESHOLDS: ThresholdConfig = {
+  strongResonance: 0.30,
+  moderateResonance: 0.10,
+  weakSignal: 0.03,
+};
+
+// ============================================================================
+// Signal Classification Legend
+// ============================================================================
+
+function SignalClassificationLegend({ isOpen, onToggle }: { isOpen: boolean; onToggle: () => void }) {
+  return (
+    <div className="border border-white/5 rounded-lg overflow-hidden" style={{ background: 'rgba(10,10,20,0.8)' }}>
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-medium text-gray-400 hover:text-gray-300 transition-colors"
+      >
+        <span className="flex items-center gap-2">
+          <Info className="w-3.5 h-3.5" />
+          Signal Classification Legend
+        </span>
+        {isOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+      </button>
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="px-4 pb-3 space-y-2.5 border-t border-white/5 pt-3">
+              {Object.entries(CLASSIFICATION_META).map(([key, meta]) => (
+                <div key={key} className="flex items-start gap-3">
+                  <div className="flex items-center gap-2 flex-shrink-0 mt-0.5">
+                    <span
+                      className="w-3 h-3 rounded-full border"
+                      style={{ backgroundColor: meta.color + '40', borderColor: meta.color }}
+                    />
+                    <span className="text-[11px] font-mono font-bold w-36" style={{ color: meta.color }}>
+                      {meta.label}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 leading-relaxed">{meta.description}</p>
+                </div>
+              ))}
+              <div className="pt-2 border-t border-white/5">
+                <p className="text-[10px] text-gray-600 italic">
+                  Resonance measures structural alignment between DTUs across different domains through shared invariants.
+                  High invariant overlap + low semantic overlap = genuine constraint geometry correspondence.
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ============================================================================
+// Threshold Configuration Panel
+// ============================================================================
+
+function ThresholdConfigPanel({
+  thresholds,
+  onChange,
+  isOpen,
+  onToggle,
+}: {
+  thresholds: ThresholdConfig;
+  onChange: (t: ThresholdConfig) => void;
+  isOpen: boolean;
+  onToggle: () => void;
+}) {
+  const handleSliderChange = (key: keyof ThresholdConfig, value: number) => {
+    onChange({ ...thresholds, [key]: value });
+  };
+
+  const handleReset = () => {
+    onChange({ ...DEFAULT_THRESHOLDS });
+  };
+
+  return (
+    <div className="border border-white/5 rounded-lg overflow-hidden" style={{ background: 'rgba(10,10,20,0.8)' }}>
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-medium text-gray-400 hover:text-gray-300 transition-colors"
+      >
+        <span className="flex items-center gap-2">
+          <SlidersHorizontal className="w-3.5 h-3.5" />
+          Threshold Configuration
+        </span>
+        {isOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+      </button>
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="px-4 pb-3 space-y-4 border-t border-white/5 pt-3">
+              {([
+                { key: 'strongResonance' as const, label: 'Strong Resonance', color: '#00ffc8', min: 0.1, max: 0.8, step: 0.01 },
+                { key: 'moderateResonance' as const, label: 'Moderate Signal', color: '#a855f7', min: 0.03, max: 0.5, step: 0.01 },
+                { key: 'weakSignal' as const, label: 'Weak Signal', color: '#eab308', min: 0.01, max: 0.2, step: 0.005 },
+              ]).map(({ key, label, color, min, max, step }) => (
+                <div key={key} className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-mono" style={{ color }}>
+                      {label}
+                    </label>
+                    <span className="text-[11px] font-mono text-white bg-white/5 px-2 py-0.5 rounded">
+                      {(thresholds[key] * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={min}
+                    max={max}
+                    step={step}
+                    value={thresholds[key]}
+                    onChange={(e) => handleSliderChange(key, parseFloat(e.target.value))}
+                    className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
+                    style={{
+                      background: `linear-gradient(to right, ${color} 0%, ${color} ${((thresholds[key] - min) / (max - min)) * 100}%, rgba(255,255,255,0.05) ${((thresholds[key] - min) / (max - min)) * 100}%, rgba(255,255,255,0.05) 100%)`,
+                      accentColor: color,
+                    }}
+                  />
+                  <div className="flex justify-between text-[9px] text-gray-700 font-mono">
+                    <span>{(min * 100).toFixed(0)}%</span>
+                    <span>{(max * 100).toFixed(0)}%</span>
+                  </div>
+                </div>
+              ))}
+              <div className="flex items-center justify-between pt-2 border-t border-white/5">
+                <p className="text-[10px] text-gray-600">
+                  Thresholds determine signal classification boundaries for pair analysis.
+                </p>
+                <button
+                  onClick={handleReset}
+                  className="text-[10px] text-gray-500 hover:text-white px-2 py-1 rounded border border-white/5 hover:border-white/10 transition-colors"
+                >
+                  Reset Defaults
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 // ============================================================================
 // Resonance Field Canvas — Animated boundary visualization
@@ -94,7 +282,6 @@ function ResonanceFieldCanvas({
   scanning: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const _frameRef = useRef(0);
   const timeRef = useRef(0);
 
   useEffect(() => {
@@ -284,11 +471,11 @@ function SignalMeter({ value, label }: { value: number; label: string }) {
 // Resonance Pair Card — Shows a single cross-domain alignment
 // ============================================================================
 
-function PairCard({ pair, rank }: { pair: ResonancePair; rank: number }) {
+function PairCard({ pair, rank, thresholds }: { pair: ResonancePair; rank: number; thresholds: ThresholdConfig }) {
   const [expanded, setExpanded] = useState(false);
-  const meta = pair.resonance > 0.3
+  const meta = pair.resonance >= thresholds.strongResonance
     ? CLASSIFICATION_META.strong_resonance
-    : pair.resonance > 0.1
+    : pair.resonance >= thresholds.moderateResonance
       ? CLASSIFICATION_META.moderate_resonance
       : CLASSIFICATION_META.weak_signal;
 
@@ -412,6 +599,65 @@ function HistorySparkline({ readings }: { readings: HistoryPoint[] }) {
 }
 
 // ============================================================================
+// Export helper
+// ============================================================================
+
+function exportResonanceData(scan: BoundaryScan | undefined, history: HistoryPoint[], format: 'json' | 'csv') {
+  if (!scan && history.length === 0) return;
+
+  let content: string;
+  let filename: string;
+  let mimeType: string;
+
+  if (format === 'json') {
+    const exportData = {
+      exportedAt: new Date().toISOString(),
+      currentScan: scan ? {
+        signal: scan.signal,
+        classification: scan.classification,
+        timestamp: scan.timestamp,
+        gradient: scan.gradient,
+        coherenceDirection: scan.coherenceDirection,
+        frontier: scan.frontier,
+        interior: scan.interior,
+        crossDomainAlignment: scan.crossDomainAlignment,
+      } : null,
+      history,
+    };
+    content = JSON.stringify(exportData, null, 2);
+    filename = `resonance-export-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
+    mimeType = 'application/json';
+  } else {
+    const rows: string[] = ['timestamp,signal,classification,gradient,coherence,pairs,topResonance,frontier'];
+    for (const r of history) {
+      rows.push([
+        r.timestamp,
+        r.signal.toFixed(4),
+        r.classification,
+        r.gradient.toFixed(4),
+        r.coherence.toFixed(4),
+        r.pairs,
+        r.topResonance.toFixed(4),
+        r.frontier,
+      ].join(','));
+    }
+    content = rows.join('\n');
+    filename = `resonance-export-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.csv`;
+    mimeType = 'text/csv';
+  }
+
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ============================================================================
 // Main Page Component
 // ============================================================================
 
@@ -421,34 +667,41 @@ export default function ResonanceBoundaryPage() {
   const queryClient = useQueryClient();
   const [viewMode, setViewMode] = useState<ViewMode>('live');
   const [autoScan, setAutoScan] = useState(false);
+  const [legendOpen, setLegendOpen] = useState(false);
+  const [thresholdOpen, setThresholdOpen] = useState(false);
+  const [thresholds, setThresholds] = useState<ThresholdConfig>({ ...DEFAULT_THRESHOLDS });
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
 
   // Fetch latest boundary scan
-  const { data: scan, isLoading: scanLoading, refetch: _refetchScan } = useQuery<BoundaryScan>({
+  const { data: scan, isLoading: scanLoading, isError: scanError, error: scanErrorObj, refetch: refetchScan } = useQuery<BoundaryScan>({
     queryKey: ['resonance-boundary'],
-    queryFn: () => api.get('/api/resonance/boundary').then(r => r.data),
+    queryFn: () => apiHelpers.emergent.latticeBeacon().then(r => r.data),
     refetchInterval: autoScan ? 15000 : false,
   });
 
   // Fetch history
   const { data: historyData } = useQuery<{ readings: HistoryPoint[] }>({
     queryKey: ['resonance-history'],
-    queryFn: () => api.get('/api/resonance/history?limit=100').then(r => r.data),
+    queryFn: () => apiHelpers.emergent.resonance().then(r => r.data),
     refetchInterval: 30000,
   });
 
   // Fetch existing health metrics
   const { data: growth } = useQuery({
     queryKey: ['growth'],
-    queryFn: () => api.get('/api/growth').then(r => r.data),
+    queryFn: () => apiHelpers.guidance.health().then(r => r.data),
     refetchInterval: 10000,
   });
 
   // Scan mutation (stores result)
   const scanMutation = useMutation({
-    mutationFn: () => api.post('/api/resonance/scan', {}).then(r => r.data),
+    mutationFn: () => apiHelpers.bridge.beacon().then(r => r.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['resonance-boundary'] });
       queryClient.invalidateQueries({ queryKey: ['resonance-history'] });
+    },
+    onError: (err) => {
+      console.error('Resonance scan failed:', err instanceof Error ? err.message : err);
     },
   });
 
@@ -464,6 +717,31 @@ export default function ResonanceBoundaryPage() {
 
   const homeostasis = growth?.growth?.homeostasis ?? 0;
   const repairRate = growth?.growth?.maintenance?.repairRate ?? 0.5;
+
+  // Classify pairs using current thresholds
+  const classifyPairSignal = (resonance: number): string => {
+    if (resonance >= thresholds.strongResonance) return 'strong_resonance';
+    if (resonance >= thresholds.moderateResonance) return 'moderate_resonance';
+    if (resonance >= thresholds.weakSignal) return 'weak_signal';
+    return 'noise_floor';
+  };
+
+  // Pair stats based on thresholds
+  const allPairs = scan?.crossDomainAlignment?.topPairs ?? [];
+  const pairsByClass = {
+    strong: allPairs.filter(p => classifyPairSignal(p.resonance) === 'strong_resonance').length,
+    moderate: allPairs.filter(p => classifyPairSignal(p.resonance) === 'moderate_resonance').length,
+    weak: allPairs.filter(p => classifyPairSignal(p.resonance) === 'weak_signal').length,
+    noise: allPairs.filter(p => classifyPairSignal(p.resonance) === 'noise_floor').length,
+  };
+
+  if (scanError) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <ErrorState error={scanErrorObj?.message} onRetry={refetchScan} />
+      </div>
+    );
+  }
 
   return (
     <div className="h-[calc(100vh-4rem)] flex flex-col" style={{ background: '#050510' }}>
@@ -504,6 +782,35 @@ export default function ResonanceBoundaryPage() {
                 {tab.label}
               </button>
             ))}
+          </div>
+
+          {/* Export dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setExportMenuOpen(!exportMenuOpen)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs text-gray-500 hover:text-gray-300 border border-white/5 hover:border-white/10 transition-all"
+              title="Export resonance data"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Export
+            </button>
+            {exportMenuOpen && (
+              <div className="absolute right-0 top-full mt-1 z-50 border border-white/10 rounded-lg overflow-hidden shadow-xl"
+                style={{ background: 'rgba(10,10,20,0.98)' }}>
+                <button
+                  onClick={() => { exportResonanceData(scan, history, 'json'); setExportMenuOpen(false); }}
+                  className="block w-full text-left px-4 py-2 text-xs text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
+                >
+                  Export as JSON
+                </button>
+                <button
+                  onClick={() => { exportResonanceData(scan, history, 'csv'); setExportMenuOpen(false); }}
+                  className="block w-full text-left px-4 py-2 text-xs text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
+                >
+                  Export as CSV
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Scan button */}
@@ -637,12 +944,41 @@ export default function ResonanceBoundaryPage() {
                     DTU pairs from different domains sharing invariant structure without semantic overlap
                   </p>
                 </div>
-                <span className="text-xs font-mono text-gray-600">
-                  {scan?.crossDomainAlignment?.pairsFound ?? 0} pairs across {scan?.crossDomainAlignment?.domainsScanned ?? 0} domains
-                </span>
+                <div className="flex items-center gap-3">
+                  {/* Pair class breakdown badges */}
+                  {pairsByClass.strong > 0 && (
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded" style={{ backgroundColor: 'rgba(0,255,200,0.1)', color: '#00ffc8' }}>
+                      {pairsByClass.strong} strong
+                    </span>
+                  )}
+                  {pairsByClass.moderate > 0 && (
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded" style={{ backgroundColor: 'rgba(168,85,247,0.1)', color: '#a855f7' }}>
+                      {pairsByClass.moderate} moderate
+                    </span>
+                  )}
+                  {pairsByClass.weak > 0 && (
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded" style={{ backgroundColor: 'rgba(234,179,8,0.1)', color: '#eab308' }}>
+                      {pairsByClass.weak} weak
+                    </span>
+                  )}
+                  <span className="text-xs font-mono text-gray-600">
+                    {scan?.crossDomainAlignment?.pairsFound ?? 0} pairs across {scan?.crossDomainAlignment?.domainsScanned ?? 0} domains
+                  </span>
+                </div>
               </div>
 
-              {(scan?.crossDomainAlignment?.topPairs ?? []).length === 0 ? (
+              {/* Legend + Threshold config */}
+              <div className="space-y-2">
+                <SignalClassificationLegend isOpen={legendOpen} onToggle={() => setLegendOpen(!legendOpen)} />
+                <ThresholdConfigPanel
+                  thresholds={thresholds}
+                  onChange={setThresholds}
+                  isOpen={thresholdOpen}
+                  onToggle={() => setThresholdOpen(!thresholdOpen)}
+                />
+              </div>
+
+              {allPairs.length === 0 ? (
                 <div className="text-center py-16 text-gray-600">
                   <Target className="w-8 h-8 mx-auto mb-3 opacity-30" />
                   <p className="text-sm">No cross-domain alignments detected</p>
@@ -650,8 +986,8 @@ export default function ResonanceBoundaryPage() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {scan!.crossDomainAlignment.topPairs.map((pair, i) => (
-                    <PairCard key={`${pair.a.id}-${pair.b.id}`} pair={pair} rank={i} />
+                  {allPairs.map((pair, i) => (
+                    <PairCard key={`${pair.a.id}-${pair.b.id}`} pair={pair} rank={i} thresholds={thresholds} />
                   ))}
                 </div>
               )}
@@ -660,7 +996,10 @@ export default function ResonanceBoundaryPage() {
 
           {viewMode === 'history' && (
             <div className="p-6 space-y-4">
-              <h2 className="text-sm font-bold">Signal History</h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-bold">Signal History</h2>
+                <SignalClassificationLegend isOpen={legendOpen} onToggle={() => setLegendOpen(!legendOpen)} />
+              </div>
 
               {history.length === 0 ? (
                 <div className="text-center py-16 text-gray-600">
@@ -734,6 +1073,9 @@ export default function ResonanceBoundaryPage() {
                   </div>
                 ))}
               </div>
+
+              {/* Legend in health view too */}
+              <SignalClassificationLegend isOpen={legendOpen} onToggle={() => setLegendOpen(!legendOpen)} />
             </div>
           )}
         </main>

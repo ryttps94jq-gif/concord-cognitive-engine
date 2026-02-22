@@ -216,7 +216,7 @@ export default function PaperLensPage() {
 
   // ---- Data hooks ----
   const {
-    isError, error, refetch, items: paperItems,
+    isLoading, isError, error, refetch, items: paperItems,
     create: createArtifact, update: updateArtifact, remove: removeArtifact,
   } = useLensData('paper', typeForTab[activeTab], {
     search: searchQuery || undefined,
@@ -431,6 +431,18 @@ export default function PaperLensPage() {
     a.click();
     URL.revokeObjectURL(url);
   }, [selectedItem]);
+
+  // ---- Loading state ----
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   // ---- Error state ----
   if (isError) {
@@ -657,7 +669,7 @@ export default function PaperLensPage() {
           )}
 
           {/* ---- Tab-Specific Content ---- */}
-          {activeTab === 'papers' && !editorOpen && <PapersGrid items={sortedItems} onEdit={openEditor} onSelect={openDetail} onValidate={(item) => validateMutation.mutate({ id: item.id, title: item.title, data: item.data as Record<string, unknown> })} validationResults={validationResults} />}
+          {activeTab === 'papers' && !editorOpen && <PapersGrid items={sortedItems} onEdit={openEditor} onSelect={openDetail} onValidate={(item) => validateMutation.mutate({ id: item.id, title: item.title, data: item.data as Record<string, unknown> })} validationResults={validationResults} isValidating={validateMutation.isPending} />}
           {activeTab === 'hypotheses' && <HypothesesList items={sortedItems} onSelect={openDetail} allEvidence={allEvidence} />}
           {activeTab === 'evidence' && <EvidenceBoard items={sortedItems} onSelect={openDetail} />}
           {activeTab === 'experiments' && <ExperimentLog items={sortedItems} onSelect={openDetail} />}
@@ -893,12 +905,13 @@ function StatCard({ icon: Icon, label, value, color }: { icon: LucideIcon; label
 }
 
 // ---- Papers Grid ----
-function PapersGrid({ items, onEdit, onSelect, onValidate, validationResults }: {
+function PapersGrid({ items, onEdit, onSelect, onValidate, validationResults, isValidating }: {
   items: LensItem[];
   onEdit: (item: LensItem) => void;
   onSelect: (item: LensItem) => void;
   onValidate: (item: LensItem) => void;
   validationResults: Record<string, { passRate: number; issueCount: number; claimsChecked: number }>;
+  isValidating?: boolean;
 }) {
   return (
     <div className={ds.grid3}>
@@ -935,8 +948,8 @@ function PapersGrid({ items, onEdit, onSelect, onValidate, validationResults }: 
                 <Calendar className="w-3 h-3" /> {new Date(item.updatedAt).toLocaleDateString()}
               </span>
               <div className="flex items-center gap-1">
-                <button onClick={e => { e.stopPropagation(); onValidate(item); }} className={cn(ds.btnGhost, 'text-xs px-1.5 py-0.5')} title="Validate">
-                  <FlaskConical className="w-3 h-3 text-neon-green" />
+                <button onClick={e => { e.stopPropagation(); onValidate(item); }} disabled={isValidating} className={cn(ds.btnGhost, 'text-xs px-1.5 py-0.5 disabled:opacity-50 disabled:cursor-not-allowed')} title="Validate">
+                  <FlaskConical className={`w-3 h-3 text-neon-green ${isValidating ? 'animate-pulse' : ''}`} />
                 </button>
                 <button onClick={e => { e.stopPropagation(); onEdit(item); }} className={cn(ds.btnGhost, 'text-xs px-1.5 py-0.5')} title="Edit">
                   <Edit3 className="w-3 h-3 text-neon-cyan" />

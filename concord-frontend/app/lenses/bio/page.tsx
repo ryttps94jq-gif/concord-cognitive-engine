@@ -2,7 +2,7 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { apiHelpers } from '@/lib/api/client';
 import { useState } from 'react';
 import { Dna, Activity, Heart, Brain, Microscope } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -23,14 +23,14 @@ export default function BioLensPage() {
 
   const [selectedSystem, setSelectedSystem] = useState('homeostasis');
 
-  const { data: bioData, isError: isError, error: error, refetch: refetch,} = useQuery({
+  const { data: bioData, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
     queryKey: ['bio-systems'],
-    queryFn: () => api.get('/api/bio/systems').then((r) => r.data),
+    queryFn: () => apiHelpers.lens.list('bio', { type: 'system' }).then((r) => r.data),
   });
 
   const { data: growthData, isError: isError2, error: error2, refetch: refetch2,} = useQuery({
     queryKey: ['growth-status'],
-    queryFn: () => api.get('/api/growth/status').then((r) => r.data),
+    queryFn: () => apiHelpers.status.get().then((r) => r.data),
   });
 
   const systems = [
@@ -40,6 +40,17 @@ export default function BioLensPage() {
     { id: 'genetic', name: 'Genetic Memory', icon: Dna, color: 'text-neon-blue' },
   ];
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-pink border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2) {
     return (
@@ -106,7 +117,7 @@ export default function BioLensPage() {
             <div key={metric.name} className="space-y-1">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-400">{metric.name}</span>
-                <span className="font-mono">{metric.value.toFixed(2)}</span>
+                <span className="font-mono">{(metric.value ?? 0).toFixed(2)}</span>
               </div>
               <div className="h-2 bg-lattice-deep rounded-full overflow-hidden">
                 <div

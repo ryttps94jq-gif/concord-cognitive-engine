@@ -124,7 +124,7 @@ export default function EcoLensPage() {
             <div
               key={i}
               className="flex-1 bg-gradient-to-t from-neon-green to-neon-cyan rounded-t"
-              style={{ height: `${30 + Math.sin(i * 0.5) * 50 + Math.random() * 20}%` }}
+              style={{ height: `${30 + Math.sin(i * 0.5) * 50}%` }}
             />
           ))}
         </div>

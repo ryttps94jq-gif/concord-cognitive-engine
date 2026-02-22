@@ -13,7 +13,7 @@ export default function LawLensPage() {
   const [newCaseTitle, setNewCaseTitle] = useState('');
 
   // Lens artifact persistence layer
-  const { isError: isError, error: error, refetch: refetch, items: caseItems, create: createCase } = useLensData('law', 'case', { noSeed: true });
+  const { isLoading, isError: isError, error: error, refetch: refetch, items: caseItems, create: createCase } = useLensData('law', 'case', { noSeed: true });
 
   const legalFrameworks = [
     { id: 'gdpr', name: 'GDPR', status: 'compliant', description: 'EU data protection' },
@@ -48,6 +48,17 @@ export default function LawLensPage() {
     });
   };
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError) {
     return (

@@ -3,8 +3,11 @@
 import { useState, useRef, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useMutation } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
+import { useLensData } from '@/lib/hooks/use-lens-data';
+import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
+import { ErrorState } from '@/components/common/EmptyState';
 import {
   Play, FileCode, Terminal, FolderTree, Plus, X,
   ChevronRight, ChevronDown, File, Folder, FolderOpen,
@@ -580,6 +583,9 @@ function generateScriptOutput(scriptType: ScriptType, code: string): { log: stri
 export default function CodeLensPage() {
   useLensNav('code');
 
+  // Persist scripts to backend
+  const { isLoading, isError, error, refetch, create: saveScript, items: savedScripts } = useLensData('code', 'script', { noSeed: true });
+
   const [files, setFiles] = useState<FileNode[]>(TEMPLATE_FILES);
   const [tabs, setTabs] = useState<Tab[]>([
     { id: 'main', name: 'untitled.js', language: 'javascript', content: DEFAULT_CODE, isDirty: false, scriptType: 'midi' },
@@ -599,10 +605,10 @@ export default function CodeLensPage() {
 
   const runScriptMutation = useMutation({
     mutationFn: async () => {
-      const res = await api.post('/api/ask', {
-        query: `Analyze this ${activeScriptType} script for music production and describe what it would produce:\n\n\`\`\`javascript\n${activeTab.content}\n\`\`\``,
-        mode: 'creative',
-      });
+      const res = await apiHelpers.chat.ask(
+        `Analyze this ${activeScriptType} script for music production and describe what it would produce:\n\n\`\`\`javascript\n${activeTab.content}\n\`\`\``,
+        'creative'
+      );
       return res.data;
     },
     onSuccess: () => {
@@ -637,6 +643,35 @@ export default function CodeLensPage() {
       )
     );
   }, [activeTabId]);
+
+  const handleSave = useCallback(async () => {
+    const tab = tabs.find(t => t.id === activeTabId);
+    if (!tab) return;
+    try {
+      await saveScript({
+        title: tab.name,
+        data: { content: tab.content, language: tab.language, scriptType: tab.scriptType },
+        meta: { tags: ['script', tab.scriptType], status: 'active' },
+      });
+      setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, isDirty: false } : t));
+    } catch (err) {
+      console.error('[Code] Save failed:', err);
+    }
+  }, [tabs, activeTabId, saveScript]);
+
+  const handleNewTab = useCallback(() => {
+    const id = `new-${Date.now()}`;
+    const newTab: Tab = {
+      id,
+      name: `script_${savedScripts.length + tabs.length}.js`,
+      language: 'javascript',
+      content: `// New ${SCRIPT_TYPES.find(s => s.id === activeScriptType)?.name || 'Script'}\n// Start writing your code here\n`,
+      isDirty: false,
+      scriptType: activeScriptType,
+    };
+    setTabs(prev => [...prev, newTab]);
+    setActiveTabId(id);
+  }, [activeScriptType, savedScripts.length, tabs.length]);
 
   const closeTab = (tabId: string) => {
     if (tabs.length === 1) return;
@@ -723,6 +758,25 @@ export default function CodeLensPage() {
     );
   };
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <ErrorState error={error?.message} onRetry={refetch} />
+      </div>
+    );
+  }
+
   return (
     <div className={`flex flex-col ${isFullscreen ? 'fixed inset-0 z-50 bg-lattice-deep' : 'h-full'}`}>
       {/* Header */}
@@ -801,10 +855,10 @@ export default function CodeLensPage() {
                 <div className="p-2 border-b border-lattice-border flex items-center justify-between">
                   <span className="text-xs font-semibold text-gray-400 uppercase">Templates</span>
                   <div className="flex items-center gap-1">
-                    <button className="p-1 rounded hover:bg-lattice-elevated text-gray-400 opacity-50 cursor-not-allowed" title="New file (not yet wired)" disabled>
+                    <button onClick={handleNewTab} className="p-1 rounded hover:bg-lattice-elevated text-gray-400 hover:text-white transition-colors" title="New script">
                       <Plus className="w-4 h-4" />
                     </button>
-                    <button className="p-1 rounded hover:bg-lattice-elevated text-gray-400 opacity-50 cursor-not-allowed" title="Folder management (not yet wired)" disabled>
+                    <button onClick={() => setShowFileTree(!showFileTree)} className="p-1 rounded hover:bg-lattice-elevated text-gray-400 hover:text-white transition-colors" title="Toggle file tree">
                       <FolderTree className="w-4 h-4" />
                     </button>
                   </div>
@@ -860,7 +914,7 @@ export default function CodeLensPage() {
               ))}
             </div>
 
-            <button className="p-1.5 rounded hover:bg-lattice-elevated text-gray-400 flex-shrink-0 opacity-50 cursor-not-allowed" title="New tab (not yet wired)" disabled>
+            <button onClick={handleNewTab} className="p-1.5 rounded hover:bg-lattice-elevated text-gray-400 hover:text-white flex-shrink-0 transition-colors" title="New tab">
               <Plus className="w-4 h-4" />
             </button>
           </div>
@@ -878,7 +932,7 @@ export default function CodeLensPage() {
                   <span>{activeTab.content.split('\n').length} lines</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <button className="p-1 rounded hover:bg-lattice-elevated text-gray-400 opacity-50 cursor-not-allowed" title="Save (not yet wired)" disabled>
+                  <button onClick={handleSave} className={cn('p-1 rounded hover:bg-lattice-elevated transition-colors', activeTab.isDirty ? 'text-neon-blue' : 'text-gray-400')} title="Save script (persists to backend)">
                     <Save className="w-4 h-4" />
                   </button>
                   <button className="p-1 rounded hover:bg-lattice-elevated text-gray-400" title="Copy to clipboard"

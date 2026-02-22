@@ -767,6 +767,18 @@ export default function NonprofitLensPage() {
     ],
   };
 
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   // Error state
   if (isError) {
     return (
@@ -2009,10 +2021,10 @@ export default function NonprofitLensPage() {
                         <button onClick={() => handleAction('donor-retention-report', detailItem.id)} className={cn(ds.btnSmall, ds.btnSecondary)}>
                           <RefreshCw className="w-3 h-3" /> Retention Report
                         </button>
-                        <button className={cn(ds.btnSmall, ds.btnSecondary)}>
+                        <button onClick={() => handleAction('send-acknowledgment', detailItem.id)} className={cn(ds.btnSmall, ds.btnSecondary)}>
                           <Mail className="w-3 h-3" /> Send Acknowledgment
                         </button>
-                        <button className={cn(ds.btnSmall, ds.btnSecondary)}>
+                        <button onClick={() => handleAction('view-giving-history', detailItem.id)} className={cn(ds.btnSmall, ds.btnSecondary)}>
                           <Eye className="w-3 h-3" /> View Giving History
                         </button>
                       </>
@@ -2022,7 +2034,7 @@ export default function NonprofitLensPage() {
                         <button onClick={() => handleAction('grant-deadline-check', detailItem.id)} className={cn(ds.btnSmall, ds.btnSecondary)}>
                           <CalendarClock className="w-3 h-3" /> Check Deadlines
                         </button>
-                        <button className={cn(ds.btnSmall, ds.btnSecondary)}>
+                        <button onClick={() => handleAction('export-grant-report', detailItem.id)} className={cn(ds.btnSmall, ds.btnSecondary)}>
                           <Download className="w-3 h-3" /> Export Report
                         </button>
                       </>

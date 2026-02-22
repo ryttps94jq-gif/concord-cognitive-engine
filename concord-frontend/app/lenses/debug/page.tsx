@@ -2,17 +2,31 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import { useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import { Terminal, Eye, RefreshCw, Play, Database } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 
 export default function DebugLensPage() {
   useLensNav('debug');
   const [activeTab, setActiveTab] = useState<'status' | 'events' | 'test'>('status');
+  const [debugOutput, setDebugOutput] = useState<string[]>(['$ concord debug', 'Ready. Type command or click button above.']);
+  const debugCmd = useMutation({
+    mutationFn: async (cmd: string) => {
+      setDebugOutput(prev => [...prev, `$ ${cmd}...`]);
+      if (cmd === 'tick') return apiHelpers.bridge.heartbeatTick();
+      if (cmd === 'organs') return apiHelpers.guidance.health();
+      if (cmd === 'invariants') return apiHelpers.emergent.status();
+      if (cmd === 'growth') return apiHelpers.pipeline.metrics();
+      return api.get('/api/status');
+    },
+    onSuccess: (res) => setDebugOutput(prev => [...prev, JSON.stringify(res.data, null, 2).slice(0, 500)]),
+    onError: (err) => setDebugOutput(prev => [...prev, `Error: ${err instanceof Error ? err.message : 'Unknown'}`]),
+  });
 
   // Backend: GET /api/status
-  const { data: status, refetch: refetchStatus, isError: isError, error: error,} = useQuery({
+  const { data: status, isLoading, refetch: refetchStatus, isError: isError, error: error,} = useQuery({
     queryKey: ['status'],
     queryFn: () => api.get('/api/status').then((r) => r.data),
   });
@@ -29,6 +43,17 @@ export default function DebugLensPage() {
     queryFn: () => api.get('/api/jobs/status').then((r) => r.data),
   });
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2 || isError3) {
     return (
@@ -136,22 +161,23 @@ export default function DebugLensPage() {
           </h2>
           <div className="space-y-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <button className="lens-card text-center hover:border-neon-green">
+              <button onClick={() => debugCmd.mutate('tick')} disabled={debugCmd.isPending} className="lens-card text-center hover:border-neon-green">
                 <p className="text-sm font-medium">Tick Kernel</p>
               </button>
-              <button className="lens-card text-center hover:border-neon-blue">
+              <button onClick={() => debugCmd.mutate('organs')} disabled={debugCmd.isPending} className="lens-card text-center hover:border-neon-blue">
                 <p className="text-sm font-medium">Check Organs</p>
               </button>
-              <button className="lens-card text-center hover:border-neon-purple">
+              <button onClick={() => debugCmd.mutate('invariants')} disabled={debugCmd.isPending} className="lens-card text-center hover:border-neon-purple">
                 <p className="text-sm font-medium">Verify Invariants</p>
               </button>
-              <button className="lens-card text-center hover:border-neon-cyan">
+              <button onClick={() => debugCmd.mutate('growth')} disabled={debugCmd.isPending} className="lens-card text-center hover:border-neon-cyan">
                 <p className="text-sm font-medium">Sim Growth</p>
               </button>
             </div>
-            <div className="bg-lattice-void p-4 rounded-lg h-48 font-mono text-sm text-gray-400">
-              <p className="text-neon-green">$ concord debug</p>
-              <p>Ready. Type command or click button above.</p>
+            <div className="bg-lattice-void p-4 rounded-lg h-48 font-mono text-sm text-gray-400 overflow-y-auto">
+              {debugOutput.map((line, i) => (
+                <p key={i} className={line.startsWith('$') ? 'text-neon-green' : ''}>{line}</p>
+              ))}
               <p className="animate-pulse">_</p>
             </div>
           </div>

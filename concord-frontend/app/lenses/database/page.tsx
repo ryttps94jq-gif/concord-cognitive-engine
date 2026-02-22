@@ -4,7 +4,7 @@ import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
-import { api } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Database, Server, HardDrive, Cpu, RefreshCw, Play, CheckCircle, XCircle,
@@ -179,10 +179,10 @@ function buildDemoPerfSnapshots(): PerfSnapshot[] {
   const now = Date.now();
   return Array.from({ length: 20 }, (_, i) => ({
     timestamp: now - (19 - i) * 15_000,
-    heapUsed: 120 + Math.random() * 60,
-    queryRate: 20 + Math.random() * 80,
-    cacheHitRate: 70 + Math.random() * 28,
-    activeConns: Math.floor(3 + Math.random() * 12),
+    heapUsed: 0,
+    queryRate: 0,
+    cacheHitRate: 0,
+    activeConns: 0,
   }));
 }
 
@@ -311,7 +311,7 @@ export default function DatabaseLensPage() {
   useLensNav('database');
   const queryClient = useQueryClient();
 
-  const { isError: isError, error: error, refetch: refetch, items: _queryItems, create: _saveQuery } = useLensData('database', 'query', { seed: [] });
+  const { isLoading, isError: isError, error: error, refetch: refetch, items: queryItems, create: saveQuery } = useLensData('database', 'query', { seed: [] });
 
   // --- Tab state ---
   const [activeTab, setActiveTab] = useState<TabId>('query');
@@ -360,19 +360,19 @@ export default function DatabaseLensPage() {
 
   const { data: liveTables, isError: isError6, error: error6, refetch: refetch6,} = useQuery({
     queryKey: ['db-tables'],
-    queryFn: () => api.get('/api/db/tables').then(r => r.data),
+    queryFn: () => apiHelpers.lens.list('database', { type: 'table' }).then(r => r.data),
     retry: false,
   });
 
   const { data: liveIndexes, isError: isError7, error: error7, refetch: refetch7,} = useQuery({
     queryKey: ['db-indexes'],
-    queryFn: () => api.get('/api/db/indexes').then(r => r.data),
+    queryFn: () => apiHelpers.lens.list('database', { type: 'index' }).then(r => r.data),
     retry: false,
   });
 
-  // Merge live data with demo fallback
-  const tables: TableInfo[] = liveTables?.tables ?? FALLBACK_TABLES;
-  const indexes: IndexInfo[] = liveIndexes?.indexes ?? FALLBACK_INDEXES;
+  // Use live data only — no fake fallbacks
+  const tables: TableInfo[] = liveTables?.tables ?? [];
+  const indexes: IndexInfo[] = liveIndexes?.indexes ?? [];
 
   // Accumulate perf snapshots for time-series charts
   useEffect(() => {
@@ -381,9 +381,9 @@ export default function DatabaseLensPage() {
       const next: PerfSnapshot = {
         timestamp: Date.now(),
         heapUsed: perfMetrics.memory?.heapUsed ?? 0,
-        queryRate: perfMetrics.queryRate ?? (20 + Math.random() * 40),
-        cacheHitRate: perfMetrics.cache?.hitRate ?? (75 + Math.random() * 20),
-        activeConns: perfMetrics.connections?.active ?? Math.floor(3 + Math.random() * 8),
+        queryRate: perfMetrics.queryRate ?? 0,
+        cacheHitRate: perfMetrics.cache?.hitRate ?? 0,
+        activeConns: perfMetrics.connections?.active ?? 0,
       };
       const updated = [...prev, next];
       return updated.length > 30 ? updated.slice(-30) : updated;
@@ -407,27 +407,26 @@ export default function DatabaseLensPage() {
   });
 
   const executeQuery = useMutation({
-    mutationFn: (query: string) => api.post('/api/db/query', { sql: query }).then(r => r.data),
+    mutationFn: (query: string) => apiHelpers.graph.query(query).then(r => r.data),
     onSuccess: (data: QueryResult, query: string) => {
       setQueryResult(data);
       setResultPage(0);
       addToHistory(query, data.duration, data.rowCount, true);
     },
-    onError: (_err: unknown, query: string) => {
-      // Fallback to demo data when API is unavailable
-      setQueryResult({ ...FALLBACK_QUERY_RESULT, error: undefined });
+    onError: (err: unknown, query: string) => {
+      setQueryResult({ columns: [], rows: [], rowCount: 0, duration: 0, error: err instanceof Error ? err.message : 'Query execution failed' });
       setResultPage(0);
-      addToHistory(query, 12, FALLBACK_QUERY_RESULT.rowCount, true);
+      addToHistory(query, 0, 0, false);
     },
   });
 
   const addToHistory = useCallback((query: string, duration: number, rowCount: number, success: boolean) => {
     historyIdRef.current += 1;
-    setQueryHistory(prev => [
-      { id: historyIdRef.current, sql: query, timestamp: Date.now(), duration, rowCount, success },
-      ...prev.slice(0, 99),
-    ]);
-  }, []);
+    const entry = { id: historyIdRef.current, sql: query, timestamp: Date.now(), duration, rowCount, success };
+    setQueryHistory(prev => [entry, ...prev.slice(0, 99)]);
+    // Persist to lens data
+    saveQuery({ title: query.slice(0, 80), data: entry as unknown as Record<string, unknown> }).catch((err) => console.error('Failed to save query to history:', err instanceof Error ? err.message : err));
+  }, [saveQuery]);
 
   const runQuery = useCallback(() => {
     const trimmed = sql.trim();
@@ -489,6 +488,17 @@ export default function DatabaseLensPage() {
   // Render
   // =========================================================================
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2 || isError3 || isError4 || isError5 || isError6 || isError7) {
     return (
@@ -645,15 +655,19 @@ export default function DatabaseLensPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {paginatedRows.map((row, ri) => (
-                          <tr key={ri} className="border-b border-lattice-border/40 hover:bg-lattice-surface/60 transition-colors">
-                            {queryResult.columns.map(col => (
-                              <td key={col} className="px-3 py-2 text-gray-300 max-w-[300px] truncate font-mono text-xs">
-                                {row[col] === null ? <span className="text-gray-600 italic">NULL</span> : String(row[col])}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
+                        {paginatedRows.length === 0 ? (
+                          <tr><td colSpan={queryResult.columns.length} className="px-3 py-8 text-center text-gray-500">No rows returned</td></tr>
+                        ) : (
+                          paginatedRows.map((row, ri) => (
+                            <tr key={ri} className="border-b border-lattice-border/40 hover:bg-lattice-surface/60 transition-colors">
+                              {queryResult.columns.map(col => (
+                                <td key={col} className="px-3 py-2 text-gray-300 max-w-[300px] truncate font-mono text-xs">
+                                  {row[col] === null ? <span className="text-gray-600 italic">NULL</span> : String(row[col])}
+                                </td>
+                              ))}
+                            </tr>
+                          ))
+                        )}
                       </tbody>
                     </table>
                   </div>

@@ -23,7 +23,7 @@ export default function GroundingLensPage() {
   const [readingUnit, setReadingUnit] = useState('');
   const [groundDtuId, setGroundDtuId] = useState('');
 
-  const { data: status, isError: isError, error: error, refetch: refetch,} = useQuery({
+  const { data: status, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
     queryKey: ['grounding-status'],
     queryFn: () => apiHelpers.grounding.status().then((r) => r.data),
     refetchInterval: 10000,
@@ -53,11 +53,13 @@ export default function GroundingLensPage() {
       queryClient.invalidateQueries({ queryKey: ['grounding-readings'] });
       setReadingValue('');
     },
+    onError: (err) => console.error('addReading failed:', err instanceof Error ? err.message : err),
   });
 
   const groundDtu = useMutation({
     mutationFn: () => apiHelpers.grounding.ground(groundDtuId),
     onSuccess: () => setGroundDtuId(''),
+    onError: (err) => console.error('groundDtu failed:', err instanceof Error ? err.message : err),
   });
 
   const sensorList = sensors?.sensors || sensors || [];
@@ -65,6 +67,17 @@ export default function GroundingLensPage() {
   const statusInfo = status?.status || status || {};
   const contextInfo = context?.context || context || {};
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2 || isError3 || isError4) {
     return (

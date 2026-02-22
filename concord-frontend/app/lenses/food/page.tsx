@@ -21,8 +21,8 @@ import { ErrorState } from '@/components/common/EmptyState';
 // Types
 // ---------------------------------------------------------------------------
 
-type ModeTab = 'recipes' | 'menu' | 'inventory' | 'bookings' | 'batches' | 'shifts';
-type ArtifactType = 'Recipe' | 'Menu' | 'InventoryItem' | 'Booking' | 'Batch' | 'Shift';
+type ModeTab = 'recipes' | 'mealplan' | 'shopping' | 'nutrition' | 'pantry' | 'menu' | 'inventory' | 'bookings' | 'batches' | 'shifts';
+type ArtifactType = 'Recipe' | 'MealPlan' | 'ShoppingItem' | 'PantryItem' | 'Menu' | 'InventoryItem' | 'Booking' | 'Batch' | 'Shift';
 type Status = 'prep' | 'active' | '86d' | 'seasonal' | 'archived';
 type MenuQuadrant = 'star' | 'puzzle' | 'plowhorse' | 'dog';
 type WasteReason = 'expired' | 'spoiled' | 'overproduction' | 'dropped' | 'other';
@@ -41,8 +41,13 @@ interface FoodArtifact {
   prepTime?: number;
   cookTime?: number;
   ingredients?: { item: string; qty: string; unit: string; cost: number }[];
+  instructions?: string[];
   allergens?: string[];
   dietary?: string[];
+  calories?: number;
+  protein?: number;
+  carbs?: number;
+  fat?: number;
   section?: string;
   menuDate?: string;
   popularity?: number;
@@ -72,6 +77,18 @@ interface FoodArtifact {
   shiftEnd?: string;
   station?: string;
   hourlyRate?: number;
+  // Meal Plan fields
+  day?: string;
+  mealType?: string;
+  recipeRef?: string;
+  // Shopping List fields
+  checked?: boolean;
+  quantity?: number;
+  shoppingUnit?: string;
+  shoppingCategory?: string;
+  // Pantry fields
+  purchaseDate?: string;
+  location?: string;
 }
 
 interface WasteEntry {
@@ -121,6 +138,10 @@ interface PrepItem {
 
 const MODE_TABS: { id: ModeTab; label: string; icon: typeof ChefHat; artifactType: ArtifactType }[] = [
   { id: 'recipes', label: 'Recipes', icon: ChefHat, artifactType: 'Recipe' },
+  { id: 'mealplan', label: 'Meal Plan', icon: CalendarDays, artifactType: 'MealPlan' },
+  { id: 'shopping', label: 'Shopping', icon: ShoppingCart, artifactType: 'ShoppingItem' },
+  { id: 'nutrition', label: 'Nutrition', icon: Flame, artifactType: 'Recipe' },
+  { id: 'pantry', label: 'Pantry', icon: Package, artifactType: 'PantryItem' },
   { id: 'menu', label: 'Menu', icon: UtensilsCrossed, artifactType: 'Menu' },
   { id: 'inventory', label: 'Inventory', icon: Warehouse, artifactType: 'InventoryItem' },
   { id: 'bookings', label: 'Bookings', icon: CalendarClock, artifactType: 'Booking' },
@@ -147,7 +168,10 @@ const WASTE_REASONS: { value: WasteReason; label: string }[] = [
   { value: 'dropped', label: 'Dropped/Damaged' },
   { value: 'other', label: 'Other' },
 ];
-const _DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const MEAL_TYPES = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
+const SHOPPING_CATEGORIES = ['Produce', 'Dairy', 'Meat & Seafood', 'Bakery', 'Frozen', 'Canned', 'Dry Goods', 'Beverages', 'Condiments', 'Snacks', 'Other'];
+const PANTRY_LOCATIONS = ['Refrigerator', 'Freezer', 'Pantry Shelf', 'Spice Rack', 'Counter', 'Root Cellar', 'Other'];
 
 const seedData: { title: string; data: Record<string, unknown> }[] = [];
 
@@ -192,11 +216,7 @@ export default function FoodLensPage() {
   const [showSupplierCompare, setShowSupplierCompare] = useState(false);
 
   // Waste log state
-  const [wasteLog, setWasteLog] = useState<WasteEntry[]>([
-    { id: '1', item: 'Mixed Greens', qty: 3, unit: 'lb', reason: 'expired', cost: 8.97, date: '2026-02-11', notes: 'Past use-by date' },
-    { id: '2', item: 'Salmon Filet', qty: 2, unit: 'lb', reason: 'spoiled', cost: 23.98, date: '2026-02-10', notes: 'Temp abuse in walk-in' },
-    { id: '3', item: 'Bread Rolls', qty: 12, unit: 'ea', reason: 'overproduction', cost: 6.00, date: '2026-02-10', notes: 'Over-prepped for brunch' },
-  ]);
+  const [wasteLog, setWasteLog] = useState<WasteEntry[]>([]);
   const [wasteItemName, setWasteItemName] = useState('');
   const [wasteQty, setWasteQty] = useState('');
   const [wasteUnit, _setWasteUnit] = useState('lb');
@@ -206,20 +226,13 @@ export default function FoodLensPage() {
 
   // Table management state
   const [tables, setTables] = useState<TableInfo[]>(generateTables);
-  const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([
-    { id: 'w1', name: 'Johnson Party', partySize: 4, addedAt: '18:30', estimatedWait: 15, phone: '555-0101' },
-    { id: 'w2', name: 'Chen Family', partySize: 6, addedAt: '18:45', estimatedWait: 25, phone: '555-0202' },
-  ]);
+  const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([]);
   const [waitlistName, setWaitlistName] = useState('');
   const [waitlistParty, setWaitlistParty] = useState('2');
   const [waitlistPhone, setWaitlistPhone] = useState('');
 
   // Prep list state
-  const [prepItems, setPrepItems] = useState<PrepItem[]>([
-    { id: 'p1', item: 'Mise en place - Onion dice', recipe: 'French Onion Soup', qty: 10, unit: 'lb', station: 'Prep', assignedTo: '', completed: false },
-    { id: 'p2', item: 'Vinaigrette batch', recipe: 'House Salad', qty: 2, unit: 'gal', station: 'Cold/Garde Manger', assignedTo: '', completed: false },
-    { id: 'p3', item: 'Bread dough proof', recipe: 'Dinner Rolls', qty: 4, unit: 'batch', station: 'Pastry', assignedTo: '', completed: false },
-  ]);
+  const [prepItems, setPrepItems] = useState<PrepItem[]>([]);
   const [expectedCovers, setExpectedCovers] = useState('120');
 
   // Editor form state
@@ -260,6 +273,15 @@ export default function FoodLensPage() {
   const { items, isLoading, isError, error, refetch, create, update, remove } = useLensData<FoodArtifact>('food', activeArtifactType, {
     seed: seedData.filter(s => (s.data as Record<string, unknown>).type === activeArtifactType),
   });
+
+  // Additional hooks for cross-tab data
+  const { items: allRecipes } = useLensData<FoodArtifact>('food', 'Recipe', { noSeed: true });
+  const { items: mealPlanItems, create: createMealPlan, update: updateMealPlan, remove: removeMealPlan } = useLensData<FoodArtifact>('food', 'MealPlan', { noSeed: true });
+  const { items: shoppingItems, create: createShoppingItem, update: updateShoppingItem, remove: removeShoppingItem } = useLensData<FoodArtifact>('food', 'ShoppingItem', { noSeed: true });
+  const { items: pantryItems } = useLensData<FoodArtifact>('food', 'PantryItem', { noSeed: true });
+
+  // Shopping list state
+  const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
 
   const runAction = useRunArtifact('food');
 
@@ -323,7 +345,13 @@ export default function FoodLensPage() {
       cost: parseFloat(formCost) || 0, price: parseFloat(formPrice) || 0, notes: formNotes,
     };
     if (activeArtifactType === 'Recipe') {
-      Object.assign(base, { servings: parseInt(formServings) || 1, prepTime: parseInt(formPrepTime) || 0, cookTime: parseInt(formCookTime) || 0, section: formSection });
+      Object.assign(base, { servings: parseInt(formServings) || 1, prepTime: parseInt(formPrepTime) || 0, cookTime: parseInt(formCookTime) || 0, section: formSection, calories: parseFloat(formNotes.match(/cal:(\d+)/)?.[1] || '0') || 0 });
+    } else if (activeArtifactType === 'MealPlan') {
+      Object.assign(base, { day: formSection, mealType: formCategory, recipeRef: formNotes });
+    } else if (activeArtifactType === 'ShoppingItem') {
+      Object.assign(base, { shoppingCategory: formCategory, quantity: parseFloat(formCurrentStock) || 1, shoppingUnit: formUnit, checked: false });
+    } else if (activeArtifactType === 'PantryItem') {
+      Object.assign(base, { currentStock: parseFloat(formCurrentStock) || 0, unit: formUnit, expiryDate: formDateTime, location: formSupplier, purchaseDate: formShiftStart });
     } else if (activeArtifactType === 'Menu') {
       Object.assign(base, { section: formSection, popularity: parseInt(formPopularity) || 50, salesVolume: parseInt(formSalesVolume) || 0 });
     } else if (activeArtifactType === 'InventoryItem') {
@@ -1175,8 +1203,526 @@ export default function FoodLensPage() {
   // Library (item list)
   // ---------------------------------------------------------------------------
 
+  // ---------------------------------------------------------------------------
+  // Meal Planner (Mon-Sun, breakfast/lunch/dinner grid)
+  // ---------------------------------------------------------------------------
+
+  const getCurrentWeekDates = (): { day: string; date: string }[] => {
+    const now = new Date();
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+    return DAYS_OF_WEEK.map((day, i) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      return { day, date: d.toISOString().split('T')[0] };
+    });
+  };
+
+  const renderMealPlanner = () => {
+    const weekDates = getCurrentWeekDates();
+    const mealsByDayType: Record<string, Record<string, LensItem<FoodArtifact>[]>> = {};
+    DAYS_OF_WEEK.forEach(day => {
+      mealsByDayType[day] = {};
+      MEAL_TYPES.forEach(mt => { mealsByDayType[day][mt] = []; });
+    });
+    mealPlanItems.forEach(item => {
+      const d = item.data as unknown as FoodArtifact;
+      if (d.day && d.mealType && mealsByDayType[d.day]) {
+        const mt = d.mealType.charAt(0).toUpperCase() + d.mealType.slice(1);
+        if (mealsByDayType[d.day][mt]) mealsByDayType[d.day][mt].push(item);
+      }
+    });
+
+    const addMealQuick = (day: string, mealType: string) => {
+      setFormSection(day);
+      setFormCategory(mealType.toLowerCase());
+      openCreate();
+    };
+
+    return (
+      <div className="space-y-6">
+        <div className={ds.sectionHeader}>
+          <h2 className={cn(ds.heading2, 'flex items-center gap-2')}>
+            <CalendarDays className="w-5 h-5 text-neon-cyan" /> Weekly Meal Plan
+          </h2>
+          <div className="flex items-center gap-2">
+            <button onClick={() => handleAction('suggest_meals')} className={ds.btnSecondary}>
+              <Zap className="w-4 h-4" /> AI Suggest
+            </button>
+            <button onClick={openCreate} className={ds.btnPrimary}><Plus className="w-4 h-4" /> Add Meal</button>
+          </div>
+        </div>
+
+        {/* Weekly Grid */}
+        <div className="overflow-x-auto">
+          <div className="min-w-[900px]">
+            <div className="grid grid-cols-8 gap-1 mb-1">
+              <div className="p-2" />
+              {DAYS_OF_WEEK.map((day, i) => (
+                <div key={day} className="p-2 text-center">
+                  <p className="text-sm font-medium text-white">{day.slice(0, 3)}</p>
+                  <p className={ds.textMuted}>{weekDates[i]?.date.slice(5) || ''}</p>
+                </div>
+              ))}
+            </div>
+            {MEAL_TYPES.slice(0, 3).map(mealType => (
+              <div key={mealType} className="grid grid-cols-8 gap-1 mb-1">
+                <div className="p-2 flex items-center">
+                  <span className="text-sm text-gray-400">{mealType}</span>
+                </div>
+                {DAYS_OF_WEEK.map(day => {
+                  const meals = mealsByDayType[day]?.[mealType] || [];
+                  return (
+                    <div key={`${day}-${mealType}`}
+                      className={cn('p-2 rounded-lg border border-lattice-border bg-lattice-surface min-h-[70px]',
+                        'hover:border-neon-cyan/30 transition-colors cursor-pointer')}
+                      onClick={() => addMealQuick(day, mealType)}>
+                      {meals.length > 0 ? meals.map(m => {
+                        const md = m.data as unknown as FoodArtifact;
+                        return (
+                          <div key={m.id} className="text-xs p-1.5 rounded bg-neon-cyan/10 text-neon-cyan mb-1 truncate"
+                            onClick={e => { e.stopPropagation(); openEdit(m); }}>
+                            {m.title}
+                            {md.calories ? <span className="text-gray-500 ml-1">{md.calories}cal</span> : null}
+                          </div>
+                        );
+                      }) : (
+                        <Plus className="w-3 h-3 text-gray-600 mx-auto mt-4" />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Daily totals */}
+        <div className={ds.panel}>
+          <h3 className={cn(ds.heading3, 'mb-3')}>Daily Nutrition Totals</h3>
+          <div className="overflow-x-auto">
+            <div className="grid grid-cols-8 gap-2 min-w-[700px]">
+              <div className="text-sm text-gray-500" />
+              {DAYS_OF_WEEK.map(day => {
+                let totalCal = 0, totalProtein = 0, totalCarbs = 0, totalFat = 0;
+                MEAL_TYPES.forEach(mt => {
+                  (mealsByDayType[day]?.[mt] || []).forEach(m => {
+                    const md = m.data as unknown as FoodArtifact;
+                    totalCal += md.calories || 0;
+                    totalProtein += md.protein || 0;
+                    totalCarbs += md.carbs || 0;
+                    totalFat += md.fat || 0;
+                  });
+                });
+                return (
+                  <div key={day} className="text-center text-xs space-y-1">
+                    <p className="font-medium text-white">{day.slice(0, 3)}</p>
+                    <p className="text-orange-400">{totalCal} cal</p>
+                    <p className="text-blue-400">{totalProtein}g P</p>
+                    <p className="text-yellow-400">{totalCarbs}g C</p>
+                    <p className="text-red-400">{totalFat}g F</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Generate shopping list from meal plan */}
+        <div className={ds.panel}>
+          <div className={ds.sectionHeader}>
+            <h3 className={cn(ds.heading3, 'flex items-center gap-2')}><ShoppingCart className="w-5 h-5 text-green-400" /> Generate Shopping List</h3>
+            <button onClick={async () => {
+              const ingredients = new Map<string, { qty: number; unit: string }>();
+              mealPlanItems.forEach(item => {
+                const d = item.data as unknown as FoodArtifact;
+                if (d.recipeRef) {
+                  const recipe = allRecipes.find(r => r.title === d.recipeRef);
+                  if (recipe) {
+                    const rd = recipe.data as unknown as FoodArtifact;
+                    (rd.ingredients || []).forEach(ing => {
+                      const existing = ingredients.get(ing.item);
+                      if (existing) {
+                        existing.qty += parseFloat(ing.qty) || 1;
+                      } else {
+                        ingredients.set(ing.item, { qty: parseFloat(ing.qty) || 1, unit: ing.unit });
+                      }
+                    });
+                  }
+                }
+              });
+              for (const [name, info] of ingredients) {
+                const existing = shoppingItems.find(s => s.title === name);
+                if (!existing) {
+                  await createShoppingItem({
+                    title: name,
+                    data: { name, type: 'ShoppingItem', status: 'active', quantity: info.qty, shoppingUnit: info.unit, checked: false } as unknown as Partial<FoodArtifact>,
+                    meta: { status: 'active' },
+                  });
+                }
+              }
+            }} className={ds.btnPrimary}>
+              <ShoppingCart className="w-4 h-4" /> Auto-Generate from Meals
+            </button>
+          </div>
+          <p className={cn(ds.textMuted, 'mt-2')}>Generates a shopping list from all meal plan recipes and their ingredients.</p>
+        </div>
+      </div>
+    );
+  };
+
+  // ---------------------------------------------------------------------------
+  // Shopping List
+  // ---------------------------------------------------------------------------
+
+  const renderShoppingList = () => {
+    const toggleCheck = async (item: LensItem<FoodArtifact>) => {
+      const d = item.data as unknown as FoodArtifact;
+      const newChecked = !d.checked;
+      setCheckedItems(prev => {
+        const next = new Set(prev);
+        if (newChecked) next.add(item.id); else next.delete(item.id);
+        return next;
+      });
+      await updateShoppingItem(item.id, {
+        data: { ...d as unknown as Record<string, unknown>, checked: newChecked } as unknown as Partial<FoodArtifact>,
+        meta: { status: newChecked ? 'completed' : 'active' },
+      });
+    };
+
+    const byCategory: Record<string, LensItem<FoodArtifact>[]> = {};
+    shoppingItems.forEach(item => {
+      const d = item.data as unknown as FoodArtifact;
+      const cat = d.shoppingCategory || 'Other';
+      if (!byCategory[cat]) byCategory[cat] = [];
+      byCategory[cat].push(item);
+    });
+
+    const totalItems = shoppingItems.length;
+    const checkedCount = shoppingItems.filter(i => (i.data as unknown as FoodArtifact).checked || checkedItems.has(i.id)).length;
+
+    return (
+      <div className="space-y-6">
+        <div className={ds.sectionHeader}>
+          <div>
+            <h2 className={cn(ds.heading2, 'flex items-center gap-2')}>
+              <ShoppingCart className="w-5 h-5 text-green-400" /> Shopping List
+            </h2>
+            <p className={ds.textMuted}>{checkedCount}/{totalItems} items checked off</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={async () => {
+              const checked = shoppingItems.filter(i => (i.data as unknown as FoodArtifact).checked || checkedItems.has(i.id));
+              for (const item of checked) { await removeShoppingItem(item.id); }
+              setCheckedItems(new Set());
+            }} className={ds.btnSecondary}>
+              <Trash2 className="w-4 h-4" /> Clear Checked
+            </button>
+            <button onClick={openCreate} className={ds.btnPrimary}><Plus className="w-4 h-4" /> Add Item</button>
+          </div>
+        </div>
+
+        {/* Progress */}
+        <div className={ds.panel}>
+          <div className="flex items-center justify-between mb-2">
+            <span className={ds.textMuted}>Progress</span>
+            <span className={ds.textMono}>{checkedCount}/{totalItems}</span>
+          </div>
+          <div className="h-3 bg-lattice-elevated rounded-full overflow-hidden">
+            <div className="h-full bg-green-400 rounded-full transition-all" style={{ width: `${totalItems > 0 ? (checkedCount / totalItems) * 100 : 0}%` }} />
+          </div>
+        </div>
+
+        {/* By category */}
+        {Object.keys(byCategory).length === 0 ? (
+          <div className={cn(ds.panel, 'text-center py-12')}>
+            <ShoppingCart className="w-10 h-10 text-gray-600 mx-auto mb-3" />
+            <p className={ds.textMuted}>No shopping items. Add items or generate from your meal plan.</p>
+          </div>
+        ) : (
+          Object.entries(byCategory).sort((a, b) => a[0].localeCompare(b[0])).map(([cat, catItems]) => (
+            <div key={cat} className={ds.panel}>
+              <h3 className={cn(ds.heading3, 'mb-3')}>{cat} <span className={ds.badge('gray-400')}>{catItems.length}</span></h3>
+              <div className="space-y-2">
+                {catItems.map(item => {
+                  const d = item.data as unknown as FoodArtifact;
+                  const isChecked = d.checked || checkedItems.has(item.id);
+                  return (
+                    <div key={item.id} className={cn('flex items-center gap-3 p-3 rounded-lg transition-colors', isChecked ? 'bg-green-400/10 opacity-60' : 'bg-lattice-elevated/50')}>
+                      <button onClick={() => toggleCheck(item)} className={cn('w-5 h-5 rounded border-2 flex items-center justify-center transition-colors', isChecked ? 'bg-green-400 border-green-400' : 'border-gray-500 hover:border-neon-cyan')}>
+                        {isChecked && <CheckCircle2 className="w-3 h-3 text-black" />}
+                      </button>
+                      <div className="flex-1">
+                        <p className={cn('font-medium', isChecked && 'line-through text-gray-500')}>{item.title}</p>
+                        <p className={ds.textMuted}>{d.quantity || 1} {d.shoppingUnit || 'ea'}</p>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button className={cn(ds.btnGhost, ds.btnSmall)} onClick={() => openEdit(item)}><Edit2 className="w-3 h-3" /></button>
+                        <button className={cn(ds.btnSmall, 'text-red-400')} onClick={() => removeShoppingItem(item.id)}><Trash2 className="w-3 h-3" /></button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    );
+  };
+
+  // ---------------------------------------------------------------------------
+  // Nutrition Tracker
+  // ---------------------------------------------------------------------------
+
+  const renderNutritionTracker = () => {
+    const recipesWithNutrition = allRecipes.filter(r => {
+      const d = r.data as unknown as FoodArtifact;
+      return d.calories || d.protein || d.carbs || d.fat;
+    });
+
+    // Daily totals from meal plan
+    const dailyTotals: Record<string, { calories: number; protein: number; carbs: number; fat: number }> = {};
+    DAYS_OF_WEEK.forEach(day => { dailyTotals[day] = { calories: 0, protein: 0, carbs: 0, fat: 0 }; });
+    mealPlanItems.forEach(item => {
+      const d = item.data as unknown as FoodArtifact;
+      if (d.day && dailyTotals[d.day]) {
+        dailyTotals[d.day].calories += d.calories || 0;
+        dailyTotals[d.day].protein += d.protein || 0;
+        dailyTotals[d.day].carbs += d.carbs || 0;
+        dailyTotals[d.day].fat += d.fat || 0;
+      }
+    });
+
+    const weekAvg = {
+      calories: DAYS_OF_WEEK.reduce((s, d) => s + dailyTotals[d].calories, 0) / 7,
+      protein: DAYS_OF_WEEK.reduce((s, d) => s + dailyTotals[d].protein, 0) / 7,
+      carbs: DAYS_OF_WEEK.reduce((s, d) => s + dailyTotals[d].carbs, 0) / 7,
+      fat: DAYS_OF_WEEK.reduce((s, d) => s + dailyTotals[d].fat, 0) / 7,
+    };
+
+    return (
+      <div className="space-y-6">
+        <h2 className={cn(ds.heading2, 'flex items-center gap-2')}>
+          <Flame className="w-5 h-5 text-orange-400" /> Nutrition Tracker
+        </h2>
+
+        {/* Weekly averages */}
+        <div className={ds.grid4}>
+          <div className={cn(ds.panel, 'border-l-4 border-l-orange-400')}>
+            <p className={ds.textMuted}>Avg Calories/Day</p>
+            <p className="text-2xl font-bold text-orange-400">{Math.round(weekAvg.calories)}</p>
+          </div>
+          <div className={cn(ds.panel, 'border-l-4 border-l-blue-400')}>
+            <p className={ds.textMuted}>Avg Protein/Day</p>
+            <p className="text-2xl font-bold text-blue-400">{Math.round(weekAvg.protein)}g</p>
+          </div>
+          <div className={cn(ds.panel, 'border-l-4 border-l-yellow-400')}>
+            <p className={ds.textMuted}>Avg Carbs/Day</p>
+            <p className="text-2xl font-bold text-yellow-400">{Math.round(weekAvg.carbs)}g</p>
+          </div>
+          <div className={cn(ds.panel, 'border-l-4 border-l-red-400')}>
+            <p className={ds.textMuted}>Avg Fat/Day</p>
+            <p className="text-2xl font-bold text-red-400">{Math.round(weekAvg.fat)}g</p>
+          </div>
+        </div>
+
+        {/* Daily breakdown */}
+        <div className={ds.panel}>
+          <h3 className={cn(ds.heading3, 'mb-4')}>Daily Breakdown</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-lattice-border text-gray-400">
+                  <th className="text-left py-2 px-3">Day</th>
+                  <th className="text-right py-2 px-3">Calories</th>
+                  <th className="text-right py-2 px-3">Protein</th>
+                  <th className="text-right py-2 px-3">Carbs</th>
+                  <th className="text-right py-2 px-3">Fat</th>
+                  <th className="text-right py-2 px-3">Meals</th>
+                </tr>
+              </thead>
+              <tbody>
+                {DAYS_OF_WEEK.map(day => {
+                  const t = dailyTotals[day];
+                  const mealCount = mealPlanItems.filter(m => (m.data as unknown as FoodArtifact).day === day).length;
+                  return (
+                    <tr key={day} className="border-b border-lattice-border/50 hover:bg-lattice-elevated/30">
+                      <td className="py-2 px-3 font-medium text-white">{day}</td>
+                      <td className="py-2 px-3 text-right font-mono text-orange-400">{t.calories}</td>
+                      <td className="py-2 px-3 text-right font-mono text-blue-400">{t.protein}g</td>
+                      <td className="py-2 px-3 text-right font-mono text-yellow-400">{t.carbs}g</td>
+                      <td className="py-2 px-3 text-right font-mono text-red-400">{t.fat}g</td>
+                      <td className="py-2 px-3 text-right text-gray-400">{mealCount}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Recipes with nutrition info */}
+        <div className={ds.panel}>
+          <h3 className={cn(ds.heading3, 'mb-4')}>Recipe Nutrition Database</h3>
+          {recipesWithNutrition.length === 0 ? (
+            <p className={ds.textMuted}>Add nutrition info (calories, protein, carbs, fat) to your recipes to see them here.</p>
+          ) : (
+            <div className="space-y-2">
+              {recipesWithNutrition.map(recipe => {
+                const d = recipe.data as unknown as FoodArtifact;
+                return (
+                  <div key={recipe.id} className="flex items-center justify-between p-3 rounded-lg bg-lattice-elevated/50 hover:bg-lattice-elevated cursor-pointer" onClick={() => openEdit(recipe)}>
+                    <div>
+                      <p className="font-medium text-white">{recipe.title}</p>
+                      <p className={ds.textMuted}>{d.servings || 1} servings - {d.category}</p>
+                    </div>
+                    <div className="flex items-center gap-4 text-xs font-mono">
+                      <span className="text-orange-400">{d.calories || 0} cal</span>
+                      <span className="text-blue-400">{d.protein || 0}g P</span>
+                      <span className="text-yellow-400">{d.carbs || 0}g C</span>
+                      <span className="text-red-400">{d.fat || 0}g F</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // ---------------------------------------------------------------------------
+  // Pantry Inventory
+  // ---------------------------------------------------------------------------
+
+  const renderPantry = () => {
+    const byLocation: Record<string, LensItem<FoodArtifact>[]> = {};
+    pantryItems.forEach(item => {
+      const d = item.data as unknown as FoodArtifact;
+      const loc = d.location || 'Pantry Shelf';
+      if (!byLocation[loc]) byLocation[loc] = [];
+      byLocation[loc].push(item);
+    });
+
+    const expiringItems = pantryItems.filter(item => {
+      const d = item.data as unknown as FoodArtifact;
+      if (!d.expiryDate) return false;
+      const daysLeft = Math.ceil((new Date(d.expiryDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+      return daysLeft >= 0 && daysLeft <= 7;
+    });
+
+    const expiredItems = pantryItems.filter(item => {
+      const d = item.data as unknown as FoodArtifact;
+      if (!d.expiryDate) return false;
+      return new Date(d.expiryDate) < new Date();
+    });
+
+    return (
+      <div className="space-y-6">
+        <div className={ds.sectionHeader}>
+          <h2 className={cn(ds.heading2, 'flex items-center gap-2')}>
+            <Package className="w-5 h-5 text-neon-cyan" /> Pantry Inventory
+          </h2>
+          <button onClick={openCreate} className={ds.btnPrimary}><Plus className="w-4 h-4" /> Add Item</button>
+        </div>
+
+        {/* Alerts */}
+        <div className={ds.grid3}>
+          <div className={cn(ds.panel, 'border-l-4 border-l-neon-cyan')}>
+            <p className={ds.textMuted}>Total Items</p>
+            <p className={ds.heading2}>{pantryItems.length}</p>
+          </div>
+          <div className={cn(ds.panel, 'border-l-4 border-l-yellow-400')}>
+            <p className={ds.textMuted}>Expiring Soon</p>
+            <p className="text-2xl font-bold text-yellow-400">{expiringItems.length}</p>
+            <p className={ds.textMuted}>within 7 days</p>
+          </div>
+          <div className={cn(ds.panel, 'border-l-4 border-l-red-400')}>
+            <p className={ds.textMuted}>Expired</p>
+            <p className="text-2xl font-bold text-red-400">{expiredItems.length}</p>
+          </div>
+        </div>
+
+        {/* Expiring alerts */}
+        {(expiringItems.length > 0 || expiredItems.length > 0) && (
+          <div className={cn(ds.panel, 'border-yellow-400/30')}>
+            <h3 className={cn(ds.heading3, 'mb-3 flex items-center gap-2')}>
+              <AlertTriangle className="w-5 h-5 text-yellow-400" /> Expiration Alerts
+            </h3>
+            <div className="space-y-2">
+              {[...expiredItems, ...expiringItems].map(item => {
+                const d = item.data as unknown as FoodArtifact;
+                const daysLeft = Math.ceil((new Date(d.expiryDate || '').getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                return (
+                  <div key={item.id} className={cn('flex items-center justify-between p-3 rounded-lg', daysLeft < 0 ? 'bg-red-500/10 border border-red-500/20' : 'bg-yellow-500/10 border border-yellow-500/20')}>
+                    <div>
+                      <p className="text-sm font-medium text-white">{item.title}</p>
+                      <p className={ds.textMuted}>{d.currentStock} {d.unit} in {d.location}</p>
+                    </div>
+                    <span className={cn('text-xs font-medium', daysLeft < 0 ? 'text-red-400' : 'text-yellow-400')}>
+                      {daysLeft < 0 ? `Expired ${Math.abs(daysLeft)}d ago` : `${daysLeft}d left`}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* By location */}
+        {Object.keys(byLocation).length === 0 ? (
+          <div className={cn(ds.panel, 'text-center py-12')}>
+            <Package className="w-10 h-10 text-gray-600 mx-auto mb-3" />
+            <p className={ds.textMuted}>No pantry items. Track what&apos;s in stock with expiration dates.</p>
+          </div>
+        ) : (
+          Object.entries(byLocation).map(([loc, locItems]) => (
+            <div key={loc} className={ds.panel}>
+              <h3 className={cn(ds.heading3, 'mb-3 flex items-center gap-2')}>
+                <Warehouse className="w-4 h-4 text-neon-cyan" /> {loc}
+                <span className={ds.badge('gray-400')}>{locItems.length}</span>
+              </h3>
+              <div className="space-y-2">
+                {locItems.map(item => {
+                  const d = item.data as unknown as FoodArtifact;
+                  const daysLeft = d.expiryDate ? Math.ceil((new Date(d.expiryDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : 999;
+                  return (
+                    <div key={item.id} className="flex items-center justify-between p-3 rounded-lg bg-lattice-elevated/50 hover:bg-lattice-elevated cursor-pointer" onClick={() => openEdit(item)}>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-white">{item.title}</p>
+                        <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
+                          <span>{d.currentStock || 0} {d.unit || 'ea'}</span>
+                          {d.expiryDate && <span className={cn(daysLeft <= 7 ? 'text-yellow-400' : daysLeft <= 0 ? 'text-red-400' : '')}>Exp: {d.expiryDate}</span>}
+                          {d.purchaseDate && <span>Bought: {d.purchaseDate}</span>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button className={cn(ds.btnGhost, ds.btnSmall)} onClick={e => { e.stopPropagation(); openEdit(item); }}><Edit2 className="w-3 h-3" /></button>
+                        <button className={cn(ds.btnSmall, 'text-red-400')} onClick={e => { e.stopPropagation(); remove(item.id); }}><Trash2 className="w-3 h-3" /></button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    );
+  };
+
+  // ---------------------------------------------------------------------------
+  // Library (item list)
+  // ---------------------------------------------------------------------------
+
   const renderLibrary = () => {
     // Sub-view routing for each tab
+    if (activeTab === 'mealplan') return renderMealPlanner();
+    if (activeTab === 'shopping') return renderShoppingList();
+    if (activeTab === 'nutrition') return renderNutritionTracker();
+    if (activeTab === 'pantry') return renderPantry();
     if (activeTab === 'menu' && showMenuMatrix) return renderMenuMatrix();
     if (activeTab === 'inventory' && showWasteLog) return renderWasteLog();
     if (activeTab === 'inventory' && showCountSheet) return renderCountSheet();
@@ -1290,6 +1836,14 @@ export default function FoodLensPage() {
                         <div className="flex items-center gap-1 flex-wrap mt-1">
                           <Leaf className="w-3 h-3 text-green-400" />
                           {d.dietary.map(df => <span key={df} className={ds.badge('green-400')}>{df}</span>)}
+                        </div>
+                      )}
+                      {(d.calories || d.protein || d.carbs || d.fat) && (
+                        <div className="flex items-center gap-3 mt-2 text-xs font-mono">
+                          {d.calories ? <span className="text-orange-400">{d.calories} cal</span> : null}
+                          {d.protein ? <span className="text-blue-400">{d.protein}g P</span> : null}
+                          {d.carbs ? <span className="text-yellow-400">{d.carbs}g C</span> : null}
+                          {d.fat ? <span className="text-red-400">{d.fat}g F</span> : null}
                         </div>
                       )}
                       <div className="flex items-center gap-2 mt-2">
@@ -1435,20 +1989,125 @@ export default function FoodLensPage() {
               )}
 
               {activeTab === 'recipes' && (
-                <div className={ds.grid3}>
-                  <div>
-                    <label className={ds.label}>Servings</label>
-                    <input type="number" value={formServings} onChange={e => setFormServings(e.target.value)} className={ds.input} />
+                <>
+                  <div className={ds.grid3}>
+                    <div>
+                      <label className={ds.label}>Servings</label>
+                      <input type="number" value={formServings} onChange={e => setFormServings(e.target.value)} className={ds.input} />
+                    </div>
+                    <div>
+                      <label className={ds.label}>Prep Time (min)</label>
+                      <input type="number" value={formPrepTime} onChange={e => setFormPrepTime(e.target.value)} className={ds.input} />
+                    </div>
+                    <div>
+                      <label className={ds.label}>Cook Time (min)</label>
+                      <input type="number" value={formCookTime} onChange={e => setFormCookTime(e.target.value)} className={ds.input} />
+                    </div>
+                  </div>
+                  <div className={ds.panel}>
+                    <label className={cn(ds.label, 'mb-2 text-orange-400')}>Nutrition per Serving</label>
+                    <div className={ds.grid4}>
+                      <div>
+                        <label className={ds.label}>Calories</label>
+                        <input type="number" className={ds.input} placeholder="0" />
+                      </div>
+                      <div>
+                        <label className={ds.label}>Protein (g)</label>
+                        <input type="number" className={ds.input} placeholder="0" />
+                      </div>
+                      <div>
+                        <label className={ds.label}>Carbs (g)</label>
+                        <input type="number" className={ds.input} placeholder="0" />
+                      </div>
+                      <div>
+                        <label className={ds.label}>Fat (g)</label>
+                        <input type="number" className={ds.input} placeholder="0" />
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {activeTab === 'mealplan' && (
+                <>
+                  <div className={ds.grid2}>
+                    <div>
+                      <label className={ds.label}>Day</label>
+                      <select value={formSection} onChange={e => setFormSection(e.target.value)} className={ds.select}>
+                        {DAYS_OF_WEEK.map(d => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={ds.label}>Meal Type</label>
+                      <select value={formCategory} onChange={e => setFormCategory(e.target.value)} className={ds.select}>
+                        {MEAL_TYPES.map(mt => <option key={mt} value={mt.toLowerCase()}>{mt}</option>)}
+                      </select>
+                    </div>
                   </div>
                   <div>
-                    <label className={ds.label}>Prep Time (min)</label>
-                    <input type="number" value={formPrepTime} onChange={e => setFormPrepTime(e.target.value)} className={ds.input} />
+                    <label className={ds.label}>Recipe Reference</label>
+                    <select className={ds.select} value={formNotes} onChange={e => setFormNotes(e.target.value)}>
+                      <option value="">Select a recipe...</option>
+                      {allRecipes.map(r => <option key={r.id} value={r.title}>{r.title}</option>)}
+                    </select>
                   </div>
-                  <div>
-                    <label className={ds.label}>Cook Time (min)</label>
-                    <input type="number" value={formCookTime} onChange={e => setFormCookTime(e.target.value)} className={ds.input} />
+                </>
+              )}
+
+              {activeTab === 'shopping' && (
+                <>
+                  <div className={ds.grid3}>
+                    <div>
+                      <label className={ds.label}>Quantity</label>
+                      <input type="number" value={formCurrentStock} onChange={e => setFormCurrentStock(e.target.value)} className={ds.input} placeholder="1" />
+                    </div>
+                    <div>
+                      <label className={ds.label}>Unit</label>
+                      <select value={formUnit} onChange={e => setFormUnit(e.target.value)} className={ds.select}>
+                        {['ea', 'lb', 'oz', 'kg', 'g', 'gal', 'qt', 'pt', 'bag', 'bunch', 'can'].map(u => <option key={u} value={u}>{u}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={ds.label}>Category</label>
+                      <select value={formCategory} onChange={e => setFormCategory(e.target.value)} className={ds.select}>
+                        {SHOPPING_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
                   </div>
-                </div>
+                </>
+              )}
+
+              {activeTab === 'pantry' && (
+                <>
+                  <div className={ds.grid3}>
+                    <div>
+                      <label className={ds.label}>Quantity</label>
+                      <input type="number" value={formCurrentStock} onChange={e => setFormCurrentStock(e.target.value)} className={ds.input} placeholder="0" />
+                    </div>
+                    <div>
+                      <label className={ds.label}>Unit</label>
+                      <select value={formUnit} onChange={e => setFormUnit(e.target.value)} className={ds.select}>
+                        {['ea', 'lb', 'oz', 'kg', 'g', 'gal', 'qt', 'pt', 'cs', 'bag', 'bottle', 'box', 'can'].map(u => <option key={u} value={u}>{u}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={ds.label}>Location</label>
+                      <select value={formSupplier} onChange={e => setFormSupplier(e.target.value)} className={ds.select}>
+                        {PANTRY_LOCATIONS.map(l => <option key={l} value={l}>{l}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className={ds.grid2}>
+                    <div>
+                      <label className={ds.label}>Expiry Date</label>
+                      <input type="date" value={formDateTime} onChange={e => setFormDateTime(e.target.value)} className={ds.input} />
+                    </div>
+                    <div>
+                      <label className={ds.label}>Purchase Date</label>
+                      <input type="date" value={formShiftStart} onChange={e => setFormShiftStart(e.target.value)} className={ds.input} />
+                    </div>
+                  </div>
+                </>
               )}
 
               {activeTab === 'menu' && (
@@ -1766,6 +2425,17 @@ export default function FoodLensPage() {
   // ---------------------------------------------------------------------------
   // Main render
   // ---------------------------------------------------------------------------
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError) {
     return (

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import { useLensNav } from '@/hooks/useLensNav';
 import { Upload, FileJson, Database, Check, AlertTriangle, Loader2, FileText, Archive, RefreshCw } from 'lucide-react';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { apiHelpers } from '@/lib/api/client';
@@ -32,6 +33,7 @@ interface ValidationResult {
 }
 
 export default function ImportLens() {
+  useLensNav('import');
   // Fetch import job history from the backend via lens data API
   const {
     items: importJobItems,

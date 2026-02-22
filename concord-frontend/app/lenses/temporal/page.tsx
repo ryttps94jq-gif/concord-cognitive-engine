@@ -23,7 +23,7 @@ export default function TemporalLensPage() {
   const [frameEnd, setFrameEnd] = useState('');
   const [results, setResults] = useState<Record<string, unknown> | null>(null);
 
-  const { data: frames, isError: isError, error: error, refetch: refetch,} = useQuery({
+  const { data: frames, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
     queryKey: ['temporal-frames'],
     queryFn: () => apiHelpers.temporal.frames().then((r) => r.data),
   });
@@ -31,6 +31,7 @@ export default function TemporalLensPage() {
   const runSim = useMutation({
     mutationFn: () => apiHelpers.temporal.sim({ scenario, timespan }),
     onSuccess: (res) => setResults(res.data),
+    onError: (err) => console.error('runSim failed:', err instanceof Error ? err.message : err),
   });
 
   const createFrame = useMutation({
@@ -40,10 +41,22 @@ export default function TemporalLensPage() {
       setFrameStart('');
       setFrameEnd('');
     },
+    onError: (err) => console.error('createFrame failed:', err instanceof Error ? err.message : err),
   });
 
   const framesList = frames?.frames || frames || [];
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError) {
     return (

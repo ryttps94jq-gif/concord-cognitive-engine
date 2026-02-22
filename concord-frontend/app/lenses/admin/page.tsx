@@ -2,7 +2,7 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import { useState } from 'react';
 import {
   Activity,
@@ -211,19 +211,19 @@ export default function AdminDashboardPage() {
     refetch: refetchDashboard,
     isLoading: dashboardLoading, isError: isError, error: error,} = useQuery<DashboardData>({
     queryKey: ['admin-dashboard'],
-    queryFn: () => api.get('/api/admin/dashboard').then((r) => r.data),
+    queryFn: () => apiHelpers.guidance.health().then((r) => r.data),
     refetchInterval: autoRefresh ? 5000 : false,
   });
 
   const { data: metrics, refetch: refetchMetrics, isError: isError2, error: error2,} = useQuery<MetricsData>({
     queryKey: ['admin-metrics'],
-    queryFn: () => api.get('/api/admin/metrics').then((r) => r.data),
+    queryFn: () => apiHelpers.perf.metrics().then((r) => r.data),
     refetchInterval: autoRefresh ? 5000 : false,
   });
 
   const { data: logs, isError: isError3, error: error3, refetch: refetch3,} = useQuery({
     queryKey: ['admin-logs'],
-    queryFn: () => api.get('/api/admin/logs?limit=20').then((r) => r.data),
+    queryFn: () => apiHelpers.eventsLog.list({ limit: 20 }).then((r) => r.data),
     refetchInterval: autoRefresh ? 10000 : false,
   });
 

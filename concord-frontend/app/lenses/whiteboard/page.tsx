@@ -2,7 +2,7 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -191,22 +191,22 @@ export default function WhiteboardLensPage() {
   /* ---------- queries / mutations ---------- */
   const { data: whiteboards, isLoading, isError: isError2, error: error2, refetch: refetch2,} = useQuery({
     queryKey: ['whiteboards'],
-    queryFn: () => api.get('/api/whiteboards').then(r => r.data),
+    queryFn: () => apiHelpers.whiteboard.list().then(r => r.data),
   });
 
   const { data: selectedWb, isError: isError3, error: error3, refetch: refetch3,} = useQuery({
     queryKey: ['whiteboard', selectedWbId],
-    queryFn: () => api.get(`/api/whiteboard/${selectedWbId}`).then(r => r.data),
+    queryFn: () => apiHelpers.whiteboard.get(selectedWbId!).then(r => r.data),
     enabled: !!selectedWbId,
   });
 
   const { data: dtus, isError: isError4, error: error4, refetch: refetch4,} = useQuery({
     queryKey: ['dtus-whiteboard'],
-    queryFn: () => api.get('/api/dtus?limit=100').then(r => r.data),
+    queryFn: () => apiHelpers.dtus.paginated({ limit: 100 }).then(r => r.data),
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: { title: string; linkedDtus: string[] }) => api.post('/api/whiteboard', data),
+    mutationFn: (data: { title: string; linkedDtus: string[] }) => apiHelpers.whiteboard.create(data),
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['whiteboards'] });
       setSelectedWbId(res.data.dtuId);
@@ -218,7 +218,7 @@ export default function WhiteboardLensPage() {
   });
 
   const saveMutation = useMutation({
-    mutationFn: (data: { elements: Element[] }) => api.put(`/api/whiteboard/${selectedWbId}`, data),
+    mutationFn: (data: { elements: Element[] }) => apiHelpers.whiteboard.update(selectedWbId!, data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['whiteboard', selectedWbId] }),
     onError: (err) => {
       console.error('Failed to save whiteboard:', err instanceof Error ? err.message : err);
@@ -742,6 +742,17 @@ export default function WhiteboardLensPage() {
   /* ================================================================== */
   /*                             RENDER                                  */
   /* ================================================================== */
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2 || isError3 || isError4) {
     return (

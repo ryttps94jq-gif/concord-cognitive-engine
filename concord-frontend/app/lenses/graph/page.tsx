@@ -180,8 +180,8 @@ export default function GraphLensPage() {
   const [showEdgeTypes, setShowEdgeTypes] = useState(true);
   const [clusterCount, setClusterCount] = useState(5);
 
-  // Lens artifact persistence layer
-  const { isError: isError, error: error, refetch: refetch, items: _entityArtifacts, create: _createEntity } = useLensData('graph', 'entity', { noSeed: true });
+  // Lens artifact persistence layer for graph entities
+  const { isLoading, isError: isError, error: error, refetch: refetch, create: createEntity } = useLensData('graph', 'entity', { noSeed: true });
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; node: GraphNode } | null>(null);
   const [showLegend, setShowLegend] = useState(true);
 
@@ -212,12 +212,12 @@ export default function GraphLensPage() {
 
   const { data: dtus, isError: isError2, error: error2, refetch: refetch2,} = useQuery({
     queryKey: ['dtus-graph'],
-    queryFn: () => api.get('/api/dtus?limit=500').then((r) => r.data),
+    queryFn: () => apiHelpers.dtus.paginated({ limit: 500 }).then((r) => r.data),
   });
 
   const { data: links, isError: isError3, error: error3, refetch: refetch3,} = useQuery({
     queryKey: ['links-graph'],
-    queryFn: () => api.get('/api/links').then((r) => r.data),
+    queryFn: () => apiHelpers.worldmodel.relations().then((r) => r.data),
     retry: 1,
   });
 
@@ -756,11 +756,22 @@ export default function GraphLensPage() {
       if (!connectSource) {
         setConnectSource(clickedNode.id);
       } else if (clickedNode.id !== connectSource) {
-        setLocalEdges(prev => [...prev, {
+        const newEdge = {
           source: connectSource, target: clickedNode.id,
           weight: 0.5, type: newEdgeType,
-        }]);
+        };
+        setLocalEdges(prev => [...prev, newEdge]);
         setConnectSource(null);
+        // Persist edge to backend
+        apiHelpers.worldmodel.createRelation({
+          from: connectSource,
+          to: clickedNode.id,
+          type: newEdgeType,
+        }).then(() => {
+          refetch3();
+        }).catch(err => {
+          console.warn('[Graph] Failed to persist edge:', err);
+        });
       }
       return;
     }
@@ -889,20 +900,37 @@ export default function GraphLensPage() {
 
   // --- Add node ---
 
-  const addNewNode = () => {
+  const addNewNode = async () => {
     if (!addNodeLabel.trim()) return;
-    const id = `local-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const localId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const w = dimensions.width;
     const h = dimensions.height;
     const newNode: GraphNode = {
-      id, label: addNodeLabel.trim(), tier: addNodeType, nodeType: addNodeType,
+      id: localId, label: addNodeLabel.trim(), tier: addNodeType, nodeType: addNodeType,
       x: w / 2 + (Math.random() - 0.5) * 200, y: h / 2 + (Math.random() - 0.5) * 200,
       vx: 0, vy: 0, fx: null, fy: null, connections: 0,
-      tags: [], createdAt: new Date().toISOString(),
+      tags: [addNodeType], createdAt: new Date().toISOString(),
     };
+    // Add locally for immediate feedback
     nodesRef.current = [...nodesRef.current, newNode];
     setAddNodeLabel('');
     setShowAddNode(false);
+    // Persist to backend via DTU create
+    try {
+      await apiHelpers.dtus.create({
+        title: newNode.label,
+        content: newNode.label,
+        tags: [addNodeType, 'graph-created'],
+      });
+      // Also persist as a graph entity artifact
+      await createEntity({
+        title: newNode.label,
+        data: { tier: addNodeType, nodeType: addNodeType, tags: [addNodeType] },
+      });
+      refetch2();
+    } catch (err) {
+      console.warn('[Graph] Failed to persist new node:', err);
+    }
   };
 
   // --- Export ---
@@ -954,6 +982,17 @@ export default function GraphLensPage() {
 
   // --- Render ---
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2 || isError3) {
     return (
