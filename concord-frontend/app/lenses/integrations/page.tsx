@@ -2,7 +2,7 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import { useState } from 'react';
 import { Plug, Webhook, Zap, Code, FileText, Plus, Trash2, Play, ToggleLeft, ToggleRight } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -15,21 +15,21 @@ export default function IntegrationsLensPage() {
 
   const { data: webhooks, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
     queryKey: ['webhooks'],
-    queryFn: () => api.get('/api/webhooks').then(r => r.data),
+    queryFn: () => apiHelpers.webhooks.list().then(r => r.data),
   });
 
   const { data: automations, isError: isError2, error: error2, refetch: refetch2,} = useQuery({
     queryKey: ['automations'],
-    queryFn: () => api.get('/api/automations').then(r => r.data),
+    queryFn: () => apiHelpers.lens.list('integrations', { type: 'automation' }).then(r => r.data),
   });
 
   const { data: integrations, isError: isError3, error: error3, refetch: refetch3,} = useQuery({
     queryKey: ['integrations'],
-    queryFn: () => api.get('/api/integrations').then(r => r.data),
+    queryFn: () => apiHelpers.lens.list('integrations', { type: 'integration' }).then(r => r.data),
   });
 
   const createWebhookMutation = useMutation({
-    mutationFn: (data: Record<string, unknown>) => api.post('/api/webhooks', data),
+    mutationFn: (data: Record<string, unknown>) => apiHelpers.webhooks.register(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['webhooks'] });
       setShowCreate(false);
@@ -37,18 +37,18 @@ export default function IntegrationsLensPage() {
   });
 
   const deleteWebhookMutation = useMutation({
-    mutationFn: (id: string) => api.delete(`/api/webhooks/${id}`),
+    mutationFn: (id: string) => apiHelpers.webhooks.deactivate(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['webhooks'] }),
   });
 
   const toggleWebhookMutation = useMutation({
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
-      api.post(`/api/webhooks/${id}/toggle`, { enabled }),
+      enabled ? apiHelpers.webhooks.deactivate(id) : apiHelpers.webhooks.register({ id }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['webhooks'] }),
   });
 
   const runAutomationMutation = useMutation({
-    mutationFn: (id: string) => api.post(`/api/automations/${id}/run`, {}),
+    mutationFn: (id: string) => apiHelpers.lens.run('integrations', id, { action: 'run' }),
     onError: (err) => {
       console.error('Automation run failed:', err instanceof Error ? err.message : err);
     },

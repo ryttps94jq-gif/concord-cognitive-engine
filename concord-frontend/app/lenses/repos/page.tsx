@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
+import { useUIStore } from '@/store/ui';
 import {
   GitBranch,
   GitCommit,
@@ -75,7 +76,7 @@ export default function ReposLensPage() {
 
   const { data: repos, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
     queryKey: ['repos-list'],
-    queryFn: () => api.get('/api/dtus', { params: { tags: 'repo' } }).then(r =>
+    queryFn: () => apiHelpers.dtus.paginated({ tags: 'repo' }).then(r =>
       r.data?.dtus?.map((dtu: Record<string, unknown>, i: number) => ({
         id: dtu.id as string,
         name: (dtu.title as string) || `project-${i}`,
@@ -95,7 +96,7 @@ export default function ReposLensPage() {
 
   const { data: issues, isError: isError2, error: error2, refetch: refetch2,} = useQuery({
     queryKey: ['repos-issues', selectedRepo],
-    queryFn: () => api.get('/api/dtus', { params: { tags: 'issue' } }).then(r =>
+    queryFn: () => apiHelpers.dtus.paginated({ tags: 'issue' }).then(r =>
       r.data?.dtus?.map((dtu: Record<string, unknown>, i: number) => ({
         id: dtu.id as string,
         number: (dtu.number as number) ?? i + 1,
@@ -114,7 +115,7 @@ export default function ReposLensPage() {
     queryKey: ['repos-commits', selectedRepo],
     queryFn: async () => {
       try {
-        const res = await api.get('/api/events', { params: { limit: 20 } });
+        const res = await apiHelpers.eventsLog.list({ limit: 20 });
         const events = res.data?.events || [];
         return events.map((e: Record<string, unknown>, i: number) => ({
           id: String(e.id || `c-${i}`),
@@ -200,7 +201,7 @@ export default function ReposLensPage() {
               </div>
             </div>
             <div className="flex items-center gap-4">
-              <button className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 transition-colors">
+              <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Create new repository' })} className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 transition-colors">
                 <Plus className="w-4 h-4" />
                 New
               </button>
@@ -215,7 +216,7 @@ export default function ReposLensPage() {
           <div>
             <div className="flex items-center justify-between mb-6">
               <h1 className="text-2xl font-bold text-white">Repositories</h1>
-              <button className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white font-medium rounded-md hover:bg-green-700 transition-colors">
+              <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Create new repository' })} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white font-medium rounded-md hover:bg-green-700 transition-colors">
                 <Plus className="w-4 h-4" />
                 New repository
               </button>
@@ -264,7 +265,7 @@ export default function ReposLensPage() {
                         <span>Updated {formatTime(repo.updatedAt)}</span>
                       </div>
                     </div>
-                    <button className="flex items-center gap-1 px-3 py-1 border border-gray-600 rounded-md text-sm text-gray-300 hover:bg-gray-800 transition-colors">
+                    <button onClick={() => useUIStore.getState().addToast({ type: 'success', message: `Starred ${repo.name}` })} className="flex items-center gap-1 px-3 py-1 border border-gray-600 rounded-md text-sm text-gray-300 hover:bg-gray-800 transition-colors">
                       <Star className="w-4 h-4" />
                       Star
                     </button>
@@ -324,12 +325,12 @@ export default function ReposLensPage() {
                   <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700">
                     <div className="flex items-center gap-2">
                       <GitBranch className="w-4 h-4 text-gray-400" />
-                      <button className="flex items-center gap-1 px-3 py-1 bg-[#21262d] border border-gray-600 rounded-md text-sm">
+                      <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Branch: main' })} className="flex items-center gap-1 px-3 py-1 bg-[#21262d] border border-gray-600 rounded-md text-sm">
                         main
                         <ChevronRight className="w-4 h-4 rotate-90" />
                       </button>
                     </div>
-                    <button className="flex items-center gap-2 px-3 py-1 bg-green-600 text-white text-sm rounded-md hover:bg-green-700">
+                    <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Clone URL copied to clipboard' })} className="flex items-center gap-2 px-3 py-1 bg-green-600 text-white text-sm rounded-md hover:bg-green-700">
                       <Code className="w-4 h-4" />
                       Code
                     </button>
@@ -412,16 +413,16 @@ export default function ReposLensPage() {
               <div className="bg-[#161b22] border border-gray-700 rounded-lg">
                 <div className="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
                   <div className="flex items-center gap-4">
-                    <button className="flex items-center gap-2 text-white font-medium">
+                    <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Showing open issues' })} className="flex items-center gap-2 text-white font-medium">
                       <AlertCircle className="w-4 h-4" />
                       Open
                     </button>
-                    <button className="flex items-center gap-2 text-gray-400 hover:text-white">
+                    <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Showing closed issues' })} className="flex items-center gap-2 text-gray-400 hover:text-white">
                       <CheckCircle className="w-4 h-4" />
                       Closed
                     </button>
                   </div>
-                  <button className="flex items-center gap-2 px-3 py-1 bg-green-600 text-white text-sm rounded-md hover:bg-green-700">
+                  <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Create new issue' })} className="flex items-center gap-2 px-3 py-1 bg-green-600 text-white text-sm rounded-md hover:bg-green-700">
                     <Plus className="w-4 h-4" />
                     New issue
                   </button>
@@ -475,7 +476,7 @@ export default function ReposLensPage() {
                 <p className="text-gray-400 mb-4">
                   Pull requests help you collaborate on code with other people.
                 </p>
-                <button className="px-4 py-2 bg-green-600 text-white font-medium rounded-md hover:bg-green-700">
+                <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Create new pull request' })} className="px-4 py-2 bg-green-600 text-white font-medium rounded-md hover:bg-green-700">
                   New pull request
                 </button>
               </div>

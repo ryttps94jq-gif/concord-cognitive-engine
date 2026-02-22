@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
+import { useUIStore } from '@/store/ui';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ThumbsUp,
@@ -96,7 +97,7 @@ export default function TimelineLensPage() {
 
   const { data: postsData, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
     queryKey: ['timeline-posts', limit],
-    queryFn: () => api.get('/api/dtus/paginated', { params: { limit, offset: 0, tags: 'timeline' } }).then(r => r.data),
+    queryFn: () => apiHelpers.dtus.paginated({ limit, offset: 0, tags: 'timeline' }).then(r => r.data),
   });
 
   const posts =
@@ -126,7 +127,7 @@ export default function TimelineLensPage() {
     queryKey: ['friends'],
     queryFn: async () => {
       try {
-        const res = await api.get('/api/personas', { params: { limit: 20 } });
+        const res = await apiHelpers.personas.list({ limit: 20 });
         const personas = res.data?.personas || [];
         return personas.map((p: Record<string, unknown>, i: number) => ({
           id: String(p.id || i),
@@ -144,7 +145,7 @@ export default function TimelineLensPage() {
     queryKey: ['stories'],
     queryFn: async () => {
       try {
-        const res = await api.get('/api/dtus', { params: { limit: 5, tags: 'story' } });
+        const res = await apiHelpers.dtus.paginated({ limit: 5, tags: 'story' });
         const dtus = res.data?.dtus || [];
         const storyItems: Story[] = [
           { id: 'yours', author: { name: 'Your Story' }, viewed: false },
@@ -162,7 +163,7 @@ export default function TimelineLensPage() {
   });
 
   const postMutation = useMutation({
-    mutationFn: (content: string) => api.post('/api/dtus', { content, tags: ['timeline'] }),
+    mutationFn: (content: string) => apiHelpers.dtus.create({ content, tags: ['timeline'] }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['timeline-posts'] });
       setNewPost('');
@@ -178,6 +179,23 @@ export default function TimelineLensPage() {
     if (!postContent.trim() || postMutation.isPending) return;
     postMutation.mutate(postContent.trim());
   };
+
+  const reactMutation = useMutation({
+    mutationFn: ({ postId, reaction }: { postId: string; reaction: string }) => apiHelpers.dtus.update(postId, { reaction }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['timeline-posts'] }),
+  });
+
+  const shareMutation = useMutation({
+    mutationFn: async (postId: string) => {
+      await navigator.clipboard.writeText(`${window.location.origin}/lenses/timeline?post=${postId}`);
+      useUIStore.getState().addToast({ type: 'success', message: 'Link copied' });
+    },
+  });
+
+  const friendAction = useMutation({
+    mutationFn: ({ friendId, action }: { friendId: string; action: string }) => apiHelpers.social.follow(friendId),
+    onSuccess: (_, { action }) => useUIStore.getState().addToast({ type: 'success', message: action === 'confirm' ? 'Friend request accepted' : 'Request removed' }),
+  });
 
   const formatTime = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -238,16 +256,16 @@ export default function TimelineLensPage() {
             <span className="text-2xl font-bold text-blue-500">Timeline Lens</span>
           </div>
           <div className="flex items-center gap-2">
-            <button className="p-2 bg-[#3a3b3c] rounded-full hover:bg-[#4a4b4c] transition-colors">
+            <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="p-2 bg-[#3a3b3c] rounded-full hover:bg-[#4a4b4c] transition-colors">
               <Home className="w-5 h-5 text-white" />
             </button>
-            <button className="p-2 bg-[#3a3b3c] rounded-full hover:bg-[#4a4b4c] transition-colors">
+            <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Watch section' })} className="p-2 bg-[#3a3b3c] rounded-full hover:bg-[#4a4b4c] transition-colors">
               <Tv className="w-5 h-5 text-gray-400" />
             </button>
-            <button className="p-2 bg-[#3a3b3c] rounded-full hover:bg-[#4a4b4c] transition-colors">
+            <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Marketplace' })} className="p-2 bg-[#3a3b3c] rounded-full hover:bg-[#4a4b4c] transition-colors">
               <Store className="w-5 h-5 text-gray-400" />
             </button>
-            <button className="p-2 bg-[#3a3b3c] rounded-full hover:bg-[#4a4b4c] transition-colors">
+            <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Groups' })} className="p-2 bg-[#3a3b3c] rounded-full hover:bg-[#4a4b4c] transition-colors">
               <Users2 className="w-5 h-5 text-gray-400" />
             </button>
           </div>
@@ -271,6 +289,7 @@ export default function TimelineLensPage() {
           ].map(item => (
             <button
               key={item.label}
+              onClick={() => useUIStore.getState().addToast({ type: 'info', message: `${item.label} section` })}
               className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-[#3a3b3c] transition-colors"
             >
               <div className="w-9 h-9 rounded-full bg-[#3a3b3c] flex items-center justify-center">
@@ -289,6 +308,7 @@ export default function TimelineLensPage() {
               {stories?.map((story, i) => (
                 <button
                   key={story.id}
+                  onClick={() => i === 0 ? setShowPostModal(true) : useUIStore.getState().addToast({ type: 'info', message: `Viewing ${story.author.name}'s story` })}
                   className={cn(
                     'flex-shrink-0 w-28 h-48 rounded-xl overflow-hidden relative',
                     i === 0 ? 'bg-[#3a3b3c]' : 'bg-gradient-to-br from-blue-500 to-purple-500'
@@ -331,15 +351,15 @@ export default function TimelineLensPage() {
               </button>
             </div>
             <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-700">
-              <button className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-[#3a3b3c] transition-colors">
+              <button onClick={() => setShowPostModal(true)} className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-[#3a3b3c] transition-colors">
                 <Video className="w-5 h-5 text-red-500" />
                 <span className="text-gray-300 text-sm">Live video</span>
               </button>
-              <button className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-[#3a3b3c] transition-colors">
+              <button onClick={() => setShowPostModal(true)} className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-[#3a3b3c] transition-colors">
                 <ImageIcon className="w-5 h-5 text-green-500" />
                 <span className="text-gray-300 text-sm">Photo/video</span>
               </button>
-              <button className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-[#3a3b3c] transition-colors">
+              <button onClick={() => setShowPostModal(true)} className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-[#3a3b3c] transition-colors">
                 <Smile className="w-5 h-5 text-yellow-500" />
                 <span className="text-gray-300 text-sm">Feeling</span>
               </button>
@@ -398,7 +418,7 @@ export default function TimelineLensPage() {
                         </div>
                       </div>
                     </div>
-                    <button className="p-2 rounded-full hover:bg-[#3a3b3c] transition-colors">
+                    <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Post options' })} className="p-2 rounded-full hover:bg-[#3a3b3c] transition-colors">
                       <MoreHorizontal className="w-5 h-5 text-gray-400" />
                     </button>
                   </div>
@@ -437,7 +457,7 @@ export default function TimelineLensPage() {
                     onMouseEnter={() => setShowReactions(post.id)}
                     onMouseLeave={() => setShowReactions(null)}
                   >
-                    <button className="w-full flex items-center justify-center gap-2 py-2 rounded-lg hover:bg-[#3a3b3c] transition-colors">
+                    <button onClick={() => reactMutation.mutate({ postId: post.id, reaction: 'like' })} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg hover:bg-[#3a3b3c] transition-colors">
                       <ThumbsUp className="w-5 h-5 text-gray-400" />
                       <span className="text-gray-400 font-medium">Like</span>
                     </button>
@@ -454,6 +474,7 @@ export default function TimelineLensPage() {
                           {REACTIONS.map(reaction => (
                             <button
                               key={reaction.id}
+                              onClick={() => { reactMutation.mutate({ postId: post.id, reaction: reaction.id }); setShowReactions(null); }}
                               className="p-2 rounded-full hover:bg-[#3a3b3c] hover:scale-125 transition-all"
                               title={reaction.label}
                             >
@@ -465,12 +486,12 @@ export default function TimelineLensPage() {
                     </AnimatePresence>
                   </div>
 
-                  <button className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg hover:bg-[#3a3b3c] transition-colors">
+                  <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Comment section' })} className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg hover:bg-[#3a3b3c] transition-colors">
                     <MessageCircle className="w-5 h-5 text-gray-400" />
                     <span className="text-gray-400 font-medium">Comment</span>
                   </button>
 
-                  <button className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg hover:bg-[#3a3b3c] transition-colors">
+                  <button onClick={() => shareMutation.mutate(post.id)} className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg hover:bg-[#3a3b3c] transition-colors">
                     <Share2 className="w-5 h-5 text-gray-400" />
                     <span className="text-gray-400 font-medium">Share</span>
                   </button>
@@ -486,10 +507,10 @@ export default function TimelineLensPage() {
                       className="flex-1 py-2 bg-transparent text-white placeholder-gray-500 focus:outline-none text-sm"
                     />
                     <div className="flex items-center gap-1">
-                      <button className="p-1 text-gray-400 hover:text-gray-300">
+                      <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Emoji picker' })} className="p-1 text-gray-400 hover:text-gray-300">
                         <Smile className="w-5 h-5" />
                       </button>
-                      <button className="p-1 text-gray-400 hover:text-gray-300">
+                      <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Attach image to comment' })} className="p-1 text-gray-400 hover:text-gray-300">
                         <ImageIcon className="w-5 h-5" />
                       </button>
                     </div>
@@ -507,7 +528,7 @@ export default function TimelineLensPage() {
           <div className="bg-[#242526] rounded-lg p-4">
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-semibold text-white">Friend Requests</h3>
-              <button className="text-blue-500 text-sm hover:underline">See all</button>
+              <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'View all friend requests' })} className="text-blue-500 text-sm hover:underline">See all</button>
             </div>
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-full bg-gradient-to-br from-green-500 to-teal-500" />
@@ -515,10 +536,10 @@ export default function TimelineLensPage() {
                 <p className="font-medium text-white text-sm">New User</p>
                 <p className="text-xs text-gray-400">5 mutual friends</p>
                 <div className="flex gap-2 mt-2">
-                  <button className="px-3 py-1.5 bg-blue-500 text-white text-xs font-medium rounded-md hover:bg-blue-600">
+                  <button onClick={() => friendAction.mutate({ friendId: 'new-user', action: 'confirm' })} className="px-3 py-1.5 bg-blue-500 text-white text-xs font-medium rounded-md hover:bg-blue-600">
                     Confirm
                   </button>
-                  <button className="px-3 py-1.5 bg-[#3a3b3c] text-white text-xs font-medium rounded-md hover:bg-[#4a4b4c]">
+                  <button onClick={() => friendAction.mutate({ friendId: 'new-user', action: 'delete' })} className="px-3 py-1.5 bg-[#3a3b3c] text-white text-xs font-medium rounded-md hover:bg-[#4a4b4c]">
                     Delete
                   </button>
                 </div>
@@ -535,6 +556,7 @@ export default function TimelineLensPage() {
               {friends?.map((friend: Friend) => (
                 <button
                   key={friend.id}
+                  onClick={() => useUIStore.getState().addToast({ type: 'info', message: `Chat with ${friend.name}` })}
                   className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-[#3a3b3c] transition-colors"
                 >
                   <div className="relative">
@@ -583,10 +605,10 @@ export default function TimelineLensPage() {
               </div>
               <div className="flex items-center justify-between pt-3 border-t border-gray-700">
                 <div className="flex items-center gap-2">
-                  <button className="p-2 rounded-lg hover:bg-[#3a3b3c] text-green-500 transition-colors">
+                  <button onClick={() => setPostContent(prev => prev + ' [Photo]')} className="p-2 rounded-lg hover:bg-[#3a3b3c] text-green-500 transition-colors">
                     <ImageIcon className="w-5 h-5" />
                   </button>
-                  <button className="p-2 rounded-lg hover:bg-[#3a3b3c] text-yellow-500 transition-colors">
+                  <button onClick={() => setPostContent(prev => prev + ' :)')} className="p-2 rounded-lg hover:bg-[#3a3b3c] text-yellow-500 transition-colors">
                     <Smile className="w-5 h-5" />
                   </button>
                 </div>

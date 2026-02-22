@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -133,36 +133,36 @@ export default function StudioLensPage() {
 
   const { data: projects, isError: isError2, error: error2, refetch: refetch2,} = useQuery({
     queryKey: ['studio-projects'],
-    queryFn: () => api.get('/api/artistry/studio/projects').then(r => r.data?.projects || []).catch((err) => { console.error('Failed to fetch studio projects:', err instanceof Error ? err.message : err); return []; }),
+    queryFn: () => apiHelpers.artistry.studio.projects.list().then(r => r.data?.projects || []).catch((err) => { console.error('Failed to fetch studio projects:', err instanceof Error ? err.message : err); return []; }),
     initialData: [],
   });
 
   const { data: activeProject, refetch: refetchProject, isError: isError3, error: error3,} = useQuery({
     queryKey: ['studio-project', activeProjectId],
-    queryFn: () => activeProjectId ? api.get(`/api/artistry/studio/projects/${activeProjectId}`).then(r => r.data?.project || null).catch((err) => { console.error('Failed to fetch active project:', err instanceof Error ? err.message : err); return null; }) : null,
+    queryFn: () => activeProjectId ? apiHelpers.artistry.studio.projects.get(activeProjectId).then(r => r.data?.project || null).catch((err) => { console.error('Failed to fetch active project:', err instanceof Error ? err.message : err); return null; }) : null,
     enabled: !!activeProjectId,
   });
 
   const { data: instruments, isError: isError4, error: error4, refetch: refetch4,} = useQuery({
     queryKey: ['studio-instruments'],
-    queryFn: () => api.get('/api/artistry/studio/instruments').then(r => r.data?.instruments || {}).catch((err) => { console.error('Failed to fetch instruments:', err instanceof Error ? err.message : err); return {}; }),
+    queryFn: () => apiHelpers.artistry.studio.instruments().then(r => r.data?.instruments || {}).catch((err) => { console.error('Failed to fetch instruments:', err instanceof Error ? err.message : err); return {}; }),
     initialData: {},
   });
 
   const { data: effectsCatalog, isError: isError5, error: error5, refetch: refetch5,} = useQuery({
     queryKey: ['studio-effects'],
-    queryFn: () => api.get('/api/artistry/studio/effects').then(r => r.data?.effects || {}).catch((err) => { console.error('Failed to fetch effects:', err instanceof Error ? err.message : err); return {}; }),
+    queryFn: () => apiHelpers.artistry.studio.effects().then(r => r.data?.effects || {}).catch((err) => { console.error('Failed to fetch effects:', err instanceof Error ? err.message : err); return {}; }),
     initialData: {},
   });
 
   const { data: genres, isError: isError6, error: error6, refetch: refetch6,} = useQuery({
     queryKey: ['artistry-genres'],
-    queryFn: () => api.get('/api/artistry/genres').then(r => r.data || {}).catch((err) => { console.error('Failed to fetch genres:', err instanceof Error ? err.message : err); return {}; }),
+    queryFn: () => apiHelpers.artistry.genres().then(r => r.data || {}).catch((err) => { console.error('Failed to fetch genres:', err instanceof Error ? err.message : err); return {}; }),
     initialData: {},
   });
 
   const createProjectMutation = useMutation({
-    mutationFn: (data: Record<string, unknown>) => api.post('/api/artistry/studio/projects', data),
+    mutationFn: (data: Record<string, unknown>) => apiHelpers.artistry.studio.projects.create(data),
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['studio-projects'] });
       setActiveProjectId(res.data?.project?.id);
@@ -173,7 +173,7 @@ export default function StudioLensPage() {
 
   const addTrackMutation = useMutation({
     mutationFn: (data: { instrumentId?: string; name?: string; type?: string }) =>
-      api.post(`/api/artistry/studio/projects/${activeProjectId}/tracks`, data),
+      apiHelpers.artistry.studio.tracks.add(activeProjectId!, data),
     onSuccess: () => {
       refetchProject();
       setShowAddTrack(false);
@@ -182,39 +182,39 @@ export default function StudioLensPage() {
 
   const updateTrackMutation = useMutation({
     mutationFn: ({ trackId, ...data }: { trackId: string } & Record<string, unknown>) =>
-      api.patch(`/api/artistry/studio/projects/${activeProjectId}/tracks/${trackId}`, data),
+      apiHelpers.artistry.studio.tracks.update(activeProjectId!, trackId, data),
     onSuccess: () => refetchProject(),
   });
 
   const deleteTrackMutation = useMutation({
-    mutationFn: (trackId: string) => api.delete(`/api/artistry/studio/projects/${activeProjectId}/tracks/${trackId}`),
+    mutationFn: (trackId: string) => apiHelpers.artistry.studio.tracks.remove(activeProjectId!, trackId),
     onSuccess: () => refetchProject(),
   });
 
   const addEffectMutation = useMutation({
     mutationFn: ({ trackId, effectId }: { trackId: string; effectId: string }) =>
-      api.post(`/api/artistry/studio/projects/${activeProjectId}/tracks/${trackId}/effects`, { effectId }),
+      apiHelpers.artistry.studio.tracks.addEffect(activeProjectId!, trackId, { effectId }),
     onSuccess: () => refetchProject(),
   });
 
   const masterMutation = useMutation({
-    mutationFn: () => api.post('/api/artistry/studio/master', { projectId: activeProjectId }),
+    mutationFn: () => apiHelpers.artistry.studio.master({ projectId: activeProjectId }),
     onSuccess: () => refetchProject(),
     onError: (err) => { console.error('Mastering failed:', err instanceof Error ? err.message : err); },
   });
 
   const aiAnalyzeMutation = useMutation({
-    mutationFn: () => api.post('/api/artistry/ai/analyze-project', { projectId: activeProjectId }),
+    mutationFn: () => apiHelpers.artistry.ai.analyzeProject({ projectId: activeProjectId }),
     onError: (err) => { console.error('AI analysis failed:', err instanceof Error ? err.message : err); },
   });
 
   const aiSessionMutation = useMutation({
-    mutationFn: (question: string) => api.post('/api/artistry/ai/session', { projectId: activeProjectId, question }),
+    mutationFn: (question: string) => apiHelpers.artistry.ai.session({ projectId: activeProjectId, question }),
     onError: (err) => { console.error('AI session failed:', err instanceof Error ? err.message : err); },
   });
 
   const aiChordsMutation = useMutation({
-    mutationFn: () => api.post('/api/artistry/ai/suggest-chords', {
+    mutationFn: () => apiHelpers.artistry.ai.suggestChords({
       key: (activeProject as Project)?.key || 'C',
       scale: (activeProject as Project)?.scale || 'major',
       genre: (activeProject as Project)?.genre,
@@ -223,7 +223,7 @@ export default function StudioLensPage() {
   });
 
   const aiDrumsMutation = useMutation({
-    mutationFn: () => api.post('/api/artistry/ai/suggest-drums', {
+    mutationFn: () => apiHelpers.artistry.ai.suggestDrums({
       bpm: (activeProject as Project)?.bpm || 120,
       genre: (activeProject as Project)?.genre || 'electronic',
     }),
@@ -232,7 +232,7 @@ export default function StudioLensPage() {
 
   // Save project mutation
   const saveProjectMutation = useMutation({
-    mutationFn: () => activeProjectId ? api.put(`/api/artistry/studio/projects/${activeProjectId}`, {}) : Promise.resolve(null),
+    mutationFn: () => activeProjectId ? apiHelpers.artistry.studio.projects.update(activeProjectId, {}) : Promise.resolve(null),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['studio-projects'] });
       refetchProject();
@@ -317,9 +317,9 @@ export default function StudioLensPage() {
       </div>
 
       <div className="flex items-center gap-2">
-        <button onClick={() => masterMutation.mutate()} className="flex items-center gap-1 px-3 py-1.5 bg-neon-green/20 text-neon-green rounded text-xs hover:bg-neon-green/30">
-          <Zap className="w-3.5 h-3.5" />
-          Master
+        <button onClick={() => masterMutation.mutate()} disabled={masterMutation.isPending} className="flex items-center gap-1 px-3 py-1.5 bg-neon-green/20 text-neon-green rounded text-xs hover:bg-neon-green/30 disabled:opacity-50 disabled:cursor-not-allowed">
+          <Zap className={`w-3.5 h-3.5 ${masterMutation.isPending ? 'animate-pulse' : ''}`} />
+          {masterMutation.isPending ? 'Mastering...' : 'Master'}
         </button>
         <button onClick={() => saveProjectMutation.mutate()} disabled={saveProjectMutation.isPending} className="p-1.5 text-gray-400 hover:text-white transition-colors" title="Save project"><Save className="w-4 h-4" /></button>
         <button onClick={handleExportProject} className="p-1.5 text-gray-400 hover:text-white transition-colors" title="Export project"><Download className="w-4 h-4" /></button>

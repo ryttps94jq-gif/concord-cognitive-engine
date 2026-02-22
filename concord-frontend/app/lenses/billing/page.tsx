@@ -1,14 +1,20 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import {
   Coins, Check, Zap, Crown,
-  ArrowRight, Sparkles, ShieldCheck, TrendingUp
+  ArrowRight, Sparkles, ShieldCheck, TrendingUp,
+  Download, Filter, BarChart3, ArrowUpDown,
+  CreditCard, History, Wallet, ChevronDown,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 interface TokenPackage {
   id: string;
@@ -17,26 +23,94 @@ interface TokenPackage {
   bonus: number;
 }
 
+interface Transaction {
+  id: string;
+  type: string;
+  amount: number;
+  balance_after?: number;
+  description?: string;
+  source?: string;
+  created_at?: string;
+  status?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Main Page
+// ---------------------------------------------------------------------------
+
 export default function BillingPage() {
   useLensNav('billing');
   const queryClient = useQueryClient();
   const [selectedPackage, setSelectedPackage] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'overview' | 'transactions' | 'subscriptions'>('overview');
+  const [txFilter, setTxFilter] = useState<'all' | 'purchase' | 'usage' | 'credit'>('all');
 
-  // Get economy config (was /api/economic/config, corrected to /api/economy/config)
-  const { data: config, isError: isError, error: error, refetch: refetch,} = useQuery({
+  // ---- API Queries ----
+
+  // Economy config
+  const {
+    data: config,
+    isError: configError,
+    error: configErrorObj,
+    refetch: refetchConfig,
+  } = useQuery({
     queryKey: ['economy-config'],
-    queryFn: () => apiHelpers.economy.config().then(r => r.data),
-  });
-
-  // Get wallet balance (was /api/economic/wallet, corrected to /api/economy/balance)
-  const { data: wallet, isLoading: walletLoading, isError: isError2, error: error2, refetch: refetch2,} = useQuery({
-    queryKey: ['wallet'],
-    queryFn: () => {
-      return apiHelpers.economy.balance().then(r => r.data);
+    queryFn: async () => {
+      try {
+        const r = await apiHelpers.economy.config();
+        return r.data;
+      } catch (err) {
+        console.error('economy.config failed:', err);
+        throw err;
+      }
     },
+    retry: 2,
+    staleTime: 60000,
   });
 
-  // Purchase tokens (was /api/economic/tokens/purchase, corrected to /api/economy/buy/checkout)
+  // Wallet balance
+  const {
+    data: wallet,
+    isLoading: walletLoading,
+    isError: walletError,
+    error: walletErrorObj,
+    refetch: refetchWallet,
+  } = useQuery({
+    queryKey: ['wallet'],
+    queryFn: async () => {
+      try {
+        const r = await apiHelpers.economy.balance();
+        return r.data;
+      } catch (err) {
+        console.error('economy.balance failed:', err);
+        throw err;
+      }
+    },
+    retry: 2,
+    staleTime: 15000,
+  });
+
+  // Transaction history
+  const {
+    data: historyData,
+    isLoading: historyLoading,
+  } = useQuery({
+    queryKey: ['economy-history', txFilter],
+    queryFn: async () => {
+      try {
+        const params: Record<string, string | number> = { limit: 100 };
+        if (txFilter !== 'all') params.type = txFilter;
+        const r = await apiHelpers.economy.history(params as { type?: string; limit?: number });
+        return r.data;
+      } catch (err) {
+        console.error('economy.history failed:', err);
+        return { transactions: [] };
+      }
+    },
+    staleTime: 15000,
+  });
+
+  // Purchase tokens
   const purchaseMutation = useMutation({
     mutationFn: async (packageId: string) => {
       const tokens = Number(packageId) || 100;
@@ -44,10 +118,11 @@ export default function BillingPage() {
       return res.data;
     },
     onSuccess: (data) => {
-      if (data.url) {
+      if (data?.url) {
         window.location.href = data.url;
       } else {
         queryClient.invalidateQueries({ queryKey: ['wallet'] });
+        queryClient.invalidateQueries({ queryKey: ['economy-history'] });
       }
     },
     onError: (err) => {
@@ -55,19 +130,20 @@ export default function BillingPage() {
     },
   });
 
-  // Subscribe (was /api/economic/subscribe, corrected to /api/economy/buy)
+  // Subscribe
   const subscribeMutation = useMutation({
     mutationFn: async (tier: string) => {
-      const amount = tier === 'pro' ? 1000 : tier === 'team' ? 5000 : 100;
+      const amount = tier === 'pro' ? 1000 : tier === 'teams' ? 5000 : 100;
       const res = await apiHelpers.economy.buy({ amount, source: `subscription-${tier}` });
       return res.data;
     },
     onSuccess: (data) => {
-      if (data.url) {
+      if (data?.url) {
         window.location.href = data.url;
       } else {
         queryClient.invalidateQueries({ queryKey: ['wallet'] });
         queryClient.invalidateQueries({ queryKey: ['economy-config'] });
+        queryClient.invalidateQueries({ queryKey: ['economy-history'] });
       }
     },
     onError: (err) => {
@@ -75,26 +151,87 @@ export default function BillingPage() {
     },
   });
 
-  const _tiers = config?.tiers || {};
-  const tokenPackages = config?.tokenPackages || [];
+  const tokenPackages: TokenPackage[] = config?.tokenPackages || [];
+  const transactions: Transaction[] = historyData?.transactions || [];
 
+  // Usage data for the last 7 days (derived from transactions)
+  const usageByDay = useMemo(() => {
+    const days: { label: string; value: number }[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      const label = d.toLocaleDateString(undefined, { weekday: 'short' });
+      const spent = transactions
+        .filter((t) => {
+          const tDate = t.created_at ? t.created_at.slice(0, 10) : '';
+          return tDate === key && (t.type === 'usage' || t.type === 'spend' || t.type === 'debit');
+        })
+        .reduce((s, t) => s + Math.abs(t.amount || 0), 0);
+      days.push({ label, value: spent });
+    }
+    return days;
+  }, [transactions]);
 
-  if (isError || isError2) {
+  const maxUsage = Math.max(...usageByDay.map((d) => d.value), 1);
+
+  // Top consumers (group usage by source/description)
+  const topConsumers = useMemo(() => {
+    const map = new Map<string, number>();
+    transactions
+      .filter((t) => t.type === 'usage' || t.type === 'spend' || t.type === 'debit')
+      .forEach((t) => {
+        const key = t.source || t.description || 'Other';
+        map.set(key, (map.get(key) || 0) + Math.abs(t.amount || 0));
+      });
+    return Array.from(map.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+  }, [transactions]);
+
+  // CSV Export
+  const handleExportCSV = useCallback(() => {
+    const headers = ['Date', 'Type', 'Amount', 'Balance After', 'Description'];
+    const rows = transactions.map((t) => [
+      t.created_at || '',
+      t.type || '',
+      String(t.amount || 0),
+      String(t.balance_after ?? ''),
+      (t.description || t.source || '').replace(/,/g, ';'),
+    ]);
+    const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `concord-transactions-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [transactions]);
+
+  // Error
+  if (configError || walletError) {
     return (
       <div className="flex items-center justify-center h-full p-8">
-        <ErrorState error={error?.message || error2?.message} onRetry={() => { refetch(); refetch2(); }} />
+        <ErrorState
+          error={configErrorObj?.message || walletErrorObj?.message}
+          onRetry={() => { refetchConfig(); refetchWallet(); }}
+        />
       </div>
     );
   }
+
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-8">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-white mb-2">Billing & Tokens</h1>
-        <p className="text-gray-400">Manage your subscription and Concord Tokens</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-white mb-2">Billing & Tokens</h1>
+          <p className="text-gray-400">Manage your subscription, tokens, and transaction history</p>
+        </div>
       </div>
 
-      {/* Current Status */}
+      {/* Current Balance - Large Display */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-lattice-surface border border-lattice-border rounded-xl p-6">
           <div className="flex items-center gap-3 mb-4">
@@ -143,165 +280,346 @@ export default function BillingPage() {
         </div>
       </div>
 
-      {/* Subscription Tiers */}
-      <div>
-        <h2 className="text-xl font-semibold text-white mb-4">Subscription Plans</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Free Tier */}
-          <TierCard
-            name="Free"
-            price={0}
-            features={[
-              'All 62 lenses',
-              'Unlimited DTUs',
-              'Marketplace access',
-              '10 pages/day ingest',
-              '100 tokens/month',
-            ]}
-            current={wallet?.tier === 'free'}
-            onSelect={() => subscribeMutation.mutate('free')}
-            disabled={wallet?.tier === 'free'}
-          />
-
-          {/* Pro Tier */}
-          <TierCard
-            name="Pro"
-            price={12}
-            features={[
-              'Everything in Free',
-              'Unlimited ingest',
-              'Cloud sync',
-              'Priority support',
-              '2,000 tokens/month',
-            ]}
-            current={wallet?.tier === 'pro'}
-            popular={true}
-            onSelect={() => subscribeMutation.mutate('pro')}
-            loading={subscribeMutation.isPending}
-            disabled={!config?.stripeEnabled}
-          />
-
-          {/* Teams Tier */}
-          <TierCard
-            name="Teams"
-            price={29}
-            priceNote="/seat"
-            features={[
-              'Everything in Pro',
-              'Team collaboration',
-              'Shared vaults',
-              'Analytics dashboard',
-              '5,000 tokens/month',
-            ]}
-            current={wallet?.tier === 'teams'}
-            onSelect={() => subscribeMutation.mutate('teams')}
-            loading={subscribeMutation.isPending}
-            disabled={!config?.stripeEnabled}
-          />
-        </div>
+      {/* Tab Navigation */}
+      <div className="flex gap-1 border-b border-lattice-border">
+        {([
+          { key: 'overview' as const, label: 'Usage Overview', icon: BarChart3 },
+          { key: 'transactions' as const, label: 'Transactions', icon: History },
+          { key: 'subscriptions' as const, label: 'Plans & Tokens', icon: CreditCard },
+        ]).map(({ key, label, icon: Icon }) => (
+          <button
+            key={key}
+            onClick={() => setActiveTab(key)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
+              activeTab === key
+                ? 'border-neon-cyan text-neon-cyan'
+                : 'border-transparent text-gray-400 hover:text-white'
+            }`}
+          >
+            <Icon className="w-4 h-4" />
+            {label}
+          </button>
+        ))}
       </div>
 
-      {/* Token Packages */}
-      <div>
-        <h2 className="text-xl font-semibold text-white mb-2">Buy Tokens</h2>
-        <p className="text-gray-400 text-sm mb-4">
-          Concord Tokens (CT) are used for marketplace purchases and premium features.
-          <span className="text-neon-cyan"> 1.46% fee</span> supports platform development.
-        </p>
+      {/* ============ USAGE OVERVIEW TAB ============ */}
+      {activeTab === 'overview' && (
+        <div className="space-y-6">
+          {/* Usage Chart - Last 7 Days */}
+          <div className="panel p-6">
+            <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 text-neon-cyan" />
+              Token Usage - Last 7 Days
+            </h3>
+            <div className="flex items-end justify-between gap-2 h-40">
+              {usageByDay.map((day, i) => (
+                <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                  <span className="text-xs text-gray-400">{day.value > 0 ? day.value : ''}</span>
+                  <div className="w-full bg-lattice-deep rounded-t flex items-end justify-center" style={{ height: '120px' }}>
+                    <div
+                      className="w-full bg-neon-cyan/60 rounded-t transition-all hover:bg-neon-cyan/80"
+                      style={{ height: `${maxUsage > 0 ? (day.value / maxUsage) * 100 : 0}%`, minHeight: day.value > 0 ? '4px' : '0px' }}
+                    />
+                  </div>
+                  <span className="text-xs text-gray-500">{day.label}</span>
+                </div>
+              ))}
+            </div>
+            {usageByDay.every((d) => d.value === 0) && (
+              <p className="text-sm text-gray-500 text-center mt-4">No usage recorded in the last 7 days.</p>
+            )}
+          </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {tokenPackages.map((pkg: TokenPackage) => (
-            <div
-              key={pkg.id}
-              className={`relative bg-lattice-surface border rounded-xl p-6 cursor-pointer transition-all ${
-                selectedPackage === pkg.id
-                  ? 'border-neon-cyan shadow-lg shadow-neon-cyan/20'
-                  : 'border-lattice-border hover:border-gray-600'
-              }`}
-              onClick={() => setSelectedPackage(pkg.id)}
+          {/* Top Consumers */}
+          <div className="panel p-6">
+            <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-neon-green" />
+              Top Token Consumers
+            </h3>
+            {topConsumers.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-4">No usage data available yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {topConsumers.map(([source, amount], i) => {
+                  const pct = Math.round((amount / Math.max(topConsumers[0][1], 1)) * 100);
+                  return (
+                    <div key={source} className="flex items-center gap-3">
+                      <span className="w-6 text-xs text-gray-500 text-right">{i + 1}.</span>
+                      <div className="flex-1">
+                        <div className="flex justify-between text-sm mb-1">
+                          <span className="capitalize">{source.replace(/[-_]/g, ' ')}</span>
+                          <span className="text-gray-400">{amount} CT</span>
+                        </div>
+                        <div className="h-1.5 bg-lattice-deep rounded-full overflow-hidden">
+                          <div className="h-full bg-neon-green rounded-full transition-all" style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ============ TRANSACTIONS TAB ============ */}
+      {activeTab === 'transactions' && (
+        <div className="space-y-4">
+          {/* Filter + Export bar */}
+          <div className="flex items-center justify-between">
+            <div className="flex gap-2">
+              {(['all', 'purchase', 'usage', 'credit'] as const).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setTxFilter(f)}
+                  className={`px-3 py-1.5 rounded-lg text-sm capitalize ${
+                    txFilter === f
+                      ? 'bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/30'
+                      : 'bg-lattice-surface text-gray-400 hover:text-white'
+                  }`}
+                >
+                  {f}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={handleExportCSV}
+              disabled={transactions.length === 0}
+              className="btn-neon flex items-center gap-2 text-sm disabled:opacity-50"
             >
-              {pkg.bonus > 0 && (
-                <div className="absolute -top-2 -right-2 px-2 py-1 bg-neon-green text-white text-xs font-bold rounded-full">
-                  +{Math.round(pkg.bonus * 100)}%
-                </div>
-              )}
+              <Download className="w-4 h-4" />
+              Export CSV
+            </button>
+          </div>
 
-              <div className="flex items-center gap-3 mb-4">
-                <Coins className="w-8 h-8 text-neon-cyan" />
-                <div>
-                  <p className="text-2xl font-bold text-white">{pkg.tokens.toLocaleString()}</p>
-                  <p className="text-sm text-gray-400">tokens</p>
+          {/* Transaction List */}
+          <div className="panel">
+            {historyLoading ? (
+              <div className="p-8 text-center text-gray-400 animate-pulse">Loading transactions...</div>
+            ) : transactions.length === 0 ? (
+              <div className="p-8 text-center">
+                <Wallet className="w-8 h-8 text-gray-500 mx-auto mb-3" />
+                <p className="text-gray-400">No transactions found.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-lattice-border">
+                {/* Table Header */}
+                <div className="grid grid-cols-12 gap-4 px-4 py-3 text-xs text-gray-500 font-medium uppercase">
+                  <div className="col-span-3">Date</div>
+                  <div className="col-span-2">Type</div>
+                  <div className="col-span-2 text-right">Amount</div>
+                  <div className="col-span-2 text-right">Balance</div>
+                  <div className="col-span-3">Description</div>
                 </div>
+                {transactions.map((tx) => {
+                  const isPositive = tx.amount > 0;
+                  const typeColors: Record<string, string> = {
+                    purchase: 'bg-neon-green/20 text-neon-green',
+                    credit: 'bg-neon-cyan/20 text-neon-cyan',
+                    usage: 'bg-neon-pink/20 text-neon-pink',
+                    spend: 'bg-neon-pink/20 text-neon-pink',
+                    debit: 'bg-neon-pink/20 text-neon-pink',
+                    transfer: 'bg-neon-purple/20 text-neon-purple',
+                  };
+                  return (
+                    <div key={tx.id} className="grid grid-cols-12 gap-4 px-4 py-3 text-sm hover:bg-lattice-elevated/50 transition-colors">
+                      <div className="col-span-3 text-gray-400">
+                        {tx.created_at
+                          ? new Date(tx.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                          : '-'}
+                      </div>
+                      <div className="col-span-2">
+                        <span className={`text-xs px-2 py-0.5 rounded capitalize ${typeColors[tx.type] || 'bg-gray-500/20 text-gray-400'}`}>
+                          {tx.type}
+                        </span>
+                      </div>
+                      <div className={`col-span-2 text-right font-medium ${isPositive ? 'text-neon-green' : 'text-neon-pink'}`}>
+                        {isPositive ? '+' : ''}{tx.amount} CT
+                      </div>
+                      <div className="col-span-2 text-right text-gray-400">
+                        {tx.balance_after != null ? `${tx.balance_after} CT` : '-'}
+                      </div>
+                      <div className="col-span-3 text-gray-500 truncate">
+                        {tx.description || tx.source || '-'}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ============ SUBSCRIPTIONS & TOKENS TAB ============ */}
+      {activeTab === 'subscriptions' && (
+        <div className="space-y-8">
+          {/* Subscription Tiers */}
+          <div>
+            <h2 className="text-xl font-semibold text-white mb-4">Subscription Plans</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Free Tier */}
+              <TierCard
+                name="Free"
+                price={0}
+                features={[
+                  'All 62 lenses',
+                  'Unlimited DTUs',
+                  'Marketplace access',
+                  '10 pages/day ingest',
+                  '100 tokens/month',
+                ]}
+                current={wallet?.tier === 'free'}
+                onSelect={() => subscribeMutation.mutate('free')}
+                disabled={wallet?.tier === 'free'}
+              />
+
+              {/* Pro Tier */}
+              <TierCard
+                name="Pro"
+                price={12}
+                features={[
+                  'Everything in Free',
+                  'Unlimited ingest',
+                  'Cloud sync',
+                  'Priority support',
+                  '2,000 tokens/month',
+                ]}
+                current={wallet?.tier === 'pro'}
+                popular={true}
+                onSelect={() => subscribeMutation.mutate('pro')}
+                loading={subscribeMutation.isPending}
+                disabled={!config?.stripeEnabled}
+              />
+
+              {/* Teams Tier */}
+              <TierCard
+                name="Teams"
+                price={29}
+                priceNote="/seat"
+                features={[
+                  'Everything in Pro',
+                  'Team collaboration',
+                  'Shared vaults',
+                  'Analytics dashboard',
+                  '5,000 tokens/month',
+                ]}
+                current={wallet?.tier === 'teams'}
+                onSelect={() => subscribeMutation.mutate('teams')}
+                loading={subscribeMutation.isPending}
+                disabled={!config?.stripeEnabled}
+              />
+            </div>
+          </div>
+
+          {/* Token Packages */}
+          <div>
+            <h2 className="text-xl font-semibold text-white mb-2">Buy Tokens</h2>
+            <p className="text-gray-400 text-sm mb-4">
+              Concord Tokens (CT) are used for marketplace purchases and premium features.
+              <span className="text-neon-cyan"> 1.46% fee</span> supports platform development.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {tokenPackages.map((pkg: TokenPackage) => (
+                <div
+                  key={pkg.id}
+                  className={`relative bg-lattice-surface border rounded-xl p-6 cursor-pointer transition-all ${
+                    selectedPackage === pkg.id
+                      ? 'border-neon-cyan shadow-lg shadow-neon-cyan/20'
+                      : 'border-lattice-border hover:border-gray-600'
+                  }`}
+                  onClick={() => setSelectedPackage(pkg.id)}
+                >
+                  {pkg.bonus > 0 && (
+                    <div className="absolute -top-2 -right-2 px-2 py-1 bg-neon-green text-white text-xs font-bold rounded-full">
+                      +{Math.round(pkg.bonus * 100)}%
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-3 mb-4">
+                    <Coins className="w-8 h-8 text-neon-cyan" />
+                    <div>
+                      <p className="text-2xl font-bold text-white">{pkg.tokens.toLocaleString()}</p>
+                      <p className="text-sm text-gray-400">tokens</p>
+                    </div>
+                  </div>
+
+                  <p className="text-3xl font-bold text-white mb-4">
+                    ${(pkg.price / 100).toFixed(2)}
+                  </p>
+
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      purchaseMutation.mutate(pkg.id);
+                    }}
+                    disabled={purchaseMutation.isPending || !config?.stripeEnabled}
+                    className="w-full py-2 bg-neon-cyan/20 border border-neon-cyan/50 rounded-lg text-neon-cyan font-medium hover:bg-neon-cyan/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {purchaseMutation.isPending ? 'Processing...' : 'Buy Now'}
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {!config?.stripeEnabled && (
+              <p className="text-yellow-500 text-sm mt-4">
+                Payment system is not configured. Contact support to enable purchases.
+              </p>
+            )}
+          </div>
+
+          {/* Economic Info */}
+          <div className="bg-lattice-surface border border-lattice-border rounded-xl p-6">
+            <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-neon-green" />
+              How the Economy Works
+            </h2>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+              <div>
+                <h3 className="font-semibold text-white mb-2">Marketplace Fees</h3>
+                <ul className="space-y-1 text-gray-400">
+                  <li>* 4% marketplace fee on sales</li>
+                  <li>* 70% goes to the creator</li>
+                  <li>* 20% goes to referenced DTUs (royalties)</li>
+                  <li>* 10% goes to Concord treasury</li>
+                </ul>
               </div>
 
-              <p className="text-3xl font-bold text-white mb-4">
-                ${(pkg.price / 100).toFixed(2)}
-              </p>
-
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  purchaseMutation.mutate(pkg.id);
-                }}
-                disabled={purchaseMutation.isPending || !config?.stripeEnabled}
-                className="w-full py-2 bg-neon-cyan/20 border border-neon-cyan/50 rounded-lg text-neon-cyan font-medium hover:bg-neon-cyan/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {purchaseMutation.isPending ? 'Processing...' : 'Buy Now'}
-              </button>
+              <div>
+                <h3 className="font-semibold text-white mb-2">Royalty Wheel</h3>
+                <ul className="space-y-1 text-gray-400">
+                  <li>* Gen 1 references: 30% of royalty pool</li>
+                  <li>* Gen 2 references: 20%</li>
+                  <li>* Gen 3 references: 10%</li>
+                  <li>* Deeper generations: 1-5%</li>
+                </ul>
+              </div>
             </div>
-          ))}
-        </div>
 
-        {!config?.stripeEnabled && (
-          <p className="text-yellow-500 text-sm mt-4">
-            Payment system is not configured. Contact support to enable purchases.
-          </p>
-        )}
-      </div>
-
-      {/* Economic Info */}
-      <div className="bg-lattice-surface border border-lattice-border rounded-xl p-6">
-        <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-          <TrendingUp className="w-5 h-5 text-neon-green" />
-          How the Economy Works
-        </h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
-          <div>
-            <h3 className="font-semibold text-white mb-2">Marketplace Fees</h3>
-            <ul className="space-y-1 text-gray-400">
-              <li>* 4% marketplace fee on sales</li>
-              <li>* 70% goes to the creator</li>
-              <li>* 20% goes to referenced DTUs (royalties)</li>
-              <li>* 10% goes to Concord treasury</li>
-            </ul>
-          </div>
-
-          <div>
-            <h3 className="font-semibold text-white mb-2">Royalty Wheel</h3>
-            <ul className="space-y-1 text-gray-400">
-              <li>* Gen 1 references: 30% of royalty pool</li>
-              <li>* Gen 2 references: 20%</li>
-              <li>* Gen 3 references: 10%</li>
-              <li>* Deeper generations: 1-5%</li>
-            </ul>
+            <div className="mt-4 p-4 bg-sovereignty-locked/10 border border-sovereignty-locked/30 rounded-lg">
+              <div className="flex items-center gap-2 text-sovereignty-locked font-medium mb-1">
+                <ShieldCheck className="w-4 h-4" />
+                Self-Hosted = Always Free
+              </div>
+              <p className="text-sm text-gray-400">
+                Running Concord on your own infrastructure is and always will be 100% free.
+                All features, no limits, full sovereignty.
+              </p>
+            </div>
           </div>
         </div>
-
-        <div className="mt-4 p-4 bg-sovereignty-locked/10 border border-sovereignty-locked/30 rounded-lg">
-          <div className="flex items-center gap-2 text-sovereignty-locked font-medium mb-1">
-            <ShieldCheck className="w-4 h-4" />
-            Self-Hosted = Always Free
-          </div>
-          <p className="text-sm text-gray-400">
-            Running Concord on your own infrastructure is and always will be 100% free.
-            All features, no limits, full sovereignty.
-          </p>
-        </div>
-      </div>
+      )}
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Tier Card Component
+// ---------------------------------------------------------------------------
 
 function TierCard({
   name,

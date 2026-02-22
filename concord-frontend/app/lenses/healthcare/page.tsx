@@ -61,10 +61,10 @@ import { cn } from '@/lib/utils';
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-type ModeTab = 'Patients' | 'Encounters' | 'Protocols' | 'Pharmacy' | 'Lab' | 'Therapy';
-type ArtifactType = 'Patient' | 'Encounter' | 'CareProtocol' | 'Prescription' | 'LabResult' | 'Treatment';
+type ModeTab = 'Patients' | 'Encounters' | 'Protocols' | 'Pharmacy' | 'Lab' | 'Therapy' | 'Symptoms';
+type ArtifactType = 'Patient' | 'Encounter' | 'CareProtocol' | 'Prescription' | 'LabResult' | 'Treatment' | 'Symptom';
 type Status = 'scheduled' | 'active' | 'completed' | 'cancelled' | 'archived';
-type DetailSubTab = 'Overview' | 'Vitals' | 'Medications' | 'Labs' | 'History';
+type DetailSubTab = 'Overview' | 'Vitals' | 'Medications' | 'Labs' | 'History' | 'Appointments';
 type PatientViewMode = 'cards' | 'timeline';
 
 interface HealthcareArtifact {
@@ -116,6 +116,17 @@ interface HealthcareArtifact {
   milestones?: { name: string; dueDate: string; completed: boolean }[];
   interventions?: string[];
   outcomeMeasure?: string;
+  /* Symptom Tracker */
+  symptomName?: string;
+  severity?: number;
+  symptomDate?: string;
+  symptomNotes?: string;
+  symptomCategory?: string;
+  /* Appointments */
+  appointmentDate?: string;
+  appointmentTime?: string;
+  appointmentType?: string;
+  appointmentLocation?: string;
   [key: string]: unknown;
 }
 
@@ -130,6 +141,7 @@ const MODE_TABS: { id: ModeTab; icon: React.ElementType; defaultType: ArtifactTy
   { id: 'Pharmacy', icon: Pill, defaultType: 'Prescription' },
   { id: 'Lab', icon: FlaskConical, defaultType: 'LabResult' },
   { id: 'Therapy', icon: Brain, defaultType: 'Treatment' },
+  { id: 'Symptoms', icon: Thermometer, defaultType: 'Symptom' },
 ];
 
 const ALL_STATUSES: Status[] = ['scheduled', 'active', 'completed', 'cancelled', 'archived'];
@@ -186,6 +198,16 @@ const VITAL_RANGES: Record<string, { low: number; high: number; critLow: number;
   respiratoryRate: { low: 12, high: 20, critLow: 8, critHigh: 30, unit: '/min' },
   o2Sat: { low: 95, high: 100, critLow: 88, critHigh: 101, unit: '%' },
 };
+
+const SYMPTOM_CATEGORIES = [
+  'Neurological', 'Respiratory', 'Cardiovascular', 'Gastrointestinal',
+  'Musculoskeletal', 'Dermatological', 'Psychological', 'General', 'Other',
+];
+
+const APPOINTMENT_TYPES = [
+  'Follow-up', 'Annual Physical', 'Specialist Referral', 'Lab Work',
+  'Imaging', 'Procedure', 'Telehealth', 'Urgent Care', 'Pre-op', 'Post-op',
+];
 
 const seedItems: { title: string; data: HealthcareArtifact }[] = [];
 
@@ -309,6 +331,37 @@ export default function HealthcareLensPage() {
   /* ---------- lab panel filter ---------- */
   const [labPanelFilter, setLabPanelFilter] = useState<string>('all');
 
+  /* ---------- medication form fields ---------- */
+  const [formDosage, setFormDosage] = useState('');
+  const [formFrequency, setFormFrequency] = useState('');
+  const [formRoute, setFormRoute] = useState('');
+  const [formStartDate, setFormStartDate] = useState('');
+  const [formEndDate, setFormEndDate] = useState('');
+  const [formIsPRN, setFormIsPRN] = useState(false);
+  const [formRefills, setFormRefills] = useState('');
+  const [formDaysSupply, setFormDaysSupply] = useState('');
+  const [formInteractions, setFormInteractions] = useState('');
+
+  /* ---------- symptom form fields ---------- */
+  const [formSymptomName, setFormSymptomName] = useState('');
+  const [formSeverity, setFormSeverity] = useState(5);
+  const [formSymptomDate, setFormSymptomDate] = useState('');
+  const [formSymptomNotes, setFormSymptomNotes] = useState('');
+  const [formSymptomCategory, setFormSymptomCategory] = useState('General');
+
+  /* ---------- lab form fields ---------- */
+  const [formTestPanel, setFormTestPanel] = useState('');
+  const [formResultValue, setFormResultValue] = useState('');
+  const [formReferenceRange, setFormReferenceRange] = useState('');
+  const [formUnit, setFormUnit] = useState('');
+  const [formIsCritical, setFormIsCritical] = useState(false);
+
+  /* ---------- appointment form fields ---------- */
+  const [formApptDate, setFormApptDate] = useState('');
+  const [formApptTime, setFormApptTime] = useState('');
+  const [formApptType, setFormApptType] = useState('Follow-up');
+  const [formApptLocation, setFormApptLocation] = useState('');
+
   /* ---------- medication filter ---------- */
   const [medFilter, setMedFilter] = useState<'all' | 'scheduled' | 'prn'>('all');
 
@@ -412,6 +465,14 @@ export default function HealthcareLensPage() {
     setSoapComplaint(''); setSoapVisitStart(''); setSoapVisitEnd('');
     setVitalsHR(''); setVitalsBPSys(''); setVitalsBPDia(''); setVitalsTemp('');
     setVitalsRR(''); setVitalsO2(''); setVitalsWeight(''); setVitalsHeight('');
+    setFormDosage(''); setFormFrequency(''); setFormRoute('');
+    setFormStartDate(''); setFormEndDate(''); setFormIsPRN(false);
+    setFormRefills(''); setFormDaysSupply(''); setFormInteractions('');
+    setFormSymptomName(''); setFormSeverity(5); setFormSymptomDate(new Date().toISOString().split('T')[0]);
+    setFormSymptomNotes(''); setFormSymptomCategory('General');
+    setFormTestPanel(''); setFormResultValue(''); setFormReferenceRange('');
+    setFormUnit(''); setFormIsCritical(false);
+    setFormApptDate(''); setFormApptTime(''); setFormApptType('Follow-up'); setFormApptLocation('');
     setShowEditor(true);
   };
 
@@ -441,6 +502,29 @@ export default function HealthcareLensPage() {
     setVitalsO2(d.o2Sat?.toString() || '');
     setVitalsWeight(d.weight?.toString() || '');
     setVitalsHeight(d.height?.toString() || '');
+    setFormDosage(d.dosage || '');
+    setFormFrequency(d.frequency || '');
+    setFormRoute(d.route || '');
+    setFormStartDate(d.startDate || '');
+    setFormEndDate(d.endDate || '');
+    setFormIsPRN(d.isPRN || false);
+    setFormRefills(d.refillsRemaining?.toString() || '');
+    setFormDaysSupply(d.daysSupply?.toString() || '');
+    setFormInteractions((d.interactions || []).join(', '));
+    setFormSymptomName(d.symptomName || '');
+    setFormSeverity(d.severity ?? 5);
+    setFormSymptomDate(d.symptomDate || '');
+    setFormSymptomNotes(d.symptomNotes || '');
+    setFormSymptomCategory(d.symptomCategory || 'General');
+    setFormTestPanel(d.testPanel || '');
+    setFormResultValue(d.resultValue || '');
+    setFormReferenceRange(d.referenceRange || '');
+    setFormUnit(d.unit || '');
+    setFormIsCritical(d.isCritical || false);
+    setFormApptDate(d.appointmentDate || '');
+    setFormApptTime(d.appointmentTime || '');
+    setFormApptType(d.appointmentType || 'Follow-up');
+    setFormApptLocation(d.appointmentLocation || '');
     setShowEditor(true);
   };
 
@@ -475,6 +559,35 @@ export default function HealthcareLensPage() {
           o2Sat: vitalsO2 ? Number(vitalsO2) : undefined,
           weight: vitalsWeight ? Number(vitalsWeight) : undefined,
           height: vitalsHeight ? Number(vitalsHeight) : undefined,
+          appointmentDate: formApptDate || undefined,
+          appointmentTime: formApptTime || undefined,
+          appointmentType: formApptType || undefined,
+          appointmentLocation: formApptLocation || undefined,
+        }),
+        ...(formType === 'Prescription' && {
+          dosage: formDosage || undefined,
+          frequency: formFrequency || undefined,
+          route: formRoute || undefined,
+          startDate: formStartDate || undefined,
+          endDate: formEndDate || undefined,
+          isPRN: formIsPRN,
+          refillsRemaining: formRefills ? Number(formRefills) : undefined,
+          daysSupply: formDaysSupply ? Number(formDaysSupply) : undefined,
+          interactions: formInteractions ? formInteractions.split(',').map(s => s.trim()).filter(Boolean) : undefined,
+        }),
+        ...(formType === 'LabResult' && {
+          testPanel: formTestPanel || undefined,
+          resultValue: formResultValue || undefined,
+          referenceRange: formReferenceRange || undefined,
+          unit: formUnit || undefined,
+          isCritical: formIsCritical,
+        }),
+        ...(formType === 'Symptom' && {
+          symptomName: formSymptomName || undefined,
+          severity: formSeverity,
+          symptomDate: formSymptomDate || undefined,
+          symptomNotes: formSymptomNotes || undefined,
+          symptomCategory: formSymptomCategory || undefined,
         }),
       } as unknown as Partial<HealthcareArtifact>,
       meta: { status: formStatus, tags: [formType] },
@@ -1277,6 +1390,88 @@ export default function HealthcareLensPage() {
                   ))}
                 </div>
               )}
+
+              {/* ---- Symptoms Tab (Symptom Tracker) ---- */}
+              {activeTab === 'Symptoms' && (
+                <div className="space-y-4">
+                  {/* Severity trend chart */}
+                  {filtered.length >= 2 && (() => {
+                    const sorted = [...filtered].sort((a, b) => {
+                      const da = (a.data as unknown as HealthcareArtifact).symptomDate || a.createdAt;
+                      const db = (b.data as unknown as HealthcareArtifact).symptomDate || b.createdAt;
+                      return da.localeCompare(db);
+                    });
+                    return (
+                      <div className={cn(ds.panel, 'space-y-3')}>
+                        <h3 className={ds.heading3}>Symptom Severity Trend</h3>
+                        <div className="flex items-end gap-1 h-24">
+                          {sorted.map((item, i) => {
+                            const d = item.data as unknown as HealthcareArtifact;
+                            const sev = d.severity ?? 5;
+                            const pct = (sev / 10) * 100;
+                            const barColor = sev >= 8 ? 'bg-red-400' : sev >= 5 ? 'bg-yellow-400' : 'bg-green-400';
+                            return (
+                              <div key={item.id} className="flex-1 flex flex-col items-center justify-end" title={`${item.title}: ${sev}/10 on ${d.symptomDate || 'N/A'}`}>
+                                <span className="text-[9px] text-gray-400 mb-0.5">{sev}</span>
+                                <div className={cn('w-full rounded-t', barColor)} style={{ height: `${Math.max(8, pct)}%` }} />
+                                <span className="text-[8px] text-gray-500 mt-0.5 truncate w-full text-center">{(d.symptomDate || '').slice(5)}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="flex items-center gap-4 text-xs">
+                          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-400" /> Mild (1-4)</span>
+                          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-yellow-400" /> Moderate (5-7)</span>
+                          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400" /> Severe (8-10)</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  {/* Category summary */}
+                  {filtered.length > 0 && (
+                    <div className="flex gap-2 flex-wrap">
+                      {SYMPTOM_CATEGORIES.map(cat => {
+                        const count = filtered.filter(i => (i.data as unknown as HealthcareArtifact).symptomCategory === cat).length;
+                        if (count === 0) return null;
+                        return <span key={cat} className={ds.badge('neon-cyan')}>{cat} ({count})</span>;
+                      })}
+                    </div>
+                  )}
+                  {/* Symptom cards */}
+                  <div className={ds.grid3}>
+                    {filtered.map(item => {
+                      const d = item.data as unknown as HealthcareArtifact;
+                      const sev = d.severity ?? 0;
+                      const sevColor = sev >= 8 ? 'text-red-400' : sev >= 5 ? 'text-yellow-400' : 'text-green-400';
+                      const sevBg = sev >= 8 ? 'bg-red-500/10 border-red-500/30' : sev >= 5 ? 'bg-yellow-500/10 border-yellow-500/30' : 'bg-green-500/10 border-green-500/30';
+                      return (
+                        <div key={item.id} className={cn(ds.panelHover, 'space-y-2')} onClick={() => openEditEditor(item)}>
+                          <div className="flex items-start justify-between">
+                            <h3 className={cn(ds.heading3, 'text-base')}>{item.title}</h3>
+                            <span className={ds.badge(STATUS_COLORS[d.status])}>{d.status}</span>
+                          </div>
+                          {d.symptomName && <p className="text-sm text-gray-300">{d.symptomName}</p>}
+                          <p className={cn(ds.textMuted, 'line-clamp-2')}>{d.description}</p>
+                          <div className="flex items-center gap-3">
+                            <div className={cn('rounded-lg border px-3 py-1.5', sevBg)}>
+                              <span className={cn('text-lg font-bold', sevColor)}>{sev}/10</span>
+                              <span className="text-xs text-gray-400 ml-1">severity</span>
+                            </div>
+                            {d.symptomCategory && <span className={ds.badge('neon-blue')}>{d.symptomCategory}</span>}
+                          </div>
+                          <div className="flex items-center gap-3 text-xs text-gray-500">
+                            {d.symptomDate && <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{d.symptomDate}</span>}
+                            {d.provider && <span>{d.provider}</span>}
+                          </div>
+                          {d.symptomNotes && (
+                            <p className="text-xs text-gray-500 italic line-clamp-2">{d.symptomNotes}</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </>
           )}
         </section>
@@ -1305,7 +1500,7 @@ export default function HealthcareLensPage() {
               </div>
               {/* Sub-tabs */}
               <div className="flex items-center gap-1 border-b border-lattice-border pb-2 mb-3 overflow-x-auto">
-                {(['Overview', 'Vitals', 'Medications', 'Labs', 'History'] as DetailSubTab[]).map(tab => (
+                {(['Overview', 'Vitals', 'Medications', 'Labs', 'History', 'Appointments'] as DetailSubTab[]).map(tab => (
                   <button
                     key={tab}
                     onClick={() => setDetailSubTab(tab)}
@@ -1481,6 +1676,78 @@ export default function HealthcareLensPage() {
                   </div>
                 );
               })()}
+
+              {/* ---------- Appointments Sub-tab ---------- */}
+              {detailSubTab === 'Appointments' && (() => {
+                const dd = drawerItem.data as unknown as HealthcareArtifact;
+                const linkedEncounters = getPatientLinked(drawerItem.id)
+                  .filter(i => {
+                    const d = i.data as unknown as HealthcareArtifact;
+                    return d.artifactType === 'Encounter' && d.status === 'scheduled';
+                  })
+                  .sort((a, b) => {
+                    const da = (a.data as unknown as HealthcareArtifact).date || '';
+                    const db = (b.data as unknown as HealthcareArtifact).date || '';
+                    return da.localeCompare(db);
+                  });
+                return (
+                  <div className="space-y-3">
+                    {/* Patient's own appointment info */}
+                    {(dd.appointmentDate || dd.appointmentType) && (
+                      <div className={cn(ds.panel, 'p-3 space-y-2')}>
+                        <div className="flex items-center gap-2">
+                          <CalendarCheck className="w-4 h-4 text-neon-blue" />
+                          <span className="text-sm font-medium text-white">Next Appointment</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div>
+                            <span className="text-gray-500 block">Date</span>
+                            <span className="text-gray-200 font-medium">{dd.appointmentDate || '--'}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-500 block">Time</span>
+                            <span className="text-gray-200 font-medium">{dd.appointmentTime || '--'}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-500 block">Type</span>
+                            <span className="text-gray-200 font-medium">{dd.appointmentType || '--'}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-500 block">Location</span>
+                            <span className="text-gray-200 font-medium">{dd.appointmentLocation || '--'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {/* Scheduled encounters */}
+                    <div>
+                      <span className="text-xs text-gray-500 font-medium">Scheduled Visits</span>
+                      <div className="mt-1 space-y-1">
+                        {linkedEncounters.length === 0 ? (
+                          <p className={cn(ds.textMuted, 'text-center py-4')}>No upcoming appointments</p>
+                        ) : linkedEncounters.map(enc => {
+                          const ed = enc.data as unknown as HealthcareArtifact;
+                          return (
+                            <div key={enc.id} className="flex items-center justify-between p-2 rounded bg-lattice-surface hover:bg-lattice-elevated cursor-pointer text-xs" onClick={() => openEditEditor(enc)}>
+                              <div className="flex items-center gap-2">
+                                <Calendar className="w-3 h-3 text-neon-blue" />
+                                <span className="text-gray-200 font-medium">{enc.title}</span>
+                              </div>
+                              <div className="flex items-center gap-2 text-gray-500">
+                                {ed.date && <span>{ed.date}</span>}
+                                {ed.provider && <span>{ed.provider}</span>}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <button onClick={() => openEditEditor(drawerItem)} className={cn(ds.btnSecondary, 'w-full text-sm')}>
+                      <Calendar className="w-4 h-4" /> Edit Appointment Info
+                    </button>
+                  </div>
+                );
+              })()}
             </div>
           </aside>
         )}
@@ -1514,6 +1781,7 @@ export default function HealthcareLensPage() {
                       <option value="Prescription">Prescription</option>
                       <option value="LabResult">Lab Result</option>
                       <option value="Treatment">Treatment</option>
+                      <option value="Symptom">Symptom</option>
                     </select>
                   </div>
                   <div>
@@ -1763,6 +2031,195 @@ export default function HealthcareLensPage() {
                           SpO2: {vitalsO2}%
                         </span>
                       )}
+                    </div>
+                  </div>
+                )}
+
+                {/* ============================================= */}
+                {/* Prescription Fields (Prescription type)       */}
+                {/* ============================================= */}
+                {formType === 'Prescription' && (
+                  <div className="border border-blue-500/30 rounded-lg p-4 space-y-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Pill className="w-5 h-5 text-blue-400" />
+                      <h3 className={cn(ds.heading3, 'text-blue-400')}>Medication Details</h3>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      <div>
+                        <label className={ds.label}>Dosage</label>
+                        <input value={formDosage} onChange={e => setFormDosage(e.target.value)} className={ds.input} placeholder="e.g. 500mg" />
+                      </div>
+                      <div>
+                        <label className={ds.label}>Frequency</label>
+                        <input value={formFrequency} onChange={e => setFormFrequency(e.target.value)} className={ds.input} placeholder="e.g. BID, TID, QHS" />
+                      </div>
+                      <div>
+                        <label className={ds.label}>Route</label>
+                        <select value={formRoute} onChange={e => setFormRoute(e.target.value)} className={ds.select}>
+                          <option value="">Select route</option>
+                          <option value="PO">PO (Oral)</option>
+                          <option value="IV">IV (Intravenous)</option>
+                          <option value="IM">IM (Intramuscular)</option>
+                          <option value="SC">SC (Subcutaneous)</option>
+                          <option value="SL">SL (Sublingual)</option>
+                          <option value="Topical">Topical</option>
+                          <option value="Inhaled">Inhaled</option>
+                          <option value="Rectal">Rectal</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className={ds.label}>Start Date</label>
+                        <input type="date" value={formStartDate} onChange={e => setFormStartDate(e.target.value)} className={ds.input} />
+                      </div>
+                      <div>
+                        <label className={ds.label}>End Date</label>
+                        <input type="date" value={formEndDate} onChange={e => setFormEndDate(e.target.value)} className={ds.input} />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      <div>
+                        <label className={ds.label}>Refills Remaining</label>
+                        <input type="number" value={formRefills} onChange={e => setFormRefills(e.target.value)} className={ds.input} placeholder="0" min="0" />
+                      </div>
+                      <div>
+                        <label className={ds.label}>Days Supply</label>
+                        <input type="number" value={formDaysSupply} onChange={e => setFormDaysSupply(e.target.value)} className={ds.input} placeholder="30" min="0" />
+                      </div>
+                      <div className="flex items-end pb-2">
+                        <label className="flex items-center gap-2 text-sm text-gray-300">
+                          <input type="checkbox" checked={formIsPRN} onChange={e => setFormIsPRN(e.target.checked)} className="accent-neon-blue" />
+                          PRN (As Needed)
+                        </label>
+                      </div>
+                    </div>
+                    <div>
+                      <label className={ds.label}>Drug Interactions (comma-separated)</label>
+                      <input value={formInteractions} onChange={e => setFormInteractions(e.target.value)} className={ds.input} placeholder="e.g. Warfarin, Aspirin..." />
+                    </div>
+                  </div>
+                )}
+
+                {/* ============================================= */}
+                {/* Lab Result Fields (LabResult type)            */}
+                {/* ============================================= */}
+                {formType === 'LabResult' && (
+                  <div className="border border-cyan-500/30 rounded-lg p-4 space-y-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <FlaskConical className="w-5 h-5 text-neon-cyan" />
+                      <h3 className={cn(ds.heading3, 'text-neon-cyan')}>Lab Result Details</h3>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className={ds.label}>Test Panel</label>
+                        <select value={formTestPanel} onChange={e => setFormTestPanel(e.target.value)} className={ds.select}>
+                          <option value="">Select panel</option>
+                          {Object.entries(LAB_PANELS).map(([key, panel]) => (
+                            <option key={key} value={key}>{panel.name} ({key})</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={ds.label}>Unit</label>
+                        <input value={formUnit} onChange={e => setFormUnit(e.target.value)} className={ds.input} placeholder="e.g. mg/dL, mmol/L" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className={ds.label}>Result Value</label>
+                        <input value={formResultValue} onChange={e => setFormResultValue(e.target.value)} className={ds.input} placeholder="e.g. 120" />
+                      </div>
+                      <div>
+                        <label className={ds.label}>Reference Range</label>
+                        <input value={formReferenceRange} onChange={e => setFormReferenceRange(e.target.value)} className={ds.input} placeholder="e.g. 70-100" />
+                      </div>
+                    </div>
+                    {formResultValue && formReferenceRange && (
+                      <div className={cn('px-3 py-2 rounded-lg text-xs font-medium',
+                        isOutOfRange(formResultValue, formReferenceRange) ? 'bg-red-500/10 text-red-400' : 'bg-green-500/10 text-green-400'
+                      )}>
+                        {isOutOfRange(formResultValue, formReferenceRange) ? 'Result is OUT OF RANGE' : 'Result is within normal range'}
+                      </div>
+                    )}
+                    <label className="flex items-center gap-2 text-sm text-gray-300">
+                      <input type="checkbox" checked={formIsCritical} onChange={e => setFormIsCritical(e.target.checked)} className="accent-red-400" />
+                      Mark as Critical Value
+                    </label>
+                  </div>
+                )}
+
+                {/* ============================================= */}
+                {/* Symptom Fields (Symptom type)                 */}
+                {/* ============================================= */}
+                {formType === 'Symptom' && (
+                  <div className="border border-orange-500/30 rounded-lg p-4 space-y-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Thermometer className="w-5 h-5 text-orange-400" />
+                      <h3 className={cn(ds.heading3, 'text-orange-400')}>Symptom Details</h3>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className={ds.label}>Symptom Name</label>
+                        <input value={formSymptomName} onChange={e => setFormSymptomName(e.target.value)} className={ds.input} placeholder="e.g. Headache, Nausea" />
+                      </div>
+                      <div>
+                        <label className={ds.label}>Category</label>
+                        <select value={formSymptomCategory} onChange={e => setFormSymptomCategory(e.target.value)} className={ds.select}>
+                          {SYMPTOM_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className={ds.label}>Severity (1-10): <span className={cn('font-bold', formSeverity >= 8 ? 'text-red-400' : formSeverity >= 5 ? 'text-yellow-400' : 'text-green-400')}>{formSeverity}</span></label>
+                      <input type="range" min="1" max="10" value={formSeverity} onChange={e => setFormSeverity(Number(e.target.value))} className="w-full accent-neon-blue" />
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>Mild</span>
+                        <span>Moderate</span>
+                        <span>Severe</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className={ds.label}>Date of Onset</label>
+                      <input type="date" value={formSymptomDate} onChange={e => setFormSymptomDate(e.target.value)} className={ds.input} />
+                    </div>
+                    <div>
+                      <label className={ds.label}>Symptom Notes</label>
+                      <textarea value={formSymptomNotes} onChange={e => setFormSymptomNotes(e.target.value)} className={ds.textarea} rows={3} placeholder="Duration, triggers, alleviating factors, associated symptoms..." />
+                    </div>
+                  </div>
+                )}
+
+                {/* ============================================= */}
+                {/* Appointment Fields (Patient type)              */}
+                {/* ============================================= */}
+                {formType === 'Patient' && (
+                  <div className="border border-neon-blue/30 rounded-lg p-4 space-y-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <CalendarCheck className="w-5 h-5 text-neon-blue" />
+                      <h3 className={cn(ds.heading3, 'text-neon-blue')}>Appointment Calendar</h3>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className={ds.label}>Next Appointment Date</label>
+                        <input type="date" value={formApptDate} onChange={e => setFormApptDate(e.target.value)} className={ds.input} />
+                      </div>
+                      <div>
+                        <label className={ds.label}>Time</label>
+                        <input type="time" value={formApptTime} onChange={e => setFormApptTime(e.target.value)} className={ds.input} />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className={ds.label}>Appointment Type</label>
+                        <select value={formApptType} onChange={e => setFormApptType(e.target.value)} className={ds.select}>
+                          {APPOINTMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={ds.label}>Location</label>
+                        <input value={formApptLocation} onChange={e => setFormApptLocation(e.target.value)} className={ds.input} placeholder="Clinic, Hospital, Telehealth" />
+                      </div>
                     </div>
                   </div>
                 )}

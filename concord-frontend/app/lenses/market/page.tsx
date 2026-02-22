@@ -3,7 +3,7 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import { MarketEmpireListing } from '@/components/market/MarketEmpireListing';
 import { Store, TrendingUp, Package, Coins } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -31,12 +31,12 @@ export default function MarketLensPage() {
   // Backend: GET /api/marketplace/listings
   const { data: listings, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
     queryKey: ['marketplace-listings'],
-    queryFn: () => api.get('/api/marketplace/listings').then((r) => r.data),
+    queryFn: () => apiHelpers.marketplace.listings().then((r) => r.data),
   });
 
   const createMutation = useMutation({
     mutationFn: (payload: { title: string; description: string; price: number; type: string }) =>
-      api.post('/api/marketplace/listings', payload),
+      apiHelpers.marketplace.submit(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['marketplace-listings'] });
       setShowCreate(false);

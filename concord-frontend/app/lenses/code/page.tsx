@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useMutation } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -605,10 +605,10 @@ export default function CodeLensPage() {
 
   const runScriptMutation = useMutation({
     mutationFn: async () => {
-      const res = await api.post('/api/ask', {
-        query: `Analyze this ${activeScriptType} script for music production and describe what it would produce:\n\n\`\`\`javascript\n${activeTab.content}\n\`\`\``,
-        mode: 'creative',
-      });
+      const res = await apiHelpers.chat.ask(
+        `Analyze this ${activeScriptType} script for music production and describe what it would produce:\n\n\`\`\`javascript\n${activeTab.content}\n\`\`\``,
+        'creative'
+      );
       return res.data;
     },
     onSuccess: () => {

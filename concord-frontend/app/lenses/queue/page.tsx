@@ -2,7 +2,8 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
+import { useUIStore } from '@/store/ui';
 import { useState } from 'react';
 import { Inbox, Play, Trash2, Clock, Zap, Globe, FileText } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -49,6 +50,17 @@ export default function QueueLensPage() {
       queryClient.invalidateQueries({ queryKey: ['status'] });
     },
     onError: (err) => console.error('processItem failed:', err instanceof Error ? err.message : err),
+  });
+
+  const removeItem = useMutation({
+    mutationFn: async (itemId: string) => {
+      return api.delete(`/api/queue/${itemId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['status'] });
+      useUIStore.getState().addToast({ type: 'success', message: 'Item removed from queue' });
+    },
+    onError: (err) => useUIStore.getState().addToast({ type: 'error', message: `Failed to remove: ${err instanceof Error ? err.message : 'Unknown error'}` }),
   });
 
   const queues = [
@@ -201,7 +213,9 @@ export default function QueueLensPage() {
                     )}
                   </button>
                   <button
-                    className="p-2 bg-neon-pink/20 text-neon-pink rounded-lg hover:bg-neon-pink/30"
+                    onClick={() => removeItem.mutate(item.id)}
+                    disabled={removeItem.isPending}
+                    className="p-2 bg-neon-pink/20 text-neon-pink rounded-lg hover:bg-neon-pink/30 disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Remove"
                   >
                     <Trash2 className="w-4 h-4" />

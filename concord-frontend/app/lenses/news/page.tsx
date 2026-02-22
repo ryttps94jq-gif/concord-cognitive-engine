@@ -128,10 +128,10 @@ export default function NewsLensPage() {
                         <span>{article.source}</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <button className="text-gray-400 hover:text-neon-blue">
+                        <button onClick={() => navigator.clipboard?.writeText(article.url || article.title)} className="text-gray-400 hover:text-neon-blue">
                           <Bookmark className="w-4 h-4" />
                         </button>
-                        <button className="text-gray-400 hover:text-neon-purple">
+                        <button onClick={() => navigator.clipboard?.writeText(`${window.location.origin}/lenses/news?article=${article.id}`)} className="text-gray-400 hover:text-neon-purple">
                           <Share2 className="w-4 h-4" />
                         </button>
                       </div>

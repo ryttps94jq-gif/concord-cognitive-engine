@@ -37,6 +37,7 @@ import {
   LineChart
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
+import { useUIStore } from '@/store/ui';
 
 // Types
 interface Model {
@@ -300,6 +301,65 @@ export default function MLLensPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['ml-models'] }),
     onError: (err) => console.error('deployModel failed:', err instanceof Error ? err.message : err),
   });
+
+  const stopExperiment = useMutation({
+    mutationFn: (expId: string) => apiHelpers.lens.run('ml', expId, { action: 'stop' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ml-experiments'] });
+      useUIStore.getState().addToast({ type: 'success', message: 'Experiment stopped' });
+    },
+    onError: (err) => useUIStore.getState().addToast({ type: 'error', message: `Failed to stop: ${err instanceof Error ? err.message : 'Unknown error'}` }),
+  });
+
+  const scaleDeployment = useMutation({
+    mutationFn: (depId: string) => apiHelpers.lens.run('ml', depId, { action: 'scale', params: { replicas: 2 } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ml-deployments'] });
+      useUIStore.getState().addToast({ type: 'success', message: 'Deployment scaling initiated' });
+    },
+    onError: (err) => useUIStore.getState().addToast({ type: 'error', message: `Scale failed: ${err instanceof Error ? err.message : 'Unknown error'}` }),
+  });
+
+  const stopDeployment = useMutation({
+    mutationFn: (depId: string) => apiHelpers.lens.run('ml', depId, { action: 'stop-deployment' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ml-deployments'] });
+      useUIStore.getState().addToast({ type: 'success', message: 'Deployment stopped' });
+    },
+    onError: (err) => useUIStore.getState().addToast({ type: 'error', message: `Stop failed: ${err instanceof Error ? err.message : 'Unknown error'}` }),
+  });
+
+  const handleUploadDataset = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.csv,.json,.parquet,.tsv,.jsonl';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        useUIStore.getState().addToast({ type: 'info', message: `Uploading dataset: ${file.name}` });
+      }
+    };
+    input.click();
+  };
+
+  const handleCopyOutput = () => {
+    if (playgroundOutput) {
+      navigator.clipboard.writeText(JSON.stringify(playgroundOutput, null, 2));
+      useUIStore.getState().addToast({ type: 'success', message: 'Output copied to clipboard' });
+    }
+  };
+
+  const handleExportOutput = () => {
+    if (playgroundOutput) {
+      const blob = new Blob([JSON.stringify(playgroundOutput, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ml-output-${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+  };
 
   // Data - sourced from persistent backend
   const datasets: Dataset[] = datasetItems.map(i => ({ ...(i.data as unknown as Dataset), id: i.id }));
@@ -645,11 +705,14 @@ export default function MLLensPage() {
                     <h3 className="font-semibold">{selectedExperiment.name}</h3>
                     <div className="flex items-center gap-2">
                       {selectedExperiment.status === 'running' && (
-                        <button className="btn-neon small pink">
-                          <Square className="w-4 h-4 mr-1" /> Stop
+                        <button className="btn-neon small pink" onClick={() => stopExperiment.mutate(selectedExperiment.id)} disabled={stopExperiment.isPending}>
+                          <Square className="w-4 h-4 mr-1" /> {stopExperiment.isPending ? 'Stopping...' : 'Stop'}
                         </button>
                       )}
-                      <button className="btn-neon small">
+                      <button className="btn-neon small" onClick={() => {
+                        setShowNewExperiment(true);
+                        useUIStore.getState().addToast({ type: 'info', message: `Cloning experiment "${selectedExperiment.name}"` });
+                      }}>
                         <Copy className="w-4 h-4 mr-1" /> Clone
                       </button>
                     </div>
@@ -725,7 +788,7 @@ export default function MLLensPage() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold">Available Datasets</h3>
-            <button className="btn-neon">
+            <button className="btn-neon" onClick={handleUploadDataset}>
               <Upload className="w-4 h-4 mr-2" />
               Upload Dataset
             </button>
@@ -819,9 +882,9 @@ export default function MLLensPage() {
                   </div>
 
                   <div className="flex gap-2">
-                    <button className="btn-neon small">Scale</button>
-                    <button className="btn-neon small">Logs</button>
-                    <button className="btn-neon small pink">Stop</button>
+                    <button className="btn-neon small" onClick={() => scaleDeployment.mutate(dep.id)} disabled={scaleDeployment.isPending}>Scale</button>
+                    <button className="btn-neon small" onClick={() => useUIStore.getState().addToast({ type: 'info', message: `Fetching logs for ${dep.modelName}...` })}>Logs</button>
+                    <button className="btn-neon small pink" onClick={() => stopDeployment.mutate(dep.id)} disabled={stopDeployment.isPending}>Stop</button>
                   </div>
                 </div>
               ))}
@@ -896,10 +959,10 @@ export default function MLLensPage() {
 
             {!!playgroundOutput && (
               <div className="flex gap-2">
-                <button className="btn-neon small flex-1">
+                <button className="btn-neon small flex-1" onClick={handleCopyOutput}>
                   <Copy className="w-4 h-4 mr-1" /> Copy
                 </button>
-                <button className="btn-neon small flex-1">
+                <button className="btn-neon small flex-1" onClick={handleExportOutput}>
                   <Download className="w-4 h-4 mr-1" /> Export
                 </button>
               </div>

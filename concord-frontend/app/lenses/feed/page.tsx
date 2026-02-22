@@ -506,8 +506,8 @@ export default function FeedLensPage() {
     queryFn: async () => {
       try {
         const [dtuRes] = await Promise.allSettled([
-          api.get('/api/dtus', { params: { limit: 50 } }),
-          api.get('/api/artistry/distribution/feed', { params: { tab: activeTab } }),
+          apiHelpers.dtus.paginated({ limit: 50 }),
+          apiHelpers.artistry.distribution.feed('current'),
         ]);
 
         const serverPosts: FeedPost[] = [];
@@ -555,9 +555,12 @@ export default function FeedLensPage() {
     queryKey: ['trending-topics'],
     queryFn: async () => {
       try {
-        const r = await api.get('/api/tags');
-        if (r.data?.tags?.length) {
-          return r.data.tags.slice(0, 5).map((tag: string, i: number) => ({
+        const r = await apiHelpers.dtus.list();
+        const allTags = new Set<string>();
+        (r.data?.dtus || []).forEach((d: Record<string, unknown>) => ((d.tags as string[]) || []).forEach(t => allTags.add(t)));
+        const tagArr = Array.from(allTags);
+        if (tagArr.length) {
+          return tagArr.slice(0, 5).map((tag: string, i: number) => ({
             id: `t-${i}`,
             tag: `#${tag}`,
             category: ['Music', 'Production', 'Community', 'Tech', 'Visual'][i % 5],
@@ -572,7 +575,7 @@ export default function FeedLensPage() {
   });
 
   const postMutation = useMutation({
-    mutationFn: (content: string) => api.post('/api/dtus', { content, tags: ['post'] }),
+    mutationFn: (content: string) => apiHelpers.dtus.create({ content, tags: ['post'] }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['feed-posts'] });
       setNewPost('');
@@ -583,7 +586,7 @@ export default function FeedLensPage() {
   });
 
   const likeMutation = useMutation({
-    mutationFn: (postId: string) => api.post(`/api/dtus/${postId}/like`),
+    mutationFn: (postId: string) => apiHelpers.dtus.update(postId, { liked: true }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['feed-posts'] }),
     onError: (err) => {
       console.error('Failed to like post:', err instanceof Error ? err.message : err);
@@ -591,7 +594,7 @@ export default function FeedLensPage() {
   });
 
   const repostMutation = useMutation({
-    mutationFn: (postId: string) => api.post(`/api/dtus/${postId}/repost`),
+    mutationFn: (postId: string) => apiHelpers.dtus.update(postId, { reposted: true }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['feed-posts'] });
       useUIStore.getState().addToast({ type: 'success', message: 'Reposted!' });
@@ -599,7 +602,7 @@ export default function FeedLensPage() {
   });
 
   const bookmarkMutation = useMutation({
-    mutationFn: (postId: string) => api.post(`/api/dtus/${postId}/bookmark`),
+    mutationFn: (postId: string) => apiHelpers.dtus.update(postId, { bookmarked: true }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['feed-posts'] }),
   });
 
@@ -669,13 +672,13 @@ export default function FeedLensPage() {
   ];
 
   const sidebarNav = [
-    { icon: Home, label: 'Home', active: true },
-    { icon: Search, label: 'Explore', active: false },
-    { icon: Bell, label: 'Notifications', active: false },
-    { icon: Mail, label: 'Messages', active: false },
-    { icon: Bookmark, label: 'Bookmarks', active: false },
-    { icon: User, label: 'Profile', active: false },
-    { icon: Music, label: 'Studio', active: false },
+    { icon: Home, label: 'Home', active: activeTab === 'for-you', action: () => setActiveTab('for-you') },
+    { icon: Search, label: 'Explore', active: activeTab === 'trending', action: () => setActiveTab('trending') },
+    { icon: Bell, label: 'Notifications', active: false, action: () => useUIStore.getState().addToast({ type: 'info', message: 'Notifications coming soon' }) },
+    { icon: Mail, label: 'Messages', active: false, action: () => useUIStore.getState().addToast({ type: 'info', message: 'Messages coming soon' }) },
+    { icon: Bookmark, label: 'Bookmarks', active: false, action: () => useUIStore.getState().addToast({ type: 'info', message: 'Bookmarks coming soon' }) },
+    { icon: User, label: 'Profile', active: false, action: () => useUIStore.getState().addToast({ type: 'info', message: 'Profile coming soon' }) },
+    { icon: Music, label: 'Studio', active: activeTab === 'releases', action: () => setActiveTab('releases') },
   ];
 
 
@@ -699,6 +702,7 @@ export default function FeedLensPage() {
           {sidebarNav.map(item => (
             <button
               key={item.label}
+              onClick={item.action}
               className={cn(
                 'flex items-center gap-4 p-3 rounded-xl transition-colors w-full',
                 item.active

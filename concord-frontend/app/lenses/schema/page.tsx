@@ -2,7 +2,8 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { apiHelpers } from '@/lib/api/client';
+import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useState } from 'react';
 import { FileCode, Plus, Check, X } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -14,15 +15,13 @@ export default function SchemaLensPage() {
   const [validateData, setValidateData] = useState({ schemaName: '', data: '' });
   const [validationResult, setValidationResult] = useState<{ valid: boolean; errors?: { field: string; error: string }[] } | null>(null);
 
-  const { data: schemas, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
-    queryKey: ['schemas'],
-    queryFn: () => api.get('/api/schema').then(r => r.data),
-  });
+  const { items: schemaItems, isLoading, isError: isError, error: error, refetch: refetch, create: createSchemaItem } = useLensData<Record<string, unknown>>('schema', 'definition', { seed: [] });
+  const schemas = schemaItems.map(i => ({ id: i.id, name: i.title, ...(i.data || {}) }));
 
   const createMutation = useMutation({
-    mutationFn: (data: unknown) => api.post('/api/schema', data),
+    mutationFn: (data: unknown) => createSchemaItem({ title: (data as Record<string, string>)?.name || 'schema', data: data as Record<string, unknown> }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['schemas'] });
+      refetch();
       setShowCreate(false);
     },
     onError: (err) => {
@@ -32,7 +31,7 @@ export default function SchemaLensPage() {
 
   const validateMutation = useMutation({
     mutationFn: (data: { schemaName: string; data: unknown }) =>
-      api.post('/api/schema/validate', data),
+      apiHelpers.lens.run('schema', data.schemaName, { action: 'validate', params: data }),
     onSuccess: (result) => setValidationResult(result.data),
     onError: (err) => {
       setValidationResult({ valid: false, errors: [{ field: 'API', error: err instanceof Error ? err.message : 'Validation request failed' }] });

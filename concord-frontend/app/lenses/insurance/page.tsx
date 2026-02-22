@@ -37,6 +37,14 @@ import {
   Wallet,
   GraduationCap,
   ChevronRight,
+  Columns,
+  Upload,
+  FolderOpen,
+  File,
+  Calendar,
+  Download,
+  Eye,
+  Clock,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 
@@ -44,8 +52,8 @@ import { ErrorState } from '@/components/common/EmptyState';
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-type ModeTab = 'Dashboard' | 'Policies' | 'Claims' | 'Calculator' | 'Clients' | 'Commissions' | 'Compliance';
-type ArtifactType = 'Policy' | 'Claim' | 'Quote' | 'InsuredClient' | 'Commission' | 'ComplianceItem';
+type ModeTab = 'Dashboard' | 'Policies' | 'Claims' | 'Calculator' | 'Clients' | 'Commissions' | 'Compliance' | 'Compare' | 'Documents';
+type ArtifactType = 'Policy' | 'Claim' | 'Quote' | 'InsuredClient' | 'Commission' | 'ComplianceItem' | 'Document';
 
 type PolicyType = 'auto' | 'home' | 'life' | 'commercial' | 'health' | 'umbrella';
 type ClaimStatus = 'reported' | 'investigating' | 'estimate' | 'approved' | 'paid' | 'closed' | 'denied';
@@ -140,7 +148,18 @@ interface ComplianceItemData {
   renewalFee: number;
 }
 
-type ArtifactDataUnion = PolicyData | ClaimData | QuoteData | InsuredClientData | CommissionData | ComplianceItemData;
+interface DocumentData {
+  documentType: string;
+  policyRef: string;
+  fileName: string;
+  fileSize: string;
+  uploadDate: string;
+  expiryDate: string;
+  notes: string;
+  category: string;
+}
+
+type ArtifactDataUnion = PolicyData | ClaimData | QuoteData | InsuredClientData | CommissionData | ComplianceItemData | DocumentData;
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -151,9 +170,11 @@ const MODE_TABS: { id: ModeTab; icon: typeof Shield; artifactType?: ArtifactType
   { id: 'Policies', icon: FileText, artifactType: 'Policy' },
   { id: 'Claims', icon: ClipboardList, artifactType: 'Claim' },
   { id: 'Calculator', icon: Calculator, artifactType: 'Quote' },
+  { id: 'Compare', icon: Columns },
   { id: 'Clients', icon: Users, artifactType: 'InsuredClient' },
   { id: 'Commissions', icon: DollarSign, artifactType: 'Commission' },
   { id: 'Compliance', icon: GraduationCap, artifactType: 'ComplianceItem' },
+  { id: 'Documents', icon: FolderOpen, artifactType: 'Document' },
 ];
 
 const POLICY_TYPES: PolicyType[] = ['auto', 'home', 'life', 'commercial', 'health', 'umbrella'];
@@ -162,6 +183,8 @@ const QUOTE_STATUSES: QuoteStatus[] = ['draft', 'quoted', 'accepted', 'declined'
 const RISK_PROFILES = ['preferred', 'standard', 'substandard', 'declined'];
 const PAYMENT_FREQUENCIES = ['monthly', 'quarterly', 'semi_annual', 'annual'];
 const COMPLIANCE_TYPES = ['CE Credits', 'License Renewal', 'E&O Insurance', 'Carrier Appointment'];
+const DOCUMENT_TYPES = ['Policy Declaration', 'Endorsement', 'Certificate of Insurance', 'Binder', 'Application', 'Claim Form', 'Proof of Loss', 'Appraisal', 'Correspondence', 'Other'];
+const DOCUMENT_CATEGORIES = ['Policy Documents', 'Claim Documents', 'Client Documents', 'Compliance', 'Invoices', 'Other'];
 
 const POLICY_ICONS: Record<string, typeof Car> = {
   auto: Car,

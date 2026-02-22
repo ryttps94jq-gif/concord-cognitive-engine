@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useUIStore } from '@/store/ui';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   TrendingUp,
@@ -544,7 +545,7 @@ export default function FinanceLensPage() {
                   className="pl-9 pr-4 py-1.5 bg-lattice-deep rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-neon-cyan w-48"
                 />
               </div>
-              <button className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400">
+              <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Filter options' })} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400">
                 <Filter className="w-4 h-4" />
               </button>
             </div>
@@ -564,6 +565,9 @@ export default function FinanceLensPage() {
                 </tr>
               </thead>
               <tbody>
+                {assets.filter(a => a.symbol.toLowerCase().includes(searchQuery.toLowerCase()) || a.name.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
+                  <tr><td colSpan={7} className="py-8 text-center text-gray-500">{searchQuery ? 'No assets match your search' : 'No assets in portfolio'}</td></tr>
+                )}
                 {assets
                   .filter(a => a.symbol.toLowerCase().includes(searchQuery.toLowerCase()) || a.name.toLowerCase().includes(searchQuery.toLowerCase()))
                   .map((asset) => (
@@ -684,7 +688,7 @@ export default function FinanceLensPage() {
         <div className="panel p-4">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold">Recent Transactions</h3>
-            <button className="text-sm text-neon-cyan hover:underline">View all</button>
+            <button onClick={() => setActiveTab('portfolio')} className="text-sm text-neon-cyan hover:underline">View all</button>
           </div>
 
           <div className="space-y-3">
@@ -729,7 +733,7 @@ export default function FinanceLensPage() {
               <Newspaper className="w-4 h-4 text-neon-cyan" />
               Market News
             </h3>
-            <button className="text-sm text-neon-cyan hover:underline">More</button>
+            <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Loading more market news' })} className="text-sm text-neon-cyan hover:underline">More</button>
           </div>
 
           <div className="space-y-3">
@@ -1024,7 +1028,7 @@ export default function FinanceLensPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold">Open Orders</h2>
-        <button className="btn-neon">
+        <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Opening order form...' })} className="btn-neon">
           <Plus className="w-4 h-4 mr-2" />
           New Order
         </button>
@@ -1046,6 +1050,9 @@ export default function FinanceLensPage() {
             </tr>
           </thead>
           <tbody>
+            {orders.length === 0 && (
+              <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-500">No orders yet</td></tr>
+            )}
             {orders.map((order) => (
               <tr key={order.id} className="border-t border-lattice-border hover:bg-lattice-elevated/30">
                 <td className="px-4 py-4 text-sm text-gray-400">{formatTime(order.createdAt)}</td>
@@ -1084,7 +1091,7 @@ export default function FinanceLensPage() {
                   </span>
                 </td>
                 <td className="px-4 py-4">
-                  <button className="p-2 rounded hover:bg-lattice-elevated text-gray-400 hover:text-red-400">
+                  <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: `Cancelling order ${order.id}` })} className="p-2 rounded hover:bg-lattice-elevated text-gray-400 hover:text-red-400">
                     <X className="w-4 h-4" />
                   </button>
                 </td>
@@ -1100,7 +1107,7 @@ export default function FinanceLensPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold">Price Alerts</h2>
-        <button className="btn-neon">
+        <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Creating new price alert...' })} className="btn-neon">
           <Plus className="w-4 h-4 mr-2" />
           New Alert
         </button>
@@ -1128,7 +1135,7 @@ export default function FinanceLensPage() {
                     <p className="text-xs text-gray-400">{alert.asset}</p>
                   </div>
                 </div>
-                <button className={cn(
+                <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: alert.active ? 'Alert paused' : 'Alert activated' })} className={cn(
                   'p-2 rounded-lg',
                   alert.active ? 'text-neon-green' : 'text-gray-500'
                 )}>
@@ -1200,13 +1207,13 @@ export default function FinanceLensPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400">
+          <button onClick={() => { refetch(); refetch2(); refetch3(); refetch4(); refetch5(); }} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400">
             <RefreshCw className="w-5 h-5" />
           </button>
-          <button className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400">
+          <button onClick={() => { const data = JSON.stringify({ assets: assetItems, transactions: txItems }, null, 2); const blob = new Blob([data], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'finance-export.json'; a.click(); URL.revokeObjectURL(url); }} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400">
             <Download className="w-5 h-5" />
           </button>
-          <button className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400">
+          <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Finance settings' })} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400">
             <Settings className="w-5 h-5" />
           </button>
         </div>

@@ -60,7 +60,7 @@ import { ErrorState } from '@/components/common/EmptyState';
 // ---------------------------------------------------------------------------
 
 type ModeTab = 'jobs' | 'estimates' | 'materials' | 'permits' | 'equipment' | 'clients';
-type SubView = 'list' | 'timeline' | 'changeOrders' | 'timeTracking' | 'profitLoss' | 'photos' | 'estimateBuilder' | 'materialsTracker';
+type SubView = 'list' | 'timeline' | 'changeOrders' | 'timeTracking' | 'profitLoss' | 'photos' | 'estimateBuilder' | 'materialsTracker' | 'invoiceGenerator';
 type ArtifactType = 'Job' | 'Estimate' | 'MaterialsList' | 'Permit' | 'Equipment' | 'Client';
 type Status = 'quoted' | 'approved' | 'in_progress' | 'inspection' | 'completed' | 'invoiced' | 'paid';
 type PhaseStatus = 'not_started' | 'in_progress' | 'complete' | 'delayed';

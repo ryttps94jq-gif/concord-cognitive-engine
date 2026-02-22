@@ -21,8 +21,8 @@ import {
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-type ModeTab = 'dashboard' | 'events' | 'venues' | 'vendors' | 'runofshow' | 'budget' | 'tickets';
-type ArtifactType = 'Event' | 'Venue' | 'Vendor' | 'RunOfShow' | 'Budget' | 'TicketTier';
+type ModeTab = 'dashboard' | 'events' | 'venues' | 'vendors' | 'guests' | 'runofshow' | 'budget' | 'tickets';
+type ArtifactType = 'Event' | 'Venue' | 'Vendor' | 'Guest' | 'RunOfShow' | 'Budget' | 'TicketTier';
 
 type EventType = 'conference' | 'wedding' | 'concert' | 'festival' | 'corporate' | 'social';
 type EventStatus = 'planning' | 'confirmed' | 'live' | 'completed' | 'cancelled';

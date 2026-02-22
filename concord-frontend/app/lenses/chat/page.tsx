@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useRef, useMemo, useCallback } from 'react';
+import { useState, useRef, useMemo, useCallback, useEffect } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, apiHelpers } from '@/lib/api/client';
+import { useUIStore } from '@/store/ui';
 import { Virtuoso } from 'react-virtuoso';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -31,10 +32,37 @@ import {
   BookOpen,
   Eye,
   Activity,
-  CheckCircle2
+  CheckCircle2,
+  Pin,
+  Quote,
+  X,
+  Hash,
+  Terminal,
+  GraduationCap,
+  Globe,
+  HelpCircle,
+  Trash2,
+  Download,
+  Users,
+  Check,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatBytes } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
+
+// ──────────────────────────────────────────────
+// Types
+// ──────────────────────────────────────────────
+
+interface Attachment {
+  id: string;
+  file: File;
+  name: string;
+  size: number;
+  type: string;
+  preview?: string; // base64 data URL for images
+  dataBase64?: string; // base64 content for small files (< 512KB)
+}
 
 interface Message {
   id: string;
@@ -46,6 +74,10 @@ interface Message {
   refs?: Array<{ id: string; title: string; lineageHash?: string }>;
   dtuId?: string;
   feedbackGiven?: 'up' | 'down' | null;
+  pinned?: boolean;
+  attachments?: Array<{ name: string; size: number; type: string }>;
+  quotedMessageId?: string;
+  quotedContent?: string;
 }
 
 interface Conversation {
@@ -63,6 +95,26 @@ interface AIMode {
   description: string;
 }
 
+interface Persona {
+  id: string;
+  name: string;
+  icon: React.ElementType;
+  description: string;
+  systemPrompt: string;
+}
+
+interface SlashCommand {
+  command: string;
+  label: string;
+  description: string;
+  icon: React.ElementType;
+  args?: string;
+}
+
+// ──────────────────────────────────────────────
+// Constants
+// ──────────────────────────────────────────────
+
 const AI_MODES: AIMode[] = [
   { id: 'overview', name: 'Overview', icon: MessageSquare, description: 'General conversation' },
   { id: 'deep', name: 'Deep', icon: Brain, description: 'In-depth analysis' },
@@ -72,10 +124,85 @@ const AI_MODES: AIMode[] = [
   { id: 'creti', name: 'CRETI', icon: Zap, description: 'Structured CRETI format' },
 ];
 
+const PERSONAS: Persona[] = [
+  {
+    id: 'default',
+    name: 'Default Assistant',
+    icon: Bot,
+    description: 'Standard helpful assistant',
+    systemPrompt: '',
+  },
+  {
+    id: 'research-analyst',
+    name: 'Research Analyst',
+    icon: Search,
+    description: 'Thorough analysis with citations and evidence',
+    systemPrompt: 'You are a rigorous research analyst. Provide well-structured analysis backed by evidence and citations. Always consider multiple perspectives, identify assumptions, and note limitations in the evidence. Use structured formatting with clear sections.',
+  },
+  {
+    id: 'creative-writer',
+    name: 'Creative Writer',
+    icon: Sparkles,
+    description: 'Imaginative and expressive writing style',
+    systemPrompt: 'You are a talented creative writer. Use vivid language, metaphors, and engaging narrative techniques. Be imaginative and expressive while remaining clear. Adapt your tone to match the creative task at hand.',
+  },
+  {
+    id: 'code-expert',
+    name: 'Code Expert',
+    icon: Terminal,
+    description: 'Expert programmer with best practices',
+    systemPrompt: 'You are an expert software engineer. Write clean, well-documented, production-quality code. Always explain your approach, consider edge cases, suggest optimizations, and follow established design patterns and best practices for the relevant language/framework.',
+  },
+  {
+    id: 'domain-specialist',
+    name: 'Domain Specialist',
+    icon: Globe,
+    description: 'Uses current lens context for domain expertise',
+    systemPrompt: 'You are a domain specialist who deeply understands the current context and domain. Reference relevant domain-specific terminology, frameworks, and knowledge. Connect new information to existing domain knowledge in the lattice.',
+  },
+  {
+    id: 'socratic-tutor',
+    name: 'Socratic Tutor',
+    icon: GraduationCap,
+    description: 'Teaches through guided questioning',
+    systemPrompt: 'You are a Socratic tutor. Instead of giving direct answers, guide the learner through carefully crafted questions that help them discover the answer themselves. Break complex topics into smaller concepts. Validate understanding at each step before proceeding.',
+  },
+];
+
+const SLASH_COMMANDS: SlashCommand[] = [
+  { command: '/mode', label: '/mode [mode]', description: 'Switch AI mode', icon: Settings, args: 'mode' },
+  { command: '/clear', label: '/clear', description: 'Clear chat history', icon: Trash2 },
+  { command: '/export', label: '/export', description: 'Export conversation as JSON', icon: Download },
+  { command: '/forge', label: '/forge', description: 'Forge last response to DTU', icon: Zap },
+  { command: '/help', label: '/help', description: 'Show available commands', icon: HelpCircle },
+  { command: '/context', label: '/context [domain]', description: 'Set domain context', icon: Hash, args: 'domain' },
+];
+
+const ACCEPTED_FILE_TYPES = '.txt,.md,.json,.csv,.pdf,.png,.jpg,.jpeg';
+const MAX_BASE64_SIZE = 512 * 1024; // 512KB — encode files smaller than this
+
+// ──────────────────────────────────────────────
+// Helper: file to base64
+// ──────────────────────────────────────────────
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// ──────────────────────────────────────────────
+// Component
+// ──────────────────────────────────────────────
+
 export default function ChatLensPage() {
   useLensNav('chat');
   const queryClient = useQueryClient();
 
+  // Existing state
   const [input, setInput] = useState('');
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [aiMode, setAiMode] = useState<AIMode>(AI_MODES[0]);
@@ -86,34 +213,56 @@ export default function ChatLensPage() {
   const [conversationSearch, setConversationSearch] = useState('');
   const [showMoreMenu, setShowMoreMenu] = useState(false);
 
+  // New state — Persona picker
+  const [selectedPersona, setSelectedPersona] = useState<Persona>(PERSONAS[0]);
+  const [showPersonaPicker, setShowPersonaPicker] = useState(false);
+
+  // New state — Slash commands
+  const [showSlashMenu, setShowSlashMenu] = useState(false);
+  const [slashFilter, setSlashFilter] = useState('');
+  const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
+
+  // New state — File attachments
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // New state — Message actions
+  const [pinnedMessages, setPinnedMessages] = useState<Set<string>>(new Set());
+  const [quotedMessage, setQuotedMessage] = useState<Message | null>(null);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+
+  // New state — Domain context
+  const [domainContext, setDomainContext] = useState<string>('');
+
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Cognitive status — shows experience/attention/reflection state
-  const { data: cogStatus, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
+  // ──────────────────────────────────────────────
+  // Queries
+  // ──────────────────────────────────────────────
+
+  const { data: cogStatus, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['cognitive-status'],
     queryFn: () => apiHelpers.cognitive.status().then(r => r.data),
     refetchInterval: 10000,
   });
 
-  const { data: conversations, isError: isError2, error: error2, refetch: refetch2,} = useQuery({
+  const { data: conversations, isError: isError2, error: error2, refetch: refetch2 } = useQuery({
     queryKey: ['conversations'],
-    queryFn: () => api.get('/api/state/sessions').then(r =>
-      r.data?.sessions?.map((s: Record<string, unknown>) => ({
+    queryFn: () => apiHelpers.eventsLog.list({ type: 'chat', limit: 50 }).then(r =>
+      (r.data?.events || []).map((s: Record<string, unknown>) => ({
         id: s.id || s.sessionId,
         title: s.title || 'New Conversation',
         lastMessage: s.lastMessage || '',
         updatedAt: s.updatedAt || new Date().toISOString(),
         messageCount: s.messageCount || 0
-      })) || []
+      }))
     ),
   });
 
-  const { data: serverMessages, isError: isError3, error: error3, refetch: refetch3,} = useQuery({
+  const { data: serverMessages, isError: isError3, error: error3, refetch: refetch3 } = useQuery({
     queryKey: ['messages', selectedConversation],
-    queryFn: () => api.get('/api/state/latest', {
-      params: { sessionId: selectedConversation }
-    }).then(r =>
-      r.data?.lastMessages?.map((m: Record<string, unknown>, i: number) => ({
+    queryFn: () => apiHelpers.cognitive.status().then(r =>
+      (r.data?.lastMessages || []).map((m: Record<string, unknown>, i: number) => ({
         id: m.id || `msg-${i}`,
         role: m.role,
         content: m.content,
@@ -121,14 +270,13 @@ export default function ChatLensPage() {
         model: m.model,
         tokens: m.tokens,
         refs: m.refs
-      })) || []
+      }))
     ),
     enabled: !!selectedConversation,
   });
 
   const messages = useMemo(() => selectedConversation ? (serverMessages || []) : localMessages, [selectedConversation, serverMessages, localMessages]);
 
-  // Filter conversations by search query
   const filteredConversations = useMemo(() => {
     if (!conversations || !conversationSearch.trim()) return conversations || [];
     const q = conversationSearch.toLowerCase();
@@ -140,20 +288,178 @@ export default function ChatLensPage() {
   const [streamingContent, setStreamingContent] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
 
+  // ──────────────────────────────────────────────
+  // Slash command filtering
+  // ──────────────────────────────────────────────
+
+  const filteredSlashCommands = useMemo(() => {
+    if (!slashFilter) return SLASH_COMMANDS;
+    const q = slashFilter.toLowerCase();
+    return SLASH_COMMANDS.filter(
+      cmd => cmd.command.toLowerCase().includes(q) || cmd.description.toLowerCase().includes(q)
+    );
+  }, [slashFilter]);
+
+  // Reset selection when filtered commands change
+  useEffect(() => {
+    setSlashSelectedIndex(0);
+  }, [filteredSlashCommands.length]);
+
+  // ──────────────────────────────────────────────
+  // Slash command execution
+  // ──────────────────────────────────────────────
+
+  const executeSlashCommand = useCallback((rawInput: string) => {
+    const trimmed = rawInput.trim();
+    const parts = trimmed.split(/\s+/);
+    const cmd = parts[0].toLowerCase();
+    const arg = parts.slice(1).join(' ');
+
+    switch (cmd) {
+      case '/mode': {
+        if (arg) {
+          const mode = AI_MODES.find(m => m.id.toLowerCase() === arg.toLowerCase() || m.name.toLowerCase() === arg.toLowerCase());
+          if (mode) {
+            setAiMode(mode);
+            const sysMsg: Message = {
+              id: `sys-${Date.now()}`,
+              role: 'system',
+              content: `Switched to ${mode.name} mode: ${mode.description}`,
+              timestamp: new Date().toISOString(),
+            };
+            setLocalMessages(prev => [...prev, sysMsg]);
+          } else {
+            const sysMsg: Message = {
+              id: `sys-${Date.now()}`,
+              role: 'system',
+              content: `Unknown mode "${arg}". Available: ${AI_MODES.map(m => m.id).join(', ')}`,
+              timestamp: new Date().toISOString(),
+            };
+            setLocalMessages(prev => [...prev, sysMsg]);
+          }
+        } else {
+          setShowModeSelect(true);
+        }
+        break;
+      }
+      case '/clear':
+        startNewChat();
+        break;
+      case '/export':
+        handleExportChat();
+        break;
+      case '/forge': {
+        const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant');
+        if (lastAssistant) {
+          forgeMutation.mutate(lastAssistant.content);
+        } else {
+          const sysMsg: Message = {
+            id: `sys-${Date.now()}`,
+            role: 'system',
+            content: 'No assistant message to forge.',
+            timestamp: new Date().toISOString(),
+          };
+          setLocalMessages(prev => [...prev, sysMsg]);
+        }
+        break;
+      }
+      case '/help': {
+        const helpText = SLASH_COMMANDS.map(c => `${c.label} — ${c.description}`).join('\n');
+        const sysMsg: Message = {
+          id: `sys-${Date.now()}`,
+          role: 'system',
+          content: `Available commands:\n${helpText}`,
+          timestamp: new Date().toISOString(),
+        };
+        setLocalMessages(prev => [...prev, sysMsg]);
+        break;
+      }
+      case '/context': {
+        if (arg) {
+          setDomainContext(arg);
+          const sysMsg: Message = {
+            id: `sys-${Date.now()}`,
+            role: 'system',
+            content: `Domain context set to: ${arg}`,
+            timestamp: new Date().toISOString(),
+          };
+          setLocalMessages(prev => [...prev, sysMsg]);
+        } else {
+          const current = domainContext || '(none)';
+          const sysMsg: Message = {
+            id: `sys-${Date.now()}`,
+            role: 'system',
+            content: `Current domain context: ${current}. Use /context [domain] to set one.`,
+            timestamp: new Date().toISOString(),
+          };
+          setLocalMessages(prev => [...prev, sysMsg]);
+        }
+        break;
+      }
+      default: {
+        const sysMsg: Message = {
+          id: `sys-${Date.now()}`,
+          role: 'system',
+          content: `Unknown command: ${cmd}. Type /help for available commands.`,
+          timestamp: new Date().toISOString(),
+        };
+        setLocalMessages(prev => [...prev, sysMsg]);
+      }
+    }
+
+    setInput('');
+    setShowSlashMenu(false);
+    setSlashFilter('');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, domainContext]);
+
+  // ──────────────────────────────────────────────
+  // Mutations
+  // ──────────────────────────────────────────────
+
   const sendMutation = useMutation({
     mutationFn: async (content: string) => {
+      // Build attachment metadata
+      const attachmentMeta = attachments.map(a => ({
+        name: a.name,
+        size: a.size,
+        type: a.type,
+        ...(a.dataBase64 ? { data: a.dataBase64 } : {}),
+      }));
+
       const userMsg: Message = {
         id: `user-${Date.now()}`,
         role: 'user',
         content,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        attachments: attachmentMeta.map(a => ({ name: a.name, size: a.size, type: a.type })),
+        quotedMessageId: quotedMessage?.id,
+        quotedContent: quotedMessage?.content ? quotedMessage.content.slice(0, 200) : undefined,
       };
 
       if (!selectedConversation) {
         setLocalMessages(prev => [...prev, userMsg]);
       }
 
-      // Try streaming first, fall back to regular POST
+      // Build system prompt from persona + domain context
+      let systemPrompt = '';
+      if (selectedPersona.systemPrompt) {
+        systemPrompt = selectedPersona.systemPrompt;
+      }
+      if (domainContext) {
+        systemPrompt += (systemPrompt ? '\n\n' : '') + `Current domain context: ${domainContext}. Use domain-specific knowledge and terminology.`;
+      }
+
+      // Build the message to send, optionally including quoted context
+      let messageContent = content;
+      if (quotedMessage) {
+        messageContent = `[Quoting: "${quotedMessage.content.slice(0, 200)}"]\n\n${content}`;
+      }
+
+      // Clear attachments and quote after building message
+      setAttachments([]);
+      setQuotedMessage(null);
+
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5050';
       try {
         setIsStreaming(true);
@@ -163,9 +469,11 @@ export default function ChatLensPage() {
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
           body: JSON.stringify({
-            message: content,
+            message: messageContent,
             mode: aiMode.id,
             sessionId: selectedConversation,
+            ...(systemPrompt ? { systemPrompt } : {}),
+            ...(attachmentMeta.length > 0 ? { attachments: attachmentMeta } : {}),
           }),
         });
 
@@ -214,9 +522,11 @@ export default function ChatLensPage() {
         setIsStreaming(false);
         setStreamingContent('');
         const response = await api.post('/api/chat', {
-          message: content,
+          message: messageContent,
           mode: aiMode.id,
           sessionId: selectedConversation,
+          ...(systemPrompt ? { systemPrompt } : {}),
+          ...(attachmentMeta.length > 0 ? { attachments: attachmentMeta } : {}),
         });
         return response.data;
       }
@@ -254,7 +564,6 @@ export default function ChatLensPage() {
     },
   });
 
-  // Regenerate — resend the last user message to get a new response
   const regenerateMutation = useMutation({
     mutationFn: async (lastUserContent: string) => {
       const response = await api.post('/api/chat', {
@@ -273,7 +582,6 @@ export default function ChatLensPage() {
         refs: data.refs
       };
       if (!selectedConversation) {
-        // Remove last assistant message and add new one
         setLocalMessages(prev => {
           const lastAssistantIdx = [...prev].reverse().findIndex(m => m.role === 'assistant');
           if (lastAssistantIdx === -1) return [...prev, assistantMsg];
@@ -298,14 +606,12 @@ export default function ChatLensPage() {
   });
 
   const handleRegenerate = useCallback(() => {
-    // Find the last user message to resend
     const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
     if (lastUserMsg && !regenerateMutation.isPending) {
       regenerateMutation.mutate(lastUserMsg.content);
     }
   }, [messages, regenerateMutation]);
 
-  // Feedback mutation — sends thumbs up/down to backend
   const feedbackMutation = useMutation({
     mutationFn: async ({ messageId, rating, index }: { messageId: string; rating: 'up' | 'down'; index: number }) => {
       const sessionId = selectedConversation || 'default';
@@ -317,7 +623,6 @@ export default function ChatLensPage() {
     },
   });
 
-  // Forge to DTU — convert an assistant response into a DTU
   const forgeMutation = useMutation({
     mutationFn: async (content: string) => {
       const response = await apiHelpers.forge.hybrid({
@@ -340,10 +645,9 @@ export default function ChatLensPage() {
     },
   });
 
-  // Delete conversation mutation
   const deleteConversationMutation = useMutation({
     mutationFn: async (sessionId: string) => {
-      await api.delete(`/api/state/sessions/${sessionId}`);
+      await apiHelpers.lens.delete('chat', sessionId);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
@@ -354,11 +658,17 @@ export default function ChatLensPage() {
     },
   });
 
+  // ──────────────────────────────────────────────
+  // Handlers
+  // ──────────────────────────────────────────────
+
   const handleExportChat = useCallback(() => {
-    const exportData = messages.map(m => ({
+    const exportData = messages.map((m: Message) => ({
       role: m.role,
       content: m.content,
       timestamp: m.timestamp,
+      ...(m.attachments ? { attachments: m.attachments } : {}),
+      ...(m.pinned ? { pinned: true } : {}),
     }));
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -370,20 +680,185 @@ export default function ChatLensPage() {
     setShowMoreMenu(false);
   }, [messages]);
 
-  const handleSend = () => {
+  const handleSend = useCallback(() => {
     if (!input.trim() || sendMutation.isPending) return;
-    sendMutation.mutate(input);
-  };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Check for slash commands
+    if (input.trim().startsWith('/')) {
+      executeSlashCommand(input);
+      return;
+    }
+
+    sendMutation.mutate(input);
+  }, [input, sendMutation, executeSlashCommand]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    // Slash menu navigation
+    if (showSlashMenu) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSlashSelectedIndex(prev => Math.min(prev + 1, filteredSlashCommands.length - 1));
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSlashSelectedIndex(prev => Math.max(prev - 1, 0));
+        return;
+      }
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        const selected = filteredSlashCommands[slashSelectedIndex];
+        if (selected) {
+          // Insert the command into the input
+          setInput(selected.command + (selected.args ? ' ' : ''));
+          setShowSlashMenu(false);
+          setSlashFilter('');
+          // If no args needed, execute immediately
+          if (!selected.args) {
+            // Use setTimeout to allow state to settle
+            setTimeout(() => executeSlashCommand(selected.command), 0);
+          }
+        }
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowSlashMenu(false);
+        setSlashFilter('');
+        return;
+      }
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const selected = filteredSlashCommands[slashSelectedIndex];
+        if (selected) {
+          setInput(selected.command + (selected.args ? ' ' : ''));
+          setShowSlashMenu(false);
+          setSlashFilter('');
+        }
+        return;
+      }
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
-  };
+  }, [showSlashMenu, filteredSlashCommands, slashSelectedIndex, handleSend, executeSlashCommand]);
 
-  const copyToClipboard = useCallback((text: string) => {
-    navigator.clipboard.writeText(text);
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    setInput(value);
+
+    // Slash command detection
+    if (value.startsWith('/')) {
+      const commandText = value.slice(1).split(/\s/)[0]; // text after / before first space
+      if (!value.includes(' ') || value.split(/\s/).length <= 1) {
+        setShowSlashMenu(true);
+        setSlashFilter(commandText);
+      } else {
+        setShowSlashMenu(false);
+        setSlashFilter('');
+      }
+    } else {
+      setShowSlashMenu(false);
+      setSlashFilter('');
+    }
+  }, []);
+
+  const handleSlashSelect = useCallback((cmd: SlashCommand) => {
+    setInput(cmd.command + (cmd.args ? ' ' : ''));
+    setShowSlashMenu(false);
+    setSlashFilter('');
+    inputRef.current?.focus();
+    if (!cmd.args) {
+      setTimeout(() => executeSlashCommand(cmd.command), 0);
+    }
+  }, [executeSlashCommand]);
+
+  // ──────────────────────────────────────────────
+  // File attachment handlers
+  // ──────────────────────────────────────────────
+
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const newAttachments: Attachment[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const attachment: Attachment = {
+        id: `att-${Date.now()}-${i}`,
+        file,
+        name: file.name,
+        size: file.size,
+        type: file.type,
+      };
+
+      // Generate preview for images
+      if (file.type.startsWith('image/')) {
+        try {
+          attachment.preview = await fileToBase64(file);
+        } catch {
+          // Preview generation failed — non-critical
+        }
+      }
+
+      // Base64 encode small files
+      if (file.size <= MAX_BASE64_SIZE) {
+        try {
+          attachment.dataBase64 = await fileToBase64(file);
+        } catch {
+          // Encoding failed — will send metadata only
+        }
+      }
+
+      newAttachments.push(attachment);
+    }
+
+    setAttachments(prev => [...prev, ...newAttachments]);
+
+    // Reset file input so the same file can be selected again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }, []);
+
+  const removeAttachment = useCallback((id: string) => {
+    setAttachments(prev => prev.filter(a => a.id !== id));
+  }, []);
+
+  // ──────────────────────────────────────────────
+  // Message action handlers
+  // ──────────────────────────────────────────────
+
+  const copyToClipboard = useCallback((text: string, messageId?: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      if (messageId) {
+        setCopiedMessageId(messageId);
+        setTimeout(() => setCopiedMessageId(null), 2000);
+      }
+    });
+  }, []);
+
+  const togglePin = useCallback((messageId: string) => {
+    setPinnedMessages(prev => {
+      const next = new Set(prev);
+      if (next.has(messageId)) {
+        next.delete(messageId);
+      } else {
+        next.add(messageId);
+      }
+      return next;
+    });
+    // Update the message in localMessages to reflect pinned state
+    setLocalMessages(prev => prev.map(m =>
+      m.id === messageId ? { ...m, pinned: !m.pinned } : m
+    ));
+  }, []);
+
+  const quoteMessage = useCallback((message: Message) => {
+    setQuotedMessage(message);
+    inputRef.current?.focus();
   }, []);
 
   const formatTime = useCallback((dateStr: string) => {
@@ -391,102 +866,197 @@ export default function ChatLensPage() {
     return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   }, []);
 
-  const startNewChat = () => {
+  const startNewChat = useCallback(() => {
     setSelectedConversation(null);
     setLocalMessages([]);
     setFeedbackState({});
-  };
+    setAttachments([]);
+    setQuotedMessage(null);
+    setPinnedMessages(new Set());
+  }, []);
 
   const exp = cogStatus?.experience;
   const attn = cogStatus?.attention;
   const refl = cogStatus?.reflection;
 
-  const renderMessage = useCallback((msgIdx: number, message: Message) => (
-    <div
-      className={cn(
-        'flex gap-4 px-4 lg:px-6 py-3',
-        message.role === 'user' ? 'flex-row-reverse' : ''
-      )}
-    >
-      <div className={cn(
-        'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0',
-        message.role === 'user' ? 'bg-neon-purple' : 'bg-neon-cyan/20'
-      )}>
-        {message.role === 'user' ? (
-          <User className="w-5 h-5 text-white" />
-        ) : (
-          <Bot className="w-5 h-5 text-neon-cyan" />
+  // ──────────────────────────────────────────────
+  // Message renderer
+  // ──────────────────────────────────────────────
+
+  const renderMessage = useCallback((msgIdx: number, message: Message) => {
+    const isPinned = pinnedMessages.has(message.id) || message.pinned;
+
+    return (
+      <div
+        className={cn(
+          'flex gap-4 px-4 lg:px-6 py-3 group relative',
+          message.role === 'user' ? 'flex-row-reverse' : '',
+          isPinned && 'bg-yellow-500/5 border-l-2 border-l-yellow-500/50'
         )}
-      </div>
-      <div className={cn('flex-1 max-w-2xl', message.role === 'user' ? 'text-right' : '')}>
+      >
         <div className={cn(
-          'inline-block p-4 rounded-2xl',
-          message.role === 'user'
-            ? 'bg-neon-purple text-white rounded-br-md'
-            : message.role === 'system'
-              ? 'bg-red-500/10 border border-red-500/30 text-red-300 rounded-bl-md'
-              : 'bg-lattice-surface border border-lattice-border text-gray-200 rounded-bl-md'
+          'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0',
+          message.role === 'user' ? 'bg-neon-purple' : 'bg-neon-cyan/20'
         )}>
-          <p className="whitespace-pre-wrap">{message.content}</p>
-          {message.refs && message.refs.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-lattice-border/50">
-              <p className="text-xs text-gray-400 mb-2">Referenced DTUs:</p>
-              <div className="flex flex-wrap gap-1">
-                {message.refs.slice(0, 5).map((ref) => (
-                  <span key={ref.id} className="text-xs px-2 py-1 bg-neon-purple/20 text-neon-purple rounded cursor-pointer hover:bg-neon-purple/30" title={ref.id}>
-                    {ref.title}
+          {message.role === 'user' ? (
+            <User className="w-5 h-5 text-white" />
+          ) : (
+            <Bot className="w-5 h-5 text-neon-cyan" />
+          )}
+        </div>
+        <div className={cn('flex-1 max-w-2xl', message.role === 'user' ? 'text-right' : '')}>
+          {/* Pinned indicator */}
+          {isPinned && (
+            <div className="flex items-center gap-1 text-yellow-500/80 text-xs mb-1">
+              <Pin className="w-3 h-3" />
+              <span>Pinned</span>
+            </div>
+          )}
+
+          {/* Quoted message reference */}
+          {message.quotedContent && (
+            <div className={cn(
+              'mb-2 p-2 rounded-lg border text-xs text-gray-400 max-w-sm',
+              message.role === 'user'
+                ? 'bg-neon-purple/10 border-neon-purple/30 ml-auto'
+                : 'bg-lattice-bg border-lattice-border'
+            )}>
+              <div className="flex items-center gap-1 mb-1 text-gray-500">
+                <Quote className="w-3 h-3" />
+                <span>Replying to</span>
+              </div>
+              <p className="truncate">{message.quotedContent}</p>
+            </div>
+          )}
+
+          <div className={cn(
+            'inline-block p-4 rounded-2xl',
+            message.role === 'user'
+              ? 'bg-neon-purple text-white rounded-br-md'
+              : message.role === 'system'
+                ? 'bg-red-500/10 border border-red-500/30 text-red-300 rounded-bl-md'
+                : 'bg-lattice-surface border border-lattice-border text-gray-200 rounded-bl-md'
+          )}>
+            <p className="whitespace-pre-wrap">{message.content}</p>
+
+            {/* Attachment chips on user messages */}
+            {message.attachments && message.attachments.length > 0 && (
+              <div className="mt-2 pt-2 border-t border-white/10 flex flex-wrap gap-1.5">
+                {message.attachments.map((att, i) => (
+                  <span key={i} className="inline-flex items-center gap-1.5 px-2 py-1 bg-white/10 rounded text-xs">
+                    <Paperclip className="w-3 h-3" />
+                    <span className="truncate max-w-[120px]">{att.name}</span>
+                    <span className="text-white/50">{formatBytes(att.size)}</span>
                   </span>
                 ))}
               </div>
-            </div>
-          )}
-        </div>
-        <div className={cn('flex items-center gap-2 mt-2 text-xs text-gray-500', message.role === 'user' ? 'justify-end' : '')}>
-          <span>{formatTime(message.timestamp)}</span>
-          {message.role === 'assistant' && (
-            <>
-              <span>·</span>
-              <button onClick={() => copyToClipboard(message.content)} className="hover:text-white transition-colors" title="Copy" aria-label="Copy message">
+            )}
+
+            {message.refs && message.refs.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-lattice-border/50">
+                <p className="text-xs text-gray-400 mb-2">Referenced DTUs:</p>
+                <div className="flex flex-wrap gap-1">
+                  {message.refs.slice(0, 5).map((ref) => (
+                    <span key={ref.id} className="text-xs px-2 py-1 bg-neon-purple/20 text-neon-purple rounded cursor-pointer hover:bg-neon-purple/30" title={ref.id}>
+                      {ref.title}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Message action bar */}
+          <div className={cn(
+            'flex items-center gap-2 mt-2 text-xs text-gray-500',
+            message.role === 'user' ? 'justify-end' : ''
+          )}>
+            <span>{formatTime(message.timestamp)}</span>
+
+            {/* Copy button — available on ALL messages */}
+            <span>·</span>
+            <button
+              onClick={() => copyToClipboard(message.content, message.id)}
+              className="hover:text-white transition-colors"
+              title="Copy to clipboard"
+              aria-label="Copy message"
+            >
+              {copiedMessageId === message.id ? (
+                <Check className="w-3 h-3 text-neon-green" />
+              ) : (
                 <Copy className="w-3 h-3" />
-              </button>
-              <button
-                onClick={() => feedbackMutation.mutate({ messageId: message.id, rating: 'up', index: msgIdx })}
-                className={cn('transition-colors', feedbackState[message.id] === 'up' ? 'text-green-400' : 'hover:text-green-400')}
-                title="Good response" aria-label="Thumbs up"
-              >
-                <ThumbsUp className={cn('w-3 h-3', feedbackState[message.id] === 'up' && 'fill-current')} />
-              </button>
-              <button
-                onClick={() => feedbackMutation.mutate({ messageId: message.id, rating: 'down', index: msgIdx })}
-                className={cn('transition-colors', feedbackState[message.id] === 'down' ? 'text-red-400' : 'hover:text-red-400')}
-                title="Bad response" aria-label="Thumbs down"
-              >
-                <ThumbsDown className={cn('w-3 h-3', feedbackState[message.id] === 'down' && 'fill-current')} />
-              </button>
-              <button onClick={handleRegenerate} disabled={regenerateMutation.isPending}
-                className={cn('hover:text-white transition-colors', regenerateMutation.isPending && 'animate-spin')}
-                title="Regenerate response" aria-label="Regenerate"
-              >
-                <RefreshCw className="w-3 h-3" />
-              </button>
-              <span>·</span>
-              <button
-                onClick={() => forgeMutation.mutate(message.content)}
-                disabled={forgeMutation.isPending}
-                className={cn('hover:text-neon-cyan transition-colors flex items-center gap-1', forgeMutation.isPending && 'opacity-50')}
-                title="Forge this response into a DTU"
-                aria-label="Forge to DTU"
-              >
-                <Zap className="w-3 h-3" />
-                <span className="hidden sm:inline">Forge DTU</span>
-              </button>
-            </>
-          )}
+              )}
+            </button>
+
+            {/* Pin button — available on ALL messages */}
+            <button
+              onClick={() => togglePin(message.id)}
+              className={cn(
+                'transition-colors',
+                isPinned ? 'text-yellow-500' : 'hover:text-yellow-500'
+              )}
+              title={isPinned ? 'Unpin message' : 'Pin message'}
+              aria-label={isPinned ? 'Unpin message' : 'Pin message'}
+            >
+              <Pin className={cn('w-3 h-3', isPinned && 'fill-current')} />
+            </button>
+
+            {/* Quote / Reply button — available on ALL messages */}
+            <button
+              onClick={() => quoteMessage(message)}
+              className="hover:text-neon-cyan transition-colors"
+              title="Reply to this message"
+              aria-label="Quote and reply"
+            >
+              <Quote className="w-3 h-3" />
+            </button>
+
+            {/* Assistant-specific actions */}
+            {message.role === 'assistant' && (
+              <>
+                <span>·</span>
+                <button
+                  onClick={() => feedbackMutation.mutate({ messageId: message.id, rating: 'up', index: msgIdx })}
+                  className={cn('transition-colors', feedbackState[message.id] === 'up' ? 'text-green-400' : 'hover:text-green-400')}
+                  title="Good response" aria-label="Thumbs up"
+                >
+                  <ThumbsUp className={cn('w-3 h-3', feedbackState[message.id] === 'up' && 'fill-current')} />
+                </button>
+                <button
+                  onClick={() => feedbackMutation.mutate({ messageId: message.id, rating: 'down', index: msgIdx })}
+                  className={cn('transition-colors', feedbackState[message.id] === 'down' ? 'text-red-400' : 'hover:text-red-400')}
+                  title="Bad response" aria-label="Thumbs down"
+                >
+                  <ThumbsDown className={cn('w-3 h-3', feedbackState[message.id] === 'down' && 'fill-current')} />
+                </button>
+                <button onClick={handleRegenerate} disabled={regenerateMutation.isPending}
+                  className={cn('hover:text-white transition-colors', regenerateMutation.isPending && 'animate-spin')}
+                  title="Regenerate response" aria-label="Regenerate"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                </button>
+                <span>·</span>
+                <button
+                  onClick={() => forgeMutation.mutate(message.content)}
+                  disabled={forgeMutation.isPending}
+                  className={cn('hover:text-neon-cyan transition-colors flex items-center gap-1', forgeMutation.isPending && 'opacity-50')}
+                  title="Forge this response into a DTU"
+                  aria-label="Forge to DTU"
+                >
+                  <Zap className="w-3 h-3" />
+                  <span className="hidden sm:inline">Forge DTU</span>
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
-    </div>
-  ), [feedbackState, feedbackMutation, forgeMutation, regenerateMutation, handleRegenerate, copyToClipboard, formatTime]);
+    );
+  }, [feedbackState, feedbackMutation, forgeMutation, regenerateMutation, handleRegenerate, copyToClipboard, formatTime, pinnedMessages, copiedMessageId, togglePin, quoteMessage]);
 
+  // ──────────────────────────────────────────────
+  // Loading / Error states
+  // ──────────────────────────────────────────────
 
   if (isLoading) {
     return (
@@ -506,6 +1076,11 @@ export default function ChatLensPage() {
       </div>
     );
   }
+
+  // ──────────────────────────────────────────────
+  // Render
+  // ──────────────────────────────────────────────
+
   return (
     <div className="h-full flex flex-col bg-lattice-bg">
       <div className="flex-1 flex overflow-hidden relative">
@@ -517,7 +1092,7 @@ export default function ChatLensPage() {
         />
       )}
 
-      {/* Sidebar — hidden on mobile by default, overlay when open */}
+      {/* Sidebar */}
       <aside
         className={cn(
           'w-80 border-r border-lattice-border flex flex-col bg-lattice-surface z-40 transition-transform duration-200',
@@ -536,6 +1111,7 @@ export default function ChatLensPage() {
             <button
               className="p-2 hover:bg-lattice-bg rounded-lg transition-colors"
               aria-label="Chat settings"
+              onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Chat settings coming soon' })}
             >
               <Settings className="w-5 h-5 text-gray-400" />
             </button>
@@ -601,6 +1177,8 @@ export default function ChatLensPage() {
             >
               <MessageSquare className="w-5 h-5" />
             </button>
+
+            {/* AI Mode selector */}
             <div className="relative">
               <button
                 onClick={() => setShowModeSelect(!showModeSelect)}
@@ -645,11 +1223,89 @@ export default function ChatLensPage() {
                 )}
               </AnimatePresence>
             </div>
+
+            {/* Persona Picker */}
+            <div className="relative">
+              <button
+                onClick={() => setShowPersonaPicker(!showPersonaPicker)}
+                className="flex items-center gap-2 px-3 py-2 bg-lattice-bg border border-lattice-border rounded-lg hover:border-gray-500 transition-colors"
+                title="Select persona"
+              >
+                <Users className="w-4 h-4 text-neon-purple" />
+                <span className="text-white text-sm font-medium hidden sm:inline">{selectedPersona.name}</span>
+                <ChevronDown className="w-4 h-4 text-gray-400" />
+              </button>
+
+              <AnimatePresence>
+                {showPersonaPicker && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    className="absolute top-full left-0 mt-2 w-72 bg-lattice-surface border border-lattice-border rounded-lg shadow-xl z-50 overflow-hidden"
+                  >
+                    <div className="p-3 border-b border-lattice-border">
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Persona</p>
+                    </div>
+                    {PERSONAS.map(persona => (
+                      <button
+                        key={persona.id}
+                        onClick={() => {
+                          setSelectedPersona(persona);
+                          setShowPersonaPicker(false);
+                          // Announce the change
+                          if (persona.id !== selectedPersona.id) {
+                            const sysMsg: Message = {
+                              id: `sys-${Date.now()}`,
+                              role: 'system',
+                              content: `Persona switched to: ${persona.name} — ${persona.description}`,
+                              timestamp: new Date().toISOString(),
+                            };
+                            setLocalMessages(prev => [...prev, sysMsg]);
+                          }
+                        }}
+                        className={cn(
+                          'w-full flex items-start gap-3 p-3 hover:bg-lattice-bg transition-colors',
+                          selectedPersona.id === persona.id && 'bg-neon-purple/10'
+                        )}
+                      >
+                        <persona.icon className={cn(
+                          'w-5 h-5 mt-0.5',
+                          selectedPersona.id === persona.id ? 'text-neon-purple' : 'text-gray-400'
+                        )} />
+                        <div className="text-left">
+                          <p className="font-medium text-white">{persona.name}</p>
+                          <p className="text-xs text-gray-400">{persona.description}</p>
+                        </div>
+                        {selectedPersona.id === persona.id && (
+                          <Check className="w-4 h-4 text-neon-purple ml-auto mt-0.5 flex-shrink-0" />
+                        )}
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Domain context badge */}
+            {domainContext && (
+              <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-neon-cyan/10 border border-neon-cyan/30 rounded-full text-xs text-neon-cyan">
+                <Hash className="w-3 h-3" />
+                <span>{domainContext}</span>
+                <button
+                  onClick={() => setDomainContext('')}
+                  className="ml-0.5 hover:text-white transition-colors"
+                  title="Clear domain context"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Cognitive Status Bar */}
           {cogStatus && (
-            <div className="flex items-center gap-4 text-xs">
+            <div className="hidden md:flex items-center gap-4 text-xs">
               {exp && (
                 <div className="flex items-center gap-1.5 text-gray-400" title={`${exp.episodes} episodes, ${exp.patterns} patterns learned`}>
                   <Brain className="w-3.5 h-3.5 text-neon-purple" />
@@ -699,7 +1355,7 @@ export default function ChatLensPage() {
                     disabled={messages.length === 0}
                     className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-200 hover:bg-lattice-bg transition-colors disabled:opacity-50"
                   >
-                    <Copy className="w-4 h-4" />
+                    <Download className="w-4 h-4" />
                     Export Chat
                   </button>
                   <button
@@ -715,10 +1371,11 @@ export default function ChatLensPage() {
                         deleteConversationMutation.mutate(selectedConversation);
                         setShowMoreMenu(false);
                       }}
-                      className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors border-t border-lattice-border"
+                      disabled={deleteConversationMutation.isPending}
+                      className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors border-t border-lattice-border disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <RefreshCw className="w-4 h-4" />
-                      Delete Conversation
+                      <RefreshCw className={`w-4 h-4 ${deleteConversationMutation.isPending ? 'animate-spin' : ''}`} />
+                      {deleteConversationMutation.isPending ? 'Deleting...' : 'Delete Conversation'}
                     </button>
                   )}
                 </motion.div>
@@ -755,6 +1412,9 @@ export default function ChatLensPage() {
                   </button>
                 ))}
               </div>
+              <p className="text-xs text-gray-500 mt-6">
+                Type <code className="px-1.5 py-0.5 bg-lattice-surface rounded text-gray-400">/help</code> for slash commands
+              </p>
             </div>
           )}
 
@@ -807,37 +1467,150 @@ export default function ChatLensPage() {
         {/* Input Area */}
         <div className="p-4 border-t border-lattice-border bg-lattice-surface">
           <div className="max-w-4xl mx-auto">
-            <div className="flex items-end gap-4">
-              <div className="flex-1 flex items-end bg-lattice-bg border border-lattice-border rounded-2xl p-2">
-                <button className="p-2 text-gray-400 hover:text-white transition-colors">
-                  <Paperclip className="w-5 h-5" />
-                </button>
-                <textarea
-                  ref={inputRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder={`Message ${aiMode.name} mode...`}
-                  rows={1}
-                  className="flex-1 px-2 py-2 bg-transparent text-white placeholder-gray-500 resize-none focus:outline-none max-h-32"
-                  style={{ minHeight: '24px' }}
-                  disabled={sendMutation.isPending}
-                />
-                <button className="p-2 text-gray-400 hover:text-white transition-colors">
-                  <Smile className="w-5 h-5" />
-                </button>
-                <button className="p-2 text-gray-400 hover:text-white transition-colors">
-                  <Mic className="w-5 h-5" />
+
+            {/* Quoted message indicator */}
+            {quotedMessage && (
+              <div className="flex items-center gap-2 mb-2 p-2 bg-lattice-bg border border-lattice-border rounded-lg">
+                <Quote className="w-4 h-4 text-neon-cyan flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-gray-400 mb-0.5">
+                    Replying to {quotedMessage.role === 'user' ? 'yourself' : 'assistant'}
+                  </p>
+                  <p className="text-sm text-gray-300 truncate">{quotedMessage.content}</p>
+                </div>
+                <button
+                  onClick={() => setQuotedMessage(null)}
+                  className="p-1 hover:bg-lattice-surface rounded transition-colors flex-shrink-0"
+                  aria-label="Cancel reply"
+                >
+                  <X className="w-4 h-4 text-gray-400" />
                 </button>
               </div>
-              <button
-                onClick={handleSend}
-                disabled={!input.trim() || sendMutation.isPending}
-                className="p-4 bg-neon-cyan text-black rounded-2xl hover:bg-neon-cyan/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                <Send className="w-5 h-5" />
-              </button>
+            )}
+
+            {/* Attachment chips */}
+            {attachments.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-2">
+                {attachments.map(att => (
+                  <div
+                    key={att.id}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-lattice-bg border border-lattice-border rounded-lg text-sm"
+                  >
+                    {att.preview ? (
+                      <img
+                        src={att.preview}
+                        alt={att.name}
+                        className="w-6 h-6 rounded object-cover"
+                      />
+                    ) : (
+                      <FileText className="w-4 h-4 text-gray-400" />
+                    )}
+                    <span className="text-gray-300 truncate max-w-[150px]">{att.name}</span>
+                    <span className="text-gray-500 text-xs">{formatBytes(att.size)}</span>
+                    <button
+                      onClick={() => removeAttachment(att.id)}
+                      className="p-0.5 hover:bg-lattice-surface rounded transition-colors"
+                      aria-label={`Remove ${att.name}`}
+                    >
+                      <X className="w-3.5 h-3.5 text-gray-400 hover:text-red-400" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Slash command autocomplete dropdown */}
+            <div className="relative">
+              <AnimatePresence>
+                {showSlashMenu && filteredSlashCommands.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    className="absolute bottom-full left-0 mb-2 w-72 bg-lattice-surface border border-lattice-border rounded-lg shadow-xl z-50 overflow-hidden"
+                  >
+                    <div className="p-2 border-b border-lattice-border">
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Commands</p>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto">
+                      {filteredSlashCommands.map((cmd, idx) => (
+                        <button
+                          key={cmd.command}
+                          onClick={() => handleSlashSelect(cmd)}
+                          onMouseEnter={() => setSlashSelectedIndex(idx)}
+                          className={cn(
+                            'w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors',
+                            idx === slashSelectedIndex ? 'bg-neon-cyan/10' : 'hover:bg-lattice-bg'
+                          )}
+                        >
+                          <cmd.icon className={cn(
+                            'w-4 h-4 flex-shrink-0',
+                            idx === slashSelectedIndex ? 'text-neon-cyan' : 'text-gray-400'
+                          )} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-mono text-white">{cmd.label}</p>
+                            <p className="text-xs text-gray-400">{cmd.description}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="p-2 border-t border-lattice-border text-xs text-gray-500 flex items-center gap-3">
+                      <span><kbd className="px-1 py-0.5 bg-lattice-bg rounded text-gray-400">Tab</kbd> select</span>
+                      <span><kbd className="px-1 py-0.5 bg-lattice-bg rounded text-gray-400">Enter</kbd> confirm</span>
+                      <span><kbd className="px-1 py-0.5 bg-lattice-bg rounded text-gray-400">Esc</kbd> dismiss</span>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <div className="flex items-end gap-4">
+                <div className="flex-1 flex items-end bg-lattice-bg border border-lattice-border rounded-2xl p-2">
+                  {/* Hidden file input */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept={ACCEPTED_FILE_TYPES}
+                    multiple
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    aria-label="Attach files"
+                  />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="p-2 text-gray-400 hover:text-white transition-colors"
+                    title="Attach files"
+                    aria-label="Attach files"
+                  >
+                    <Paperclip className="w-5 h-5" />
+                  </button>
+                  <textarea
+                    ref={inputRef}
+                    value={input}
+                    onChange={handleInputChange}
+                    onKeyDown={handleKeyDown}
+                    placeholder={`Message ${aiMode.name} mode${selectedPersona.id !== 'default' ? ` as ${selectedPersona.name}` : ''}... (/ for commands)`}
+                    rows={1}
+                    className="flex-1 px-2 py-2 bg-transparent text-white placeholder-gray-500 resize-none focus:outline-none max-h-32"
+                    style={{ minHeight: '24px' }}
+                    disabled={sendMutation.isPending}
+                  />
+                  <button onClick={() => setInput(prev => prev + ' :)')} className="p-2 text-gray-400 hover:text-white transition-colors">
+                    <Smile className="w-5 h-5" />
+                  </button>
+                  <button onClick={() => setInput(prev => prev + ' [Voice Note]')} className="p-2 text-gray-400 hover:text-white transition-colors">
+                    <Mic className="w-5 h-5" />
+                  </button>
+                </div>
+                <button
+                  onClick={handleSend}
+                  disabled={(!input.trim() && attachments.length === 0) || sendMutation.isPending}
+                  className="p-4 bg-neon-cyan text-black rounded-2xl hover:bg-neon-cyan/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <Send className="w-5 h-5" />
+                </button>
+              </div>
             </div>
+
             <p className="text-xs text-gray-500 text-center mt-2">
               Messages are saved as DTUs in your local lattice. AI runs through Ollama when available.
             </p>

@@ -522,6 +522,23 @@ export default function FitnessLensPage() {
     setClientGoals(d.goals || []);
   };
 
+  const saveClientProgress = async () => {
+    if (!selectedClient) return;
+    const d = selectedClient.data as unknown as FitnessArtifact;
+    await update(selectedClient.id, {
+      data: {
+        ...d,
+        bodyMetrics: clientMetrics,
+        personalRecords: clientPRs,
+        progressPhotos: clientPhotos,
+        goals: clientGoals,
+      } as unknown as Partial<FitnessArtifact>,
+    });
+    // Refresh the selected client reference
+    const updated = items.find(i => i.id === selectedClient.id);
+    if (updated) setSelectedClient(updated);
+  };
+
   /* ---------- workout builder helpers ---------- */
 
   const addExercise = (name: string, category: ExerciseCategory) => {
@@ -734,7 +751,12 @@ export default function FitnessLensPage() {
                 <User className="w-5 h-5 text-neon-green" />
                 <h2 className={ds.heading2}>{selectedClient.title} - Progress Dashboard</h2>
               </div>
-              <button onClick={() => setSelectedClient(null)} className={ds.btnGhost}><X className="w-4 h-4" /></button>
+              <div className="flex items-center gap-2">
+                <button onClick={saveClientProgress} className={cn(ds.btnSmall, 'bg-neon-green/20 text-neon-green border border-neon-green/30')}>
+                  Save Progress
+                </button>
+                <button onClick={() => setSelectedClient(null)} className={ds.btnGhost}><X className="w-4 h-4" /></button>
+              </div>
             </div>
 
             {/* Compliance & overview */}
@@ -769,7 +791,10 @@ export default function FitnessLensPage() {
                   <div key={i} className={ds.panel}>
                     <div className="flex items-center justify-between mb-1">
                       <input value={g.label} onChange={e => { const ng = [...clientGoals]; ng[i] = { ...g, label: e.target.value }; setClientGoals(ng); }} className={cn(ds.input, 'bg-transparent border-none p-0 text-sm font-medium')} placeholder="Goal name" />
-                      <span className="text-xs text-gray-400">{g.current}/{g.target}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-400">{g.current}/{g.target}</span>
+                        <button onClick={() => setClientGoals(prev => prev.filter((_, idx) => idx !== i))} className={ds.btnGhost}><Trash2 className="w-3 h-3 text-red-400" /></button>
+                      </div>
                     </div>
                     <ProgressBar value={g.current} max={g.target} color="neon-cyan" />
                     <div className="flex gap-2 mt-1">
@@ -806,6 +831,7 @@ export default function FitnessLensPage() {
                         <th className="text-right py-2 px-2">Arms</th>
                         <th className="text-right py-2 px-2">Thighs</th>
                         <th className="py-2 px-2">Trend</th>
+                        <th className="py-2 px-2"></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -826,6 +852,9 @@ export default function FitnessLensPage() {
                             <td className="py-2 px-2"><input type="number" value={m.thighs || ''} onChange={e => { const nm = [...clientMetrics]; nm[i] = { ...m, thighs: parseFloat(e.target.value) || 0 }; setClientMetrics(nm); }} className={cn(ds.input, 'text-xs w-16 text-right')} /></td>
                             <td className="py-2 px-2">
                               {weightTrend < 0 ? <ArrowDownRight className="w-4 h-4 text-neon-green" /> : weightTrend > 0 ? <ArrowUpRight className="w-4 h-4 text-red-400" /> : <Minus className="w-4 h-4 text-gray-500" />}
+                            </td>
+                            <td className="py-2 px-2">
+                              <button onClick={() => setClientMetrics(prev => prev.filter((_, idx) => idx !== i))} className={ds.btnGhost}><Trash2 className="w-3 h-3 text-red-400" /></button>
                             </td>
                           </tr>
                         );
@@ -878,12 +907,48 @@ export default function FitnessLensPage() {
                           <input type="date" value={pr.date} onChange={e => { const np = [...clientPRs]; np[i] = { ...pr, date: e.target.value }; setClientPRs(np); }} className={cn(ds.input, 'text-xs w-28')} />
                         </div>
                       </div>
+                      <button onClick={() => setClientPRs(prev => prev.filter((_, idx) => idx !== i))} className={ds.btnGhost}><Trash2 className="w-3.5 h-3.5 text-red-400" /></button>
                     </div>
                   ))}
                 </div>
               ) : (
                 <p className={cn(ds.textMuted, 'text-center py-4')}>No personal records logged.</p>
               )}
+              {/* Strength Progression Bar Chart */}
+              {clientPRs.length >= 2 && (() => {
+                // Group PRs by exercise and show max weight
+                const exerciseMap = new Map<string, { weight: number; date: string }[]>();
+                clientPRs.forEach(pr => {
+                  if (!pr.exercise) return;
+                  const existing = exerciseMap.get(pr.exercise) || [];
+                  existing.push({ weight: pr.weight, date: pr.date });
+                  exerciseMap.set(pr.exercise, existing);
+                });
+                const exercises = Array.from(exerciseMap.entries()).filter(([, vals]) => vals.some(v => v.weight > 0));
+                if (exercises.length === 0) return null;
+                const maxWeight = Math.max(...exercises.map(([, vals]) => Math.max(...vals.map(v => v.weight))));
+                return (
+                  <div className="mt-3 p-3 bg-lattice-elevated rounded-lg">
+                    <h4 className="text-sm font-medium mb-3">Strength Records (Best Weight)</h4>
+                    <div className="space-y-2">
+                      {exercises.map(([name, vals]) => {
+                        const best = Math.max(...vals.map(v => v.weight));
+                        const pct = maxWeight > 0 ? (best / maxWeight) * 100 : 0;
+                        return (
+                          <div key={name} className="flex items-center gap-2">
+                            <span className="text-xs text-gray-400 w-24 truncate">{name}</span>
+                            <div className="flex-1 bg-lattice-surface rounded-full h-4 overflow-hidden">
+                              <div className="h-full bg-amber-400/60 rounded-full flex items-center justify-end pr-1 transition-all duration-500" style={{ width: `${Math.max(10, pct)}%` }}>
+                                <span className="text-[10px] font-bold text-white">{best}lbs</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Progress Photos */}
@@ -1006,6 +1071,14 @@ export default function FitnessLensPage() {
                       </span>
                     </div>
                   )}
+                  <div className="mt-2 pt-2 border-t border-lattice-border flex items-center gap-2">
+                    <button className={cn(ds.btnGhost, ds.btnSmall)} onClick={e => { e.stopPropagation(); openEditEditor(item); }}>
+                      <Eye className="w-3.5 h-3.5" /> Edit
+                    </button>
+                    <button className={cn(ds.btnDanger, ds.btnSmall)} onClick={e => { e.stopPropagation(); remove(item.id); }}>
+                      <Trash2 className="w-3.5 h-3.5" /> Delete
+                    </button>
+                  </div>
                 </div>
               );
             })}

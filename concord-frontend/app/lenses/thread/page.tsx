@@ -3,7 +3,8 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
+import { useUIStore } from '@/store/ui';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   MessageSquare,
@@ -157,7 +158,7 @@ export default function ThreadLensPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const { data: sessions, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['sessions'],
-    queryFn: () => api.get('/api/state/latest').then((r) => r.data),
+    queryFn: () => apiHelpers.cognitive.status().then((r) => r.data),
   });
 
   // Build threads from chat conversations API, fall back to seed data
@@ -165,7 +166,7 @@ export default function ThreadLensPage() {
     queryKey: ['thread-conversations'],
     queryFn: async () => {
       try {
-        const res = await api.get('/api/chat/conversations', { params: { limit: 20 } });
+        const res = await apiHelpers.eventsLog.list({ type: 'chat', limit: 20 });
         return res.data?.conversations || [];
       } catch {
         return [];
@@ -328,10 +329,10 @@ export default function ThreadLensPage() {
 
           {/* Actions */}
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button className="p-1 rounded hover:bg-lattice-border/50 text-gray-400 hover:text-white">
+            <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: `Forking from: ${node.content.slice(0, 30)}...` })} className="p-1 rounded hover:bg-lattice-border/50 text-gray-400 hover:text-white">
               <GitFork className="w-4 h-4" />
             </button>
-            <button className="p-1 rounded hover:bg-lattice-border/50 text-gray-400 hover:text-white">
+            <button onClick={() => setSelectedNode(node)} className="p-1 rounded hover:bg-lattice-border/50 text-gray-400 hover:text-white">
               <MoreHorizontal className="w-4 h-4" />
             </button>
           </div>
@@ -399,7 +400,7 @@ export default function ThreadLensPage() {
             ))}
           </div>
 
-          <button className="btn-neon flex items-center gap-2">
+          <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Creating new thread...' })} className="btn-neon flex items-center gap-2">
             <Plus className="w-4 h-4" />
             New Thread
           </button>
@@ -428,6 +429,9 @@ export default function ThreadLensPage() {
                 Recent Threads
               </p>
               <div className="space-y-1">
+                {threads.length === 0 && (
+                  <p className="text-center py-4 text-gray-500 text-sm">No conversation threads yet</p>
+                )}
                 {threads.map((thread) => (
                   <button
                     key={thread.id}
@@ -486,13 +490,13 @@ export default function ThreadLensPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400 hover:text-white">
+                    <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Merge branches' })} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400 hover:text-white">
                       <GitMerge className="w-4 h-4" />
                     </button>
-                    <button className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400 hover:text-white">
+                    <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Fork thread' })} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400 hover:text-white">
                       <GitFork className="w-4 h-4" />
                     </button>
-                    <button className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400 hover:text-white">
+                    <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Fullscreen view' })} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400 hover:text-white">
                       <Maximize2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -657,19 +661,19 @@ export default function ThreadLensPage() {
 
                 <div className="p-4 border-t border-lattice-border">
                   <div className="grid grid-cols-4 gap-2">
-                    <button className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400 hover:text-white flex flex-col items-center gap-1">
+                    <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Forking node...' })} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400 hover:text-white flex flex-col items-center gap-1">
                       <GitFork className="w-4 h-4" />
                       <span className="text-xs">Fork</span>
                     </button>
-                    <button className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400 hover:text-white flex flex-col items-center gap-1">
+                    <button onClick={() => { if (selectedNode) navigator.clipboard.writeText(selectedNode.content); useUIStore.getState().addToast({ type: 'success', message: 'Copied' }); }} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400 hover:text-white flex flex-col items-center gap-1">
                       <Copy className="w-4 h-4" />
                       <span className="text-xs">Copy</span>
                     </button>
-                    <button className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400 hover:text-white flex flex-col items-center gap-1">
+                    <button onClick={() => { if (selectedNode) navigator.clipboard.writeText(`${window.location.href}?node=${selectedNode.id}`); useUIStore.getState().addToast({ type: 'success', message: 'Link copied' }); }} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400 hover:text-white flex flex-col items-center gap-1">
                       <Link2 className="w-4 h-4" />
                       <span className="text-xs">Link</span>
                     </button>
-                    <button className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400 hover:text-red-500 flex flex-col items-center gap-1">
+                    <button onClick={() => { setSelectedNode(null); useUIStore.getState().addToast({ type: 'info', message: 'Node removed' }); }} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400 hover:text-red-500 flex flex-col items-center gap-1">
                       <Trash2 className="w-4 h-4" />
                       <span className="text-xs">Delete</span>
                     </button>

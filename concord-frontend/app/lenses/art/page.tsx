@@ -113,20 +113,19 @@ export default function ArtLensPage() {
 
   const { data: artAssets, isLoading: _assetsLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
     queryKey: ['art-assets', selectedStyle, searchQuery],
-    queryFn: () => api.get('/api/artistry/assets', {
-      params: { type: 'artwork', search: searchQuery || undefined }
-    }).then(r => r.data?.assets || []).catch((err) => { console.error('Failed to fetch art assets:', err instanceof Error ? err.message : err); return []; }),
+    queryFn: () => apiHelpers.artistry.assets.list({ type: 'artwork', search: searchQuery || undefined })
+    .then(r => r.data?.assets || []).catch((err) => { console.error('Failed to fetch art assets:', err instanceof Error ? err.message : err); return []; }),
     initialData: [],
   });
 
   const { data: artListings, isError: isError2, error: error2, refetch: refetch2,} = useQuery({
     queryKey: ['art-marketplace'],
-    queryFn: () => api.get('/api/artistry/marketplace/art').then(r => r.data?.artworks || []).catch((err) => { console.error('Failed to fetch art listings:', err instanceof Error ? err.message : err); return []; }),
+    queryFn: () => apiHelpers.artistry.marketplace.art.list().then(r => r.data?.artworks || []).catch((err) => { console.error('Failed to fetch art listings:', err instanceof Error ? err.message : err); return []; }),
     initialData: [],
   });
 
   const uploadMutation = useMutation({
-    mutationFn: (data: Record<string, unknown>) => api.post('/api/artistry/assets', data),
+    mutationFn: (data: Record<string, unknown>) => apiHelpers.artistry.assets.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['art-assets'] });
       setShowUpload(false);
@@ -140,7 +139,7 @@ export default function ArtLensPage() {
   });
 
   const createListingMutation = useMutation({
-    mutationFn: (data: Record<string, unknown>) => api.post('/api/artistry/marketplace/art', data),
+    mutationFn: (data: Record<string, unknown>) => apiHelpers.artistry.marketplace.art.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['art-marketplace'] });
       setShowCreateListing(false);

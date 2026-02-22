@@ -10,7 +10,8 @@ import {
   Shield, Wrench, FileText, DollarSign, Weight, AlertTriangle, CheckCircle,
   XCircle, ChevronDown, ChevronRight, Fuel, MapPin,
   UserCheck, Clipboard, Calculator, BarChart3,
-  Timer, Award, CloudRain, TrendingUp, Package
+  Timer, Award, CloudRain, TrendingUp, Package,
+  Wind, Thermometer, Eye, Droplets
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { cn } from '@/lib/utils';
@@ -18,7 +19,7 @@ import { cn } from '@/lib/utils';
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-type ModeTab = 'dashboard' | 'flights' | 'pilots' | 'fleet' | 'maintenance' | 'charter' | 'wb';
+type ModeTab = 'dashboard' | 'flights' | 'pilots' | 'fleet' | 'maintenance' | 'charter' | 'wb' | 'weather';
 
 
 interface PilotData {
@@ -156,6 +157,29 @@ interface WBData {
   date: string;
 }
 
+interface WeatherData {
+  stationId: string;
+  observationTime: string;
+  rawMetar: string;
+  windDirection: number;
+  windSpeed: number;
+  windGust: number;
+  visibility: number;
+  ceiling: number;
+  temperature: number;
+  dewpoint: number;
+  altimeter: number;
+  flightCategory: string;
+  wxConditions: string;
+  cloudLayers: string;
+  remarks: string;
+  taf: string;
+  notams: string;
+  pirepSummary: string;
+  airmets: string;
+  sigmets: string;
+}
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -167,6 +191,7 @@ const MODE_TABS: { key: ModeTab; label: string; icon: typeof Plane }[] = [
   { key: 'maintenance', label: 'Maintenance', icon: Wrench },
   { key: 'charter', label: 'Charter', icon: DollarSign },
   { key: 'wb', label: 'W&B', icon: Weight },
+  { key: 'weather', label: 'Weather', icon: CloudRain },
 ];
 
 const FLIGHT_STATUSES = ['planned', 'dispatched', 'airborne', 'completed', 'cancelled', 'diverted'];
@@ -177,6 +202,7 @@ const MX_CATEGORIES = ['scheduled', 'unscheduled', 'ad-compliance', 'sb-complian
 const MX_PRIORITIES = ['routine', 'priority', 'AOG', 'safety'];
 const CHARTER_STATUSES = ['inquiry', 'quoted', 'confirmed', 'completed', 'cancelled'];
 const FLIGHT_REGS = ['14 CFR 91', '14 CFR 91.1059', '14 CFR 135.267', '14 CFR 121'];
+const FLIGHT_CATEGORIES = ['VFR', 'MVFR', 'IFR', 'LIFR'];
 
 const STATUS_COLORS: Record<string, string> = {
   planned: 'blue-400', dispatched: 'yellow-400', airborne: 'green-400',
@@ -187,6 +213,7 @@ const STATUS_COLORS: Record<string, string> = {
   confirmed: 'green-400', current: 'green-400', expiring: 'yellow-400', expired: 'red-400',
   scheduled: 'blue-400', unscheduled: 'orange-400', 'ad-compliance': 'red-400',
   'sb-compliance': 'yellow-400', inspection: 'cyan-400', overhaul: 'purple-400',
+  VFR: 'green-400', MVFR: 'blue-400', IFR: 'red-400', LIFR: 'purple-400',
 };
 
 function statusBadge(status: string) {
@@ -202,6 +229,7 @@ function getTypeForTab(tab: ModeTab): string {
     case 'maintenance': return 'WorkOrder';
     case 'charter': return 'Charter';
     case 'wb': return 'WeightBalance';
+    case 'weather': return 'Weather';
     default: return 'Flight';
   }
 }
@@ -212,6 +240,7 @@ function getStatusesForTab(tab: ModeTab): string[] {
     case 'fleet': return AIRCRAFT_STATUSES;
     case 'maintenance': return MX_CATEGORIES;
     case 'charter': return CHARTER_STATUSES;
+    case 'weather': return FLIGHT_CATEGORIES;
     default: return [];
   }
 }
@@ -276,6 +305,10 @@ export default function AviationLensPage() {
   const wbQuery = useLensData('aviation', 'WeightBalance', {
     search: activeMode === 'wb' ? searchQuery || undefined : undefined,
   });
+  const weatherQuery = useLensData('aviation', 'Weather', {
+    search: activeMode === 'weather' ? searchQuery || undefined : undefined,
+    status: activeMode === 'weather' ? statusFilter || undefined : undefined,
+  });
 
   const runAction = useRunArtifact('aviation');
 
@@ -288,9 +321,10 @@ export default function AviationLensPage() {
       case 'maintenance': return mxQuery;
       case 'charter': return charterQuery;
       case 'wb': return wbQuery;
+      case 'weather': return weatherQuery;
       default: return flightQuery;
     }
-  }, [activeMode, flightQuery, pilotQuery, fleetQuery, mxQuery, charterQuery, wbQuery]);
+  }, [activeMode, flightQuery, pilotQuery, fleetQuery, mxQuery, charterQuery, wbQuery, weatherQuery]);
 
   const items = activeQuery.items;
   const { create, update, remove, isLoading, isError, error, refetch } = activeQuery;
@@ -391,6 +425,12 @@ export default function AviationLensPage() {
   const charterRevenue = charters.filter(c => c.meta?.status === 'completed').reduce(
     (sum, c) => sum + ((c.data as Record<string, unknown>).totalPrice as number || 0), 0
   );
+
+  const weatherBriefings = weatherQuery.items;
+  const ifrStations = weatherBriefings.filter(w => {
+    const d = w.data as unknown as WeatherData;
+    return d.flightCategory === 'IFR' || d.flightCategory === 'LIFR';
+  }).length;
 
   // -----------------------------------------------------------------------
   // Error state
@@ -590,6 +630,45 @@ export default function AviationLensPage() {
                           <AlertTriangle className="w-3 h-3" /> {d.squawks.length} open squawk{d.squawks.length > 1 ? 's' : ''}
                         </div>
                       )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Weather Summary */}
+      <div className={ds.panel}>
+        <button onClick={() => toggleSection('weatherSummary')} className="flex items-center gap-2 w-full text-left">
+          {expandedSections.weatherSummary ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
+          <CloudRain className="w-5 h-5 text-cyan-400" />
+          <h3 className={ds.heading3}>Weather Briefings</h3>
+          <span className={cn(ds.textMuted, 'ml-auto')}>{weatherBriefings.length} stations{ifrStations > 0 ? ` (${ifrStations} IFR/LIFR)` : ''}</span>
+        </button>
+        {expandedSections.weatherSummary && (
+          <div className="mt-4">
+            {weatherBriefings.length === 0 ? (
+              <p className={ds.textMuted}>No weather briefings. Add stations in the Weather tab.</p>
+            ) : (
+              <div className={ds.grid3}>
+                {weatherBriefings.slice(0, 6).map(w => {
+                  const d = w.data as unknown as WeatherData;
+                  const cat = d.flightCategory || 'VFR';
+                  const catColor = cat === 'VFR' ? 'text-green-400' : cat === 'MVFR' ? 'text-blue-400' : cat === 'IFR' ? 'text-red-400' : 'text-purple-400';
+                  return (
+                    <div key={w.id} className="flex items-center gap-3 p-2 bg-lattice-elevated rounded-lg">
+                      <CloudRain className={cn('w-4 h-4', catColor)} />
+                      <div className="min-w-0 flex-1">
+                        <span className="font-mono text-sm font-bold text-white">{d.stationId || w.title}</span>
+                        <div className="flex items-center gap-2 text-xs text-gray-400">
+                          <span>{d.windDirection || '--'}°/{d.windSpeed || '--'}kt</span>
+                          <span>{d.visibility || '--'}SM</span>
+                          <span>{d.ceiling ? `${d.ceiling}ft` : 'CLR'}</span>
+                        </div>
+                      </div>
+                      <span className={cn('text-xs font-bold', catColor)}>{cat}</span>
                     </div>
                   );
                 })}
@@ -892,6 +971,68 @@ export default function AviationLensPage() {
           </div>
         )}
         {d.date && <div className="text-xs text-gray-500 mt-2"><Calendar className="w-3 h-3 inline mr-1" />{d.date}</div>}
+      </div>
+    );
+  };
+
+  // -----------------------------------------------------------------------
+  // Weather cards
+  // -----------------------------------------------------------------------
+  const renderWeatherCard = (item: LensItem) => {
+    const d = item.data as unknown as WeatherData;
+    const cat = d.flightCategory || 'VFR';
+    const catColor = cat === 'VFR' ? 'text-green-400' : cat === 'MVFR' ? 'text-blue-400' : cat === 'IFR' ? 'text-red-400' : 'text-purple-400';
+    const catBg = cat === 'VFR' ? 'border-l-green-500' : cat === 'MVFR' ? 'border-l-blue-500' : cat === 'IFR' ? 'border-l-red-500' : 'border-l-purple-500';
+    return (
+      <div key={item.id} className={cn(ds.panelHover, 'border-l-4', catBg)} onClick={() => openEdit(item)}>
+        <div className="flex items-start justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <CloudRain className="w-5 h-5 text-cyan-400" />
+            <span className="font-mono text-white font-bold text-sm">{d.stationId || item.title}</span>
+          </div>
+          <span className={cn('text-sm font-bold', catColor)}>{cat}</span>
+        </div>
+        {d.rawMetar && (
+          <div className="bg-lattice-elevated rounded p-2 mb-2">
+            <p className="font-mono text-xs text-cyan-300 break-all">{d.rawMetar}</p>
+          </div>
+        )}
+        <div className="grid grid-cols-2 gap-1 text-xs">
+          <span className="text-gray-500 flex items-center gap-1"><Wind className="w-3 h-3" />Wind:</span>
+          <span className="text-white">{d.windDirection || '--'}° @ {d.windSpeed || '--'}kt{d.windGust ? ` G${d.windGust}` : ''}</span>
+          <span className="text-gray-500 flex items-center gap-1"><Eye className="w-3 h-3" />Vis:</span>
+          <span className="text-white">{d.visibility || '--'} SM</span>
+          <span className="text-gray-500 flex items-center gap-1"><CloudRain className="w-3 h-3" />Ceiling:</span>
+          <span className={cn('text-white', (d.ceiling || 99999) < 1000 ? 'text-red-400 font-bold' : '')}>{d.ceiling ? `${d.ceiling} ft` : 'CLR'}</span>
+          <span className="text-gray-500 flex items-center gap-1"><Thermometer className="w-3 h-3" />Temp:</span>
+          <span className="text-white">{d.temperature !== undefined ? `${d.temperature}°C` : '--'} / {d.dewpoint !== undefined ? `${d.dewpoint}°C` : '--'}</span>
+          <span className="text-gray-500">Altimeter:</span>
+          <span className="text-white">{d.altimeter ? `${d.altimeter}" Hg` : '--'}</span>
+        </div>
+        {d.cloudLayers && (
+          <div className="text-xs text-gray-400 mt-2">
+            <span className="text-gray-500">Clouds:</span> {d.cloudLayers}
+          </div>
+        )}
+        {d.wxConditions && (
+          <div className="text-xs mt-1 flex items-center gap-1">
+            <Droplets className="w-3 h-3 text-blue-400" />
+            <span className="text-blue-400">{d.wxConditions}</span>
+          </div>
+        )}
+        {d.sigmets && (
+          <div className="text-xs text-red-400 mt-1 flex items-center gap-1">
+            <AlertTriangle className="w-3 h-3" /> SIGMET: {d.sigmets}
+          </div>
+        )}
+        {d.airmets && (
+          <div className="text-xs text-yellow-400 mt-1 flex items-center gap-1">
+            <AlertTriangle className="w-3 h-3" /> AIRMET: {d.airmets}
+          </div>
+        )}
+        <div className="flex items-center text-xs text-gray-500 mt-2 pt-2 border-t border-lattice-border">
+          <Clock className="w-3 h-3 mr-1" />{d.observationTime || new Date(item.updatedAt).toLocaleString()}
+        </div>
       </div>
     );
   };
@@ -1360,6 +1501,59 @@ export default function AviationLensPage() {
     );
   };
 
+  const renderWeatherEditor = () => (
+    <div className="space-y-4">
+      <div className={ds.grid2}>
+        <div><label className={ds.label}>Station / Airport (ICAO)</label><input className={ds.input} value={(form.stationId as string) || ''} onChange={e => { setField('stationId', e.target.value.toUpperCase()); setField('_title', e.target.value.toUpperCase()); }} placeholder="KJFK" /></div>
+        <div><label className={ds.label}>Flight Category</label>
+          <select className={ds.select} value={(form._status as string) || 'VFR'} onChange={e => { setField('_status', e.target.value); setField('flightCategory', e.target.value); }}>
+            {FLIGHT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+      </div>
+      <div>
+        <label className={ds.label}>Raw METAR</label>
+        <textarea className={cn(ds.textarea, 'font-mono text-xs h-16')} value={(form.rawMetar as string) || ''} onChange={e => setField('rawMetar', e.target.value)} placeholder="KJFK 221456Z 27015G25KT 10SM FEW250 08/M04 A3012 RMK AO2..." />
+      </div>
+      <div><label className={ds.label}>Observation Time (UTC)</label><input type="datetime-local" className={ds.input} value={(form.observationTime as string) || ''} onChange={e => setField('observationTime', e.target.value)} /></div>
+      <div className="border-t border-lattice-border pt-4">
+        <h4 className={cn(ds.heading3, 'text-sm mb-3')}>Wind</h4>
+        <div className={ds.grid3}>
+          <div><label className={ds.label}>Direction (°)</label><input type="number" className={ds.input} value={(form.windDirection as number) || ''} onChange={e => setField('windDirection', parseInt(e.target.value) || 0)} placeholder="270" /></div>
+          <div><label className={ds.label}>Speed (kt)</label><input type="number" className={ds.input} value={(form.windSpeed as number) || ''} onChange={e => setField('windSpeed', parseInt(e.target.value) || 0)} placeholder="15" /></div>
+          <div><label className={ds.label}>Gust (kt)</label><input type="number" className={ds.input} value={(form.windGust as number) || ''} onChange={e => setField('windGust', parseInt(e.target.value) || 0)} placeholder="25" /></div>
+        </div>
+      </div>
+      <div className="border-t border-lattice-border pt-4">
+        <h4 className={cn(ds.heading3, 'text-sm mb-3')}>Conditions</h4>
+        <div className={ds.grid3}>
+          <div><label className={ds.label}>Visibility (SM)</label><input type="number" step="0.25" className={ds.input} value={(form.visibility as number) || ''} onChange={e => setField('visibility', parseFloat(e.target.value) || 0)} placeholder="10" /></div>
+          <div><label className={ds.label}>Ceiling (ft AGL)</label><input type="number" className={ds.input} value={(form.ceiling as number) || ''} onChange={e => setField('ceiling', parseInt(e.target.value) || 0)} placeholder="25000" /></div>
+          <div><label className={ds.label}>Weather Conditions</label><input className={ds.input} value={(form.wxConditions as string) || ''} onChange={e => setField('wxConditions', e.target.value)} placeholder="RA, SN, BR, FG..." /></div>
+        </div>
+        <div className={ds.grid2}>
+          <div><label className={ds.label}>Temperature (°C)</label><input type="number" className={ds.input} value={(form.temperature as number) ?? ''} onChange={e => setField('temperature', parseInt(e.target.value))} placeholder="8" /></div>
+          <div><label className={ds.label}>Dewpoint (°C)</label><input type="number" className={ds.input} value={(form.dewpoint as number) ?? ''} onChange={e => setField('dewpoint', parseInt(e.target.value))} placeholder="-4" /></div>
+        </div>
+        <div className={ds.grid2}>
+          <div><label className={ds.label}>Altimeter (" Hg)</label><input type="number" step="0.01" className={ds.input} value={(form.altimeter as number) || ''} onChange={e => setField('altimeter', parseFloat(e.target.value) || 0)} placeholder="30.12" /></div>
+          <div><label className={ds.label}>Cloud Layers</label><input className={ds.input} value={(form.cloudLayers as string) || ''} onChange={e => setField('cloudLayers', e.target.value)} placeholder="FEW250, SCT120, BKN080..." /></div>
+        </div>
+      </div>
+      <div className="border-t border-lattice-border pt-4">
+        <h4 className={cn(ds.heading3, 'text-sm mb-3')}>Forecast & Advisories</h4>
+        <div><label className={ds.label}>TAF (Terminal Forecast)</label><textarea className={cn(ds.textarea, 'font-mono text-xs h-20')} value={(form.taf as string) || ''} onChange={e => setField('taf', e.target.value)} placeholder="TAF KJFK 221130Z..." /></div>
+        <div><label className={ds.label}>NOTAMs</label><textarea className={cn(ds.textarea, 'h-16')} value={(form.notams as string) || ''} onChange={e => setField('notams', e.target.value)} placeholder="Active NOTAMs for this station..." /></div>
+        <div><label className={ds.label}>PIREPs</label><textarea className={cn(ds.textarea, 'h-16')} value={(form.pirepSummary as string) || ''} onChange={e => setField('pirepSummary', e.target.value)} placeholder="Pilot reports of turbulence, icing..." /></div>
+        <div className={ds.grid2}>
+          <div><label className={ds.label}>AIRMETs</label><textarea className={cn(ds.textarea, 'h-12')} value={(form.airmets as string) || ''} onChange={e => setField('airmets', e.target.value)} placeholder="Active AIRMETs..." /></div>
+          <div><label className={ds.label}>SIGMETs</label><textarea className={cn(ds.textarea, 'h-12')} value={(form.sigmets as string) || ''} onChange={e => setField('sigmets', e.target.value)} placeholder="Active SIGMETs..." /></div>
+        </div>
+      </div>
+      <div><label className={ds.label}>Remarks</label><textarea className={cn(ds.textarea, 'h-12')} value={(form.remarks as string) || ''} onChange={e => setField('remarks', e.target.value)} placeholder="Additional remarks..." /></div>
+    </div>
+  );
+
   const getEditorForTab = () => {
     switch (activeMode) {
       case 'flights': return renderFlightEditor();
@@ -1368,6 +1562,7 @@ export default function AviationLensPage() {
       case 'maintenance': return renderMaintenanceEditor();
       case 'charter': return renderCharterEditor();
       case 'wb': return renderWBEditor();
+      case 'weather': return renderWeatherEditor();
       default: return renderFlightEditor();
     }
   };
@@ -1380,6 +1575,7 @@ export default function AviationLensPage() {
       case 'maintenance': return renderMaintenanceCard;
       case 'charter': return renderCharterCard;
       case 'wb': return renderWBCard;
+      case 'weather': return renderWeatherCard;
       default: return renderFlightCard;
     }
   };
@@ -1521,6 +1717,12 @@ export default function AviationLensPage() {
                 <button onClick={() => handleAction('wb_calculate')} className={cn(ds.btnGhost, ds.btnSmall)}><Calculator className="w-3 h-3" /> W&B Calculate</button>
               </>
             )}
+            {activeMode === 'weather' && (
+              <>
+                <button onClick={() => handleAction('weather_check')} className={cn(ds.btnGhost, ds.btnSmall)}><CloudRain className="w-3 h-3" /> Refresh Weather</button>
+                <button onClick={() => handleAction('flight_summary')} className={cn(ds.btnGhost, ds.btnSmall)}><Clipboard className="w-3 h-3" /> Weather Summary</button>
+              </>
+            )}
           </div>
 
           {/* Cards Grid */}
@@ -1579,6 +1781,11 @@ export default function AviationLensPage() {
                   {editingId && activeMode === 'wb' && (
                     <button onClick={() => handleAction('wb_calculate', editingId)} className={ds.btnSecondary}>
                       <Calculator className="w-4 h-4" /> Calculate
+                    </button>
+                  )}
+                  {editingId && activeMode === 'weather' && (
+                    <button onClick={() => handleAction('weather_check', editingId)} className={ds.btnSecondary}>
+                      <CloudRain className="w-4 h-4" /> Refresh
                     </button>
                   )}
                 </div>

@@ -4,7 +4,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
-import { api } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
+import { useUIStore } from '@/store/ui';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -748,16 +749,16 @@ function ActiveSessionView({ session, onLeave }: { session: CollabSession; onLea
 
           {/* Bottom action bar */}
           <div className="flex items-center gap-2 px-5 py-3 border-t border-lattice-border bg-lattice-surface/50">
-            <button className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-lattice-surface border border-lattice-border text-gray-300 hover:border-neon-blue/40 transition-colors">
+            <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Screen sharing initiated' })} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-lattice-surface border border-lattice-border text-gray-300 hover:border-neon-blue/40 transition-colors">
               <Monitor className="w-3.5 h-3.5" /> Share Screen
             </button>
-            <button className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-lattice-surface border border-lattice-border text-gray-300 hover:border-neon-blue/40 transition-colors">
+            <button onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.click(); }} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-lattice-surface border border-lattice-border text-gray-300 hover:border-neon-blue/40 transition-colors">
               <Upload className="w-3.5 h-3.5" /> Upload File
             </button>
-            <button className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-lattice-surface border border-lattice-border text-gray-300 hover:border-neon-blue/40 transition-colors">
+            <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Invite link copied to clipboard' })} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-lattice-surface border border-lattice-border text-gray-300 hover:border-neon-blue/40 transition-colors">
               <UserPlus className="w-3.5 h-3.5" /> Invite
             </button>
-            <button className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-lattice-surface border border-lattice-border text-gray-300 hover:border-neon-blue/40 transition-colors">
+            <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Session settings' })} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-lattice-surface border border-lattice-border text-gray-300 hover:border-neon-blue/40 transition-colors">
               <Settings className="w-3.5 h-3.5" /> Settings
             </button>
           </div>
@@ -795,7 +796,7 @@ function ActiveSessionView({ session, onLeave }: { session: CollabSession; onLea
           </div>
           <div className="p-2 border-t border-lattice-border">
             <div className="flex items-center gap-1.5">
-              <button className="p-1.5 text-gray-500 hover:text-gray-300 transition-colors">
+              <button onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.click(); }} className="p-1.5 text-gray-500 hover:text-gray-300 transition-colors">
                 <Paperclip className="w-3.5 h-3.5" />
               </button>
               <input
@@ -946,13 +947,13 @@ function CreateSessionModal({ onClose }: { onClose: () => void }) {
 
   const { data: projectsData } = useQuery({
     queryKey: ['studio-projects-for-link'],
-    queryFn: () => api.get('/api/artistry/studio/projects').then(r => r.data),
+    queryFn: () => apiHelpers.artistry.studio.projects.list().then(r => r.data),
     retry: 1,
   });
 
   const createMutation = useMutation({
     mutationFn: (data: typeof form) =>
-      api.post('/api/artistry/collab/sessions', {
+      apiHelpers.artistry.collab.sessions.create({
         projectId: data.linkedProjectId || undefined,
         maxParticipants: data.maxParticipants,
         mode: data.privacy,

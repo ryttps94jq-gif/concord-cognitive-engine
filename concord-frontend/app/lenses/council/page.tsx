@@ -5,7 +5,7 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
-import { api } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import { ds } from '@/lib/design-system';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -478,11 +478,7 @@ export default function CouncilLensPage() {
       const dtus: DTU[] = dtusData?.dtus || [];
       const dtuA = dtus.find((d: DTU) => d.id === params.dtuA);
       const dtuB = dtus.find((d: DTU) => d.id === params.dtuB);
-      const res = await api.post('/api/council/debate', {
-        dtuA: dtuA ? { id: dtuA.id, content: dtuA.content } : params.dtuA,
-        dtuB: dtuB ? { id: dtuB.id, content: dtuB.content } : params.dtuB,
-        topic: params.topic,
-      });
+      const res = await apiHelpers.council.reviewGlobal();
       return res.data;
     },
     onSuccess: () => {

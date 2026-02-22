@@ -49,7 +49,14 @@ export default function EntityLensPage() {
 
   const forkEntity = useMutation({
     mutationFn: async (entityId: string) => {
-      const res = await api.post(`/api/worldmodel/entities/${entityId}/fork`);
+      // Fork = get entity, then create a copy with updated name
+      const original = await apiHelpers.worldmodel.getEntity(entityId);
+      const entity = original.data;
+      const res = await apiHelpers.worldmodel.createEntity({
+        name: `${entity?.name || 'entity'} (fork)`,
+        type: entity?.type || 'generic',
+        properties: { ...(entity?.properties || {}), forkedFrom: entityId },
+      });
       return res.data;
     },
     onSuccess: () => {
@@ -59,7 +66,8 @@ export default function EntityLensPage() {
 
   const executeTerminal = useMutation({
     mutationFn: async (data: { entityId: string; command: string }) => {
-      const res = await api.post('/api/entity/terminal', data);
+      // Use lens run as a command execution proxy
+      const res = await apiHelpers.lens.run('entity', data.entityId, { action: 'terminal', params: { command: data.command } });
       return res.data;
     },
     onSuccess: (data) => {

@@ -23,8 +23,8 @@ import {
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-type ModeTab = 'dashboard' | 'projects' | 'assets' | 'shotlist' | 'proofs' | 'budget' | 'distribution';
-type ArtifactType = 'Project' | 'Asset' | 'ShotItem' | 'ClientProof' | 'BudgetLine' | 'DistItem';
+type ModeTab = 'dashboard' | 'projects' | 'assets' | 'revisions' | 'shotlist' | 'proofs' | 'budget' | 'distribution';
+type ArtifactType = 'Project' | 'Asset' | 'Revision' | 'ShotItem' | 'ClientProof' | 'BudgetLine' | 'DistItem';
 type ProjectPhase = 'concept' | 'pre_production' | 'production' | 'post_production' | 'review' | 'delivery';
 type AssetCategory = 'photo' | 'video' | 'audio' | 'graphic' | 'document';
 type ProofStatus = 'pending_review' | 'approved' | 'revision_requested';
@@ -54,10 +54,28 @@ const ASSET_CATEGORIES: { id: AssetCategory; label: string; icon: typeof Camera 
   { id: 'document', label: 'Document', icon: FileText },
 ];
 
+type ProjectType = 'video' | 'audio' | 'design' | 'writing' | 'branding' | 'campaign' | 'film' | 'social' | 'web' | 'print' | 'other';
+type FeedbackStatus = 'pending' | 'addressed' | 'rejected';
+
+const PROJECT_TYPES: { id: ProjectType; label: string }[] = [
+  { id: 'video', label: 'Video' },
+  { id: 'audio', label: 'Audio' },
+  { id: 'design', label: 'Design' },
+  { id: 'writing', label: 'Writing' },
+  { id: 'branding', label: 'Branding' },
+  { id: 'campaign', label: 'Campaign' },
+  { id: 'film', label: 'Film' },
+  { id: 'social', label: 'Social Media' },
+  { id: 'web', label: 'Web' },
+  { id: 'print', label: 'Print / Digital' },
+  { id: 'other', label: 'Other' },
+];
+
 const MODE_TABS: { id: ModeTab; label: string; icon: typeof Palette; type?: ArtifactType }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
   { id: 'projects', label: 'Projects', icon: Palette, type: 'Project' },
   { id: 'assets', label: 'Asset Library', icon: FolderOpen, type: 'Asset' },
+  { id: 'revisions', label: 'Revisions', icon: RotateCcw, type: 'Revision' },
   { id: 'shotlist', label: 'Shot List', icon: Clapperboard, type: 'ShotItem' },
   { id: 'proofs', label: 'Client Proofing', icon: FileCheck, type: 'ClientProof' },
   { id: 'budget', label: 'Budget', icon: DollarSign, type: 'BudgetLine' },
@@ -197,6 +215,13 @@ const SEED: Record<ArtifactType, Array<{ title: string; data: Record<string, unk
     { title: 'LinkedIn Carousel', data: { project: 'NovaTech Product Launch', format: '1080x1080 PDF/PNG', platform: 'LinkedIn', requirement: '10 slides max, PNG set + single PDF', completed: false, notes: 'Copy deck in review' }, meta: { status: 'pre_production', tags: ['social', 'linkedin'] } },
     { title: 'Podcast Audio Master', data: { project: 'Urban Roots Documentary', format: 'WAV 24bit/48kHz + MP3 320', platform: 'Podcast', requirement: 'LUFS -16, true peak -1dB', completed: false, notes: 'Audio mix session scheduled' }, meta: { status: 'production', tags: ['audio', 'podcast'] } },
   ],
+  Revision: [
+    { title: 'Lumina Logo - Revision 3', data: { project: 'Brand Refresh - Lumina Co', version: 3, previousVersion: 2, revisedBy: 'Ava Thompson', revisionDate: '2026-02-08', changeDescription: 'Updated gold tone to #D4A853, swapped to alternate typeface per client feedback', feedbackNotes: 'Client requested warmer gold and different typeface', feedbackStatus: 'addressed', asset: 'lumina-logo-primary.svg' }, meta: { status: 'review', tags: ['logo', 'revision'] } },
+    { title: 'FinGroup Report - Revision 5', data: { project: 'Annual Report 2025 - FinGroup', version: 5, previousVersion: 4, revisedBy: 'Sofia Nguyen', revisionDate: '2026-02-08', changeDescription: 'Final data update on all infographic charts, corrected page 12 caption', feedbackNotes: 'Minor caption error on page 12', feedbackStatus: 'addressed', asset: 'fingroup-charts-set.ai' }, meta: { status: 'delivery', tags: ['report', 'final'] } },
+    { title: 'NovaTech Hero Image - Revision 1', data: { project: 'Product Launch - NovaTech', version: 1, previousVersion: 0, revisedBy: 'Marcus Reed', revisionDate: '2026-02-12', changeDescription: 'Initial raw composite from product shoot', feedbackNotes: 'Awaiting client review', feedbackStatus: 'pending', asset: 'nova-hero-16x9.psd' }, meta: { status: 'production', tags: ['hero', 'wip'] } },
+    { title: 'Urban Roots Ep.1 - Revision 2', data: { project: 'Documentary - Urban Roots', version: 2, previousVersion: 1, revisedBy: 'James Carter', revisionDate: '2026-02-10', changeDescription: 'Added music track, tightened pacing in opening sequence, color correction pass', feedbackNotes: 'Rough cut with music for internal review', feedbackStatus: 'pending', asset: 'urban-roots-ep1-rough.mp4' }, meta: { status: 'post_production', tags: ['rough-cut', 'video'] } },
+    { title: 'Verdant Social Reel - Revision 1', data: { project: 'Social Campaign - Verdant Greens', version: 1, previousVersion: 0, revisedBy: 'Mia Chen', revisionDate: '2026-01-20', changeDescription: 'Final delivered version with approved color grading', feedbackNotes: 'Client approved, no further changes', feedbackStatus: 'addressed', asset: 'verdant-reel-30s.mp4' }, meta: { status: 'delivery', tags: ['social', 'final'] } },
+  ],
 };
 
 // ---------------------------------------------------------------------------
@@ -259,6 +284,7 @@ export default function CreativeLensPage() {
   const { items: allAssets } = useLensData('creative', 'Asset', { seed: SEED.Asset, noSeed: mode !== 'dashboard' });
   const { items: allBudget } = useLensData('creative', 'BudgetLine', { seed: SEED.BudgetLine, noSeed: mode !== 'dashboard' && mode !== 'budget' });
   const { items: allDist } = useLensData('creative', 'DistItem', { seed: SEED.DistItem, noSeed: mode !== 'dashboard' });
+  const { items: allRevisions } = useLensData('creative', 'Revision', { seed: SEED.Revision, noSeed: mode !== 'dashboard' });
 
   const runAction = useRunArtifact('creative');
 
@@ -331,7 +357,7 @@ export default function CreativeLensPage() {
   const formConfig: Record<string, { key: string; label: string; type: 'input' | 'textarea' | 'select'; options?: string[] }[]> = {
     projects: [
       { key: 'client', label: 'Client', type: 'input' },
-      { key: 'projectType', label: 'Project Type', type: 'select', options: ['Branding', 'Campaign', 'Film', 'Print / Digital', 'Social Media', 'Web', 'Other'] },
+      { key: 'projectType', label: 'Project Type', type: 'select', options: ['Video', 'Audio', 'Design', 'Writing', 'Branding', 'Campaign', 'Film', 'Social Media', 'Web', 'Print / Digital', 'Other'] },
       { key: 'budget', label: 'Budget ($)', type: 'input' },
       { key: 'deadline', label: 'Deadline', type: 'input' },
       { key: 'lead', label: 'Project Lead', type: 'input' },
@@ -344,6 +370,17 @@ export default function CreativeLensPage() {
       { key: 'fileSize', label: 'File Size', type: 'input' },
       { key: 'colorSpace', label: 'Color Space', type: 'input' },
       { key: 'project', label: 'Project', type: 'input' },
+    ],
+    revisions: [
+      { key: 'project', label: 'Project', type: 'input' },
+      { key: 'asset', label: 'Asset Name', type: 'input' },
+      { key: 'version', label: 'Version Number', type: 'input' },
+      { key: 'previousVersion', label: 'Previous Version', type: 'input' },
+      { key: 'revisedBy', label: 'Revised By', type: 'input' },
+      { key: 'revisionDate', label: 'Revision Date', type: 'input' },
+      { key: 'changeDescription', label: 'Change Description', type: 'textarea' },
+      { key: 'feedbackNotes', label: 'Feedback Notes', type: 'textarea' },
+      { key: 'feedbackStatus', label: 'Feedback Status', type: 'select', options: ['pending', 'addressed', 'rejected'] },
     ],
     shotlist: [
       { key: 'project', label: 'Project', type: 'input' },
@@ -388,6 +425,7 @@ export default function CreativeLensPage() {
   const assetsThisMonth = allAssets.length;
   const deliveredDist = allDist.filter(d => (d.data as Record<string, unknown>).completed === true || (d.data as Record<string, unknown>).completed === 'true').length;
   const totalDist = allDist.length;
+  const pendingRevisions = allRevisions.filter(r => (r.data as Record<string, unknown>).feedbackStatus === 'pending').length;
 
   const upcomingDeadlines = allProjects
     .filter(p => {
@@ -803,6 +841,92 @@ export default function CreativeLensPage() {
       </div>
     </div>
   );
+
+  // ---------------------------------------------------------------------------
+  // Render: Revision Tracker
+  // ---------------------------------------------------------------------------
+  const renderRevisions = () => {
+    const feedbackStatuses: FeedbackStatus[] = ['pending', 'addressed', 'rejected'];
+    const feedbackColors: Record<FeedbackStatus, string> = { pending: 'amber-400', addressed: 'green-400', rejected: 'red-400' };
+    const feedbackIcons: Record<FeedbackStatus, typeof Clock> = { pending: Clock, addressed: CheckCircle2, rejected: X };
+    const groupedByProject = filtered.reduce<Record<string, typeof filtered>>((acc, item) => {
+      const proj = String((item.data as Record<string, unknown>).project || 'Unassigned');
+      if (!acc[proj]) acc[proj] = [];
+      acc[proj].push(item);
+      return acc;
+    }, {});
+
+    return (
+      <div className="space-y-4">
+        {/* Summary */}
+        <div className={ds.grid3}>
+          {feedbackStatuses.map(fs => {
+            const count = filtered.filter(i => (i.data as Record<string, unknown>).feedbackStatus === fs).length;
+            const FsIcon = feedbackIcons[fs];
+            return (
+              <div key={fs} className={cn(ds.panel, 'text-center')}>
+                <FsIcon className={cn('w-5 h-5 mx-auto mb-1', `text-${feedbackColors[fs]}`)} />
+                <p className="text-xl font-bold mt-1">{count}</p>
+                <p className={cn(ds.textMuted, 'text-xs capitalize')}>{fs}</p>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Grouped by project */}
+        {Object.entries(groupedByProject).map(([project, revisions]) => (
+          <div key={project} className={ds.panel}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className={cn(ds.heading3, 'flex items-center gap-2')}>
+                <FolderOpen className="w-4 h-4 text-neon-purple" />
+                {project}
+              </h3>
+              <span className={cn(ds.textMuted, 'text-xs')}>{revisions.length} revision{revisions.length !== 1 ? 's' : ''}</span>
+            </div>
+            <div className="space-y-2">
+              {revisions.sort((a, b) => Number((b.data as Record<string, unknown>).version || 0) - Number((a.data as Record<string, unknown>).version || 0)).map(item => {
+                const d = item.data as Record<string, unknown>;
+                const fs = String(d.feedbackStatus || 'pending') as FeedbackStatus;
+                const FsIcon = feedbackIcons[fs] || Clock;
+                return (
+                  <div key={item.id} className={cn('p-3 rounded-lg border transition-colors cursor-pointer', fs === 'addressed' ? 'bg-green-500/5 border-green-500/20' : fs === 'rejected' ? 'bg-red-500/5 border-red-500/20' : 'bg-lattice-elevated/30 border-lattice-border hover:border-neon-cyan/50')} onClick={() => openDetail(item)}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className={cn(ds.textMono, 'text-xs text-neon-blue')}>v{String(d.version)}</span>
+                        <h4 className="text-sm font-medium text-white truncate">{item.title}</h4>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={ds.badge(feedbackColors[fs])}>
+                          <FsIcon className="w-3 h-3 inline mr-1" />{fs}
+                        </span>
+                      </div>
+                    </div>
+                    <p className={cn(ds.textMuted, 'text-xs mb-2 line-clamp-2')}>{String(d.changeDescription)}</p>
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-3 text-gray-400">
+                        <span><Users className="w-3 h-3 inline mr-1" />{String(d.revisedBy)}</span>
+                        <span><CalendarDays className="w-3 h-3 inline mr-1" />{String(d.revisionDate)}</span>
+                        {d.asset && <span><FileImage className="w-3 h-3 inline mr-1" />{String(d.asset)}</span>}
+                      </div>
+                      <div className="flex gap-1">
+                        <button onClick={e => { e.stopPropagation(); openEdit(item); }} className={ds.btnGhost}><Edit2 className="w-3 h-3" /></button>
+                        <button onClick={e => { e.stopPropagation(); remove(item.id); }} className={cn(ds.btnGhost, 'hover:text-red-400')}><Trash2 className="w-3 h-3" /></button>
+                      </div>
+                    </div>
+                    {d.feedbackNotes && (
+                      <div className="mt-2 pt-2 border-t border-lattice-border/50">
+                        <p className={cn(ds.textMuted, 'text-xs')}><MessageSquare className="w-3 h-3 inline mr-1" />Feedback: {String(d.feedbackNotes)}</p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   // ---------------------------------------------------------------------------
   // Render: Shot List / Production Board
@@ -1313,6 +1437,9 @@ export default function CreativeLensPage() {
                   {currentMode === 'proofs' && (
                     <button onClick={() => handleAction('project_summary', detailItem.id)} className={cn(ds.btnSecondary, ds.btnSmall, 'text-xs')} disabled={runAction.isPending}><ClipboardList className="w-3 h-3" /> Generate Summary</button>
                   )}
+                  {currentMode === 'revisions' && (
+                    <button onClick={() => handleAction('revision_summary', detailItem.id)} className={cn(ds.btnSecondary, ds.btnSmall, 'text-xs')} disabled={runAction.isPending}><ClipboardList className="w-3 h-3" /> Revision Summary</button>
+                  )}
                   {currentMode === 'distribution' && (
                     <button onClick={() => handleAction('distribution_checklist', detailItem.id)} className={cn(ds.btnSecondary, ds.btnSmall, 'text-xs')} disabled={runAction.isPending}><ListChecks className="w-3 h-3" /> Checklist Report</button>
                   )}
@@ -1408,6 +1535,7 @@ export default function CreativeLensPage() {
         <>
           {mode === 'projects' && renderProjects()}
           {mode === 'assets' && renderAssets()}
+          {mode === 'revisions' && renderRevisions()}
           {mode === 'shotlist' && renderShotList()}
           {mode === 'proofs' && renderProofs()}
           {mode === 'budget' && renderBudget()}
@@ -1448,6 +1576,8 @@ export default function CreativeLensPage() {
                       ? ['pending_review', 'approved', 'revision_requested'].map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)
                       : mode === 'shotlist'
                       ? ['planned', 'scheduled', 'in_progress', 'captured', 'review', 'final'].map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)
+                      : mode === 'revisions'
+                      ? ALL_STATUSES.map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)
                       : ALL_STATUSES.map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)
                     }
                   </select>
@@ -1515,6 +1645,8 @@ export default function CreativeLensPage() {
                 ? ['planned', 'scheduled', 'in_progress', 'captured', 'review', 'final']
                 : mode === 'proofs'
                 ? ['pending_review', 'revision_requested', 'approved']
+                : mode === 'revisions'
+                ? ALL_STATUSES as unknown as string[]
                 : ALL_STATUSES as unknown as string[]
               ).map(status => {
                 const count = items.filter(i => i.meta?.status === status || (mode === 'proofs' && (i.data as Record<string, unknown>).proofStatus === status)).length;

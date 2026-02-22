@@ -25,7 +25,7 @@ type ArtifactType = 'Account' | 'Transaction' | 'Invoice' | 'PayrollEntry' | 'Bu
 type InvoiceStatus = 'draft' | 'sent' | 'partial' | 'paid' | 'overdue' | 'void';
 type TransactionStatus = 'pending' | 'cleared' | 'reconciled';
 type AccountCategory = 'Asset' | 'Liability' | 'Equity' | 'Revenue' | 'Expense';
-type LedgerView = 'accounts' | 'journal' | 'trial-balance' | 'pnl';
+type LedgerView = 'accounts' | 'journal' | 'trial-balance' | 'pnl' | 'balance-sheet' | 'cash-flow' | 'reconciliation';
 type InvoicingView = 'list' | 'builder' | 'aging';
 type PayrollView = 'list' | 'calculator' | 'summary';
 type BudgetView = 'list' | 'variance';
@@ -147,6 +147,17 @@ export default function AccountingLensPage() {
     { id: uid(), description: '', quantity: 1, unitPrice: 0, amount: 0 },
   ]);
   const [invoiceTaxRate, setInvoiceTaxRate] = useState(0);
+  const [invNumber, setInvNumber] = useState('');
+  const [invClient, setInvClient] = useState('');
+  const [invTerms, setInvTerms] = useState('net-30');
+  const [invIssueDate, setInvIssueDate] = useState('');
+  const [invDueDate, setInvDueDate] = useState('');
+  const [invNotes, setInvNotes] = useState('');
+
+  /* ---- reconciliation ---- */
+  const [reconAccount, setReconAccount] = useState('');
+  const [reconBankBalance, setReconBankBalance] = useState(0);
+  const [reconDate, setReconDate] = useState('');
 
   /* ---- journal entry builder ---- */
   const [journalRows, setJournalRows] = useState<JournalRow[]>([
@@ -520,7 +531,7 @@ export default function AccountingLensPage() {
             ) : (
               <span className="flex items-center gap-1 text-red-400 text-sm"><XCircle className="w-4 h-4" /> Unbalanced ({fmt(Math.abs(journalTotalDebits - journalTotalCredits))})</span>
             )}
-            <button className={ds.btnPrimary} disabled={!journalBalanced || !journalDesc.trim()}>
+            <button onClick={() => { transactionData.create({ title: journalDesc, data: { description: journalDesc, entries: journalRows, date: new Date().toISOString(), type: 'journal', status: 'posted' } as unknown as Record<string, unknown> }); setJournalDesc(''); setJournalRows([{ account: '', debit: 0, credit: 0 }]); }} className={ds.btnPrimary} disabled={!journalBalanced || !journalDesc.trim()}>
               <CheckCircle className="w-4 h-4" /> Post Entry
             </button>
           </div>
@@ -585,7 +596,7 @@ export default function AccountingLensPage() {
           <button className={ds.btnSecondary} onClick={() => { if (filtered[0]) handleAction('trial-balance', filtered[0].id); }}>
             <RefreshCw className="w-4 h-4" /> Recalculate
           </button>
-          <button className={ds.btnSecondary}><Download className="w-4 h-4" /> Export</button>
+          <button onClick={() => { const data = JSON.stringify(transactionData.items, null, 2); const blob = new Blob([data], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'trial-balance.json'; a.click(); URL.revokeObjectURL(url); }} className={ds.btnSecondary}><Download className="w-4 h-4" /> Export</button>
         </div>
       </div>
 
@@ -758,6 +769,376 @@ export default function AccountingLensPage() {
   };
 
   /* ================================================================ */
+  /*  BALANCE SHEET                                                    */
+  /* ================================================================ */
+
+  const renderBalanceSheet = () => {
+    const assetAccounts = accountsByType['Asset'] || [];
+    const liabilityAccounts = accountsByType['Liability'] || [];
+    const equityAccounts = accountsByType['Equity'] || [];
+
+    return (
+      <div className="space-y-4">
+        <div className={ds.sectionHeader}>
+          <h2 className={ds.heading2}>Balance Sheet</h2>
+          <div className="flex items-center gap-2">
+            <select className={cn(ds.select, 'w-auto')} value={periodType} onChange={e => setPeriodType(e.target.value as PeriodType)}>
+              <option value="monthly">Monthly</option>
+              <option value="quarterly">Quarterly</option>
+              <option value="annual">Annual</option>
+            </select>
+            <button className={ds.btnSecondary} onClick={() => { const data = JSON.stringify({ assets: totalAssets, liabilities: totalLiabilities, equity: totalEquity + netIncome, date: new Date().toISOString() }, null, 2); const blob = new Blob([data], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'balance-sheet.json'; a.click(); URL.revokeObjectURL(url); }}>
+              <Download className="w-4 h-4" /> Export
+            </button>
+          </div>
+        </div>
+
+        <div className={ds.panel}>
+          {/* Assets */}
+          <div className="mb-6">
+            <h3 className="text-sm font-semibold text-green-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <ArrowUpRight className="w-4 h-4" /> Assets
+            </h3>
+            {assetAccounts.length === 0 ? (
+              <p className={cn(ds.textMuted, 'ml-6')}>No asset accounts.</p>
+            ) : (
+              assetAccounts.map(acct => {
+                const d = acct.data as unknown as Account;
+                return (
+                  <div key={acct.id} className="flex items-center justify-between py-2 px-4 hover:bg-lattice-elevated/30 rounded">
+                    <span className="text-sm text-white">{d.name || acct.title}</span>
+                    <span className={cn(ds.textMono, 'text-green-400')}>{fmt(d.balance || 0)}</span>
+                  </div>
+                );
+              })
+            )}
+            <div className="flex items-center justify-between py-2 px-4 mt-1 border-t border-lattice-border/30 font-semibold">
+              <span className="text-white">Total Assets</span>
+              <span className={cn(ds.textMono, 'text-green-400')}>{fmt(totalAssets)}</span>
+            </div>
+          </div>
+
+          {/* Liabilities */}
+          <div className="mb-6">
+            <h3 className="text-sm font-semibold text-red-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <ArrowDownRight className="w-4 h-4" /> Liabilities
+            </h3>
+            {liabilityAccounts.length === 0 ? (
+              <p className={cn(ds.textMuted, 'ml-6')}>No liability accounts.</p>
+            ) : (
+              liabilityAccounts.map(acct => {
+                const d = acct.data as unknown as Account;
+                return (
+                  <div key={acct.id} className="flex items-center justify-between py-2 px-4 hover:bg-lattice-elevated/30 rounded">
+                    <span className="text-sm text-white">{d.name || acct.title}</span>
+                    <span className={cn(ds.textMono, 'text-red-400')}>{fmt(d.balance || 0)}</span>
+                  </div>
+                );
+              })
+            )}
+            <div className="flex items-center justify-between py-2 px-4 mt-1 border-t border-lattice-border/30 font-semibold">
+              <span className="text-white">Total Liabilities</span>
+              <span className={cn(ds.textMono, 'text-red-400')}>{fmt(totalLiabilities)}</span>
+            </div>
+          </div>
+
+          {/* Equity */}
+          <div className="mb-6">
+            <h3 className="text-sm font-semibold text-neon-cyan uppercase tracking-wider mb-3 flex items-center gap-2">
+              <Landmark className="w-4 h-4" /> Equity
+            </h3>
+            {equityAccounts.length === 0 ? (
+              <p className={cn(ds.textMuted, 'ml-6')}>No equity accounts.</p>
+            ) : (
+              equityAccounts.map(acct => {
+                const d = acct.data as unknown as Account;
+                return (
+                  <div key={acct.id} className="flex items-center justify-between py-2 px-4 hover:bg-lattice-elevated/30 rounded">
+                    <span className="text-sm text-white">{d.name || acct.title}</span>
+                    <span className={cn(ds.textMono, 'text-neon-cyan')}>{fmt(d.balance || 0)}</span>
+                  </div>
+                );
+              })
+            )}
+            <div className="flex items-center justify-between py-2 px-4 hover:bg-lattice-elevated/30 rounded">
+              <span className="text-sm text-white italic">Retained Earnings (Net Income)</span>
+              <span className={cn(ds.textMono, netIncome >= 0 ? 'text-green-400' : 'text-red-400')}>{fmt(netIncome)}</span>
+            </div>
+            <div className="flex items-center justify-between py-2 px-4 mt-1 border-t border-lattice-border/30 font-semibold">
+              <span className="text-white">Total Equity</span>
+              <span className={cn(ds.textMono, 'text-neon-cyan')}>{fmt(totalEquity + netIncome)}</span>
+            </div>
+          </div>
+
+          {/* Total L+E */}
+          <div className="flex items-center justify-between py-2 px-4 border-t-2 border-lattice-border font-bold text-lg">
+            <span className="text-white">Total Liabilities + Equity</span>
+            <span className={cn(ds.textMono, 'text-neon-cyan')}>{fmt(totalLiabilities + totalEquity + netIncome)}</span>
+          </div>
+
+          {/* Balance check */}
+          <div className={cn('mt-4 p-3 rounded-lg text-center', Math.abs(totalAssets - (totalLiabilities + totalEquity + netIncome)) < 0.01 ? 'bg-green-400/10 border border-green-400/30' : 'bg-red-400/10 border border-red-400/30')}>
+            {Math.abs(totalAssets - (totalLiabilities + totalEquity + netIncome)) < 0.01 ? (
+              <span className="flex items-center justify-center gap-2 text-green-400"><CheckCircle className="w-5 h-5" /> Assets = Liabilities + Equity (Balanced)</span>
+            ) : (
+              <span className="flex items-center justify-center gap-2 text-red-400"><AlertCircle className="w-5 h-5" /> Out of balance by {fmt(Math.abs(totalAssets - (totalLiabilities + totalEquity + netIncome)))}</span>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  /* ================================================================ */
+  /*  CASH FLOW STATEMENT                                              */
+  /* ================================================================ */
+
+  const renderCashFlow = () => {
+    const operatingInflows = transactionData.items.filter(t => {
+      const d = t.data as unknown as Transaction;
+      return d.category === 'Revenue' || (d.credit || 0) > 0;
+    }).reduce((s, t) => s + ((t.data as unknown as Transaction).credit || 0), 0);
+
+    const operatingOutflows = transactionData.items.filter(t => {
+      const d = t.data as unknown as Transaction;
+      return d.category === 'Expense' || d.category === 'COGS';
+    }).reduce((s, t) => s + ((t.data as unknown as Transaction).debit || 0), 0);
+
+    const netOperating = operatingInflows - operatingOutflows;
+
+    const investingActivity = transactionData.items.filter(t => {
+      const d = t.data as unknown as Transaction;
+      return d.category === 'Transfer' && d.account?.toLowerCase().includes('asset');
+    }).reduce((s, t) => {
+      const d = t.data as unknown as Transaction;
+      return s + (d.credit || 0) - (d.debit || 0);
+    }, 0);
+
+    const financingActivity = transactionData.items.filter(t => {
+      const d = t.data as unknown as Transaction;
+      return d.category === 'Transfer' && (d.account?.toLowerCase().includes('loan') || d.account?.toLowerCase().includes('equity'));
+    }).reduce((s, t) => {
+      const d = t.data as unknown as Transaction;
+      return s + (d.credit || 0) - (d.debit || 0);
+    }, 0);
+
+    const netCashChange = netOperating + investingActivity + financingActivity;
+
+    return (
+      <div className="space-y-4">
+        <div className={ds.sectionHeader}>
+          <h2 className={ds.heading2}>Cash Flow Statement</h2>
+          <select className={cn(ds.select, 'w-auto')} value={periodType} onChange={e => setPeriodType(e.target.value as PeriodType)}>
+            <option value="monthly">Monthly</option>
+            <option value="quarterly">Quarterly</option>
+            <option value="annual">Annual</option>
+          </select>
+        </div>
+
+        <div className={ds.panel}>
+          {/* Operating Activities */}
+          <div className="mb-6">
+            <h3 className="text-sm font-semibold text-green-400 uppercase tracking-wider mb-3">Operating Activities</h3>
+            <div className="space-y-2 px-4">
+              <div className="flex items-center justify-between py-2">
+                <span className="text-sm text-white">Cash received from customers</span>
+                <span className={cn(ds.textMono, 'text-green-400')}>{fmt(operatingInflows)}</span>
+              </div>
+              <div className="flex items-center justify-between py-2">
+                <span className="text-sm text-white">Cash paid for operations</span>
+                <span className={cn(ds.textMono, 'text-red-400')}>({fmt(operatingOutflows)})</span>
+              </div>
+            </div>
+            <div className="flex items-center justify-between py-2 px-4 mt-1 border-t border-lattice-border/30 font-semibold">
+              <span className="text-white">Net Cash from Operations</span>
+              <span className={cn(ds.textMono, netOperating >= 0 ? 'text-green-400' : 'text-red-400')}>{fmt(netOperating)}</span>
+            </div>
+          </div>
+
+          {/* Investing Activities */}
+          <div className="mb-6">
+            <h3 className="text-sm font-semibold text-neon-blue uppercase tracking-wider mb-3">Investing Activities</h3>
+            <div className="space-y-2 px-4">
+              <div className="flex items-center justify-between py-2">
+                <span className="text-sm text-white">Capital asset transactions</span>
+                <span className={cn(ds.textMono, investingActivity >= 0 ? 'text-green-400' : 'text-red-400')}>{fmt(investingActivity)}</span>
+              </div>
+            </div>
+            <div className="flex items-center justify-between py-2 px-4 mt-1 border-t border-lattice-border/30 font-semibold">
+              <span className="text-white">Net Cash from Investing</span>
+              <span className={cn(ds.textMono, investingActivity >= 0 ? 'text-green-400' : 'text-red-400')}>{fmt(investingActivity)}</span>
+            </div>
+          </div>
+
+          {/* Financing Activities */}
+          <div className="mb-6">
+            <h3 className="text-sm font-semibold text-neon-purple uppercase tracking-wider mb-3">Financing Activities</h3>
+            <div className="space-y-2 px-4">
+              <div className="flex items-center justify-between py-2">
+                <span className="text-sm text-white">Loan &amp; equity transactions</span>
+                <span className={cn(ds.textMono, financingActivity >= 0 ? 'text-green-400' : 'text-red-400')}>{fmt(financingActivity)}</span>
+              </div>
+            </div>
+            <div className="flex items-center justify-between py-2 px-4 mt-1 border-t border-lattice-border/30 font-semibold">
+              <span className="text-white">Net Cash from Financing</span>
+              <span className={cn(ds.textMono, financingActivity >= 0 ? 'text-green-400' : 'text-red-400')}>{fmt(financingActivity)}</span>
+            </div>
+          </div>
+
+          {/* Net Change */}
+          <div className={cn('p-4 rounded-lg', netCashChange >= 0 ? 'bg-green-400/10 border border-green-400/30' : 'bg-red-400/10 border border-red-400/30')}>
+            <div className="flex items-center justify-between">
+              <span className="text-lg font-bold text-white">Net Change in Cash</span>
+              <span className={cn('text-xl font-bold', ds.textMono, netCashChange >= 0 ? 'text-green-400' : 'text-red-400')}>
+                {fmt(netCashChange)}
+              </span>
+            </div>
+          </div>
+
+          <div className="mt-4 flex items-center justify-between py-3 px-4 bg-lattice-elevated/50 rounded-lg">
+            <span className="text-sm font-medium text-white">Ending Cash Position (Total Assets)</span>
+            <span className={cn(ds.textMono, 'text-neon-cyan font-bold')}>{fmt(totalAssets)}</span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  /* ================================================================ */
+  /*  BANK RECONCILIATION                                              */
+  /* ================================================================ */
+
+  const reconAccountObj = useMemo(() => {
+    if (!reconAccount) return null;
+    return accountData.items.find(a => a.id === reconAccount || (a.data as unknown as Account).name === reconAccount);
+  }, [reconAccount, accountData.items]);
+
+  const reconBookBalance = useMemo(() => {
+    if (!reconAccountObj) return 0;
+    return (reconAccountObj.data as unknown as Account).balance || 0;
+  }, [reconAccountObj]);
+
+  const reconUnmatchedTxns = useMemo(() => {
+    if (!reconAccount) return [];
+    return transactionData.items.filter(t => {
+      const d = t.data as unknown as Transaction;
+      return (d.account === reconAccount || (reconAccountObj && d.account === (reconAccountObj.data as unknown as Account).name)) && t.meta.status !== 'reconciled';
+    });
+  }, [reconAccount, reconAccountObj, transactionData.items]);
+
+  const reconDifference = useMemo(() => {
+    return reconBankBalance - reconBookBalance;
+  }, [reconBankBalance, reconBookBalance]);
+
+  const renderReconciliation = () => (
+    <div className="space-y-4">
+      <div className={ds.sectionHeader}>
+        <h2 className={ds.heading2}>Bank Reconciliation</h2>
+      </div>
+
+      {/* Setup */}
+      <div className={ds.panel}>
+        <h3 className={cn(ds.heading3, 'mb-4')}>Reconciliation Setup</h3>
+        <div className={ds.grid3}>
+          <div>
+            <label className={ds.label}>Account to Reconcile</label>
+            <select className={ds.select} value={reconAccount} onChange={e => setReconAccount(e.target.value)}>
+              <option value="">Select account...</option>
+              {accountData.items.filter(a => (a.data as unknown as Account).type === 'Asset').map(a => {
+                const d = a.data as unknown as Account;
+                return <option key={a.id} value={d.name || a.title}>{d.accountNumber ? `${d.accountNumber} - ` : ''}{d.name || a.title}</option>;
+              })}
+            </select>
+          </div>
+          <div>
+            <label className={ds.label}>Statement Date</label>
+            <input type="date" className={ds.input} value={reconDate} onChange={e => setReconDate(e.target.value)} />
+          </div>
+          <div>
+            <label className={ds.label}>Bank Statement Balance ($)</label>
+            <input type="number" step="0.01" className={ds.input} value={reconBankBalance || ''} onChange={e => setReconBankBalance(parseFloat(e.target.value) || 0)} placeholder="0.00" />
+          </div>
+        </div>
+      </div>
+
+      {reconAccount && (
+        <>
+          {/* Comparison */}
+          <div className={ds.grid3}>
+            <div className={cn(ds.panel, 'text-center')}>
+              <p className={ds.textMuted}>Book Balance</p>
+              <p className={cn(ds.heading2, 'text-neon-cyan')}>{fmt(reconBookBalance)}</p>
+            </div>
+            <div className={cn(ds.panel, 'text-center')}>
+              <p className={ds.textMuted}>Bank Statement Balance</p>
+              <p className={cn(ds.heading2, 'text-white')}>{fmt(reconBankBalance)}</p>
+            </div>
+            <div className={cn(ds.panel, 'text-center')}>
+              <p className={ds.textMuted}>Difference</p>
+              <p className={cn(ds.heading2, Math.abs(reconDifference) < 0.01 ? 'text-green-400' : 'text-red-400')}>{fmt(reconDifference)}</p>
+            </div>
+          </div>
+
+          {/* Status */}
+          <div className={cn('p-3 rounded-lg text-center', Math.abs(reconDifference) < 0.01 ? 'bg-green-400/10 border border-green-400/30' : 'bg-yellow-400/10 border border-yellow-400/30')}>
+            {Math.abs(reconDifference) < 0.01 ? (
+              <span className="flex items-center justify-center gap-2 text-green-400"><CheckCircle className="w-5 h-5" /> Account is reconciled</span>
+            ) : (
+              <span className="flex items-center justify-center gap-2 text-yellow-400"><AlertCircle className="w-5 h-5" /> Unreconciled difference of {fmt(Math.abs(reconDifference))}</span>
+            )}
+          </div>
+
+          {/* Unmatched transactions */}
+          <div className={ds.panel}>
+            <div className={ds.sectionHeader}>
+              <h3 className={ds.heading3}>Outstanding Transactions</h3>
+              <span className={ds.badge('yellow-400')}>{reconUnmatchedTxns.length} unreconciled</span>
+            </div>
+            {reconUnmatchedTxns.length === 0 ? (
+              <p className={cn(ds.textMuted, 'mt-3')}>No outstanding transactions for this account.</p>
+            ) : (
+              <table className="w-full mt-3">
+                <thead>
+                  <tr className="text-left text-xs text-gray-500 border-b border-lattice-border/30">
+                    <th className="pb-2 pr-4">Date</th>
+                    <th className="pb-2 pr-4">Description</th>
+                    <th className="pb-2 pr-4">Reference</th>
+                    <th className="pb-2 text-right pr-4">Debit</th>
+                    <th className="pb-2 text-right pr-4">Credit</th>
+                    <th className="pb-2 text-center">Match</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reconUnmatchedTxns.map(txn => {
+                    const d = txn.data as unknown as Transaction;
+                    return (
+                      <tr key={txn.id} className="border-b border-lattice-border/20 hover:bg-lattice-elevated/30">
+                        <td className={cn(ds.textMono, 'py-2.5 pr-4 text-gray-400')}>{d.date || '-'}</td>
+                        <td className="py-2.5 pr-4 text-sm text-white">{d.description || txn.title}</td>
+                        <td className={cn(ds.textMuted, 'py-2.5 pr-4')}>{d.reference || '-'}</td>
+                        <td className={cn(ds.textMono, 'py-2.5 text-right pr-4 text-green-400')}>{(d.debit || 0) > 0 ? fmt(d.debit) : '-'}</td>
+                        <td className={cn(ds.textMono, 'py-2.5 text-right pr-4 text-red-400')}>{(d.credit || 0) > 0 ? fmt(d.credit) : '-'}</td>
+                        <td className="py-2.5 text-center">
+                          <button
+                            className={cn(ds.btnSmall, 'text-green-400 hover:bg-green-400/20')}
+                            onClick={() => transactionData.update(txn.id, { ...txn, meta: { ...txn.meta, status: 'reconciled' } })}
+                          >
+                            <CheckCircle className="w-3.5 h-3.5" /> Reconcile
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+
+  /* ================================================================ */
   /*  INVOICE BUILDER                                                  */
   /* ================================================================ */
 
@@ -775,15 +1156,15 @@ export default function AccountingLensPage() {
         <div className={cn(ds.grid3, 'mb-6')}>
           <div>
             <label className={ds.label}>Invoice Number</label>
-            <input className={ds.input} placeholder="INV-001" />
+            <input className={ds.input} placeholder="INV-001" value={invNumber} onChange={e => setInvNumber(e.target.value)} />
           </div>
           <div>
             <label className={ds.label}>Client</label>
-            <input className={ds.input} placeholder="Client name..." />
+            <input className={ds.input} placeholder="Client name..." value={invClient} onChange={e => setInvClient(e.target.value)} />
           </div>
           <div>
             <label className={ds.label}>Payment Terms</label>
-            <select className={ds.select}>
+            <select className={ds.select} value={invTerms} onChange={e => setInvTerms(e.target.value)}>
               <option value="net-15">Net 15</option>
               <option value="net-30">Net 30</option>
               <option value="net-45">Net 45</option>
@@ -795,11 +1176,11 @@ export default function AccountingLensPage() {
         <div className={cn(ds.grid2, 'mb-6')}>
           <div>
             <label className={ds.label}>Issue Date</label>
-            <input type="date" className={ds.input} />
+            <input type="date" className={ds.input} value={invIssueDate} onChange={e => setInvIssueDate(e.target.value)} />
           </div>
           <div>
             <label className={ds.label}>Due Date</label>
-            <input type="date" className={ds.input} />
+            <input type="date" className={ds.input} value={invDueDate} onChange={e => setInvDueDate(e.target.value)} />
           </div>
         </div>
 
@@ -865,12 +1246,12 @@ export default function AccountingLensPage() {
         {/* Notes */}
         <div className="mt-6">
           <label className={ds.label}>Notes / Terms</label>
-          <textarea className={ds.textarea} rows={3} placeholder="Payment terms, thank you note, etc..." />
+          <textarea className={ds.textarea} rows={3} placeholder="Payment terms, thank you note, etc..." value={invNotes} onChange={e => setInvNotes(e.target.value)} />
         </div>
 
         <div className="mt-4 flex items-center justify-end gap-3">
-          <button className={ds.btnSecondary}>Save as Draft</button>
-          <button className={ds.btnPrimary}><FileText className="w-4 h-4" /> Create Invoice</button>
+          <button onClick={() => { const payload = { title: invNumber || `INV-${Date.now()}`, data: { invoiceNumber: invNumber, client: invClient, amount: invoiceTotal, taxRate: invoiceTaxRate, issuedDate: invIssueDate, dueDate: invDueDate, paymentTerms: invTerms, notes: invNotes, lineItems: invoiceLines.length, paidAmount: 0 } as unknown as Record<string, unknown>, meta: { status: 'draft' } }; invoiceData.create(payload); setInvNumber(''); setInvClient(''); setInvNotes(''); setInvoiceLines([{ id: uid(), description: '', quantity: 1, unitPrice: 0, amount: 0 }]); setInvoiceTaxRate(0); setInvoicingView('list'); }} className={ds.btnSecondary}>Save as Draft</button>
+          <button onClick={() => { const payload = { title: invNumber || `INV-${Date.now()}`, data: { invoiceNumber: invNumber, client: invClient, amount: invoiceTotal, taxRate: invoiceTaxRate, issuedDate: invIssueDate || new Date().toISOString().split('T')[0], dueDate: invDueDate, paymentTerms: invTerms, notes: invNotes, lineItems: invoiceLines.length, paidAmount: 0 } as unknown as Record<string, unknown>, meta: { status: 'sent' } }; invoiceData.create(payload); setInvNumber(''); setInvClient(''); setInvNotes(''); setInvoiceLines([{ id: uid(), description: '', quantity: 1, unitPrice: 0, amount: 0 }]); setInvoiceTaxRate(0); setInvoicingView('list'); }} className={ds.btnPrimary}><FileText className="w-4 h-4" /> Create &amp; Send Invoice</button>
         </div>
       </div>
     </div>
@@ -1337,10 +1718,16 @@ export default function AccountingLensPage() {
           <button className={ds.btnSecondary} onClick={() => { setMode('Invoicing'); setView('library'); setInvoicingView('aging'); }}>
             <AlertCircle className="w-4 h-4" /> Invoice Aging
           </button>
+          <button className={ds.btnSecondary} onClick={() => { setMode('Ledger'); setView('library'); setLedgerView('balance-sheet'); }}>
+            <Landmark className="w-4 h-4" /> Balance Sheet
+          </button>
+          <button className={ds.btnSecondary} onClick={() => { setMode('Ledger'); setView('library'); setLedgerView('cash-flow'); }}>
+            <DollarSign className="w-4 h-4" /> Cash Flow
+          </button>
           <button className={ds.btnSecondary} onClick={() => { setMode('Budget'); setView('library'); setBudgetView('variance'); }}>
             <BarChart3 className="w-4 h-4" /> Budget Variance
           </button>
-          <button className={ds.btnSecondary} onClick={() => { if (filtered[0]) handleAction('reconcile', filtered[0].id); }}>
+          <button className={ds.btnSecondary} onClick={() => { setMode('Ledger'); setView('library'); setLedgerView('reconciliation'); }}>
             <RefreshCw className="w-4 h-4" /> Reconcile
           </button>
         </div>
@@ -1605,6 +1992,9 @@ export default function AccountingLensPage() {
       if (ledgerView === 'journal') return renderJournalEntry();
       if (ledgerView === 'trial-balance') return renderTrialBalance();
       if (ledgerView === 'pnl') return renderProfitLoss();
+      if (ledgerView === 'balance-sheet') return renderBalanceSheet();
+      if (ledgerView === 'cash-flow') return renderCashFlow();
+      if (ledgerView === 'reconciliation') return renderReconciliation();
     }
 
     /* Invoicing tab sub-views */
@@ -1766,7 +2156,16 @@ export default function AccountingLensPage() {
             <Scale className="w-4 h-4" /> Trial Balance
           </button>
           <button className={ledgerView === 'pnl' ? ds.btnPrimary : ds.btnSecondary} onClick={() => setLedgerView('pnl')}>
-            <TrendingUp className="w-4 h-4" /> Profit &amp; Loss
+            <TrendingUp className="w-4 h-4" /> P&amp;L
+          </button>
+          <button className={ledgerView === 'balance-sheet' ? ds.btnPrimary : ds.btnSecondary} onClick={() => setLedgerView('balance-sheet')}>
+            <Landmark className="w-4 h-4" /> Balance Sheet
+          </button>
+          <button className={ledgerView === 'cash-flow' ? ds.btnPrimary : ds.btnSecondary} onClick={() => setLedgerView('cash-flow')}>
+            <DollarSign className="w-4 h-4" /> Cash Flow
+          </button>
+          <button className={ledgerView === 'reconciliation' ? ds.btnPrimary : ds.btnSecondary} onClick={() => setLedgerView('reconciliation')}>
+            <RefreshCw className="w-4 h-4" /> Reconciliation
           </button>
         </div>
       )}

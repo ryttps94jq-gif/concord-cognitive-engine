@@ -16,6 +16,7 @@ import {
   Hash, ToggleLeft, ToggleRight, Info
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
+import { useUIStore } from '@/store/ui';
 import { ds } from '@/lib/design-system';
 import { cn } from '@/lib/utils';
 
@@ -471,7 +472,7 @@ export default function SimLensPage() {
   const handleRunSensitivity = useCallback(async (scenario: Scenario) => {
     const sensitiveVars = scenario.variables.filter(v => v.sensitive);
     if (sensitiveVars.length === 0) {
-      alert('Mark at least one parameter as sensitive in the Parameter Space Explorer to run sensitivity analysis.');
+      useUIStore.getState().addToast({ type: 'error', message: 'Mark at least one parameter as sensitive in the Parameter Space Explorer to run sensitivity analysis.' });
       return;
     }
     await runArtifactAction.mutateAsync({
@@ -536,7 +537,7 @@ export default function SimLensPage() {
       setImportJson('');
       setShowImportModal(false);
     } catch {
-      alert('Invalid JSON. Please check the format and try again.');
+      useUIStore.getState().addToast({ type: 'error', message: 'Invalid JSON. Please check the format and try again.' });
     }
   }, [importJson, createScenarioArtifact]);
 
@@ -762,7 +763,7 @@ export default function SimLensPage() {
         <button
           onClick={() => {
             if (selectedScenario) handleRunSimulation(selectedScenario);
-            else alert('Select a scenario first.');
+            else useUIStore.getState().addToast({ type: 'error', message: 'Select a scenario first.' });
           }}
           className={cn(ds.btnPrimary, ds.btnSmall)}
           disabled={runSim.isPending}
@@ -773,7 +774,7 @@ export default function SimLensPage() {
         <button
           onClick={() => {
             if (selectedScenario) handleRunSensitivity(selectedScenario);
-            else alert('Select a scenario first.');
+            else useUIStore.getState().addToast({ type: 'error', message: 'Select a scenario first.' });
           }}
           className={cn(ds.btnSecondary, ds.btnSmall)}
         >
@@ -783,7 +784,7 @@ export default function SimLensPage() {
           onClick={() => {
             const r = runs.find(r => r.results);
             if (r) handleExportResults(r);
-            else alert('No results to export yet.');
+            else useUIStore.getState().addToast({ type: 'info', message: 'No results to export yet.' });
           }}
           className={cn(ds.btnSecondary, ds.btnSmall)}
         >
@@ -792,7 +793,7 @@ export default function SimLensPage() {
         <button
           onClick={() => {
             if (selectedScenario) handleCloneScenario(selectedScenario);
-            else alert('Select a scenario first.');
+            else useUIStore.getState().addToast({ type: 'error', message: 'Select a scenario first.' });
           }}
           className={cn(ds.btnGhost, ds.btnSmall)}
         >

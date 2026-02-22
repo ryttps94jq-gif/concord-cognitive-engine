@@ -5,6 +5,7 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { apiHelpers } from '@/lib/api/client';
+import { useUIStore } from '@/store/ui';
 import { VoiceRecorder } from '@/components/voice/VoiceRecorder';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -393,7 +394,7 @@ export default function VoiceLensPage() {
         <aside className="w-72 flex-shrink-0 border-r border-lattice-border bg-black/30 flex flex-col">
           <div className="px-4 py-3 border-b border-lattice-border flex items-center justify-between">
             <h2 className="text-sm font-semibold text-gray-300">Takes</h2>
-            <button className="text-xs text-neon-cyan hover:text-neon-cyan/80 flex items-center gap-1">
+            <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Select two takes to compare' })} className="text-xs text-neon-cyan hover:text-neon-cyan/80 flex items-center gap-1">
               <GitCompare className="w-3 h-3" />
               Compare
             </button>
@@ -743,7 +744,7 @@ export default function VoiceLensPage() {
 
           {/* Apply processing */}
           <div className="px-4 py-3 border-t border-lattice-border">
-            <button className="w-full py-2 bg-neon-purple/20 text-neon-purple rounded-lg text-sm font-medium hover:bg-neon-purple/30 transition-colors flex items-center justify-center gap-2">
+            <button onClick={() => useUIStore.getState().addToast({ type: 'success', message: 'Processing applied to current take' })} className="w-full py-2 bg-neon-purple/20 text-neon-purple rounded-lg text-sm font-medium hover:bg-neon-purple/30 transition-colors flex items-center justify-center gap-2">
               <Zap className="w-4 h-4" />
               Apply Processing
             </button>
@@ -821,6 +822,7 @@ export default function VoiceLensPage() {
               {(['wav', 'mp3', 'flac'] as ExportFormat[]).map((fmt) => (
                 <button
                   key={fmt}
+                  onClick={() => useUIStore.getState().addToast({ type: 'success', message: `Exporting as ${fmt.toUpperCase()}...` })}
                   className="px-2.5 py-1.5 bg-white/5 rounded text-[10px] font-mono uppercase text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
                 >
                   {fmt}

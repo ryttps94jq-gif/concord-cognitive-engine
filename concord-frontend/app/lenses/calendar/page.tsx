@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
+import { useUIStore } from '@/store/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -145,7 +146,6 @@ export default function CalendarLensPage() {
   const [showEventModal, setShowEventModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showBookingModal, setShowBookingModal] = useState(false);
-  const [_searchQuery, _setSearchQuery] = useState('');
   const [showSidebar, setShowSidebar] = useState(true);
 
   // New event form
@@ -1163,10 +1163,10 @@ export default function CalendarLensPage() {
             ))}
           </div>
 
-          <button className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400">
+          <button onClick={() => setShowSidebar(!showSidebar)} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400">
             <Search className="w-5 h-5" />
           </button>
-          <button className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400">
+          <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Calendar settings' })} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400">
             <Settings className="w-5 h-5" />
           </button>
         </div>
@@ -1229,7 +1229,7 @@ export default function CalendarLensPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400">
+                  <button onClick={() => { setShowEventModal(false); setShowCreateModal(true); setNewEvent(selectedEvent); }} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400">
                     <Edit2 className="w-4 h-4" />
                   </button>
                   <button
@@ -1334,7 +1334,7 @@ export default function CalendarLensPage() {
 
                 {selectedEvent.eventType === 'release' && (
                   <div className="pt-4 border-t border-lattice-border">
-                    <button className="flex items-center gap-2 text-neon-cyan hover:underline">
+                    <button onClick={() => { window.location.href = '/lenses/music'; }} className="flex items-center gap-2 text-neon-cyan hover:underline">
                       <ExternalLink className="w-4 h-4" />
                       Open release dashboard
                     </button>

@@ -655,15 +655,19 @@ export default function DatabaseLensPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {paginatedRows.map((row, ri) => (
-                          <tr key={ri} className="border-b border-lattice-border/40 hover:bg-lattice-surface/60 transition-colors">
-                            {queryResult.columns.map(col => (
-                              <td key={col} className="px-3 py-2 text-gray-300 max-w-[300px] truncate font-mono text-xs">
-                                {row[col] === null ? <span className="text-gray-600 italic">NULL</span> : String(row[col])}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
+                        {paginatedRows.length === 0 ? (
+                          <tr><td colSpan={queryResult.columns.length} className="px-3 py-8 text-center text-gray-500">No rows returned</td></tr>
+                        ) : (
+                          paginatedRows.map((row, ri) => (
+                            <tr key={ri} className="border-b border-lattice-border/40 hover:bg-lattice-surface/60 transition-colors">
+                              {queryResult.columns.map(col => (
+                                <td key={col} className="px-3 py-2 text-gray-300 max-w-[300px] truncate font-mono text-xs">
+                                  {row[col] === null ? <span className="text-gray-600 italic">NULL</span> : String(row[col])}
+                                </td>
+                              ))}
+                            </tr>
+                          ))
+                        )}
                       </tbody>
                     </table>
                   </div>

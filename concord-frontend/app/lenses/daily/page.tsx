@@ -604,9 +604,9 @@ export default function DailyLensPage() {
                 placeholder="Reminder title..." className="input-lattice flex-1 text-sm" />
               <input type="datetime-local" value={reminderDue} onChange={(e) => setReminderDue(e.target.value)}
                 className="input-lattice text-sm" />
-              <button onClick={handleAddReminder} disabled={!reminderTitle.trim() || !reminderDue}
-                className="btn-neon purple text-sm flex items-center gap-1">
-                <Plus className="w-3 h-3" /> Add
+              <button onClick={handleAddReminder} disabled={!reminderTitle.trim() || !reminderDue || createReminderMut.isPending}
+                className="btn-neon purple text-sm flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed">
+                <Plus className="w-3 h-3" /> {createReminderMut.isPending ? 'Adding...' : 'Add'}
               </button>
             </div>
             <div className="space-y-2">

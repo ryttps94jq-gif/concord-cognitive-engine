@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { generateId } from '@/lib/utils';
+import { ErrorState } from '@/components/common/EmptyState';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -193,7 +194,7 @@ export default function BoardLensPage() {
   useLensNav('board');
 
   // Persist tasks via real backend lens artifacts (auto-seeds on first use)
-  const { items: lensItems, isLoading: tasksLoading, isSeeding, create: createLens, update: updateLens, remove: _removeLens } = useLensData<Record<string, unknown>>('board', 'task', {
+  const { items: lensItems, isLoading: tasksLoading, isError, error, refetch, isSeeding, create: createLens, update: updateLens, remove: _removeLens } = useLensData<Record<string, unknown>>('board', 'task', {
     seed: SEED_TASKS,
   });
 
@@ -405,6 +406,14 @@ export default function BoardLensPage() {
           <div className="w-8 h-8 border-2 border-purple-400 border-t-transparent rounded-full animate-spin mx-auto" />
           <p className="text-sm text-gray-400">{isSeeding ? 'Setting up board data...' : 'Loading board...'}</p>
         </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <ErrorState error={error?.message} onRetry={refetch} />
       </div>
     );
   }

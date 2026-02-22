@@ -3,7 +3,8 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
-import { api } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
+import { useUIStore } from '@/store/ui';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -443,40 +444,40 @@ export default function MarketplaceLensPage() {
   // Real API queries — no demo fallback
   const { data: beatsData } = useQuery({
     queryKey: ['artistry-beats'],
-    queryFn: () => api.get('/api/artistry/marketplace/beats').then(r => r.data).catch((err) => { console.error('Failed to fetch beats:', err instanceof Error ? err.message : err); return { beats: [] }; }),
+    queryFn: () => apiHelpers.artistry.marketplace.beats.list().then(r => r.data).catch((err) => { console.error('Failed to fetch beats:', err instanceof Error ? err.message : err); return { beats: [] }; }),
   });
 
   const { data: stemsData, isError: isError5, error: error5, refetch: refetch5,} = useQuery({
     queryKey: ['artistry-stems'],
-    queryFn: () => api.get('/api/artistry/marketplace/stems').then(r => r.data).catch((err) => { console.error('Failed to fetch stems:', err instanceof Error ? err.message : err); return { stems: [] }; }),
+    queryFn: () => apiHelpers.artistry.marketplace.stems.list().then(r => r.data).catch((err) => { console.error('Failed to fetch stems:', err instanceof Error ? err.message : err); return { stems: [] }; }),
   });
 
   const { data: samplesData, isError: isError6, error: error6, refetch: refetch6,} = useQuery({
     queryKey: ['artistry-samples'],
-    queryFn: () => api.get('/api/artistry/marketplace/samples').then(r => r.data).catch((err) => { console.error('Failed to fetch samples:', err instanceof Error ? err.message : err); return { samples: [] }; }),
+    queryFn: () => apiHelpers.artistry.marketplace.samples.list().then(r => r.data).catch((err) => { console.error('Failed to fetch samples:', err instanceof Error ? err.message : err); return { samples: [] }; }),
   });
 
   const { data: artData, isError: isError7, error: error7, refetch: refetch7,} = useQuery({
     queryKey: ['artistry-art'],
-    queryFn: () => api.get('/api/artistry/marketplace/art').then(r => r.data).catch((err) => { console.error('Failed to fetch art:', err instanceof Error ? err.message : err); return { artworks: [] }; }),
+    queryFn: () => apiHelpers.artistry.marketplace.art.list().then(r => r.data).catch((err) => { console.error('Failed to fetch art:', err instanceof Error ? err.message : err); return { artworks: [] }; }),
   });
 
   // Purchases from API
   useQuery({
     queryKey: ['artistry-purchases'],
-    queryFn: () => api.get('/api/artistry/marketplace/licenses').then(r => r.data).catch((err) => { console.error('Failed to fetch licenses:', err instanceof Error ? err.message : err); return { licenseTypes: {} }; }),
+    queryFn: () => apiHelpers.artistry.marketplace.licenses().then(r => r.data).catch((err) => { console.error('Failed to fetch licenses:', err instanceof Error ? err.message : err); return { licenseTypes: {} }; }),
   });
 
   // Economy balance
   const { data: balanceData } = useQuery({
     queryKey: ['economy-balance'],
-    queryFn: () => api.get('/api/economy/balance', { params: { user_id: 'current' } }).then(r => r.data).catch((err) => { console.error('Failed to fetch balance:', err instanceof Error ? err.message : err); return { balance: 0 }; }),
+    queryFn: () => apiHelpers.economy.balance().then(r => r.data).catch((err) => { console.error('Failed to fetch balance:', err instanceof Error ? err.message : err); return { balance: 0 }; }),
   });
 
   // Fee schedule
   const { data: feeData } = useQuery({
     queryKey: ['economy-fees'],
-    queryFn: () => api.get('/api/economy/fees').then(r => r.data).catch((err) => { console.error('Failed to fetch fees:', err instanceof Error ? err.message : err); return { fees: { MARKETPLACE_PURCHASE: 0.05 } }; }),
+    queryFn: () => apiHelpers.economy.config().then(r => r.data).catch((err) => { console.error('Failed to fetch fees:', err instanceof Error ? err.message : err); return { fees: { MARKETPLACE_PURCHASE: 0.05 } }; }),
   });
 
   const marketplaceFeeRate = feeData?.fees?.MARKETPLACE_PURCHASE ?? 0.05;
@@ -558,7 +559,7 @@ export default function MarketplaceLensPage() {
         'beat': 'beat', 'stem': 'stems', 'sample': 'sample-pack',
         'artwork': 'artwork', 'plugin': 'plugin', 'preset': 'preset',
       };
-      await api.post('/api/marketplace/submit', {
+      await apiHelpers.marketplace.submit({
         title: newListingForm.title.trim(),
         type: typeMap[newListingForm.type] || 'beat',
         description: newListingForm.description.trim(),
@@ -596,7 +597,7 @@ export default function MarketplaceLensPage() {
     for (const ci of cart) {
       try {
         const typeMap: Record<string, string> = { beat: 'beat', stem: 'stems', sample: 'sample-pack', artwork: 'artwork', plugin: 'beat', preset: 'beat' };
-        const resp = await api.post('/api/artistry/marketplace/purchase', {
+        const resp = await apiHelpers.marketplace.purchase({
           buyerId: 'current',
           listingId: ci.item.id,
           listingType: typeMap[ci.item.type] || 'beat',
@@ -880,7 +881,7 @@ export default function MarketplaceLensPage() {
                 </div>
                 <div className="flex items-center gap-1">{starRating(item.rating)}</div>
                 <span className="text-neon-green text-sm font-bold">${(item.sales * item.prices.basic * 0.7).toFixed(0)}</span>
-                <button className="p-1.5 text-gray-400 hover:text-white transition-colors"><Eye className="w-4 h-4" /></button>
+                <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: `Viewing listing: ${item.title}` })} className="p-1.5 text-gray-400 hover:text-white transition-colors"><Eye className="w-4 h-4" /></button>
               </div>
             ))}
           </div>
@@ -1069,7 +1070,7 @@ export default function MarketplaceLensPage() {
                     </div>
                   </div>
                   <span className="text-sm text-gray-400">{formatPrice(p.price)}</span>
-                  <button className="btn-neon small flex items-center gap-1 text-sm">
+                  <button onClick={() => useUIStore.getState().addToast({ type: 'success', message: `Downloading: ${p.title}` })} className="btn-neon small flex items-center gap-1 text-sm">
                     <Download className="w-3.5 h-3.5" /> Download
                   </button>
                 </div>

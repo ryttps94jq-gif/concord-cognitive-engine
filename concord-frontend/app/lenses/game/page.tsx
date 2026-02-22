@@ -718,6 +718,9 @@ export default function GameLensPage() {
                 </tr>
               </thead>
               <tbody>
+                {sortedLeaderboard.length === 0 && (
+                  <tr><td colSpan={5} className="py-8 text-center text-gray-500">No players on the leaderboard yet</td></tr>
+                )}
                 {sortedLeaderboard.map((player, index) => (
                   <motion.tr
                     key={player.id}
