@@ -1025,7 +1025,7 @@ function MetricCard({ icon, label, value, trend, color }: { icon: React.ReactNod
   );
 }
 
-function ModelCard({ model, statusConfig, typeConfig, onSelect, onDeploy: _onDeploy }: { model: Model; statusConfig: Record<string, Record<string, unknown>>; typeConfig: Record<string, Record<string, unknown>>; onSelect: () => void; onDeploy: () => void }) {
+function ModelCard({ model, statusConfig, typeConfig, onSelect, onDeploy: _onDeploy, isDeploying: _isDeploying }: { model: Model; statusConfig: Record<string, Record<string, unknown>>; typeConfig: Record<string, Record<string, unknown>>; onSelect: () => void; onDeploy: () => void; isDeploying?: boolean }) {
   const StatusIcon = (statusConfig[model.status]?.icon || Activity) as React.ElementType;
   const TypeIcon = (typeConfig[model.type]?.icon || Brain) as React.ElementType;
 

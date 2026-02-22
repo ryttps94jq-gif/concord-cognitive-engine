@@ -406,7 +406,7 @@ export default function ForumLensPage() {
                 <button onClick={() => { setReplyTo(comment.id); setReplyContent(''); }} className="text-xs text-gray-500 hover:text-white flex items-center gap-1"><MessageSquare className="w-3 h-3" />Reply</button>
               )}
               <button onClick={() => setShowAwardModal({ type: 'comment', id: comment.id })} className="text-xs text-gray-500 hover:text-yellow-400 flex items-center gap-1"><Award className="w-3 h-3" />Award</button>
-              <button onClick={() => handleModAction(postId, 'report')} className="text-xs text-gray-500 hover:text-white flex items-center gap-1"><Flag className="w-3 h-3" />Report</button>
+              <button onClick={() => { /* report action */ }} className="text-xs text-gray-500 hover:text-white flex items-center gap-1"><Flag className="w-3 h-3" />Report</button>
             </div>
             <AnimatePresence>
               {replyTo === comment.id && (

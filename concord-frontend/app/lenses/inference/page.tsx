@@ -461,7 +461,7 @@ export default function InferenceLensPage() {
                     )}
                   </div>
                 </div>
-                {expandedHistoryId === entry.id && entry.result && (
+                {expandedHistoryId === entry.id && !!entry.result && (
                   <div className="mt-2 pt-2 border-t border-lattice-border">
                     <pre className="text-xs text-gray-400 font-mono whitespace-pre-wrap max-h-40 overflow-y-auto">
                       {JSON.stringify(entry.result, null, 2)}

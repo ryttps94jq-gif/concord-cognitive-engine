@@ -163,12 +163,12 @@ export default function CustomLensPage() {
           </h3>
 
           <div className="space-y-2">
-            {customLenses?.lenses?.length === 0 ? (
+            {customLenses?.length === 0 ? (
               <p className="text-center py-8 text-gray-500">
                 No custom lenses yet. Create your first one!
               </p>
             ) : (
-              customLenses?.lenses?.map((lens: CustomLens) => (
+              customLenses?.map((lens: CustomLens) => (
                 <button
                   key={lens.id}
                   onClick={() => setSelectedLens(lens.id)}
@@ -212,7 +212,7 @@ export default function CustomLensPage() {
                     disabled={toggleLens.isPending}
                     className="btn-neon text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {toggleLens.isPending ? 'Processing...' : customLenses?.lenses?.find((l: CustomLens) => l.id === selectedLens)?.isActive
+                    {toggleLens.isPending ? 'Processing...' : customLenses?.find((l: CustomLens) => l.id === selectedLens)?.isActive
                       ? 'Deactivate'
                       : 'Activate'}
                   </button>
@@ -236,13 +236,13 @@ export default function CustomLensPage() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-400">Configuration</span>
-                  <button onClick={() => { const cfg = customLenses?.lenses?.find((l: CustomLens) => l.id === selectedLens)?.config; if (cfg) navigator.clipboard.writeText(JSON.stringify(cfg, null, 2)); }} className="text-gray-400 hover:text-white">
+                  <button onClick={() => { const cfg = customLenses?.find((l: CustomLens) => l.id === selectedLens)?.config; if (cfg) navigator.clipboard.writeText(JSON.stringify(cfg, null, 2)); }} className="text-gray-400 hover:text-white">
                     <Copy className="w-4 h-4" />
                   </button>
                 </div>
                 <pre className="bg-lattice-deep p-4 rounded-lg text-sm font-mono overflow-auto max-h-48">
                   {JSON.stringify(
-                    customLenses?.lenses?.find((l: CustomLens) => l.id === selectedLens)?.config,
+                    customLenses?.find((l: CustomLens) => l.id === selectedLens)?.config,
                     null,
                     2
                   )}
@@ -267,7 +267,7 @@ export default function CustomLensPage() {
           Lens Templates
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {templates?.templates?.map((template: Record<string, unknown>) => (
+          {templates?.map((template: Record<string, unknown>) => (
             <div key={template.id as string} className="lens-card">
               <span className="text-2xl">{String(template.icon)}</span>
               <h4 className="font-semibold mt-2">{String(template.name)}</h4>

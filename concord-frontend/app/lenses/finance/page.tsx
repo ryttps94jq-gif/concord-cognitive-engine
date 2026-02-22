@@ -688,7 +688,7 @@ export default function FinanceLensPage() {
         <div className="panel p-4">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold">Recent Transactions</h3>
-            <button onClick={() => setActiveTab('portfolio')} className="text-sm text-neon-cyan hover:underline">View all</button>
+            <button onClick={() => setViewMode('portfolio')} className="text-sm text-neon-cyan hover:underline">View all</button>
           </div>
 
           <div className="space-y-3">

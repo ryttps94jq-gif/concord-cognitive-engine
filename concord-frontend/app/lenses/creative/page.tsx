@@ -906,14 +906,14 @@ export default function CreativeLensPage() {
                       <div className="flex items-center gap-3 text-gray-400">
                         <span><Users className="w-3 h-3 inline mr-1" />{String(d.revisedBy)}</span>
                         <span><CalendarDays className="w-3 h-3 inline mr-1" />{String(d.revisionDate)}</span>
-                        {d.asset && <span><FileImage className="w-3 h-3 inline mr-1" />{String(d.asset)}</span>}
+                        {!!d.asset && <span><FileImage className="w-3 h-3 inline mr-1" />{String(d.asset)}</span>}
                       </div>
                       <div className="flex gap-1">
                         <button onClick={e => { e.stopPropagation(); openEdit(item); }} className={ds.btnGhost}><Edit2 className="w-3 h-3" /></button>
                         <button onClick={e => { e.stopPropagation(); remove(item.id); }} className={cn(ds.btnGhost, 'hover:text-red-400')}><Trash2 className="w-3 h-3" /></button>
                       </div>
                     </div>
-                    {d.feedbackNotes && (
+                    {!!d.feedbackNotes && (
                       <div className="mt-2 pt-2 border-t border-lattice-border/50">
                         <p className={cn(ds.textMuted, 'text-xs')}><MessageSquare className="w-3 h-3 inline mr-1" />Feedback: {String(d.feedbackNotes)}</p>
                       </div>

@@ -87,10 +87,13 @@ const EMPTY_RUNOFSHOW: Array<{ title: string; data: Record<string, unknown>; met
 const EMPTY_BUDGETS: Array<{ title: string; data: Record<string, unknown>; meta: Record<string, unknown> }> = [];
 const EMPTY_TICKETS: Array<{ title: string; data: Record<string, unknown>; meta: Record<string, unknown> }> = [];
 
+const EMPTY_GUESTS: Array<{ title: string; data: Record<string, unknown>; meta: Record<string, unknown> }> = [];
+
 const EMPTY_DATA: Record<ArtifactType, Array<{ title: string; data: Record<string, unknown>; meta: Record<string, unknown> }>> = {
   Event: EMPTY_EVENTS,
   Venue: EMPTY_VENUES,
   Vendor: EMPTY_VENDORS,
+  Guest: EMPTY_GUESTS,
   RunOfShow: EMPTY_RUNOFSHOW,
   Budget: EMPTY_BUDGETS,
   TicketTier: EMPTY_TICKETS,
@@ -170,7 +173,7 @@ export default function EventsLensPage() {
   // Determine current artifact type
   const typeMap: Record<ModeTab, ArtifactType> = {
     dashboard: 'Event', events: 'Event', venues: 'Venue', vendors: 'Vendor',
-    runofshow: 'RunOfShow', budget: 'Budget', tickets: 'TicketTier',
+    guests: 'Guest', runofshow: 'RunOfShow', budget: 'Budget', tickets: 'TicketTier',
   };
   const currentType = typeMap[mode] || 'Event';
 
@@ -178,6 +181,7 @@ export default function EventsLensPage() {
   const { items: events, isLoading: eventsLoading, isError, error, refetch, create: createEvent, update: updateEvent, remove: removeEvent } = useLensData('events', 'Event', { seed: EMPTY_DATA.Event });
   const { items: venues, isLoading: venuesLoading, create: createVenue, update: updateVenue, remove: removeVenue } = useLensData('events', 'Venue', { seed: EMPTY_DATA.Venue });
   const { items: vendors, isLoading: vendorsLoading, create: createVendor, update: updateVendor, remove: removeVendor } = useLensData('events', 'Vendor', { seed: EMPTY_DATA.Vendor });
+  const { items: guests, isLoading: guestsLoading, create: createGuest, update: updateGuest, remove: removeGuest } = useLensData('events', 'Guest', { seed: EMPTY_DATA.Guest });
   const { items: runofshows, isLoading: rosLoading, create: createROS, update: updateROS, remove: removeROS } = useLensData('events', 'RunOfShow', { seed: EMPTY_DATA.RunOfShow });
   const { items: budgets, isLoading: budgetLoading, create: createBudget, update: updateBudget, remove: removeBudget } = useLensData('events', 'Budget', { seed: EMPTY_DATA.Budget });
   const { items: tickets, isLoading: ticketsLoading, create: createTicket, update: updateTicket, remove: removeTicket } = useLensData('events', 'TicketTier', { seed: EMPTY_DATA.TicketTier });
@@ -187,10 +191,10 @@ export default function EventsLensPage() {
   // Current items based on mode
   const currentItems = useMemo(() => {
     const map: Record<ModeTab, LensItem[]> = {
-      dashboard: events, events, venues, vendors, runofshow: runofshows, budget: budgets, tickets,
+      dashboard: events, events, venues, vendors, guests, runofshow: runofshows, budget: budgets, tickets,
     };
     return map[mode] || [];
-  }, [mode, events, venues, vendors, runofshows, budgets, tickets]);
+  }, [mode, events, venues, vendors, guests, runofshows, budgets, tickets]);
 
   const isLoading = eventsLoading || venuesLoading || vendorsLoading || rosLoading || budgetLoading || ticketsLoading;
 

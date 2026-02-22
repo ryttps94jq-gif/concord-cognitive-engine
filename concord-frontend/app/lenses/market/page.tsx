@@ -36,7 +36,7 @@ export default function MarketLensPage() {
 
   const createMutation = useMutation({
     mutationFn: (payload: { title: string; description: string; price: number; type: string }) =>
-      apiHelpers.marketplace.submit(payload),
+      apiHelpers.marketplace.submit(payload as unknown as { name: string; githubUrl: string; description?: string; category?: string }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['marketplace-listings'] });
       setShowCreate(false);

@@ -954,7 +954,7 @@ function CreateSessionModal({ onClose }: { onClose: () => void }) {
   const createMutation = useMutation({
     mutationFn: (data: typeof form) =>
       apiHelpers.artistry.collab.sessions.create({
-        projectId: data.linkedProjectId || undefined,
+        projectId: data.linkedProjectId || '',
         maxParticipants: data.maxParticipants,
         mode: data.privacy,
       }),

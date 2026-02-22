@@ -129,7 +129,7 @@ export default function ChemLensPage() {
           </h3>
 
           <div className="space-y-2 max-h-[400px] overflow-auto">
-            {compounds?.compounds?.map((compound: Compound) => (
+            {compounds?.map((compound: Compound) => (
               <button
                 key={compound.id}
                 onClick={() => setSelectedCompound(compound.id)}
@@ -176,12 +176,12 @@ export default function ChemLensPage() {
           Recent Reactions
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {reactions?.reactions?.length === 0 ? (
+          {reactions?.length === 0 ? (
             <p className="col-span-full text-center py-8 text-gray-500">
               No reactions yet. Try the reaction chamber!
             </p>
           ) : (
-            reactions?.reactions?.slice(0, 6).map((reaction: Reaction) => (
+            reactions?.slice(0, 6).map((reaction: Reaction) => (
               <div key={reaction.id} className="lens-card">
                 <p className="font-mono text-sm mb-2">{reaction.formula}</p>
                 <div className="flex items-center justify-between text-xs">

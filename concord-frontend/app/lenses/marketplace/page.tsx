@@ -571,7 +571,7 @@ export default function MarketplaceLensPage() {
           unlimited: { price: Number(newListingForm.unlimitedPrice) || 0 },
           exclusive: { price: Number(newListingForm.exclusivePrice) || 0 },
         },
-      });
+      } as unknown as { name: string; githubUrl: string; description?: string; category?: string });
       setShowNewListing(false);
       setNewListingForm({ title: '', type: 'beat', description: '', genre: '', tags: '', basicPrice: '', premiumPrice: '', unlimitedPrice: '', exclusivePrice: '' });
       queryClient.invalidateQueries({ queryKey: ['artistry-beats'] });
@@ -597,7 +597,7 @@ export default function MarketplaceLensPage() {
     for (const ci of cart) {
       try {
         const typeMap: Record<string, string> = { beat: 'beat', stem: 'stems', sample: 'sample-pack', artwork: 'artwork', plugin: 'beat', preset: 'beat' };
-        const resp = await apiHelpers.marketplace.purchase({
+        const resp = await apiHelpers.artistry.marketplace.purchase({
           buyerId: 'current',
           listingId: ci.item.id,
           listingType: typeMap[ci.item.type] || 'beat',
@@ -1070,7 +1070,7 @@ export default function MarketplaceLensPage() {
                     </div>
                   </div>
                   <span className="text-sm text-gray-400">{formatPrice(p.price)}</span>
-                  <button onClick={() => useUIStore.getState().addToast({ type: 'success', message: `Downloading: ${p.title}` })} className="btn-neon small flex items-center gap-1 text-sm">
+                  <button onClick={() => useUIStore.getState().addToast({ type: 'success', message: `Downloading: ${p.item.title}` })} className="btn-neon small flex items-center gap-1 text-sm">
                     <Download className="w-3.5 h-3.5" /> Download
                   </button>
                 </div>
