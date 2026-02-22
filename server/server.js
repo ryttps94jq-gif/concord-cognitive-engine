@@ -9480,10 +9480,17 @@ const BRAIN = {
     enabled: false,
     stats: { requests: 0, totalMs: 0, dtusGenerated: 0, errors: 0, lastCallAt: null },
   },
+  repair: {
+    url: process.env.BRAIN_REPAIR_URL || "http://localhost:11437",
+    model: process.env.BRAIN_REPAIR_MODEL || "qwen2.5:0.5b",
+    role: "error detection, auto-fix, runtime repair",
+    enabled: false,
+    stats: { requests: 0, totalMs: 0, dtusGenerated: 0, errors: 0, fixes: 0, sleeping: true, lastCallAt: null },
+  },
 };
 
 /**
- * Initialize three-brain architecture.
+ * Initialize four-brain architecture.
  * Probes each brain endpoint; marks as enabled if responsive.
  * Falls back gracefully to single-Ollama if multi-brain isn't deployed.
  */
@@ -17395,6 +17402,18 @@ app.use((err, req, res, _next) => {
   const msg = String(err?.message || err);
   structuredLog("error", "unhandled_route_error", { requestId: req.id, method: req.method, path: req.path, error: msg, stack: String(err?.stack || "") });
   res.status(500).json({ ok:false, error: "An unexpected error occurred", code: "INTERNAL_ERROR" });
+
+  // Trigger repair cortex in background for 500-level errors
+  if (typeof repairError === "function") {
+    repairError({
+      type: "api-error",
+      message: msg,
+      stack: String(err?.stack || ""),
+      file: extractFileFromStack?.(String(err?.stack || "")) || null,
+      line: extractLineFromStack?.(String(err?.stack || "")) || null,
+      meta: { method: req.method, path: req.path },
+    }).catch(() => {});
+  }
 });
 
 // ---- heartbeat (Scope Separation: Local tick + Global tick, no Marketplace tick) ----
@@ -27522,6 +27541,187 @@ app.get("/api/admin/queue/stats", requireAuth(), requireRole("owner"), (_req, re
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
+});
+
+// ---- Repair Cortex Runtime Endpoints ----
+const REPAIR_STATE = {
+  sleeping: true,
+  currentFix: null,
+  fixHistory: [],
+  consecutiveFailures: 0,
+  maxConsecutiveFailures: 5,
+  totalFixes: 0,
+  knownPatterns: [],
+};
+
+// Load learned patterns from disk
+try {
+  const patternsPath = path.join(DATA_DIR, "repair-patterns.json");
+  if (fs.existsSync(patternsPath)) {
+    REPAIR_STATE.knownPatterns = JSON.parse(fs.readFileSync(patternsPath, "utf8"));
+    structuredLog("info", "repair_init", { patternsLoaded: REPAIR_STATE.knownPatterns.length });
+  }
+} catch { /* no patterns yet */ }
+
+function saveRepairPatterns() {
+  try {
+    const patternsPath = path.join(DATA_DIR, "repair-patterns.json");
+    fs.writeFileSync(patternsPath, JSON.stringify(REPAIR_STATE.knownPatterns, null, 2));
+  } catch (e) {
+    structuredLog("warn", "repair_save_error", { error: String(e?.message || e) });
+  }
+}
+
+function tryPatternFix(error) {
+  for (const pattern of REPAIR_STATE.knownPatterns) {
+    if (error.message && error.message.includes(pattern.trigger)) {
+      structuredLog("info", "repair_pattern_match", { pattern: pattern.name });
+      return pattern.fix;
+    }
+  }
+  return null;
+}
+
+function extractTrigger(message) {
+  return (message || "")
+    .replace(/line \d+/g, "line N")
+    .replace(/column \d+/g, "column N")
+    .replace(/\/[^\s]+\//g, "PATH/")
+    .slice(0, 200);
+}
+
+function extractFileFromStack(stack) {
+  if (!stack) return null;
+  const match = stack.match(/at\s+.*?\(?(\/[^:)]+)/);
+  return match ? match[1] : null;
+}
+
+function extractLineFromStack(stack) {
+  if (!stack) return null;
+  const match = stack.match(/:(\d+):\d+/);
+  return match ? parseInt(match[1], 10) : null;
+}
+
+async function tryAIFix(error, context) {
+  if (!BRAIN.repair.enabled) return null;
+  REPAIR_STATE.sleeping = false;
+
+  const prompt = `You are a runtime repair system. Fix this error.\n\nERROR: ${error.message}\nFILE: ${error.file || "unknown"}\nLINE: ${error.line || "unknown"}\nSTACK: ${(error.stack || "").slice(0, 500)}\n\nSURROUNDING CODE:\n${context}\n\nRules:\n- Return ONLY the fixed code, no explanation\n- Fix the root cause, not the symptom\n- If you can't fix it, return UNFIXABLE`;
+
+  try {
+    const resp = await fetch(`${BRAIN.repair.url}/api/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: BRAIN.repair.model, prompt, stream: false, options: { temperature: 0.1 } }),
+      signal: AbortSignal.timeout(30000),
+    });
+    BRAIN.repair.stats.requests++;
+    const data = await resp.json();
+    REPAIR_STATE.sleeping = true;
+    const fix = (data.response || "").trim();
+    return fix === "UNFIXABLE" ? null : fix;
+  } catch (err) {
+    structuredLog("warn", "repair_ai_error", { error: String(err?.message || err) });
+    REPAIR_STATE.sleeping = true;
+    return null;
+  }
+}
+
+async function repairError(error) {
+  if (REPAIR_STATE.consecutiveFailures >= REPAIR_STATE.maxConsecutiveFailures) {
+    structuredLog("error", "repair_halted", { reason: "max-consecutive-failures", count: REPAIR_STATE.maxConsecutiveFailures });
+    return { success: false, reason: "max-failures-reached" };
+  }
+
+  REPAIR_STATE.currentFix = (error.message || "").slice(0, 200);
+  structuredLog("info", "repair_triggered", { type: error.type, message: (error.message || "").slice(0, 100) });
+
+  // Layer 1: Pattern match
+  const patternFix = tryPatternFix(error);
+  if (patternFix) {
+    const entry = { timestamp: new Date().toISOString(), type: error.type, message: error.message, method: "pattern", success: true };
+    REPAIR_STATE.fixHistory.push(entry);
+    if (REPAIR_STATE.fixHistory.length > 100) REPAIR_STATE.fixHistory.shift();
+    REPAIR_STATE.totalFixes++;
+    REPAIR_STATE.consecutiveFailures = 0;
+    REPAIR_STATE.currentFix = null;
+    BRAIN.repair.stats.fixes = (BRAIN.repair.stats.fixes || 0) + 1;
+    return { success: true, method: "pattern" };
+  }
+
+  // Layer 2: AI fix
+  let context = "";
+  if (error.file && fs.existsSync(error.file)) {
+    try {
+      const lines = fs.readFileSync(error.file, "utf8").split("\n");
+      const start = Math.max(0, (error.line || 1) - 10);
+      const end = Math.min(lines.length, (error.line || 1) + 10);
+      context = lines.slice(start, end).join("\n");
+    } catch { /* can't read file */ }
+  }
+
+  const aiFix = await tryAIFix(error, context);
+  if (aiFix) {
+    // Learn the pattern for future instant matches
+    const pattern = {
+      name: `auto-${Date.now()}`,
+      trigger: extractTrigger(error.message),
+      fix: aiFix.slice(0, 2000),
+      learnedAt: new Date().toISOString(),
+      method: "ai",
+      errorType: error.type,
+    };
+    REPAIR_STATE.knownPatterns.push(pattern);
+    saveRepairPatterns();
+
+    const entry = { timestamp: new Date().toISOString(), type: error.type, message: error.message, method: "ai", success: true };
+    REPAIR_STATE.fixHistory.push(entry);
+    if (REPAIR_STATE.fixHistory.length > 100) REPAIR_STATE.fixHistory.shift();
+    REPAIR_STATE.totalFixes++;
+    REPAIR_STATE.consecutiveFailures = 0;
+    REPAIR_STATE.currentFix = null;
+    BRAIN.repair.stats.fixes = (BRAIN.repair.stats.fixes || 0) + 1;
+    return { success: true, method: "ai", pattern: pattern.name };
+  }
+
+  // Both layers failed
+  REPAIR_STATE.consecutiveFailures++;
+  const entry = { timestamp: new Date().toISOString(), type: error.type, message: error.message, method: "none", success: false };
+  REPAIR_STATE.fixHistory.push(entry);
+  if (REPAIR_STATE.fixHistory.length > 100) REPAIR_STATE.fixHistory.shift();
+  REPAIR_STATE.currentFix = null;
+  return { success: false, reason: "no-fix-found" };
+}
+
+// Repair trigger endpoint
+app.post("/api/admin/repair/trigger", requireAuth(), requireRole("owner"), asyncHandler(async (req, res) => {
+  const result = await repairError(req.body);
+  res.json(result);
+}));
+
+// Frontend error report endpoint (no auth required — frontends report errors)
+app.post("/api/admin/repair/report", asyncHandler(async (req, res) => {
+  const result = await repairError(req.body);
+  res.json({ received: true, repaired: result.success });
+}));
+
+// Repair status
+app.get("/api/admin/repair/status", requireAuth(), requireRole("owner"), (_req, res) => {
+  res.json({
+    sleeping: REPAIR_STATE.sleeping,
+    currentFix: REPAIR_STATE.currentFix,
+    totalFixes: REPAIR_STATE.totalFixes,
+    knownPatterns: REPAIR_STATE.knownPatterns.length,
+    consecutiveFailures: REPAIR_STATE.consecutiveFailures,
+    maxConsecutiveFailures: REPAIR_STATE.maxConsecutiveFailures,
+    recentFixes: REPAIR_STATE.fixHistory.slice(-20),
+    repairBrainOnline: BRAIN.repair.enabled,
+  });
+});
+
+// View learned patterns
+app.get("/api/admin/repair/patterns", requireAuth(), requireRole("owner"), (_req, res) => {
+  res.json({ patterns: REPAIR_STATE.knownPatterns });
 });
 
 const SHOULD_LISTEN = (String(process.env.CONCORD_NO_LISTEN || "").toLowerCase() !== "true") && (String(process.env.NODE_ENV || "").toLowerCase() !== "test");

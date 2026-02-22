@@ -60,15 +60,17 @@ describe('useBrainHealth', () => {
     expect(result.current.brainStatus.conscious?.online).toBe(false);
     expect(result.current.brainStatus.subconscious?.online).toBe(false);
     expect(result.current.brainStatus.utility?.online).toBe(false);
+    expect(result.current.brainStatus.repair?.online).toBe(false);
   });
 
-  it('displays three brain statuses', async () => {
+  it('displays four brain statuses', async () => {
     fetchMock.mockResolvedValue({
       ok: true,
       json: async () => ({
         conscious: { online: true },
         subconscious: { online: true },
         utility: { online: true },
+        repair: { online: true },
       }),
     });
 
@@ -81,5 +83,6 @@ describe('useBrainHealth', () => {
     expect(result.current.brainStatus).toHaveProperty('conscious');
     expect(result.current.brainStatus).toHaveProperty('subconscious');
     expect(result.current.brainStatus).toHaveProperty('utility');
+    expect(result.current.brainStatus).toHaveProperty('repair');
   });
 });

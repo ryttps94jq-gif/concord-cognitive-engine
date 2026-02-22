@@ -12,7 +12,7 @@ interface FallbackProps {
   /** Feature name to display in the fallback message */
   feature: string;
   /** Which brain is required for this feature */
-  brainRequired: 'conscious' | 'utility' | 'subconscious' | 'none';
+  brainRequired: 'conscious' | 'utility' | 'subconscious' | 'repair' | 'none';
   children: ReactNode;
 }
 

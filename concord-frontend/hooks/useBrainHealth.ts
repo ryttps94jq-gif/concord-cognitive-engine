@@ -18,6 +18,7 @@ interface BrainHealthStatus {
   conscious: BrainState | null;
   subconscious: BrainState | null;
   utility: BrainState | null;
+  repair: BrainState | null;
 }
 
 const POLL_INTERVAL = 30000; // 30s
@@ -27,6 +28,7 @@ export function useBrainHealth() {
     conscious: null,
     subconscious: null,
     utility: null,
+    repair: null,
   });
   const [isLoading, setIsLoading] = useState(true);
 
@@ -43,6 +45,7 @@ export function useBrainHealth() {
           conscious: { online: false },
           subconscious: { online: false },
           utility: { online: false },
+          repair: { online: false },
         });
       }
     } catch {
@@ -50,6 +53,7 @@ export function useBrainHealth() {
         conscious: { online: false },
         subconscious: { online: false },
         utility: { online: false },
+        repair: { online: false },
       });
     } finally {
       setIsLoading(false);

@@ -36,18 +36,20 @@ describe('Frontend Integration', () => {
   });
 
   describe('BrainMonitor', () => {
-    it('displays three brain statuses', () => {
+    it('displays four brain statuses', () => {
       const brainData = {
         conscious: { enabled: true, model: 'qwen2.5:7b', stats: { requests: 100 } },
         subconscious: { enabled: true, model: 'qwen2.5:1.5b', stats: { requests: 50 } },
         utility: { enabled: true, model: 'qwen2.5:3b', stats: { requests: 200 } },
+        repair: { enabled: true, model: 'qwen2.5:0.5b', stats: { requests: 10 } },
       };
 
       const brainNames = Object.keys(brainData);
-      expect(brainNames).toHaveLength(3);
+      expect(brainNames).toHaveLength(4);
       expect(brainNames).toContain('conscious');
       expect(brainNames).toContain('subconscious');
       expect(brainNames).toContain('utility');
+      expect(brainNames).toContain('repair');
     });
   });
 

@@ -96,8 +96,18 @@ except Exception as e:
   fi
 
   if [ "$FIXED" = false ]; then
-    echo "[repair-cortex] No auto-fix available for this error pattern. Manual intervention needed."
-    exit 1
+    echo "[repair-cortex] No pattern fix. Calling repair brain API..."
+    API_URL="${API_URL:-http://localhost:5050}"
+    REPAIR_RESP=$(curl -s -X POST "$API_URL/api/admin/repair/trigger" \
+      -H "Content-Type: application/json" \
+      -d "{\"type\":\"build-error\",\"message\":\"$ERROR_MSG\",\"file\":\"$ERROR_FILE\",\"line\":\"$ERROR_LINE\"}" 2>/dev/null || echo '{"success":false}')
+    echo "[repair-cortex] Repair brain response: $REPAIR_RESP"
+    if echo "$REPAIR_RESP" | grep -q '"success":true'; then
+      FIXED=true
+    else
+      echo "[repair-cortex] Repair brain could not fix. Manual intervention needed."
+      exit 1
+    fi
   fi
 
   RETRY=$((RETRY + 1))
