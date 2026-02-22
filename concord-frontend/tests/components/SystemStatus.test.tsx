@@ -100,7 +100,7 @@ describe('SystemStatus', () => {
   });
 
   it('shows "Backend Unreachable" when backend is down', () => {
-    mockQueryReturn.data = null;
+    mockQueryReturn.data = null as any;
     mockQueryReturn.isError = true;
     mockQueryReturn.error = new Error('Network error');
 
@@ -166,7 +166,7 @@ describe('SystemStatus', () => {
   });
 
   it('shows error message when backend is unreachable and expanded', () => {
-    mockQueryReturn.data = null;
+    mockQueryReturn.data = null as any;
     mockQueryReturn.isError = true;
     mockQueryReturn.error = new Error('Connection refused');
 
