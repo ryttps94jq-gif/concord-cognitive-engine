@@ -92,6 +92,15 @@ OLLAMA_HOST="0.0.0.0:${SUBCONSCIOUS_PORT}" ollama pull "${SUBCONSCIOUS_MODEL}"
 log "Pulling model for Utility: ${UTILITY_MODEL}..."
 OLLAMA_HOST="0.0.0.0:${UTILITY_PORT}" ollama pull "${UTILITY_MODEL}"
 
+# Pull embedding model on all three instances (nomic-embed-text: 137MB, CPU, millisecond inference)
+EMBEDDING_MODEL="${EMBEDDING_MODEL:-nomic-embed-text}"
+log "Pulling embedding model (${EMBEDDING_MODEL}) on all three instances..."
+OLLAMA_HOST="0.0.0.0:${CONSCIOUS_PORT}" ollama pull "${EMBEDDING_MODEL}" &
+OLLAMA_HOST="0.0.0.0:${SUBCONSCIOUS_PORT}" ollama pull "${EMBEDDING_MODEL}" &
+OLLAMA_HOST="0.0.0.0:${UTILITY_PORT}" ollama pull "${EMBEDDING_MODEL}" &
+wait
+log "Embedding model pulled on all instances"
+
 log "============================================"
 log "Three brains online"
 log "  Conscious    (${CONSCIOUS_MODEL})    → http://localhost:${CONSCIOUS_PORT}"

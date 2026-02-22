@@ -124,6 +124,42 @@ import {
   buildDTUConversationContext, getArtifactDTUs, getDTUArtifact,
   recordEnrichmentMetric, getLensIntegrationMetrics,
 } from "./emergent/lens-integration.js";
+
+// ---- Semantic Intelligence Layer ----
+import {
+  initEmbeddings, embed, cosineSimilarity, findSimilar, semanticSearch,
+  findCrossDomainConnections, embedDTU, storeEmbedding, getEmbedding,
+  removeEmbedding, backfillEmbeddings, getEmbeddingStatus, isEmbeddingAvailable,
+} from "./embeddings.js";
+import {
+  initSemanticCache, semanticCacheCheck, recordCacheSatisfaction,
+  warmRelatedQueries, getCacheStats,
+} from "./semanticCache.js";
+import {
+  initDistillation, assessRetrievalSufficiency, recordRoutingLevel,
+  getDistillationStats,
+} from "./distillation.js";
+import {
+  initPrecompute, logQuery, analyzeQueryPatterns, runPrecomputeCycle,
+  expirePrecomputedDTUs, getPrecomputeStats,
+} from "./precompute.js";
+import {
+  initModelOptimizer, assessLensMaturity, assessAllLenses,
+  recordQueryEvent, getRecommendedModel, getModelOptimizerStats,
+} from "./modelOptimizer.js";
+import {
+  initAffectRetrieval, detectAffect, affectAwareBuildContext,
+  entityAffectStrategy, affectDrivenScheduler, getSystemAffectState,
+} from "./affectRetrieval.js";
+import {
+  initEconomics, recordEconomicsEvent, calculateEconomics,
+  getCostPerUserTrend, projectCosts, getEconomicsStats,
+} from "./economics.js";
+import {
+  initSelfHealing, flagAndHeal, runDreamReview,
+  assessFreshness, recordWeakQuery, detectKnowledgeGaps,
+  runSkillBuilding, getSelfHealingStats,
+} from "./selfHealing.js";
 import {
   getDTU as shadowGetDTU, getDTUSource,
   wireShadowEdges_pattern, wireShadowEdges_linguistic,
@@ -9475,6 +9511,48 @@ async function initThreeBrains() {
 // Initialize brains after a short delay (let Ollama instances start)
 setTimeout(() => initThreeBrains(), 3000);
 
+// ── Semantic Intelligence Layer Initialization ────────────────────────────
+// Initialize after brains come online (embeddings use Ollama)
+setTimeout(async () => {
+  try {
+    // Gather all Ollama URLs (three brains + default)
+    const ollamaUrls = [
+      BRAIN.conscious.url,
+      BRAIN.subconscious.url,
+      BRAIN.utility.url,
+      process.env.OLLAMA_URL || process.env.OLLAMA_HOST || "http://ollama:11434",
+    ].filter(Boolean);
+
+    // Initialize embeddings
+    await initEmbeddings({ db, ollamaUrls, structuredLog });
+
+    // Initialize downstream modules
+    initSemanticCache({ structuredLog });
+    initDistillation({ structuredLog });
+    initPrecompute({ structuredLog });
+    initModelOptimizer({ structuredLog });
+    initAffectRetrieval({ structuredLog });
+    initEconomics({ structuredLog });
+    initSelfHealing({ structuredLog });
+
+    structuredLog("info", "semantic_intelligence_init", { embeddingsAvailable: isEmbeddingAvailable() });
+
+    // Background backfill: embed existing DTUs that don't have embeddings
+    if (isEmbeddingAvailable() && STATE.dtus.size > 0) {
+      structuredLog("info", "backfill_start", { dtuCount: STATE.dtus.size });
+      backfillEmbeddings(STATE.dtus, {
+        onProgress: ({ progress, total, embedded, errors }) => {
+          if (progress % 100 === 0 || progress === total) {
+            structuredLog("info", "backfill_progress", { progress, total, embedded, errors });
+          }
+        },
+      }).catch(e => structuredLog("warn", "backfill_error", { error: String(e?.message || e) }));
+    }
+  } catch (e) {
+    structuredLog("warn", "semantic_intelligence_init_error", { error: String(e?.message || e) });
+  }
+}, 5000); // Wait 5s for Ollama to be ready
+
 /**
  * Call a specific brain (Ollama instance).
  * @param {"conscious"|"subconscious"|"utility"} brainName
@@ -9557,10 +9635,26 @@ async function callBrain(brainName, prompt, options = {}) {
  * @param {number} maxDTUs - Maximum DTUs to include
  * @returns {string} Formatted context string
  */
-function buildBrainContext(query, lens = null, maxDTUs = 10) {
+async function buildBrainContext(query, lens = null, maxDTUs = 10) {
   const all = dtusArray();
   if (!all.length) return "";
 
+  // ── Semantic path: use embeddings when available ──
+  if (isEmbeddingAvailable()) {
+    try {
+      const results = await semanticSearch(query, all, { lens, topK: maxDTUs, includeHighTier: true });
+      if (results.length > 0) {
+        return results.map(r => {
+          const d = all.find(x => x.id === r.id) || r;
+          return `[${(d.tier || "regular").toUpperCase()}] ${d.title}: ${(d.cretiHuman || d.human?.summary || "").slice(0, 400)}`;
+        }).join("\n");
+      }
+    } catch {
+      // Fall through to keyword-based retrieval
+    }
+  }
+
+  // ── Fallback: keyword/Jaccard-based retrieval ──
   const qTokens = tokensNoStop(String(query || ""));
 
   const scored = all.map(d => {
@@ -9591,10 +9685,85 @@ function buildBrainContext(query, lens = null, maxDTUs = 10) {
 
 /**
  * Conscious brain: handles user chat messages.
+ * Smart routing: cache → retrieval+utility → full conscious reasoning.
  * Retrieves DTU context, calls 7B model, saves exchange as DTU.
  */
 async function consciousChat(userMessage, lens = null, options = {}) {
-  const context = buildBrainContext(userMessage, lens);
+  const inferenceStart = Date.now();
+  const userId = options.userId || "anonymous";
+
+  // Log query for pattern analysis (precompute pipeline)
+  logQuery(userMessage, lens);
+
+  // ── Level 1: Semantic Cache (instant) ──
+  try {
+    const cached = await semanticCacheCheck(userMessage, lens, { dtusArray });
+    if (cached.cached) {
+      recordRoutingLevel(lens, "cache");
+      recordQueryEvent(lens, { cacheHit: true, topSimilarity: cached.score });
+      recordEconomicsEvent({ type: "cache", userId });
+
+      // Still create a DTU linking to the source
+      try {
+        const ctx = makeCtx(null);
+        ctx.actor = { userId: "system", orgId: "internal", role: "owner", scopes: ["*"] };
+        await runMacro("dtu", "create", {
+          title: `Cached: ${userMessage.slice(0, 80)}`,
+          creti: cached.response,
+          tags: [lens, "conscious", "chat", "cache-hit"].filter(Boolean),
+          source: "conscious.cache",
+          lineage: cached.sourceId ? [cached.sourceId] : [],
+          meta: { brainSource: "cache", cacheScore: cached.score, sourceId: cached.sourceId },
+        }, ctx);
+      } catch {}
+
+      return { ok: true, content: cached.response, source: "cache", model: "cached", tokens: 0 };
+    }
+  } catch {}
+
+  // ── Level 2: Retrieval Sufficient (near-instant) ──
+  try {
+    const retrieval = await assessRetrievalSufficiency(userMessage, lens, { dtusArray });
+    if (retrieval.sufficient) {
+      recordRoutingLevel(lens, "retrieval");
+      recordQueryEvent(lens, { retrievalSufficient: true, topSimilarity: retrieval.context[0]?.rawSimilarity || 0 });
+
+      // Use utility brain to format retrieved knowledge (much faster than full 7B)
+      const contextStr = retrieval.context.map(c => `[${(c.tier || "regular").toUpperCase()}] ${c.title}: ${c.summary.slice(0, 300)}`).join("\n");
+      const result = await callBrain("utility", `Answer this question using the provided knowledge:\n\nQuestion: ${userMessage}\n\nKnowledge:\n${contextStr}`, {
+        system: `You are a knowledge retrieval formatter. Synthesize the provided context into a direct, helpful answer.`,
+        temperature: 0.3,
+        maxTokens: 500,
+        timeout: 15000,
+      });
+
+      if (result.ok && result.content) {
+        const elapsed = Date.now() - inferenceStart;
+        recordEconomicsEvent({ type: "retrieval", inferenceMs: elapsed, userId });
+
+        try {
+          const ctx = makeCtx(null);
+          ctx.actor = { userId: "system", orgId: "internal", role: "owner", scopes: ["*"] };
+          await runMacro("dtu", "create", {
+            title: `Chat: ${userMessage.slice(0, 80)}`,
+            creti: result.content,
+            tags: [lens, "conscious", "chat", "retrieval-routed"].filter(Boolean),
+            source: "conscious.chat",
+            meta: { brainSource: "utility", confidence: 0.7, retrievalMethod: retrieval.method },
+          }, ctx);
+          BRAIN.utility.stats.dtusGenerated++;
+        } catch {}
+
+        return result;
+      }
+    }
+  } catch {}
+
+  // ── Level 3: Full Conscious Reasoning ──
+  recordRoutingLevel(lens, "inference");
+  recordQueryEvent(lens, { topSimilarity: 0 });
+
+  const context = await buildBrainContext(userMessage, lens);
   const contextCount = context ? context.split("\n").length : 0;
   const system = `You are Concord's conscious mind. You have access to ${contextCount} knowledge units about ${lens || "general topics"}.\n\nRelevant knowledge:\n${context}`;
 
@@ -9604,6 +9773,9 @@ async function consciousChat(userMessage, lens = null, options = {}) {
     maxTokens: options.maxTokens || 700,
     timeout: options.timeout || 60000,
   });
+
+  const elapsed = Date.now() - inferenceStart;
+  recordEconomicsEvent({ type: "inference", inferenceMs: elapsed, userId });
 
   if (result.ok && result.content) {
     // Save exchange as DTU (fire-and-forget)
@@ -9621,6 +9793,9 @@ async function consciousChat(userMessage, lens = null, options = {}) {
     } catch (e) {
       structuredLog("warn", "conscious_dtu_save_failed", { error: String(e?.message || e) });
     }
+
+    // Cache warming: associate similar queries with this response
+    warmRelatedQueries(userMessage, result.content, dtusArray).catch(() => {});
   }
 
   return result;
@@ -9631,7 +9806,7 @@ async function consciousChat(userMessage, lens = null, options = {}) {
  * Pulls recent DTUs as synthesis material, calls 1.5B model, result becomes new DTU.
  */
 async function subconsciousTask(taskType, domain = null) {
-  const material = buildBrainContext(domain || taskType, domain, 20);
+  const material = await buildBrainContext(domain || taskType, domain, 20);
   const taskPrompts = {
     autogen: "Generate a new knowledge unit that fills a gap in the existing substrate. Be concise and specific.",
     dream: "Create a creative hypothesis by connecting disparate concepts in the substrate. Think laterally.",
@@ -9676,7 +9851,7 @@ async function subconsciousTask(taskType, domain = null) {
  * Gets lens-specific DTU context, calls 3B model, saves result as DTU.
  */
 async function utilityCall(action, lens, data) {
-  const context = buildBrainContext(action, lens, 5);
+  const context = await buildBrainContext(action, lens, 5);
   const system = `You are a ${lens} specialist in Concord. Use this domain knowledge:\n${context}`;
 
   const dataStr = typeof data === "string" ? data : JSON.stringify(data || {});
@@ -9715,7 +9890,7 @@ async function utilityCall(action, lens, data) {
  * Born entities use the utility brain to interact with lenses autonomously.
  */
 async function entityExploreLens(entity, lens) {
-  const lensData = buildBrainContext(lens, lens, 5);
+  const lensData = await buildBrainContext(lens, lens, 5);
   const entityId = entity?.id || "unknown";
   const species = entity?.species || "emergent";
   const homeostasis = entity?.homeostasis != null ? entity.homeostasis : 0.5;
@@ -9775,6 +9950,7 @@ function getBrainStatus() {
     mode: onlineCount === 3 ? "three_brain" : onlineCount > 0 ? "partial" : "fallback",
     onlineCount,
     brains,
+    embeddings: getEmbeddingStatus(STATE.dtus.size),
   };
 }
 
@@ -11712,6 +11888,9 @@ async function pipelineCommitDTU(ctx, dtu, opts={}) {
     try { autoUpdateWorldModel(dtu); } catch {}
     // ===== END AUTO WORLD MODEL UPDATE =====
 
+    // ===== SEMANTIC EMBEDDING (async, never blocks) =====
+    embedDTU(dtu).catch(() => {});
+
     // Keep high-tier sparse & maintain metrics periodically
     try { enforceTierBudgets(); } catch {}
     try { await maybeRunLocalUpgrade(); } catch {}
@@ -11886,6 +12065,10 @@ register("dtu", "create", async (ctx, input) => {
 
   await pipelineCommitDTU(ctx, dtu, { op: 'dtu.create', allowRewrite: true });
   ctx.log("dtu.create", `Created DTU: ${title}`, { id: dtu.id, tier, tags, source, score: gate.score });
+
+  // Async embedding generation (NEVER blocks DTU creation — Rule #1)
+  embedDTU(dtu).catch(() => {});
+
   return { ok: true, dtu };
 }, { description: "Create a DTU (regular/mega/hyper) with structured core; UI receives human projection." });
 
@@ -15882,6 +16065,9 @@ register("lattice", "birth_protocol", async (ctx, input={}) => {
   STATE.dtus.set(id, dtu);
   saveStateDebounced();
   _c2log("c2.birth.accept", "Birth accepted and DTU committed", { id, title:dtu.title });
+
+  // Async embedding for birth DTU (never blocks)
+  embedDTU(dtu).catch(() => {});
 
   // ── Entity Lifecycle Completion ──────────────────────────────────────────
   // If this birth came from reproduction or entity emergence, instantiate the
@@ -26943,6 +27129,154 @@ setInterval(() => {
 structuredLog("info", "module_loaded", { detail: "Atlas Global + Platform v2: All endpoints registered" });
 structuredLog("info", "module_loaded", { detail: "New modules: Atlas Epistemic Engine, Autogen v2, Council Protocol, Social Layer, Collaboration, RBAC, Analytics, Webhook" });
 structuredLog("info", "module_loaded", { detail: "Atlas v2 Default-On: Write Guard, Scope Router, 3-Lane Separation, Invariant Monitor, Heartbeats, Auto-Promote Gate" });
+
+// ── Semantic Intelligence API Endpoints ──────────────────────────────────────
+
+// Embedding status
+app.get("/api/embeddings/status", asyncHandler(async (_req, res) => {
+  res.json({ ok: true, ...getEmbeddingStatus(STATE.dtus.size) });
+}));
+
+// Semantic search
+app.get("/api/dtus/search/semantic", asyncHandler(async (req, res) => {
+  const { q, lens, limit } = req.query;
+  if (!q) return res.status(400).json({ ok: false, error: "q (query) is required" });
+
+  const topK = Math.min(Number(limit) || 10, 50);
+  const all = dtusArray();
+  const results = await semanticSearch(String(q), all, { lens: lens || null, topK });
+
+  // Enrich results with DTU data
+  const enriched = results.map(r => {
+    const dtu = all.find(d => d.id === r.id);
+    return {
+      id: r.id,
+      title: dtu?.title || r.title || "",
+      tier: r.tier || "regular",
+      tags: dtu?.tags || [],
+      score: Math.round(r.score * 1000) / 1000,
+      rawSimilarity: Math.round((r.rawSimilarity || 0) * 1000) / 1000,
+      summary: (dtu?.human?.summary || dtu?.cretiHuman || "").slice(0, 300),
+    };
+  });
+
+  res.json({ ok: true, query: q, lens: lens || null, results: enriched, total: enriched.length });
+}));
+
+// Cross-domain connections for a DTU
+app.get("/api/dtus/:id/connections", asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const limit = Math.min(Number(req.query.limit) || 5, 20);
+  const all = dtusArray();
+
+  const connections = await findCrossDomainConnections(id, all, limit);
+  res.json({ ok: true, dtuId: id, connections });
+}));
+
+// Semantic cache stats
+app.get("/api/cache/stats", asyncHandler(async (_req, res) => {
+  res.json({ ok: true, ...getCacheStats() });
+}));
+
+// Record cache satisfaction (thumbs up/down)
+app.post("/api/cache/satisfaction", asyncHandler(async (req, res) => {
+  const { lens, satisfied } = req.body || {};
+  recordCacheSatisfaction(lens || null, !!satisfied);
+  res.json({ ok: true });
+}));
+
+// Distillation stats
+app.get("/api/distillation/stats", asyncHandler(async (_req, res) => {
+  res.json({ ok: true, ...getDistillationStats() });
+}));
+
+// Precompute stats
+app.get("/api/precompute/stats", asyncHandler(async (_req, res) => {
+  res.json({ ok: true, ...getPrecomputeStats() });
+}));
+
+// Model optimizer — assess all lenses
+app.get("/api/model-optimizer/lenses", asyncHandler(async (_req, res) => {
+  const assessments = assessAllLenses({ dtusArray });
+  res.json({ ok: true, lenses: assessments });
+}));
+
+// Model optimizer — assess single lens
+app.get("/api/model-optimizer/lens/:lens", asyncHandler(async (req, res) => {
+  const assessment = assessLensMaturity(req.params.lens, { dtusArray });
+  res.json({ ok: true, ...assessment });
+}));
+
+// Model optimizer stats
+app.get("/api/model-optimizer/stats", asyncHandler(async (_req, res) => {
+  res.json({ ok: true, ...getModelOptimizerStats() });
+}));
+
+// Affect system state
+app.get("/api/affect/system", asyncHandler(async (_req, res) => {
+  res.json({ ok: true, ...getSystemAffectState() });
+}));
+
+// Economics — current period
+app.get("/api/economics/current", asyncHandler(async (req, res) => {
+  const hours = Number(req.query.hours) || 24;
+  res.json({ ok: true, ...calculateEconomics(hours) });
+}));
+
+// Economics — trend
+app.get("/api/economics/trend", asyncHandler(async (req, res) => {
+  const days = Math.min(Number(req.query.days) || 30, 90);
+  res.json({ ok: true, trend: getCostPerUserTrend(days) });
+}));
+
+// Economics — projection
+app.get("/api/economics/projection", asyncHandler(async (req, res) => {
+  const users = Number(req.query.users) || 10000;
+  res.json({ ok: true, ...projectCosts(users) });
+}));
+
+// Self-healing: flag a DTU as problematic
+app.post("/api/heal/flag", asyncHandler(async (req, res) => {
+  const { dtuId, rating, correction } = req.body || {};
+  if (!dtuId) return res.status(400).json({ ok: false, error: "dtuId is required" });
+  const result = await flagAndHeal(dtuId, { rating, correction }, { dtusArray });
+  res.json({ ok: true, ...result });
+}));
+
+// Self-healing: get stats
+app.get("/api/heal/stats", asyncHandler(async (_req, res) => {
+  res.json({ ok: true, ...getSelfHealingStats() });
+}));
+
+// Self-healing: assess freshness
+app.get("/api/heal/freshness", asyncHandler(async (req, res) => {
+  const { lens, maxAgeDays } = req.query;
+  const stale = assessFreshness({ dtusArray }, { lens: lens || null, maxAgeDays: Number(maxAgeDays) || 7 });
+  res.json({ ok: true, stale, count: stale.length });
+}));
+
+// Knowledge gaps
+app.get("/api/skill/gaps", asyncHandler(async (_req, res) => {
+  const gaps = detectKnowledgeGaps(72);
+  res.json({ ok: true, gaps });
+}));
+
+// Combined intelligence dashboard
+app.get("/api/intelligence/dashboard", asyncHandler(async (_req, res) => {
+  res.json({
+    ok: true,
+    embeddings: getEmbeddingStatus(STATE.dtus.size),
+    cache: getCacheStats(),
+    distillation: getDistillationStats(),
+    precompute: getPrecomputeStats(),
+    modelOptimizer: getModelOptimizerStats(),
+    affect: getSystemAffectState(),
+    economics: getEconomicsStats(),
+    selfHealing: getSelfHealingStats(),
+  });
+}));
+
+structuredLog("info", "module_loaded", { detail: "Semantic Intelligence Layer: embeddings, cache, distillation, precompute, model optimizer, affect, economics" });
 
 // ── "Everything Real": Register durable DB-backed endpoints ──────────────────
 registerDurableEndpoints(app, db);

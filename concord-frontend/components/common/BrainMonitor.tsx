@@ -35,6 +35,26 @@ interface BrainInfo {
   avgResponseMs: number;
 }
 
+interface EmbeddingStatus {
+  available: boolean;
+  model: string | null;
+  dimension: number;
+  cached: number;
+  totalDTUs: number;
+  coverage: number;
+  backfill: {
+    complete: boolean;
+    progress: number;
+    total: number;
+  };
+  stats: {
+    totalEmbedded: number;
+    totalRequests: number;
+    totalErrors: number;
+    avgEmbedMs: number;
+  };
+}
+
 interface BrainStatusResponse {
   ok: boolean;
   mode: 'three_brain' | 'partial' | 'fallback';
@@ -44,6 +64,7 @@ interface BrainStatusResponse {
     subconscious: BrainInfo;
     utility: BrainInfo;
   };
+  embeddings?: EmbeddingStatus;
 }
 
 const BRAIN_CONFIG = {
@@ -185,6 +206,61 @@ export function BrainMonitor() {
           <BrainCard key={name} name={name} brain={data.brains[name]} />
         ))}
       </div>
+
+      {/* Embedding Status */}
+      {data.embeddings && (
+        <div className="mt-3 rounded-lg border p-3 bg-amber-500/10 border-amber-500/30">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <Zap className="w-4 h-4 text-amber-400" />
+              <span className="text-sm font-medium text-amber-400">Embeddings</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className={cn('w-2 h-2 rounded-full', data.embeddings.available ? 'bg-amber-400 animate-pulse' : 'bg-red-500')} />
+              <span className="text-xs text-lattice-text-secondary">
+                {data.embeddings.available ? data.embeddings.model || 'Active' : 'Offline'}
+              </span>
+            </div>
+          </div>
+
+          {data.embeddings.available && (
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+              <div className="flex justify-between">
+                <span className="text-lattice-text-secondary">Coverage</span>
+                <span className="text-lattice-text-primary font-mono">{data.embeddings.coverage}%</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-lattice-text-secondary">Cached</span>
+                <span className="text-lattice-text-primary font-mono">{data.embeddings.cached}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-lattice-text-secondary">Avg ms</span>
+                <span className="text-lattice-text-primary font-mono">{data.embeddings.stats.avgEmbedMs}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-lattice-text-secondary">Errors</span>
+                <span className={cn('font-mono', data.embeddings.stats.totalErrors > 0 ? 'text-red-400' : 'text-lattice-text-primary')}>
+                  {data.embeddings.stats.totalErrors}
+                </span>
+              </div>
+              {!data.embeddings.backfill.complete && data.embeddings.backfill.total > 0 && (
+                <div className="col-span-2 mt-1">
+                  <div className="flex justify-between text-lattice-text-secondary mb-1">
+                    <span>Backfill</span>
+                    <span className="font-mono">{data.embeddings.backfill.progress}/{data.embeddings.backfill.total}</span>
+                  </div>
+                  <div className="w-full h-1 bg-black/30 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-amber-400 rounded-full transition-all"
+                      style={{ width: `${data.embeddings.backfill.total > 0 ? (data.embeddings.backfill.progress / data.embeddings.backfill.total) * 100 : 0}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

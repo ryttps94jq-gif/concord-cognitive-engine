@@ -135,21 +135,46 @@ export function CrossDomainConnections({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // ---- Fetch cross-domain connections via graph.force ----
+  // ---- Fetch cross-domain connections via semantic search (primary) or graph.force (fallback) ----
   const {
-    data: graphData,
+    data: connectionData,
     isLoading: graphLoading,
     error: graphError,
     refetch: refetchGraph,
   } = useQuery({
     queryKey: ['cross-domain-connections', domain],
     queryFn: async () => {
+      // Try semantic search first
+      try {
+        const res = await apiHelpers.semanticSearch.search(domain, { lens: domain, limit: 30 });
+        if (res.data?.ok && res.data.results?.length > 0) {
+          // Convert semantic results to ConnectionItem format
+          const items: ConnectionItem[] = res.data.results
+            .filter((r: { tags?: string[] }) => {
+              const primaryTag = r.tags?.[0]?.toLowerCase() || '';
+              return primaryTag !== '' && primaryTag !== domain.toLowerCase();
+            })
+            .map((r: { id: string; title?: string; tags?: string[]; score?: number; summary?: string }) => ({
+              id: r.id,
+              title: r.title || 'Untitled',
+              sourceDomain: r.tags?.[0] || 'unknown',
+              similarity: r.score ?? 0,
+              excerpt: r.summary,
+            }));
+          return { items, source: 'semantic' as const };
+        }
+      } catch {
+        // Fall through to graph.force
+      }
+
+      // Fallback: graph.force
       const res = await apiHelpers.graph.force({
         centerNode: domain,
         depth: 2,
         maxNodes: 60,
       });
-      return res.data as GraphForceResponse;
+      const graphRes = res.data as GraphForceResponse;
+      return { items: normaliseGraphNodes(graphRes?.nodes || [], domain), source: 'graph' as const };
     },
     staleTime: 60_000,
     enabled: open,
@@ -158,9 +183,8 @@ export function CrossDomainConnections({
 
   // ---- Normalise results ----
   const connections: ConnectionItem[] = useMemo(() => {
-    if (!graphData?.nodes) return [];
-    return normaliseGraphNodes(graphData.nodes, domain);
-  }, [graphData, domain]);
+    return connectionData?.items || [];
+  }, [connectionData]);
 
   // ---- Group by source domain ----
   const grouped: Record<string, ConnectionItem[]> = useMemo(() => {

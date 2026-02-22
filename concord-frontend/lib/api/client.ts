@@ -1496,6 +1496,91 @@ export const apiHelpers = {
     entityExplore: (entityId: string, lens: string) =>
       api.post('/api/brain/entity/explore', { entityId, lens }),
   },
+
+  // ---- Semantic Intelligence Layer ----
+  embeddings: {
+    /** Get embedding subsystem status */
+    status: () => api.get('/api/embeddings/status'),
+  },
+
+  semanticSearch: {
+    /** Semantic search across DTU substrate */
+    search: (q: string, opts?: { lens?: string; limit?: number }) =>
+      api.get('/api/dtus/search/semantic', { params: { q, ...opts } }),
+
+    /** Get cross-domain connections for a DTU */
+    connections: (dtuId: string, limit?: number) =>
+      api.get(`/api/dtus/${dtuId}/connections`, { params: { limit } }),
+  },
+
+  cache: {
+    /** Get semantic cache stats */
+    stats: () => api.get('/api/cache/stats'),
+
+    /** Record user satisfaction for cached response */
+    satisfaction: (lens: string | null, satisfied: boolean) =>
+      api.post('/api/cache/satisfaction', { lens, satisfied }),
+  },
+
+  distillation: {
+    /** Get knowledge distillation stats */
+    stats: () => api.get('/api/distillation/stats'),
+  },
+
+  precompute: {
+    /** Get predictive pre-computation stats */
+    stats: () => api.get('/api/precompute/stats'),
+  },
+
+  modelOptimizer: {
+    /** Assess all lenses for model recommendations */
+    lenses: () => api.get('/api/model-optimizer/lenses'),
+
+    /** Assess a single lens */
+    lens: (lens: string) => api.get(`/api/model-optimizer/lens/${lens}`),
+
+    /** Get model optimizer stats */
+    stats: () => api.get('/api/model-optimizer/stats'),
+  },
+
+  affectIntelligence: {
+    /** Get system-wide affect state (aggregate sentiment) */
+    system: () => api.get('/api/affect/system'),
+  },
+
+  economics: {
+    /** Get current period economics */
+    current: (hours?: number) => api.get('/api/economics/current', { params: { hours } }),
+
+    /** Get cost-per-user trend */
+    trend: (days?: number) => api.get('/api/economics/trend', { params: { days } }),
+
+    /** Get cost projections at scale */
+    projection: (users?: number) => api.get('/api/economics/projection', { params: { users } }),
+  },
+
+  intelligence: {
+    /** Get combined intelligence dashboard data */
+    dashboard: () => api.get('/api/intelligence/dashboard'),
+  },
+
+  selfHealing: {
+    /** Flag a DTU as problematic for self-healing */
+    flag: (dtuId: string, rating?: number, correction?: string) =>
+      api.post('/api/heal/flag', { dtuId, rating, correction }),
+
+    /** Get self-healing stats */
+    stats: () => api.get('/api/heal/stats'),
+
+    /** Assess DTU freshness */
+    freshness: (lens?: string, maxAgeDays?: number) =>
+      api.get('/api/heal/freshness', { params: { lens, maxAgeDays } }),
+  },
+
+  skillGaps: {
+    /** Get detected knowledge gaps */
+    gaps: () => api.get('/api/skill/gaps'),
+  },
 };
 
 // CSRF token is fetched lazily before the first state-changing request.
