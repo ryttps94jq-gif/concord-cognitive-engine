@@ -1097,7 +1097,7 @@ function TaskDetailPanel({
               <Paperclip className="w-3 h-3 text-gray-600 flex-shrink-0" />
             </div>
           ))}
-          <button className="flex items-center gap-1.5 px-3 py-1.5 w-full rounded-md border border-dashed border-white/10 text-xs text-gray-500 hover:text-gray-300 hover:border-white/20 transition-colors justify-center">
+          <button onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.click(); }} className="flex items-center gap-1.5 px-3 py-1.5 w-full rounded-md border border-dashed border-white/10 text-xs text-gray-500 hover:text-gray-300 hover:border-white/20 transition-colors justify-center">
             <Upload className="w-3.5 h-3.5" />
             Upload file
           </button>

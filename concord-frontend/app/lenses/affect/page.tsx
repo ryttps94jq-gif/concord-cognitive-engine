@@ -39,7 +39,7 @@ export default function AffectLensPage() {
   const [intensity, setIntensity] = useState(0.5);
   const [polarity, setPolarity] = useState(0.0);
 
-  const { data: state, isLoading: _stateLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
+  const { data: state, isLoading: stateLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
     queryKey: ['affect-state', sessionId],
     queryFn: () => apiHelpers.affect.state(sessionId).then((r) => r.data),
     refetchInterval: 3000,
@@ -90,6 +90,17 @@ export default function AffectLensPage() {
   const policyData = policy?.policy || policy || {};
 
 
+  if (stateLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-pink border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading affect state...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (isError || isError2 || isError3 || isError4) {
     return (
       <div className="flex items-center justify-center h-full p-8">
@@ -119,13 +130,15 @@ export default function AffectLensPage() {
           />
           <button
             onClick={() => resetAffect.mutate(undefined)}
-            className="btn-neon flex items-center gap-1 text-sm"
+            disabled={resetAffect.isPending}
+            className="btn-neon flex items-center gap-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <RefreshCw className="w-3 h-3" /> Reset
+            <RefreshCw className={`w-3 h-3 ${resetAffect.isPending ? 'animate-spin' : ''}`} /> {resetAffect.isPending ? 'Resetting...' : 'Reset'}
           </button>
           <button
             onClick={() => resetAffect.mutate('cooldown')}
-            className="btn-neon flex items-center gap-1 text-sm"
+            disabled={resetAffect.isPending}
+            className="btn-neon flex items-center gap-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             title="Council-mandated cooldown"
           >
             <Shield className="w-3 h-3" /> Cooldown

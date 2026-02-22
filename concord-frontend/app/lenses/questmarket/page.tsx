@@ -1,8 +1,8 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useState } from 'react';
 import { Target, Trophy, Coins, Clock, Users } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -24,23 +24,20 @@ export default function QuestmarketLensPage() {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<string>('all');
 
-  const { data: quests, isError: isError, error: error, refetch: refetch,} = useQuery({
-    queryKey: ['quests', filter],
-    queryFn: () =>
-      api.get('/api/quests', { params: { status: filter } }).then((r) => r.data),
-  });
+  const { items: questItems, isLoading, isError: isError, error: error, refetch: refetch } = useLensData<Record<string, unknown>>('questmarket', 'quest', { seed: [], status: filter !== 'all' ? filter : undefined });
+  const quests = questItems.map(i => ({ id: i.id, title: i.title, ...(i.data || {}) }));
 
-  const { data: myQuests, isError: isError2, error: error2, refetch: refetch2,} = useQuery({
-    queryKey: ['my-quests'],
-    queryFn: () => api.get('/api/quests/mine').then((r) => r.data),
-  });
+  const { items: myQuestItems, isError: isError2, error: error2, refetch: refetch2 } = useLensData<Record<string, unknown>>('questmarket', 'my-quest', { seed: [] });
+  const myQuests = myQuestItems.map(i => ({ id: i.id, title: i.title, ...(i.data || {}) }));
 
+  const { update: updateQuest } = useLensData<Record<string, unknown>>('questmarket', 'quest', { noSeed: true });
   const claimQuest = useMutation({
-    mutationFn: (questId: string) => api.post(`/api/quests/${questId}/claim`),
+    mutationFn: (questId: string) => updateQuest(questId, { data: { status: 'claimed', claimedAt: new Date().toISOString() } }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['quests'] });
-      queryClient.invalidateQueries({ queryKey: ['my-quests'] });
+      refetch();
+      refetch2();
     },
+    onError: (err) => console.error('claimQuest failed:', err instanceof Error ? err.message : err),
   });
 
   const difficultyColors = {
@@ -50,6 +47,17 @@ export default function QuestmarketLensPage() {
     legendary: 'bg-neon-pink/20 text-neon-pink border-neon-pink/30 animate-pulse',
   };
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2) {
     return (

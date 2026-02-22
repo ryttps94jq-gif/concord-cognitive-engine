@@ -3,7 +3,7 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Clock, Zap, Activity, Play, Pause, RefreshCw } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 
@@ -22,22 +22,33 @@ export default function TickLensPage() {
   const [tickHistory, setTickHistory] = useState<TickEvent[]>([]);
 
   // Backend: GET /api/events for tick history
-  const { data: events, isError: isError, error: error, refetch: refetch,} = useQuery({
+  const { data: events, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
     queryKey: ['events'],
     queryFn: () => api.get('/api/events').then((r) => r.data),
     refetchInterval: isLive ? 2000 : false,
   });
 
-  // Simulate tick events from real events
+  // Track the last event set to avoid unnecessary re-renders
+  const prevEventIdsRef = useRef<string>('');
+
+  // Derive tick events from real event data (no random values)
   useEffect(() => {
     if (events?.events) {
+      // Build a fingerprint of current event IDs to compare with previous
+      const eventIds = events.events
+        .slice(0, 50)
+        .map((e: Record<string, unknown>) => e.id || '')
+        .join(',');
+      if (eventIds === prevEventIdsRef.current) return;
+      prevEventIdsRef.current = eventIds;
+
       const ticks: TickEvent[] = events.events.slice(0, 50).map((e: Record<string, unknown>, i: number) => ({
-        id: e.id || `tick-${i}`,
-        type: e.type || 'kernel',
-        signal: Math.random() * 0.8 + 0.2,
-        stress: Math.random() * 0.3,
-        timestamp: e.at || new Date().toISOString(),
-        organ: ['growth_os', 'council_engine', 'dtu_forge', 'resonance_core'][i % 4],
+        id: (e.id as string) || `tick-${i}`,
+        type: (e.type as string) || 'kernel',
+        signal: Number(e.severity ?? e.priority ?? 0.5),
+        stress: Number(e.stress ?? e.urgency ?? (e.type === 'error' ? 0.25 : 0.1)),
+        timestamp: (e.at as string) || (e.timestamp as string) || new Date().toISOString(),
+        organ: (e.source as string) || (e.domain as string) || 'unknown',
       }));
       setTickHistory(ticks);
     }
@@ -51,6 +62,17 @@ export default function TickLensPage() {
     ? tickHistory.reduce((s, t) => s + t.stress, 0) / tickHistory.length
     : 0;
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError) {
     return (

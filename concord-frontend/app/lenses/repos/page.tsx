@@ -73,22 +73,22 @@ export default function ReposLensPage() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('code');
   const [selectedRepo, setSelectedRepo] = useState<string | null>(null);
 
-  const { data: repos, isError: isError, error: error, refetch: refetch,} = useQuery({
+  const { data: repos, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
     queryKey: ['repos-list'],
     queryFn: () => api.get('/api/dtus', { params: { tags: 'repo' } }).then(r =>
       r.data?.dtus?.map((dtu: Record<string, unknown>, i: number) => ({
         id: dtu.id as string,
         name: (dtu.title as string) || `project-${i}`,
         description: (dtu.content as string)?.slice(0, 100) || 'A Concord DTU repository',
-        language: ['TypeScript', 'Python', 'Rust', 'Go', 'JavaScript'][i % 5],
-        stars: Math.floor(Math.random() * 1000),
-        forks: Math.floor(Math.random() * 200),
-        watchers: Math.floor(Math.random() * 50),
-        issues: Math.floor(Math.random() * 30),
-        pullRequests: Math.floor(Math.random() * 10),
+        language: (dtu.language as string) || ['TypeScript', 'Python', 'Rust', 'Go', 'JavaScript'][i % 5],
+        stars: (dtu.stars as number) ?? 0,
+        forks: (dtu.forks as number) ?? 0,
+        watchers: (dtu.watchers as number) ?? 0,
+        issues: (dtu.issues as number) ?? 0,
+        pullRequests: (dtu.pullRequests as number) ?? 0,
         updatedAt: (dtu.updatedAt || dtu.createdAt) as string,
-        isPrivate: Math.random() > 0.7,
-        defaultBranch: 'main'
+        isPrivate: (dtu.isPrivate as boolean) ?? false,
+        defaultBranch: (dtu.defaultBranch as string) || 'main'
       })) || generateMockRepos()
     ),
   });
@@ -98,15 +98,12 @@ export default function ReposLensPage() {
     queryFn: () => api.get('/api/dtus', { params: { tags: 'issue' } }).then(r =>
       r.data?.dtus?.map((dtu: Record<string, unknown>, i: number) => ({
         id: dtu.id as string,
-        number: i + 1,
+        number: (dtu.number as number) ?? i + 1,
         title: (dtu.title as string) || (dtu.content as string)?.slice(0, 60),
-        state: Math.random() > 0.3 ? 'open' : 'closed',
-        author: 'user',
-        labels: [
-          { name: 'bug', color: 'd73a4a' },
-          { name: 'enhancement', color: 'a2eeef' },
-        ].slice(0, Math.floor(Math.random() * 3)),
-        comments: Math.floor(Math.random() * 20),
+        state: (dtu.state as 'open' | 'closed') || 'open',
+        author: (dtu.author as string) || 'user',
+        labels: (dtu.labels as { name: string; color: string }[]) || [],
+        comments: (dtu.comments as number) ?? 0,
         createdAt: dtu.createdAt as string
       })) || []
     ),
@@ -125,8 +122,8 @@ export default function ReposLensPage() {
           message: String(e.type || e.summary || 'Update'),
           author: 'system',
           date: String(e.createdAt || new Date().toISOString()),
-          additions: Math.floor(Math.random() * 50),
-          deletions: Math.floor(Math.random() * 20),
+          additions: (e.additions as number) ?? 0,
+          deletions: (e.deletions as number) ?? 0,
         })) as Commit[];
       } catch {
         return [] as Commit[];
@@ -166,6 +163,17 @@ export default function ReposLensPage() {
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2 || isError3) {
     return (

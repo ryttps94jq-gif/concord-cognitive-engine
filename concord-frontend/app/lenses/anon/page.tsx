@@ -1,8 +1,8 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { useMutation } from '@tanstack/react-query';
+import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useState } from 'react';
 import { Shield, Send, RefreshCw, Eye, EyeOff, Lock } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -18,39 +18,50 @@ interface AnonMessage {
 export default function AnonLensPage() {
   useLensNav('anon');
 
-  const queryClient = useQueryClient();
   const [message, setMessage] = useState('');
   const [recipient, setRecipient] = useState('');
   const [showMessages, setShowMessages] = useState(true);
   const [ephemeral, setEphemeral] = useState(false);
 
-  const { data: messages, isError: isError, error: error, refetch: refetch,} = useQuery({
-    queryKey: ['anon-messages'],
-    queryFn: () => api.get('/api/anon/messages').then((r) => r.data),
-  });
+  const { items: messageItems, isLoading, isError: isError, error: error, refetch: refetch, create: createMessage } = useLensData<Record<string, unknown>>('anon', 'message', { seed: [] });
+  const messages = messageItems.map(i => ({ id: i.id, ...(i.data || {}) }));
 
-  const { data: identity, isError: isError2, error: error2, refetch: refetch2,} = useQuery({
-    queryKey: ['anon-identity'],
-    queryFn: () => api.get('/api/anon/identity').then((r) => r.data),
-  });
+  const { items: identityItems, isError: isError2, error: error2, refetch: refetch2, create: createIdentity, remove: removeIdentity } = useLensData<Record<string, unknown>>('anon', 'identity', { seed: [] });
+  const identity = identityItems.length > 0 ? identityItems[0].data : null;
 
   const sendMessage = useMutation({
     mutationFn: (payload: { content: string; recipient: string; ephemeral: boolean }) =>
-      api.post('/api/anon/send', payload),
+      createMessage({ title: 'message', data: payload }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['anon-messages'] });
+      refetch();
       setMessage('');
       setRecipient('');
     },
+    onError: (err) => console.error('Send anonymous message failed:', err instanceof Error ? err.message : err),
   });
 
   const rotateIdentity = useMutation({
-    mutationFn: () => api.post('/api/anon/rotate'),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['anon-identity'] });
+    mutationFn: async () => {
+      if (identityItems.length > 0) await removeIdentity(identityItems[0].id);
+      return createIdentity({ title: 'identity', data: { alias: `anon-${Math.random().toString(36).slice(2, 8)}`, rotatedAt: new Date().toISOString() } });
     },
+    onSuccess: () => {
+      refetch2();
+    },
+    onError: (err) => console.error('Identity rotation failed:', err instanceof Error ? err.message : err),
   });
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-green border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2) {
     return (

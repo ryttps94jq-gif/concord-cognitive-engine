@@ -3,7 +3,7 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-
+import { useLensData } from '@/lib/hooks/use-lens-data';
 import { api } from '@/lib/api/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -207,61 +207,28 @@ export default function GameLensPage() {
   const [activeTab, setActiveTab] = useState<MainTab>('dashboard');
   const [lbPeriod, setLbPeriod] = useState<LeaderboardPeriod>('alltime');
   const [shopItems, setShopItems] = useState<ShopItem[]>(SHOP_ITEMS);
-  const [playerXp, setPlayerXp] = useState(INITIAL_PROFILE.xp);
+  const [playerXp, setPlayerXp] = useState(0);
   const [expandedBranch, setExpandedBranch] = useState<SkillBranch | null>('production');
   const [showCreateChallenge, setShowCreateChallenge] = useState(false);
   const [newChallenge, setNewChallenge] = useState({ name: '', description: '', difficulty: 'medium' as Quest['difficulty'], xpReward: 300 });
   const [unlockAnim, setUnlockAnim] = useState<string | null>(null);
   const [questFilter, setQuestFilter] = useState<'all' | 'daily' | 'weekly' | 'challenge'>('all');
 
-  // Fetch achievements from backend
-  const { data: achievements = INITIAL_ACHIEVEMENTS, isError: isError, error: error, refetch: refetch } = useQuery({
-    queryKey: ['game-achievements'],
-    queryFn: () => api.get('/api/game/achievements').then(r => {
-      const achs = r.data?.achievements || [];
-      return achs.map((a: Record<string, unknown>) => ({
-        id: a.id || String(a.name),
-        name: String(a.name || a.id || ''),
-        description: String(a.description || ''),
-        icon: String(a.icon || '🏆'),
-        xpReward: Number(a.xpReward || a.reward || 0),
-        unlocked: Boolean(a.earned || a.unlocked),
-        progress: Number(a.progress || 0),
-        maxProgress: Number(a.maxProgress || a.target || 1),
-        rarity: (a.rarity as Achievement['rarity']) || 'common',
-      })) as Achievement[];
-    }).catch(() => INITIAL_ACHIEVEMENTS),
-  });
+  // Fetch achievements via useLensData (no /api/game/* backend exists)
+  const { items: achievementItems, isLoading, isError: isError, error: error, refetch: refetch } = useLensData<Achievement>('game', 'achievement', { seed: [] });
+  const achievements: Achievement[] = achievementItems.map(i => ({ ...(i.data as unknown as Achievement), id: i.id }));
 
-  // Fetch challenges/quests from backend
-  const { data: quests = INITIAL_QUESTS, isError: isError2, error: error2, refetch: refetch2 } = useQuery({
-    queryKey: ['game-challenges'],
-    queryFn: () => api.get('/api/game/challenges').then(r => {
-      const chals = r.data?.challenges || [];
-      return chals.map((c: Record<string, unknown>) => ({
-        id: String(c.id || ''),
-        name: String(c.name || ''),
-        description: String(c.description || ''),
-        icon: '🎯',
-        xpReward: Number(c.reward || c.xpReward || 100),
-        difficulty: 'medium' as Quest['difficulty'],
-        type: 'challenge' as Quest['type'],
-        status: 'available' as QuestStatus,
-      })) as Quest[];
-    }).catch(() => INITIAL_QUESTS),
-  });
+  // Fetch challenges/quests via useLensData
+  const { items: questItems, isError: isError2, error: error2, refetch: refetch2 } = useLensData<Quest>('game', 'quest', { seed: [] });
+  const quests: Quest[] = questItems.map(i => ({ ...(i.data as unknown as Quest), id: i.id }));
 
-  // Fetch profile from backend, fall back to initial data
-  const { data: profileData, isError: isError3, error: error3, refetch: refetch3 } = useQuery({
-    queryKey: ['game-profile'],
-    queryFn: () => api.get('/api/game/profile').then(r => r.data?.profile || r.data || INITIAL_PROFILE).catch(() => INITIAL_PROFILE),
-  });
+  // Fetch profile via useLensData
+  const { items: profileItems, isError: isError3, error: error3, refetch: refetch3 } = useLensData<Record<string, unknown>>('game', 'profile', { seed: [] });
+  const profileData = profileItems.length > 0 ? profileItems[0].data : null;
 
-  // Fetch leaderboard from backend
-  const { data: leaderboardData, isError: isError4, error: error4, refetch: refetch4 } = useQuery({
-    queryKey: ['game-leaderboard', lbPeriod],
-    queryFn: () => api.get('/api/game/leaderboard', { params: { period: lbPeriod } }).then(r => r.data?.leaderboard || r.data?.players || []).catch(() => []),
-  });
+  // Fetch leaderboard via useLensData
+  const { items: leaderboardItems, isError: isError4, error: error4, refetch: refetch4 } = useLensData<Record<string, unknown>>('game', 'leaderboard', { seed: [] });
+  const leaderboardData = leaderboardItems.map(i => i.data);
 
   // Sync profile data into local state when available
   useEffect(() => {
@@ -271,9 +238,10 @@ export default function GameLensPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profileData]);
 
+  const { update: updateQuest } = useLensData<Quest>('game', 'quest', { noSeed: true });
   const completeQuestMutation = useMutation({
-    mutationFn: (questId: string) => api.post(`/api/game/quests/${questId}/complete`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['game-profile'] }),
+    mutationFn: (questId: string) => updateQuest(questId, { data: { status: 'completed' } as unknown as Partial<Quest> }),
+    onSuccess: () => { refetch2(); refetch3(); },
     onError: (err) => {
       console.error('Failed to complete quest:', err instanceof Error ? err.message : err);
     },
@@ -340,14 +308,14 @@ export default function GameLensPage() {
 
   const sortedLeaderboard = useMemo(() => {
     const apiPlayers = leaderboardData || [];
-    return apiPlayers.length > 0 ? [...apiPlayers].sort((a: LeaderboardPlayer, b: LeaderboardPlayer) => b.xp - a.xp) : [...INITIAL_LEADERBOARD].sort((a, b) => b.xp - a.xp);
+    return [...apiPlayers].sort((a: LeaderboardPlayer, b: LeaderboardPlayer) => b.xp - a.xp);
   }, [leaderboardData]);
 
-  const profile = profileData || INITIAL_PROFILE;
-  const xpHistory = profile.xpHistory || INITIAL_XP_HISTORY;
+  const profile = profileData || { level: 1, xp: 0, nextLevelXp: 1000, totalXpEarned: 0, achievements: 0, totalAchievements: 0, streak: 0, longestStreak: 0, questsCompleted: 0, challengesWon: 0, completionRate: 0, rank: 0, xpHistory: [] };
+  const xpHistory = profile.xpHistory || [];
   const xpMax = Math.max(1, ...xpHistory.map((d: { xp: number }) => d.xp));
-  const level = profile.level || INITIAL_PROFILE.level;
-  const progressPct = ((playerXp) / (profile.nextLevelXp || INITIAL_PROFILE.nextLevelXp)) * 100;
+  const level = profile.level || 1;
+  const progressPct = ((playerXp) / (profile.nextLevelXp || 1000)) * 100;
 
   const TABS: { id: MainTab; label: string; icon: typeof Trophy }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
@@ -363,6 +331,17 @@ export default function GameLensPage() {
   // Render
   // ---------------------------------------------------------------------------
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2 || isError3 || isError4) {
     return (

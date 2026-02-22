@@ -1,8 +1,8 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useState } from 'react';
 import { Atom, Beaker, FlaskConical, Sparkles, Zap } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -29,23 +29,20 @@ export default function ChemLensPage() {
   const [selectedCompound, setSelectedCompound] = useState<string | null>(null);
   const [reactionInput, setReactionInput] = useState('');
 
-  const { data: compounds, isError: isError, error: error, refetch: refetch,} = useQuery({
-    queryKey: ['chem-compounds'],
-    queryFn: () => api.get('/api/chem/compounds').then((r) => r.data),
-  });
+  const { items: compoundItems, isLoading, isError: isError, error: error, refetch: refetch } = useLensData<Record<string, unknown>>('chem', 'compound', { seed: [] });
+  const compounds = compoundItems.map(i => ({ id: i.id, ...(i.data || {}) }));
 
-  const { data: reactions, isError: isError2, error: error2, refetch: refetch2,} = useQuery({
-    queryKey: ['chem-reactions'],
-    queryFn: () => api.get('/api/chem/reactions').then((r) => r.data),
-  });
+  const { items: reactionItems, isError: isError2, error: error2, refetch: refetch2, create: createReaction } = useLensData<Record<string, unknown>>('chem', 'reaction', { seed: [] });
+  const reactions = reactionItems.map(i => ({ id: i.id, ...(i.data || {}) }));
 
   const runReaction = useMutation({
-    mutationFn: (formula: string) => api.post('/api/chem/react', { formula }),
+    mutationFn: (formula: string) => createReaction({ title: formula, data: { formula, ranAt: new Date().toISOString() } }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['chem-compounds'] });
-      queryClient.invalidateQueries({ queryKey: ['chem-reactions'] });
+      refetch();
+      refetch2();
       setReactionInput('');
     },
+    onError: (err) => console.error('runReaction failed:', err instanceof Error ? err.message : err),
   });
 
   const typeColors = {
@@ -54,6 +51,17 @@ export default function ChemLensPage() {
     product: 'bg-neon-green/20 text-neon-green border-neon-green/30',
   };
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-purple border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2) {
     return (

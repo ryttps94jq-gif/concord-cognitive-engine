@@ -7,6 +7,7 @@ import { api } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
+import { ErrorState } from '@/components/common/EmptyState';
 import {
   Play, FileCode, Terminal, FolderTree, Plus, X,
   ChevronRight, ChevronDown, File, Folder, FolderOpen,
@@ -583,7 +584,7 @@ export default function CodeLensPage() {
   useLensNav('code');
 
   // Persist scripts to backend
-  const { create: saveScript, items: savedScripts } = useLensData('code', 'script', { noSeed: true });
+  const { isLoading, isError, error, refetch, create: saveScript, items: savedScripts } = useLensData('code', 'script', { noSeed: true });
 
   const [files, setFiles] = useState<FileNode[]>(TEMPLATE_FILES);
   const [tabs, setTabs] = useState<Tab[]>([
@@ -756,6 +757,25 @@ export default function CodeLensPage() {
       </div>
     );
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <ErrorState error={error?.message} onRetry={refetch} />
+      </div>
+    );
+  }
 
   return (
     <div className={`flex flex-col ${isFullscreen ? 'fixed inset-0 z-50 bg-lattice-deep' : 'h-full'}`}>

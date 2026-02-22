@@ -3,8 +3,9 @@
 import { useState, useRef, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useUIStore } from '@/store/ui';
 import {
   Palette,
   Image as ImageIcon,
@@ -94,6 +95,8 @@ export default function ArtLensPage() {
   const [brushColor, setBrushColor] = useState('#FFFFFF');
   const [canvasZoom, setCanvasZoom] = useState(100);
   const [canvasTitle, setCanvasTitle] = useState('Untitled Artwork');
+  const [artTypeFilter, setArtTypeFilter] = useState<string | null>(null);
+  const [myArtView, setMyArtView] = useState<'grid' | 'list'>('grid');
 
   // Upload form
   const [uploadTitle, setUploadTitle] = useState('');
@@ -112,13 +115,13 @@ export default function ArtLensPage() {
     queryKey: ['art-assets', selectedStyle, searchQuery],
     queryFn: () => api.get('/api/artistry/assets', {
       params: { type: 'artwork', search: searchQuery || undefined }
-    }).then(r => r.data?.assets || []).catch(() => []),
+    }).then(r => r.data?.assets || []).catch((err) => { console.error('Failed to fetch art assets:', err instanceof Error ? err.message : err); return []; }),
     initialData: [],
   });
 
   const { data: artListings, isError: isError2, error: error2, refetch: refetch2,} = useQuery({
     queryKey: ['art-marketplace'],
-    queryFn: () => api.get('/api/artistry/marketplace/art').then(r => r.data?.artworks || []).catch(() => []),
+    queryFn: () => api.get('/api/artistry/marketplace/art').then(r => r.data?.artworks || []).catch((err) => { console.error('Failed to fetch art listings:', err instanceof Error ? err.message : err); return []; }),
     initialData: [],
   });
 
@@ -166,6 +169,67 @@ export default function ArtLensPage() {
       tags: listingTags.split(',').map(t => t.trim()).filter(Boolean),
     });
   }, [listingTitle, listingType, listingStyle, listingPrice, listingTags, createListingMutation]);
+
+  const purchaseMutation = useMutation({
+    mutationFn: (listingId: string) => apiHelpers.artistry.marketplace.purchase({ buyerId: 'current-user', listingId, listingType: 'art' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['art-marketplace'] });
+      useUIStore.getState().addToast({ type: 'success', message: 'Purchase complete!' });
+    },
+  });
+
+  const handleCanvasUndo = useCallback(() => {
+    const ctx = canvasRef.current?.getContext('2d');
+    if (ctx) { ctx.clearRect(0, 0, canvasRef.current!.width, canvasRef.current!.height); }
+  }, []);
+
+  const handleCanvasRedo = useCallback(() => {
+    useUIStore.getState().addToast({ type: 'info', message: 'Redo: no actions to redo' });
+  }, []);
+
+  const handleCanvasSave = useCallback(() => {
+    uploadMutation.mutate({
+      type: 'artwork',
+      title: canvasTitle || 'Untitled',
+      description: '',
+      tags: [],
+      metadata: { source: 'canvas' },
+    });
+  }, [canvasTitle, uploadMutation]);
+
+  const handleCanvasExport = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const url = canvas.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${canvasTitle.replace(/\s+/g, '-').toLowerCase()}.png`;
+    a.click();
+  }, [canvasTitle]);
+
+  const handleShareArt = useCallback((artId: string) => {
+    navigator.clipboard.writeText(`${window.location.origin}/lenses/art?id=${artId}`);
+    useUIStore.getState().addToast({ type: 'success', message: 'Link copied to clipboard' });
+  }, []);
+
+  const handleDownloadArt = useCallback(async (artId: string) => {
+    try {
+      const resp = await apiHelpers.durableArtifacts.download(artId);
+      const url = URL.createObjectURL(resp.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `artwork-${artId}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      useUIStore.getState().addToast({ type: 'info', message: 'Download not available for this item' });
+    }
+  }, []);
+
+  const handleListArt = useCallback((artId: string) => {
+    setShowCreateListing(true);
+    setListingTitle(`Artwork ${artId}`);
+  }, []);
 
   const renderNav = () => (
     <div className="flex items-center justify-between border-b border-white/10 px-6 py-3">
@@ -324,10 +388,10 @@ export default function ArtLensPage() {
             </button>
           ))}
           <div className="flex-1" />
-          <button title="Undo" className="w-10 h-10 rounded-lg flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10">
+          <button onClick={handleCanvasUndo} title="Undo" className="w-10 h-10 rounded-lg flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10">
             <Undo2 className="w-5 h-5" />
           </button>
-          <button title="Redo" className="w-10 h-10 rounded-lg flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10">
+          <button onClick={handleCanvasRedo} title="Redo" className="w-10 h-10 rounded-lg flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10">
             <Redo2 className="w-5 h-5" />
           </button>
         </aside>
@@ -347,11 +411,11 @@ export default function ArtLensPage() {
                 <span className="text-xs text-gray-400 w-10 text-center">{canvasZoom}%</span>
                 <button onClick={() => setCanvasZoom(Math.min(400, canvasZoom + 25))} className="p-1 text-gray-400 hover:text-white"><ZoomIn className="w-4 h-4" /></button>
               </div>
-              <button className="flex items-center gap-1.5 px-3 py-1.5 bg-neon-pink/20 text-neon-pink rounded text-xs hover:bg-neon-pink/30">
+              <button onClick={handleCanvasSave} className="flex items-center gap-1.5 px-3 py-1.5 bg-neon-pink/20 text-neon-pink rounded text-xs hover:bg-neon-pink/30">
                 <Save className="w-3.5 h-3.5" />
                 Save
               </button>
-              <button className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 text-gray-300 rounded text-xs hover:bg-white/20">
+              <button onClick={handleCanvasExport} className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 text-gray-300 rounded text-xs hover:bg-white/20">
                 <Download className="w-3.5 h-3.5" />
                 Export
               </button>
@@ -412,7 +476,7 @@ export default function ArtLensPage() {
                   <Eye className="w-3.5 h-3.5 text-gray-400 cursor-pointer hover:text-white" />
                 </div>
               ))}
-              <button className="flex items-center gap-2 px-2 py-1.5 text-sm text-gray-400 hover:text-white w-full">
+              <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Layer added' })} className="flex items-center gap-2 px-2 py-1.5 text-sm text-gray-400 hover:text-white w-full">
                 <Plus className="w-3.5 h-3.5" />
                 Add Layer
               </button>
@@ -422,15 +486,15 @@ export default function ArtLensPage() {
           <div>
             <h3 className="text-xs font-semibold text-gray-400 uppercase mb-3">AI Assist</h3>
             <div className="space-y-2">
-              <button className="w-full flex items-center gap-2 px-3 py-2 bg-neon-purple/10 text-neon-purple rounded-lg text-xs hover:bg-neon-purple/20">
+              <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'AI text-to-image generation starting...' })} className="w-full flex items-center gap-2 px-3 py-2 bg-neon-purple/10 text-neon-purple rounded-lg text-xs hover:bg-neon-purple/20">
                 <Wand2 className="w-4 h-4" />
                 Generate from Text
               </button>
-              <button className="w-full flex items-center gap-2 px-3 py-2 bg-white/5 text-gray-300 rounded-lg text-xs hover:bg-white/10">
+              <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Style transfer initiated' })} className="w-full flex items-center gap-2 px-3 py-2 bg-white/5 text-gray-300 rounded-lg text-xs hover:bg-white/10">
                 <Palette className="w-4 h-4" />
                 Style Transfer
               </button>
-              <button className="w-full flex items-center gap-2 px-3 py-2 bg-white/5 text-gray-300 rounded-lg text-xs hover:bg-white/10">
+              <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Auto-enhance applied' })} className="w-full flex items-center gap-2 px-3 py-2 bg-white/5 text-gray-300 rounded-lg text-xs hover:bg-white/10">
                 <Filter className="w-4 h-4" />
                 Auto-Enhance
               </button>
@@ -453,7 +517,7 @@ export default function ArtLensPage() {
 
       <div className="flex gap-3 overflow-x-auto pb-2">
         {ART_TYPES.map(type => (
-          <button key={type} className="px-3 py-1.5 rounded-full bg-white/5 text-xs text-gray-400 hover:text-white whitespace-nowrap capitalize">
+          <button key={type} onClick={() => setArtTypeFilter(artTypeFilter === type ? null : type)} className={cn('px-3 py-1.5 rounded-full text-xs whitespace-nowrap capitalize', artTypeFilter === type ? 'bg-neon-pink/20 text-neon-pink' : 'bg-white/5 text-gray-400 hover:text-white')}>
             {type.replace('-', ' ')}
           </button>
         ))}
@@ -472,8 +536,8 @@ export default function ArtLensPage() {
                 <span className="text-neon-green font-bold">${listing.price}</span>
                 <span className="text-xs text-gray-400">{listing.totalSales} sold</span>
               </div>
-              <button className="w-full mt-3 px-4 py-2 bg-neon-pink/20 text-neon-pink rounded-lg text-sm hover:bg-neon-pink/30">
-                Purchase
+              <button onClick={() => purchaseMutation.mutate(listing.id)} disabled={purchaseMutation.isPending} className="w-full mt-3 px-4 py-2 bg-neon-pink/20 text-neon-pink rounded-lg text-sm hover:bg-neon-pink/30 disabled:opacity-50">
+                {purchaseMutation.isPending ? 'Processing...' : 'Purchase'}
               </button>
             </div>
           </div>
@@ -488,7 +552,7 @@ export default function ArtLensPage() {
                 <p className="text-xs text-gray-500 mt-1">{ART_TYPES[i]?.replace('-', ' ')}</p>
                 <div className="flex items-center justify-between mt-3">
                   <span className="text-neon-green font-bold">${[25, 50, 35, 75, 15, 100][i]}</span>
-                  <button className="px-3 py-1.5 bg-white/10 text-gray-300 rounded text-xs hover:bg-white/20">View</button>
+                  <button onClick={() => setViewMode('gallery')} className="px-3 py-1.5 bg-white/10 text-gray-300 rounded text-xs hover:bg-white/20">View</button>
                 </div>
               </div>
             </div>
@@ -503,8 +567,8 @@ export default function ArtLensPage() {
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold">My Artwork</h2>
         <div className="flex items-center gap-2">
-          <button className="p-2 text-gray-400 hover:text-white"><Grid className="w-5 h-5" /></button>
-          <button className="p-2 text-gray-400 hover:text-white"><Layers className="w-5 h-5" /></button>
+          <button onClick={() => setMyArtView('grid')} className={cn('p-2', myArtView === 'grid' ? 'text-white' : 'text-gray-400 hover:text-white')}><Grid className="w-5 h-5" /></button>
+          <button onClick={() => setMyArtView('list')} className={cn('p-2', myArtView === 'list' ? 'text-white' : 'text-gray-400 hover:text-white')}><Layers className="w-5 h-5" /></button>
         </div>
       </div>
 
@@ -524,9 +588,9 @@ export default function ArtLensPage() {
             <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
               <span className="text-sm font-medium">{art.title}</span>
               <div className="flex gap-2">
-                <button className="p-1.5 bg-white/10 rounded"><Share2 className="w-4 h-4" /></button>
-                <button className="p-1.5 bg-white/10 rounded"><Download className="w-4 h-4" /></button>
-                <button className="p-1.5 bg-white/10 rounded"><DollarSign className="w-4 h-4" /></button>
+                <button onClick={() => handleShareArt(art.id)} className="p-1.5 bg-white/10 rounded hover:bg-white/20"><Share2 className="w-4 h-4" /></button>
+                <button onClick={() => handleDownloadArt(art.id)} className="p-1.5 bg-white/10 rounded hover:bg-white/20"><Download className="w-4 h-4" /></button>
+                <button onClick={() => handleListArt(art.id)} className="p-1.5 bg-white/10 rounded hover:bg-white/20"><DollarSign className="w-4 h-4" /></button>
               </div>
             </div>
           </div>

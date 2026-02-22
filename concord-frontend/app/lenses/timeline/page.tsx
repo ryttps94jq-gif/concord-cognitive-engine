@@ -87,7 +87,7 @@ export default function TimelineLensPage() {
   useLensNav('timeline');
   const queryClient = useQueryClient();
 
-  const [_newPost, setNewPost] = useState('');
+  const [newPost, setNewPost] = useState('');
   const [showReactions, setShowReactions] = useState<string | null>(null);
   const [limit, setLimit] = useState(30);
   const [showPostModal, setShowPostModal] = useState(false);
@@ -110,14 +110,14 @@ export default function TimelineLensPage() {
         createdAt: dtu.createdAt,
         privacy: 'public',
         reactions: {
-          like: Math.floor(Math.random() * 100),
-          love: Math.floor(Math.random() * 50),
-          haha: Math.floor(Math.random() * 20),
-          sad: Math.floor(Math.random() * 10),
-          angry: Math.floor(Math.random() * 5),
+          like: (dtu.reactions as Record<string, number>)?.like || 0,
+          love: (dtu.reactions as Record<string, number>)?.love || 0,
+          haha: (dtu.reactions as Record<string, number>)?.haha || 0,
+          sad: (dtu.reactions as Record<string, number>)?.sad || 0,
+          angry: (dtu.reactions as Record<string, number>)?.angry || 0,
         },
-        comments: Math.floor(Math.random() * 50),
-        shares: Math.floor(Math.random() * 20),
+        comments: (dtu.comments as number) || 0,
+        shares: (dtu.shares as number) || 0,
         dtuId: dtu.id
       })) || [];
 
@@ -131,7 +131,7 @@ export default function TimelineLensPage() {
         return personas.map((p: Record<string, unknown>, i: number) => ({
           id: String(p.id || i),
           name: String(p.name || `User ${i + 1}`),
-          mutualFriends: Math.floor(Math.random() * 15),
+          mutualFriends: (p.mutualFriends as number) || 0,
           online: i % 2 === 0,
         })) as Friend[];
       } catch {
@@ -203,6 +203,17 @@ export default function TimelineLensPage() {
       .map(([type]) => REACTIONS.find(r => r.id === type));
   };
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2 || isError3) {
     return (

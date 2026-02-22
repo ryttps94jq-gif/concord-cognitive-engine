@@ -2,7 +2,7 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { apiHelpers } from '@/lib/api/client';
 import { useState } from 'react';
 import { FractalEmpireExplorer } from '@/components/graphs/FractalEmpireExplorer';
 import { Layers, ZoomIn, ZoomOut, RotateCcw, Maximize } from 'lucide-react';
@@ -14,17 +14,28 @@ export default function FractalLensPage() {
   const [zoomLevel, setZoomLevel] = useState(1);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
 
-  const { data: fractalData, isError: isError, error: error, refetch: refetch,} = useQuery({
+  const { data: fractalData, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
     queryKey: ['fractal-structure'],
-    queryFn: () => api.get('/api/lattice/fractal').then((r) => r.data),
+    queryFn: () => apiHelpers.emergent.latticeBeacon().then((r) => r.data),
   });
 
   const { data: nodeDetail, isError: isError2, error: error2, refetch: refetch2,} = useQuery({
     queryKey: ['fractal-node', selectedNode],
-    queryFn: () => api.get(`/api/lattice/fractal/${selectedNode}`).then((r) => r.data),
+    queryFn: () => apiHelpers.guidance.inspect('fractal', selectedNode!).then((r) => r.data),
     enabled: !!selectedNode,
   });
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2) {
     return (

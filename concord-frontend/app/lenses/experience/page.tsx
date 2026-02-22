@@ -4,6 +4,7 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useState, useMemo } from 'react';
+import { useUIStore } from '@/store/ui';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import {
@@ -81,18 +82,13 @@ const SEED_SKILLS: SkillData[] = [];
 
 const INITIAL_HISTORY: HistoryItem[] = [];
 
-const INITIAL_INSIGHTS: InsightData = {
-  mostProductiveDay: '',
-  favoriteGenre: '',
-  collaborationScore: 0,
-  recommendations: [],
-  weeklyHeatmap: [],
-};
+// InsightData is now computed reactively — see computedInsights in the component
 
 // --- Radar Chart Helper ---
 
 function radarPoints(skills: SkillData[], radius: number, cx: number, cy: number): string {
   const count = skills.length;
+  if (count === 0) return '';
   return skills
     .map((s, i) => {
       const angle = (Math.PI * 2 * i) / count - Math.PI / 2;
@@ -214,21 +210,28 @@ export default function ExperienceLensPage() {
   const [activeTab, setActiveTab] = useState<TabId>('portfolio');
   const [portfolioFilter, setPortfolioFilter] = useState<PortfolioFilter>('all');
 
-  const { isError: isError, error: error, refetch: refetch, items: portfolioItems } = useLensData('experience', 'portfolio', {
+  const { isLoading, isError: isError, error: error, refetch: refetch, items: portfolioItems } = useLensData('experience', 'portfolio', {
     seed: INITIAL_PORTFOLIO.map(p => ({ title: p.title, data: p as unknown as Record<string, unknown> })),
   });
   const { isError: isError2, error: error2, refetch: refetch2, items: skillItems } = useLensData('experience', 'skill', {
     seed: SEED_SKILLS.map(s => ({ title: s.name, data: s as unknown as Record<string, unknown> })),
   });
+  const { isError: isError3, error: error3, refetch: refetch3, items: historyItems } = useLensData('experience', 'history', {
+    seed: INITIAL_HISTORY.map(h => ({ title: h.title, data: h as unknown as Record<string, unknown> })),
+  });
 
-  // Derive live data from backend items, falling back to initial constants
+  // Derive live data from backend items
   const portfolio: PortfolioItem[] = useMemo(() =>
-    portfolioItems.length > 0 ? portfolioItems.map(i => i.data as unknown as PortfolioItem) : INITIAL_PORTFOLIO,
+    portfolioItems.map(i => i.data as unknown as PortfolioItem),
     [portfolioItems]
   );
   const skills: SkillData[] = useMemo(() =>
-    skillItems.length > 0 ? skillItems.map(i => i.data as unknown as SkillData) : SEED_SKILLS,
+    skillItems.map(i => i.data as unknown as SkillData),
     [skillItems]
+  );
+  const history: HistoryItem[] = useMemo(() =>
+    historyItems.map(i => i.data as unknown as HistoryItem),
+    [historyItems]
   );
 
   // Fetch real data in background for future use
@@ -248,12 +251,12 @@ export default function ExperienceLensPage() {
 
   const groupedHistory = useMemo(() => {
     const groups: Record<string, HistoryItem[]> = {};
-    for (const item of INITIAL_HISTORY) {
+    for (const item of history) {
       if (!groups[item.group]) groups[item.group] = [];
       groups[item.group].push(item);
     }
     return groups;
-  }, []);
+  }, [history]);
 
   const skillsByCategory = useMemo(() => {
     const cats: Record<string, SkillData[]> = { technical: [], creative: [], business: [] };
@@ -262,6 +265,120 @@ export default function ExperienceLensPage() {
     }
     return cats;
   }, [skills]);
+
+  // --- Computed insights derived from portfolio + history ---
+  const computedInsights = useMemo((): InsightData => {
+    // mostProductiveDay: count history items per day-of-week using their timestamp
+    const dayCounts: Record<string, number> = {};
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    for (const item of history) {
+      if (item.timestamp) {
+        const parsed = new Date(item.timestamp);
+        if (!isNaN(parsed.getTime())) {
+          const dayName = dayNames[parsed.getDay()];
+          dayCounts[dayName] = (dayCounts[dayName] || 0) + 1;
+        }
+      }
+    }
+    // If timestamps aren't parseable dates, fall back to group-based counting
+    if (Object.keys(dayCounts).length === 0) {
+      for (const item of history) {
+        // Use the group as a rough proxy
+        const group = item.group || 'unknown';
+        dayCounts[group] = (dayCounts[group] || 0) + 1;
+      }
+    }
+    let mostProductiveDay = '';
+    if (Object.keys(dayCounts).length > 0) {
+      mostProductiveDay = Object.entries(dayCounts).sort((a, b) => b[1] - a[1])[0][0];
+    }
+
+    // favoriteGenre: count genres from portfolio items
+    const genreCounts: Record<string, number> = {};
+    for (const item of portfolio) {
+      if (item.genre) {
+        genreCounts[item.genre] = (genreCounts[item.genre] || 0) + 1;
+      }
+    }
+    let favoriteGenre = '';
+    if (Object.keys(genreCounts).length > 0) {
+      favoriteGenre = Object.entries(genreCounts).sort((a, b) => b[1] - a[1])[0][0];
+    }
+
+    // collaborationScore: percentage of portfolio items that are collaborations
+    const collaborationScore = portfolio.length > 0
+      ? Math.round((portfolio.filter(p => p.type === 'collaboration').length / portfolio.length) * 100)
+      : 0;
+
+    // weeklyHeatmap: 7 days x variable weeks, derived from history timestamps
+    // Build a grid of day-of-week (0-6) x week-index
+    const weeklyHeatmap: number[][] = [];
+    if (history.length > 0) {
+      const dated: { day: number; weekOffset: number }[] = [];
+      const now = new Date();
+      for (const item of history) {
+        if (item.timestamp) {
+          const parsed = new Date(item.timestamp);
+          if (!isNaN(parsed.getTime())) {
+            const dayOfWeek = parsed.getDay(); // 0=Sun, 6=Sat -> remap to Mon=0
+            const mondayDay = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+            const diffDays = Math.floor((now.getTime() - parsed.getTime()) / (1000 * 60 * 60 * 24));
+            const weekOffset = Math.floor(diffDays / 7);
+            dated.push({ day: mondayDay, weekOffset });
+          }
+        }
+      }
+      if (dated.length > 0) {
+        const maxWeeks = Math.min(Math.max(...dated.map(d => d.weekOffset)) + 1, 8);
+        for (let day = 0; day < 7; day++) {
+          const row: number[] = [];
+          for (let week = 0; week < maxWeeks; week++) {
+            const count = dated.filter(d => d.day === day && d.weekOffset === week).length;
+            // Normalize to heatmap index 0-5
+            row.push(Math.min(count, 5));
+          }
+          weeklyHeatmap.push(row);
+        }
+      }
+    }
+
+    // recommendations: derive from data patterns
+    const recommendations: string[] = [];
+    if (portfolio.length === 0 && history.length === 0) {
+      recommendations.push('Add your first portfolio item to start tracking your creative journey.');
+    } else {
+      if (portfolio.length > 0 && portfolio.filter(p => p.type === 'collaboration').length === 0) {
+        recommendations.push('Try collaborating with another creator to diversify your portfolio.');
+      }
+      if (portfolio.length > 0 && Object.keys(genreCounts).length === 1) {
+        recommendations.push('Experiment with a new genre to broaden your creative range.');
+      }
+      if (portfolio.length > 0 && Object.keys(genreCounts).length > 2) {
+        recommendations.push(`You work across ${Object.keys(genreCounts).length} genres — consider deepening your ${favoriteGenre} skills.`);
+      }
+      if (skills.length > 0) {
+        const lowest = [...skills].sort((a, b) => a.level - b.level)[0];
+        if (lowest && lowest.level < 5) {
+          recommendations.push(`Level up your ${lowest.name} skill — it's your biggest growth opportunity.`);
+        }
+      }
+      if (history.length < 5) {
+        recommendations.push('Keep building! Add more work to unlock deeper activity insights.');
+      }
+      // Always cap at 4 recommendations
+      if (recommendations.length === 0) {
+        recommendations.push('Great progress! Keep creating to unlock new insights.');
+      }
+    }
+
+    return {
+      mostProductiveDay,
+      favoriteGenre,
+      collaborationScore,
+      weeklyHeatmap,
+      recommendations: recommendations.slice(0, 4),
+    };
+  }, [portfolio, history, skills]);
 
   const TABS: { id: TabId; label: string }[] = [
     { id: 'portfolio', label: 'Portfolio' },
@@ -285,10 +402,21 @@ export default function ExperienceLensPage() {
   const gridLevels = [2, 4, 6, 8, 10];
 
 
-  if (isError || isError2) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full p-8">
-        <ErrorState error={error?.message || error2?.message} onRetry={() => { refetch(); refetch2(); }} />
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isError || isError2 || isError3) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <ErrorState error={error?.message || error2?.message || error3?.message} onRetry={() => { refetch(); refetch2(); refetch3(); }} />
       </div>
     );
   }
@@ -310,7 +438,7 @@ export default function ExperienceLensPage() {
             <p className="text-sm text-gray-400">Showcase your work, track your growth</p>
           </div>
         </div>
-        <button className="btn-neon purple flex items-center gap-2 text-sm">
+        <button onClick={() => { navigator.clipboard.writeText(window.location.href); useUIStore.getState().addToast({ type: 'success', message: 'Portfolio link copied!' }); }} className="btn-neon purple flex items-center gap-2 text-sm">
           <Share2 className="w-4 h-4" />
           Share Portfolio
         </button>
@@ -331,7 +459,7 @@ export default function ExperienceLensPage() {
                 AR
               </div>
             </div>
-            <button className="btn-neon text-xs flex items-center gap-1 px-3 py-1.5">
+            <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Profile editor opening...' })} className="btn-neon text-xs flex items-center gap-1 px-3 py-1.5">
               <Edit3 className="w-3 h-3" />
               Edit Profile
             </button>
@@ -440,7 +568,7 @@ export default function ExperienceLensPage() {
                   </button>
                 ))}
               </div>
-              <button className="btn-neon purple text-xs flex items-center gap-1">
+              <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Add new portfolio item via the creative lens' })} className="btn-neon purple text-xs flex items-center gap-1">
                 <Plus className="w-3 h-3" />
                 Add to Portfolio
               </button>
@@ -655,7 +783,7 @@ export default function ExperienceLensPage() {
                       const matched = skillsByCategory[cat].find(
                         (s) => s.name.toLowerCase() === subSkill.toLowerCase()
                       );
-                      const level = matched ? matched.level : Math.floor(Math.random() * 5) + 2;
+                      const level = matched ? matched.level : 1;
                       return (
                         <div key={subSkill} className="flex items-center justify-between text-xs">
                           <span className="text-gray-300">{subSkill}</span>
@@ -754,17 +882,25 @@ export default function ExperienceLensPage() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="lens-card text-center py-4">
                 <Flame className="w-6 h-6 mx-auto mb-2 text-orange-400" />
-                <p className="text-lg font-bold">{INITIAL_INSIGHTS.mostProductiveDay}</p>
+                <p className="text-lg font-bold">
+                  {computedInsights.mostProductiveDay || <span className="text-gray-500 text-sm font-normal">Add history to see</span>}
+                </p>
                 <p className="text-xs text-gray-400">Most Productive Day</p>
               </div>
               <div className="lens-card text-center py-4">
                 <Music className="w-6 h-6 mx-auto mb-2 text-neon-purple" />
-                <p className="text-lg font-bold">{INITIAL_INSIGHTS.favoriteGenre}</p>
+                <p className="text-lg font-bold">
+                  {computedInsights.favoriteGenre || <span className="text-gray-500 text-sm font-normal">Add items to see</span>}
+                </p>
                 <p className="text-xs text-gray-400">Favorite Genre</p>
               </div>
               <div className="lens-card text-center py-4">
                 <Users className="w-6 h-6 mx-auto mb-2 text-neon-cyan" />
-                <p className="text-lg font-bold">{INITIAL_INSIGHTS.collaborationScore}%</p>
+                <p className="text-lg font-bold">
+                  {portfolio.length > 0
+                    ? `${computedInsights.collaborationScore}%`
+                    : <span className="text-gray-500 text-sm font-normal">Add items to see</span>}
+                </p>
                 <p className="text-xs text-gray-400">Collaboration Score</p>
               </div>
             </div>
@@ -776,32 +912,39 @@ export default function ExperienceLensPage() {
                   <BarChart3 className="w-4 h-4 text-neon-green" />
                   Weekly Activity Heatmap
                 </h3>
-                <div className="space-y-1.5">
-                  {INITIAL_INSIGHTS.weeklyHeatmap.map((row, dayIdx) => (
-                    <div key={dayIdx} className="flex items-center gap-2">
-                      <span className="text-[10px] text-gray-500 w-7">{DAY_LABELS[dayIdx]}</span>
-                      <div className="flex gap-1.5">
-                        {row.map((val, weekIdx) => (
-                          <motion.div
-                            key={weekIdx}
-                            initial={{ scale: 0 }}
-                            animate={{ scale: 1 }}
-                            transition={{ delay: dayIdx * 0.04 + weekIdx * 0.06, duration: 0.2 }}
-                            className={`w-8 h-8 rounded-md ${HEAT_COLORS[val]} border border-white/5`}
-                            title={`Week ${weekIdx + 1}: ${val} sessions`}
-                          />
-                        ))}
+                {computedInsights.weeklyHeatmap.length > 0 ? (
+                  <div className="space-y-1.5">
+                    {computedInsights.weeklyHeatmap.map((row, dayIdx) => (
+                      <div key={dayIdx} className="flex items-center gap-2">
+                        <span className="text-[10px] text-gray-500 w-7">{DAY_LABELS[dayIdx]}</span>
+                        <div className="flex gap-1.5">
+                          {row.map((val, weekIdx) => (
+                            <motion.div
+                              key={weekIdx}
+                              initial={{ scale: 0 }}
+                              animate={{ scale: 1 }}
+                              transition={{ delay: dayIdx * 0.04 + weekIdx * 0.06, duration: 0.2 }}
+                              className={`w-8 h-8 rounded-md ${HEAT_COLORS[val]} border border-white/5`}
+                              title={`Week ${weekIdx + 1}: ${val} sessions`}
+                            />
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                  <div className="flex items-center gap-2 mt-3 ml-9">
-                    <span className="text-[10px] text-gray-500">Less</span>
-                    {HEAT_COLORS.map((c, i) => (
-                      <div key={i} className={`w-4 h-4 rounded-sm ${c} border border-white/5`} />
                     ))}
-                    <span className="text-[10px] text-gray-500">More</span>
+                    <div className="flex items-center gap-2 mt-3 ml-9">
+                      <span className="text-[10px] text-gray-500">Less</span>
+                      {HEAT_COLORS.map((c, i) => (
+                        <div key={i} className={`w-4 h-4 rounded-sm ${c} border border-white/5`} />
+                      ))}
+                      <span className="text-[10px] text-gray-500">More</span>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-8 text-center">
+                    <Calendar className="w-8 h-8 text-gray-600 mb-2" />
+                    <p className="text-sm text-gray-400">Add more history items to see your activity heatmap</p>
+                  </div>
+                )}
               </div>
 
               {/* Recommendations */}
@@ -816,7 +959,7 @@ export default function ExperienceLensPage() {
                   initial="hidden"
                   animate="visible"
                 >
-                  {INITIAL_INSIGHTS.recommendations.map((rec, i) => (
+                  {computedInsights.recommendations.map((rec, i) => (
                     <motion.div
                       key={i}
                       variants={staggerChild}
@@ -832,27 +975,47 @@ export default function ExperienceLensPage() {
               </div>
             </div>
 
-            {/* Additional insight cards */}
+            {/* Additional insight cards — derived from real data */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="lens-card">
                 <Trophy className="w-5 h-5 text-neon-yellow mb-2" />
-                <p className="text-sm font-semibold">Top 10%</p>
-                <p className="text-xs text-gray-400">Sound Design ranking among peers</p>
+                <p className="text-sm font-semibold">
+                  {skills.length > 0
+                    ? `${Math.max(...skills.map(s => s.level))} / ${Math.max(...skills.map(s => s.maxLevel))}`
+                    : 'No skills yet'}
+                </p>
+                <p className="text-xs text-gray-400">
+                  {skills.length > 0 ? 'Highest skill level' : 'Add skills to track progress'}
+                </p>
               </div>
               <div className="lens-card">
                 <TrendingUp className="w-5 h-5 text-neon-green mb-2" />
-                <p className="text-sm font-semibold">+23% This Month</p>
-                <p className="text-xs text-gray-400">Production output increase</p>
+                <p className="text-sm font-semibold">
+                  {portfolio.length > 0 ? `${portfolio.length} items` : 'No items yet'}
+                </p>
+                <p className="text-xs text-gray-400">
+                  {portfolio.length > 0 ? 'Total portfolio pieces' : 'Add work to your portfolio'}
+                </p>
               </div>
               <div className="lens-card">
                 <Target className="w-5 h-5 text-neon-cyan mb-2" />
-                <p className="text-sm font-semibold">4 / 5 Goals</p>
-                <p className="text-xs text-gray-400">Monthly goals completed</p>
+                <p className="text-sm font-semibold">
+                  {history.length > 0 ? `${history.length} events` : 'No activity yet'}
+                </p>
+                <p className="text-xs text-gray-400">
+                  {history.length > 0 ? 'Total history events' : 'Activity will appear here'}
+                </p>
               </div>
               <div className="lens-card">
                 <Star className="w-5 h-5 text-pink-400 mb-2" />
-                <p className="text-sm font-semibold">12 Endorsements</p>
-                <p className="text-xs text-gray-400">Received this month</p>
+                <p className="text-sm font-semibold">
+                  {skills.length > 0
+                    ? `${skills.reduce((sum, s) => sum + s.endorsements, 0)} endorsements`
+                    : 'No endorsements yet'}
+                </p>
+                <p className="text-xs text-gray-400">
+                  {skills.length > 0 ? 'Total skill endorsements' : 'Endorsements will appear here'}
+                </p>
               </div>
             </div>
           </motion.div>

@@ -405,7 +405,7 @@ function AudioPreviewBar({
 
 export default function MarketplaceLensPage() {
   useLensNav('marketplace');
-  const _queryClient = useQueryClient();
+  const queryClient = useQueryClient();
 
   // State
   const [tab, setTab] = useState<Tab>('browse');
@@ -431,10 +431,10 @@ export default function MarketplaceLensPage() {
   const [listingSubmitting, setListingSubmitting] = useState(false);
   const [listingError, setListingError] = useState<string | null>(null);
 
-  const { isError: isError, error: error, refetch: refetch, items: _listingItems, create: _createListing } = useLensData('marketplace', 'listing', {
+  const { isLoading, isError: isError, error: error, refetch: refetch } = useLensData('marketplace', 'listing', {
     noSeed: true,
   });
-  const { isError: isError2, error: error2, refetch: refetch2, items: _purchaseItems } = useLensData('marketplace', 'purchase', {
+  const { isError: isError2, error: error2, refetch: refetch2 } = useLensData('marketplace', 'purchase', {
     noSeed: true,
   });
   const isError3 = false as boolean; const error3 = null as Error | null; const refetch3 = () => {};
@@ -443,40 +443,40 @@ export default function MarketplaceLensPage() {
   // Real API queries — no demo fallback
   const { data: beatsData } = useQuery({
     queryKey: ['artistry-beats'],
-    queryFn: () => api.get('/api/artistry/marketplace/beats').then(r => r.data).catch(() => ({ beats: [] })),
+    queryFn: () => api.get('/api/artistry/marketplace/beats').then(r => r.data).catch((err) => { console.error('Failed to fetch beats:', err instanceof Error ? err.message : err); return { beats: [] }; }),
   });
 
   const { data: stemsData, isError: isError5, error: error5, refetch: refetch5,} = useQuery({
     queryKey: ['artistry-stems'],
-    queryFn: () => api.get('/api/artistry/marketplace/stems').then(r => r.data).catch(() => ({ stems: [] })),
+    queryFn: () => api.get('/api/artistry/marketplace/stems').then(r => r.data).catch((err) => { console.error('Failed to fetch stems:', err instanceof Error ? err.message : err); return { stems: [] }; }),
   });
 
   const { data: samplesData, isError: isError6, error: error6, refetch: refetch6,} = useQuery({
     queryKey: ['artistry-samples'],
-    queryFn: () => api.get('/api/artistry/marketplace/samples').then(r => r.data).catch(() => ({ samples: [] })),
+    queryFn: () => api.get('/api/artistry/marketplace/samples').then(r => r.data).catch((err) => { console.error('Failed to fetch samples:', err instanceof Error ? err.message : err); return { samples: [] }; }),
   });
 
   const { data: artData, isError: isError7, error: error7, refetch: refetch7,} = useQuery({
     queryKey: ['artistry-art'],
-    queryFn: () => api.get('/api/artistry/marketplace/art').then(r => r.data).catch(() => ({ artworks: [] })),
+    queryFn: () => api.get('/api/artistry/marketplace/art').then(r => r.data).catch((err) => { console.error('Failed to fetch art:', err instanceof Error ? err.message : err); return { artworks: [] }; }),
   });
 
   // Purchases from API
-  const { data: _purchaseData } = useQuery({
+  useQuery({
     queryKey: ['artistry-purchases'],
-    queryFn: () => api.get('/api/artistry/marketplace/licenses').then(r => r.data).catch(() => ({ licenseTypes: {} })),
+    queryFn: () => api.get('/api/artistry/marketplace/licenses').then(r => r.data).catch((err) => { console.error('Failed to fetch licenses:', err instanceof Error ? err.message : err); return { licenseTypes: {} }; }),
   });
 
   // Economy balance
   const { data: balanceData } = useQuery({
     queryKey: ['economy-balance'],
-    queryFn: () => api.get('/api/economy/balance', { params: { user_id: 'current' } }).then(r => r.data).catch(() => ({ balance: 0 })),
+    queryFn: () => api.get('/api/economy/balance', { params: { user_id: 'current' } }).then(r => r.data).catch((err) => { console.error('Failed to fetch balance:', err instanceof Error ? err.message : err); return { balance: 0 }; }),
   });
 
   // Fee schedule
   const { data: feeData } = useQuery({
     queryKey: ['economy-fees'],
-    queryFn: () => api.get('/api/economy/fees').then(r => r.data).catch(() => ({ fees: { MARKETPLACE_PURCHASE: 0.05 } })),
+    queryFn: () => api.get('/api/economy/fees').then(r => r.data).catch((err) => { console.error('Failed to fetch fees:', err instanceof Error ? err.message : err); return { fees: { MARKETPLACE_PURCHASE: 0.05 } }; }),
   });
 
   const marketplaceFeeRate = feeData?.fees?.MARKETPLACE_PURCHASE ?? 0.05;
@@ -573,16 +573,16 @@ export default function MarketplaceLensPage() {
       });
       setShowNewListing(false);
       setNewListingForm({ title: '', type: 'beat', description: '', genre: '', tags: '', basicPrice: '', premiumPrice: '', unlimitedPrice: '', exclusivePrice: '' });
-      _queryClient.invalidateQueries({ queryKey: ['artistry-beats'] });
-      _queryClient.invalidateQueries({ queryKey: ['artistry-stems'] });
-      _queryClient.invalidateQueries({ queryKey: ['artistry-samples'] });
-      _queryClient.invalidateQueries({ queryKey: ['artistry-art'] });
+      queryClient.invalidateQueries({ queryKey: ['artistry-beats'] });
+      queryClient.invalidateQueries({ queryKey: ['artistry-stems'] });
+      queryClient.invalidateQueries({ queryKey: ['artistry-samples'] });
+      queryClient.invalidateQueries({ queryKey: ['artistry-art'] });
     } catch (err) {
       setListingError(err instanceof Error ? err.message : 'Failed to publish listing');
     } finally {
       setListingSubmitting(false);
     }
-  }, [newListingForm, listingSubmitting, _queryClient]);
+  }, [newListingForm, listingSubmitting, queryClient]);
 
   // Checkout — settles each cart item through the economy ledger
   const handleCheckout = useCallback(async () => {
@@ -661,6 +661,17 @@ export default function MarketplaceLensPage() {
   // RENDER
   // =========================================================================
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2 || isError3 || isError4 || isError5 || isError6 || isError7) {
     return (

@@ -110,7 +110,7 @@ export default function StudioLensPage() {
   const queryClient = useQueryClient();
 
   // Lens artifact persistence layer
-  const { isError: isError, error: error, refetch: refetch, items: _projectArtifacts, create: _createProjectArtifact } = useLensData('studio', 'project', { noSeed: true });
+  const { isLoading, isError: isError, error: error, refetch: refetch, items: _projectArtifacts, create: _createProjectArtifact } = useLensData('studio', 'project', { noSeed: true });
 
   const [studioView, setStudioView] = useState<StudioView>('arrange');
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
@@ -133,31 +133,31 @@ export default function StudioLensPage() {
 
   const { data: projects, isError: isError2, error: error2, refetch: refetch2,} = useQuery({
     queryKey: ['studio-projects'],
-    queryFn: () => api.get('/api/artistry/studio/projects').then(r => r.data?.projects || []).catch(() => []),
+    queryFn: () => api.get('/api/artistry/studio/projects').then(r => r.data?.projects || []).catch((err) => { console.error('Failed to fetch studio projects:', err instanceof Error ? err.message : err); return []; }),
     initialData: [],
   });
 
   const { data: activeProject, refetch: refetchProject, isError: isError3, error: error3,} = useQuery({
     queryKey: ['studio-project', activeProjectId],
-    queryFn: () => activeProjectId ? api.get(`/api/artistry/studio/projects/${activeProjectId}`).then(r => r.data?.project || null).catch(() => null) : null,
+    queryFn: () => activeProjectId ? api.get(`/api/artistry/studio/projects/${activeProjectId}`).then(r => r.data?.project || null).catch((err) => { console.error('Failed to fetch active project:', err instanceof Error ? err.message : err); return null; }) : null,
     enabled: !!activeProjectId,
   });
 
   const { data: instruments, isError: isError4, error: error4, refetch: refetch4,} = useQuery({
     queryKey: ['studio-instruments'],
-    queryFn: () => api.get('/api/artistry/studio/instruments').then(r => r.data?.instruments || {}).catch(() => ({})),
+    queryFn: () => api.get('/api/artistry/studio/instruments').then(r => r.data?.instruments || {}).catch((err) => { console.error('Failed to fetch instruments:', err instanceof Error ? err.message : err); return {}; }),
     initialData: {},
   });
 
   const { data: effectsCatalog, isError: isError5, error: error5, refetch: refetch5,} = useQuery({
     queryKey: ['studio-effects'],
-    queryFn: () => api.get('/api/artistry/studio/effects').then(r => r.data?.effects || {}).catch(() => ({})),
+    queryFn: () => api.get('/api/artistry/studio/effects').then(r => r.data?.effects || {}).catch((err) => { console.error('Failed to fetch effects:', err instanceof Error ? err.message : err); return {}; }),
     initialData: {},
   });
 
   const { data: genres, isError: isError6, error: error6, refetch: refetch6,} = useQuery({
     queryKey: ['artistry-genres'],
-    queryFn: () => api.get('/api/artistry/genres').then(r => r.data || {}).catch(() => ({})),
+    queryFn: () => api.get('/api/artistry/genres').then(r => r.data || {}).catch((err) => { console.error('Failed to fetch genres:', err instanceof Error ? err.message : err); return {}; }),
     initialData: {},
   });
 
@@ -746,6 +746,17 @@ export default function StudioLensPage() {
     );
   }
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2 || isError3 || isError4 || isError5 || isError6) {
     return (

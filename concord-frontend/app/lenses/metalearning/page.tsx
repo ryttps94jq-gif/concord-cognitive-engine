@@ -27,7 +27,7 @@ export default function MetalearningLensPage() {
   const [curriculumTopic, setCurriculumTopic] = useState('');
   const [results, setResults] = useState<unknown>(null);
 
-  const { data: status, isError: isError, error: error, refetch: refetch,} = useQuery({
+  const { data: status, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
     queryKey: ['metalearning-status'],
     queryFn: () => apiHelpers.metalearning.status().then((r) => r.data),
     refetchInterval: 15000,
@@ -49,6 +49,7 @@ export default function MetalearningLensPage() {
       queryClient.invalidateQueries({ queryKey: ['metalearning-strategies'] });
       setNewName('');
     },
+    onError: (err) => console.error('createStrategy failed:', err instanceof Error ? err.message : err),
   });
 
   const runCurriculum = useMutation({
@@ -57,12 +58,24 @@ export default function MetalearningLensPage() {
       setResults(res.data);
       setCurriculumTopic('');
     },
+    onError: (err) => console.error('runCurriculum failed:', err instanceof Error ? err.message : err),
   });
 
   const strategyList: Strategy[] = strategies?.strategies || strategies || [];
   const statusInfo = status?.status || status || {};
   const bestStrategy = best?.strategy || best || null;
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2 || isError3) {
     return (

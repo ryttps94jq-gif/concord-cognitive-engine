@@ -22,7 +22,7 @@ export default function QueueLensPage() {
   const [selectedQueue, setSelectedQueue] = useState<'ingest' | 'autocrawl' | 'terminal'>('ingest');
 
   // Backend: GET /api/status for queue counts
-  const { data: status, isError: isError, error: error, refetch: refetch,} = useQuery({
+  const { data: status, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
     queryKey: ['status'],
     queryFn: () => api.get('/api/status').then((r) => r.data),
     refetchInterval: 5000,
@@ -48,6 +48,7 @@ export default function QueueLensPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['status'] });
     },
+    onError: (err) => console.error('processItem failed:', err instanceof Error ? err.message : err),
   });
 
   const queues = [
@@ -56,6 +57,17 @@ export default function QueueLensPage() {
     { key: 'terminal', label: 'Terminal Queue', icon: <Zap className="w-4 h-4" />, count: queueItems.terminal.length },
   ];
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2) {
     return (
@@ -178,10 +190,15 @@ export default function QueueLensPage() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => processItem.mutate(item.id)}
-                    className="p-2 bg-neon-green/20 text-neon-green rounded-lg hover:bg-neon-green/30"
+                    disabled={processItem.isPending}
+                    className="p-2 bg-neon-green/20 text-neon-green rounded-lg hover:bg-neon-green/30 disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Process Now"
                   >
-                    <Play className="w-4 h-4" />
+                    {processItem.isPending ? (
+                      <div className="w-4 h-4 border-2 border-neon-green border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Play className="w-4 h-4" />
+                    )}
                   </button>
                   <button
                     className="p-2 bg-neon-pink/20 text-neon-pink rounded-lg hover:bg-neon-pink/30"
@@ -200,24 +217,31 @@ export default function QueueLensPage() {
       <div className="panel p-4">
         <h2 className="font-semibold mb-4">Governor Jobs</h2>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          {Object.entries(jobs?.jobs || {}).map(([name, job]) => {
-            const j = job as Record<string, unknown>;
-            return (
-            <div
-              key={name}
-              className={`lens-card flex items-center justify-between ${
-                j?.enabled ? 'border-neon-green/30' : 'border-gray-600'
-              }`}
-            >
-              <span className="capitalize">{name}</span>
-              <span
-                className={`w-3 h-3 rounded-full ${
-                  j?.enabled ? 'bg-neon-green' : 'bg-gray-500'
-                }`}
-              />
+          {Object.entries(jobs?.jobs || {}).length === 0 ? (
+            <div className="col-span-full text-center py-8">
+              <p className="text-gray-500">No governor jobs configured</p>
+              <p className="text-sm text-gray-400 mt-1">Jobs will appear here once the system is initialized</p>
             </div>
-            );
-          })}
+          ) : (
+            Object.entries(jobs?.jobs || {}).map(([name, job]) => {
+              const j = job as Record<string, unknown>;
+              return (
+              <div
+                key={name}
+                className={`lens-card flex items-center justify-between ${
+                  j?.enabled ? 'border-neon-green/30' : 'border-gray-600'
+                }`}
+              >
+                <span className="capitalize">{name}</span>
+                <span
+                  className={`w-3 h-3 rounded-full ${
+                    j?.enabled ? 'bg-neon-green' : 'bg-gray-500'
+                  }`}
+                />
+              </div>
+              );
+            })
+          )}
         </div>
       </div>
     </div>

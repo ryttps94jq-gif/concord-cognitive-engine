@@ -19,7 +19,7 @@ export default function QuantumLensPage() {
   const [qubits, setQubits] = useState(4);
   const [result, setResult] = useState<string | null>(null);
 
-  const { items: circuitItems, isLoading: _circuitsLoading, isError: isError, error: error, refetch: refetch, create: saveResult } = useLensData<SimResultData>('quantum', 'sim-result', {
+  const { items: circuitItems, isLoading: circuitsLoading, isError: isError, error: error, refetch: refetch, create: saveResult } = useLensData<SimResultData>('quantum', 'sim-result', {
     seed: [],
   });
 
@@ -54,12 +54,24 @@ export default function QuantumLensPage() {
       saveResult({
         title: `Sim ${new Date().toISOString().slice(0, 19)}`,
         data: { qubits, result: resultStr, gates: circuits.map((c) => c.name) },
-      }).catch(() => {});
+      }).catch((err) => console.error('Failed to save simulation result:', err instanceof Error ? err.message : err));
     },
+    onError: (err) => console.error('runSimulation failed:', err instanceof Error ? err.message : err),
   });
 
   const recentSims = circuitItems.slice(0, 5);
 
+
+  if (circuitsLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-purple border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Initializing quantum circuits...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError) {
     return (

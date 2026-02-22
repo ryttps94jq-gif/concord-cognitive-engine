@@ -27,7 +27,7 @@ export default function AttentionLensPage() {
   const [newPriority, setNewPriority] = useState('0.5');
   const [newDesc, setNewDesc] = useState('');
 
-  const { data: status, isError: isError, error: error, refetch: refetch,} = useQuery({
+  const { data: status, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
     queryKey: ['attention-status'],
     queryFn: () => apiHelpers.attention.status().then((r) => r.data),
     refetchInterval: 5000,
@@ -77,6 +77,17 @@ export default function AttentionLensPage() {
   const queueData = queue?.queue || [];
   const completedData = queue?.completed || [];
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2 || isError3) {
     return (
@@ -181,14 +192,15 @@ export default function AttentionLensPage() {
                     <span className="font-medium text-sm">{t.type}</span>
                   </div>
                   <span className="text-xs px-2 py-0.5 rounded bg-lattice-surface text-gray-400">
-                    P:{t.priority.toFixed(1)}
+                    P:{(t.priority ?? 0).toFixed(1)}
                   </span>
                 </div>
                 <p className="text-xs text-gray-400 mt-1 truncate">{t.description}</p>
                 {t.status === 'active' && (
                   <button onClick={() => completeThread.mutate(t.id)}
-                    className="mt-2 text-xs text-neon-green flex items-center gap-1 hover:underline">
-                    <CheckCircle2 className="w-3 h-3" /> Complete
+                    disabled={completeThread.isPending}
+                    className="mt-2 text-xs text-neon-green flex items-center gap-1 hover:underline disabled:opacity-50 disabled:cursor-not-allowed">
+                    <CheckCircle2 className="w-3 h-3" /> {completeThread.isPending ? 'Completing...' : 'Complete'}
                   </button>
                 )}
               </div>

@@ -2,7 +2,7 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useState, useMemo, useCallback, useRef } from 'react';
@@ -332,18 +332,19 @@ export default function SimLensPage() {
   const dragOverItem = useRef<number | null>(null);
 
   // ── API: Backend simulations ───────────────────────────────────────────────
-  const { data: simulations, isError: isError2, error: error2, refetch: refetch2 } = useQuery({
+  const { data: simulations, isLoading, isError: isError2, error: error2, refetch: refetch2 } = useQuery({
     queryKey: ['simulations'],
-    queryFn: () => api.get('/api/simulations').then((r) => r.data),
+    queryFn: () => apiHelpers.simulations.list().then((r) => r.data),
   });
 
   const runSim = useMutation({
     mutationFn: async (payload: { title: string; prompt: string; assumptions: string[] }) => {
-      return api.post('/api/simulations/whatif', payload).then((r) => r.data);
+      return apiHelpers.simulations.run({ prompt: `${payload.title}: ${payload.prompt}` }).then((r) => r.data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['simulations'] });
     },
+    onError: (err) => console.error('runSim failed:', err instanceof Error ? err.message : err),
   });
 
   // ── Lens artifact persistence ──────────────────────────────────────────────
@@ -626,6 +627,18 @@ export default function SimLensPage() {
     return getEmptyResults();
   }, [selectedRun]);
   const mockResultsForDisplay = runResults;
+
+  // ── Loading state ──────────────────────────────────────────────────────────
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   // ── Error boundary ─────────────────────────────────────────────────────────
   if (isError || isError2) {

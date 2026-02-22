@@ -1,8 +1,8 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { useMutation } from '@tanstack/react-query';
+import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useState } from 'react';
 import { Wand2, Plus, Code, Eye, Trash2, Copy, Settings } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -19,51 +19,64 @@ interface CustomLens {
 export default function CustomLensPage() {
   useLensNav('custom');
 
-  const queryClient = useQueryClient();
   const [showBuilder, setShowBuilder] = useState(false);
   const [newLensName, setNewLensName] = useState('');
   const [newLensConfig, setNewLensConfig] = useState('{}');
   const [selectedLens, setSelectedLens] = useState<string | null>(null);
 
-  const { data: customLenses, isError: isError, error: error, refetch: refetch,} = useQuery({
-    queryKey: ['custom-lenses'],
-    queryFn: () => api.get('/api/lenses/custom').then((r) => r.data),
-  });
+  const { items: lensItems, isLoading, isError: isError, error: error, refetch: refetch, create: createLensItem, remove: removeLensItem, update: updateLensItem } = useLensData<Record<string, unknown>>('custom', 'lens-config', { seed: [] });
+  const customLenses = lensItems.map(i => ({ id: i.id, name: i.title, config: i.data, ...(i.data || {}) }));
 
-  const { data: templates, isError: isError2, error: error2, refetch: refetch2,} = useQuery({
-    queryKey: ['lens-templates'],
-    queryFn: () => api.get('/api/lenses/templates').then((r) => r.data),
-  });
+  const { items: templateItems, isError: isError2, error: error2, refetch: refetch2 } = useLensData<Record<string, unknown>>('custom', 'lens-template', { seed: [] });
+  const templates = templateItems.map(i => ({ id: i.id, name: i.title, ...(i.data || {}) }));
 
   const createLens = useMutation({
     mutationFn: (payload: { name: string; config: string }) => {
       let parsed;
       try { parsed = JSON.parse(payload.config); } catch { throw new Error('Invalid JSON in lens configuration'); }
-      return api.post('/api/lenses/custom', { name: payload.name, config: parsed });
+      return createLensItem({ title: payload.name, data: parsed });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['custom-lenses'] });
+      refetch();
       setShowBuilder(false);
       setNewLensName('');
       setNewLensConfig('{}');
     },
+    onError: (err) => console.error('createLens failed:', err instanceof Error ? err.message : err),
   });
 
   const deleteLens = useMutation({
-    mutationFn: (id: string) => api.delete(`/api/lenses/custom/${id}`),
+    mutationFn: (id: string) => removeLensItem(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['custom-lenses'] });
+      refetch();
       setSelectedLens(null);
     },
+    onError: (err) => console.error('deleteLens failed:', err instanceof Error ? err.message : err),
   });
 
   const toggleLens = useMutation({
-    mutationFn: (id: string) => api.post(`/api/lenses/custom/${id}/toggle`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['custom-lenses'] });
+    mutationFn: (id: string) => {
+      const lens = lensItems.find(i => i.id === id);
+      const currentEnabled = (lens?.data as Record<string, unknown>)?.enabled ?? true;
+      return updateLensItem(id, { data: { ...((lens?.data as Record<string, unknown>) || {}), enabled: !currentEnabled } });
     },
+    onSuccess: () => {
+      refetch();
+    },
+    onError: (err) => console.error('toggleLens failed:', err instanceof Error ? err.message : err),
   });
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2) {
     return (
@@ -196,17 +209,19 @@ export default function CustomLensPage() {
                 <div className="flex gap-2">
                   <button
                     onClick={() => toggleLens.mutate(selectedLens)}
-                    className="btn-neon text-sm"
+                    disabled={toggleLens.isPending}
+                    className="btn-neon text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {customLenses?.lenses?.find((l: CustomLens) => l.id === selectedLens)?.isActive
+                    {toggleLens.isPending ? 'Processing...' : customLenses?.lenses?.find((l: CustomLens) => l.id === selectedLens)?.isActive
                       ? 'Deactivate'
                       : 'Activate'}
                   </button>
                   <button
                     onClick={() => deleteLens.mutate(selectedLens)}
-                    className="btn-neon pink text-sm"
+                    disabled={deleteLens.isPending}
+                    className="btn-neon pink text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    {deleteLens.isPending ? '...' : <Trash2 className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
@@ -221,7 +236,7 @@ export default function CustomLensPage() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-400">Configuration</span>
-                  <button className="text-gray-400 hover:text-white">
+                  <button onClick={() => { const cfg = customLenses?.lenses?.find((l: CustomLens) => l.id === selectedLens)?.config; if (cfg) navigator.clipboard.writeText(JSON.stringify(cfg, null, 2)); }} className="text-gray-400 hover:text-white">
                     <Copy className="w-4 h-4" />
                   </button>
                 </div>

@@ -4,7 +4,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
-import { api } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowBigUp,
@@ -125,16 +125,32 @@ const FLAIRS = [
 ];
 
 // ---------------------------------------------------------------------------
+// Default author for locally-created posts/comments
+// ---------------------------------------------------------------------------
+
+const DEFAULT_AUTHOR: UserProfile = {
+  username: 'you',
+  displayName: 'You',
+  avatar: 'Y',
+  karma: 0,
+  joinedAt: new Date().toISOString(),
+  bio: '',
+  postCount: 0,
+  commentCount: 0,
+};
+
+// ---------------------------------------------------------------------------
 // Initial state — populated from backend
 // ---------------------------------------------------------------------------
 
-const INITIAL_USERS: Record<string, UserProfile> = {};
-
 const INITIAL_COMMUNITIES: Community[] = [];
 
-function _mkComment(id: string, author: string, content: string, score: number, replies: Comment[] = []): Comment {
-  const hrs = Math.floor(Math.random() * 48) + 1;
-  return { id, author: INITIAL_USERS[author], content, score, userVote: 0, createdAt: new Date(Date.now() - hrs * 3600000).toISOString(), awards: score > 80 ? ['\uD83D\uDD25'] : [], replies, collapsed: false };
+function _mkComment(id: string, _author: string, content: string, score: number, replies: Comment[] = []): Comment {
+  // Use a deterministic offset based on the id hash instead of Math.random()
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = ((hash << 5) - hash + id.charCodeAt(i)) | 0;
+  const hrs = (Math.abs(hash) % 48) + 1;
+  return { id, author: DEFAULT_AUTHOR, content, score, userVote: 0, createdAt: new Date(Date.now() - hrs * 3600000).toISOString(), awards: score > 80 ? ['\uD83D\uDD25'] : [], replies, collapsed: false };
 }
 
 const INITIAL_POSTS: Post[] = [];
@@ -172,8 +188,8 @@ export default function ForumLensPage() {
   const queryClient = useQueryClient();
 
   // ----- State -----
-  const [posts, setPosts] = useState<Post[]>(INITIAL_POSTS);
-  const [communities, setCommunities] = useState<Community[]>(INITIAL_COMMUNITIES);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [communities, setCommunities] = useState<Community[]>([]);
   const [selectedCommunity, setSelectedCommunity] = useState<string>('all');
   const [sortMode, setSortMode] = useState<SortMode>('hot');
   const [searchQuery, setSearchQuery] = useState('');
@@ -203,7 +219,7 @@ export default function ForumLensPage() {
   const [replyContent, setReplyContent] = useState('');
   const [postReplyContent, setPostReplyContent] = useState('');
 
-  const { isError: isError, error: error, refetch: refetch, items: postItems, create: _createForumPost } = useLensData('forum', 'post', {
+  const { isLoading, isError: isError, error: error, refetch: refetch, items: postItems, create: _createForumPost } = useLensData('forum', 'post', {
     seed: INITIAL_POSTS.map(p => ({ title: p.title, data: p as unknown as Record<string, unknown> })),
   });
   const { isError: isError2, error: error2, refetch: refetch2, items: communityItems } = useLensData('forum', 'community', {
@@ -224,9 +240,9 @@ export default function ForumLensPage() {
   }, [communityItems]);
 
   // API queries for real-data integration
-  useQuery({ queryKey: ['forum-posts-api', selectedCommunity, sortMode], queryFn: () => api.get('/api/dtus', { params: { tags: selectedCommunity !== 'all' ? selectedCommunity : undefined, sort: sortMode === 'new' ? 'createdAt' : 'score', order: 'desc' } }).then(r => r.data) });
-  useQuery({ queryKey: ['communities-api'], queryFn: () => api.get('/api/tags').then(r => r.data) });
-  const voteMutation = useMutation({ mutationFn: ({ postId, vote }: { postId: string; vote: number }) => api.post(`/api/dtus/${postId}/vote`, { vote }), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['forum-posts-api'] }), onError: (err: Error) => { console.error('Vote failed:', err.message); } });
+  useQuery({ queryKey: ['forum-posts-api', selectedCommunity, sortMode], queryFn: () => apiHelpers.dtus.paginated({ tags: selectedCommunity !== 'all' ? selectedCommunity : undefined, pageSize: 50 }).then(r => r.data) });
+  useQuery({ queryKey: ['communities-api'], queryFn: () => apiHelpers.dtus.list().then(r => { const tags = new Set<string>(); (r.data?.dtus || []).forEach((d: Record<string, unknown>) => ((d.tags as string[]) || []).forEach(t => tags.add(t))); return { tags: Array.from(tags) }; }) });
+  const voteMutation = useMutation({ mutationFn: ({ postId, vote }: { postId: string; vote: number }) => apiHelpers.dtus.update(postId, { vote }), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['forum-posts-api'] }), onError: (err: Error) => { console.error('Vote failed:', err.message); } });
 
   // ----- Filtered & sorted posts -----
   const displayPosts = useMemo(() => {
@@ -279,7 +295,7 @@ export default function ForumLensPage() {
     if (!newPostTitle.trim() || !newPostCommunity) return;
     const newPost: Post = {
       id: `p${Date.now()}`, title: newPostTitle, content: newPostContent,
-      author: INITIAL_USERS.beatsmith, community: newPostCommunity,
+      author: DEFAULT_AUTHOR, community: newPostCommunity,
       score: 1, userVote: 1, commentCount: 0,
       createdAt: new Date().toISOString(),
       tags: newPostTags.split(',').map(t => t.trim()).filter(Boolean),
@@ -294,7 +310,7 @@ export default function ForumLensPage() {
   const handleCreateCommunity = useCallback(() => {
     if (!newCommName.trim()) return;
     const slug = newCommName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    const newComm: Community = { id: slug, name: newCommName, description: newCommDesc, memberCount: 1, icon: '\uD83C\uDFB5', banner: 'from-neon-cyan to-neon-purple', joined: true, rules: ['Be respectful', 'Stay on topic'], createdAt: new Date().toISOString(), moderators: ['beatsmith'] };
+    const newComm: Community = { id: slug, name: newCommName, description: newCommDesc, memberCount: 1, icon: '\uD83C\uDFB5', banner: 'from-neon-cyan to-neon-purple', joined: true, rules: ['Be respectful', 'Stay on topic'], createdAt: new Date().toISOString(), moderators: [DEFAULT_AUTHOR.username] };
     setCommunities(prev => [...prev, newComm]);
     setShowCreateCommunity(false);
     setNewCommName(''); setNewCommDesc('');
@@ -302,7 +318,7 @@ export default function ForumLensPage() {
 
   const handleAddComment = useCallback((postId: string, parentCommentId: string | null, content: string) => {
     if (!content.trim()) return;
-    const newComment: Comment = { id: `c${Date.now()}`, author: INITIAL_USERS.beatsmith, content, score: 1, userVote: 1, createdAt: new Date().toISOString(), awards: [], replies: [], collapsed: false };
+    const newComment: Comment = { id: `c${Date.now()}`, author: DEFAULT_AUTHOR, content, score: 1, userVote: 1, createdAt: new Date().toISOString(), awards: [], replies: [], collapsed: false };
     function insertReply(comments: Comment[]): Comment[] {
       return comments.map(c => {
         if (c.id === parentCommentId) return { ...c, replies: [...c.replies, newComment] };
@@ -507,7 +523,7 @@ export default function ForumLensPage() {
         {/* Comment input */}
         {!selectedPost.locked && (
           <div className="bg-lattice-surface border border-lattice-border rounded-lg p-4 lens-card">
-            <p className="text-xs text-gray-400 mb-2">Comment as <span className="text-neon-cyan">u/beatsmith</span></p>
+            <p className="text-xs text-gray-400 mb-2">Comment as <span className="text-neon-cyan">u/{DEFAULT_AUTHOR.username}</span></p>
             <textarea value={postReplyContent} onChange={e => setPostReplyContent(e.target.value)} rows={3} placeholder="What are your thoughts?" className="w-full px-3 py-2 bg-lattice-bg border border-lattice-border rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-neon-cyan resize-none input-lattice" />
             <div className="flex justify-end mt-2">
               <button onClick={() => handleAddComment(selectedPost.id, null, postReplyContent)} disabled={!postReplyContent.trim()} className="px-4 py-1.5 bg-neon-cyan text-black text-sm font-medium rounded-full hover:bg-neon-cyan/90 disabled:opacity-40 disabled:cursor-not-allowed btn-neon">Comment</button>
@@ -637,6 +653,17 @@ export default function ForumLensPage() {
   }
 
   // ===== RENDER =====
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2) {
     return (

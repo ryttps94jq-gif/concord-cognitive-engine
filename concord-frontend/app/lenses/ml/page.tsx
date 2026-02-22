@@ -3,7 +3,7 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
-import { api } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -188,9 +188,9 @@ const INITIAL_EXPERIMENTS: Experiment[] = [
     hyperparams: { learningRate: 0.001, batchSize: 32, epochs: 100, dropout: 0.3 },
     metrics: Array.from({ length: 45 }, (_, i) => ({
       epoch: i + 1,
-      trainLoss: 2.5 - (i * 0.04) + Math.random() * 0.1,
-      valLoss: 2.6 - (i * 0.035) + Math.random() * 0.15,
-      accuracy: 0.3 + (i * 0.014) + Math.random() * 0.02,
+      trainLoss: 2.5 - (i * 0.04) + Math.sin(i * 1.5) * 0.05,
+      valLoss: 2.6 - (i * 0.035) + Math.sin(i * 2.1) * 0.07,
+      accuracy: 0.3 + (i * 0.014) + Math.sin(i * 1.8) * 0.01,
       learningRate: 0.001 * Math.pow(0.95, Math.floor(i / 10))
     })),
     startedAt: '2026-02-05T10:30:00Z'
@@ -243,23 +243,21 @@ const INITIAL_DEPLOYMENTS: Deployment[] = [
 export default function MLLensPage() {
   useLensNav('ml');
   const queryClient = useQueryClient();
-  const { isError: isError, error: error, refetch: refetch, items: modelItems } = useLensData<Model>('ml', 'model', {
+  const { isError, error, refetch, isLoading: isLoadingModels, items: modelItems } = useLensData<Model>('ml', 'model', {
     seed: INITIAL_MODELS.map(m => ({ title: m.name, data: m as unknown as Record<string, unknown> })),
   });
-  const { isError: isError2, error: error2, refetch: refetch2, items: expItems } = useLensData<Experiment>('ml', 'experiment', {
+  const { isError: isError2, error: error2, refetch: refetch2, isLoading: isLoadingExperiments, items: expItems } = useLensData<Experiment>('ml', 'experiment', {
     seed: INITIAL_EXPERIMENTS.map(e => ({ title: e.name, data: e as unknown as Record<string, unknown> })),
   });
-  const { items: datasetItems } = useLensData<Dataset>('ml', 'dataset', {
+  const { isError: isError3, error: error3, refetch: refetch3, isLoading: isLoadingDatasets, items: datasetItems } = useLensData<Dataset>('ml', 'dataset', {
     seed: INITIAL_DATASETS.map(d => ({ title: d.name, data: d as unknown as Record<string, unknown> })),
   });
-  const { items: deploymentItems } = useLensData<Deployment>('ml', 'deployment', {
+  const { isError: isError4, error: error4, refetch: refetch4, isLoading: isLoadingDeployments, items: deploymentItems } = useLensData<Deployment>('ml', 'deployment', {
     seed: INITIAL_DEPLOYMENTS.map(d => ({ title: d.modelName, data: d as unknown as Record<string, unknown> })),
   });
-  const isError3 = false as boolean; const error3 = null as Error | null; const refetch3 = () => {};
-  const isError4 = false as boolean; const error4 = null as Error | null; const refetch4 = () => {};
-  const isError5 = false as boolean; const error5 = null as Error | null; const refetch5 = () => {};
-  const models: Model[] = modelItems.length > 0 ? modelItems.map(i => ({ ...(i.data as unknown as Model), id: i.id })) : INITIAL_MODELS;
-  const experiments: Experiment[] = expItems.length > 0 ? expItems.map(i => ({ ...(i.data as unknown as Experiment), id: i.id })) : INITIAL_EXPERIMENTS;
+  const isLoading = isLoadingModels || isLoadingExperiments || isLoadingDatasets || isLoadingDeployments;
+  const models: Model[] = modelItems.map(i => ({ ...(i.data as unknown as Model), id: i.id }));
+  const experiments: Experiment[] = expItems.map(i => ({ ...(i.data as unknown as Experiment), id: i.id }));
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // State
@@ -276,33 +274,36 @@ export default function MLLensPage() {
   // Queries
   const { data: metricsData } = useQuery({
     queryKey: ['ml-metrics'],
-    queryFn: () => api.get('/api/ml/metrics').then(r => r.data),
+    queryFn: () => apiHelpers.lens.list('ml', { type: 'metrics' }).then(r => r.data),
     refetchInterval: 5000
   });
 
   // Mutations
   const runInference = useMutation({
     mutationFn: (payload: { modelId: string; input: string }) =>
-      api.post('/api/ml/infer', payload).then(r => r.data),
-    onSuccess: (data) => setPlaygroundOutput(data)
+      apiHelpers.lens.run('ml', payload.modelId, { action: 'infer', params: { input: payload.input } }).then(r => r.data),
+    onSuccess: (data) => setPlaygroundOutput(data),
+    onError: (err) => console.error('runInference failed:', err instanceof Error ? err.message : err),
   });
 
   const startTraining = useMutation({
-    mutationFn: (config: Record<string, unknown>) => api.post('/api/ml/train', config),
+    mutationFn: (config: Record<string, unknown>) => apiHelpers.lens.create('ml', { type: 'training-job', data: config }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ml-experiments'] });
       setShowNewExperiment(false);
-    }
+    },
+    onError: (err) => console.error('startTraining failed:', err instanceof Error ? err.message : err),
   });
 
   const deployModel = useMutation({
-    mutationFn: (modelId: string) => api.post(`/api/ml/deploy/${modelId}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['ml-models'] })
+    mutationFn: (modelId: string) => apiHelpers.lens.run('ml', modelId, { action: 'deploy' }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['ml-models'] }),
+    onError: (err) => console.error('deployModel failed:', err instanceof Error ? err.message : err),
   });
 
   // Data - sourced from persistent backend
-  const datasets: Dataset[] = datasetItems.length > 0 ? datasetItems.map(i => ({ ...(i.data as unknown as Dataset), id: i.id })) : INITIAL_DATASETS;
-  const deployments: Deployment[] = deploymentItems.length > 0 ? deploymentItems.map(i => ({ ...(i.data as unknown as Deployment), id: i.id })) : INITIAL_DEPLOYMENTS;
+  const datasets: Dataset[] = datasetItems.map(i => ({ ...(i.data as unknown as Dataset), id: i.id }));
+  const deployments: Deployment[] = deploymentItems.map(i => ({ ...(i.data as unknown as Deployment), id: i.id }));
   const metrics = metricsData || { gpuUsage: 0, memoryUsage: 0, totalInferences: 0, avgLatency: 0 };
 
   // Filtered data
@@ -427,10 +428,21 @@ export default function MLLensPage() {
   };
 
 
-  if (isError || isError2 || isError3 || isError4 || isError5) {
+  if (isError || isError2 || isError3 || isError4) {
     return (
       <div className="flex items-center justify-center h-full p-8">
-        <ErrorState error={error?.message || error2?.message || error3?.message || error4?.message || error5?.message} onRetry={() => { refetch(); refetch2(); refetch3(); refetch4(); refetch5(); }} />
+        <ErrorState error={error?.message || error2?.message || error3?.message || error4?.message} onRetry={() => { refetch(); refetch2(); refetch3(); refetch4(); }} />
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center">
+          <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-4 text-neon-purple" />
+          <p className="text-gray-400">Loading ML data...</p>
+        </div>
       </div>
     );
   }
@@ -559,6 +571,7 @@ export default function MLLensPage() {
                   typeConfig={typeConfig}
                   onSelect={() => setSelectedModel(model)}
                   onDeploy={() => deployModel.mutate(model.id)}
+                  isDeploying={deployModel.isPending}
                 />
               ))}
             </div>
@@ -572,6 +585,7 @@ export default function MLLensPage() {
                   typeConfig={typeConfig}
                   onSelect={() => setSelectedModel(model)}
                   onDeploy={() => deployModel.mutate(model.id)}
+                  isDeploying={deployModel.isPending}
                 />
               ))}
             </div>
@@ -904,6 +918,7 @@ export default function MLLensPage() {
             onTrain={() => { setSelectedModel(null); setShowNewExperiment(true); }}
             statusConfig={statusConfig}
             typeConfig={typeConfig}
+            isDeploying={deployModel.isPending}
           />
         )}
       </AnimatePresence>
@@ -1005,7 +1020,7 @@ function ModelCard({ model, statusConfig, typeConfig, onSelect, onDeploy: _onDep
   );
 }
 
-function ModelListItem({ model, statusConfig, typeConfig, onSelect, onDeploy }: { model: Model; statusConfig: Record<string, Record<string, unknown>>; typeConfig: Record<string, Record<string, unknown>>; onSelect: () => void; onDeploy: () => void }) {
+function ModelListItem({ model, statusConfig, typeConfig, onSelect, onDeploy, isDeploying }: { model: Model; statusConfig: Record<string, Record<string, unknown>>; typeConfig: Record<string, Record<string, unknown>>; onSelect: () => void; onDeploy: () => void; isDeploying?: boolean }) {
   const StatusIcon = (statusConfig[model.status]?.icon || Activity) as React.ElementType;
   const TypeIcon = (typeConfig[model.type]?.icon || Brain) as React.ElementType;
 
@@ -1033,7 +1048,8 @@ function ModelListItem({ model, statusConfig, typeConfig, onSelect, onDeploy }: 
         {model.status === 'ready' && (
           <button
             onClick={(e) => { e.stopPropagation(); onDeploy(); }}
-            className="btn-neon small"
+            disabled={isDeploying}
+            className="btn-neon small disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Rocket className="w-4 h-4" />
           </button>
@@ -1043,7 +1059,7 @@ function ModelListItem({ model, statusConfig, typeConfig, onSelect, onDeploy }: 
   );
 }
 
-function ModelDetailModal({ model, onClose, onDeploy, onTrain, statusConfig, typeConfig }: { model: Model; onClose: () => void; onDeploy: () => void; onTrain: () => void; statusConfig: Record<string, Record<string, unknown>>; typeConfig: Record<string, Record<string, unknown>> }) {
+function ModelDetailModal({ model, onClose, onDeploy, onTrain, statusConfig, typeConfig, isDeploying }: { model: Model; onClose: () => void; onDeploy: () => void; onTrain: () => void; statusConfig: Record<string, Record<string, unknown>>; typeConfig: Record<string, Record<string, unknown>>; isDeploying?: boolean }) {
   const StatusIcon = (statusConfig[model.status]?.icon || Activity) as React.ElementType;
   const TypeIcon = (typeConfig[model.type]?.icon || Brain) as React.ElementType;
 
@@ -1085,8 +1101,8 @@ function ModelDetailModal({ model, onClose, onDeploy, onTrain, statusConfig, typ
             </span>
             {model.status === 'ready' && (
               <>
-                <button onClick={onDeploy} className="btn-neon purple">
-                  <Rocket className="w-4 h-4 mr-2" /> Deploy
+                <button onClick={onDeploy} disabled={isDeploying} className="btn-neon purple disabled:opacity-50 disabled:cursor-not-allowed">
+                  <Rocket className="w-4 h-4 mr-2" /> {isDeploying ? 'Deploying...' : 'Deploy'}
                 </button>
                 <button onClick={onTrain} className="btn-neon">
                   <RefreshCw className="w-4 h-4 mr-2" /> Retrain

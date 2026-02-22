@@ -62,6 +62,7 @@ export default function VoteLensPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['lens', 'vote', 'list'] });
     },
+    onError: (err) => console.error('castVote failed:', err instanceof Error ? err.message : err),
   });
 
   const filteredProposals = proposals.filter((p) =>

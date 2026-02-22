@@ -100,12 +100,12 @@ export default function DailyLensPage() {
   const [workedOn, setWorkedOn] = useState('');
   const [learned, setLearned] = useState('');
   const [goals, setGoals] = useState('');
-  const [sessions, setSessions] = useState<SessionLog[]>(INITIAL_SESSIONS);
+  const [sessions, setSessions] = useState<SessionLog[]>([]);
   const [newProject, setNewProject] = useState('');
   const [newGenre, setNewGenre] = useState('');
   const [newDuration, setNewDuration] = useState('');
   const [showSessionForm, setShowSessionForm] = useState(false);
-  const [clips, setClips] = useState<AudioClip[]>(INITIAL_CLIPS);
+  const [clips, setClips] = useState<AudioClip[]>([]);
   const [playingClip, setPlayingClip] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -116,13 +116,13 @@ export default function DailyLensPage() {
   const [selectedSkill, setSelectedSkill] = useState(SKILLS[0]);
   const [practiceHistory, setPracticeHistory] = useState<PracticeSession[]>([]);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const [localReminders, setLocalReminders] = useState<Reminder[]>(INITIAL_REMINDERS);
+  const [localReminders, setLocalReminders] = useState<Reminder[]>([]);
   const [quote] = useState(() => QUOTES[Math.floor(Math.random() * QUOTES.length)]);
   const [calMonth, setCalMonth] = useState(() => {
     const d = new Date(); return { year: d.getFullYear(), month: d.getMonth() };
   });
 
-  const { isError: isError, error: error, refetch: refetch, items: _entryItems, create: _createEntry } = useLensData('daily', 'entry', {
+  const { isLoading, isError: isError, error: error, refetch: refetch, items: entryItems, create: _createEntry } = useLensData('daily', 'entry', {
     seed: INITIAL_ENTRIES.map(e => ({ title: e.date, data: e as unknown as Record<string, unknown> })),
   });
   const { isError: isError2, error: error2, refetch: refetch2, items: sessionItems, create: _createSession } = useLensData('daily', 'session', {
@@ -155,14 +155,17 @@ export default function DailyLensPage() {
   const generateDigest = useMutation({
     mutationFn: () => apiHelpers.daily.digest(),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['daily-notes'] }),
+    onError: (err) => console.error('generateDigest failed:', err instanceof Error ? err.message : err),
   });
   const createReminderMut = useMutation({
     mutationFn: () => apiHelpers.daily.createReminder({ title: reminderTitle, dueAt: reminderDue }),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['reminders-due'] }); setReminderTitle(''); setReminderDue(''); },
+    onError: (err) => console.error('createReminderMut failed:', err instanceof Error ? err.message : err),
   });
   const completeReminderMut = useMutation({
     mutationFn: (id: string) => apiHelpers.daily.completeReminder(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['reminders-due'] }),
+    onError: (err) => console.error('completeReminderMut failed:', err instanceof Error ? err.message : err),
   });
   const _notes = useMemo(() => {
     const raw = dailyData?.notes || dailyData || [];
@@ -208,7 +211,7 @@ export default function DailyLensPage() {
       recorder.onstop = () => {
         stream.getTracks().forEach(t => t.stop());
         const duration = Math.round((Date.now() - recordingStartRef.current) / 1000);
-        const waveform = Array.from({ length: 24 }, () => 0.2 + Math.random() * 0.8);
+        const waveform = Array.from({ length: 24 }, (_, i) => 0.2 + (Math.sin(i * 0.5) * 0.35 + 0.35 + Math.sin(i * 1.2 + 1) * 0.15));
         const newClip: AudioClip = {
           id: `clip-${Date.now()}`,
           name: `Quick Note ${clips.length + 1}`,
@@ -246,7 +249,9 @@ export default function DailyLensPage() {
     return cells;
   }, [calMonth]);
 
-  const entryDates = useMemo(() => new Set(INITIAL_ENTRIES.map((e) => e.date)), []);
+  const entries: JournalEntry[] = useMemo(() => entryItems.map(i => i.data as unknown as JournalEntry), [entryItems]);
+
+  const entryDates = useMemo(() => new Set(entries.map((e) => e.date)), [entries]);
 
   const recentDates = useMemo(() => {
     const dates: string[] = [];
@@ -254,7 +259,7 @@ export default function DailyLensPage() {
     return dates;
   }, []);
 
-  const entriesThisWeek = INITIAL_ENTRIES.filter((e) => {
+  const entriesThisWeek = entries.filter((e) => {
     return (new Date().getTime() - new Date(e.date).getTime()) / 86400000 <= 7;
   }).length;
 
@@ -278,12 +283,23 @@ export default function DailyLensPage() {
   };
   const handleSelectDate = (dateStr: string) => {
     setSelectedDate(dateStr);
-    const entry = INITIAL_ENTRIES.find((e) => e.date === dateStr);
+    const entry = entries.find((e) => e.date === dateStr);
     if (entry) { setSelectedMood(entry.mood); setJournalNotes(entry.notes); setWorkedOn(entry.workedOn); setLearned(entry.learned); setGoals(entry.goals); }
     else { setSelectedMood(null); setJournalNotes(''); setWorkedOn(''); setLearned(''); setGoals(''); }
   };
 
   // -- Render ---------------------------------------------------------------
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2 || isError3 || isError4 || isError5 || isError6) {
     return (
@@ -328,7 +344,7 @@ export default function DailyLensPage() {
         <div className="flex-1 overflow-y-auto p-3 space-y-1">
           <p className="text-xs text-gray-500 uppercase tracking-wider mb-2 px-1">Recent Entries</p>
           {recentDates.map((ds) => {
-            const entry = INITIAL_ENTRIES.find((e) => e.date === ds);
+            const entry = entries.find((e) => e.date === ds);
             return (
               <button key={ds} onClick={() => handleSelectDate(ds)}
                 className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between transition-colors ${

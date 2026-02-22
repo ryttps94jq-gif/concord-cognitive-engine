@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { apiHelpers } from '@/lib/api/client';
 import {
   Coins, Check, Zap, Crown,
   ArrowRight, Sparkles, ShieldCheck, TrendingUp
@@ -17,29 +18,29 @@ interface TokenPackage {
 }
 
 export default function BillingPage() {
+  useLensNav('billing');
   const queryClient = useQueryClient();
   const [selectedPackage, setSelectedPackage] = useState<string | null>(null);
 
-  // Get economic config
+  // Get economy config (was /api/economic/config, corrected to /api/economy/config)
   const { data: config, isError: isError, error: error, refetch: refetch,} = useQuery({
-    queryKey: ['economic-config'],
-    queryFn: () => api.get('/api/economic/config').then(r => r.data),
+    queryKey: ['economy-config'],
+    queryFn: () => apiHelpers.economy.config().then(r => r.data),
   });
 
-  // Get wallet
+  // Get wallet balance (was /api/economic/wallet, corrected to /api/economy/balance)
   const { data: wallet, isLoading: walletLoading, isError: isError2, error: error2, refetch: refetch2,} = useQuery({
     queryKey: ['wallet'],
     queryFn: () => {
-      const odId = localStorage.getItem('concord_od_id') || 'default';
-      return api.get(`/api/economic/wallet/${odId}`).then(r => r.data);
+      return apiHelpers.economy.balance().then(r => r.data);
     },
   });
 
-  // Purchase tokens
+  // Purchase tokens (was /api/economic/tokens/purchase, corrected to /api/economy/buy/checkout)
   const purchaseMutation = useMutation({
     mutationFn: async (packageId: string) => {
-      const odId = localStorage.getItem('concord_od_id') || 'default';
-      const res = await api.post('/api/economic/tokens/purchase', { odId, packageId });
+      const tokens = Number(packageId) || 100;
+      const res = await apiHelpers.economy.createCheckout(tokens);
       return res.data;
     },
     onSuccess: (data) => {
@@ -54,11 +55,11 @@ export default function BillingPage() {
     },
   });
 
-  // Subscribe
+  // Subscribe (was /api/economic/subscribe, corrected to /api/economy/buy)
   const subscribeMutation = useMutation({
     mutationFn: async (tier: string) => {
-      const odId = localStorage.getItem('concord_od_id') || 'default';
-      const res = await api.post('/api/economic/subscribe', { odId, tier });
+      const amount = tier === 'pro' ? 1000 : tier === 'team' ? 5000 : 100;
+      const res = await apiHelpers.economy.buy({ amount, source: `subscription-${tier}` });
       return res.data;
     },
     onSuccess: (data) => {
@@ -66,7 +67,7 @@ export default function BillingPage() {
         window.location.href = data.url;
       } else {
         queryClient.invalidateQueries({ queryKey: ['wallet'] });
-        queryClient.invalidateQueries({ queryKey: ['economic-config'] });
+        queryClient.invalidateQueries({ queryKey: ['economy-config'] });
       }
     },
     onError: (err) => {

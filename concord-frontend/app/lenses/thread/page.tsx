@@ -155,7 +155,7 @@ export default function ThreadLensPage() {
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set(['msg-1', 'msg-2']));
   const [viewMode, setViewMode] = useState<ViewMode>('tree');
   const [searchQuery, setSearchQuery] = useState('');
-  const { data: sessions, isError, error, refetch } = useQuery({
+  const { data: sessions, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['sessions'],
     queryFn: () => api.get('/api/state/latest').then((r) => r.data),
   });
@@ -175,7 +175,7 @@ export default function ThreadLensPage() {
 
   const threads: Thread[] = useMemo(() => {
     const convs = conversationsData || [];
-    if (convs.length === 0) return INITIAL_THREADS;
+    if (convs.length === 0) return [];
     return convs.map((c: Record<string, unknown>, i: number) => ({
       id: String(c.id || `thread-${i}`),
       name: String(c.title || c.summary || `Thread ${i + 1}`),
@@ -349,6 +349,17 @@ export default function ThreadLensPage() {
     );
   };
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2) {
     return (

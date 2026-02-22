@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
-import { useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { motion, AnimatePresence, Reorder } from 'framer-motion';
 import {
@@ -116,7 +115,7 @@ const _INITIAL_ARTISTS: Artist[] = [
 
 export default function MusicLensPage() {
   useLensNav('music');
-  const _queryClient = useQueryClient();
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>();
 
@@ -145,17 +144,17 @@ export default function MusicLensPage() {
   const [crossfade, setCrossfade] = useState(0);
 
   // Persistent lens data (replaces MOCK arrays)
-  const { isError: isError, error: error, refetch: refetch, items: trackItems } = useLensData<Track>('music', 'track', {
+  const { isLoading, isError: isError, error: error, refetch: refetch, items: trackItems } = useLensData<Track>('music', 'track', {
     seed: INITIAL_TRACKS.map(t => ({ title: t.title, data: t as unknown as Record<string, unknown> })),
   });
   const { isError: isError2, error: error2, refetch: refetch2, items: playlistItems } = useLensData<Playlist>('music', 'playlist', {
     seed: INITIAL_PLAYLISTS.map(p => ({ title: p.name, data: p as unknown as Record<string, unknown> })),
   });
-  const allTracks: Track[] = trackItems.length > 0 ? trackItems.map(i => ({ ...(i.data as unknown as Track), id: i.id })) : INITIAL_TRACKS;
-  const playlists: Playlist[] = playlistItems.length > 0 ? playlistItems.map(i => ({ ...(i.data as unknown as Playlist), id: i.id })) : INITIAL_PLAYLISTS;
+  const allTracks: Track[] = trackItems.map(i => ({ ...(i.data as unknown as Track), id: i.id }));
+  const playlists: Playlist[] = playlistItems.map(i => ({ ...(i.data as unknown as Playlist), id: i.id }));
 
   // Queue
-  const [queue, setQueue] = useState<Track[]>(INITIAL_TRACKS);
+  const [queue, setQueue] = useState<Track[]>([]);
   const currentTrack = queue[currentTrackIndex] || allTracks[0];
 
   // Sync queue when tracks load from backend
@@ -185,7 +184,8 @@ export default function MusicLensPage() {
       gradient.addColorStop(1, '#f472b6');
 
       for (let i = 0; i < barCount; i++) {
-        const value = Math.random() * 0.5 + 0.3 + Math.sin(Date.now() / 200 + i * 0.2) * 0.2;
+        const now = Date.now();
+        const value = 0.5 + Math.sin(now / 200 + i * 0.2) * 0.2 + Math.sin(now / 130 + i * 0.5) * 0.15 + Math.cos(now / 170 + i * 0.35) * 0.1;
         const barHeight = value * height * 0.8;
 
         if (visualizerMode === 'bars') {
@@ -470,17 +470,25 @@ export default function MusicLensPage() {
               <button className="text-sm text-gray-400 hover:text-white">Show all</button>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-              {_INITIAL_ARTISTS.map((artist) => (
-                <div key={artist.id} className="group cursor-pointer text-center">
-                  <div className="relative aspect-square rounded-full overflow-hidden bg-gradient-to-br from-gray-700 to-gray-800 mb-3 mx-auto">
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <Headphones className="w-12 h-12 opacity-50" />
+              {(() => {
+                // Derive unique artists from track data
+                const seen = new Set<string>();
+                return allTracks.filter(t => {
+                  if (seen.has(t.artist)) return false;
+                  seen.add(t.artist);
+                  return true;
+                }).map((track) => (
+                  <div key={track.artist} className="group cursor-pointer text-center">
+                    <div className="relative aspect-square rounded-full overflow-hidden bg-gradient-to-br from-gray-700 to-gray-800 mb-3 mx-auto">
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <Headphones className="w-12 h-12 opacity-50" />
+                      </div>
                     </div>
+                    <h3 className="font-semibold truncate">{track.artist}</h3>
+                    <p className="text-sm text-gray-400">Artist</p>
                   </div>
-                  <h3 className="font-semibold truncate">{artist.name}</h3>
-                  <p className="text-sm text-gray-400">Artist</p>
-                </div>
-              ))}
+                ));
+              })()}
             </div>
           </section>
 
@@ -493,7 +501,7 @@ export default function MusicLensPage() {
               </h2>
             </div>
             <div className="space-y-2">
-              {INITIAL_TRACKS.slice(0, 5).map((track, index) => (
+              {allTracks.slice(0, 5).map((track, index) => (
                 <button
                   key={track.id}
                   onClick={() => playTrack(track)}
@@ -557,7 +565,7 @@ export default function MusicLensPage() {
               <section>
                 <h3 className="text-xl font-bold mb-4">Songs</h3>
                 <div className="space-y-2">
-                  {INITIAL_TRACKS.filter((t) =>
+                  {allTracks.filter((t) =>
                     t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                     t.artist.toLowerCase().includes(searchQuery.toLowerCase())
                   ).map((track) => (
@@ -583,17 +591,22 @@ export default function MusicLensPage() {
             <div>
               <h3 className="text-xl font-bold mb-4">Browse all</h3>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {['Electronic', 'Ambient', 'Focus', 'Workout', 'Chill', 'Party', 'Sleep', 'Meditation'].map((genre) => (
-                  <button
-                    key={genre}
-                    className="aspect-[1.5] rounded-lg p-4 text-left font-bold text-xl overflow-hidden relative"
-                    style={{
-                      background: `linear-gradient(135deg, hsl(${Math.random() * 360}, 70%, 40%), hsl(${Math.random() * 360}, 70%, 30%))`,
-                    }}
-                  >
-                    {genre}
-                  </button>
-                ))}
+                {['Electronic', 'Ambient', 'Focus', 'Workout', 'Chill', 'Party', 'Sleep', 'Meditation'].map((genre, i) => {
+                  // Deterministic hue based on index, spread evenly across the color wheel
+                  const hue1 = (i * 45 + 10) % 360;
+                  const hue2 = (hue1 + 40) % 360;
+                  return (
+                    <button
+                      key={genre}
+                      className="aspect-[1.5] rounded-lg p-4 text-left font-bold text-xl overflow-hidden relative"
+                      style={{
+                        background: `linear-gradient(135deg, hsl(${hue1}, 70%, 40%), hsl(${hue2}, 70%, 30%))`,
+                      }}
+                    >
+                      {genre}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -695,7 +708,7 @@ export default function MusicLensPage() {
               </tr>
             </thead>
             <tbody>
-              {INITIAL_TRACKS.map((track, index) => (
+              {allTracks.map((track, index) => (
                 <tr
                   key={track.id}
                   onClick={() => playTrack(track)}
@@ -993,6 +1006,17 @@ export default function MusicLensPage() {
     </AnimatePresence>
   );
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2) {
     return (

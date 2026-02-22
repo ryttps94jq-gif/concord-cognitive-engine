@@ -615,9 +615,9 @@ export default function RetailLensPage() {
       const d = i.data as unknown as Customer;
       return {
         id: i.id, title: i.title, data: d,
-        recency: d.recencyScore || Math.floor(Math.random() * 5) + 1,
-        frequency: d.frequencyScore || Math.floor(Math.random() * 5) + 1,
-        monetary: d.monetaryScore || Math.floor(Math.random() * 5) + 1,
+        recency: d.recencyScore || 1,
+        frequency: d.frequencyScore || 1,
+        monetary: d.monetaryScore || 1,
       };
     }).map(c => ({
       ...c,
@@ -854,7 +854,7 @@ export default function RetailLensPage() {
               <button className={cn(ds.btnGhost, ds.btnSmall)} onClick={() => navigator.clipboard?.writeText(template)}>
                 <Copy className="w-3.5 h-3.5" /> Copy
               </button>
-              <button className={cn(ds.btnGhost, ds.btnSmall)}>
+              <button onClick={() => { const el = document.querySelector<HTMLParagraphElement>(`[data-template="${i}"]`); if (el) { el.contentEditable = 'true'; el.focus(); } }} className={cn(ds.btnGhost, ds.btnSmall)}>
                 <Edit3 className="w-3.5 h-3.5" /> Edit
               </button>
             </div>
@@ -1710,6 +1710,17 @@ export default function RetailLensPage() {
   /* ================================================================ */
   /*  Main render                                                      */
   /* ================================================================ */
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError) {
     return (

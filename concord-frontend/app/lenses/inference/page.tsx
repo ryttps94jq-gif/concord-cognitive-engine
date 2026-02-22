@@ -20,7 +20,7 @@ export default function InferenceLensPage() {
   const [results, setResults] = useState<unknown>(null);
   const [tab, setTab] = useState<'facts' | 'query' | 'syllogism' | 'forward'>('facts');
 
-  const { data: status, isError: isError, error: error, refetch: refetch,} = useQuery({
+  const { data: status, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
     queryKey: ['inference-status'],
     queryFn: () => apiHelpers.inference.status().then((r) => r.data),
     refetchInterval: 15000,
@@ -33,25 +33,40 @@ export default function InferenceLensPage() {
       queryClient.invalidateQueries({ queryKey: ['inference-status'] });
       setFactInput('');
     },
+    onError: (err) => console.error('addFacts failed:', err instanceof Error ? err.message : err),
   });
 
   const runQuery = useMutation({
     mutationFn: () => apiHelpers.inference.query({ query: queryInput }),
     onSuccess: (res) => setResults(res.data),
+    onError: (err) => console.error('runQuery failed:', err instanceof Error ? err.message : err),
   });
 
   const runSyllogism = useMutation({
     mutationFn: () => apiHelpers.inference.syllogism({ major: majorPremise, minor: minorPremise }),
     onSuccess: (res) => setResults(res.data),
+    onError: (err) => console.error('runSyllogism failed:', err instanceof Error ? err.message : err),
   });
 
   const runForwardChain = useMutation({
     mutationFn: () => apiHelpers.inference.forwardChain({}),
     onSuccess: (res) => setResults(res.data),
+    onError: (err) => console.error('runForwardChain failed:', err instanceof Error ? err.message : err),
   });
 
   const statusInfo = status?.status || status || {};
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-blue border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError) {
     return (

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useLensNav } from '@/hooks/useLensNav';
 import {
   Activity, Brain, FlaskConical, Layers, Radio,
   BarChart3, Zap, Shield
@@ -100,6 +101,7 @@ function OverviewDashboard() {
 }
 
 export default function PlatformPage() {
+  useLensNav('platform');
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const { events, connected } = usePlatformEvents();
 

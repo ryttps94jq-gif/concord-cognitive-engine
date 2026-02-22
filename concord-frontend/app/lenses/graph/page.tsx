@@ -181,7 +181,7 @@ export default function GraphLensPage() {
   const [clusterCount, setClusterCount] = useState(5);
 
   // Lens artifact persistence layer for graph entities
-  const { isError: isError, error: error, refetch: refetch, create: createEntity } = useLensData('graph', 'entity', { noSeed: true });
+  const { isLoading, isError: isError, error: error, refetch: refetch, create: createEntity } = useLensData('graph', 'entity', { noSeed: true });
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; node: GraphNode } | null>(null);
   const [showLegend, setShowLegend] = useState(true);
 
@@ -212,12 +212,12 @@ export default function GraphLensPage() {
 
   const { data: dtus, isError: isError2, error: error2, refetch: refetch2,} = useQuery({
     queryKey: ['dtus-graph'],
-    queryFn: () => api.get('/api/dtus?limit=500').then((r) => r.data),
+    queryFn: () => apiHelpers.dtus.paginated({ limit: 500 }).then((r) => r.data),
   });
 
   const { data: links, isError: isError3, error: error3, refetch: refetch3,} = useQuery({
     queryKey: ['links-graph'],
-    queryFn: () => api.get('/api/links').then((r) => r.data),
+    queryFn: () => apiHelpers.worldmodel.relations().then((r) => r.data),
     retry: 1,
   });
 
@@ -763,11 +763,10 @@ export default function GraphLensPage() {
         setLocalEdges(prev => [...prev, newEdge]);
         setConnectSource(null);
         // Persist edge to backend
-        api.post('/api/links', {
-          sourceId: connectSource,
-          targetId: clickedNode.id,
+        apiHelpers.worldmodel.createRelation({
+          from: connectSource,
+          to: clickedNode.id,
           type: newEdgeType,
-          weight: 0.5,
         }).then(() => {
           refetch3();
         }).catch(err => {
@@ -918,10 +917,9 @@ export default function GraphLensPage() {
     setShowAddNode(false);
     // Persist to backend via DTU create
     try {
-      await api.post('/api/macro/dtu/create', {
+      await apiHelpers.dtus.create({
         title: newNode.label,
         content: newNode.label,
-        tier: addNodeType === 'mega' ? 'mega' : addNodeType === 'hyper' ? 'hyper' : 'regular',
         tags: [addNodeType, 'graph-created'],
       });
       // Also persist as a graph entity artifact
@@ -984,6 +982,17 @@ export default function GraphLensPage() {
 
   // --- Render ---
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2 || isError3) {
     return (

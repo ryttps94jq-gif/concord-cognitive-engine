@@ -176,8 +176,8 @@ const AVAILABLE_TOOLS = [
 export default function AgentsLensPage() {
   useLensNav('agents');
 
-  const _queryClient = useQueryClient();
-  const [_view, setView] = useState<ViewMode>('dashboard');
+  const queryClient = useQueryClient();
+  const [view, setView] = useState<ViewMode>('dashboard');
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [filter, setFilter] = useState<AgentFilter>('all');
@@ -468,21 +468,22 @@ export default function AgentsLensPage() {
                         <div className="flex gap-2 pt-2 border-t border-lattice-border">
                           <button
                             onClick={(e) => { e.stopPropagation(); enableAgent.mutate(agent.id); }}
-                            className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded text-xs font-medium transition-colors ${
+                            disabled={enableAgent.isPending}
+                            className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                               agent.enabled
                                 ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20'
                                 : 'bg-green-500/10 text-green-400 hover:bg-green-500/20'
                             }`}
                           >
                             <Power className="w-3 h-3" />
-                            {agent.enabled ? 'Stop' : 'Start'}
+                            {enableAgent.isPending ? '...' : agent.enabled ? 'Stop' : 'Start'}
                           </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); tickAgent.mutate(agent.id); }}
-                            disabled={!agent.enabled}
+                            disabled={!agent.enabled || tickAgent.isPending}
                             className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded text-xs font-medium bg-neon-cyan/10 text-neon-cyan hover:bg-neon-cyan/20 transition-colors disabled:opacity-30"
                           >
-                            <Play className="w-3 h-3" /> Tick
+                            <Play className="w-3 h-3" /> {tickAgent.isPending ? '...' : 'Tick'}
                           </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); setSelectedAgent(agent); setDetailTab('logs'); }}
@@ -552,21 +553,22 @@ export default function AgentsLensPage() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => enableAgent.mutate(selectedAgent.id)}
-                    className={`flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    disabled={enableAgent.isPending}
+                    className={`flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                       selectedAgent.enabled
                         ? 'bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20'
                         : 'bg-green-500/10 text-green-400 border border-green-500/30 hover:bg-green-500/20'
                     }`}
                   >
                     <Power className="w-4 h-4" />
-                    {selectedAgent.enabled ? 'Stop Agent' : 'Start Agent'}
+                    {enableAgent.isPending ? 'Processing...' : selectedAgent.enabled ? 'Stop Agent' : 'Start Agent'}
                   </button>
                   <button
                     onClick={() => tickAgent.mutate(selectedAgent.id)}
-                    disabled={!selectedAgent.enabled}
+                    disabled={!selectedAgent.enabled || tickAgent.isPending}
                     className="flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/20 transition-colors disabled:opacity-30"
                   >
-                    <Play className="w-4 h-4" /> Manual Tick
+                    <Play className="w-4 h-4" /> {tickAgent.isPending ? 'Ticking...' : 'Manual Tick'}
                   </button>
                 </div>
               </div>
@@ -662,7 +664,7 @@ export default function AgentsLensPage() {
               <div className="panel overflow-hidden">
                 <div className="bg-lattice-bg/80 p-3 border-b border-lattice-border flex items-center justify-between">
                   <span className="text-xs text-gray-400 font-mono">Execution Logs</span>
-                  <button className="text-xs text-neon-cyan hover:underline">Clear</button>
+                  <button onClick={() => { if (selectedAgent) setSelectedAgent({ ...selectedAgent, logs: [] }); }} className="text-xs text-neon-cyan hover:underline">Clear</button>
                 </div>
                 <div className="p-2 font-mono text-xs space-y-0.5 max-h-[500px] overflow-y-auto bg-[#0a0a0f]">
                   {(selectedAgent.logs || []).length === 0 ? (

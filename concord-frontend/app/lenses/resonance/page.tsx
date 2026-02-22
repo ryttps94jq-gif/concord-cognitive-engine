@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Activity,
@@ -20,6 +20,7 @@ import {
   Crosshair,
   Signal,
 } from 'lucide-react';
+import { ErrorState } from '@/components/common/EmptyState';
 
 // ============================================================================
 // Types
@@ -94,7 +95,6 @@ function ResonanceFieldCanvas({
   scanning: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const _frameRef = useRef(0);
   const timeRef = useRef(0);
 
   useEffect(() => {
@@ -423,32 +423,35 @@ export default function ResonanceBoundaryPage() {
   const [autoScan, setAutoScan] = useState(false);
 
   // Fetch latest boundary scan
-  const { data: scan, isLoading: scanLoading, refetch: _refetchScan } = useQuery<BoundaryScan>({
+  const { data: scan, isLoading: scanLoading, isError: scanError, error: scanErrorObj, refetch: refetchScan } = useQuery<BoundaryScan>({
     queryKey: ['resonance-boundary'],
-    queryFn: () => api.get('/api/resonance/boundary').then(r => r.data),
+    queryFn: () => apiHelpers.emergent.latticeBeacon().then(r => r.data),
     refetchInterval: autoScan ? 15000 : false,
   });
 
   // Fetch history
   const { data: historyData } = useQuery<{ readings: HistoryPoint[] }>({
     queryKey: ['resonance-history'],
-    queryFn: () => api.get('/api/resonance/history?limit=100').then(r => r.data),
+    queryFn: () => apiHelpers.emergent.resonance().then(r => r.data),
     refetchInterval: 30000,
   });
 
   // Fetch existing health metrics
   const { data: growth } = useQuery({
     queryKey: ['growth'],
-    queryFn: () => api.get('/api/growth').then(r => r.data),
+    queryFn: () => apiHelpers.guidance.health().then(r => r.data),
     refetchInterval: 10000,
   });
 
   // Scan mutation (stores result)
   const scanMutation = useMutation({
-    mutationFn: () => api.post('/api/resonance/scan', {}).then(r => r.data),
+    mutationFn: () => apiHelpers.bridge.beacon().then(r => r.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['resonance-boundary'] });
       queryClient.invalidateQueries({ queryKey: ['resonance-history'] });
+    },
+    onError: (err) => {
+      console.error('Resonance scan failed:', err instanceof Error ? err.message : err);
     },
   });
 
@@ -464,6 +467,14 @@ export default function ResonanceBoundaryPage() {
 
   const homeostasis = growth?.growth?.homeostasis ?? 0;
   const repairRate = growth?.growth?.maintenance?.repairRate ?? 0.5;
+
+  if (scanError) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <ErrorState error={scanErrorObj?.message} onRetry={refetchScan} />
+      </div>
+    );
+  }
 
   return (
     <div className="h-[calc(100vh-4rem)] flex flex-col" style={{ background: '#050510' }}>

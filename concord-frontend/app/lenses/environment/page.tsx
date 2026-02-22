@@ -728,7 +728,7 @@ export default function EnvironmentLensPage() {
                 <label className={ds.label}>Photo Log Reference</label>
                 <div className="flex gap-2">
                   <input className={ds.input} value={(formData.photoLogRef as string) || ''} onChange={e => setFormData({ ...formData, photoLogRef: e.target.value })} placeholder="Photo ID or file ref" />
-                  <button className={ds.btnGhost} title="Attach photo placeholder"><Camera className="w-4 h-4" /></button>
+                  <button onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'; input.click(); }} className={ds.btnGhost} title="Attach photo"><Camera className="w-4 h-4" /></button>
                 </div>
               </div>
             </div>
@@ -1756,6 +1756,17 @@ export default function EnvironmentLensPage() {
   /* ================================================================ */
   /*  Main Render                                                      */
   /* ================================================================ */
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError) {
     return (

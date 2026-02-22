@@ -30,7 +30,7 @@ export default function HypothesisLensPage() {
   const [newEvidence, setNewEvidence] = useState('');
   const [evidenceSupports, setEvidenceSupports] = useState(true);
 
-  const { data: hypothesesData, isLoading: _isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
+  const { data: hypothesesData, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
     queryKey: ['hypotheses'],
     queryFn: () => apiHelpers.hypothesis.list().then((r) => r.data),
     refetchInterval: 10000,
@@ -52,11 +52,13 @@ export default function HypothesisLensPage() {
       setNewStatement('');
       setNewDomain('');
     },
+    onError: (err) => console.error('createHypothesis failed:', err instanceof Error ? err.message : err),
   });
 
   const evaluateHypothesis = useMutation({
     mutationFn: (id: string) => apiHelpers.hypothesis.evaluate(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['hypotheses'] }),
+    onError: (err) => console.error('evaluateHypothesis failed:', err instanceof Error ? err.message : err),
   });
 
   const addEvidence = useMutation({
@@ -71,16 +73,29 @@ export default function HypothesisLensPage() {
       queryClient.invalidateQueries({ queryKey: ['hypotheses'] });
       setNewEvidence('');
     },
+    onError: (err) => console.error('addEvidence failed:', err instanceof Error ? err.message : err),
   });
 
   const runExperiment = useMutation({
     mutationFn: (id: string) => apiHelpers.hypothesis.experiment(id, {}),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['hypotheses'] }),
+    onError: (err) => console.error('runExperiment failed:', err instanceof Error ? err.message : err),
   });
 
   const hypotheses: Hypothesis[] = hypothesesData?.hypotheses || hypothesesData || [];
   const status = statusData?.status || statusData || {};
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-purple border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading hypotheses...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2) {
     return (
@@ -158,6 +173,9 @@ export default function HypothesisLensPage() {
           <div className="panel p-4">
             <h2 className="font-semibold mb-3">Hypotheses</h2>
             <div className="space-y-2 max-h-96 overflow-y-auto">
+              {hypotheses.length === 0 && (
+                <p className="text-sm text-gray-500 text-center py-4">No hypotheses yet. Create one above to get started.</p>
+              )}
               {hypotheses.map((h) => (
                 <button
                   key={h.id}
@@ -248,15 +266,17 @@ export default function HypothesisLensPage() {
                     <div className="flex gap-2">
                       <button
                         onClick={() => evaluateHypothesis.mutate(h.id)}
-                        className="btn-neon purple flex-1 flex items-center justify-center gap-1"
+                        disabled={evaluateHypothesis.isPending}
+                        className="btn-neon purple flex-1 flex items-center justify-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        <TrendingUp className="w-4 h-4" /> Evaluate
+                        <TrendingUp className="w-4 h-4" /> {evaluateHypothesis.isPending ? 'Evaluating...' : 'Evaluate'}
                       </button>
                       <button
                         onClick={() => runExperiment.mutate(h.id)}
-                        className="btn-neon flex-1 flex items-center justify-center gap-1"
+                        disabled={runExperiment.isPending}
+                        className="btn-neon flex-1 flex items-center justify-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        <Beaker className="w-4 h-4" /> Experiment
+                        <Beaker className="w-4 h-4" /> {runExperiment.isPending ? 'Running...' : 'Experiment'}
                       </button>
                     </div>
                   </>

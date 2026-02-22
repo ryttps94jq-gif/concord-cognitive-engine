@@ -24,7 +24,7 @@ export default function MetacognitionLensPage() {
   const [predictionConfidence, setPredictionConfidence] = useState(0.7);
   const [introspectFocus, setIntrospectFocus] = useState('');
 
-  const { data: status, isError: isError, error: error, refetch: refetch,} = useQuery({
+  const { data: status, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
     queryKey: ['metacognition-status'],
     queryFn: () => apiHelpers.metacognition.status().then((r) => r.data),
     refetchInterval: 15000,
@@ -55,6 +55,7 @@ export default function MetacognitionLensPage() {
       queryClient.invalidateQueries({ queryKey: ['metacognition-status'] });
       setPredictionClaim('');
     },
+    onError: (err) => console.error('makePrediction failed:', err instanceof Error ? err.message : err),
   });
 
   const runIntrospection = useMutation({
@@ -62,12 +63,24 @@ export default function MetacognitionLensPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['metacognition-introspection'] });
     },
+    onError: (err) => console.error('runIntrospection failed:', err instanceof Error ? err.message : err),
   });
 
   const spots = blindspots?.blindspots || blindspots || [];
   const cal = calibration?.calibration || calibration || {};
   const statusInfo = status?.status || status || {};
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-purple border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2 || isError3 || isError4) {
     return (

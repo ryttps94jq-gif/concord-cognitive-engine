@@ -743,6 +743,17 @@ export default function WhiteboardLensPage() {
   /*                             RENDER                                  */
   /* ================================================================== */
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (isError || isError2 || isError3 || isError4) {
     return (
       <div className="flex items-center justify-center h-full p-8">

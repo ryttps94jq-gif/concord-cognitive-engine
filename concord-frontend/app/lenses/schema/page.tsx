@@ -49,6 +49,17 @@ export default function SchemaLensPage() {
   };
 
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (isError) {
     return (
       <div className="flex items-center justify-center h-full p-8">
@@ -111,10 +122,10 @@ export default function SchemaLensPage() {
             />
             <button
               onClick={handleValidate}
-              disabled={!validateData.schemaName || !validateData.data}
-              className="btn-primary w-full"
+              disabled={!validateData.schemaName || !validateData.data || validateMutation.isPending}
+              className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Validate
+              {validateMutation.isPending ? 'Validating...' : 'Validate'}
             </button>
 
             {validationResult && (

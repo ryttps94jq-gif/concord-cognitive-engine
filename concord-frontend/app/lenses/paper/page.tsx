@@ -216,7 +216,7 @@ export default function PaperLensPage() {
 
   // ---- Data hooks ----
   const {
-    isError, error, refetch, items: paperItems,
+    isLoading, isError, error, refetch, items: paperItems,
     create: createArtifact, update: updateArtifact, remove: removeArtifact,
   } = useLensData('paper', typeForTab[activeTab], {
     search: searchQuery || undefined,
@@ -431,6 +431,18 @@ export default function PaperLensPage() {
     a.click();
     URL.revokeObjectURL(url);
   }, [selectedItem]);
+
+  // ---- Loading state ----
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   // ---- Error state ----
   if (isError) {
