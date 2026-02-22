@@ -1,8 +1,8 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useState } from 'react';
 import { Atom, Beaker, FlaskConical, Sparkles, Zap } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -29,23 +29,20 @@ export default function ChemLensPage() {
   const [selectedCompound, setSelectedCompound] = useState<string | null>(null);
   const [reactionInput, setReactionInput] = useState('');
 
-  const { data: compounds, isError: isError, error: error, refetch: refetch,} = useQuery({
-    queryKey: ['chem-compounds'],
-    queryFn: () => api.get('/api/chem/compounds').then((r) => r.data),
-  });
+  const { items: compoundItems, isLoading, isError: isError, error: error, refetch: refetch } = useLensData<Record<string, unknown>>('chem', 'compound', { seed: [] });
+  const compounds = compoundItems.map(i => ({ id: i.id, ...(i.data || {}) })) as unknown as Compound[];
 
-  const { data: reactions, isError: isError2, error: error2, refetch: refetch2,} = useQuery({
-    queryKey: ['chem-reactions'],
-    queryFn: () => api.get('/api/chem/reactions').then((r) => r.data),
-  });
+  const { items: reactionItems, isError: isError2, error: error2, refetch: refetch2, create: createReaction } = useLensData<Record<string, unknown>>('chem', 'reaction', { seed: [] });
+  const reactions = reactionItems.map(i => ({ id: i.id, ...(i.data || {}) })) as unknown as Reaction[];
 
   const runReaction = useMutation({
-    mutationFn: (formula: string) => api.post('/api/chem/react', { formula }),
+    mutationFn: (formula: string) => createReaction({ title: formula, data: { formula, ranAt: new Date().toISOString() } }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['chem-compounds'] });
-      queryClient.invalidateQueries({ queryKey: ['chem-reactions'] });
+      refetch();
+      refetch2();
       setReactionInput('');
     },
+    onError: (err) => console.error('runReaction failed:', err instanceof Error ? err.message : err),
   });
 
   const typeColors = {
@@ -54,6 +51,17 @@ export default function ChemLensPage() {
     product: 'bg-neon-green/20 text-neon-green border-neon-green/30',
   };
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-purple border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2) {
     return (
@@ -121,7 +129,7 @@ export default function ChemLensPage() {
           </h3>
 
           <div className="space-y-2 max-h-[400px] overflow-auto">
-            {compounds?.compounds?.map((compound: Compound) => (
+            {compounds?.map((compound: Compound) => (
               <button
                 key={compound.id}
                 onClick={() => setSelectedCompound(compound.id)}
@@ -168,12 +176,12 @@ export default function ChemLensPage() {
           Recent Reactions
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {reactions?.reactions?.length === 0 ? (
+          {reactions?.length === 0 ? (
             <p className="col-span-full text-center py-8 text-gray-500">
               No reactions yet. Try the reaction chamber!
             </p>
           ) : (
-            reactions?.reactions?.slice(0, 6).map((reaction: Reaction) => (
+            reactions?.slice(0, 6).map((reaction: Reaction) => (
               <div key={reaction.id} className="lens-card">
                 <p className="font-mono text-sm mb-2">{reaction.formula}</p>
                 <div className="flex items-center justify-between text-xs">

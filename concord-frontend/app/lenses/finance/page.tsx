@@ -2,8 +2,8 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
-import { useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useUIStore } from '@/store/ui';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   TrendingUp,
@@ -117,27 +117,31 @@ const INITIAL_NEWS: NewsItem[] = [];
 
 export default function FinanceLensPage() {
   useLensNav('finance');
-  const _queryClient = useQueryClient();
-  const { isError: isError, error: error, refetch: refetch, items: assetItems } = useLensData<Asset>('finance', 'asset', {
+  const { isError: isError, error: error, refetch: refetch, isLoading: isLoadingAssets, items: assetItems } = useLensData<Asset>('finance', 'asset', {
     seed: INITIAL_ASSETS.map(a => ({ title: a.name, data: a as unknown as Record<string, unknown> })),
   });
-  const { isError: isError2, error: error2, refetch: refetch2, items: txItems } = useLensData<Transaction>('finance', 'transaction', {
+  const { isError: isError2, error: error2, refetch: refetch2, isLoading: isLoadingTx, items: txItems } = useLensData<Transaction>('finance', 'transaction', {
     seed: INITIAL_TRANSACTIONS.map(t => ({ title: t.type, data: t as unknown as Record<string, unknown> })),
   });
-  const { items: orderItems } = useLensData<Order>('finance', 'order', {
-    seed: INITIAL_ORDERS.map(o => ({ title: o.asset, data: o as unknown as Record<string, unknown> })),
+  const { isError: isError3, error: error3, refetch: refetch3, isLoading: isLoadingOrders, items: orderItems } = useLensData<Order>('finance', 'order', {
+    seed: INITIAL_ORDERS.map(o => ({ title: `${o.side} ${o.symbol}`, data: o as unknown as Record<string, unknown> })),
   });
-  const { items: alertItems } = useLensData<PriceAlert>('finance', 'alert', {
-    seed: INITIAL_ALERTS.map(a => ({ title: a.asset, data: a as unknown as Record<string, unknown> })),
+  const { isError: isError4, error: error4, refetch: refetch4, isLoading: isLoadingAlerts, items: alertItems } = useLensData<PriceAlert>('finance', 'alert', {
+    seed: INITIAL_ALERTS.map(a => ({ title: `${a.symbol} ${a.condition} ${a.price}`, data: a as unknown as Record<string, unknown> })),
   });
-  const { items: newsItems } = useLensData<NewsItem>('finance', 'news', {
+  const { isError: isError5, error: error5, refetch: refetch5, isLoading: isLoadingNews, items: newsItems } = useLensData<NewsItem>('finance', 'news', {
     seed: INITIAL_NEWS.map(n => ({ title: n.title, data: n as unknown as Record<string, unknown> })),
   });
-  const _assets: Asset[] = assetItems.map(i => ({ ...(i.data as unknown as Asset), id: i.id }));
-  const _transactions: Transaction[] = txItems.map(i => ({ ...(i.data as unknown as Transaction), id: i.id }));
+  const { create: createOrderMut } = useLensData<Order>('finance', 'order', { noSeed: true });
+
+  const assets: Asset[] = assetItems.map(i => ({ ...(i.data as unknown as Asset), id: i.id }));
+  const transactions: Transaction[] = txItems.map(i => ({ ...(i.data as unknown as Transaction), id: i.id }));
   const orders: Order[] = orderItems.map(i => ({ ...(i.data as unknown as Order), id: i.id }));
   const alerts: PriceAlert[] = alertItems.map(i => ({ ...(i.data as unknown as PriceAlert), id: i.id }));
   const news: NewsItem[] = newsItems.map(i => ({ ...(i.data as unknown as NewsItem), id: i.id }));
+
+  const isLoading = isLoadingAssets || isLoadingTx || isLoadingOrders || isLoadingAlerts || isLoadingNews;
+
   const chartRef = useRef<HTMLCanvasElement>(null);
 
   // State
@@ -154,11 +158,46 @@ export default function FinanceLensPage() {
   const [orderType, setOrderType] = useState<'market' | 'limit' | 'stop'>('market');
   const [tradeAmount, setTradeAmount] = useState('');
   const [tradePrice, setTradePrice] = useState('');
+  const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
+
+  const handleSubmitOrder = async () => {
+    if (!tradeAmount || isSubmittingOrder) return;
+    const amount = parseFloat(tradeAmount);
+    if (isNaN(amount) || amount <= 0) return;
+
+    setIsSubmittingOrder(true);
+    try {
+      const selectedTradingAsset = assets.find(a => a.symbol === tradeAsset) || assets[0];
+      const price = orderType === 'market' ? selectedTradingAsset?.price : parseFloat(tradePrice || '0');
+      const orderData: Partial<Order> = {
+        type: orderType,
+        side: tradeSide,
+        asset: selectedTradingAsset?.name || tradeAsset,
+        symbol: tradeAsset,
+        amount,
+        ...(orderType === 'limit' ? { price } : {}),
+        ...(orderType === 'stop' ? { stopPrice: price } : {}),
+        filled: 0,
+        status: orderType === 'market' ? 'filled' : 'open',
+        createdAt: new Date().toISOString(),
+      };
+      await createOrderMut({
+        title: `${tradeSide} ${tradeAsset}`,
+        data: orderData,
+      });
+      setTradeAmount('');
+      setTradePrice('');
+    } catch (err) {
+      console.error('Failed to submit order:', err);
+    } finally {
+      setIsSubmittingOrder(false);
+    }
+  };
 
   // Computed values
-  const totalValue = _assets.reduce((sum, a) => sum + a.value, 0);
-  const totalPnl = _assets.reduce((sum, a) => sum + a.pnl, 0);
-  const totalPnlPercent = totalValue > totalPnl ? (totalPnl / (totalValue - totalPnl)) * 100 : 0;
+  const totalValue = assets.reduce((sum, a) => sum + a.value, 0);
+  const totalPnl = assets.reduce((sum, a) => sum + a.pnl, 0);
+  const totalPnlPercent = totalValue - totalPnl !== 0 ? (totalPnl / (totalValue - totalPnl)) * 100 : 0;
 
   // Chart rendering
   useEffect(() => {
@@ -175,13 +214,15 @@ export default function FinanceLensPage() {
     ctx.fillStyle = 'transparent';
     ctx.fillRect(0, 0, width, height);
 
-    // Generate chart data
+    // Generate chart data deterministically from totalValue
     const dataPoints = 100;
     const data: number[] = [];
     let value = totalValue * 0.85;
 
     for (let i = 0; i < dataPoints; i++) {
-      value = value + (Math.random() - 0.45) * (totalValue * 0.02);
+      // Deterministic pseudo-movement using layered sine waves seeded from totalValue
+      const wave = Math.sin(i * 0.15) * 0.3 + Math.sin(i * 0.07 + 2) * 0.4 + Math.cos(i * 0.23 + 1) * 0.25;
+      value = value + wave * (totalValue * 0.02);
       value = Math.max(value, totalValue * 0.7);
       value = Math.min(value, totalValue * 1.1);
       data.push(value);
@@ -271,8 +312,8 @@ export default function FinanceLensPage() {
         const baseIndex = Math.floor((i / 20) * data.length);
         const open = data[baseIndex];
         const close = data[Math.min(baseIndex + 5, data.length - 1)];
-        const high = Math.max(open, close) * (1 + Math.random() * 0.02);
-        const low = Math.min(open, close) * (1 - Math.random() * 0.02);
+        const high = Math.max(open, close) * 1.01;
+        const low = Math.min(open, close) * 0.99;
 
         const x = padding + (i / 19) * (width - padding * 2);
         const openY = padding + ((maxVal - open) / range) * (height - padding * 2);
@@ -384,8 +425,8 @@ export default function FinanceLensPage() {
             <TrendingUp className="w-4 h-4 text-green-400" />
             <span className="text-sm text-gray-400">Best Performer</span>
           </div>
-          <p className="text-xl font-bold">{_assets.sort((a, b) => b.pnlPercent - a.pnlPercent)[0]?.symbol}</p>
-          <p className="text-green-400 text-sm">+{_assets.sort((a, b) => b.pnlPercent - a.pnlPercent)[0]?.pnlPercent.toFixed(2)}%</p>
+          <p className="text-xl font-bold">{assets.length > 0 ? [...assets].sort((a, b) => b.pnlPercent - a.pnlPercent)[0].symbol : '--'}</p>
+          <p className="text-green-400 text-sm">{assets.length > 0 ? `+${[...assets].sort((a, b) => b.pnlPercent - a.pnlPercent)[0].pnlPercent.toFixed(2)}%` : '--'}</p>
         </div>
 
         <div className="lens-card">
@@ -394,7 +435,7 @@ export default function FinanceLensPage() {
             <span className="text-sm text-gray-400">24h Volume</span>
           </div>
           <p className="text-xl font-bold">
-            {formatCurrency(_assets.reduce((sum, a) => sum + a.volume24h, 0), true)}
+            {formatCurrency(assets.reduce((sum, a) => sum + a.volume24h, 0), true)}
           </p>
           <p className="text-gray-400 text-sm">Across all assets</p>
         </div>
@@ -479,7 +520,7 @@ export default function FinanceLensPage() {
                   className="pl-9 pr-4 py-1.5 bg-lattice-deep rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-neon-cyan w-48"
                 />
               </div>
-              <button className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400">
+              <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Filter options' })} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400">
                 <Filter className="w-4 h-4" />
               </button>
             </div>
@@ -499,7 +540,10 @@ export default function FinanceLensPage() {
                 </tr>
               </thead>
               <tbody>
-                {_assets
+                {assets.filter(a => a.symbol.toLowerCase().includes(searchQuery.toLowerCase()) || a.name.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
+                  <tr><td colSpan={7} className="py-8 text-center text-gray-500">{searchQuery ? 'No assets match your search' : 'No assets in portfolio'}</td></tr>
+                )}
+                {assets
                   .filter(a => a.symbol.toLowerCase().includes(searchQuery.toLowerCase()) || a.name.toLowerCase().includes(searchQuery.toLowerCase()))
                   .map((asset) => (
                   <tr
@@ -562,7 +606,7 @@ export default function FinanceLensPage() {
             <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
               {(() => {
                 let offset = 0;
-                return _assets.map((asset, i) => {
+                return assets.map((asset, i) => {
                   const circumference = 2 * Math.PI * 40;
                   const strokeDasharray = (asset.allocation / 100) * circumference;
                   const strokeDashoffset = -offset;
@@ -589,14 +633,14 @@ export default function FinanceLensPage() {
             </svg>
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center">
-                <p className="text-2xl font-bold">{_assets.length}</p>
+                <p className="text-2xl font-bold">{assets.length}</p>
                 <p className="text-xs text-gray-400">Assets</p>
               </div>
             </div>
           </div>
 
           <div className="space-y-3">
-            {_assets.map((asset, i) => {
+            {assets.map((asset, i) => {
               const colors = ['bg-neon-cyan', 'bg-neon-purple', 'bg-green-500', 'bg-amber-500', 'bg-red-500'];
               return (
                 <div key={asset.id} className="flex items-center gap-3">
@@ -619,11 +663,11 @@ export default function FinanceLensPage() {
         <div className="panel p-4">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold">Recent Transactions</h3>
-            <button className="text-sm text-neon-cyan hover:underline">View all</button>
+            <button onClick={() => setViewMode('portfolio')} className="text-sm text-neon-cyan hover:underline">View all</button>
           </div>
 
           <div className="space-y-3">
-            {_transactions.slice(0, 5).map((tx) => (
+            {transactions.slice(0, 5).map((tx) => (
               <div key={tx.id} className="flex items-center gap-4 p-3 rounded-lg bg-lattice-deep/50">
                 <div className={cn(
                   'w-10 h-10 rounded-full flex items-center justify-center',
@@ -664,28 +708,28 @@ export default function FinanceLensPage() {
               <Newspaper className="w-4 h-4 text-neon-cyan" />
               Market News
             </h3>
-            <button className="text-sm text-neon-cyan hover:underline">More</button>
+            <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Loading more market news' })} className="text-sm text-neon-cyan hover:underline">More</button>
           </div>
 
           <div className="space-y-3">
-            {news.map((item) => (
-              <div key={item.id} className="p-3 rounded-lg bg-lattice-deep/50 hover:bg-lattice-elevated/50 cursor-pointer transition-colors">
+            {news.map((newsItem) => (
+              <div key={newsItem.id} className="p-3 rounded-lg bg-lattice-deep/50 hover:bg-lattice-elevated/50 cursor-pointer transition-colors">
                 <div className="flex items-start gap-3">
                   <div className={cn(
                     'w-2 h-2 rounded-full mt-2',
-                    item.sentiment === 'positive' && 'bg-green-400',
-                    item.sentiment === 'negative' && 'bg-red-400',
-                    item.sentiment === 'neutral' && 'bg-gray-400'
+                    newsItem.sentiment === 'positive' && 'bg-green-400',
+                    newsItem.sentiment === 'negative' && 'bg-red-400',
+                    newsItem.sentiment === 'neutral' && 'bg-gray-400'
                   )} />
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm leading-tight">{item.title}</p>
+                    <p className="font-medium text-sm leading-tight">{newsItem.title}</p>
                     <div className="flex items-center gap-2 mt-1">
-                      <span className="text-xs text-gray-400">{item.source}</span>
+                      <span className="text-xs text-gray-400">{newsItem.source}</span>
                       <span className="text-xs text-gray-500">·</span>
-                      <span className="text-xs text-gray-400">{formatTime(item.timestamp)}</span>
+                      <span className="text-xs text-gray-400">{formatTime(newsItem.timestamp)}</span>
                     </div>
                     <div className="flex items-center gap-1 mt-2">
-                      {item.assets.map((asset) => (
+                      {newsItem.assets.map((asset) => (
                         <span key={asset} className="px-2 py-0.5 bg-lattice-elevated rounded text-xs">
                           {asset}
                         </span>
@@ -702,8 +746,9 @@ export default function FinanceLensPage() {
   );
 
   const renderTrade = () => {
-    const selectedTradingAsset = _assets.find(a => a.symbol === tradeAsset) || _assets[0];
-    const estimatedValue = parseFloat(tradeAmount || '0') * (orderType === 'market' ? (selectedTradingAsset?.price || 0) : parseFloat(tradePrice || '0'));
+    const selectedTradingAsset = assets.find(a => a.symbol === tradeAsset) || assets[0];
+    if (!selectedTradingAsset) return <div className="p-8 text-center text-gray-400">No assets available for trading.</div>;
+    const estimatedValue = parseFloat(tradeAmount || '0') * (orderType === 'market' ? selectedTradingAsset.price : parseFloat(tradePrice || '0'));
 
     return (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -717,7 +762,7 @@ export default function FinanceLensPage() {
                   onChange={(e) => setTradeAsset(e.target.value)}
                   className="bg-lattice-deep rounded-lg px-4 py-2 font-semibold focus:outline-none focus:ring-1 focus:ring-neon-cyan"
                 >
-                  {_assets.map((asset) => (
+                  {assets.map((asset) => (
                     <option key={asset.id} value={asset.symbol}>
                       {asset.symbol}/USD
                     </option>
@@ -761,22 +806,23 @@ export default function FinanceLensPage() {
                   <span>Price (USD)</span>
                   <span>Amount ({tradeAsset})</span>
                 </div>
-                {Array.from({ length: 8 }).map((_, i) => {
-                  const price = selectedTradingAsset.price * (1 - (i + 1) * 0.001);
-                  const amount = Math.random() * 100 + 10;
-                  const depth = Math.random() * 100;
-
-                  return (
-                    <div key={i} className="relative flex justify-between text-sm py-1">
-                      <div
-                        className="absolute inset-0 bg-green-500/10"
-                        style={{ width: `${depth}%` }}
-                      />
-                      <span className="relative text-green-400 font-mono">{formatCurrency(price)}</span>
-                      <span className="relative text-gray-400 font-mono">{amount.toFixed(4)}</span>
-                    </div>
-                  );
-                })}
+                {orders.filter(o => o.side === 'buy' && (o.status === 'open' || o.status === 'partial')).length > 0 ? (
+                  orders.filter(o => o.side === 'buy' && (o.status === 'open' || o.status === 'partial')).slice(0, 8).map((order, i) => {
+                    const depth = ((order.filled / order.amount) * 100) || ((i + 1) / 8 * 100);
+                    return (
+                      <div key={order.id} className="relative flex justify-between text-sm py-1">
+                        <div
+                          className="absolute inset-0 bg-green-500/10"
+                          style={{ width: `${depth}%` }}
+                        />
+                        <span className="relative text-green-400 font-mono">{formatCurrency(order.price || selectedTradingAsset.price)}</span>
+                        <span className="relative text-gray-400 font-mono">{order.amount.toFixed(4)}</span>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="text-center text-xs text-gray-500 py-4">No buy orders yet</div>
+                )}
               </div>
 
               {/* Asks */}
@@ -785,22 +831,23 @@ export default function FinanceLensPage() {
                   <span>Price (USD)</span>
                   <span>Amount ({tradeAsset})</span>
                 </div>
-                {Array.from({ length: 8 }).map((_, i) => {
-                  const price = selectedTradingAsset.price * (1 + (i + 1) * 0.001);
-                  const amount = Math.random() * 100 + 10;
-                  const depth = Math.random() * 100;
-
-                  return (
-                    <div key={i} className="relative flex justify-between text-sm py-1">
-                      <div
-                        className="absolute inset-0 right-0 bg-red-500/10"
-                        style={{ width: `${depth}%`, marginLeft: 'auto' }}
-                      />
-                      <span className="relative text-red-400 font-mono">{formatCurrency(price)}</span>
-                      <span className="relative text-gray-400 font-mono">{amount.toFixed(4)}</span>
-                    </div>
-                  );
-                })}
+                {orders.filter(o => o.side === 'sell' && (o.status === 'open' || o.status === 'partial')).length > 0 ? (
+                  orders.filter(o => o.side === 'sell' && (o.status === 'open' || o.status === 'partial')).slice(0, 8).map((order, i) => {
+                    const depth = ((order.filled / order.amount) * 100) || ((i + 1) / 8 * 100);
+                    return (
+                      <div key={order.id} className="relative flex justify-between text-sm py-1">
+                        <div
+                          className="absolute inset-0 right-0 bg-red-500/10"
+                          style={{ width: `${depth}%`, marginLeft: 'auto' }}
+                        />
+                        <span className="relative text-red-400 font-mono">{formatCurrency(order.price || order.stopPrice || selectedTradingAsset.price)}</span>
+                        <span className="relative text-gray-400 font-mono">{order.amount.toFixed(4)}</span>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="text-center text-xs text-gray-500 py-4">No sell orders yet</div>
+                )}
               </div>
             </div>
           </div>
@@ -910,14 +957,16 @@ export default function FinanceLensPage() {
               </div>
 
               <button
+                onClick={handleSubmitOrder}
+                disabled={isSubmittingOrder || !tradeAmount}
                 className={cn(
-                  'w-full py-4 rounded-lg font-bold text-lg transition-colors',
+                  'w-full py-4 rounded-lg font-bold text-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed',
                   tradeSide === 'buy'
                     ? 'bg-green-500 hover:bg-green-600 text-white'
                     : 'bg-red-500 hover:bg-red-600 text-white'
                 )}
               >
-                {tradeSide === 'buy' ? 'Buy' : 'Sell'} {tradeAsset}
+                {isSubmittingOrder ? 'Submitting...' : `${tradeSide === 'buy' ? 'Buy' : 'Sell'} ${tradeAsset}`}
               </button>
             </div>
           </div>
@@ -954,7 +1003,7 @@ export default function FinanceLensPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold">Open Orders</h2>
-        <button className="btn-neon">
+        <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Opening order form...' })} className="btn-neon">
           <Plus className="w-4 h-4 mr-2" />
           New Order
         </button>
@@ -976,6 +1025,9 @@ export default function FinanceLensPage() {
             </tr>
           </thead>
           <tbody>
+            {orders.length === 0 && (
+              <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-500">No orders yet</td></tr>
+            )}
             {orders.map((order) => (
               <tr key={order.id} className="border-t border-lattice-border hover:bg-lattice-elevated/30">
                 <td className="px-4 py-4 text-sm text-gray-400">{formatTime(order.createdAt)}</td>
@@ -1014,7 +1066,7 @@ export default function FinanceLensPage() {
                   </span>
                 </td>
                 <td className="px-4 py-4">
-                  <button className="p-2 rounded hover:bg-lattice-elevated text-gray-400 hover:text-red-400">
+                  <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: `Cancelling order ${order.id}` })} className="p-2 rounded hover:bg-lattice-elevated text-gray-400 hover:text-red-400">
                     <X className="w-4 h-4" />
                   </button>
                 </td>
@@ -1030,7 +1082,7 @@ export default function FinanceLensPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold">Price Alerts</h2>
-        <button className="btn-neon">
+        <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Creating new price alert...' })} className="btn-neon">
           <Plus className="w-4 h-4 mr-2" />
           New Alert
         </button>
@@ -1038,7 +1090,7 @@ export default function FinanceLensPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {alerts.map((alert) => {
-          const asset = _assets.find(a => a.symbol === alert.symbol);
+          const asset = assets.find(a => a.symbol === alert.symbol);
           const triggered = alert.condition === 'above'
             ? (asset?.price || 0) >= alert.price
             : (asset?.price || 0) <= alert.price;
@@ -1058,7 +1110,7 @@ export default function FinanceLensPage() {
                     <p className="text-xs text-gray-400">{alert.asset}</p>
                   </div>
                 </div>
-                <button className={cn(
+                <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: alert.active ? 'Alert paused' : 'Alert activated' })} className={cn(
                   'p-2 rounded-lg',
                   alert.active ? 'text-neon-green' : 'text-gray-500'
                 )}>
@@ -1097,13 +1149,28 @@ export default function FinanceLensPage() {
   );
 
 
-  if (isError || isError2) {
+  if (isError || isError2 || isError3 || isError4 || isError5) {
     return (
       <div className="flex items-center justify-center h-full p-8">
-        <ErrorState error={error?.message || error2?.message} onRetry={() => { refetch(); refetch2(); }} />
+        <ErrorState
+          error={error?.message || error2?.message || error3?.message || error4?.message || error5?.message}
+          onRetry={() => { refetch(); refetch2(); refetch3(); refetch4(); refetch5(); }}
+        />
       </div>
     );
   }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="flex flex-col items-center gap-4">
+          <RefreshCw className="w-8 h-8 text-neon-cyan animate-spin" />
+          <p className="text-gray-400">Loading finance data...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 space-y-6">
       <header className="flex items-center justify-between">
@@ -1115,13 +1182,13 @@ export default function FinanceLensPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400">
+          <button onClick={() => { refetch(); refetch2(); refetch3(); refetch4(); refetch5(); }} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400">
             <RefreshCw className="w-5 h-5" />
           </button>
-          <button className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400">
+          <button onClick={() => { const data = JSON.stringify({ assets: assetItems, transactions: txItems }, null, 2); const blob = new Blob([data], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'finance-export.json'; a.click(); URL.revokeObjectURL(url); }} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400">
             <Download className="w-5 h-5" />
           </button>
-          <button className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400">
+          <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Finance settings' })} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400">
             <Settings className="w-5 h-5" />
           </button>
         </div>
@@ -1161,24 +1228,24 @@ export default function FinanceLensPage() {
         <div className="space-y-4">
           <h2 className="text-xl font-bold">Market News & Analysis</h2>
           <div className="grid gap-4">
-            {news.map((item) => (
-              <div key={item.id} className="panel p-4 hover:bg-lattice-elevated/50 cursor-pointer transition-colors">
+            {news.map((newsItem) => (
+              <div key={newsItem.id} className="panel p-4 hover:bg-lattice-elevated/50 cursor-pointer transition-colors">
                 <div className="flex items-start gap-4">
                   <div className={cn(
                     'w-1 h-full min-h-[60px] rounded-full',
-                    item.sentiment === 'positive' && 'bg-green-400',
-                    item.sentiment === 'negative' && 'bg-red-400',
-                    item.sentiment === 'neutral' && 'bg-gray-400'
+                    newsItem.sentiment === 'positive' && 'bg-green-400',
+                    newsItem.sentiment === 'negative' && 'bg-red-400',
+                    newsItem.sentiment === 'neutral' && 'bg-gray-400'
                   )} />
                   <div className="flex-1">
-                    <h3 className="font-semibold mb-1">{item.title}</h3>
+                    <h3 className="font-semibold mb-1">{newsItem.title}</h3>
                     <div className="flex items-center gap-3 text-sm text-gray-400 mb-2">
-                      <span>{item.source}</span>
+                      <span>{newsItem.source}</span>
                       <span>·</span>
-                      <span>{formatTime(item.timestamp)}</span>
+                      <span>{formatTime(newsItem.timestamp)}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      {item.assets.map((asset) => (
+                      {newsItem.assets.map((asset) => (
                         <span key={asset} className="px-2 py-1 bg-lattice-deep rounded text-xs font-medium">
                           {asset}
                         </span>

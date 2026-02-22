@@ -19,7 +19,7 @@ export default function CommonsenseLensPage() {
   const [queryText, setQueryText] = useState('');
   const [results, setResults] = useState<unknown>(null);
 
-  const { data: factsData, isError: isError, error: error, refetch: refetch,} = useQuery({
+  const { data: factsData, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
     queryKey: ['commonsense-facts'],
     queryFn: () => apiHelpers.commonsense.facts().then((r) => r.data),
   });
@@ -36,11 +36,13 @@ export default function CommonsenseLensPage() {
       setSubject('');
       setObject('');
     },
+    onError: (err) => console.error('addFact failed:', err instanceof Error ? err.message : err),
   });
 
   const queryFacts = useMutation({
     mutationFn: () => apiHelpers.commonsense.query({ query: queryText }),
     onSuccess: (res) => setResults(res.data),
+    onError: (err) => console.error('queryFacts failed:', err instanceof Error ? err.message : err),
   });
 
   const facts = factsData?.facts || factsData || [];
@@ -48,6 +50,17 @@ export default function CommonsenseLensPage() {
 
   const relations = ['is_a', 'has_property', 'part_of', 'used_for', 'causes', 'capable_of', 'located_at'];
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-yellow border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2) {
     return (

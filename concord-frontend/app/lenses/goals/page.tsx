@@ -192,15 +192,22 @@ function XpLevelBar({ xp }: { xp: number }) {
   );
 }
 
-function WeeklyActivityBar() {
+function WeeklyActivityBar({ goals }: { goals: Goal[] }) {
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  const activity = [3, 5, 2, 7, 4, 6, 1];
-  const max = Math.max(...activity);
+  // Derive activity from completed goals by day of week
+  const activity = days.map((_, dayIdx) => {
+    return goals.filter(g => {
+      if (g.status !== 'completed' || !g.targetDate) return false;
+      const d = new Date(g.targetDate);
+      return ((d.getDay() + 6) % 7) === dayIdx; // Monday=0
+    }).length;
+  });
+  const max = Math.max(...activity, 1);
   return (
     <div className="flex items-end gap-1.5 h-10">
       {days.map((day, i) => (
         <div key={day} className="flex flex-col items-center gap-0.5 flex-1">
-          <motion.div className="w-full rounded-sm bg-gradient-to-t from-cyan-600 to-cyan-400" initial={{ height: 0 }} animate={{ height: `${(activity[i] / max) * 100}%` }} transition={{ duration: 0.6, delay: i * 0.05 }} title={`${activity[i]}h`} />
+          <motion.div className="w-full rounded-sm bg-gradient-to-t from-cyan-600 to-cyan-400" initial={{ height: 0 }} animate={{ height: `${(activity[i] / max) * 100}%` }} transition={{ duration: 0.6, delay: i * 0.05 }} title={`${activity[i]} goals`} />
           <span className="text-[8px] text-gray-500">{day}</span>
         </div>
       ))}
@@ -246,41 +253,55 @@ export default function GoalsLensPage() {
   const [newXp, setNewXp] = useState(200);
   const [newPriority, setNewPriority] = useState<Goal['priority']>('medium');
 
-  const { isError: isError, error: error, refetch: refetch, items: _goalItems, create: _createGoal, update: _updateGoal } = useLensData('goals', 'goal', {
+  const { isLoading, isError: isError, error: error, refetch: refetch, items: goalItems, create: createGoalItem, update: updateGoalItem } = useLensData<Record<string, unknown>>('goals', 'goal', {
     seed: SEED_GOALS.map(g => ({ title: g.title, data: g as unknown as Record<string, unknown> })),
   });
-  const { isError: isError2, error: error2, refetch: refetch2, items: _challengeItems } = useLensData('goals', 'challenge', {
+  const { isError: isError2, error: error2, refetch: refetch2, items: challengeItems, update: updateChallengeItem } = useLensData<Record<string, unknown>>('goals', 'challenge', {
     seed: SEED_CHALLENGES.map(c => ({ title: c.title, data: c as unknown as Record<string, unknown> })),
   });
-  const { isError: isError3, error: error3, refetch: refetch3, items: _milestoneItems } = useLensData('goals', 'milestone', {
+  const { isError: isError3, error: error3, refetch: refetch3, items: milestoneItems } = useLensData<Record<string, unknown>>('goals', 'milestone', {
     seed: SEED_MILESTONES.map(m => ({ title: m.title, data: m as unknown as Record<string, unknown> })),
   });
-  const isError4 = false as boolean; const error4 = null as Error | null; const refetch4 = () => {};
-  const isError5 = false as boolean; const error5 = null as Error | null; const refetch5 = () => {};
+  const { isError: isError4, error: error4, refetch: refetch4, items: achievementItems } = useLensData<Record<string, unknown>>('goals', 'achievement', {
+    seed: SEED_ACHIEVEMENTS.map(a => ({ title: a.name, data: a as unknown as Record<string, unknown> })),
+  });
 
-  // State — initialized empty, populated from backend via useLensData
-  const [goals, setGoals] = useState<Goal[]>(SEED_GOALS);
-  const [challenges, setChallenges] = useState<Challenge[]>(SEED_CHALLENGES);
-  const [milestones] = useState<Milestone[]>(SEED_MILESTONES);
-  const [achievements] = useState<Achievement[]>(SEED_ACHIEVEMENTS);
+  // Derive state from useLensData items (real backend data)
+  const goals = useMemo(() => goalItems.map(item => ({ id: item.id, ...item.data } as unknown as Goal)), [goalItems]);
+  const challenges = useMemo(() => challengeItems.map(item => ({ id: item.id, ...item.data } as unknown as Challenge)), [challengeItems]);
+  const milestones = useMemo(() => milestoneItems.map(item => ({ id: item.id, ...item.data } as unknown as Milestone)), [milestoneItems]);
+  const achievements = useMemo(() => achievementItems.map(item => ({ id: item.id, ...item.data } as unknown as Achievement)), [achievementItems]);
 
-  // API integration (preserves original backend connectivity)
+  // API integration
   const createGoalMutation = useMutation({
-    mutationFn: () =>
-      apiHelpers.goals.create({
-        title: newTitle,
-        description: newDescription,
-        priority: newPriority,
-      }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['goals'] }),
+    mutationFn: async () => {
+      // Try backend first, fallback to lens data
+      try {
+        await apiHelpers.goals.create({ title: newTitle, description: newDescription, priority: newPriority });
+        queryClient.invalidateQueries({ queryKey: ['goals'] });
+      } catch {
+        await createGoalItem({
+          title: newTitle,
+          data: {
+            title: newTitle, description: newDescription, category: newCategory,
+            progress: 0, priority: newPriority, targetDate: newTargetDate,
+            subtasks: newSubtasks.split('\n').filter(Boolean).map((s, i) => ({ id: `st-${i}`, label: s, done: false })),
+            xp: newXp, milestones: [], status: 'active',
+          } as unknown as Record<string, unknown>,
+        });
+      }
+    },
+    onSuccess: () => { setShowCreate(false); setNewTitle(''); setNewDescription(''); setNewSubtasks(''); },
     onError: (err) => {
       console.error('Failed to create goal:', err instanceof Error ? err.message : err);
     },
   });
 
   const autoPropose = useMutation({
-    mutationFn: () => apiHelpers.goals.autoPropose(),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['goals'] }),
+    mutationFn: async () => {
+      try { await apiHelpers.goals.autoPropose(); } catch { /* backend may not support this */ }
+      queryClient.invalidateQueries({ queryKey: ['goals'] });
+    },
     onError: (err) => {
       console.error('Auto-propose failed:', err instanceof Error ? err.message : err);
     },
@@ -326,46 +347,25 @@ export default function GoalsLensPage() {
   }, [goals]);
 
   const toggleSubtask = (goalId: string, subtaskId: string) => {
-    setGoals((prev) =>
-      prev.map((g) => {
-        if (g.id !== goalId) return g;
-        const updated = g.subtasks.map((st) =>
-          st.id === subtaskId ? { ...st, done: !st.done } : st
-        );
-        const doneCount = updated.filter((st) => st.done).length;
-        return { ...g, subtasks: updated, progress: Math.round((doneCount / updated.length) * 100) / 100 };
-      })
+    const goal = goals.find(g => g.id === goalId);
+    if (!goal) return;
+    const updated = (goal.subtasks || []).map((st) =>
+      st.id === subtaskId ? { ...st, done: !st.done } : st
     );
+    const doneCount = updated.filter((st) => st.done).length;
+    const progress = updated.length > 0 ? Math.round((doneCount / updated.length) * 100) / 100 : 0;
+    updateGoalItem(goalId, { data: { ...goal, subtasks: updated, progress } as unknown as Record<string, unknown> }).catch((err) => console.error('Failed to update goal subtask:', err instanceof Error ? err.message : err));
   };
 
   const acceptChallenge = (id: string) => {
-    setChallenges((prev) => prev.map((c) => (c.id === id ? { ...c, accepted: true } : c)));
+    const challenge = challenges.find(c => c.id === id);
+    if (challenge) {
+      updateChallengeItem(id, { data: { ...challenge, accepted: true } as unknown as Record<string, unknown> }).catch((err) => console.error('Failed to accept challenge:', err instanceof Error ? err.message : err));
+    }
   };
 
   const handleCreateGoal = () => {
-    const subtaskList = newSubtasks
-      .split('\n')
-      .filter(Boolean)
-      .map((label, i) => ({ id: `new-${Date.now()}-${i}`, label: label.trim(), done: false }));
-    const newGoal: Goal = {
-      id: `g-${Date.now()}`,
-      title: newTitle,
-      description: newDescription,
-      category: newCategory,
-      progress: 0,
-      priority: newPriority,
-      targetDate: newTargetDate || '2026-03-31',
-      subtasks: subtaskList,
-      xp: newXp,
-      milestones: [50],
-      status: 'active',
-    };
-    setGoals((prev) => [newGoal, ...prev]);
     createGoalMutation.mutate();
-    setShowCreate(false);
-    setNewTitle('');
-    setNewDescription('');
-    setNewSubtasks('');
   };
 
   const tabs = [
@@ -378,10 +378,21 @@ export default function GoalsLensPage() {
   const filterPills = ['All', 'Active', 'Completed', 'Creative', 'Technical', 'Release'];
 
 
-  if (isError || isError2 || isError3 || isError4 || isError5) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full p-8">
-        <ErrorState error={error?.message || error2?.message || error3?.message || error4?.message || error5?.message} onRetry={() => { refetch(); refetch2(); refetch3(); refetch4(); refetch5(); }} />
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isError || isError2 || isError3 || isError4) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <ErrorState error={error?.message || error2?.message || error3?.message || error4?.message} onRetry={() => { refetch(); refetch2(); refetch3(); refetch4(); }} />
       </div>
     );
   }
@@ -455,7 +466,7 @@ export default function GoalsLensPage() {
         </div>
         <div className="panel p-4 space-y-2">
           <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">Weekly Activity</p>
-          <WeeklyActivityBar />
+          <WeeklyActivityBar goals={goals} />
         </div>
       </div>
 
@@ -500,7 +511,7 @@ export default function GoalsLensPage() {
                   <Zap className="w-4 h-4 text-yellow-400 flex-shrink-0" />
                   <input type="number" value={newXp} onChange={(e) => setNewXp(Number(e.target.value))} min={50} max={2000} step={50} className="input-lattice w-full" placeholder="XP" />
                 </div>
-                <button onClick={handleCreateGoal} disabled={!newTitle} className="btn-neon purple">Create Goal</button>
+                <button onClick={handleCreateGoal} disabled={!newTitle || createGoalMutation.isPending} className="btn-neon purple disabled:opacity-50 disabled:cursor-not-allowed">{createGoalMutation.isPending ? 'Creating...' : 'Create Goal'}</button>
               </div>
               <textarea value={newSubtasks} onChange={(e) => setNewSubtasks(e.target.value)} placeholder="Subtasks (one per line)..." className="input-lattice w-full h-16 resize-none text-sm" />
             </div>

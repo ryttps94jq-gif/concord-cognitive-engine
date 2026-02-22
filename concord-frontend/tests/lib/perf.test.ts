@@ -62,14 +62,14 @@ describe('perf utilities', () => {
   describe('default reporter', () => {
     it('logs to console.debug in development', () => {
       const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
-      const originalEnv = process.env.NODE_ENV;
-      process.env.NODE_ENV = 'development';
+      const originalDev = import.meta.env.DEV;
+      import.meta.env.DEV = true;
 
       // Reset to default reporter by importing fresh
       // We need to re-set to the original default behavior
       // The simplest approach: set a reporter that mimics the default
       setMetricReporter((metric) => {
-        if (process.env.NODE_ENV === 'development') {
+        if (import.meta.env.DEV) {
           console.debug('[Perf]', metric.name, `${metric.value.toFixed(1)}ms`, metric.meta || '');
         }
       });
@@ -84,7 +84,7 @@ describe('perf utilities', () => {
         expect.objectContaining({ lens: 'debug-lens' })
       );
 
-      process.env.NODE_ENV = originalEnv;
+      import.meta.env.DEV = originalDev;
       debugSpy.mockRestore();
     });
   });
@@ -306,7 +306,7 @@ describe('perf utilities', () => {
 
       // CLS value should only include entries without recent input
       const clsCall = reporter.mock.calls.find(
-        (call: [PerfMetric]) => call[0].name === 'CLS'
+        (call: unknown[]) => (call[0] as PerfMetric).name === 'CLS'
       );
       if (clsCall) {
         expect(clsCall[0].value).toBeCloseTo(0.15, 5);

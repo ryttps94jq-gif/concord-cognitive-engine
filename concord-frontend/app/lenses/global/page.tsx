@@ -6,6 +6,7 @@ import { Search, ChevronsLeft, ChevronsRight, RefreshCw } from 'lucide-react';
 import { apiHelpers } from '@/lib/api/client';
 import { useLensNav } from '@/hooks/useLensNav';
 import { getCommandPaletteLenses } from '@/lib/lens-registry';
+import { ErrorState } from '@/components/common/EmptyState';
 
 const PAGE_SIZE = 50;
 
@@ -21,15 +22,16 @@ export default function GlobalLensPage() {
     []
   );
 
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
     queryKey: ['global-dtus-browser', PAGE_SIZE, offset, query, tags],
     queryFn: () =>
       apiHelpers.dtus
         .paginated({
           limit: PAGE_SIZE,
           offset,
-          query,
-          tags,
+          query: query || undefined,
+          tags: tags || undefined,
+          scope: 'global',
         })
         .then((r) => r.data),
   });
@@ -40,10 +42,21 @@ export default function GlobalLensPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['global-dtus-browser'] });
     },
+    onError: (err) => {
+      console.error('Failed to sync DTU to lens:', err instanceof Error ? err.message : err);
+    },
   });
 
   const items = data?.items || [];
   const total = Number(data?.total || 0);
+
+  if (isError) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <ErrorState error={error?.message} onRetry={refetch} />
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-5">

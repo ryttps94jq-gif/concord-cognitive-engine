@@ -2,7 +2,7 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { apiHelpers } from '@/lib/api/client';
 import { useState } from 'react';
 import { Newspaper, Clock, Tag, TrendingUp, Bookmark, Share2 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -17,6 +17,7 @@ interface NewsArticle {
   imageUrl?: string;
   trending: boolean;
   bookmarked: boolean;
+  url?: string;
 }
 
 export default function NewsLensPage() {
@@ -24,15 +25,15 @@ export default function NewsLensPage() {
 
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
-  const { data: news, isError: isError, error: error, refetch: refetch,} = useQuery({
+  const { data: news, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
     queryKey: ['news', selectedCategory],
     queryFn: () =>
-      api.get('/api/news', { params: { category: selectedCategory } }).then((r) => r.data),
+      apiHelpers.lens.list('news', { type: 'article', tags: selectedCategory !== 'all' ? selectedCategory : undefined }).then((r) => r.data),
   });
 
   const { data: trending, isError: isError2, error: error2, refetch: refetch2,} = useQuery({
     queryKey: ['news-trending'],
-    queryFn: () => api.get('/api/news/trending').then((r) => r.data),
+    queryFn: () => apiHelpers.lens.list('news', { type: 'trending' }).then((r) => r.data),
   });
 
   const categories = [
@@ -44,6 +45,17 @@ export default function NewsLensPage() {
     { id: 'community', name: 'Community' },
   ];
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-blue border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2) {
     return (
@@ -117,10 +129,10 @@ export default function NewsLensPage() {
                         <span>{article.source}</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <button className="text-gray-400 hover:text-neon-blue">
+                        <button onClick={() => navigator.clipboard?.writeText(article.url || article.title)} className="text-gray-400 hover:text-neon-blue">
                           <Bookmark className="w-4 h-4" />
                         </button>
-                        <button className="text-gray-400 hover:text-neon-purple">
+                        <button onClick={() => navigator.clipboard?.writeText(`${window.location.origin}/lenses/news?article=${article.id}`)} className="text-gray-400 hover:text-neon-purple">
                           <Share2 className="w-4 h-4" />
                         </button>
                       </div>

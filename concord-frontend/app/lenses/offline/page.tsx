@@ -83,6 +83,7 @@ export default function OfflineLensPage() {
       qc.invalidateQueries({ queryKey: ['db', 'status'] });
       qc.invalidateQueries({ queryKey: ['lens', 'offline', 'list'] });
     },
+    onError: (err) => console.error('syncAllMut failed:', err instanceof Error ? err.message : err),
   });
 
   // Clear Cache mutation — deletes all sync items one by one
@@ -95,6 +96,7 @@ export default function OfflineLensPage() {
       qc.invalidateQueries({ queryKey: ['db', 'status'] });
       qc.invalidateQueries({ queryKey: ['lens', 'offline', 'list'] });
     },
+    onError: (err) => console.error('clearCacheMut failed:', err instanceof Error ? err.message : err),
   });
 
   // Sync a single item
@@ -107,6 +109,7 @@ export default function OfflineLensPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['lens', 'offline', 'list'] });
     },
+    onError: (err) => console.error('syncSingleMut failed:', err instanceof Error ? err.message : err),
   });
 
   // Force Refresh — invalidate all queries to re-fetch from server

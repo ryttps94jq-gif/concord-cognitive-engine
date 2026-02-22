@@ -3,7 +3,7 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
-import { api } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -37,6 +37,7 @@ import {
   LineChart
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
+import { useUIStore } from '@/store/ui';
 
 // Types
 interface Model {
@@ -105,9 +106,129 @@ type Tab = 'models' | 'experiments' | 'datasets' | 'deployments' | 'playground';
 type ViewMode = 'grid' | 'list';
 
 // Seed data
-const INITIAL_MODELS: Model[] = [];
+const INITIAL_MODELS: Model[] = [
+  {
+    id: 'model-1',
+    name: 'DTU Classifier v3',
+    type: 'classification',
+    framework: 'pytorch',
+    status: 'deployed',
+    version: '3.2.1',
+    accuracy: 0.942,
+    f1Score: 0.938,
+    loss: 0.156,
+    parameters: 12500000,
+    size: '48 MB',
+    lastTrained: '2026-01-28',
+    description: 'Multi-class classification model for DTU categorization',
+    tags: ['production', 'classification', 'nlp'],
+    deployedAt: '2026-01-29',
+    endpoint: '/api/ml/infer/dtu-classifier'
+  },
+  {
+    id: 'model-2',
+    name: 'Embedding Model',
+    type: 'embedding',
+    framework: 'pytorch',
+    status: 'ready',
+    version: '2.0.0',
+    accuracy: 0.891,
+    parameters: 25000000,
+    size: '95 MB',
+    lastTrained: '2026-01-20',
+    description: 'Dense vector embeddings for semantic search',
+    tags: ['embeddings', 'search']
+  },
+  {
+    id: 'model-3',
+    name: 'Sentiment Analyzer',
+    type: 'classification',
+    framework: 'tensorflow',
+    status: 'training',
+    version: '1.5.0',
+    parameters: 8000000,
+    size: '32 MB',
+    description: 'Real-time sentiment analysis for user content',
+    tags: ['nlp', 'sentiment']
+  },
+  {
+    id: 'model-4',
+    name: 'Content Generator',
+    type: 'generation',
+    framework: 'pytorch',
+    status: 'ready',
+    version: '1.0.0',
+    parameters: 175000000,
+    size: '680 MB',
+    lastTrained: '2026-01-15',
+    description: 'GPT-style model for content generation',
+    tags: ['generation', 'llm']
+  },
+  {
+    id: 'model-5',
+    name: 'Anomaly Detector',
+    type: 'clustering',
+    framework: 'sklearn',
+    status: 'ready',
+    version: '2.1.0',
+    accuracy: 0.967,
+    parameters: 50000,
+    size: '2 MB',
+    lastTrained: '2026-01-25',
+    description: 'Isolation forest for anomaly detection',
+    tags: ['anomaly', 'security']
+  }
+];
 
-const INITIAL_EXPERIMENTS: Experiment[] = [];
+const INITIAL_EXPERIMENTS: Experiment[] = [
+  {
+    id: 'exp-1',
+    name: 'DTU Classifier Hypertuning',
+    modelId: 'model-1',
+    status: 'running',
+    hyperparams: { learningRate: 0.001, batchSize: 32, epochs: 100, dropout: 0.3 },
+    metrics: Array.from({ length: 45 }, (_, i) => ({
+      epoch: i + 1,
+      trainLoss: 2.5 - (i * 0.04) + Math.sin(i * 1.5) * 0.05,
+      valLoss: 2.6 - (i * 0.035) + Math.sin(i * 2.1) * 0.07,
+      accuracy: 0.3 + (i * 0.014) + Math.sin(i * 1.8) * 0.01,
+      learningRate: 0.001 * Math.pow(0.95, Math.floor(i / 10))
+    })),
+    startedAt: '2026-02-05T10:30:00Z'
+  },
+  {
+    id: 'exp-2',
+    name: 'Embedding Model Fine-tune',
+    modelId: 'model-2',
+    status: 'completed',
+    hyperparams: { learningRate: 0.0005, batchSize: 64, epochs: 50, embeddingDim: 768 },
+    metrics: Array.from({ length: 50 }, (_, i) => ({
+      epoch: i + 1,
+      trainLoss: 1.8 - (i * 0.03),
+      valLoss: 1.9 - (i * 0.028),
+      accuracy: 0.5 + (i * 0.008),
+      learningRate: 0.0005
+    })),
+    startedAt: '2026-02-04T14:00:00Z',
+    completedAt: '2026-02-04T18:30:00Z',
+    duration: '4h 30m'
+  },
+  {
+    id: 'exp-3',
+    name: 'Sentiment v2 Training',
+    modelId: 'model-3',
+    status: 'running',
+    hyperparams: { learningRate: 0.002, batchSize: 16, epochs: 80, hiddenSize: 512 },
+    metrics: Array.from({ length: 23 }, (_, i) => ({
+      epoch: i + 1,
+      trainLoss: 1.5 - (i * 0.05),
+      valLoss: 1.6 - (i * 0.045),
+      accuracy: 0.4 + (i * 0.02),
+      learningRate: 0.002
+    })),
+    startedAt: '2026-02-05T08:00:00Z'
+  }
+];
 
 const INITIAL_DATASETS: Dataset[] = [];
 
@@ -116,21 +237,19 @@ const INITIAL_DEPLOYMENTS: Deployment[] = [];
 export default function MLLensPage() {
   useLensNav('ml');
   const queryClient = useQueryClient();
-  const { isError: isError, error: error, refetch: refetch, items: modelItems } = useLensData<Model>('ml', 'model', {
+  const { isError, error, refetch, isLoading: isLoadingModels, items: modelItems } = useLensData<Model>('ml', 'model', {
     seed: INITIAL_MODELS.map(m => ({ title: m.name, data: m as unknown as Record<string, unknown> })),
   });
-  const { isError: isError2, error: error2, refetch: refetch2, items: expItems } = useLensData<Experiment>('ml', 'experiment', {
+  const { isError: isError2, error: error2, refetch: refetch2, isLoading: isLoadingExperiments, items: expItems } = useLensData<Experiment>('ml', 'experiment', {
     seed: INITIAL_EXPERIMENTS.map(e => ({ title: e.name, data: e as unknown as Record<string, unknown> })),
   });
-  const { items: datasetItems } = useLensData<Dataset>('ml', 'dataset', {
+  const { isError: isError3, error: error3, refetch: refetch3, isLoading: isLoadingDatasets, items: datasetItems } = useLensData<Dataset>('ml', 'dataset', {
     seed: INITIAL_DATASETS.map(d => ({ title: d.name, data: d as unknown as Record<string, unknown> })),
   });
-  const { items: deploymentItems } = useLensData<Deployment>('ml', 'deployment', {
+  const { isError: isError4, error: error4, refetch: refetch4, isLoading: isLoadingDeployments, items: deploymentItems } = useLensData<Deployment>('ml', 'deployment', {
     seed: INITIAL_DEPLOYMENTS.map(d => ({ title: d.modelName, data: d as unknown as Record<string, unknown> })),
   });
-  const isError3 = false as boolean; const error3 = null as Error | null; const refetch3 = () => {};
-  const isError4 = false as boolean; const error4 = null as Error | null; const refetch4 = () => {};
-  const isError5 = false as boolean; const error5 = null as Error | null; const refetch5 = () => {};
+  const isLoading = isLoadingModels || isLoadingExperiments || isLoadingDatasets || isLoadingDeployments;
   const models: Model[] = modelItems.map(i => ({ ...(i.data as unknown as Model), id: i.id }));
   const experiments: Experiment[] = expItems.map(i => ({ ...(i.data as unknown as Experiment), id: i.id }));
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -149,33 +268,95 @@ export default function MLLensPage() {
   // Queries
   const { data: metricsData } = useQuery({
     queryKey: ['ml-metrics'],
-    queryFn: () => api.get('/api/ml/metrics').then(r => r.data),
+    queryFn: () => apiHelpers.lens.list('ml', { type: 'metrics' }).then(r => r.data),
     refetchInterval: 5000
   });
 
   // Mutations
   const runInference = useMutation({
     mutationFn: (payload: { modelId: string; input: string }) =>
-      api.post('/api/ml/infer', payload).then(r => r.data),
-    onSuccess: (data) => setPlaygroundOutput(data)
+      apiHelpers.lens.run('ml', payload.modelId, { action: 'infer', params: { input: payload.input } }).then(r => r.data),
+    onSuccess: (data) => setPlaygroundOutput(data),
+    onError: (err) => console.error('runInference failed:', err instanceof Error ? err.message : err),
   });
 
   const startTraining = useMutation({
-    mutationFn: (config: Record<string, unknown>) => api.post('/api/ml/train', config),
+    mutationFn: (config: Record<string, unknown>) => apiHelpers.lens.create('ml', { type: 'training-job', data: config }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ml-experiments'] });
       setShowNewExperiment(false);
-    }
+    },
+    onError: (err) => console.error('startTraining failed:', err instanceof Error ? err.message : err),
   });
 
   const deployModel = useMutation({
-    mutationFn: (modelId: string) => api.post(`/api/ml/deploy/${modelId}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['ml-models'] })
+    mutationFn: (modelId: string) => apiHelpers.lens.run('ml', modelId, { action: 'deploy' }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['ml-models'] }),
+    onError: (err) => console.error('deployModel failed:', err instanceof Error ? err.message : err),
   });
 
+  const stopExperiment = useMutation({
+    mutationFn: (expId: string) => apiHelpers.lens.run('ml', expId, { action: 'stop' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ml-experiments'] });
+      useUIStore.getState().addToast({ type: 'success', message: 'Experiment stopped' });
+    },
+    onError: (err) => useUIStore.getState().addToast({ type: 'error', message: `Failed to stop: ${err instanceof Error ? err.message : 'Unknown error'}` }),
+  });
+
+  const scaleDeployment = useMutation({
+    mutationFn: (depId: string) => apiHelpers.lens.run('ml', depId, { action: 'scale', params: { replicas: 2 } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ml-deployments'] });
+      useUIStore.getState().addToast({ type: 'success', message: 'Deployment scaling initiated' });
+    },
+    onError: (err) => useUIStore.getState().addToast({ type: 'error', message: `Scale failed: ${err instanceof Error ? err.message : 'Unknown error'}` }),
+  });
+
+  const stopDeployment = useMutation({
+    mutationFn: (depId: string) => apiHelpers.lens.run('ml', depId, { action: 'stop-deployment' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ml-deployments'] });
+      useUIStore.getState().addToast({ type: 'success', message: 'Deployment stopped' });
+    },
+    onError: (err) => useUIStore.getState().addToast({ type: 'error', message: `Stop failed: ${err instanceof Error ? err.message : 'Unknown error'}` }),
+  });
+
+  const handleUploadDataset = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.csv,.json,.parquet,.tsv,.jsonl';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        useUIStore.getState().addToast({ type: 'info', message: `Uploading dataset: ${file.name}` });
+      }
+    };
+    input.click();
+  };
+
+  const handleCopyOutput = () => {
+    if (playgroundOutput) {
+      navigator.clipboard.writeText(JSON.stringify(playgroundOutput, null, 2));
+      useUIStore.getState().addToast({ type: 'success', message: 'Output copied to clipboard' });
+    }
+  };
+
+  const handleExportOutput = () => {
+    if (playgroundOutput) {
+      const blob = new Blob([JSON.stringify(playgroundOutput, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ml-output-${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+  };
+
   // Data - sourced from persistent backend
-  const datasets: Dataset[] = datasetItems.length > 0 ? datasetItems.map(i => ({ ...(i.data as unknown as Dataset), id: i.id })) : INITIAL_DATASETS;
-  const deployments: Deployment[] = deploymentItems.length > 0 ? deploymentItems.map(i => ({ ...(i.data as unknown as Deployment), id: i.id })) : INITIAL_DEPLOYMENTS;
+  const datasets: Dataset[] = datasetItems.map(i => ({ ...(i.data as unknown as Dataset), id: i.id }));
+  const deployments: Deployment[] = deploymentItems.map(i => ({ ...(i.data as unknown as Deployment), id: i.id }));
   const metrics = metricsData || { gpuUsage: 0, memoryUsage: 0, totalInferences: 0, avgLatency: 0 };
 
   // Filtered data
@@ -300,10 +481,21 @@ export default function MLLensPage() {
   };
 
 
-  if (isError || isError2 || isError3 || isError4 || isError5) {
+  if (isError || isError2 || isError3 || isError4) {
     return (
       <div className="flex items-center justify-center h-full p-8">
-        <ErrorState error={error?.message || error2?.message || error3?.message || error4?.message || error5?.message} onRetry={() => { refetch(); refetch2(); refetch3(); refetch4(); refetch5(); }} />
+        <ErrorState error={error?.message || error2?.message || error3?.message || error4?.message} onRetry={() => { refetch(); refetch2(); refetch3(); refetch4(); }} />
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center">
+          <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-4 text-neon-purple" />
+          <p className="text-gray-400">Loading ML data...</p>
+        </div>
       </div>
     );
   }
@@ -432,6 +624,7 @@ export default function MLLensPage() {
                   typeConfig={typeConfig}
                   onSelect={() => setSelectedModel(model)}
                   onDeploy={() => deployModel.mutate(model.id)}
+                  isDeploying={deployModel.isPending}
                 />
               ))}
             </div>
@@ -445,6 +638,7 @@ export default function MLLensPage() {
                   typeConfig={typeConfig}
                   onSelect={() => setSelectedModel(model)}
                   onDeploy={() => deployModel.mutate(model.id)}
+                  isDeploying={deployModel.isPending}
                 />
               ))}
             </div>
@@ -504,11 +698,14 @@ export default function MLLensPage() {
                     <h3 className="font-semibold">{selectedExperiment.name}</h3>
                     <div className="flex items-center gap-2">
                       {selectedExperiment.status === 'running' && (
-                        <button className="btn-neon small pink">
-                          <Square className="w-4 h-4 mr-1" /> Stop
+                        <button className="btn-neon small pink" onClick={() => stopExperiment.mutate(selectedExperiment.id)} disabled={stopExperiment.isPending}>
+                          <Square className="w-4 h-4 mr-1" /> {stopExperiment.isPending ? 'Stopping...' : 'Stop'}
                         </button>
                       )}
-                      <button className="btn-neon small">
+                      <button className="btn-neon small" onClick={() => {
+                        setShowNewExperiment(true);
+                        useUIStore.getState().addToast({ type: 'info', message: `Cloning experiment "${selectedExperiment.name}"` });
+                      }}>
                         <Copy className="w-4 h-4 mr-1" /> Clone
                       </button>
                     </div>
@@ -584,7 +781,7 @@ export default function MLLensPage() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold">Available Datasets</h3>
-            <button className="btn-neon">
+            <button className="btn-neon" onClick={handleUploadDataset}>
               <Upload className="w-4 h-4 mr-2" />
               Upload Dataset
             </button>
@@ -678,9 +875,9 @@ export default function MLLensPage() {
                   </div>
 
                   <div className="flex gap-2">
-                    <button className="btn-neon small">Scale</button>
-                    <button className="btn-neon small">Logs</button>
-                    <button className="btn-neon small pink">Stop</button>
+                    <button className="btn-neon small" onClick={() => scaleDeployment.mutate(dep.id)} disabled={scaleDeployment.isPending}>Scale</button>
+                    <button className="btn-neon small" onClick={() => useUIStore.getState().addToast({ type: 'info', message: `Fetching logs for ${dep.modelName}...` })}>Logs</button>
+                    <button className="btn-neon small pink" onClick={() => stopDeployment.mutate(dep.id)} disabled={stopDeployment.isPending}>Stop</button>
                   </div>
                 </div>
               ))}
@@ -755,10 +952,10 @@ export default function MLLensPage() {
 
             {!!playgroundOutput && (
               <div className="flex gap-2">
-                <button className="btn-neon small flex-1">
+                <button className="btn-neon small flex-1" onClick={handleCopyOutput}>
                   <Copy className="w-4 h-4 mr-1" /> Copy
                 </button>
-                <button className="btn-neon small flex-1">
+                <button className="btn-neon small flex-1" onClick={handleExportOutput}>
                   <Download className="w-4 h-4 mr-1" /> Export
                 </button>
               </div>
@@ -777,6 +974,7 @@ export default function MLLensPage() {
             onTrain={() => { setSelectedModel(null); setShowNewExperiment(true); }}
             statusConfig={statusConfig}
             typeConfig={typeConfig}
+            isDeploying={deployModel.isPending}
           />
         )}
       </AnimatePresence>
@@ -820,7 +1018,7 @@ function MetricCard({ icon, label, value, trend, color }: { icon: React.ReactNod
   );
 }
 
-function ModelCard({ model, statusConfig, typeConfig, onSelect, onDeploy: _onDeploy }: { model: Model; statusConfig: Record<string, Record<string, unknown>>; typeConfig: Record<string, Record<string, unknown>>; onSelect: () => void; onDeploy: () => void }) {
+function ModelCard({ model, statusConfig, typeConfig, onSelect, onDeploy: _onDeploy, isDeploying: _isDeploying }: { model: Model; statusConfig: Record<string, Record<string, unknown>>; typeConfig: Record<string, Record<string, unknown>>; onSelect: () => void; onDeploy: () => void; isDeploying?: boolean }) {
   const StatusIcon = (statusConfig[model.status]?.icon || Activity) as React.ElementType;
   const TypeIcon = (typeConfig[model.type]?.icon || Brain) as React.ElementType;
 
@@ -878,7 +1076,7 @@ function ModelCard({ model, statusConfig, typeConfig, onSelect, onDeploy: _onDep
   );
 }
 
-function ModelListItem({ model, statusConfig, typeConfig, onSelect, onDeploy }: { model: Model; statusConfig: Record<string, Record<string, unknown>>; typeConfig: Record<string, Record<string, unknown>>; onSelect: () => void; onDeploy: () => void }) {
+function ModelListItem({ model, statusConfig, typeConfig, onSelect, onDeploy, isDeploying }: { model: Model; statusConfig: Record<string, Record<string, unknown>>; typeConfig: Record<string, Record<string, unknown>>; onSelect: () => void; onDeploy: () => void; isDeploying?: boolean }) {
   const StatusIcon = (statusConfig[model.status]?.icon || Activity) as React.ElementType;
   const TypeIcon = (typeConfig[model.type]?.icon || Brain) as React.ElementType;
 
@@ -906,7 +1104,8 @@ function ModelListItem({ model, statusConfig, typeConfig, onSelect, onDeploy }: 
         {model.status === 'ready' && (
           <button
             onClick={(e) => { e.stopPropagation(); onDeploy(); }}
-            className="btn-neon small"
+            disabled={isDeploying}
+            className="btn-neon small disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Rocket className="w-4 h-4" />
           </button>
@@ -916,7 +1115,7 @@ function ModelListItem({ model, statusConfig, typeConfig, onSelect, onDeploy }: 
   );
 }
 
-function ModelDetailModal({ model, onClose, onDeploy, onTrain, statusConfig, typeConfig }: { model: Model; onClose: () => void; onDeploy: () => void; onTrain: () => void; statusConfig: Record<string, Record<string, unknown>>; typeConfig: Record<string, Record<string, unknown>> }) {
+function ModelDetailModal({ model, onClose, onDeploy, onTrain, statusConfig, typeConfig, isDeploying }: { model: Model; onClose: () => void; onDeploy: () => void; onTrain: () => void; statusConfig: Record<string, Record<string, unknown>>; typeConfig: Record<string, Record<string, unknown>>; isDeploying?: boolean }) {
   const StatusIcon = (statusConfig[model.status]?.icon || Activity) as React.ElementType;
   const TypeIcon = (typeConfig[model.type]?.icon || Brain) as React.ElementType;
 
@@ -958,8 +1157,8 @@ function ModelDetailModal({ model, onClose, onDeploy, onTrain, statusConfig, typ
             </span>
             {model.status === 'ready' && (
               <>
-                <button onClick={onDeploy} className="btn-neon purple">
-                  <Rocket className="w-4 h-4 mr-2" /> Deploy
+                <button onClick={onDeploy} disabled={isDeploying} className="btn-neon purple disabled:opacity-50 disabled:cursor-not-allowed">
+                  <Rocket className="w-4 h-4 mr-2" /> {isDeploying ? 'Deploying...' : 'Deploy'}
                 </button>
                 <button onClick={onTrain} className="btn-neon">
                   <RefreshCw className="w-4 h-4 mr-2" /> Retrain

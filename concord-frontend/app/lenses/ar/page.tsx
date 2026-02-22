@@ -2,7 +2,7 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { apiHelpers } from '@/lib/api/client';
 import { useState } from 'react';
 import { Glasses, Camera, Scan, Settings } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -13,9 +13,9 @@ export default function ARLensPage() {
   const [arEnabled, setArEnabled] = useState(false);
   const [selectedLayer, setSelectedLayer] = useState<string | null>(null);
 
-  const { data: arLayers, isError, error, refetch } = useQuery({
+  const { data: arLayers, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['ar-layers'],
-    queryFn: () => api.get('/api/ar/layers').then((r) => r.data),
+    queryFn: () => apiHelpers.lens.list('ar', { type: 'layer' }).then((r) => r.data),
   });
   const isError2 = isError; const error2 = error; const refetch2 = refetch;
 
@@ -26,6 +26,17 @@ export default function ARLensPage() {
     { id: 'temporal-markers', name: 'Temporal Markers', description: 'Time-based annotations', icon: '⏰' },
   ];
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-purple border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2) {
     return (

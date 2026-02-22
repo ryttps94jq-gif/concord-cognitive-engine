@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
-import { api } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import { ds } from '@/lib/design-system';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -274,53 +274,33 @@ export default function CouncilLensPage() {
   useLensNav('council');
   const queryClient = useQueryClient();
 
-  // ----- Lens persistence (auto-seeds on first use, syncs local state) -----
-  const { items: proposalLensItems, isLoading: _proposalsLoading } = useLensData<Record<string, unknown>>('council', 'proposal', {
+  // ----- Lens persistence (auto-seeds on first use, derives local data) -----
+  const { items: proposalLensItems, isLoading: _proposalsLoading, isError, error, refetch, create: createProposalItem, update: updateProposalItem, remove: _removeProposalItem } = useLensData<Record<string, unknown>>('council', 'proposal', {
     seed: INITIAL_PROPOSALS.map(p => ({ title: p.title, data: p as unknown as Record<string, unknown> })),
   });
-  const { items: budgetLensItems } = useLensData<Record<string, unknown>>('council', 'budget', {
+  const { items: budgetLensItems, create: createBudgetItem, update: updateBudgetItem, remove: _removeBudgetItem } = useLensData<Record<string, unknown>>('council', 'budget', {
     seed: INITIAL_BUDGET_ITEMS.map(b => ({ title: b.description, data: b as unknown as Record<string, unknown> })),
   });
-  const { items: stakeholderLensItems } = useLensData<Record<string, unknown>>('council', 'stakeholder', {
+  const { items: stakeholderLensItems, create: _createStakeholderItem, update: updateStakeholderItem, remove: _removeStakeholderItem } = useLensData<Record<string, unknown>>('council', 'stakeholder', {
     seed: INITIAL_STAKEHOLDERS.map(s => ({ title: s.name, data: s as unknown as Record<string, unknown> })),
   });
-  const { items: committeeLensItems } = useLensData<Record<string, unknown>>('council', 'committee', {
+  const { items: committeeLensItems, create: createCommitteeItem, update: _updateCommitteeItem, remove: _removeCommitteeItem } = useLensData<Record<string, unknown>>('council', 'committee', {
     seed: INITIAL_COMMITTEES.map(c => ({ title: c.name, data: c as unknown as Record<string, unknown> })),
   });
-  const { items: auditLensItems } = useLensData<Record<string, unknown>>('council', 'audit', {
+  const { items: auditLensItems, create: createAuditItem, update: _updateAuditItem, remove: _removeAuditItem } = useLensData<Record<string, unknown>>('council', 'audit', {
     seed: INITIAL_AUDIT.map(a => ({ title: a.action, data: a as unknown as Record<string, unknown> })),
   });
-  const { items: debateLensItems } = useLensData<Record<string, unknown>>('council', 'debate', {
+  const { items: debateLensItems, create: createDebateItem, update: updateDebateItem, remove: _removeDebateItem } = useLensData<Record<string, unknown>>('council', 'debate', {
     seed: INITIAL_DEBATES.map(d => ({ title: d.topic, data: d as unknown as Record<string, unknown> })),
   });
 
-  // Local state initialized from persisted lens data (falls back to seed data on first load)
-  const [proposals, setProposals] = useState<Proposal[]>(INITIAL_PROPOSALS);
-  const [budgetItems, setBudgetItems] = useState<BudgetItem[]>(INITIAL_BUDGET_ITEMS);
-  const [stakeholders, setStakeholders] = useState<Stakeholder[]>(INITIAL_STAKEHOLDERS);
-  const [committees, setCommittees] = useState<Committee[]>(INITIAL_COMMITTEES);
-  const [auditLog, setAuditLog] = useState<AuditEntry[]>(INITIAL_AUDIT);
-  const [debates, setDebates] = useState<DebateSession[]>(INITIAL_DEBATES);
-
-  // Sync from backend when lens data loads
-  useEffect(() => {
-    if (proposalLensItems.length > 0) setProposals(proposalLensItems.map(i => ({ id: i.id, ...i.data } as unknown as Proposal)));
-  }, [proposalLensItems]);
-  useEffect(() => {
-    if (budgetLensItems.length > 0) setBudgetItems(budgetLensItems.map(i => ({ id: i.id, ...i.data } as unknown as BudgetItem)));
-  }, [budgetLensItems]);
-  useEffect(() => {
-    if (stakeholderLensItems.length > 0) setStakeholders(stakeholderLensItems.map(i => ({ id: i.id, ...i.data } as unknown as Stakeholder)));
-  }, [stakeholderLensItems]);
-  useEffect(() => {
-    if (committeeLensItems.length > 0) setCommittees(committeeLensItems.map(i => ({ id: i.id, ...i.data } as unknown as Committee)));
-  }, [committeeLensItems]);
-  useEffect(() => {
-    if (auditLensItems.length > 0) setAuditLog(auditLensItems.map(i => ({ id: i.id, ...i.data } as unknown as AuditEntry)));
-  }, [auditLensItems]);
-  useEffect(() => {
-    if (debateLensItems.length > 0) setDebates(debateLensItems.map(i => ({ id: i.id, ...i.data } as unknown as DebateSession)));
-  }, [debateLensItems]);
+  // Derive typed arrays from lens items (backend data is the source of truth)
+  const proposals: Proposal[] = useMemo(() => proposalLensItems.map(i => ({ ...(i.data as unknown as Proposal), id: i.id })), [proposalLensItems]);
+  const budgetItems: BudgetItem[] = useMemo(() => budgetLensItems.map(i => ({ ...(i.data as unknown as BudgetItem), id: i.id })), [budgetLensItems]);
+  const stakeholders: Stakeholder[] = useMemo(() => stakeholderLensItems.map(i => ({ ...(i.data as unknown as Stakeholder), id: i.id })), [stakeholderLensItems]);
+  const committees: Committee[] = useMemo(() => committeeLensItems.map(i => ({ ...(i.data as unknown as Committee), id: i.id })), [committeeLensItems]);
+  const auditLog: AuditEntry[] = useMemo(() => auditLensItems.map(i => ({ ...(i.data as unknown as AuditEntry), id: i.id })), [auditLensItems]);
+  const debates: DebateSession[] = useMemo(() => debateLensItems.map(i => ({ ...(i.data as unknown as DebateSession), id: i.id })), [debateLensItems]);
 
   const [activeTab, setActiveTab] = useState<CouncilTab>('proposals');
 
@@ -363,11 +343,7 @@ export default function CouncilLensPage() {
       const dtus: DTU[] = dtusData?.dtus || [];
       const dtuA = dtus.find((d: DTU) => d.id === params.dtuA);
       const dtuB = dtus.find((d: DTU) => d.id === params.dtuB);
-      const res = await api.post('/api/council/debate', {
-        dtuA: dtuA ? { id: dtuA.id, content: dtuA.content } : params.dtuA,
-        dtuB: dtuB ? { id: dtuB.id, content: dtuB.content } : params.dtuB,
-        topic: params.topic,
-      });
+      const res = await apiHelpers.council.reviewGlobal();
       return res.data;
     },
     onSuccess: () => {
@@ -377,8 +353,6 @@ export default function CouncilLensPage() {
       console.error('Debate failed:', err instanceof Error ? err.message : err);
     },
   });
-
-  const { isError, error, refetch, items: _proposalArtifacts, create: _createProposal } = useLensData('council', 'proposal', { noSeed: true });
 
   const runArtifact = useRunArtifact('council');
 
@@ -425,8 +399,9 @@ export default function CouncilLensPage() {
 
   // ----- Audit Logger -----
   const addAuditEntry = useCallback((entry: Omit<AuditEntry, 'id' | 'timestamp'>) => {
-    setAuditLog(prev => [{ ...entry, id: `au-${Date.now()}`, timestamp: new Date().toISOString() }, ...prev]);
-  }, []);
+    const auditEntry = { ...entry, id: `au-${Date.now()}`, timestamp: new Date().toISOString() };
+    createAuditItem({ title: entry.action, data: auditEntry as unknown as Record<string, unknown> });
+  }, [createAuditItem]);
 
   // ----- Stakeholder name lookup -----
   const stakeholderName = useCallback((id: string) => {
@@ -444,64 +419,70 @@ export default function CouncilLensPage() {
       linkedBudgetItems: [], votingMethod: newProposal.votingMethod, votingDeadline: null,
       votes: {}, quorumRequired: 4, tags: newProposal.tags.split(',').map(t => t.trim()).filter(Boolean),
     };
-    setProposals(prev => [p, ...prev]);
+    createProposalItem({ title: p.title, data: p as unknown as Record<string, unknown> });
     addAuditEntry({ actor: 'Council Chair', action: 'Created proposal', target: p.id, details: p.title, category: 'proposal' });
     setShowCreateProposal(false);
     setNewProposal({ title: '', description: '', type: 'policy', impactAssessment: '', tags: '', votingMethod: 'simple_majority' });
-  }, [newProposal, addAuditEntry]);
+  }, [newProposal, addAuditEntry, createProposalItem]);
 
   const handleAdvanceStatus = useCallback((proposalId: string) => {
     const order: ProposalStatus[] = ['draft', 'discussion', 'voting', 'decided', 'implemented'];
-    setProposals(prev => prev.map(p => {
-      if (p.id !== proposalId) return p;
-      const idx = order.indexOf(p.status);
-      if (idx < 0 || idx >= order.length - 1) return p;
-      const next = order[idx + 1];
-      addAuditEntry({ actor: 'Council Chair', action: `Advanced to ${next}`, target: p.id, details: `${p.title} moved to ${next}`, category: 'proposal' });
-      return { ...p, status: next, updatedAt: new Date().toISOString() };
-    }));
-  }, [addAuditEntry]);
+    const p = proposals.find(pr => pr.id === proposalId);
+    if (!p) return;
+    const idx = order.indexOf(p.status);
+    if (idx < 0 || idx >= order.length - 1) return;
+    const next = order[idx + 1];
+    const updated = { ...p, status: next, updatedAt: new Date().toISOString() };
+    updateProposalItem(proposalId, { data: updated as unknown as Record<string, unknown> });
+    addAuditEntry({ actor: 'Council Chair', action: `Advanced to ${next}`, target: p.id, details: `${p.title} moved to ${next}`, category: 'proposal' });
+  }, [proposals, addAuditEntry, updateProposalItem]);
 
   const handleRejectProposal = useCallback((proposalId: string) => {
-    setProposals(prev => prev.map(p => {
-      if (p.id !== proposalId) return p;
-      addAuditEntry({ actor: 'Council Chair', action: 'Rejected proposal', target: p.id, details: p.title, category: 'proposal' });
-      return { ...p, status: 'rejected' as ProposalStatus, updatedAt: new Date().toISOString() };
-    }));
-  }, [addAuditEntry]);
+    const p = proposals.find(pr => pr.id === proposalId);
+    if (!p) return;
+    const updated = { ...p, status: 'rejected' as ProposalStatus, updatedAt: new Date().toISOString() };
+    updateProposalItem(proposalId, { data: updated as unknown as Record<string, unknown> });
+    addAuditEntry({ actor: 'Council Chair', action: 'Rejected proposal', target: p.id, details: p.title, category: 'proposal' });
+  }, [proposals, addAuditEntry, updateProposalItem]);
 
   const handleCastVote = useCallback((proposalId: string, stakeholderId: string, choice: VoteChoice) => {
-    setProposals(prev => prev.map(p => {
-      if (p.id !== proposalId) return p;
-      const newVotes = { ...p.votes, [stakeholderId]: choice };
-      addAuditEntry({ actor: stakeholderName(stakeholderId), action: 'Voted', target: p.id, details: `Cast vote: ${choice.replace('_', ' ')}`, category: 'vote' });
-      return { ...p, votes: newVotes, updatedAt: new Date().toISOString() };
-    }));
-  }, [addAuditEntry, stakeholderName]);
+    const p = proposals.find(pr => pr.id === proposalId);
+    if (!p) return;
+    const newVotes = { ...p.votes, [stakeholderId]: choice };
+    const updated = { ...p, votes: newVotes, updatedAt: new Date().toISOString() };
+    updateProposalItem(proposalId, { data: updated as unknown as Record<string, unknown> });
+    addAuditEntry({ actor: stakeholderName(stakeholderId), action: 'Voted', target: p.id, details: `Cast vote: ${choice.replace('_', ' ')}`, category: 'vote' });
+  }, [proposals, addAuditEntry, stakeholderName, updateProposalItem]);
 
   const handleAddComment = useCallback((proposalId: string) => {
     if (!commentText.trim()) return;
+    const p = proposals.find(pr => pr.id === proposalId);
+    if (!p) return;
     const comment: DiscussionComment = { id: `dc-${Date.now()}`, author: 's1', content: commentText, createdAt: new Date().toISOString(), type: 'comment' };
-    setProposals(prev => prev.map(p => p.id === proposalId ? { ...p, discussion: [...p.discussion, comment], updatedAt: new Date().toISOString() } : p));
+    const updated = { ...p, discussion: [...p.discussion, comment], updatedAt: new Date().toISOString() };
+    updateProposalItem(proposalId, { data: updated as unknown as Record<string, unknown> });
     setCommentText('');
-  }, [commentText]);
+  }, [commentText, proposals, updateProposalItem]);
 
   const handleAddAmendment = useCallback((proposalId: string) => {
     if (!amendmentForm.title.trim()) return;
+    const p = proposals.find(pr => pr.id === proposalId);
+    if (!p) return;
     const amendment: Amendment = { id: `am-${Date.now()}`, proposalId, author: 's1', title: amendmentForm.title, description: amendmentForm.description, status: 'proposed', createdAt: new Date().toISOString() };
-    setProposals(prev => prev.map(p => p.id === proposalId ? { ...p, amendments: [...p.amendments, amendment], updatedAt: new Date().toISOString() } : p));
+    const updated = { ...p, amendments: [...p.amendments, amendment], updatedAt: new Date().toISOString() };
+    updateProposalItem(proposalId, { data: updated as unknown as Record<string, unknown> });
     addAuditEntry({ actor: 'Council Chair', action: 'Proposed amendment', target: amendment.id, details: amendment.title, category: 'amendment' });
     setAmendmentForm({ title: '', description: '' });
     setShowAmendmentForm(false);
-  }, [amendmentForm, addAuditEntry]);
+  }, [amendmentForm, addAuditEntry, proposals, updateProposalItem]);
 
   const handleAcceptAmendment = useCallback((proposalId: string, amendmentId: string) => {
-    setProposals(prev => prev.map(p => {
-      if (p.id !== proposalId) return p;
-      return { ...p, amendments: p.amendments.map(a => a.id === amendmentId ? { ...a, status: 'accepted' as const } : a), updatedAt: new Date().toISOString() };
-    }));
+    const p = proposals.find(pr => pr.id === proposalId);
+    if (!p) return;
+    const updated = { ...p, amendments: p.amendments.map(a => a.id === amendmentId ? { ...a, status: 'accepted' as const } : a), updatedAt: new Date().toISOString() };
+    updateProposalItem(proposalId, { data: updated as unknown as Record<string, unknown> });
     addAuditEntry({ actor: 'Council Chair', action: 'Accepted amendment', target: amendmentId, details: 'Amendment accepted', category: 'amendment' });
-  }, [addAuditEntry]);
+  }, [proposals, addAuditEntry, updateProposalItem]);
 
   const handleCreateBudgetItem = useCallback(() => {
     if (!newBudgetItem.description.trim() || !newBudgetItem.amount) return;
@@ -510,32 +491,38 @@ export default function CouncilLensPage() {
       amount: parseFloat(newBudgetItem.amount), type: newBudgetItem.type, justification: newBudgetItem.justification,
       approvalStatus: 'pending', proposalId: null, scenario: newBudgetItem.scenario,
     };
-    setBudgetItems(prev => [...prev, item]);
+    createBudgetItem({ title: item.description, data: item as unknown as Record<string, unknown> });
     addAuditEntry({ actor: 'Council Chair', action: 'Submitted budget item', target: item.id, details: `${item.description} (${formatCurrency(item.amount)})`, category: 'budget' });
     setShowCreateBudgetItem(false);
     setNewBudgetItem({ category: 'Operations', description: '', amount: '', type: 'expense', justification: '', scenario: 'proposed' });
-  }, [newBudgetItem, addAuditEntry]);
+  }, [newBudgetItem, addAuditEntry, createBudgetItem]);
 
   const handleApproveBudgetItem = useCallback((itemId: string, approved: boolean) => {
-    setBudgetItems(prev => prev.map(b => b.id === itemId ? { ...b, approvalStatus: approved ? 'approved' : 'rejected' } : b));
+    const b = budgetItems.find(bi => bi.id === itemId);
+    if (!b) return;
+    const updated = { ...b, approvalStatus: approved ? 'approved' as const : 'rejected' as const };
+    updateBudgetItem(itemId, { data: updated as unknown as Record<string, unknown> });
     addAuditEntry({ actor: 'Council Chair', action: approved ? 'Approved budget item' : 'Rejected budget item', target: itemId, details: '', category: 'budget' });
-  }, [addAuditEntry]);
+  }, [budgetItems, addAuditEntry, updateBudgetItem]);
 
   const handleCreateCommittee = useCallback(() => {
     if (!newCommittee.name.trim()) return;
     const c: Committee = { id: `com-${Date.now()}`, name: newCommittee.name, description: newCommittee.description, members: ['s1'], chair: 's1' };
-    setCommittees(prev => [...prev, c]);
+    createCommitteeItem({ title: c.name, data: c as unknown as Record<string, unknown> });
     addAuditEntry({ actor: 'Council Chair', action: 'Created committee', target: c.id, details: c.name, category: 'stakeholder' });
     setShowCreateCommittee(false);
     setNewCommittee({ name: '', description: '' });
-  }, [newCommittee, addAuditEntry]);
+  }, [newCommittee, addAuditEntry, createCommitteeItem]);
 
   const handleDelegate = useCallback((fromId: string, toId: string | null) => {
-    setStakeholders(prev => prev.map(s => s.id === fromId ? { ...s, delegatedTo: toId } : s));
+    const s = stakeholders.find(sh => sh.id === fromId);
+    if (!s) return;
+    const updated = { ...s, delegatedTo: toId };
+    updateStakeholderItem(fromId, { data: updated as unknown as Record<string, unknown> });
     if (toId) {
       addAuditEntry({ actor: stakeholderName(fromId), action: 'Delegated vote', target: `${fromId} -> ${toId}`, details: `Delegated to ${stakeholderName(toId)}`, category: 'stakeholder' });
     }
-  }, [addAuditEntry, stakeholderName]);
+  }, [stakeholders, addAuditEntry, stakeholderName, updateStakeholderItem]);
 
   const handleCreateDebate = useCallback(() => {
     if (!newDebate.topic.trim()) return;
@@ -545,25 +532,28 @@ export default function CouncilLensPage() {
       timePerSpeaker: newDebate.timePerSpeaker, points: [], synthesis: null,
       createdAt: new Date().toISOString(),
     };
-    setDebates(prev => [d, ...prev]);
+    createDebateItem({ title: d.topic, data: d as unknown as Record<string, unknown> });
     addAuditEntry({ actor: 'Council Chair', action: 'Started debate', target: d.id, details: d.topic, category: 'debate' });
     setShowCreateDebate(false);
     setNewDebate({ topic: '', timePerSpeaker: 300 });
-  }, [newDebate, addAuditEntry]);
+  }, [newDebate, addAuditEntry, createDebateItem]);
 
   const handleAddDebatePoint = useCallback((debateId: string, type: 'point' | 'counterpoint' | 'motion') => {
     if (!debatePointText.trim()) return;
-    setDebates(prev => prev.map(d => {
-      if (d.id !== debateId) return d;
-      return { ...d, points: [...d.points, { speaker: 'Council Chair', content: debatePointText, type }] };
-    }));
+    const d = debates.find(db => db.id === debateId);
+    if (!d) return;
+    const updated = { ...d, points: [...d.points, { speaker: 'Council Chair', content: debatePointText, type }] };
+    updateDebateItem(debateId, { data: updated as unknown as Record<string, unknown> });
     setDebatePointText('');
-  }, [debatePointText]);
+  }, [debatePointText, debates, updateDebateItem]);
 
   const handleConcludeDebate = useCallback((debateId: string) => {
-    setDebates(prev => prev.map(d => d.id === debateId ? { ...d, status: 'concluded' as const, synthesis: 'Synthesis to be generated...' } : d));
+    const d = debates.find(db => db.id === debateId);
+    if (!d) return;
+    const updated = { ...d, status: 'concluded' as const, synthesis: 'Synthesis to be generated...' };
+    updateDebateItem(debateId, { data: updated as unknown as Record<string, unknown> });
     addAuditEntry({ actor: 'Council Chair', action: 'Concluded debate', target: debateId, details: 'Debate concluded', category: 'debate' });
-  }, [addAuditEntry]);
+  }, [debates, addAuditEntry, updateDebateItem]);
 
   const handleGenerateSynthesis = useCallback((debateId: string) => {
     const debate = debates.find(d => d.id === debateId);
@@ -1267,7 +1257,7 @@ export default function CouncilLensPage() {
               <div className="space-y-1.5 text-xs text-gray-400">
                 <div className="flex items-center justify-between">
                   <span>Voting Weight</span>
-                  <span className="font-semibold text-white">{s.votingWeight.toFixed(1)}x</span>
+                  <span className="font-semibold text-white">{(s.votingWeight ?? 0).toFixed(1)}x</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span>Participation</span>
@@ -1362,7 +1352,7 @@ export default function CouncilLensPage() {
           <div className="flex items-center gap-2">
             <button onClick={() => { setActiveTab('debates'); setShowCreateDebate(true); }} className={ds.btnSecondary}><Megaphone className="w-4 h-4" />Start Debate</button>
             <button onClick={() => { const vp = proposals.find(p => p.status === 'discussion'); if (vp) { handleAdvanceStatus(vp.id); setActiveTab('voting'); } }} className={ds.btnSecondary}><Gavel className="w-4 h-4" />Call Vote</button>
-            <button onClick={() => { runArtifact.mutate({ id: 'council', action: 'generate-minutes', params: { debates, proposals } }); }} className={ds.btnSecondary}><FileDown className="w-4 h-4" />Generate Minutes</button>
+            <button onClick={() => { runArtifact.mutate({ id: 'council', action: 'generate-minutes', params: { debates, proposals } }); }} disabled={runArtifact.isPending} className={cn(ds.btnSecondary, 'disabled:opacity-50 disabled:cursor-not-allowed')}><FileDown className="w-4 h-4" />{runArtifact.isPending ? 'Generating...' : 'Generate Minutes'}</button>
             <button onClick={handleExportAudit} className={ds.btnSecondary}><Download className="w-4 h-4" />Export Decisions</button>
           </div>
         </div>

@@ -632,19 +632,26 @@ export default function AgricultureLensPage() {
       <div className={ds.panel}>
         <h3 className={cn(ds.heading3, 'mb-4 flex items-center gap-2')}><TrendingUp className="w-5 h-5 text-neon-cyan" /> Recent Items</h3>
         <div className="space-y-2">
-          {items.slice(0, 5).map(item => {
-            const d = item.data as unknown as AgricultureArtifact;
-            return (
-              <div key={item.id} className="flex items-center gap-3 p-3 rounded-lg bg-lattice-surface/50 hover:bg-lattice-surface cursor-pointer" onClick={() => openEdit(item)}>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium truncate">{item.title}</p>
-                  <p className={ds.textMuted}>{d.type}</p>
+          {items.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-gray-500">No items yet</p>
+              <p className="text-sm text-gray-400 mt-1">Create your first farm item to get started</p>
+            </div>
+          ) : (
+            items.slice(0, 5).map(item => {
+              const d = item.data as unknown as AgricultureArtifact;
+              return (
+                <div key={item.id} className="flex items-center gap-3 p-3 rounded-lg bg-lattice-surface/50 hover:bg-lattice-surface cursor-pointer" onClick={() => openEdit(item)}>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium truncate">{item.title}</p>
+                    <p className={ds.textMuted}>{d.type}</p>
+                  </div>
+                  {renderStatusBadge(d.status)}
+                  <ArrowUpRight className="w-4 h-4 text-gray-500" />
                 </div>
-                {renderStatusBadge(d.status)}
-                <ArrowUpRight className="w-4 h-4 text-gray-500" />
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
       </div>
     </div>
@@ -654,6 +661,17 @@ export default function AgricultureLensPage() {
   // Main render
   // ---------------------------------------------------------------------------
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError) {
     return (

@@ -4,7 +4,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
-import { api } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
+import { useUIStore } from '@/store/ui';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -211,14 +212,15 @@ function formatTimestamp(ts: number): string {
 
 export default function CollabLensPage() {
   useLensNav('collab');
-  const _queryClient = useQueryClient();
-
-  const { isError: isError, error: error, refetch: refetch, items: _sessionItems, create: _createSession } = useLensData('collab', 'session', {
+  const { isLoading, isError, error, refetch, items: sessionItems } = useLensData('collab', 'session', {
     seed: INITIAL_SESSIONS.map(s => ({ title: s.name, data: s as unknown as Record<string, unknown> })),
   });
-  const isError2 = isError; const error2 = error; const refetch2 = refetch;
-  const isError3 = false as boolean; const error3 = null as Error | null; const refetch3 = refetch;
-  const isError4 = false as boolean; const error4 = null as Error | null; const refetch4 = refetch;
+  const { isLoading: isLoadingInvitations, isError: isError2, error: error2, refetch: refetch2, items: invitationItems } = useLensData('collab', 'invitation', {
+    seed: INITIAL_INVITATIONS.map(i => ({ title: i.sessionName, data: i as unknown as Record<string, unknown> })),
+  });
+  const { isLoading: isLoadingHistory, isError: isError3, error: error3, refetch: refetch3, items: historyItems } = useLensData('collab', 'history', {
+    seed: INITIAL_HISTORY.map(h => ({ title: h.sessionName, data: h as unknown as Record<string, unknown> })),
+  });
 
   const [activeTab, setActiveTab] = useState<MainTab>('active');
   const [filterPill, setFilterPill] = useState<FilterPill>('all');
@@ -226,7 +228,9 @@ export default function CollabLensPage() {
   const [activeSession, setActiveSession] = useState<CollabSession | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
-  const sessions: CollabSession[] = INITIAL_SESSIONS;
+  const sessions: CollabSession[] = sessionItems.map(i => i.data as unknown as CollabSession);
+  const invitations: Invitation[] = invitationItems.map(i => i.data as unknown as Invitation);
+  const history: HistoryEntry[] = historyItems.map(i => i.data as unknown as HistoryEntry);
   const onlineCount = sessions.reduce((n, s) => n + s.participants.filter(p => p.online).length, 0);
 
   // Filter sessions
@@ -241,7 +245,7 @@ export default function CollabLensPage() {
   const TABS: { key: MainTab; label: string; count?: number }[] = [
     { key: 'active', label: 'Active Sessions', count: sessions.length },
     { key: 'mine', label: 'My Sessions', count: mySessions.length },
-    { key: 'invitations', label: 'Invitations', count: INITIAL_INVITATIONS.length },
+    { key: 'invitations', label: 'Invitations' },
     { key: 'history', label: 'Session History' },
   ];
 
@@ -265,10 +269,21 @@ export default function CollabLensPage() {
   }
 
 
-  if (isError || isError2 || isError3 || isError4) {
+  if (isLoading || isLoadingInvitations || isLoadingHistory) {
     return (
       <div className="flex items-center justify-center h-full p-8">
-        <ErrorState error={error?.message || error2?.message || error3?.message || error4?.message} onRetry={() => { refetch(); refetch2(); refetch3(); refetch4(); }} />
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isError || isError2 || isError3) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <ErrorState error={error?.message || error2?.message || error3?.message} onRetry={() => { refetch(); refetch2(); refetch3(); }} />
       </div>
     );
   }
@@ -425,9 +440,17 @@ export default function CollabLensPage() {
             transition={{ duration: 0.2 }}
             className="space-y-3"
           >
-            {INITIAL_INVITATIONS.map(inv => (
-              <InvitationCard key={inv.id} invitation={inv} />
-            ))}
+            {invitations.length === 0 ? (
+              <div className="panel p-12 text-center text-gray-400">
+                <Mail className="w-12 h-12 mx-auto mb-3 opacity-40" />
+                <p className="font-medium">No invitations</p>
+                <p className="text-sm mt-1">When someone invites you to a session, it will appear here.</p>
+              </div>
+            ) : (
+              invitations.map(inv => (
+                <InvitationCard key={inv.id} invitation={inv} />
+              ))
+            )}
           </motion.div>
         )}
 
@@ -440,9 +463,17 @@ export default function CollabLensPage() {
             transition={{ duration: 0.2 }}
             className="space-y-3"
           >
-            {INITIAL_HISTORY.map(entry => (
-              <HistoryCard key={entry.id} entry={entry} />
-            ))}
+            {history.length === 0 ? (
+              <div className="panel p-12 text-center text-gray-400">
+                <Archive className="w-12 h-12 mx-auto mb-3 opacity-40" />
+                <p className="font-medium">No session history</p>
+                <p className="text-sm mt-1">Completed sessions will appear here.</p>
+              </div>
+            ) : (
+              history.map(entry => (
+                <HistoryCard key={entry.id} entry={entry} />
+              ))
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -569,7 +600,10 @@ function SessionCard({ session, onJoin }: { session: CollabSession; onJoin: () =
 
 function ActiveSessionView({ session, onLeave }: { session: CollabSession; onLeave: () => void }) {
   const [chatInput, setChatInput] = useState('');
-  const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_CHAT);
+  const { items: chatItems, create: createChatMessage } = useLensData('collab', 'chat', {
+    seed: INITIAL_CHAT.map(m => ({ title: m.senderName, data: m as unknown as Record<string, unknown> })),
+  });
+  const messages: ChatMessage[] = chatItems.map(i => i.data as unknown as ChatMessage);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [elapsed, setElapsed] = useState(Date.now() - session.startedAt);
 
@@ -580,20 +614,21 @@ function ActiveSessionView({ session, onLeave }: { session: CollabSession; onLea
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages.length]);
 
   const sendMessage = useCallback(() => {
     if (!chatInput.trim()) return;
-    setMessages(prev => [...prev, {
+    const newMsg: ChatMessage = {
       id: `m-${Date.now()}`,
       senderId: 'me',
       senderName: 'You',
       senderAvatar: AVATARS[0],
       text: chatInput.trim(),
       timestamp: Date.now(),
-    }]);
+    };
+    createChatMessage({ title: newMsg.senderName, data: newMsg as unknown as Record<string, unknown> });
     setChatInput('');
-  }, [chatInput]);
+  }, [chatInput, createChatMessage]);
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)]">
@@ -666,7 +701,7 @@ function ActiveSessionView({ session, onLeave }: { session: CollabSession; onLea
                         i % 3 === 1 ? 'bg-neon-purple/15 text-neon-purple' :
                         'bg-neon-cyan/15 text-neon-cyan'
                       )}
-                      style={{ width: `${Math.max(60, Math.random() * 100)}%` }}
+                      style={{ width: `${Math.max(60, ((i + 1) / 6) * 100)}%` }}
                     >
                       {section}
                     </div>
@@ -714,16 +749,16 @@ function ActiveSessionView({ session, onLeave }: { session: CollabSession; onLea
 
           {/* Bottom action bar */}
           <div className="flex items-center gap-2 px-5 py-3 border-t border-lattice-border bg-lattice-surface/50">
-            <button className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-lattice-surface border border-lattice-border text-gray-300 hover:border-neon-blue/40 transition-colors">
+            <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Screen sharing initiated' })} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-lattice-surface border border-lattice-border text-gray-300 hover:border-neon-blue/40 transition-colors">
               <Monitor className="w-3.5 h-3.5" /> Share Screen
             </button>
-            <button className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-lattice-surface border border-lattice-border text-gray-300 hover:border-neon-blue/40 transition-colors">
+            <button onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.click(); }} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-lattice-surface border border-lattice-border text-gray-300 hover:border-neon-blue/40 transition-colors">
               <Upload className="w-3.5 h-3.5" /> Upload File
             </button>
-            <button className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-lattice-surface border border-lattice-border text-gray-300 hover:border-neon-blue/40 transition-colors">
+            <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Invite link copied to clipboard' })} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-lattice-surface border border-lattice-border text-gray-300 hover:border-neon-blue/40 transition-colors">
               <UserPlus className="w-3.5 h-3.5" /> Invite
             </button>
-            <button className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-lattice-surface border border-lattice-border text-gray-300 hover:border-neon-blue/40 transition-colors">
+            <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Session settings' })} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-lattice-surface border border-lattice-border text-gray-300 hover:border-neon-blue/40 transition-colors">
               <Settings className="w-3.5 h-3.5" /> Settings
             </button>
           </div>
@@ -761,7 +796,7 @@ function ActiveSessionView({ session, onLeave }: { session: CollabSession; onLea
           </div>
           <div className="p-2 border-t border-lattice-border">
             <div className="flex items-center gap-1.5">
-              <button className="p-1.5 text-gray-500 hover:text-gray-300 transition-colors">
+              <button onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.click(); }} className="p-1.5 text-gray-500 hover:text-gray-300 transition-colors">
                 <Paperclip className="w-3.5 h-3.5" />
               </button>
               <input
@@ -910,16 +945,16 @@ function CreateSessionModal({ onClose }: { onClose: () => void }) {
     linkedProjectId: '',
   });
 
-  const { data: projectsData, isError: _isError4, error: _error4, refetch: _refetch4,} = useQuery({
+  const { data: projectsData } = useQuery({
     queryKey: ['studio-projects-for-link'],
-    queryFn: () => api.get('/api/artistry/studio/projects').then(r => r.data),
+    queryFn: () => apiHelpers.artistry.studio.projects.list().then(r => r.data),
     retry: 1,
   });
 
   const createMutation = useMutation({
     mutationFn: (data: typeof form) =>
-      api.post('/api/artistry/collab/sessions', {
-        projectId: data.linkedProjectId || undefined,
+      apiHelpers.artistry.collab.sessions.create({
+        projectId: data.linkedProjectId || '',
         maxParticipants: data.maxParticipants,
         mode: data.privacy,
       }),

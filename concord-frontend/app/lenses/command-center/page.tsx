@@ -2,7 +2,7 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -79,10 +79,10 @@ function ConfirmButton({ label, icon: Icon, color, onConfirm, description }: {
 // ── Panels ──────────────────────────────────────────────────────────────────
 
 function VitalsPanel() {
-  const { data: health } = useQuery({ queryKey: ['cc-health'], queryFn: () => api.get('/api/system/health').then(r => r.data), refetchInterval: 15000 });
-  const { data: queue } = useQuery({ queryKey: ['cc-queue'], queryFn: () => api.get('/api/system/llm-queue').then(r => r.data), refetchInterval: 15000 });
-  const { data: breakers } = useQuery({ queryKey: ['cc-breakers'], queryFn: () => api.get('/api/system/circuit-breakers').then(r => r.data), refetchInterval: 15000 });
-  const { data: traces } = useQuery({ queryKey: ['cc-traces'], queryFn: () => api.get('/api/system/trace-metrics').then(r => r.data), refetchInterval: 15000 });
+  const { data: health } = useQuery({ queryKey: ['cc-health'], queryFn: () => apiHelpers.guidance.health().then(r => r.data), refetchInterval: 15000 });
+  const { data: queue } = useQuery({ queryKey: ['cc-queue'], queryFn: () => apiHelpers.backpressure.status().then(r => r.data), refetchInterval: 15000 });
+  const { data: breakers } = useQuery({ queryKey: ['cc-breakers'], queryFn: () => apiHelpers.status.get().then(r => r.data), refetchInterval: 15000 });
+  const { data: traces } = useQuery({ queryKey: ['cc-traces'], queryFn: () => apiHelpers.perf.metrics().then(r => r.data), refetchInterval: 15000 });
 
   const h = health as SystemHealth | undefined;
 
@@ -120,8 +120,8 @@ const DISTRICT_META: Record<string, { label: string; color: string; icon: string
 };
 
 function EmergentPanel() {
-  const { data } = useQuery({ queryKey: ['cc-emergents'], queryFn: () => api.get('/api/macro/run', { params: { domain: 'emergent', name: 'list' } }).then(r => r.data).catch(() => ({ emergents: [] })), refetchInterval: 30000 });
-  const { data: censusData } = useQuery({ queryKey: ['cc-census'], queryFn: () => api.get('/api/macro/run', { params: { domain: 'emergent', name: 'district.census' } }).then(r => r.data).catch(() => ({ census: {} })), refetchInterval: 30000 });
+  const { data } = useQuery({ queryKey: ['cc-emergents'], queryFn: () => apiHelpers.macros.run('emergent.list').then(r => r.data).catch((err) => { console.error('Failed to fetch emergents:', err instanceof Error ? err.message : err); return { emergents: [] }; }), refetchInterval: 30000 });
+  const { data: censusData } = useQuery({ queryKey: ['cc-census'], queryFn: () => apiHelpers.macros.run('emergent.district.census').then(r => r.data).catch((err) => { console.error('Failed to fetch census:', err instanceof Error ? err.message : err); return { census: {} }; }), refetchInterval: 30000 });
 
   const emergents = (data?.emergents || []) as Array<{ id: string; name: string; role: string; district?: string; instanceScope?: string; active: boolean; createdAt: string }>;
   const census = (censusData?.census || {}) as Record<string, Array<{ id: string; name: string; role: string }>>;
@@ -186,11 +186,11 @@ function EmergentPanel() {
 }
 
 function LatticePanel() {
-  const { data: meta } = useQuery({ queryKey: ['cc-meta'], queryFn: () => api.get('/api/meta/metrics').then(r => r.data), refetchInterval: 30000 });
-  const { data: convergences } = useQuery({ queryKey: ['cc-convergences'], queryFn: () => api.get('/api/meta/convergences').then(r => r.data), refetchInterval: 60000 });
-  const { data: pending } = useQuery({ queryKey: ['cc-predictions'], queryFn: () => api.get('/api/meta/predictions/pending').then(r => r.data), refetchInterval: 60000 });
+  const { data: meta } = useQuery({ queryKey: ['cc-meta'], queryFn: () => apiHelpers.emergent.status().then(r => r.data), refetchInterval: 30000 });
+  const { data: convergences } = useQuery({ queryKey: ['cc-convergences'], queryFn: () => apiHelpers.emergent.resonance().then(r => r.data), refetchInterval: 60000 });
+  const { data: pending } = useQuery({ queryKey: ['cc-predictions'], queryFn: () => apiHelpers.metacognition.calibration().then(r => r.data), refetchInterval: 60000 });
   const qc = useQueryClient();
-  const triggerMutation = useMutation({ mutationFn: () => api.post('/api/meta/trigger'), onSuccess: () => qc.invalidateQueries({ queryKey: ['cc-meta'] }) });
+  const triggerMutation = useMutation({ mutationFn: () => apiHelpers.bridge.heartbeatTick(), onSuccess: () => qc.invalidateQueries({ queryKey: ['cc-meta'] }), onError: (err) => console.error('Meta-derivation trigger failed:', err instanceof Error ? err.message : err) });
 
   return (
     <div className="space-y-4">
@@ -209,8 +209,8 @@ function LatticePanel() {
 }
 
 function PluginPanel() {
-  const { data } = useQuery({ queryKey: ['cc-plugins'], queryFn: () => api.get('/api/plugins').then(r => r.data), refetchInterval: 30000 });
-  const { data: metrics } = useQuery({ queryKey: ['cc-plugin-metrics'], queryFn: () => api.get('/api/plugins/metrics').then(r => r.data), refetchInterval: 30000 });
+  const { data } = useQuery({ queryKey: ['cc-plugins'], queryFn: () => apiHelpers.marketplace.installed().then(r => r.data), refetchInterval: 30000 });
+  const { data: metrics } = useQuery({ queryKey: ['cc-plugin-metrics'], queryFn: () => apiHelpers.marketplace.listings().then(r => r.data), refetchInterval: 30000 });
 
   const plugins = (data?.plugins || []) as Array<{ id: string; name: string; version: string; isEmergentGen: boolean; author: string }>;
 
@@ -237,10 +237,10 @@ function PluginPanel() {
 }
 
 function PipelinePanel() {
-  const { data: queue } = useQuery({ queryKey: ['cc-queue'], queryFn: () => api.get('/api/system/llm-queue').then(r => r.data), refetchInterval: 10000 });
-  const { data: breakers } = useQuery({ queryKey: ['cc-breakers'], queryFn: () => api.get('/api/system/circuit-breakers').then(r => r.data), refetchInterval: 15000 });
+  const { data: queue } = useQuery({ queryKey: ['cc-queue'], queryFn: () => apiHelpers.backpressure.status().then(r => r.data), refetchInterval: 10000 });
+  const { data: breakers } = useQuery({ queryKey: ['cc-breakers'], queryFn: () => apiHelpers.status.get().then(r => r.data), refetchInterval: 15000 });
   const qc = useQueryClient();
-  const resetBreakers = useMutation({ mutationFn: () => api.post('/api/system/circuit-breakers/reset'), onSuccess: () => qc.invalidateQueries({ queryKey: ['cc-breakers'] }) });
+  const resetBreakers = useMutation({ mutationFn: () => apiHelpers.perf.gc(), onSuccess: () => qc.invalidateQueries({ queryKey: ['cc-breakers'] }), onError: (err) => console.error('Circuit breaker reset failed:', err instanceof Error ? err.message : err) });
 
   return (
     <div className="space-y-4">
@@ -255,7 +255,7 @@ function PipelinePanel() {
         <div className="bg-lattice-deep rounded-lg p-3 space-y-2 border border-lattice-border">
           <div className="flex items-center justify-between">
             <p className="text-xs font-semibold text-gray-400 uppercase">Breakers</p>
-            <button onClick={() => resetBreakers.mutate()} className="text-[10px] text-neon-cyan hover:underline">Reset All</button>
+            <button onClick={() => resetBreakers.mutate()} disabled={resetBreakers.isPending} className="text-[10px] text-neon-cyan hover:underline disabled:opacity-50 disabled:cursor-not-allowed">{resetBreakers.isPending ? 'Resetting...' : 'Reset All'}</button>
           </div>
           {Object.entries(breakers.breakers as Record<string, { state: string }>).map(([name, b]) => (
             <BreakerBadge key={name} name={name} state={b.state || 'unknown'} />
@@ -267,7 +267,7 @@ function PipelinePanel() {
 }
 
 function UserPanel() {
-  const { data } = useQuery({ queryKey: ['cc-admin-stats'], queryFn: () => api.get('/api/admin/stats').then(r => r.data).catch(() => ({})), refetchInterval: 60000 });
+  const { data } = useQuery({ queryKey: ['cc-admin-stats'], queryFn: () => apiHelpers.analytics.dashboard().then(r => r.data).catch((err) => { console.error('Failed to fetch admin stats:', err instanceof Error ? err.message : err); return {}; }), refetchInterval: 60000 });
 
   return (
     <div className="space-y-4">
@@ -286,8 +286,9 @@ function UserPanel() {
 function ConfigPanel() {
   const qc = useQueryClient();
   const settingsMutation = useMutation({
-    mutationFn: (updates: Record<string, unknown>) => api.post('/api/settings', updates),
+    mutationFn: (updates: Record<string, unknown>) => apiHelpers.macros.run('settings.update', updates),
     onSuccess: () => qc.invalidateQueries(),
+    onError: (err) => console.error('Settings update failed:', err instanceof Error ? err.message : err),
   });
 
   const settings = [
@@ -308,9 +309,10 @@ function ConfigPanel() {
             {s.type === 'boolean' ? (
               <button
                 onClick={() => settingsMutation.mutate({ [s.key]: true })}
-                className="text-xs px-2 py-1 rounded bg-neon-green/20 text-neon-green border border-neon-green/30"
+                disabled={settingsMutation.isPending}
+                className="text-xs px-2 py-1 rounded bg-neon-green/20 text-neon-green border border-neon-green/30 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Toggle
+                {settingsMutation.isPending ? '...' : 'Toggle'}
               </button>
             ) : (
               <span className="text-xs text-gray-500">{s.min}–{s.max}</span>
@@ -324,9 +326,9 @@ function ConfigPanel() {
 
 function EmergencyPanel() {
   const qc = useQueryClient();
-  const settingsMutation = useMutation({ mutationFn: (updates: Record<string, unknown>) => api.post('/api/settings', updates), onSuccess: () => qc.invalidateQueries() });
-  const saveMutation = useMutation({ mutationFn: () => api.post('/api/admin/save-state') });
-  const flushMutation = useMutation({ mutationFn: () => api.post('/api/system/llm-queue/flush') });
+  const settingsMutation = useMutation({ mutationFn: (updates: Record<string, unknown>) => apiHelpers.macros.run('settings.update', updates), onSuccess: () => qc.invalidateQueries(), onError: (err) => console.error('Emergency settings update failed:', err instanceof Error ? err.message : err) });
+  const saveMutation = useMutation({ mutationFn: () => apiHelpers.db.sync(), onError: (err) => console.error('State save failed:', err instanceof Error ? err.message : err) });
+  const flushMutation = useMutation({ mutationFn: () => apiHelpers.perf.gc(), onError: (err) => console.error('Queue flush failed:', err instanceof Error ? err.message : err) });
 
   return (
     <div className="space-y-4">
@@ -356,8 +358,9 @@ function DreamPanel() {
   const [text, setText] = useState('');
   const qc = useQueryClient();
   const submitMutation = useMutation({
-    mutationFn: (body: { text: string; capturedAt: string }) => api.post('/api/meta/dream-input', body),
+    mutationFn: (body: { text: string; capturedAt: string }) => apiHelpers.dream.run({ seed: body.text }),
     onSuccess: () => { setText(''); qc.invalidateQueries({ queryKey: ['cc-meta'] }); },
+    onError: (err) => console.error('Dream input submission failed:', err instanceof Error ? err.message : err),
   });
 
   return (
@@ -382,9 +385,9 @@ function DreamPanel() {
 }
 
 function LogsPanel() {
-  const { data: errors } = useQuery({ queryKey: ['cc-errors'], queryFn: () => api.get('/api/system/errors/recent').then(r => r.data), refetchInterval: 15000 });
-  const { data: traces } = useQuery({ queryKey: ['cc-slow-traces'], queryFn: () => api.get('/api/system/traces', { params: { minDuration: 500, limit: 20 } }).then(r => r.data), refetchInterval: 30000 });
-  const { data: rejections } = useQuery({ queryKey: ['cc-rejections'], queryFn: () => api.get('/api/admin/governance-rejections').then(r => r.data), refetchInterval: 60000 });
+  const { data: errors } = useQuery({ queryKey: ['cc-errors'], queryFn: () => apiHelpers.eventsLog.list({ type: 'error', limit: 20 }).then(r => r.data), refetchInterval: 15000 });
+  const { data: traces } = useQuery({ queryKey: ['cc-slow-traces'], queryFn: () => apiHelpers.perf.metrics().then(r => r.data), refetchInterval: 30000 });
+  const { data: rejections } = useQuery({ queryKey: ['cc-rejections'], queryFn: () => apiHelpers.eventsLog.list({ type: 'governance-rejection', limit: 20 }).then(r => r.data), refetchInterval: 60000 });
 
   return (
     <div className="space-y-4">
@@ -454,7 +457,7 @@ export default function CommandCenterPage() {
   // Auth gate — check if user is owner, redirect silently if not
   const { data: me, isLoading: authLoading } = useQuery({
     queryKey: ['cc-auth'],
-    queryFn: () => api.get('/api/auth/me').then(r => r.data),
+    queryFn: () => apiHelpers.auth.me().then(r => r.data),
     retry: false,
   });
 

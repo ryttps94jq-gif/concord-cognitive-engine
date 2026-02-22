@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { api } from '@/lib/api/client';
+import { apiHelpers } from '@/lib/api/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Heart,
@@ -38,6 +39,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
+import { useUIStore } from '@/store/ui';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -139,8 +141,8 @@ const gradients = [
 
 const pickGrad = (i: number) => gradients[i % gradients.length];
 
-const _generateWaveform = (len = 32): number[] =>
-  Array.from({ length: len }, () => 12 + Math.floor(Math.random() * 28));
+const generateWaveform = (len = 32): number[] =>
+  Array.from({ length: len }, (_, i) => 12 + Math.floor((Math.sin(i * 0.5) * 0.5 + 0.5) * 28));
 
 // ── Data (all from backend — no mock data) ───────────────────────────────────
 
@@ -282,6 +284,10 @@ function ArtGallery({ images }: { images: ArtAttachment['images'] }) {
 
 function CollabCard({ collab }: { collab: CollabAttachment }) {
   const spotsLeft = collab.maxParticipants - collab.participants;
+  const joinMutation = useMutation({
+    mutationFn: () => apiHelpers.artistry.collab.sessions.join(collab.sessionName, { userId: 'current-user' }),
+    onSuccess: () => useUIStore.getState().addToast({ type: 'success', message: `Joined "${collab.sessionName}"` }),
+  });
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
@@ -298,8 +304,12 @@ function CollabCard({ collab }: { collab: CollabAttachment }) {
             {collab.genre} &middot; {collab.participants}/{collab.maxParticipants} joined &middot; {spotsLeft} spot{spotsLeft !== 1 ? 's' : ''} left
           </p>
         </div>
-        <button className="px-4 py-1.5 bg-neon-purple text-white text-sm font-bold rounded-full hover:bg-neon-purple/80 transition-colors">
-          Join
+        <button
+          onClick={() => joinMutation.mutate()}
+          disabled={joinMutation.isPending || spotsLeft <= 0}
+          className="px-4 py-1.5 bg-neon-purple text-white text-sm font-bold rounded-full hover:bg-neon-purple/80 transition-colors disabled:opacity-50"
+        >
+          {joinMutation.isPending ? 'Joining...' : 'Join'}
         </button>
       </div>
     </motion.div>
@@ -315,6 +325,7 @@ export default function FeedLensPage() {
   const [newPost, setNewPost] = useState('');
   const [activeTab, setActiveTab] = useState<FeedTab>('for-you');
   const [searchQuery, setSearchQuery] = useState('');
+  const composeRef = useRef<HTMLTextAreaElement>(null);
 
   const { isError: isError, error: error, refetch: refetch, items: postLensItems, create: _createLensPost } = useLensData<Record<string, unknown>>('feed', 'post', {
     seed: INITIAL_POSTS.map(p => ({ title: p.content?.slice(0, 80) || p.id, data: p as unknown as Record<string, unknown> })),
@@ -324,41 +335,50 @@ export default function FeedLensPage() {
   const { data: feedPosts, isLoading, isError: isError2, error: error2, refetch: refetch2,} = useQuery<FeedPost[]>({
     queryKey: ['feed-posts', activeTab],
     queryFn: async () => {
-      const [dtuRes] = await Promise.allSettled([
-        api.get('/api/dtus', { params: { limit: 50 } }),
-        api.get('/api/artistry/distribution/feed', { params: { tab: activeTab } }),
-      ]);
+      try {
+        const [dtuRes] = await Promise.allSettled([
+          apiHelpers.dtus.paginated({ limit: 50 }),
+          apiHelpers.artistry.distribution.feed('current'),
+        ]);
 
-      const serverPosts: FeedPost[] = [];
-      if (dtuRes.status === 'fulfilled' && dtuRes.value?.data?.dtus?.length) {
-        dtuRes.value.data.dtus.forEach((dtu: Record<string, unknown>) => {
-          serverPosts.push({
-            id: dtu.id as string,
-            type: 'text',
-            author: {
-              id: (dtu.authorId as string) || 'user',
-              name: (dtu.authorName as string) || 'Concord User',
-              handle: (dtu.authorHandle as string) || 'user',
-              gradient: pickGrad(serverPosts.length),
-              verified: false,
-            },
-            content: (dtu.content as string)?.slice(0, 400) || (dtu.title as string) || '',
-            createdAt: (dtu.createdAt as string) || new Date().toISOString(),
-            likes: (dtu.likes as number) || 0,
-            comments: (dtu.commentCount as number) || 0,
-            reposts: (dtu.reposts as number) || 0,
-            shares: (dtu.shares as number) || 0,
-            views: (dtu.views as number) || 0,
-            liked: false, reposted: false, bookmarked: false,
-            dtuId: dtu.id as string,
+        const serverPosts: FeedPost[] = [];
+        if (dtuRes.status === 'fulfilled' && dtuRes.value?.data?.dtus?.length) {
+          dtuRes.value.data.dtus.forEach((dtu: Record<string, unknown>) => {
+            serverPosts.push({
+              id: dtu.id as string,
+              type: 'text',
+              author: {
+                id: (dtu.authorId as string) || 'user',
+                name: (dtu.authorName as string) || 'Concord User',
+                handle: (dtu.authorHandle as string) || 'user',
+                gradient: pickGrad(serverPosts.length),
+                verified: (dtu.verified as boolean) || false,
+              },
+              content: (dtu.content as string)?.slice(0, 400) || (dtu.title as string) || '',
+              createdAt: (dtu.createdAt as string) || new Date().toISOString(),
+              likes: (dtu.likes as number) || 0,
+              comments: (dtu.comments as number) || 0,
+              reposts: (dtu.reposts as number) || 0,
+              shares: (dtu.shares as number) || 0,
+              views: (dtu.views as number) || 0,
+              liked: false, reposted: false, bookmarked: false,
+              dtuId: dtu.id as string,
+            });
           });
         });
       }
 
-      if (serverPosts.length > 0) return serverPosts;
-      // Fall back to persisted lens items if available
-      if (postLensItems.length > 0) {
-        return postLensItems.map(li => ({ id: li.id, ...(li.data as Record<string, unknown>) } as unknown as FeedPost));
+        if (serverPosts.length > 0) return serverPosts;
+        // Fall back to persisted lens items (which include seeded data)
+        if (postLensItems.length > 0) {
+          return postLensItems.map(li => ({ id: li.id, ...(li.data as Record<string, unknown>) } as unknown as FeedPost));
+        }
+        return [];
+      } catch {
+        if (postLensItems.length > 0) {
+          return postLensItems.map(li => ({ id: li.id, ...(li.data as Record<string, unknown>) } as unknown as FeedPost));
+        }
+        return [];
       }
       return [];
     },
@@ -368,13 +388,16 @@ export default function FeedLensPage() {
     queryKey: ['trending-topics'],
     queryFn: async () => {
       try {
-        const r = await api.get('/api/tags');
-        if (r.data?.tags?.length) {
-          return r.data.tags.slice(0, 5).map((tag: string, i: number) => ({
+        const r = await apiHelpers.dtus.list();
+        const allTags = new Set<string>();
+        (r.data?.dtus || []).forEach((d: Record<string, unknown>) => ((d.tags as string[]) || []).forEach(t => allTags.add(t)));
+        const tagArr = Array.from(allTags);
+        if (tagArr.length) {
+          return tagArr.slice(0, 5).map((tag: string, i: number) => ({
             id: `t-${i}`,
             tag: `#${tag}`,
             category: ['Music', 'Production', 'Community', 'Tech', 'Visual'][i % 5],
-            posts: (r.data.counts?.[i] as number) || 0,
+            posts: 0,
           }));
         }
         return [];
@@ -385,7 +408,7 @@ export default function FeedLensPage() {
   });
 
   const postMutation = useMutation({
-    mutationFn: (content: string) => api.post('/api/dtus', { content, tags: ['post'] }),
+    mutationFn: (content: string) => apiHelpers.dtus.create({ content, tags: ['post'] }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['feed-posts'] });
       setNewPost('');
@@ -396,12 +419,46 @@ export default function FeedLensPage() {
   });
 
   const likeMutation = useMutation({
-    mutationFn: (postId: string) => api.post(`/api/dtus/${postId}/like`),
+    mutationFn: (postId: string) => apiHelpers.dtus.update(postId, { liked: true }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['feed-posts'] }),
     onError: (err) => {
       console.error('Failed to like post:', err instanceof Error ? err.message : err);
     },
   });
+
+  const repostMutation = useMutation({
+    mutationFn: (postId: string) => apiHelpers.dtus.update(postId, { reposted: true }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['feed-posts'] });
+      useUIStore.getState().addToast({ type: 'success', message: 'Reposted!' });
+    },
+  });
+
+  const bookmarkMutation = useMutation({
+    mutationFn: (postId: string) => apiHelpers.dtus.update(postId, { bookmarked: true }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['feed-posts'] }),
+  });
+
+  const shareMutation = useMutation({
+    mutationFn: async (postId: string) => {
+      if (navigator.share) {
+        await navigator.share({ title: 'Concord Post', url: `${window.location.origin}/lenses/feed?post=${postId}` });
+      } else {
+        await navigator.clipboard.writeText(`${window.location.origin}/lenses/feed?post=${postId}`);
+        useUIStore.getState().addToast({ type: 'success', message: 'Link copied to clipboard' });
+      }
+    },
+  });
+
+  const followMutation = useMutation({
+    mutationFn: (userId: string) => apiHelpers.social.follow(userId),
+    onSuccess: () => useUIStore.getState().addToast({ type: 'success', message: 'Followed!' }),
+  });
+
+  const handleComposeHint = useCallback((hint: string) => {
+    setNewPost(prev => prev ? `${prev}\n[${hint}]` : `[${hint}]`);
+    composeRef.current?.focus();
+  }, []);
 
   const formatTime = useCallback((dateStr: string) => {
     const date = new Date(dateStr);
@@ -425,10 +482,20 @@ export default function FeedLensPage() {
 
   const filteredPosts = useMemo(() => {
     if (!feedPosts) return [];
-    if (activeTab === 'releases') return feedPosts.filter(p => p.type === 'release');
-    if (activeTab === 'trending') return [...feedPosts].sort((a, b) => b.views - a.views);
-    return feedPosts;
-  }, [feedPosts, activeTab]);
+    let posts = feedPosts;
+    if (activeTab === 'releases') posts = posts.filter(p => p.type === 'release');
+    if (activeTab === 'trending') posts = [...posts].sort((a, b) => b.views - a.views);
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      posts = posts.filter(p =>
+        p.content.toLowerCase().includes(q) ||
+        p.author.name.toLowerCase().includes(q) ||
+        p.author.handle.toLowerCase().includes(q) ||
+        p.tags?.some(t => t.toLowerCase().includes(q))
+      );
+    }
+    return posts;
+  }, [feedPosts, activeTab, searchQuery]);
 
   const tabs: { key: FeedTab; label: string }[] = [
     { key: 'for-you', label: 'For You' },
@@ -438,13 +505,13 @@ export default function FeedLensPage() {
   ];
 
   const sidebarNav = [
-    { icon: Home, label: 'Home', active: true },
-    { icon: Search, label: 'Explore', active: false },
-    { icon: Bell, label: 'Notifications', active: false },
-    { icon: Mail, label: 'Messages', active: false },
-    { icon: Bookmark, label: 'Bookmarks', active: false },
-    { icon: User, label: 'Profile', active: false },
-    { icon: Music, label: 'Studio', active: false },
+    { icon: Home, label: 'Home', active: activeTab === 'for-you', action: () => setActiveTab('for-you') },
+    { icon: Search, label: 'Explore', active: activeTab === 'trending', action: () => setActiveTab('trending') },
+    { icon: Bell, label: 'Notifications', active: false, action: () => useUIStore.getState().addToast({ type: 'info', message: 'Notifications coming soon' }) },
+    { icon: Mail, label: 'Messages', active: false, action: () => useUIStore.getState().addToast({ type: 'info', message: 'Messages coming soon' }) },
+    { icon: Bookmark, label: 'Bookmarks', active: false, action: () => useUIStore.getState().addToast({ type: 'info', message: 'Bookmarks coming soon' }) },
+    { icon: User, label: 'Profile', active: false, action: () => useUIStore.getState().addToast({ type: 'info', message: 'Profile coming soon' }) },
+    { icon: Music, label: 'Studio', active: activeTab === 'releases', action: () => setActiveTab('releases') },
   ];
 
 
@@ -468,6 +535,7 @@ export default function FeedLensPage() {
           {sidebarNav.map(item => (
             <button
               key={item.label}
+              onClick={item.action}
               className={cn(
                 'flex items-center gap-4 p-3 rounded-xl transition-colors w-full',
                 item.active
@@ -481,7 +549,10 @@ export default function FeedLensPage() {
           ))}
         </nav>
 
-        <button className="mt-6 w-12 h-12 xl:w-full xl:h-auto xl:py-3 bg-neon-cyan text-black font-bold rounded-full hover:bg-neon-cyan/90 transition-colors flex items-center justify-center gap-2">
+        <button
+          onClick={() => { composeRef.current?.focus(); composeRef.current?.scrollIntoView({ behavior: 'smooth' }); }}
+          className="mt-6 w-12 h-12 xl:w-full xl:h-auto xl:py-3 bg-neon-cyan text-black font-bold rounded-full hover:bg-neon-cyan/90 transition-colors flex items-center justify-center gap-2"
+        >
           <PlusCircle className="w-5 h-5 xl:hidden" />
           <span className="hidden xl:inline">Create Post</span>
         </button>
@@ -534,6 +605,7 @@ export default function FeedLensPage() {
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-neon-cyan to-neon-purple flex-shrink-0" />
             <div className="flex-1">
               <textarea
+                ref={composeRef}
                 value={newPost}
                 onChange={(e) => setNewPost(e.target.value)}
                 placeholder="Share a track, thought, or start a collab..."
@@ -542,19 +614,19 @@ export default function FeedLensPage() {
               />
               <div className="flex items-center justify-between pt-3 border-t border-lattice-border">
                 <div className="flex items-center gap-0.5 text-neon-cyan">
-                  <button className="p-2 rounded-full hover:bg-neon-cyan/10 transition-colors" title="Text">
+                  <button onClick={() => handleComposeHint('Track')} className="p-2 rounded-full hover:bg-neon-cyan/10 transition-colors" title="Attach track reference">
                     <ListMusic className="w-5 h-5" />
                   </button>
-                  <button className="p-2 rounded-full hover:bg-neon-cyan/10 transition-colors" title="Audio">
+                  <button onClick={() => handleComposeHint('Audio')} className="p-2 rounded-full hover:bg-neon-cyan/10 transition-colors" title="Attach audio">
                     <Mic2 className="w-5 h-5" />
                   </button>
-                  <button className="p-2 rounded-full hover:bg-neon-cyan/10 transition-colors" title="Image">
+                  <button onClick={() => handleComposeHint('Image')} className="p-2 rounded-full hover:bg-neon-cyan/10 transition-colors" title="Attach image">
                     <ImageIcon className="w-5 h-5" />
                   </button>
-                  <button className="p-2 rounded-full hover:bg-neon-cyan/10 transition-colors" title="Link DTU">
+                  <button onClick={() => handleComposeHint('DTU Link')} className="p-2 rounded-full hover:bg-neon-cyan/10 transition-colors" title="Link DTU">
                     <Link2 className="w-5 h-5" />
                   </button>
-                  <button className="p-2 rounded-full hover:bg-neon-cyan/10 transition-colors" title="Poll">
+                  <button onClick={() => handleComposeHint('Poll')} className="p-2 rounded-full hover:bg-neon-cyan/10 transition-colors" title="Add poll">
                     <BarChart3 className="w-5 h-5" />
                   </button>
                 </div>
@@ -624,7 +696,10 @@ export default function FeedLensPage() {
                         <span className="text-gray-500 hover:underline cursor-pointer flex-shrink-0">
                           {formatTime(post.createdAt)}
                         </span>
-                        <button className="ml-auto p-1 text-gray-600 hover:text-neon-cyan hover:bg-neon-cyan/10 rounded-full transition-colors flex-shrink-0">
+                        <button
+                          onClick={() => useUIStore.getState().addToast({ type: 'info', message: `Post ${post.id} options` })}
+                          className="ml-auto p-1 text-gray-600 hover:text-neon-cyan hover:bg-neon-cyan/10 rounded-full transition-colors flex-shrink-0"
+                        >
                           <MoreHorizontal className="w-4 h-4" />
                         </button>
                       </div>
@@ -664,17 +739,23 @@ export default function FeedLensPage() {
 
                       {/* Engagement Bar */}
                       <div className="flex items-center justify-between mt-3 max-w-md text-gray-500">
-                        <button className="flex items-center gap-1.5 group">
+                        <button
+                          onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Comments coming soon' })}
+                          className="flex items-center gap-1.5 group"
+                        >
                           <div className="p-1.5 rounded-full group-hover:bg-blue-500/10 group-hover:text-blue-400 transition-colors">
                             <MessageCircle className="w-4 h-4" />
                           </div>
                           <span className="text-xs group-hover:text-blue-400">{formatNumber(post.comments)}</span>
                         </button>
 
-                        <button className={cn(
-                          'flex items-center gap-1.5 group',
-                          post.reposted && 'text-neon-green'
-                        )}>
+                        <button
+                          onClick={() => repostMutation.mutate(post.id)}
+                          className={cn(
+                            'flex items-center gap-1.5 group',
+                            post.reposted && 'text-neon-green'
+                          )}
+                        >
                           <div className="p-1.5 rounded-full group-hover:bg-neon-green/10 group-hover:text-neon-green transition-colors">
                             <Repeat2 className="w-4 h-4" />
                           </div>
@@ -694,18 +775,24 @@ export default function FeedLensPage() {
                           <span className="text-xs group-hover:text-neon-pink">{formatNumber(post.likes)}</span>
                         </button>
 
-                        <button className="flex items-center gap-1.5 group">
+                        <div className="flex items-center gap-1.5 group" title="Views">
                           <div className="p-1.5 rounded-full group-hover:bg-neon-cyan/10 group-hover:text-neon-cyan transition-colors">
                             <Eye className="w-4 h-4" />
                           </div>
                           <span className="text-xs group-hover:text-neon-cyan">{formatNumber(post.views)}</span>
-                        </button>
+                        </div>
 
                         <div className="flex items-center gap-0.5">
-                          <button className="p-1.5 rounded-full hover:bg-neon-cyan/10 hover:text-neon-cyan transition-colors">
+                          <button
+                            onClick={() => bookmarkMutation.mutate(post.id)}
+                            className="p-1.5 rounded-full hover:bg-neon-cyan/10 hover:text-neon-cyan transition-colors"
+                          >
                             <Bookmark className={cn('w-4 h-4', post.bookmarked && 'fill-current text-neon-cyan')} />
                           </button>
-                          <button className="p-1.5 rounded-full hover:bg-neon-cyan/10 hover:text-neon-cyan transition-colors">
+                          <button
+                            onClick={() => shareMutation.mutate(post.id)}
+                            className="p-1.5 rounded-full hover:bg-neon-cyan/10 hover:text-neon-cyan transition-colors"
+                          >
                             <Share className="w-4 h-4" />
                           </button>
                         </div>
@@ -747,9 +834,10 @@ export default function FeedLensPage() {
             <TrendingUp className="w-4 h-4 text-neon-cyan" />
             <h2 className="text-base font-bold text-white">Trending in Studio</h2>
           </div>
-          {(trending || TRENDING_TOPICS).map(topic => (
+          {(trending || []).map(topic => (
             <button
               key={topic.id}
+              onClick={() => setSearchQuery(topic.tag.replace('#', ''))}
               className="w-full px-4 py-2.5 hover:bg-lattice-deep transition-colors text-left"
             >
               <p className="text-[11px] text-gray-500 uppercase tracking-wider">{topic.category}</p>
@@ -757,7 +845,10 @@ export default function FeedLensPage() {
               <p className="text-[11px] text-gray-500">{formatNumber(topic.posts)} posts</p>
             </button>
           ))}
-          <button className="w-full px-4 py-3 text-neon-cyan hover:bg-lattice-deep transition-colors text-left text-sm">
+          <button
+            onClick={() => setActiveTab('trending')}
+            className="w-full px-4 py-3 text-neon-cyan hover:bg-lattice-deep transition-colors text-left text-sm"
+          >
             Show more
           </button>
         </div>
@@ -775,12 +866,19 @@ export default function FeedLensPage() {
                 </div>
                 <p className="text-gray-500 text-xs truncate">@{user.handle} &middot; {user.role}</p>
               </div>
-              <button className="px-3.5 py-1.5 bg-white text-black font-bold rounded-full text-xs hover:bg-gray-200 transition-colors flex-shrink-0">
-                Follow
+              <button
+                onClick={() => followMutation.mutate(user.id)}
+                disabled={followMutation.isPending}
+                className="px-3.5 py-1.5 bg-white text-black font-bold rounded-full text-xs hover:bg-gray-200 transition-colors flex-shrink-0 disabled:opacity-50"
+              >
+                {followMutation.isPending ? '...' : 'Follow'}
               </button>
             </div>
           ))}
-          <button className="w-full px-4 py-3 text-neon-cyan hover:bg-lattice-deep transition-colors text-left text-sm">
+          <button
+            onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Discover more users in the social lens' })}
+            className="w-full px-4 py-3 text-neon-cyan hover:bg-lattice-deep transition-colors text-left text-sm"
+          >
             Show more
           </button>
         </div>
@@ -792,7 +890,11 @@ export default function FeedLensPage() {
             <h2 className="text-base font-bold text-white">New Releases</h2>
           </div>
           {NEW_RELEASES.map(rel => (
-            <button key={rel.id} className="w-full px-4 py-2.5 hover:bg-lattice-deep transition-colors flex items-center gap-3 text-left">
+            <button
+              key={rel.id}
+              onClick={() => setSearchQuery(rel.title)}
+              className="w-full px-4 py-2.5 hover:bg-lattice-deep transition-colors flex items-center gap-3 text-left"
+            >
               <div className={cn(
                 'w-10 h-10 rounded-lg bg-gradient-to-br flex items-center justify-center flex-shrink-0',
                 rel.gradient,
@@ -805,7 +907,10 @@ export default function FeedLensPage() {
               </div>
             </button>
           ))}
-          <button className="w-full px-4 py-3 text-neon-cyan hover:bg-lattice-deep transition-colors text-left text-sm">
+          <button
+            onClick={() => setActiveTab('releases')}
+            className="w-full px-4 py-3 text-neon-cyan hover:bg-lattice-deep transition-colors text-left text-sm"
+          >
             View all releases
           </button>
         </div>

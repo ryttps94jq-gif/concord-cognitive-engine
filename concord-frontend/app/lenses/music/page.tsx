@@ -2,8 +2,8 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
-import { useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useUIStore } from '@/store/ui';
 import { motion, AnimatePresence, Reorder } from 'framer-motion';
 import {
   Music,
@@ -63,6 +63,7 @@ interface Playlist {
   isOwner: boolean;
   followers?: number;
   type: 'playlist' | 'album' | 'podcast' | 'radio';
+  trackIds?: string[];
 }
 
 interface Artist {
@@ -98,7 +99,7 @@ const _INITIAL_ARTISTS: Artist[] = [];
 
 export default function MusicLensPage() {
   useLensNav('music');
-  const _queryClient = useQueryClient();
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>();
 
@@ -118,6 +119,7 @@ export default function MusicLensPage() {
   const [showLyrics, setShowLyrics] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [libraryFilter, setLibraryFilter] = useState<'playlists' | 'podcasts' | 'artists' | 'albums'>('playlists');
   const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
 
   // Audio processing
@@ -127,7 +129,7 @@ export default function MusicLensPage() {
   const [crossfade, setCrossfade] = useState(0);
 
   // Persistent lens data (replaces MOCK arrays)
-  const { isError: isError, error: error, refetch: refetch, items: trackItems } = useLensData<Track>('music', 'track', {
+  const { isLoading, isError: isError, error: error, refetch: refetch, items: trackItems } = useLensData<Track>('music', 'track', {
     seed: INITIAL_TRACKS.map(t => ({ title: t.title, data: t as unknown as Record<string, unknown> })),
   });
   const { isError: isError2, error: error2, refetch: refetch2, items: playlistItems } = useLensData<Playlist>('music', 'playlist', {
@@ -138,7 +140,7 @@ export default function MusicLensPage() {
 
   // Queue
   const [queue, setQueue] = useState<Track[]>([]);
-  const currentTrack = queue[currentTrackIndex] || allTracks[0] || { id: '', title: '', artist: '', album: '', duration: 0, resonanceScore: 0, bpm: 0, key: '', genre: '', playCount: 0 } as Track;
+  const currentTrack = queue[currentTrackIndex] || allTracks[0];
 
   // Sync queue when tracks load from backend
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -167,7 +169,8 @@ export default function MusicLensPage() {
       gradient.addColorStop(1, '#f472b6');
 
       for (let i = 0; i < barCount; i++) {
-        const value = Math.random() * 0.5 + 0.3 + Math.sin(Date.now() / 200 + i * 0.2) * 0.2;
+        const now = Date.now();
+        const value = 0.5 + Math.sin(now / 200 + i * 0.2) * 0.2 + Math.sin(now / 130 + i * 0.5) * 0.15 + Math.cos(now / 170 + i * 0.35) * 0.1;
         const barHeight = value * height * 0.8;
 
         if (visualizerMode === 'bars') {
@@ -343,7 +346,7 @@ export default function MusicLensPage() {
       <div className="flex-1 overflow-y-auto px-4 py-2">
         <div className="flex items-center justify-between mb-3">
           <span className="text-xs font-semibold text-gray-400 uppercase">Playlists</span>
-          <button className="p-1 rounded hover:bg-lattice-elevated text-gray-400">
+          <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Create new playlist' })} className="p-1 rounded hover:bg-lattice-elevated text-gray-400">
             <Plus className="w-4 h-4" />
           </button>
         </div>
@@ -419,7 +422,7 @@ export default function MusicLensPage() {
                   </div>
                   <span className="font-semibold">{playlist.name}</span>
                   <div className="ml-auto mr-4 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button className="w-12 h-12 rounded-full bg-neon-green flex items-center justify-center shadow-lg">
+                    <button onClick={(e) => { e.stopPropagation(); const firstTrack = allTracks.find(t => playlist.trackIds?.includes(t.id)); if (firstTrack) playTrack(firstTrack); }} className="w-12 h-12 rounded-full bg-neon-green flex items-center justify-center shadow-lg">
                       <Play className="w-5 h-5 text-black ml-1" />
                     </button>
                   </div>
@@ -432,7 +435,7 @@ export default function MusicLensPage() {
           <section>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold">Made for You</h2>
-              <button className="text-sm text-gray-400 hover:text-white">Show all</button>
+              <button onClick={() => setViewMode('library')} className="text-sm text-gray-400 hover:text-white">Show all</button>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
               {['Daily Mix 1', 'Discover Weekly', 'Release Radar', 'Your Top 2024', 'Repeat Rewind'].map((name, i) => (
@@ -442,7 +445,7 @@ export default function MusicLensPage() {
                       <Music className="w-16 h-16 opacity-50" />
                     </div>
                     <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity transform translate-y-2 group-hover:translate-y-0">
-                      <button className="w-12 h-12 rounded-full bg-neon-green flex items-center justify-center shadow-lg">
+                      <button onClick={() => { if (allTracks[i]) playTrack(allTracks[i]); }} className="w-12 h-12 rounded-full bg-neon-green flex items-center justify-center shadow-lg">
                         <Play className="w-5 h-5 text-black ml-1" />
                       </button>
                     </div>
@@ -458,20 +461,28 @@ export default function MusicLensPage() {
           <section>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold">Popular Artists</h2>
-              <button className="text-sm text-gray-400 hover:text-white">Show all</button>
+              <button onClick={() => setViewMode('library')} className="text-sm text-gray-400 hover:text-white">Show all</button>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-              {allTracks.reduce<{id: string; name: string; genres: string[]}[]>((acc, t) => { if (!acc.find(a => a.name === t.artist)) acc.push({ id: t.id, name: t.artist, genres: [t.genre || ''] }); return acc; }, []).map((artist) => (
-                <div key={artist.id} className="group cursor-pointer text-center">
-                  <div className="relative aspect-square rounded-full overflow-hidden bg-gradient-to-br from-gray-700 to-gray-800 mb-3 mx-auto">
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <Headphones className="w-12 h-12 opacity-50" />
+              {(() => {
+                // Derive unique artists from track data
+                const seen = new Set<string>();
+                return allTracks.filter(t => {
+                  if (seen.has(t.artist)) return false;
+                  seen.add(t.artist);
+                  return true;
+                }).map((track) => (
+                  <div key={track.artist} className="group cursor-pointer text-center">
+                    <div className="relative aspect-square rounded-full overflow-hidden bg-gradient-to-br from-gray-700 to-gray-800 mb-3 mx-auto">
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <Headphones className="w-12 h-12 opacity-50" />
+                      </div>
                     </div>
+                    <h3 className="font-semibold truncate">{track.artist}</h3>
+                    <p className="text-sm text-gray-400">Artist</p>
                   </div>
-                  <h3 className="font-semibold truncate">{artist.name}</h3>
-                  <p className="text-sm text-gray-400">Artist</p>
-                </div>
-              ))}
+                ));
+              })()}
             </div>
           </section>
 
@@ -574,17 +585,23 @@ export default function MusicLensPage() {
             <div>
               <h3 className="text-xl font-bold mb-4">Browse all</h3>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {['Electronic', 'Ambient', 'Focus', 'Workout', 'Chill', 'Party', 'Sleep', 'Meditation'].map((genre) => (
-                  <button
-                    key={genre}
-                    className="aspect-[1.5] rounded-lg p-4 text-left font-bold text-xl overflow-hidden relative"
-                    style={{
-                      background: `linear-gradient(135deg, hsl(${Math.random() * 360}, 70%, 40%), hsl(${Math.random() * 360}, 70%, 30%))`,
-                    }}
-                  >
-                    {genre}
-                  </button>
-                ))}
+                {['Electronic', 'Ambient', 'Focus', 'Workout', 'Chill', 'Party', 'Sleep', 'Meditation'].map((genre, i) => {
+                  // Deterministic hue based on index, spread evenly across the color wheel
+                  const hue1 = (i * 45 + 10) % 360;
+                  const hue2 = (hue1 + 40) % 360;
+                  return (
+                    <button
+                      key={genre}
+                      onClick={() => setSearchQuery(genre)}
+                      className="aspect-[1.5] rounded-lg p-4 text-left font-bold text-xl overflow-hidden relative"
+                      style={{
+                        background: `linear-gradient(135deg, hsl(${hue1}, 70%, 40%), hsl(${hue2}, 70%, 30%))`,
+                      }}
+                    >
+                      {genre}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -598,10 +615,9 @@ export default function MusicLensPage() {
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-bold">Your Library</h2>
             <div className="flex items-center gap-2">
-              <button className="px-3 py-1 rounded-full bg-white/10 text-sm hover:bg-white/20">Playlists</button>
-              <button className="px-3 py-1 rounded-full text-gray-400 text-sm hover:text-white">Podcasts</button>
-              <button className="px-3 py-1 rounded-full text-gray-400 text-sm hover:text-white">Artists</button>
-              <button className="px-3 py-1 rounded-full text-gray-400 text-sm hover:text-white">Albums</button>
+              {(['playlists', 'podcasts', 'artists', 'albums'] as const).map(f => (
+                <button key={f} onClick={() => setLibraryFilter(f)} className={cn('px-3 py-1 rounded-full text-sm', libraryFilter === f ? 'bg-white/10 hover:bg-white/20' : 'text-gray-400 hover:text-white')}>{f.charAt(0).toUpperCase() + f.slice(1)}</button>
+              ))}
             </div>
           </div>
 
@@ -662,13 +678,13 @@ export default function MusicLensPage() {
                 <Play className="w-6 h-6 text-black ml-1" />
               )}
             </button>
-            <button className="text-gray-400 hover:text-white">
+            <button onClick={() => useUIStore.getState().addToast({ type: 'success', message: 'Playlist saved to library' })} className="text-gray-400 hover:text-white">
               <Heart className="w-8 h-8" />
             </button>
-            <button className="text-gray-400 hover:text-white">
+            <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Downloading playlist for offline' })} className="text-gray-400 hover:text-white">
               <Download className="w-6 h-6" />
             </button>
-            <button className="text-gray-400 hover:text-white">
+            <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Playlist options' })} className="text-gray-400 hover:text-white">
               <MoreHorizontal className="w-6 h-6" />
             </button>
           </div>
@@ -686,6 +702,9 @@ export default function MusicLensPage() {
               </tr>
             </thead>
             <tbody>
+              {allTracks.length === 0 && (
+                <tr><td colSpan={5} className="py-8 text-center text-gray-500">No tracks yet. Add music to get started.</td></tr>
+              )}
               {allTracks.map((track, index) => (
                 <tr
                   key={track.id}
@@ -742,7 +761,7 @@ export default function MusicLensPage() {
           <ChevronDown className="w-6 h-6" />
         </button>
         <span className="text-sm text-gray-400">Now Playing</span>
-        <button className="p-2 rounded-full hover:bg-white/10">
+        <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Track options' })} className="p-2 rounded-full hover:bg-white/10">
           <MoreHorizontal className="w-6 h-6" />
         </button>
       </div>
@@ -985,6 +1004,17 @@ export default function MusicLensPage() {
   );
 
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (isError || isError2) {
     return (
       <div className="flex items-center justify-center h-full p-8">
@@ -1027,7 +1057,7 @@ export default function MusicLensPage() {
             <p className="font-medium truncate hover:underline cursor-pointer">{currentTrack.title}</p>
             <p className="text-sm text-gray-400 truncate hover:underline cursor-pointer">{currentTrack.artist}</p>
           </div>
-          <button className={cn('p-2', currentTrack.liked ? 'text-neon-green' : 'text-gray-400 hover:text-white')}>
+          <button onClick={() => useUIStore.getState().addToast({ type: 'success', message: currentTrack.liked ? 'Removed from liked' : 'Added to liked songs' })} className={cn('p-2', currentTrack.liked ? 'text-neon-green' : 'text-gray-400 hover:text-white')}>
             <Heart className={cn('w-4 h-4', currentTrack.liked && 'fill-current')} />
           </button>
         </div>

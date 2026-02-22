@@ -41,10 +41,22 @@ export default function LockLensPage() {
       addEvent({
         title: new Date().toISOString().split('T')[0],
         data: { event: `Audit ${data?.ok ? 'passed' : 'failed'}`, level: lockPercentage },
-      }).catch(() => {});
+      }).catch((err) => console.error('Failed to save audit event:', err instanceof Error ? err.message : err));
     },
+    onError: (err) => console.error('runAudit failed:', err instanceof Error ? err.message : err),
   });
 
+
+  if (historyLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError) {
     return (

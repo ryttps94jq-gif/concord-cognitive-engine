@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
+import { useUIStore } from '@/store/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -125,19 +126,19 @@ const DAY_NAMES_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 
 
 export default function CalendarLensPage() {
   useLensNav('calendar');
-  const _queryClient = useQueryClient();
+  const queryClient = useQueryClient();
 
   // State
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [categories, setCategories] = useState<CalendarCategory[]>(INITIAL_CATEGORIES);
+  const [categories, setCategories] = useState<CalendarCategory[]>([]);
 
-  const { isError: isError, error: error, refetch: refetch, items: _eventItems, create: _createEvent } = useLensData<CalendarEvent>('calendar', 'event', {
+  const { isLoading, isError: isError, error: error, refetch: refetch, items: eventItems, create: createEvent } = useLensData<CalendarEvent>('calendar', 'event', {
     seed: [],
   });
-  const { isError: isError2, error: error2, refetch: refetch2, items: _catItems } = useLensData<CalendarCategory>('calendar', 'category', {
+  const { isError: isError2, error: error2, refetch: refetch2, items: catItems } = useLensData<CalendarCategory>('calendar', 'category', {
     seed: INITIAL_CATEGORIES.map(c => ({ title: c.name, data: c as unknown as Record<string, unknown> })),
   });
 
@@ -145,7 +146,6 @@ export default function CalendarLensPage() {
   const [showEventModal, setShowEventModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showBookingModal, setShowBookingModal] = useState(false);
-  const [_searchQuery, _setSearchQuery] = useState('');
   const [showSidebar, setShowSidebar] = useState(true);
 
   // New event form
@@ -174,10 +174,39 @@ export default function CalendarLensPage() {
 
   const [collaboratorInput, setCollaboratorInput] = useState('');
 
-  // Initialize events
+  // Sync backend event data into local state when available
   useEffect(() => {
-    setEvents(generateInitialEvents(currentDate));
-  }, [currentDate]);
+    if (eventItems.length > 0) {
+      const backendEvents: CalendarEvent[] = eventItems.map(i => {
+        const d = i.data as unknown as CalendarEvent;
+        return {
+          ...d,
+          id: i.id,
+          startDate: new Date(d.startDate),
+          endDate: new Date(d.endDate),
+        };
+      });
+      setEvents(backendEvents);
+    } else {
+      setEvents(generateInitialEvents(currentDate));
+    }
+  }, [eventItems, currentDate]);
+
+  // Sync backend category data into local state when available
+  useEffect(() => {
+    if (catItems.length > 0) {
+      setCategories(catItems.map(i => i.data as unknown as CalendarCategory));
+    }
+  }, [catItems]);
+
+  // Derive project list from event data instead of hardcoded INITIAL_PROJECTS
+  const projects: string[] = useMemo(() => {
+    const projectSet = new Set<string>();
+    events.forEach(e => {
+      if (e.linkedProject) projectSet.add(e.linkedProject);
+    });
+    return Array.from(projectSet).sort();
+  }, [events]);
 
   // Calendar calculations
   const getDaysInMonth = (date: Date) => {
@@ -979,6 +1008,9 @@ export default function CalendarLensPage() {
             <div>
               <h4 className="text-sm font-medium mb-3">Categories</h4>
               <div className="space-y-2">
+                {categories.length === 0 && (
+                  <p className="text-xs text-gray-500 py-2">No categories yet. Create events to see categories here.</p>
+                )}
                 {categories.map((category) => (
                   <button
                     key={category.id}
@@ -1047,6 +1079,17 @@ export default function CalendarLensPage() {
   // Main render
   // ---------------------------------------------------------------------------
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2) {
     return (
@@ -1120,10 +1163,10 @@ export default function CalendarLensPage() {
             ))}
           </div>
 
-          <button className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400">
+          <button onClick={() => setShowSidebar(!showSidebar)} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400">
             <Search className="w-5 h-5" />
           </button>
-          <button className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400">
+          <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Calendar settings' })} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400">
             <Settings className="w-5 h-5" />
           </button>
         </div>
@@ -1186,7 +1229,7 @@ export default function CalendarLensPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400">
+                  <button onClick={() => { setShowEventModal(false); setShowCreateModal(true); setNewEvent(selectedEvent); }} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400">
                     <Edit2 className="w-4 h-4" />
                   </button>
                   <button
@@ -1291,7 +1334,7 @@ export default function CalendarLensPage() {
 
                 {selectedEvent.eventType === 'release' && (
                   <div className="pt-4 border-t border-lattice-border">
-                    <button className="flex items-center gap-2 text-neon-cyan hover:underline">
+                    <button onClick={() => { window.location.href = '/lenses/music'; }} className="flex items-center gap-2 text-neon-cyan hover:underline">
                       <ExternalLink className="w-4 h-4" />
                       Open release dashboard
                     </button>
@@ -1414,7 +1457,7 @@ export default function CalendarLensPage() {
                     className="w-full bg-lattice-deep rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-neon-cyan"
                   >
                     <option value="">None</option>
-                    {INITIAL_PROJECTS.map((proj) => (
+                    {projects.map((proj) => (
                       <option key={proj} value={proj}>{proj}</option>
                     ))}
                   </select>

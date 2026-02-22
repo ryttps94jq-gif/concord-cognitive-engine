@@ -2,7 +2,8 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { apiHelpers } from '@/lib/api/client';
+import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useState } from 'react';
 import { FileCode, Plus, Check, X } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -14,15 +15,13 @@ export default function SchemaLensPage() {
   const [validateData, setValidateData] = useState({ schemaName: '', data: '' });
   const [validationResult, setValidationResult] = useState<{ valid: boolean; errors?: { field: string; error: string }[] } | null>(null);
 
-  const { data: schemas, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
-    queryKey: ['schemas'],
-    queryFn: () => api.get('/api/schema').then(r => r.data),
-  });
+  const { items: schemaItems, isLoading, isError: isError, error: error, refetch: refetch, create: createSchemaItem } = useLensData<Record<string, unknown>>('schema', 'definition', { seed: [] });
+  const schemas = schemaItems.map(i => ({ id: i.id, name: i.title, ...(i.data || {}) })) as unknown as Record<string, unknown>[];
 
   const createMutation = useMutation({
-    mutationFn: (data: unknown) => api.post('/api/schema', data),
+    mutationFn: (data: unknown) => createSchemaItem({ title: (data as Record<string, string>)?.name || 'schema', data: data as Record<string, unknown> }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['schemas'] });
+      refetch();
       setShowCreate(false);
     },
     onError: (err) => {
@@ -32,7 +31,7 @@ export default function SchemaLensPage() {
 
   const validateMutation = useMutation({
     mutationFn: (data: { schemaName: string; data: unknown }) =>
-      api.post('/api/schema/validate', data),
+      apiHelpers.lens.run('schema', data.schemaName, { action: 'validate', params: data }),
     onSuccess: (result) => setValidationResult(result.data),
     onError: (err) => {
       setValidationResult({ valid: false, errors: [{ field: 'API', error: err instanceof Error ? err.message : 'Validation request failed' }] });
@@ -48,6 +47,17 @@ export default function SchemaLensPage() {
     }
   };
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError) {
     return (
@@ -77,12 +87,12 @@ export default function SchemaLensPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Schema List */}
         <div className="space-y-4">
-          <h2 className="text-lg font-semibold">Available Schemas ({schemas?.count || 0})</h2>
+          <h2 className="text-lg font-semibold">Available Schemas ({schemas?.length || 0})</h2>
           {isLoading ? (
             <div className="text-gray-400">Loading...</div>
           ) : (
             <div className="space-y-3">
-              {schemas?.schemas?.map((schema: Record<string, unknown>) => (
+              {schemas?.map((schema: Record<string, unknown>) => (
                 <SchemaCard key={(schema.id || schema.name) as string} schema={schema} />
               ))}
             </div>
@@ -99,7 +109,7 @@ export default function SchemaLensPage() {
               className="w-full px-3 py-2 bg-lattice-surface border border-lattice-border rounded"
             >
               <option value="">Select Schema</option>
-              {schemas?.schemas?.map((s: Record<string, unknown>) => (
+              {schemas?.map((s: Record<string, unknown>) => (
                 <option key={s.name as string} value={s.name as string}>{s.name as string}</option>
               ))}
             </select>
@@ -111,10 +121,10 @@ export default function SchemaLensPage() {
             />
             <button
               onClick={handleValidate}
-              disabled={!validateData.schemaName || !validateData.data}
-              className="btn-primary w-full"
+              disabled={!validateData.schemaName || !validateData.data || validateMutation.isPending}
+              className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Validate
+              {validateMutation.isPending ? 'Validating...' : 'Validate'}
             </button>
 
             {validationResult && (

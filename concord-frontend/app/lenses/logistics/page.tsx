@@ -972,7 +972,7 @@ export default function LogisticsLensPage() {
             {/* Route Header */}
             <div className="flex items-start justify-between cursor-pointer" onClick={() => setRouteExpanded(expanded ? null : item.id)}>
               <div className="flex items-center gap-3">
-                <button className={ds.btnGhost}>
+                <button className={ds.btnGhost} onClick={(e) => { e.stopPropagation(); setRouteExpanded(expanded ? null : item.id); }}>
                   {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                 </button>
                 <div>

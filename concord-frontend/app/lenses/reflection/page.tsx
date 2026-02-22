@@ -24,7 +24,7 @@ interface Reflection {
 export default function ReflectionLensPage() {
   useLensNav('reflection');
 
-  const { data: status, isError: isError, error: error, refetch: refetch,} = useQuery({
+  const { data: status, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
     queryKey: ['reflection-status'],
     queryFn: () => apiHelpers.reflection.status().then((r) => r.data),
     refetchInterval: 15000,
@@ -56,6 +56,17 @@ export default function ReflectionLensPage() {
     selfConsistency: 'Self-Consistency',
   };
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2 || isError3) {
     return (

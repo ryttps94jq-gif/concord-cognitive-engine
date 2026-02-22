@@ -1283,6 +1283,17 @@ export default function GovernmentLensPage() {
   /*  Main Render                                                      */
   /* ================================================================ */
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (isError) {
     return (
       <div className="flex items-center justify-center h-full p-8">
@@ -1311,7 +1322,7 @@ export default function GovernmentLensPage() {
           <button className={cn(view === 'library' ? ds.btnPrimary : ds.btnSecondary)} onClick={() => { setView('library'); setDetailId(null); }}>
             <ListChecks className="w-4 h-4" /> Library
           </button>
-          <button className={ds.btnGhost} title="Export"><Download className="w-4 h-4" /></button>
+          <button onClick={() => { const data = JSON.stringify({ export: 'government-lens', date: new Date().toISOString() }, null, 2); const blob = new Blob([data], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'government-export.json'; a.click(); URL.revokeObjectURL(url); }} className={ds.btnGhost} title="Export"><Download className="w-4 h-4" /></button>
         </div>
       </header>
 

@@ -9,7 +9,7 @@
  *   - DashboardPage for returning users
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
@@ -50,6 +50,7 @@ export function HomeClient() {
   const [authChecked, setAuthChecked] = useState(false);
   const setFullPageMode = useUIStore((state) => state.setFullPageMode);
   const router = useRouter();
+  const authCheckRef = useRef(false);
 
   useEffect(() => {
     // Hide SSR landing content once client takes over
@@ -62,19 +63,35 @@ export function HomeClient() {
     setFullPageMode(!isEntered);
 
     // If user has entered before, verify they're still authenticated
-    if (isEntered) {
-      api.get('/api/auth/me')
+    if (isEntered && !authCheckRef.current) {
+      authCheckRef.current = true;
+
+      // Race auth check against a timeout to prevent infinite loading
+      const timeout = new Promise<'timeout'>((resolve) =>
+        setTimeout(() => resolve('timeout'), 10_000)
+      );
+
+      const authCheck = api.get('/api/auth/me')
         .then(async () => {
-          // Proactively refresh CSRF token for state-changing requests
           try { await api.get('/api/auth/csrf-token'); } catch {}
-          setAuthChecked(true);
+          return 'ok' as const;
         })
         .catch(() => {
           // Not authenticated — the 401 interceptor will redirect to /login
-          setAuthChecked(true);
+          return 'failed' as const;
         });
+
+      Promise.race([authCheck, timeout]).then((result) => {
+        if (result === 'timeout') {
+          // Auth check hung — allow through so the page isn't stuck forever.
+          // API calls will still get 401-redirected if session is truly dead.
+          console.warn('[HomeClient] Auth check timed out after 10s');
+        }
+        setAuthChecked(true);
+      });
     }
-  }, [setFullPageMode]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleEnter = () => {
     router.push('/register');

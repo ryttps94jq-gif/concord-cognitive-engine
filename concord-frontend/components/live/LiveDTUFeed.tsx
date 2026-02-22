@@ -41,13 +41,13 @@ export function LiveDTUFeed({ limit = 10 }: { limit?: number }) {
       || (dtusData as { dtus?: DTUEvent[]; items?: DTUEvent[] })?.items
       || [];
     if (items.length > 0 && liveDtus.length === 0) {
-      setLiveDtus(items.slice(0, limit).map((d: any) => ({
-        id: d.id as string || '',
-        title: d.title as string || d.summary as string || '',
-        summary: d.summary as string || '',
-        tier: d.tier as string || 'regular',
-        emergent: d.emergent as string || d.actor as string || '',
-        timestamp: d.timestamp as string || d.created_at as string || new Date().toISOString(),
+      setLiveDtus(items.slice(0, limit).map((d: DTUEvent) => ({
+        id: d.id || '',
+        title: d.title || d.summary || '',
+        summary: d.summary || '',
+        tier: d.tier || 'regular',
+        emergent: d.emergent || d.actor || '',
+        timestamp: d.timestamp || new Date().toISOString(),
         isNew: false,
       })));
     }

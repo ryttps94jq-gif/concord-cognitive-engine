@@ -2,7 +2,7 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import { useState } from 'react';
 import { Plug, Webhook, Zap, Code, FileText, Plus, Trash2, Play, ToggleLeft, ToggleRight } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -13,23 +13,23 @@ export default function IntegrationsLensPage() {
   const [activeTab, setActiveTab] = useState<'webhooks' | 'automations' | 'services'>('webhooks');
   const [showCreate, setShowCreate] = useState(false);
 
-  const { data: webhooks, isError: isError, error: error, refetch: refetch,} = useQuery({
+  const { data: webhooks, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
     queryKey: ['webhooks'],
-    queryFn: () => api.get('/api/webhooks').then(r => r.data),
+    queryFn: () => apiHelpers.webhooks.list().then(r => r.data),
   });
 
   const { data: automations, isError: isError2, error: error2, refetch: refetch2,} = useQuery({
     queryKey: ['automations'],
-    queryFn: () => api.get('/api/automations').then(r => r.data),
+    queryFn: () => apiHelpers.lens.list('integrations', { type: 'automation' }).then(r => r.data),
   });
 
   const { data: integrations, isError: isError3, error: error3, refetch: refetch3,} = useQuery({
     queryKey: ['integrations'],
-    queryFn: () => api.get('/api/integrations').then(r => r.data),
+    queryFn: () => apiHelpers.lens.list('integrations', { type: 'integration' }).then(r => r.data),
   });
 
   const createWebhookMutation = useMutation({
-    mutationFn: (data: Record<string, unknown>) => api.post('/api/webhooks', data),
+    mutationFn: (data: Record<string, unknown>) => apiHelpers.webhooks.register(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['webhooks'] });
       setShowCreate(false);
@@ -37,23 +37,34 @@ export default function IntegrationsLensPage() {
   });
 
   const deleteWebhookMutation = useMutation({
-    mutationFn: (id: string) => api.delete(`/api/webhooks/${id}`),
+    mutationFn: (id: string) => apiHelpers.webhooks.deactivate(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['webhooks'] }),
   });
 
   const toggleWebhookMutation = useMutation({
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
-      api.post(`/api/webhooks/${id}/toggle`, { enabled }),
+      enabled ? apiHelpers.webhooks.deactivate(id) : apiHelpers.webhooks.register({ id }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['webhooks'] }),
   });
 
   const runAutomationMutation = useMutation({
-    mutationFn: (id: string) => api.post(`/api/automations/${id}/run`, {}),
+    mutationFn: (id: string) => apiHelpers.lens.run('integrations', id, { action: 'run' }),
     onError: (err) => {
       console.error('Automation run failed:', err instanceof Error ? err.message : err);
     },
   });
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2 || isError3) {
     return (
@@ -124,13 +135,15 @@ export default function IntegrationsLensPage() {
                   <span className="text-sm text-gray-400">{String(wh.triggerCount)} triggers</span>
                   <button
                     onClick={() => toggleWebhookMutation.mutate({ id: wh.id as string, enabled: !(wh.enabled as boolean) })}
-                    className="text-gray-400 hover:text-white"
+                    disabled={toggleWebhookMutation.isPending}
+                    className="text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {wh.enabled ? <ToggleRight className="w-6 h-6 text-green-500" /> : <ToggleLeft className="w-6 h-6" />}
                   </button>
                   <button
                     onClick={() => deleteWebhookMutation.mutate(wh.id as string)}
-                    className="text-gray-400 hover:text-red-400"
+                    disabled={deleteWebhookMutation.isPending}
+                    className="text-gray-400 hover:text-red-400 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Trash2 className="w-5 h-5" />
                   </button>

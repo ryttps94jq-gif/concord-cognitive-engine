@@ -113,10 +113,14 @@ export default function SRSLensPage() {
   useLensNav('srs');
 
   const queryClient = useQueryClient();
-  const { isError: isError, error: error, refetch: refetch, items: cardItems, create: _createCard } = useLensData<SRSItem>('srs', 'card', {
+  const { isError: isError, error: error, refetch: refetch, items: cardItems, create: _createCard, remove: removeCard } = useLensData<SRSItem>('srs', 'card', {
     seed: INITIAL_CARDS.map(c => ({ title: c.front, data: c as unknown as Record<string, unknown> })),
   });
-  const persistedCards: SRSItem[] = cardItems.length > 0 ? cardItems.map(i => ({ ...(i.data as unknown as SRSItem), id: i.id })) : INITIAL_CARDS;
+  const { isError: isError3, error: error3, refetch: refetch3, items: deckItems } = useLensData<Deck>('srs', 'deck', {
+    seed: INITIAL_DECKS.map(d => ({ title: d.name, data: d as unknown as Record<string, unknown> })),
+  });
+  const persistedCards: SRSItem[] = cardItems.map(i => ({ ...(i.data as unknown as SRSItem), id: i.id }));
+  const persistedDecks: Deck[] = deckItems.map(i => ({ ...(i.data as unknown as Deck), id: i.id }));
   const [view, setView] = useState<ViewMode>('study');
   const [studyMode, setStudyMode] = useState<StudyMode>('normal');
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -145,7 +149,7 @@ export default function SRSLensPage() {
   // API with fallback
   const { data: dueData, isLoading, isError: isError2, error: error2, refetch: refetch2,} = useQuery({
     queryKey: ['srs-due'],
-    queryFn: () => apiHelpers.srs.due().then((r) => r.data).catch(() => null),
+    queryFn: () => apiHelpers.srs.due().then((r) => r.data).catch((err) => { console.error('Failed to fetch SRS due cards:', err instanceof Error ? err.message : err); return null; }),
     refetchInterval: 30000,
   });
 
@@ -162,22 +166,39 @@ export default function SRSLensPage() {
     onError: (err) => { console.error('SRS review failed:', err instanceof Error ? err.message : err); },
   });
 
-  // Use API data, persisted lens data, or demo fallback
+  // Use API data or persisted lens data
   const allCards: SRSItem[] = useMemo(() => {
     const apiItems = dueData?.items || dueData?.due || (Array.isArray(dueData) ? dueData : []);
     if (apiItems.length > 0) return apiItems;
-    if (persistedCards.length > 0) return persistedCards;
-    return INITIAL_CARDS;
+    return persistedCards;
   }, [dueData, persistedCards]);
 
   const decks: Deck[] = useMemo(() => {
-    return INITIAL_DECKS.map(d => ({
+    if (persistedDecks.length === 0 && allCards.length === 0) return [];
+    // If we have persisted decks, use those; otherwise derive from card data
+    const baseDeckList = persistedDecks.length > 0
+      ? persistedDecks
+      : (() => {
+          const deckIds = new Set<string>();
+          allCards.forEach(c => { if (c.deck) deckIds.add(c.deck); });
+          return Array.from(deckIds).map(id => ({
+            id,
+            name: id.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+            color: '#06b6d4',
+            cardCount: 0,
+            dueCount: 0,
+            newCount: 0,
+            learnCount: 0,
+          }));
+        })();
+    return baseDeckList.map(d => ({
       ...d,
       cardCount: allCards.filter(c => c.deck === d.id).length || d.cardCount,
       dueCount: allCards.filter(c => c.deck === d.id && c.nextReview && new Date(c.nextReview) <= new Date()).length || d.dueCount,
       newCount: allCards.filter(c => c.deck === d.id && (c.repetitions || 0) === 0).length || d.newCount,
+      learnCount: allCards.filter(c => c.deck === d.id && (c.repetitions || 0) > 0 && (c.interval || 0) < 21).length || d.learnCount,
     }));
-  }, [allCards]);
+  }, [allCards, persistedDecks]);
 
   const dueCards = useMemo(() => {
     let cards = allCards.filter(c => {
@@ -263,10 +284,10 @@ export default function SRSLensPage() {
   ];
 
 
-  if (isError || isError2) {
+  if (isError || isError2 || isError3) {
     return (
       <div className="flex items-center justify-center h-full p-8">
-        <ErrorState error={error?.message || error2?.message} onRetry={() => { refetch(); refetch2(); }} />
+        <ErrorState error={error?.message || error2?.message || error3?.message} onRetry={() => { refetch(); refetch2(); refetch3(); }} />
       </div>
     );
   }
@@ -537,6 +558,16 @@ export default function SRSLensPage() {
             </div>
 
             {/* Deck grid */}
+            {decks.length === 0 && (
+              <div className="panel p-12 text-center">
+                <FolderOpen className="w-12 h-12 mx-auto mb-3 text-gray-500 opacity-40" />
+                <p className="text-lg font-semibold text-white mb-1">No decks yet</p>
+                <p className="text-sm text-gray-400 mb-4">Create your first deck to start organizing your cards.</p>
+                <button onClick={() => setShowCreateDeck(true)} className="btn-neon purple text-sm">
+                  <Plus className="w-4 h-4 inline mr-1" /> Create Deck
+                </button>
+              </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {decks.map(deck => (
                 <motion.div
@@ -901,10 +932,10 @@ export default function SRSLensPage() {
                 </button>
                 <button
                   onClick={handleCreateCard}
-                  disabled={!newFront.trim() || !newBack.trim()}
-                  className="flex-1 py-2 bg-neon-cyan text-black font-medium rounded-lg hover:bg-neon-cyan/90 transition-colors disabled:opacity-50"
+                  disabled={!newFront.trim() || !newBack.trim() || addToSrs.isPending}
+                  className="flex-1 py-2 bg-neon-cyan text-black font-medium rounded-lg hover:bg-neon-cyan/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Create Card
+                  {addToSrs.isPending ? 'Creating...' : 'Create Card'}
                 </button>
               </div>
             </motion.div>
@@ -1073,7 +1104,7 @@ export default function SRSLensPage() {
                 >
                   Close
                 </button>
-                <button className="py-2 px-4 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/30 transition-colors text-sm">
+                <button onClick={() => { if (editingCard) { removeCard(editingCard.dtuId || ''); setEditingCard(null); } }} className="py-2 px-4 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/30 transition-colors text-sm">
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>

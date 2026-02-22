@@ -150,6 +150,8 @@ api.interceptors.response.use(
         // Session is managed via httpOnly cookies, cleared by server
         const path = window.location.pathname;
         if (!path.includes('/login') && !path.includes('/register')) {
+          // Clear entered flag to prevent redirect loop on next visit
+          try { localStorage.removeItem('concord_entered'); } catch {}
           window.location.href = '/login';
         }
       }
@@ -1471,10 +1473,143 @@ export const apiHelpers = {
     recordLlmCall: (operation: string, details?: Record<string, unknown>) =>
       api.post('/api/efficiency/record-llm-call', { operation, details }),
   },
+
+  // Three-Brain Cognitive Architecture
+  brain: {
+    /** Get status of all three brains (conscious, subconscious, utility) */
+    status: () => api.get('/api/brain/status'),
+
+    /** Health check all three brains */
+    health: () => api.get('/api/brain/health'),
+
+    /** Call the utility brain for lens-specific AI tasks */
+    utilityCall: (data: { action: string; lens: string; data?: Record<string, unknown> }) =>
+      api.post('/api/utility/call', data),
+
+    /** Direct conscious brain chat (bypasses normal chat pipeline) */
+    consciousChat: (message: string, lens?: string) =>
+      api.post('/api/brain/conscious/chat', { message, lens }),
+
+    /** Trigger a subconscious task (admin only) */
+    subconsciousTask: (taskType: 'autogen' | 'dream' | 'evolution' | 'synthesis' | 'birth', domain?: string) =>
+      api.post('/api/brain/subconscious/task', { taskType, domain }),
+
+    /** Entity explores a lens via utility brain */
+    entityExplore: (entityId: string, lens: string) =>
+      api.post('/api/brain/entity/explore', { entityId, lens }),
+  },
+
+  // ---- Semantic Intelligence Layer ----
+  embeddings: {
+    /** Get embedding subsystem status */
+    status: () => api.get('/api/embeddings/status'),
+  },
+
+  semanticSearch: {
+    /** Semantic search across DTU substrate */
+    search: (q: string, opts?: { lens?: string; limit?: number }) =>
+      api.get('/api/dtus/search/semantic', { params: { q, ...opts } }),
+
+    /** Get cross-domain connections for a DTU */
+    connections: (dtuId: string, limit?: number) =>
+      api.get(`/api/dtus/${dtuId}/connections`, { params: { limit } }),
+  },
+
+  cache: {
+    /** Get semantic cache stats */
+    stats: () => api.get('/api/cache/stats'),
+
+    /** Record user satisfaction for cached response */
+    satisfaction: (lens: string | null, satisfied: boolean) =>
+      api.post('/api/cache/satisfaction', { lens, satisfied }),
+  },
+
+  distillation: {
+    /** Get knowledge distillation stats */
+    stats: () => api.get('/api/distillation/stats'),
+  },
+
+  precompute: {
+    /** Get predictive pre-computation stats */
+    stats: () => api.get('/api/precompute/stats'),
+  },
+
+  modelOptimizer: {
+    /** Assess all lenses for model recommendations */
+    lenses: () => api.get('/api/model-optimizer/lenses'),
+
+    /** Assess a single lens */
+    lens: (lens: string) => api.get(`/api/model-optimizer/lens/${lens}`),
+
+    /** Get model optimizer stats */
+    stats: () => api.get('/api/model-optimizer/stats'),
+  },
+
+  affectIntelligence: {
+    /** Get system-wide affect state (aggregate sentiment) */
+    system: () => api.get('/api/affect/system'),
+  },
+
+  economics: {
+    /** Get current period economics */
+    current: (hours?: number) => api.get('/api/economics/current', { params: { hours } }),
+
+    /** Get cost-per-user trend */
+    trend: (days?: number) => api.get('/api/economics/trend', { params: { days } }),
+
+    /** Get cost projections at scale */
+    projection: (users?: number) => api.get('/api/economics/projection', { params: { users } }),
+  },
+
+  intelligence: {
+    /** Get combined intelligence dashboard data */
+    dashboard: () => api.get('/api/intelligence/dashboard'),
+  },
+
+  selfHealing: {
+    /** Flag a DTU as problematic for self-healing */
+    flag: (dtuId: string, rating?: number, correction?: string) =>
+      api.post('/api/heal/flag', { dtuId, rating, correction }),
+
+    /** Get self-healing stats */
+    stats: () => api.get('/api/heal/stats'),
+
+    /** Assess DTU freshness */
+    freshness: (lens?: string, maxAgeDays?: number) =>
+      api.get('/api/heal/freshness', { params: { lens, maxAgeDays } }),
+  },
+
+  skillGaps: {
+    /** Get detected knowledge gaps */
+    gaps: () => api.get('/api/skill/gaps'),
+  },
 };
 
 // CSRF token is fetched lazily before the first state-changing request.
 // Do NOT auto-fetch on module load — that fires before the user logs in
 // and generates error toasts/banners that block the login UI.
+
+/**
+ * Safe wrapper for utility brain calls.
+ * Returns a structured error instead of throwing on failure, rate limiting, or offline.
+ */
+export async function safeUtilityCall(action: string, lens: string, data: Record<string, unknown> = {}) {
+  try {
+    const res = await api.post('/api/utility/call', { action, lens, data });
+    return res.data;
+  } catch (err) {
+    if (axios.isAxiosError(err)) {
+      const status = err.response?.status;
+      if (status === 429) {
+        return { error: 'Rate limit reached. Please wait a moment.', rateLimited: true };
+      }
+      if (status === 503) {
+        return { error: 'AI features temporarily unavailable.', offline: true };
+      }
+      return { error: 'Something went wrong. Your data is safe.', status };
+    }
+    return { error: 'Connection lost. Reconnecting...', offline: true };
+  }
+}
 
 export default api;

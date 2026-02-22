@@ -22,7 +22,7 @@ export default function OrganLensPage() {
   const [selectedOrgan, setSelectedOrgan] = useState<string | null>(null);
 
   // Backend: GET /api/status for organ registry
-  const { data: _status, isError: isError, error: error, refetch: refetch,} = useQuery({
+  const { data: _status, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
     queryKey: ['status'],
     queryFn: () => api.get('/api/status').then((r) => r.data),
   });
@@ -31,6 +31,17 @@ export default function OrganLensPage() {
 
   const avgHealth = organs.length > 0 ? organs.reduce((sum, o) => sum + (o.maturity - o.wear), 0) / organs.length : 0;
 
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError) {
     return (
@@ -66,17 +77,17 @@ export default function OrganLensPage() {
         </div>
         <div className="lens-card">
           <TrendingUp className="w-5 h-5 text-neon-green mb-2" />
-          <p className="text-2xl font-bold">{(organs.reduce((s, o) => s + o.maturity, 0) / organs.length * 100).toFixed(0)}%</p>
+          <p className="text-2xl font-bold">{organs.length > 0 ? (organs.reduce((s, o) => s + o.maturity, 0) / organs.length * 100).toFixed(0) : '0'}%</p>
           <p className="text-sm text-gray-400">Avg Maturity</p>
         </div>
         <div className="lens-card">
           <Zap className="w-5 h-5 text-neon-purple mb-2" />
-          <p className="text-2xl font-bold">{(organs.reduce((s, o) => s + o.plasticity, 0) / organs.length * 100).toFixed(0)}%</p>
+          <p className="text-2xl font-bold">{organs.length > 0 ? (organs.reduce((s, o) => s + o.plasticity, 0) / organs.length * 100).toFixed(0) : '0'}%</p>
           <p className="text-sm text-gray-400">Avg Plasticity</p>
         </div>
         <div className="lens-card">
           <TrendingDown className="w-5 h-5 text-neon-pink mb-2" />
-          <p className="text-2xl font-bold">{(organs.reduce((s, o) => s + o.wear, 0) / organs.length * 100).toFixed(0)}%</p>
+          <p className="text-2xl font-bold">{organs.length > 0 ? (organs.reduce((s, o) => s + o.wear, 0) / organs.length * 100).toFixed(0) : '0'}%</p>
           <p className="text-sm text-gray-400">Avg Wear</p>
         </div>
       </div>

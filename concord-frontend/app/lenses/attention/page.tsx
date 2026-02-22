@@ -3,10 +3,11 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
-  Eye, Plus, Play, CheckCircle2,
-  Layers, Clock, BarChart3
+  Eye, Plus, Play, CheckCircle2, Layers, Clock, BarChart3,
+  Sliders, Focus, Pause, AlertTriangle, ArrowUpDown,
+  RefreshCw, Activity, Target, Cpu
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 
@@ -17,7 +18,19 @@ interface Thread {
   status: string;
   description: string;
   createdAt: string;
+  domain?: string;
+  startedAt?: string;
+  completedAt?: string;
+  output?: unknown;
 }
+
+const THREAD_TYPES = [
+  { value: 'reasoning', label: 'Reasoning', color: 'text-neon-cyan' },
+  { value: 'analysis', label: 'Analysis', color: 'text-neon-blue' },
+  { value: 'creative', label: 'Creative', color: 'text-neon-purple' },
+  { value: 'memory-search', label: 'Memory Search', color: 'text-neon-green' },
+  { value: 'planning', label: 'Planning', color: 'text-neon-yellow' },
+];
 
 export default function AttentionLensPage() {
   useLensNav('attention');
@@ -26,20 +39,24 @@ export default function AttentionLensPage() {
   const [newType, setNewType] = useState('reasoning');
   const [newPriority, setNewPriority] = useState('0.5');
   const [newDesc, setNewDesc] = useState('');
+  const [newDomain, setNewDomain] = useState('');
+  const [threadFilter, setThreadFilter] = useState<'all' | 'active' | 'pending' | 'completed'>('all');
+  const [sortBy, setSortBy] = useState<'priority' | 'created' | 'status'>('priority');
+  const [selectedThread, setSelectedThread] = useState<Thread | null>(null);
 
-  const { data: status, isError: isError, error: error, refetch: refetch,} = useQuery({
+  const { data: status, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['attention-status'],
     queryFn: () => apiHelpers.attention.status().then((r) => r.data),
     refetchInterval: 5000,
   });
 
-  const { data: threads, isError: isError2, error: error2, refetch: refetch2,} = useQuery({
+  const { data: threads, isError: isError2, error: error2, refetch: refetch2 } = useQuery({
     queryKey: ['attention-threads'],
     queryFn: () => apiHelpers.attention.threads().then((r) => r.data),
     refetchInterval: 5000,
   });
 
-  const { data: queue, isError: isError3, error: error3, refetch: refetch3,} = useQuery({
+  const { data: queue, isError: isError3, error: error3, refetch: refetch3 } = useQuery({
     queryKey: ['attention-queue'],
     queryFn: () => apiHelpers.attention.queue().then((r) => r.data),
   });
@@ -49,11 +66,13 @@ export default function AttentionLensPage() {
       type: newType,
       priority: parseFloat(newPriority),
       description: newDesc,
+      domain: newDomain || undefined,
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['attention-threads'] });
       queryClient.invalidateQueries({ queryKey: ['attention-status'] });
       setNewDesc('');
+      setNewDomain('');
     },
     onError: (err) => {
       console.error('Failed to create thread:', err instanceof Error ? err.message : err);
@@ -65,9 +84,21 @@ export default function AttentionLensPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['attention-threads'] });
       queryClient.invalidateQueries({ queryKey: ['attention-status'] });
+      setSelectedThread(null);
     },
     onError: (err) => {
       console.error('Failed to complete thread:', err instanceof Error ? err.message : err);
+    },
+  });
+
+  const addBackground = useMutation({
+    mutationFn: (data: { type: string; priority: number }) =>
+      apiHelpers.attention.addBackground({ type: data.type, priority: data.priority }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['attention-status'] });
+    },
+    onError: (err) => {
+      console.error('Failed to add background task:', err instanceof Error ? err.message : err);
     },
   });
 
@@ -77,29 +108,87 @@ export default function AttentionLensPage() {
   const queueData = queue?.queue || [];
   const completedData = queue?.completed || [];
 
+  const filteredThreads = useMemo(() => {
+    let filtered = [...threadList];
+    if (threadFilter !== 'all') {
+      filtered = filtered.filter(t => t.status === threadFilter);
+    }
+    filtered.sort((a, b) => {
+      if (sortBy === 'priority') return (b.priority ?? 0) - (a.priority ?? 0);
+      if (sortBy === 'created') return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+      // sort by status: active first, pending, then completed
+      const statusOrder: Record<string, number> = { active: 0, pending: 1, interrupted: 2, completed: 3 };
+      return (statusOrder[a.status] ?? 4) - (statusOrder[b.status] ?? 4);
+    });
+    return filtered;
+  }, [threadList, threadFilter, sortBy]);
+
+  // Priority weight distribution
+  const priorityDistribution = useMemo(() => {
+    const activeOnly = threadList.filter(t => t.status === 'active' || t.status === 'pending');
+    const totalWeight = activeOnly.reduce((s, t) => s + (t.priority ?? 0), 0);
+    return activeOnly.map(t => ({
+      ...t,
+      allocation: totalWeight > 0 ? ((t.priority ?? 0) / totalWeight) * 100 : 0,
+    }));
+  }, [threadList]);
+
+  // Focus metrics
+  const focusScore = useMemo(() => {
+    const active = threadList.filter(t => t.status === 'active').length;
+    const total = threadList.length;
+    if (total === 0) return 0;
+    // Focus is better when fewer threads are active relative to total
+    return Math.min(1, active > 0 ? 1 / active : 0);
+  }, [threadList]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading attention system...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isError || isError2 || isError3) {
     return (
       <div className="flex items-center justify-center h-full p-8">
-        <ErrorState error={error?.message || error2?.message || error3?.message} onRetry={() => { refetch(); refetch2(); refetch3(); }} />
+        <ErrorState
+          error={error?.message || error2?.message || error3?.message}
+          onRetry={() => { refetch(); refetch2(); refetch3(); }}
+        />
       </div>
     );
   }
+
   return (
     <div className="p-6 space-y-6">
-      <header className="flex items-center gap-3">
-        <span className="text-2xl">👁️</span>
-        <div>
-          <h1 className="text-xl font-bold">Attention & Cognition Lens</h1>
-          <p className="text-sm text-gray-400">
-            Parallel reasoning threads, focus management, and cognitive scheduling
-          </p>
+      <header className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Eye className="w-7 h-7 text-neon-cyan" />
+          <div>
+            <h1 className="text-xl font-bold">Attention & Cognition Lens</h1>
+            <p className="text-sm text-gray-400">
+              Parallel reasoning threads, focus management, and cognitive scheduling
+            </p>
+          </div>
         </div>
+        <button
+          onClick={() => { refetch(); refetch2(); refetch3(); }}
+          className="p-2 rounded-lg bg-lattice-surface hover:bg-lattice-border transition-colors text-gray-400 hover:text-white"
+          title="Refresh all"
+        >
+          <RefreshCw className="w-4 h-4" />
+        </button>
       </header>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div className="lens-card">
-          <Eye className="w-5 h-5 text-neon-cyan mb-2" />
+          <Focus className="w-5 h-5 text-neon-cyan mb-2" />
           <p className="text-2xl font-bold">{status?.focus ? 'Focused' : 'Idle'}</p>
           <p className="text-sm text-gray-400">Focus State</p>
         </div>
@@ -118,83 +207,252 @@ export default function AttentionLensPage() {
           <p className="text-2xl font-bold">{stats.threadsCompleted || 0}</p>
           <p className="text-sm text-gray-400">Completed</p>
         </div>
+        <div className="lens-card">
+          <Target className="w-5 h-5 text-neon-blue mb-2" />
+          <p className="text-2xl font-bold">{(focusScore * 100).toFixed(0)}%</p>
+          <p className="text-sm text-gray-400">Focus Score</p>
+        </div>
+      </div>
+
+      {/* Priority Weights Display */}
+      {priorityDistribution.length > 0 && (
+        <div className="panel p-4">
+          <h2 className="font-semibold mb-3 flex items-center gap-2">
+            <Sliders className="w-4 h-4 text-neon-yellow" /> Attention Allocation
+          </h2>
+          <div className="flex h-6 rounded-full overflow-hidden bg-lattice-deep">
+            {priorityDistribution.map((t, i) => {
+              const colors = ['bg-neon-cyan', 'bg-neon-purple', 'bg-neon-green', 'bg-neon-blue', 'bg-neon-yellow', 'bg-neon-pink'];
+              return (
+                <div
+                  key={t.id}
+                  className={`${colors[i % colors.length]} transition-all duration-500 relative group`}
+                  style={{ width: `${Math.max(t.allocation, 2)}%` }}
+                  title={`${t.type}: ${t.allocation.toFixed(1)}%`}
+                >
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    {t.allocation > 10 && (
+                      <span className="text-[10px] font-bold text-white/90 truncate px-1">
+                        {t.type}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex flex-wrap gap-3 mt-2">
+            {priorityDistribution.map((t, i) => {
+              const dotColors = ['bg-neon-cyan', 'bg-neon-purple', 'bg-neon-green', 'bg-neon-blue', 'bg-neon-yellow', 'bg-neon-pink'];
+              return (
+                <span key={t.id} className="flex items-center gap-1 text-xs text-gray-400">
+                  <span className={`w-2 h-2 rounded-full ${dotColors[i % dotColors.length]}`} />
+                  {t.type} ({t.allocation.toFixed(1)}%)
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Focus Metrics */}
+      <div className="panel p-4">
+        <h2 className="font-semibold mb-3 flex items-center gap-2">
+          <Activity className="w-4 h-4 text-neon-green" /> Focus Metrics
+        </h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="text-center">
+            <p className="text-xs text-gray-500 uppercase">Total Created</p>
+            <p className="text-lg font-bold text-gray-200">{stats.threadsCreated || 0}</p>
+          </div>
+          <div className="text-center">
+            <p className="text-xs text-gray-500 uppercase">Interruptions</p>
+            <p className="text-lg font-bold text-yellow-400">{stats.interruptions || 0}</p>
+          </div>
+          <div className="text-center">
+            <p className="text-xs text-gray-500 uppercase">Background Tasks</p>
+            <p className="text-lg font-bold text-gray-200">{status?.backgroundTasks || 0}</p>
+          </div>
+          <div className="text-center">
+            <p className="text-xs text-gray-500 uppercase">Avg Focus Duration</p>
+            <p className="text-lg font-bold text-gray-200">
+              {stats.avgFocusDurationMs ? `${(stats.avgFocusDurationMs / 1000).toFixed(1)}s` : '--'}
+            </p>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Create Thread */}
+        {/* Create Thread + Allocation Controls */}
         <div className="panel p-4 space-y-3">
           <h2 className="font-semibold flex items-center gap-2">
             <Plus className="w-4 h-4 text-neon-purple" /> New Cognitive Thread
           </h2>
           <select value={newType} onChange={(e) => setNewType(e.target.value)} className="input-lattice w-full">
-            <option value="reasoning">Reasoning</option>
-            <option value="analysis">Analysis</option>
-            <option value="creative">Creative</option>
-            <option value="memory-search">Memory Search</option>
-            <option value="planning">Planning</option>
+            {THREAD_TYPES.map(t => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
           </select>
-          <input type="number" value={newPriority} onChange={(e) => setNewPriority(e.target.value)}
-            min="0" max="1" step="0.1" placeholder="Priority (0-1)" className="input-lattice w-full" />
-          <input type="text" value={newDesc} onChange={(e) => setNewDesc(e.target.value)}
-            placeholder="Thread description..." className="input-lattice w-full" />
-          <button onClick={() => createThread.mutate()} disabled={!newDesc || createThread.isPending}
-            className="btn-neon purple w-full">
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">
+              Priority: <span className="text-neon-cyan">{parseFloat(newPriority).toFixed(1)}</span>
+            </label>
+            <input
+              type="range"
+              value={newPriority}
+              onChange={(e) => setNewPriority(e.target.value)}
+              min="0"
+              max="1"
+              step="0.1"
+              className="w-full accent-neon-cyan"
+            />
+            <div className="flex justify-between text-[10px] text-gray-600">
+              <span>Low</span>
+              <span>Medium</span>
+              <span>High</span>
+            </div>
+          </div>
+          <input
+            type="text"
+            value={newDesc}
+            onChange={(e) => setNewDesc(e.target.value)}
+            placeholder="Thread description..."
+            className="input-lattice w-full"
+          />
+          <input
+            type="text"
+            value={newDomain}
+            onChange={(e) => setNewDomain(e.target.value)}
+            placeholder="Domain (optional)..."
+            className="input-lattice w-full"
+          />
+          <button
+            onClick={() => createThread.mutate()}
+            disabled={!newDesc || createThread.isPending}
+            className="btn-neon purple w-full"
+          >
             {createThread.isPending ? 'Creating...' : 'Create Thread'}
           </button>
 
-          <div className="border-t border-lattice-border pt-3 mt-3 space-y-2 text-sm">
-            <p className="text-gray-400">Stats</p>
-            <div className="flex justify-between text-xs">
-              <span className="text-gray-500">Total created</span>
-              <span className="text-gray-300">{stats.threadsCreated || 0}</span>
-            </div>
-            <div className="flex justify-between text-xs">
-              <span className="text-gray-500">Interruptions</span>
-              <span className="text-yellow-400">{stats.interruptions || 0}</span>
-            </div>
-            <div className="flex justify-between text-xs">
-              <span className="text-gray-500">Background tasks</span>
-              <span className="text-gray-300">{status?.backgroundTasks || 0}</span>
-            </div>
-            <div className="flex justify-between text-xs">
-              <span className="text-gray-500">Avg focus duration</span>
-              <span className="text-gray-300">{stats.avgFocusDurationMs ? `${(stats.avgFocusDurationMs / 1000).toFixed(1)}s` : '—'}</span>
+          {/* Background Task */}
+          <div className="border-t border-lattice-border pt-3 mt-3">
+            <h3 className="text-sm font-medium mb-2 flex items-center gap-2">
+              <Cpu className="w-3 h-3 text-gray-400" /> Quick Background Task
+            </h3>
+            <div className="flex gap-2">
+              <button
+                onClick={() => addBackground.mutate({ type: 'memory-consolidation', priority: 0.3 })}
+                disabled={addBackground.isPending}
+                className="text-xs px-2 py-1.5 rounded bg-lattice-surface border border-lattice-border hover:border-neon-cyan/30 transition-colors text-gray-400 hover:text-neon-cyan disabled:opacity-50"
+              >
+                Memory
+              </button>
+              <button
+                onClick={() => addBackground.mutate({ type: 'pattern-scan', priority: 0.2 })}
+                disabled={addBackground.isPending}
+                className="text-xs px-2 py-1.5 rounded bg-lattice-surface border border-lattice-border hover:border-neon-purple/30 transition-colors text-gray-400 hover:text-neon-purple disabled:opacity-50"
+              >
+                Patterns
+              </button>
+              <button
+                onClick={() => addBackground.mutate({ type: 'cleanup', priority: 0.1 })}
+                disabled={addBackground.isPending}
+                className="text-xs px-2 py-1.5 rounded bg-lattice-surface border border-lattice-border hover:border-neon-green/30 transition-colors text-gray-400 hover:text-neon-green disabled:opacity-50"
+              >
+                Cleanup
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Active Threads */}
+        {/* Thread Viewer */}
         <div className="panel p-4">
-          <h2 className="font-semibold mb-3 flex items-center gap-2">
-            <Layers className="w-4 h-4 text-neon-cyan" /> All Threads
-          </h2>
-          <div className="space-y-2 max-h-96 overflow-y-auto">
-            {threadList.map((t) => (
-              <div key={t.id} className="lens-card">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-semibold flex items-center gap-2">
+              <Layers className="w-4 h-4 text-neon-cyan" /> Threads
+            </h2>
+            <div className="flex items-center gap-2">
+              <select
+                value={threadFilter}
+                onChange={(e) => setThreadFilter(e.target.value as typeof threadFilter)}
+                className="text-xs bg-lattice-surface border border-lattice-border rounded px-2 py-1 text-gray-400"
+              >
+                <option value="all">All</option>
+                <option value="active">Active</option>
+                <option value="pending">Pending</option>
+                <option value="completed">Completed</option>
+              </select>
+              <button
+                onClick={() => setSortBy(sortBy === 'priority' ? 'created' : sortBy === 'created' ? 'status' : 'priority')}
+                className="text-xs flex items-center gap-1 text-gray-500 hover:text-gray-300 transition-colors"
+                title={`Sort by: ${sortBy}`}
+              >
+                <ArrowUpDown className="w-3 h-3" /> {sortBy}
+              </button>
+            </div>
+          </div>
+          <div className="space-y-2 max-h-[28rem] overflow-y-auto">
+            {filteredThreads.map((t) => (
+              <div
+                key={t.id}
+                className={`lens-card cursor-pointer transition-all ${
+                  selectedThread?.id === t.id ? 'ring-1 ring-neon-cyan/40' : 'hover:bg-lattice-border/20'
+                }`}
+                onClick={() => setSelectedThread(selectedThread?.id === t.id ? null : t)}
+              >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full ${
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
                       t.status === 'active' ? 'bg-neon-green animate-pulse' :
                       t.status === 'pending' ? 'bg-yellow-400' :
                       t.status === 'interrupted' ? 'bg-red-400' : 'bg-gray-500'
                     }`} />
-                    <span className="font-medium text-sm">{t.type}</span>
+                    <span className="font-medium text-sm">
+                      {THREAD_TYPES.find(tt => tt.value === t.type)?.label || t.type}
+                    </span>
                   </div>
                   <span className="text-xs px-2 py-0.5 rounded bg-lattice-surface text-gray-400">
-                    P:{t.priority.toFixed(1)}
+                    P:{(t.priority ?? 0).toFixed(1)}
                   </span>
                 </div>
                 <p className="text-xs text-gray-400 mt-1 truncate">{t.description}</p>
-                {t.status === 'active' && (
-                  <button onClick={() => completeThread.mutate(t.id)}
-                    className="mt-2 text-xs text-neon-green flex items-center gap-1 hover:underline">
-                    <CheckCircle2 className="w-3 h-3" /> Complete
-                  </button>
+                {t.domain && (
+                  <span className="text-[10px] text-neon-purple/70 mt-1 inline-block">{t.domain}</span>
+                )}
+
+                {/* Expanded thread details */}
+                {selectedThread?.id === t.id && (
+                  <div className="mt-2 pt-2 border-t border-lattice-border space-y-2">
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <span className="text-gray-500">Status</span>
+                        <p className="capitalize text-gray-300">{t.status}</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Created</span>
+                        <p className="text-gray-300">
+                          {t.createdAt ? new Date(t.createdAt).toLocaleTimeString() : '--'}
+                        </p>
+                      </div>
+                    </div>
+                    {t.status === 'active' && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); completeThread.mutate(t.id); }}
+                        disabled={completeThread.isPending}
+                        className="w-full mt-1 text-xs py-1.5 rounded bg-neon-green/10 text-neon-green border border-neon-green/20 hover:bg-neon-green/20 transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
+                      >
+                        <CheckCircle2 className="w-3 h-3" />
+                        {completeThread.isPending ? 'Completing...' : 'Complete Thread'}
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             ))}
-            {threadList.length === 0 && (
-              <p className="text-center py-4 text-gray-500 text-sm">No active threads</p>
+            {filteredThreads.length === 0 && (
+              <p className="text-center py-4 text-gray-500 text-sm">
+                {threadFilter === 'all' ? 'No threads yet' : `No ${threadFilter} threads`}
+              </p>
             )}
           </div>
         </div>
@@ -204,15 +462,21 @@ export default function AttentionLensPage() {
           <div>
             <h2 className="font-semibold mb-3 flex items-center gap-2">
               <Clock className="w-4 h-4 text-neon-yellow" /> Queue
+              {queueData.length > 0 && (
+                <span className="text-xs px-1.5 py-0.5 rounded-full bg-neon-yellow/20 text-neon-yellow">{queueData.length}</span>
+              )}
             </h2>
             <div className="space-y-1 max-h-40 overflow-y-auto">
               {queueData.length > 0 ? queueData.map((q: Record<string, unknown>, i: number) => (
-                <div key={i} className="flex justify-between text-xs text-gray-400">
-                  <span>{(q.threadId as string | undefined)?.slice(0, 12)}</span>
-                  <span>P:{(q.priority as number | undefined)?.toFixed(1)}</span>
+                <div key={i} className="flex justify-between items-center text-xs text-gray-400 p-2 rounded bg-lattice-surface/50">
+                  <div className="flex items-center gap-2">
+                    <Pause className="w-3 h-3 text-yellow-400" />
+                    <span className="truncate max-w-[120px]">{(q.threadId as string | undefined)?.slice(0, 12) || `Item ${i + 1}`}</span>
+                  </div>
+                  <span className="font-mono">P:{((q.priority as number) ?? 0).toFixed(1)}</span>
                 </div>
               )) : (
-                <p className="text-sm text-gray-500">Queue empty</p>
+                <p className="text-sm text-gray-500 text-center py-2">Queue empty</p>
               )}
             </div>
           </div>
@@ -224,13 +488,38 @@ export default function AttentionLensPage() {
             <div className="space-y-1 max-h-48 overflow-y-auto">
               {completedData.length > 0 ? completedData.map((c: Record<string, unknown>, i: number) => (
                 <div key={i} className="lens-card text-xs">
-                  <span className="text-gray-300">{String(c.type)}</span>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-3 h-3 text-neon-green flex-shrink-0" />
+                      <span className="text-gray-300 capitalize">{String(c.type || 'unknown')}</span>
+                    </div>
+                    {!!c.completedAt && (
+                      <span className="text-gray-600 text-[10px]">
+                        {new Date(c.completedAt as string).toLocaleTimeString()}
+                      </span>
+                    )}
+                  </div>
                 </div>
               )) : (
-                <p className="text-sm text-gray-500">None yet</p>
+                <p className="text-sm text-gray-500 text-center py-2">None yet</p>
               )}
             </div>
           </div>
+
+          {/* Interruption Warning */}
+          {(stats.interruptions || 0) > 5 && (
+            <div className="border-t border-lattice-border pt-3">
+              <div className="flex items-start gap-2 p-2 rounded-lg bg-yellow-400/5 border border-yellow-400/20">
+                <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" />
+                <div className="text-xs">
+                  <p className="text-yellow-400 font-medium">High Interruption Rate</p>
+                  <p className="text-gray-500 mt-0.5">
+                    {stats.interruptions} interruptions detected. Consider reducing thread concurrency.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
