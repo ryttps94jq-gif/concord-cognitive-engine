@@ -25,10 +25,10 @@ export default function CustomLensPage() {
   const [selectedLens, setSelectedLens] = useState<string | null>(null);
 
   const { items: lensItems, isLoading, isError: isError, error: error, refetch: refetch, create: createLensItem, remove: removeLensItem, update: updateLensItem } = useLensData<Record<string, unknown>>('custom', 'lens-config', { seed: [] });
-  const customLenses = lensItems.map(i => ({ id: i.id, name: i.title, config: i.data, ...(i.data || {}) }));
+  const customLenses = lensItems.map(i => ({ id: i.id, name: i.title, config: i.data, ...(i.data || {}) })) as unknown as CustomLens[];
 
   const { items: templateItems, isError: isError2, error: error2, refetch: refetch2 } = useLensData<Record<string, unknown>>('custom', 'lens-template', { seed: [] });
-  const templates = templateItems.map(i => ({ id: i.id, name: i.title, ...(i.data || {}) }));
+  const templates = templateItems.map(i => ({ id: i.id, name: i.title, ...(i.data || {}) })) as unknown as Record<string, unknown>[];
 
   const createLens = useMutation({
     mutationFn: (payload: { name: string; config: string }) => {

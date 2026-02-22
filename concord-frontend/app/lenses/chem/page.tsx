@@ -30,10 +30,10 @@ export default function ChemLensPage() {
   const [reactionInput, setReactionInput] = useState('');
 
   const { items: compoundItems, isLoading, isError: isError, error: error, refetch: refetch } = useLensData<Record<string, unknown>>('chem', 'compound', { seed: [] });
-  const compounds = compoundItems.map(i => ({ id: i.id, ...(i.data || {}) }));
+  const compounds = compoundItems.map(i => ({ id: i.id, ...(i.data || {}) })) as unknown as Compound[];
 
   const { items: reactionItems, isError: isError2, error: error2, refetch: refetch2, create: createReaction } = useLensData<Record<string, unknown>>('chem', 'reaction', { seed: [] });
-  const reactions = reactionItems.map(i => ({ id: i.id, ...(i.data || {}) }));
+  const reactions = reactionItems.map(i => ({ id: i.id, ...(i.data || {}) })) as unknown as Reaction[];
 
   const runReaction = useMutation({
     mutationFn: (formula: string) => createReaction({ title: formula, data: { formula, ranAt: new Date().toISOString() } }),

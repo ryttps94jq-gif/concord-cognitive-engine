@@ -16,10 +16,10 @@ export default function LabLensPage() {
   const [selectedOrgan, setSelectedOrgan] = useState('abstraction_governor');
 
   const { items: organItems, isLoading, isError: isError, error: error, refetch: refetch } = useLensData<Record<string, unknown>>('lab', 'organ', { seed: [] });
-  const organs = organItems.map(i => ({ id: i.id, ...(i.data || {}) }));
+  const organs = organItems.map(i => ({ id: i.id, ...(i.data || {}) })) as unknown as Record<string, unknown>[];
 
   const { items: experimentItems, isError: isError2, error: error2, refetch: refetch2, create: createExperiment } = useLensData<Record<string, unknown>>('lab', 'experiment', { seed: [] });
-  const experiments = experimentItems.map(i => ({ id: i.id, ...(i.data || {}) }));
+  const experiments = experimentItems.map(i => ({ id: i.id, ...(i.data || {}) })) as unknown as Record<string, unknown>[];
 
   const runExperiment = useMutation({
     mutationFn: (payload: { code: string; organ: string }) =>

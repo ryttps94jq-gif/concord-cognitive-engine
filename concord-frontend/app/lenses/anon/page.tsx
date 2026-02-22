@@ -24,7 +24,7 @@ export default function AnonLensPage() {
   const [ephemeral, setEphemeral] = useState(false);
 
   const { items: messageItems, isLoading, isError: isError, error: error, refetch: refetch, create: createMessage } = useLensData<Record<string, unknown>>('anon', 'message', { seed: [] });
-  const messages = messageItems.map(i => ({ id: i.id, ...(i.data || {}) }));
+  const messages = messageItems.map(i => ({ id: i.id, ...(i.data || {}) })) as unknown as AnonMessage[];
 
   const { items: identityItems, isError: isError2, error: error2, refetch: refetch2, create: createIdentity, remove: removeIdentity } = useLensData<Record<string, unknown>>('anon', 'identity', { seed: [] });
   const identity = identityItems.length > 0 ? identityItems[0].data : null;

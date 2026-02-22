@@ -16,7 +16,7 @@ export default function SchemaLensPage() {
   const [validationResult, setValidationResult] = useState<{ valid: boolean; errors?: { field: string; error: string }[] } | null>(null);
 
   const { items: schemaItems, isLoading, isError: isError, error: error, refetch: refetch, create: createSchemaItem } = useLensData<Record<string, unknown>>('schema', 'definition', { seed: [] });
-  const schemas = schemaItems.map(i => ({ id: i.id, name: i.title, ...(i.data || {}) }));
+  const schemas = schemaItems.map(i => ({ id: i.id, name: i.title, ...(i.data || {}) })) as unknown as Record<string, unknown>[];
 
   const createMutation = useMutation({
     mutationFn: (data: unknown) => createSchemaItem({ title: (data as Record<string, string>)?.name || 'schema', data: data as Record<string, unknown> }),

@@ -25,10 +25,10 @@ export default function QuestmarketLensPage() {
   const [filter, setFilter] = useState<string>('all');
 
   const { items: questItems, isLoading, isError: isError, error: error, refetch: refetch } = useLensData<Record<string, unknown>>('questmarket', 'quest', { seed: [], status: filter !== 'all' ? filter : undefined });
-  const quests = questItems.map(i => ({ id: i.id, title: i.title, ...(i.data || {}) }));
+  const quests = questItems.map(i => ({ id: i.id, title: i.title, ...(i.data || {}) })) as unknown as Quest[];
 
   const { items: myQuestItems, isError: isError2, error: error2, refetch: refetch2 } = useLensData<Record<string, unknown>>('questmarket', 'my-quest', { seed: [] });
-  const myQuests = myQuestItems.map(i => ({ id: i.id, title: i.title, ...(i.data || {}) }));
+  const myQuests = myQuestItems.map(i => ({ id: i.id, title: i.title, ...(i.data || {}) })) as unknown as Record<string, unknown>[];
 
   const { update: updateQuest } = useLensData<Record<string, unknown>>('questmarket', 'quest', { noSeed: true });
   const claimQuest = useMutation({
