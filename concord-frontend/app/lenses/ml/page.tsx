@@ -230,16 +230,9 @@ const INITIAL_EXPERIMENTS: Experiment[] = [
   }
 ];
 
-const INITIAL_DATASETS: Dataset[] = [
-  { id: 'ds-1', name: 'DTU Training Set', size: 2.5, samples: 150000, features: 512, type: 'text', splits: { train: 0.8, val: 0.1, test: 0.1 }, createdAt: '2025-12-01' },
-  { id: 'ds-2', name: 'Sentiment Corpus', size: 1.2, samples: 80000, features: 256, type: 'text', splits: { train: 0.7, val: 0.15, test: 0.15 }, createdAt: '2025-11-15' },
-  { id: 'ds-3', name: 'Image Features', size: 5.8, samples: 50000, features: 2048, type: 'image', splits: { train: 0.85, val: 0.1, test: 0.05 }, createdAt: '2025-10-20' },
-  { id: 'ds-4', name: 'Anomaly Samples', size: 0.3, samples: 10000, features: 64, type: 'tabular', splits: { train: 0.9, val: 0.05, test: 0.05 }, createdAt: '2026-01-10' }
-];
+const INITIAL_DATASETS: Dataset[] = [];
 
-const INITIAL_DEPLOYMENTS: Deployment[] = [
-  { id: 'dep-1', modelId: 'model-1', modelName: 'DTU Classifier v3', version: '3.2.1', status: 'active', endpoint: '/api/ml/infer/dtu-classifier', replicas: 3, requestsPerSec: 245, avgLatency: 42, errorRate: 0.2, createdAt: '2026-01-29' }
-];
+const INITIAL_DEPLOYMENTS: Deployment[] = [];
 
 export default function MLLensPage() {
   useLensNav('ml');

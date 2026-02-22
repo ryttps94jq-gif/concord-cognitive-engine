@@ -105,40 +105,15 @@ type TimeRange = '1H' | '24H' | '7D' | '30D' | '90D' | '1Y' | 'ALL';
 type ViewMode = 'overview' | 'portfolio' | 'trade' | 'orders' | 'alerts' | 'news';
 type ChartType = 'line' | 'candle' | 'area';
 
-const INITIAL_ASSETS: Asset[] = [
-  { id: '1', symbol: 'DTU', name: 'Concord DTU Token', type: 'dtu', price: 42.5, change24h: 3.25, changePercent24h: 8.28, volume24h: 15000000, marketCap: 425000000, holdings: 1250, value: 53125, avgBuyPrice: 35.2, pnl: 9125, pnlPercent: 20.74, allocation: 45, sparkline: [38, 39, 41, 40, 42, 43, 42.5] },
-  { id: '2', symbol: 'ETH', name: 'Ethereum', type: 'crypto', price: 3450.00, change24h: -85.50, changePercent24h: -2.42, volume24h: 12000000000, marketCap: 415000000000, holdings: 5.5, value: 18975, avgBuyPrice: 3200, pnl: 1375, pnlPercent: 7.81, allocation: 16, sparkline: [3500, 3520, 3480, 3450, 3400, 3420, 3450] },
-  { id: '3', symbol: 'BTC', name: 'Bitcoin', type: 'crypto', price: 67500.00, change24h: 1250.00, changePercent24h: 1.89, volume24h: 28000000000, marketCap: 1320000000000, holdings: 0.25, value: 16875, avgBuyPrice: 62000, pnl: 1375, pnlPercent: 8.87, allocation: 14, sparkline: [66000, 66500, 67000, 67200, 67800, 67500, 67500] },
-  { id: '4', symbol: 'SOL', name: 'Solana', type: 'crypto', price: 175.50, change24h: 12.30, changePercent24h: 7.54, volume24h: 3500000000, marketCap: 75000000000, holdings: 85, value: 14917.5, avgBuyPrice: 145, pnl: 2592.5, pnlPercent: 21.03, allocation: 13, sparkline: [160, 165, 168, 172, 178, 176, 175.5] },
-  { id: '5', symbol: 'NVDA', name: 'NVIDIA Corp', type: 'stock', price: 875.25, change24h: 28.50, changePercent24h: 3.37, volume24h: 45000000, marketCap: 2160000000000, holdings: 15, value: 13128.75, avgBuyPrice: 750, pnl: 1878.75, pnlPercent: 16.69, allocation: 11, sparkline: [840, 850, 855, 860, 870, 878, 875.25] },
-];
+const INITIAL_ASSETS: Asset[] = [];
 
-const INITIAL_TRANSACTIONS: Transaction[] = [
-  { id: '1', type: 'buy', asset: 'Concord DTU Token', symbol: 'DTU', amount: 500, price: 38.5, value: 19250, fee: 25, timestamp: '2024-01-15T10:30:00Z', status: 'completed' },
-  { id: '2', type: 'sell', asset: 'Ethereum', symbol: 'ETH', amount: 2, price: 3520, value: 7040, fee: 15, timestamp: '2024-01-14T15:45:00Z', status: 'completed' },
-  { id: '3', type: 'stake', asset: 'Solana', symbol: 'SOL', amount: 50, price: 168, value: 8400, timestamp: '2024-01-13T09:00:00Z', status: 'completed' },
-  { id: '4', type: 'reward', asset: 'Concord DTU Token', symbol: 'DTU', amount: 25, price: 42.5, value: 1062.5, timestamp: '2024-01-12T00:00:00Z', status: 'completed' },
-  { id: '5', type: 'transfer', asset: 'Bitcoin', symbol: 'BTC', amount: 0.1, price: 67000, value: 6700, fee: 5, timestamp: '2024-01-11T18:20:00Z', status: 'completed' },
-];
+const INITIAL_TRANSACTIONS: Transaction[] = [];
 
-const INITIAL_ORDERS: Order[] = [
-  { id: '1', type: 'limit', side: 'buy', asset: 'Ethereum', symbol: 'ETH', amount: 2, price: 3200, filled: 0, status: 'open', createdAt: '2024-01-15T12:00:00Z' },
-  { id: '2', type: 'stop', side: 'sell', asset: 'Bitcoin', symbol: 'BTC', amount: 0.1, stopPrice: 60000, filled: 0, status: 'open', createdAt: '2024-01-14T10:00:00Z' },
-  { id: '3', type: 'limit', side: 'buy', asset: 'Concord DTU Token', symbol: 'DTU', amount: 200, price: 40, filled: 150, status: 'partial', createdAt: '2024-01-13T08:00:00Z' },
-];
+const INITIAL_ORDERS: Order[] = [];
 
-const INITIAL_ALERTS: PriceAlert[] = [
-  { id: '1', asset: 'Bitcoin', symbol: 'BTC', condition: 'above', price: 70000, active: true },
-  { id: '2', asset: 'Ethereum', symbol: 'ETH', condition: 'below', price: 3000, active: true },
-  { id: '3', asset: 'Concord DTU Token', symbol: 'DTU', condition: 'above', price: 50, active: true },
-];
+const INITIAL_ALERTS: PriceAlert[] = [];
 
-const INITIAL_NEWS: NewsItem[] = [
-  { id: '1', title: 'DTU Token Reaches New All-Time High After Major Partnership', source: 'CryptoNews', timestamp: '2024-01-15T14:00:00Z', sentiment: 'positive', assets: ['DTU'] },
-  { id: '2', title: 'Federal Reserve Signals Potential Rate Cuts in 2024', source: 'Bloomberg', timestamp: '2024-01-15T12:30:00Z', sentiment: 'positive', assets: ['BTC', 'ETH', 'SOL'] },
-  { id: '3', title: 'NVIDIA Reports Record Quarterly Revenue Driven by AI Demand', source: 'Reuters', timestamp: '2024-01-15T10:00:00Z', sentiment: 'positive', assets: ['NVDA'] },
-  { id: '4', title: 'Ethereum Gas Fees Spike Amid NFT Market Surge', source: 'CoinDesk', timestamp: '2024-01-15T08:00:00Z', sentiment: 'neutral', assets: ['ETH'] },
-];
+const INITIAL_NEWS: NewsItem[] = [];
 
 export default function FinanceLensPage() {
   useLensNav('finance');

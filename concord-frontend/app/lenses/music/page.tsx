@@ -91,29 +91,11 @@ const EQ_PRESETS: { [key: string]: number[] } = {
 
 const FREQUENCIES = ['32Hz', '64Hz', '125Hz', '250Hz', '500Hz', '1kHz', '2kHz', '4kHz'];
 
-const INITIAL_TRACKS: Track[] = [
-  { id: '1', title: 'Neural Resonance', artist: 'Lattice Dreams', album: 'Cognitive Waves', duration: 234, resonanceScore: 0.92, bpm: 128, key: 'Am', genre: 'Electronic', playCount: 1542 },
-  { id: '2', title: 'Quantum Harmonics', artist: 'DTU Protocol', album: 'Memory Palace', duration: 312, resonanceScore: 0.87, bpm: 140, key: 'Em', genre: 'Ambient', playCount: 892 },
-  { id: '3', title: 'Synaptic Fire', artist: 'Cortex Theory', album: 'Brain Patterns', duration: 198, resonanceScore: 0.95, bpm: 174, key: 'Dm', genre: 'DnB', playCount: 2341 },
-  { id: '4', title: 'Deep Memory', artist: 'Lattice Dreams', album: 'Cognitive Waves', duration: 267, resonanceScore: 0.78, bpm: 100, key: 'C', genre: 'Downtempo', playCount: 567 },
-  { id: '5', title: 'Concord Protocol', artist: 'System Collective', album: 'First Contact', duration: 445, resonanceScore: 0.99, bpm: 120, key: 'F#m', genre: 'Progressive', playCount: 4521 },
-  { id: '6', title: 'Emergence', artist: 'DTU Protocol', album: 'Memory Palace', duration: 356, resonanceScore: 0.88, bpm: 110, key: 'G', genre: 'Ambient', playCount: 1234 },
-];
+const INITIAL_TRACKS: Track[] = [];
 
-const INITIAL_PLAYLISTS: Playlist[] = [
-  { id: '1', name: 'Focus Flow', description: 'Deep work concentration music', trackCount: 45, duration: 10800, isOwner: true, followers: 234, type: 'playlist' },
-  { id: '2', name: 'Neural Beats', description: 'High-energy cognitive enhancement', trackCount: 32, duration: 7200, isOwner: true, followers: 567, type: 'playlist' },
-  { id: '3', name: 'Dream State', description: 'Ambient soundscapes for creativity', trackCount: 28, duration: 9000, isOwner: false, followers: 1234, type: 'playlist' },
-  { id: '4', name: 'Cognitive Waves', trackCount: 12, duration: 3600, isOwner: false, type: 'album' },
-  { id: '5', name: 'Tech Talk Podcast', trackCount: 156, duration: 360000, isOwner: false, type: 'podcast' },
-];
+const INITIAL_PLAYLISTS: Playlist[] = [];
 
-const _INITIAL_ARTISTS: Artist[] = [
-  { id: '1', name: 'Lattice Dreams', monthlyListeners: 245000, genres: ['Electronic', 'Ambient'] },
-  { id: '2', name: 'DTU Protocol', monthlyListeners: 189000, genres: ['Ambient', 'Experimental'] },
-  { id: '3', name: 'Cortex Theory', monthlyListeners: 312000, genres: ['DnB', 'Electronic'] },
-  { id: '4', name: 'System Collective', monthlyListeners: 567000, genres: ['Progressive', 'Electronic'] },
-];
+const _INITIAL_ARTISTS: Artist[] = [];
 
 export default function MusicLensPage() {
   useLensNav('music');
@@ -411,6 +393,15 @@ export default function MusicLensPage() {
 
   const renderMainContent = () => {
     if (viewMode === 'home') {
+      if (allTracks.length === 0 && playlists.length === 0) {
+        return (
+          <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+            <Music className="w-16 h-16 mb-4 opacity-40" />
+            <h3 className="text-lg font-medium mb-2 text-white">No music yet</h3>
+            <p className="text-sm mb-4">Upload tracks or create playlists to get started.</p>
+          </div>
+        );
+      }
       return (
         <div className="space-y-8">
           {/* Recently Played */}
