@@ -114,6 +114,9 @@ import registerFoundationIntelRoutes from "./routes/foundation-intel.js";
 // Foundation Atlas — signal tomography & volumetric mapping
 import { initializeAtlas, getAtlasMetrics, collectSignal, getTile, getVolume, getMaterialAtPoint, getSubsurface, getChanges, getCoverage, getLiveFeedStatus, executeSpatialQuery, detectAtlasIntent, atlasHeartbeatTick } from "./lib/foundation-atlas.js";
 import registerAtlasRoutes from "./routes/atlas.js";
+// Atlas Signal Cortex — signal classification, privacy architecture & adjustment control
+import { initializeCortex, getCortexMetrics, classifySignal as cortexClassifySignal, getTaxonomy, getUnknownSignals, getAnomalies, getSpectralOccupancy, detectPrivacyZone, checkPrivacy, getPrivacyZones, getPrivacyStats, verifyPrivacyZone, suppressPresenceDetection, suppressVehicleTracking, checkAdjustmentPermission, detectCortexIntent, cortexHeartbeatTick } from "./lib/atlas-signal-cortex.js";
+import registerAtlasSignalRoutes from "./routes/atlas-signals.js";
 
 // ── Learning Verification & Substrate Integrity ──────────────────────────────
 import {
@@ -4232,8 +4235,9 @@ function authMiddleware(req, res, next) {
     "/api/inspect", "/api/worldmodel", "/api/council", "/api/resonance",
     // Chat & AI
     "/api/chat", "/api/ask", "/api/forge",
-    // Atlas
+    // Atlas & Signal Cortex
     "/api/atlas",
+    "/api/atlas/signals", "/api/atlas/privacy",
     // Plugins & extensions
     "/api/plugins", "/api/macros",
     // Growth & entities
@@ -6676,6 +6680,7 @@ async function runMacro(domain, name, input, ctx) {
     foundation: new Set(["status", "sense.readings", "sense.patterns", "identity.verify", "energy.map", "energy.grid", "spectrum.map", "spectrum.available", "emergency.status", "market.earnings", "market.topology", "archive.fossils", "archive.decoded", "synthesis.correlations", "neural.readiness", "protocol.stats"]),
     intel: new Set(["weather", "geology", "energy", "ocean", "seismic", "agriculture", "environment", "research.status", "research.data", "research.synthesis", "research.archive", "classifier.status", "metrics"]),
     atlas: new Set(["tile", "volume", "material", "subsurface", "change", "coverage", "live", "metrics"]),
+    cortex: new Set(["taxonomy", "unknown", "anomalies", "classify", "spectrum", "privacy.zones", "privacy.verify", "privacy.stats", "metrics"]),
   };
   const _domainSet = publicReadDomains[domain];
   const _domainNameAllowed = _domainSet ? _domainSet.has(name) : false;
@@ -6686,7 +6691,7 @@ async function runMacro(domain, name, input, ctx) {
     "/api/goals", "/api/growth", "/api/metrics", "/api/resonance", "/api/lattice",
     "/api/emergent", "/api/plugins", "/api/scope", "/api/events", "/api/guidance",
     "/api/graph", "/api/system", "/api/inspect", "/api/worldmodel", "/api/chat",
-    "/api/brain", "/api/species", "/api/atlas", "/api/knowledge", "/api/search",
+    "/api/brain", "/api/species", "/api/atlas", "/api/atlas/signals", "/api/atlas/privacy", "/api/knowledge", "/api/search",
     "/api/council", "/api/hypothesis", "/api/analytics", "/api/agents", "/api/personas",
     "/api/affect", "/api/attention", "/api/metacognition", "/api/metalearning",
     "/api/reasoning", "/api/reflection", "/api/temporal", "/api/inference",
@@ -15683,6 +15688,14 @@ const intentInfo = classifyIntent(prompt);
           _chatRoute._atlasIntent = _atlasIntent;
         }
       } catch {}
+
+      // Check for Signal Cortex intent ("signal taxonomy", "privacy zone", "spectrum", etc.)
+      try {
+        const _cortexIntent = detectCortexIntent(prompt);
+        if (_cortexIntent.isCortexRequest) {
+          _chatRoute._cortexIntent = _cortexIntent;
+        }
+      } catch {}
     }
   } catch (_routerErr) {
     // Chat router is supplementary — never block the chat path
@@ -16400,6 +16413,10 @@ When helpful, reference DTU titles in plain language (do not dump ids unless ask
       action: _chatRoute._atlasIntent.action,
       params: _chatRoute._atlasIntent.params,
     } : null,
+    cortex: _chatRoute?._cortexIntent?.isCortexRequest ? {
+      action: _chatRoute._cortexIntent.action,
+      params: _chatRoute._cortexIntent.params,
+    } : null,
   };
 }, { description: "Mode-aware chat with DTU retrieval, universal lens routing, and inline artifact forge. Outputs GRC v1 envelope." });
 
@@ -16892,6 +16909,46 @@ register("atlas", "metrics", (ctx, input) => {
 }, { description: "Get Foundation Atlas metrics." });
 
 // ===== END FOUNDATION ATLAS MACROS =====
+
+// ===== ATLAS SIGNAL CORTEX MACROS — Classification, Privacy & Adjustment =====
+
+register("cortex", "taxonomy", (ctx, input) => {
+  return getTaxonomy(input.category || "all", Number(input.limit) || 50);
+}, { description: "Retrieve signal classification taxonomy." });
+
+register("cortex", "unknown", (ctx, input) => {
+  return getUnknownSignals(Number(input.limit) || 50);
+}, { description: "Retrieve unclassified signals queue." });
+
+register("cortex", "anomalies", (ctx, input) => {
+  return getAnomalies(Number(input.limit) || 50);
+}, { description: "Retrieve detected signal anomalies." });
+
+register("cortex", "classify", (ctx, input) => {
+  return cortexClassifySignal(input);
+}, { description: "Submit a signal for 5-property classification." });
+
+register("cortex", "spectrum", (ctx, input) => {
+  return getSpectralOccupancy();
+}, { description: "Get spectral occupancy by frequency band." });
+
+register("cortex", "privacy.zones", (ctx, input) => {
+  return getPrivacyZones(Number(input.limit) || 50);
+}, { description: "Get privacy zone map." });
+
+register("cortex", "privacy.verify", (ctx, input) => {
+  return verifyPrivacyZone(input.zoneId || input.zone_id);
+}, { description: "Verify privacy zone integrity." });
+
+register("cortex", "privacy.stats", (ctx, input) => {
+  return getPrivacyStats();
+}, { description: "Get aggregate privacy statistics." });
+
+register("cortex", "metrics", (ctx, input) => {
+  return { ok: true, ...getCortexMetrics() };
+}, { description: "Get Atlas Signal Cortex metrics." });
+
+// ===== END ATLAS SIGNAL CORTEX MACROS =====
 
 // ===== USER FEEDBACK → EXPERIENCE LEARNING =====
 // Records thumbs up/down and ratings, feeds into experience memory + affect
@@ -21442,6 +21499,11 @@ registerAtlasRoutes(app, {
   STATE, makeCtx, runMacro, uiJson, uid, validate, perEndpointRateLimit,
 });
 
+// ---- Atlas Signal Cortex Routes (extracted to routes/atlas-signals.js) ----
+registerAtlasSignalRoutes(app, {
+  STATE, makeCtx, runMacro, uiJson, uid, validate, perEndpointRateLimit,
+});
+
 // Error handler
 app.use((err, req, res, _next) => {
   if (res.headersSent) return;
@@ -22912,6 +22974,11 @@ async function governorTick(reason="heartbeat") {
       // 2.14 — Foundation Atlas Heartbeat — every 20th tick (signal path pruning)
       if (_tick % 20 === 0) {
         try { await atlasHeartbeatTick(STATE, _tick); } catch {}
+      }
+
+      // 2.15 — Signal Cortex Heartbeat — every 25th tick (taxonomy pruning)
+      if (_tick % 25 === 0) {
+        try { await cortexHeartbeatTick(STATE, _tick); } catch {}
       }
 
       // ── Consolidation Pipeline (derived from hardware math) ──
@@ -29550,6 +29617,7 @@ try {
     initializeProtocol(STATE),
     initializeIntelligence(STATE),
     initializeAtlas(STATE),
+    initializeCortex(STATE),
   ]).then(results => {
     const initialized = results.filter(r => r.ok).length;
     structuredLog("info", "foundation_initialized", {
