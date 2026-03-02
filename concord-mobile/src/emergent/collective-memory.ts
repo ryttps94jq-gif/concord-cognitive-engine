@@ -66,7 +66,7 @@ interface KnowledgeGap {
 
 const MAX_TOP_TAGS = 20;
 const MAX_TYPE_CODE = 0x000E; // highest known DTU type code
-const LOCAL_NODE_ID = 'local'; // placeholder; real ID comes from identity module
+const DEFAULT_NODE_ID = 'local';
 const GEO_GRID_CELL_DEG = 0.001; // ~111m grid cells for coverage counting
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -112,7 +112,7 @@ function geoCellKey(lat: number, lon: number): string {
  * @param store - The local DTU store
  * @returns A CollectiveSnapshot summarizing local knowledge
  */
-export function buildCollectiveSnapshot(store: DTUStore): CollectiveSnapshot {
+export function buildCollectiveSnapshot(store: DTUStore, nodeId: string = DEFAULT_NODE_ID): CollectiveSnapshot {
   const allDTUs = collectAllDTUs(store);
   const now = Date.now();
 
@@ -189,7 +189,7 @@ export function buildCollectiveSnapshot(store: DTUStore): CollectiveSnapshot {
       : { earliestTimestamp: 0, latestTimestamp: 0, spanMs: 0 };
 
   return {
-    nodeId: LOCAL_NODE_ID,
+    nodeId,
     createdAt: now,
     totalDTUs: allDTUs.length,
     topTags,

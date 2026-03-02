@@ -93,6 +93,7 @@ export function proposeConsensus(
   topic: string,
   value: string,
   meshPeers: MeshPeer[],
+  proposerId: string = '',
 ): ConsensusProposal {
   const now = Date.now();
   const expectedVoters = meshPeers.map((p) => p.id);
@@ -101,7 +102,7 @@ export function proposeConsensus(
     id: generateProposalId(topic, now),
     topic,
     value,
-    proposerId: '', // will be set by the caller's identity
+    proposerId,
     createdAt: now,
     expiresAt: now + DEFAULT_PROPOSAL_TTL_MS,
     expectedVoters,

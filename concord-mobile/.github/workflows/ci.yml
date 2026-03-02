@@ -7,6 +7,8 @@ on:
   pull_request:
     branches: [main]
     paths: ['concord-mobile/**']
+  schedule:
+    - cron: '0 3 * * *'  # Nightly at 3:00 UTC
 
 defaults:
   run:
