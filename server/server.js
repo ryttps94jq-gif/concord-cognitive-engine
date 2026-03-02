@@ -201,7 +201,7 @@ import {
 
 // ---- Atlas + Platform Upgrade Imports (v2) ----
 import { DOMAIN_TYPES as ATLAS_DOMAIN_TYPES, EPISTEMIC_CLASSES, initAtlasState, getAtlasState } from "./emergent/atlas-epistemic.js";
-import { createAtlasDtu, getAtlasDtu, searchAtlasDtus, promoteAtlasDtu, addAtlasLink, getScoreExplanation, recomputeScores, registerEntity, getEntity, getContradictions, getAtlasMetrics } from "./emergent/atlas-store.js";
+import { createAtlasDtu, getAtlasDtu, searchAtlasDtus, promoteAtlasDtu, addAtlasLink, getScoreExplanation, recomputeScores, registerEntity, getEntity, getContradictions, getAtlasMetrics as getAtlasStoreMetrics } from "./emergent/atlas-store.js";
 import { runAntiGamingScan, getAntiGamingMetrics } from "./emergent/atlas-antigaming.js";
 import { runAutogenV2, getAutogenRun, acceptAutogenOutput, mergeAutogenOutput, propagateConfidence, getAutogenV2Metrics } from "./emergent/atlas-autogen-v2.js";
 import { councilResolve, getCouncilQueue, councilRequestSources, councilMerge, getCouncilActions, getCouncilMetrics } from "./emergent/atlas-council.js";
@@ -36256,7 +36256,7 @@ app.post("/api/atlas/dtu/:id/recompute-scores", (req, res) => {
 });
 
 app.get("/api/atlas/metrics", (req, res) => {
-  try { res.json(getAtlasMetrics(STATE)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  try { res.json(getAtlasStoreMetrics(STATE)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.get("/api/atlas/domains", (req, res) => {

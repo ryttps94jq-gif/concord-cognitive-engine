@@ -18,7 +18,8 @@
  *   - Full pipeline integration
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, beforeEach } from "node:test";
+import assert from "node:assert/strict";
 
 import {
   LAYERS,
@@ -60,69 +61,69 @@ beforeEach(() => {
 
 describe("Constants", () => {
   it("defines 5 map layers", () => {
-    expect(ALL_LAYERS).toHaveLength(5);
-    expect(ALL_LAYERS).toContain("surface");
-    expect(ALL_LAYERS).toContain("subsurface");
-    expect(ALL_LAYERS).toContain("interior");
-    expect(ALL_LAYERS).toContain("atmosphere");
-    expect(ALL_LAYERS).toContain("material");
+    assert.equal(ALL_LAYERS.length, 5);
+    assert.ok(ALL_LAYERS.includes("surface"));
+    assert.ok(ALL_LAYERS.includes("subsurface"));
+    assert.ok(ALL_LAYERS.includes("interior"));
+    assert.ok(ALL_LAYERS.includes("atmosphere"));
+    assert.ok(ALL_LAYERS.includes("material"));
   });
 
   it("defines 10 material types", () => {
     const types = Object.values(MATERIAL_TYPES);
-    expect(types).toHaveLength(10);
-    expect(types).toContain("concrete");
-    expect(types).toContain("metal");
-    expect(types).toContain("water");
-    expect(types).toContain("soil");
+    assert.equal(types.length, 10);
+    assert.ok(types.includes("concrete"));
+    assert.ok(types.includes("metal"));
+    assert.ok(types.includes("water"));
+    assert.ok(types.includes("soil"));
   });
 
   it("defines 7 frequency bands with EM properties", () => {
-    expect(ALL_FREQUENCY_BANDS).toHaveLength(7);
-    expect(FREQUENCY_BANDS.WIFI_2_4.resolution_cm).toBe(6.25);
-    expect(FREQUENCY_BANDS.WIFI_5.resolution_cm).toBe(2.6);
-    expect(FREQUENCY_BANDS.LORA_900.penetration).toBe("ground");
-    expect(FREQUENCY_BANDS.RF_HF.penetration).toBe("deep_geology");
-    expect(FREQUENCY_BANDS.TELEPHONE.penetration).toBe("conducted");
+    assert.equal(ALL_FREQUENCY_BANDS.length, 7);
+    assert.equal(FREQUENCY_BANDS.WIFI_2_4.resolution_cm, 6.25);
+    assert.equal(FREQUENCY_BANDS.WIFI_5.resolution_cm, 2.6);
+    assert.equal(FREQUENCY_BANDS.LORA_900.penetration, "ground");
+    assert.equal(FREQUENCY_BANDS.RF_HF.penetration, "deep_geology");
+    assert.equal(FREQUENCY_BANDS.TELEPHONE.penetration, "conducted");
   });
 
   it("defines tomographic reconstruction constants", () => {
-    expect(TOMO_CONSTANTS.MIN_PATHS_FOR_RECONSTRUCTION).toBe(3);
-    expect(TOMO_CONSTANTS.MIN_ANGLES_FOR_QUALITY).toBe(8);
-    expect(TOMO_CONSTANTS.VOXEL_SIZE_CM).toBe(25);
-    expect(TOMO_CONSTANTS.CONFIDENCE_THRESHOLD).toBe(0.3);
+    assert.equal(TOMO_CONSTANTS.MIN_PATHS_FOR_RECONSTRUCTION, 3);
+    assert.equal(TOMO_CONSTANTS.MIN_ANGLES_FOR_QUALITY, 8);
+    assert.equal(TOMO_CONSTANTS.VOXEL_SIZE_CM, 25);
+    assert.equal(TOMO_CONSTANTS.CONFIDENCE_THRESHOLD, 0.3);
   });
 
   it("defines 3 access tiers", () => {
-    expect(ATLAS_TIERS.PUBLIC).toBe("PUBLIC");
-    expect(ATLAS_TIERS.RESEARCH).toBe("RESEARCH");
-    expect(ATLAS_TIERS.SOVEREIGN).toBe("SOVEREIGN");
+    assert.equal(ATLAS_TIERS.PUBLIC, "PUBLIC");
+    assert.equal(ATLAS_TIERS.RESEARCH, "RESEARCH");
+    assert.equal(ATLAS_TIERS.SOVEREIGN, "SOVEREIGN");
   });
 
   it("defines tier access to layers", () => {
-    expect(TIER_ACCESS.PUBLIC).toHaveLength(2);
-    expect(TIER_ACCESS.PUBLIC).toContain("surface");
-    expect(TIER_ACCESS.PUBLIC).toContain("atmosphere");
-    expect(TIER_ACCESS.RESEARCH).toHaveLength(4);
-    expect(TIER_ACCESS.RESEARCH).toContain("subsurface");
-    expect(TIER_ACCESS.SOVEREIGN).toHaveLength(5); // all layers
+    assert.equal(TIER_ACCESS.PUBLIC.length, 2);
+    assert.ok(TIER_ACCESS.PUBLIC.includes("surface"));
+    assert.ok(TIER_ACCESS.PUBLIC.includes("atmosphere"));
+    assert.equal(TIER_ACCESS.RESEARCH.length, 4);
+    assert.ok(TIER_ACCESS.RESEARCH.includes("subsurface"));
+    assert.equal(TIER_ACCESS.SOVEREIGN.length, 5); // all layers
   });
 
   it("defines material EM profiles for classification", () => {
-    expect(MATERIAL_EM_PROFILES.concrete.attenuation).toBe(12);
-    expect(MATERIAL_EM_PROFILES.metal.attenuation).toBe(40);
-    expect(MATERIAL_EM_PROFILES.air.attenuation).toBe(0);
-    expect(MATERIAL_EM_PROFILES.water.permittivity).toBe(80.0);
+    assert.equal(MATERIAL_EM_PROFILES.concrete.attenuation, 12);
+    assert.equal(MATERIAL_EM_PROFILES.metal.attenuation, 40);
+    assert.equal(MATERIAL_EM_PROFILES.air.attenuation, 0);
+    assert.equal(MATERIAL_EM_PROFILES.water.permittivity, 80.0);
   });
 
   it("all constants are frozen", () => {
-    expect(Object.isFrozen(LAYERS)).toBe(true);
-    expect(Object.isFrozen(ALL_LAYERS)).toBe(true);
-    expect(Object.isFrozen(MATERIAL_TYPES)).toBe(true);
-    expect(Object.isFrozen(FREQUENCY_BANDS)).toBe(true);
-    expect(Object.isFrozen(TOMO_CONSTANTS)).toBe(true);
-    expect(Object.isFrozen(ATLAS_TIERS)).toBe(true);
-    expect(Object.isFrozen(TIER_ACCESS)).toBe(true);
+    assert.equal(Object.isFrozen(LAYERS), true);
+    assert.equal(Object.isFrozen(ALL_LAYERS), true);
+    assert.equal(Object.isFrozen(MATERIAL_TYPES), true);
+    assert.equal(Object.isFrozen(FREQUENCY_BANDS), true);
+    assert.equal(Object.isFrozen(TOMO_CONSTANTS), true);
+    assert.equal(Object.isFrozen(ATLAS_TIERS), true);
+    assert.equal(Object.isFrozen(TIER_ACCESS), true);
   });
 });
 
@@ -138,34 +139,34 @@ describe("Signal Collection", () => {
       phase: 120.5,
     });
 
-    expect(result).not.toBeNull();
-    expect(result.id).toMatch(/^sig_/);
-    expect(result.sourceNode).toBe("node_A");
-    expect(result.destNode).toBe("node_B");
-    expect(result.frequency).toBe(2400);
-    expect(result.signalStrength).toBe(-65);
-    expect(result.band).toBe("wifi_2.4ghz");
+    assert.notEqual(result, null);
+    assert.match(result.id, /^sig_/);
+    assert.equal(result.sourceNode, "node_A");
+    assert.equal(result.destNode, "node_B");
+    assert.equal(result.frequency, 2400);
+    assert.equal(result.signalStrength, -65);
+    assert.equal(result.band, "wifi_2.4ghz");
   });
 
   it("returns null for missing required fields", () => {
-    expect(collectSignal(null)).toBeNull();
-    expect(collectSignal({})).toBeNull();
-    expect(collectSignal({ sourceNode: "A" })).toBeNull();
-    expect(collectSignal({ sourceNode: "A", destNode: "B" })).toBeNull();
+    assert.equal(collectSignal(null), null);
+    assert.equal(collectSignal({}), null);
+    assert.equal(collectSignal({ sourceNode: "A" }), null);
+    assert.equal(collectSignal({ sourceNode: "A", destNode: "B" }), null);
   });
 
   it("identifies correct frequency bands", () => {
     const wifi5 = collectSignal({ sourceNode: "A", destNode: "B", frequency: 5800 });
-    expect(wifi5.band).toBe("wifi_5ghz");
+    assert.equal(wifi5.band, "wifi_5ghz");
 
     const lora = collectSignal({ sourceNode: "A", destNode: "B", frequency: 900 });
-    expect(lora.band).toBe("lora_900mhz");
+    assert.equal(lora.band, "lora_900mhz");
 
     const rf433 = collectSignal({ sourceNode: "A", destNode: "B", frequency: 433 });
-    expect(rf433.band).toBe("rf_433mhz");
+    assert.equal(rf433.band, "rf_433mhz");
 
     const telephone = collectSignal({ sourceNode: "A", destNode: "B", frequency: 0.003 });
-    expect(telephone.band).toBe("telephone");
+    assert.equal(telephone.band, "telephone");
   });
 
   it("tracks frequency coverage", () => {
@@ -173,8 +174,8 @@ describe("Signal Collection", () => {
     collectSignal({ sourceNode: "A", destNode: "C", frequency: 900 });
 
     const coverage = getCoverage();
-    expect(coverage.frequenciesActive).toContain("wifi_2.4ghz");
-    expect(coverage.frequenciesActive).toContain("lora_900mhz");
+    assert.ok(coverage.frequenciesActive.includes("wifi_2.4ghz"));
+    assert.ok(coverage.frequenciesActive.includes("lora_900mhz"));
   });
 
   it("updates stats on collection", () => {
@@ -182,8 +183,8 @@ describe("Signal Collection", () => {
     collectSignal({ sourceNode: "A", destNode: "C", frequency: 2400 });
 
     const metrics = getAtlasMetrics();
-    expect(metrics.stats.signalsCollected).toBe(2);
-    expect(metrics.stats.lastSignalAt).not.toBeNull();
+    assert.equal(metrics.stats.signalsCollected, 2);
+    assert.notEqual(metrics.stats.lastSignalAt, null);
   });
 });
 
@@ -201,20 +202,20 @@ describe("Path Modeling", () => {
       multipath: [{ delay: 10 }, { delay: 25 }],
     });
 
-    expect(result).not.toBeNull();
-    expect(result.id).toMatch(/^path_/);
-    expect(result.distance_m).toBeGreaterThan(0);
-    expect(result.freeSpaceLoss_dB).toBeGreaterThan(0);
-    expect(result.excessLoss_dB).toBeDefined();
-    expect(result.phaseDeviation_deg).toBeDefined();
-    expect(result.multipathCount).toBe(2);
-    expect(result.band).toBe("wifi_2.4ghz");
+    assert.notEqual(result, null);
+    assert.match(result.id, /^path_/);
+    assert.ok(result.distance_m > 0);
+    assert.ok(result.freeSpaceLoss_dB > 0);
+    assert.notEqual(result.excessLoss_dB, undefined);
+    assert.notEqual(result.phaseDeviation_deg, undefined);
+    assert.equal(result.multipathCount, 2);
+    assert.equal(result.band, "wifi_2.4ghz");
   });
 
   it("returns null for missing inputs", () => {
-    expect(modelPath(null, posB, {})).toBeNull();
-    expect(modelPath(posA, null, {})).toBeNull();
-    expect(modelPath(posA, posB, null)).toBeNull();
+    assert.equal(modelPath(null, posB, {}), null);
+    assert.equal(modelPath(posA, null, {}), null);
+    assert.equal(modelPath(posA, posB, null), null);
   });
 
   it("calculates environmental impact between 0 and 1", () => {
@@ -222,13 +223,13 @@ describe("Path Modeling", () => {
       frequency: 2400,
       signalStrength: -80,
     });
-    expect(result.environmentalImpact).toBeGreaterThanOrEqual(0);
-    expect(result.environmentalImpact).toBeLessThanOrEqual(1);
+    assert.ok(result.environmentalImpact >= 0);
+    assert.ok(result.environmentalImpact <= 1);
   });
 
   it("updates path modeling stats", () => {
     modelPath(posA, posB, { frequency: 2400, signalStrength: -65 });
-    expect(getAtlasMetrics().stats.pathsModeled).toBe(1);
+    assert.equal(getAtlasMetrics().stats.pathsModeled, 1);
   });
 });
 
@@ -257,49 +258,49 @@ describe("Tomographic Reconstruction", () => {
 
   it("requires minimum number of paths", () => {
     const result = reconstructTile(coords, [{ id: "p1" }]);
-    expect(result).toBeNull();
+    assert.equal(result, null);
   });
 
   it("reconstructs a tile from sufficient paths", () => {
     const paths = makePaths(10);
     const tile = reconstructTile(coords, paths);
 
-    expect(tile).not.toBeNull();
-    expect(tile.id).toMatch(/^tile_/);
-    expect(tile.type).toBe("MAP_TILE");
-    expect(tile.coordinates).toEqual(coords);
-    expect(tile.signal_paths_used).toBe(10);
-    expect(tile.confidence).toBeGreaterThan(0);
-    expect(tile.version).toBe(1);
-    expect(tile.resolution_cm).toBeLessThan(Infinity);
-    expect(tile.frequency_sources).toContain("wifi_2.4ghz");
-    expect(tile.frequency_sources).toContain("lora_900mhz");
+    assert.notEqual(tile, null);
+    assert.match(tile.id, /^tile_/);
+    assert.equal(tile.type, "MAP_TILE");
+    assert.deepEqual(tile.coordinates, coords);
+    assert.equal(tile.signal_paths_used, 10);
+    assert.ok(tile.confidence > 0);
+    assert.equal(tile.version, 1);
+    assert.ok(tile.resolution_cm < Infinity);
+    assert.ok(tile.frequency_sources.includes("wifi_2.4ghz"));
+    assert.ok(tile.frequency_sources.includes("lora_900mhz"));
   });
 
   it("populates all 5 layers", () => {
     const paths = makePaths(10);
     const tile = reconstructTile(coords, paths);
 
-    expect(tile.layers.surface).toBeDefined();
-    expect(tile.layers.subsurface).toBeDefined();
-    expect(tile.layers.interior).toBeDefined();
-    expect(tile.layers.atmosphere).toBeDefined();
-    expect(tile.layers.material).toBeDefined();
+    assert.notEqual(tile.layers.surface, undefined);
+    assert.notEqual(tile.layers.subsurface, undefined);
+    assert.notEqual(tile.layers.interior, undefined);
+    assert.notEqual(tile.layers.atmosphere, undefined);
+    assert.notEqual(tile.layers.material, undefined);
   });
 
   it("increments version on re-reconstruction", () => {
     const paths = makePaths(5);
     const tile1 = reconstructTile(coords, paths);
-    expect(tile1.version).toBe(1);
+    assert.equal(tile1.version, 1);
 
     const tile2 = reconstructTile(coords, makePaths(8));
-    expect(tile2.version).toBe(2);
+    assert.equal(tile2.version, 2);
   });
 
   it("counts unique nodes", () => {
     const paths = makePaths(6);
     const tile = reconstructTile(coords, paths);
-    expect(tile.node_count).toBeGreaterThan(0);
+    assert.ok(tile.node_count > 0);
   });
 
   it("higher path count increases confidence", () => {
@@ -312,14 +313,14 @@ describe("Tomographic Reconstruction", () => {
     _resetAtlasState();
     const highTile = reconstructTile(coords, highPaths);
 
-    expect(highTile.confidence).toBeGreaterThan(lowTile.confidence);
+    assert.ok(highTile.confidence > lowTile.confidence);
   });
 
   it("selects best resolution from frequency bands", () => {
     // WiFi 5GHz has 2.6cm resolution — best available
     const paths = makePaths(5).map(p => ({ ...p, band: "wifi_5ghz" }));
     const tile = reconstructTile(coords, paths);
-    expect(tile.resolution_cm).toBe(2.6);
+    assert.equal(tile.resolution_cm, 2.6);
   });
 });
 
@@ -328,42 +329,42 @@ describe("Tomographic Reconstruction", () => {
 describe("Material Classification", () => {
   it("classifies air (no loss, no phase shift)", () => {
     const result = classifyMaterial(0, 0);
-    expect(result.material).toBe("air");
-    expect(result.confidence).toBeGreaterThan(0.5);
+    assert.equal(result.material, "air");
+    assert.ok(result.confidence > 0.5);
   });
 
   it("classifies concrete (moderate loss, moderate phase)", () => {
     const result = classifyMaterial(12, 45);
-    expect(result.material).toBe("concrete");
-    expect(result.confidence).toBeGreaterThan(0.5);
+    assert.equal(result.material, "concrete");
+    assert.ok(result.confidence > 0.5);
   });
 
   it("classifies metal (high loss, high phase)", () => {
     const result = classifyMaterial(40, 90);
-    expect(result.material).toBe("metal");
-    expect(result.confidence).toBeGreaterThan(0.5);
+    assert.equal(result.material, "metal");
+    assert.ok(result.confidence > 0.5);
   });
 
   it("classifies water (moderate loss, moderate phase, high permittivity)", () => {
     const result = classifyMaterial(8, 30);
-    expect(result.material).toBe("water");
+    assert.equal(result.material, "water");
   });
 
   it("classifies wood (low loss)", () => {
     const result = classifyMaterial(4, 15);
-    expect(result.material).toBe("wood");
+    assert.equal(result.material, "wood");
   });
 
   it("returns confidence between 0 and 1", () => {
     const result = classifyMaterial(15, 35);
-    expect(result.confidence).toBeGreaterThanOrEqual(0);
-    expect(result.confidence).toBeLessThanOrEqual(1);
+    assert.ok(result.confidence >= 0);
+    assert.ok(result.confidence <= 1);
   });
 
   it("updates material classification stats", () => {
     classifyMaterial(10, 20);
     classifyMaterial(30, 60);
-    expect(getAtlasMetrics().stats.materialsClassified).toBe(2);
+    assert.equal(getAtlasMetrics().stats.materialsClassified, 2);
   });
 });
 
@@ -381,7 +382,7 @@ describe("Temporal Differencing", () => {
     reconstructTile(coords, paths);
 
     const result = detectChanges("52.367_4.904_-50");
-    expect(result).toBeNull(); // version 1, no comparison possible
+    assert.equal(result, null); // version 1, no comparison possible
   });
 
   it("detects changes between tile versions", () => {
@@ -397,7 +398,7 @@ describe("Temporal Differencing", () => {
 
     const result = detectChanges("52.367_4.904_-50");
     // May or may not detect a change (randomized magnitude), but function should run
-    expect(result === null || result.tileKey === "52.367_4.904_-50").toBe(true);
+    assert.equal(result === null || result.tileKey === "52.367_4.904_-50", true);
   });
 });
 
@@ -405,7 +406,7 @@ describe("Temporal Differencing", () => {
 
 describe("Multi-Frequency Fusion", () => {
   it("returns null for nonexistent tile", () => {
-    expect(fuseFrequencies("nonexistent")).toBeNull();
+    assert.equal(fuseFrequencies("nonexistent"), null);
   });
 
   it("fuses multiple frequency sources", () => {
@@ -421,10 +422,10 @@ describe("Multi-Frequency Fusion", () => {
     reconstructTile(coords, paths);
 
     const fusion = fuseFrequencies("52.367_4.904_-50");
-    expect(fusion).not.toBeNull();
-    expect(fusion.frequencySources).toHaveLength(3);
-    expect(fusion.fusionConfidence).toBeGreaterThan(0);
-    expect(fusion.fusedLayers).toBeDefined();
+    assert.notEqual(fusion, null);
+    assert.equal(fusion.frequencySources.length, 3);
+    assert.ok(fusion.fusionConfidence > 0);
+    assert.notEqual(fusion.fusedLayers, undefined);
   });
 
   it("WiFi contributes to interior layer", () => {
@@ -438,8 +439,8 @@ describe("Multi-Frequency Fusion", () => {
     reconstructTile(coords, paths);
 
     const fusion = fuseFrequencies("52.367_4.904_-50");
-    expect(fusion.fusedLayers.interior).toBeDefined();
-    expect(fusion.fusedLayers.interior.source).toBe("wifi_2.4ghz");
+    assert.notEqual(fusion.fusedLayers.interior, undefined);
+    assert.equal(fusion.fusedLayers.interior.source, "wifi_2.4ghz");
   });
 
   it("LoRa contributes to subsurface layer", () => {
@@ -453,8 +454,8 @@ describe("Multi-Frequency Fusion", () => {
     reconstructTile(coords, paths);
 
     const fusion = fuseFrequencies("52.367_4.904_-50");
-    expect(fusion.fusedLayers.subsurface).toBeDefined();
-    expect(fusion.fusedLayers.subsurface.source).toBe("lora_900mhz");
+    assert.notEqual(fusion.fusedLayers.subsurface, undefined);
+    assert.equal(fusion.fusedLayers.subsurface.source, "lora_900mhz");
   });
 });
 
@@ -477,15 +478,15 @@ describe("DTU Encoding", () => {
     };
 
     const dtu = createMapTileDTU(tile);
-    expect(dtu.type).toBe("MAP_TILE");
-    expect(dtu.id).toBe("tile_test");
-    expect(dtu.resolution_cm).toBe(6.25);
-    expect(dtu.confidence).toBe(0.85);
-    expect(dtu.source).toBe("foundation-atlas");
+    assert.equal(dtu.type, "MAP_TILE");
+    assert.equal(dtu.id, "tile_test");
+    assert.equal(dtu.resolution_cm, 6.25);
+    assert.equal(dtu.confidence, 0.85);
+    assert.equal(dtu.source, "foundation-atlas");
   });
 
   it("returns null for null input", () => {
-    expect(createMapTileDTU(null)).toBeNull();
+    assert.equal(createMapTileDTU(null), null);
   });
 });
 
@@ -505,18 +506,18 @@ describe("Tile Retrieval", () => {
 
   it("retrieves a tile by coordinates", () => {
     const result = getTile({ lat: 52.3675, lng: 4.9045 });
-    expect(result.ok).toBe(true);
-    expect(result.tile.type).toBe("MAP_TILE");
+    assert.equal(result.ok, true);
+    assert.equal(result.tile.type, "MAP_TILE");
   });
 
   it("returns error for missing coordinates", () => {
-    expect(getTile(null).ok).toBe(false);
+    assert.equal(getTile(null).ok, false);
   });
 
   it("returns error for coordinates outside any tile", () => {
     const result = getTile({ lat: 0, lng: 0 });
-    expect(result.ok).toBe(false);
-    expect(result.error).toBe("no_tile_at_coordinates");
+    assert.equal(result.ok, false);
+    assert.equal(result.error, "no_tile_at_coordinates");
   });
 });
 
@@ -534,36 +535,36 @@ describe("Volume Retrieval", () => {
 
   it("retrieves volume with public tier access", () => {
     const result = getVolume({ lat_min: 52.36, lat_max: 52.37, lng_min: 4.9, lng_max: 4.91 }, "PUBLIC");
-    expect(result.ok).toBe(true);
-    expect(result.tier).toBe("PUBLIC");
-    expect(result.accessibleLayers).toEqual(["surface", "atmosphere"]);
+    assert.equal(result.ok, true);
+    assert.equal(result.tier, "PUBLIC");
+    assert.deepEqual(result.accessibleLayers, ["surface", "atmosphere"]);
   });
 
   it("retrieves volume with research tier access", () => {
     const result = getVolume({ lat_min: 52.36, lat_max: 52.37, lng_min: 4.9, lng_max: 4.91 }, "RESEARCH");
-    expect(result.ok).toBe(true);
-    expect(result.accessibleLayers).toContain("subsurface");
-    expect(result.accessibleLayers).toContain("material");
+    assert.equal(result.ok, true);
+    assert.ok(result.accessibleLayers.includes("subsurface"));
+    assert.ok(result.accessibleLayers.includes("material"));
   });
 
   it("retrieves volume with sovereign tier access (all layers)", () => {
     const result = getVolume({ lat_min: 52.36, lat_max: 52.37, lng_min: 4.9, lng_max: 4.91 }, "SOVEREIGN");
-    expect(result.accessibleLayers).toHaveLength(5);
-    expect(result.accessibleLayers).toContain("interior");
+    assert.equal(result.accessibleLayers.length, 5);
+    assert.ok(result.accessibleLayers.includes("interior"));
   });
 });
 
 describe("Subsurface Retrieval", () => {
   it("denies public tier access to subsurface", () => {
     const result = getSubsurface({ lat_min: 52.36, lat_max: 52.37, lng_min: 4.9, lng_max: 4.91 }, "PUBLIC");
-    expect(result.ok).toBe(false);
-    expect(result.error).toBe("access_denied");
+    assert.equal(result.ok, false);
+    assert.equal(result.error, "access_denied");
   });
 
   it("allows research tier access to subsurface", () => {
     const result = getSubsurface({ lat_min: 52.36, lat_max: 52.37, lng_min: 4.9, lng_max: 4.91 }, "RESEARCH");
-    expect(result.ok).toBe(true);
-    expect(result.tier).toBe("RESEARCH");
+    assert.equal(result.ok, true);
+    assert.equal(result.tier, "RESEARCH");
   });
 });
 
@@ -573,7 +574,7 @@ describe("Spatial Queries", () => {
   it("handles point query", () => {
     const result = executeSpatialQuery({ type: "point", coordinates: { lat: 52.3675, lng: 4.9045 } });
     // No tile exists yet
-    expect(result.ok).toBe(false);
+    assert.equal(result.ok, false);
   });
 
   it("handles area query", () => {
@@ -581,8 +582,8 @@ describe("Spatial Queries", () => {
       type: "area",
       bounds: { lat_min: 52.36, lat_max: 52.37, lng_min: 4.9, lng_max: 4.91 },
     });
-    expect(result.ok).toBe(true);
-    expect(result.tileCount).toBe(0); // No tiles yet
+    assert.equal(result.ok, true);
+    assert.equal(result.tileCount, 0); // No tiles yet
   });
 
   it("handles radius query", () => {
@@ -591,12 +592,12 @@ describe("Spatial Queries", () => {
       coordinates: { lat: 52.3675, lng: 4.9045 },
       radius_m: 500,
     });
-    expect(result.ok).toBe(true);
+    assert.equal(result.ok, true);
   });
 
   it("handles material query", () => {
     const result = executeSpatialQuery({ type: "material", coordinates: { lat: 52.3675, lng: 4.9045 } });
-    expect(result.ok).toBe(false); // No tile at point
+    assert.equal(result.ok, false); // No tile at point
   });
 
   it("handles subsurface query", () => {
@@ -604,29 +605,29 @@ describe("Spatial Queries", () => {
       type: "subsurface",
       bounds: { lat_min: 52.36, lat_max: 52.37, lng_min: 4.9, lng_max: 4.91 },
     });
-    expect(result.ok).toBe(true);
+    assert.equal(result.ok, true);
   });
 
   it("handles changes query", () => {
     const result = executeSpatialQuery({ type: "changes", bounds: null });
-    expect(result.ok).toBe(true);
-    expect(result.count).toBe(0);
+    assert.equal(result.ok, true);
+    assert.equal(result.count, 0);
   });
 
   it("rejects unknown query type", () => {
     const result = executeSpatialQuery({ type: "invalid" });
-    expect(result.ok).toBe(false);
-    expect(result.error).toBe("unknown_query_type");
+    assert.equal(result.ok, false);
+    assert.equal(result.error, "unknown_query_type");
   });
 
   it("rejects null query", () => {
     const result = executeSpatialQuery(null);
-    expect(result.ok).toBe(false);
+    assert.equal(result.ok, false);
   });
 
   it("radius query requires coordinates", () => {
     const result = executeSpatialQuery({ type: "radius" });
-    expect(result.ok).toBe(false);
+    assert.equal(result.ok, false);
   });
 });
 
@@ -635,19 +636,19 @@ describe("Spatial Queries", () => {
 describe("Coverage", () => {
   it("returns initial coverage state", () => {
     const result = getCoverage();
-    expect(result.ok).toBe(true);
-    expect(result.totalNodes).toBe(0);
-    expect(result.totalPaths).toBe(0);
-    expect(result.totalTiles).toBe(0);
-    expect(result.bestResolution_cm).toBeNull();
-    expect(result.frequencyCapabilities).toHaveLength(7);
+    assert.equal(result.ok, true);
+    assert.equal(result.totalNodes, 0);
+    assert.equal(result.totalPaths, 0);
+    assert.equal(result.totalTiles, 0);
+    assert.equal(result.bestResolution_cm, null);
+    assert.equal(result.frequencyCapabilities.length, 7);
   });
 
   it("reports frequency capabilities", () => {
     const result = getCoverage();
     const wifi = result.frequencyCapabilities.find(f => f.name === "wifi_2.4ghz");
-    expect(wifi.resolution_cm).toBe(6.25);
-    expect(wifi.penetration).toBe("walls");
+    assert.equal(wifi.resolution_cm, 6.25);
+    assert.equal(wifi.penetration, "walls");
   });
 });
 
@@ -656,9 +657,9 @@ describe("Coverage", () => {
 describe("Live Feed", () => {
   it("returns live feed status", () => {
     const result = getLiveFeedStatus();
-    expect(result.ok).toBe(true);
-    expect(result.active).toBe(false);
-    expect(result.totalSignals).toBe(0);
+    assert.equal(result.ok, true);
+    assert.equal(result.active, false);
+    assert.equal(result.totalSignals, 0);
   });
 });
 
@@ -666,61 +667,61 @@ describe("Live Feed", () => {
 
 describe("Chat Intent Detection", () => {
   it("returns false for empty input", () => {
-    expect(detectAtlasIntent("").isAtlasRequest).toBe(false);
-    expect(detectAtlasIntent(null).isAtlasRequest).toBe(false);
+    assert.equal(detectAtlasIntent("").isAtlasRequest, false);
+    assert.equal(detectAtlasIntent(null).isAtlasRequest, false);
   });
 
   it("detects map/atlas tile requests", () => {
     const result = detectAtlasIntent("Show me the atlas view of Amsterdam");
-    expect(result.isAtlasRequest).toBe(true);
-    expect(result.action).toBe("tile");
+    assert.equal(result.isAtlasRequest, true);
+    assert.equal(result.action, "tile");
   });
 
   it("detects volumetric requests", () => {
     const result = detectAtlasIntent("Show the 3D model of this area");
-    expect(result.isAtlasRequest).toBe(true);
-    expect(result.action).toBe("volume");
+    assert.equal(result.isAtlasRequest, true);
+    assert.equal(result.action, "volume");
   });
 
   it("detects material classification requests", () => {
     const result = detectAtlasIntent("What material is this building made of?");
-    expect(result.isAtlasRequest).toBe(true);
-    expect(result.action).toBe("material");
+    assert.equal(result.isAtlasRequest, true);
+    assert.equal(result.action, "material");
   });
 
   it("detects subsurface/underground requests", () => {
     const result = detectAtlasIntent("What is underground at this location?");
-    expect(result.isAtlasRequest).toBe(true);
-    expect(result.action).toBe("subsurface");
+    assert.equal(result.isAtlasRequest, true);
+    assert.equal(result.action, "subsurface");
   });
 
   it("detects change detection requests", () => {
     const result = detectAtlasIntent("Detect recent changes in this area");
-    expect(result.isAtlasRequest).toBe(true);
-    expect(result.action).toBe("change");
+    assert.equal(result.isAtlasRequest, true);
+    assert.equal(result.action, "change");
   });
 
   it("detects coverage requests", () => {
     const result = detectAtlasIntent("What is the atlas coverage status?");
-    expect(result.isAtlasRequest).toBe(true);
-    expect(result.action).toBe("coverage");
+    assert.equal(result.isAtlasRequest, true);
+    assert.equal(result.action, "coverage");
   });
 
   it("detects signal tomography requests", () => {
     const result = detectAtlasIntent("How does signal tomography work?");
-    expect(result.isAtlasRequest).toBe(true);
-    expect(result.action).toBe("coverage");
+    assert.equal(result.isAtlasRequest, true);
+    assert.equal(result.action, "coverage");
   });
 
   it("detects live feed requests", () => {
     const result = detectAtlasIntent("Show the real-time atlas feed");
-    expect(result.isAtlasRequest).toBe(true);
-    expect(result.action).toBe("live");
+    assert.equal(result.isAtlasRequest, true);
+    assert.equal(result.action, "live");
   });
 
   it("does not match unrelated queries", () => {
-    expect(detectAtlasIntent("What's the weather today?").isAtlasRequest).toBe(false);
-    expect(detectAtlasIntent("Play some music").isAtlasRequest).toBe(false);
+    assert.equal(detectAtlasIntent("What's the weather today?").isAtlasRequest, false);
+    assert.equal(detectAtlasIntent("Play some music").isAtlasRequest, false);
   });
 });
 
@@ -732,10 +733,10 @@ describe("Atlas Metrics", () => {
     collectSignal({ sourceNode: "A", destNode: "B", frequency: 2400 });
 
     const metrics = getAtlasMetrics();
-    expect(metrics.initialized).toBe(true);
-    expect(metrics.stats.signalsCollected).toBe(1);
-    expect(metrics.coverage).toBeDefined();
-    expect(metrics.uptime).toBeGreaterThanOrEqual(0);
+    assert.equal(metrics.initialized, true);
+    assert.equal(metrics.stats.signalsCollected, 1);
+    assert.notEqual(metrics.coverage, undefined);
+    assert.ok(metrics.uptime >= 0);
   });
 });
 
@@ -744,7 +745,7 @@ describe("Atlas Metrics", () => {
 describe("Atlas Heartbeat", () => {
   it("runs without error", async () => {
     await initializeAtlas({});
-    await expect(atlasHeartbeatTick({}, 1)).resolves.not.toThrow();
+    await atlasHeartbeatTick({}, 1);
   });
 });
 
@@ -753,17 +754,17 @@ describe("Atlas Heartbeat", () => {
 describe("Initialization", () => {
   it("initializes successfully", async () => {
     const result = await initializeAtlas({});
-    expect(result.ok).toBe(true);
-    expect(result.layers).toEqual(ALL_LAYERS);
-    expect(result.frequencyBands).toHaveLength(7);
-    expect(result.tiers).toEqual(["PUBLIC", "RESEARCH", "SOVEREIGN"]);
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.layers, ALL_LAYERS);
+    assert.equal(result.frequencyBands.length, 7);
+    assert.deepEqual(result.tiers, ["PUBLIC", "RESEARCH", "SOVEREIGN"]);
   });
 
   it("returns alreadyInitialized on second call", async () => {
     await initializeAtlas({});
     const result = await initializeAtlas({});
-    expect(result.ok).toBe(true);
-    expect(result.alreadyInitialized).toBe(true);
+    assert.equal(result.ok, true);
+    assert.equal(result.alreadyInitialized, true);
   });
 });
 
@@ -776,8 +777,8 @@ describe("State Reset", () => {
     _resetAtlasState();
 
     const metrics = getAtlasMetrics();
-    expect(metrics.initialized).toBe(false);
-    expect(metrics.stats.signalsCollected).toBe(0);
+    assert.equal(metrics.initialized, false);
+    assert.equal(metrics.stats.signalsCollected, 0);
   });
 });
 
@@ -796,8 +797,8 @@ describe("Full Pipeline Integration", () => {
     const sig1 = collectSignal({ sourceNode: "A", destNode: "B", frequency: 2400, signalStrength: -65, phase: 120 });
     const sig2 = collectSignal({ sourceNode: "C", destNode: "D", frequency: 900, signalStrength: -80, phase: 90 });
 
-    expect(sig1).not.toBeNull();
-    expect(sig2).not.toBeNull();
+    assert.notEqual(sig1, null);
+    assert.notEqual(sig2, null);
 
     // Step 2: Model paths
     const path1 = modelPath(posA, posB, { frequency: 2400, signalStrength: -65, phase: 120, multipath: [] });
@@ -812,35 +813,35 @@ describe("Full Pipeline Integration", () => {
       { frequency: 5800, signalStrength: -55, phase: 60, multipath: [] }
     );
 
-    expect(path1).not.toBeNull();
-    expect(path2).not.toBeNull();
-    expect(path3).not.toBeNull();
+    assert.notEqual(path1, null);
+    assert.notEqual(path2, null);
+    assert.notEqual(path3, null);
 
     // Step 3: Reconstruct tile
     const coords = { lat_min: 52.367, lat_max: 52.368, lng_min: 4.904, lng_max: 4.905 };
     const tile = reconstructTile(coords, [path1, path2, path3]);
 
-    expect(tile).not.toBeNull();
-    expect(tile.type).toBe("MAP_TILE");
-    expect(tile.frequency_sources.length).toBeGreaterThanOrEqual(2);
+    assert.notEqual(tile, null);
+    assert.equal(tile.type, "MAP_TILE");
+    assert.ok(tile.frequency_sources.length >= 2);
 
     // Step 4: Classify materials
     const material = classifyMaterial(path1.excessLoss_dB, path1.phaseDeviation_deg);
-    expect(material.material).toBeDefined();
-    expect(material.confidence).toBeGreaterThanOrEqual(0);
+    assert.notEqual(material.material, undefined);
+    assert.ok(material.confidence >= 0);
 
     // Step 6: Multi-frequency fusion
     const fusion = fuseFrequencies("52.367_4.904_-50");
-    expect(fusion).not.toBeNull();
+    assert.notEqual(fusion, null);
 
     // Step 7: DTU encoding
     const dtu = createMapTileDTU(tile);
-    expect(dtu.type).toBe("MAP_TILE");
-    expect(dtu.source).toBe("foundation-atlas");
+    assert.equal(dtu.type, "MAP_TILE");
+    assert.equal(dtu.source, "foundation-atlas");
 
     // Verify retrieval
     const retrieved = getTile({ lat: 52.3675, lng: 4.9045 });
-    expect(retrieved.ok).toBe(true);
+    assert.equal(retrieved.ok, true);
   });
 
   it("respects tiered access for volume retrieval", () => {
@@ -857,9 +858,9 @@ describe("Full Pipeline Integration", () => {
     const sovereignVol = getVolume({ lat_min: 52.36, lat_max: 52.37, lng_min: 4.9, lng_max: 4.91 }, "SOVEREIGN");
 
     // Public: surface + atmosphere only
-    expect(publicVol.accessibleLayers).toHaveLength(2);
+    assert.equal(publicVol.accessibleLayers.length, 2);
     // Sovereign: all 5 layers
-    expect(sovereignVol.accessibleLayers).toHaveLength(5);
+    assert.equal(sovereignVol.accessibleLayers.length, 5);
   });
 
   it("coverage reflects collected data", () => {
@@ -867,8 +868,8 @@ describe("Full Pipeline Integration", () => {
     collectSignal({ sourceNode: "C", destNode: "D", frequency: 900 });
 
     const coverage = getCoverage();
-    expect(coverage.totalPaths).toBe(2);
-    expect(coverage.frequenciesActive).toContain("wifi_2.4ghz");
-    expect(coverage.frequenciesActive).toContain("lora_900mhz");
+    assert.equal(coverage.totalPaths, 2);
+    assert.ok(coverage.frequenciesActive.includes("wifi_2.4ghz"));
+    assert.ok(coverage.frequenciesActive.includes("lora_900mhz"));
   });
 });

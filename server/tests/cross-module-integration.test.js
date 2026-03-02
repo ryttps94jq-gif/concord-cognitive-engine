@@ -11,7 +11,8 @@
  *   - Heartbeat orchestration
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, beforeEach } from "node:test";
+import assert from "node:assert/strict";
 
 // Foundation Atlas
 import {
@@ -89,7 +90,7 @@ describe("Atlas + Signal Cortex Pipeline", () => {
       signalStrength: -65,
       phase: 120.5,
     });
-    expect(sig).not.toBeNull();
+    assert.notEqual(sig, null);
 
     // Cortex classifies the same frequency signal
     const classified = cortexClassifySignal({
@@ -97,8 +98,8 @@ describe("Atlas + Signal Cortex Pipeline", () => {
       modulation: "OFDM",
       keywords: ["wifi"],
     });
-    expect(classified.category).toBe("COMMUNICATION");
-    expect(classified.purpose).toBe("COMMUNICATION");
+    assert.equal(classified.category, "COMMUNICATION");
+    assert.equal(classified.purpose, "COMMUNICATION");
   });
 
   it("privacy zone blocks atlas reconstruction at zone coordinates", async () => {
@@ -112,16 +113,16 @@ describe("Atlas + Signal Cortex Pipeline", () => {
         coordinates: [[52.36, 4.90], [52.36, 4.91], [52.37, 4.91], [52.37, 4.90]],
       },
     });
-    expect(zone.protection_level).toBe("ABSOLUTE");
+    assert.equal(zone.protection_level, "ABSOLUTE");
 
     // Privacy check at zone coordinates should block
     const check = checkPrivacy({ lat: 52.365, lng: 4.905 });
-    expect(check.allowed).toBe(false);
-    expect(check.interior_data_exists).toBe(false);
+    assert.equal(check.allowed, false);
+    assert.equal(check.interior_data_exists, false);
 
     // Privacy check outside zone should allow
     const checkOutside = checkPrivacy({ lat: 53.0, lng: 5.0 });
-    expect(checkOutside.allowed).toBe(true);
+    assert.equal(checkOutside.allowed, true);
   });
 
   it("cortex taxonomy and atlas coverage are independent but complementary", async () => {
@@ -139,15 +140,15 @@ describe("Atlas + Signal Cortex Pipeline", () => {
 
     // Atlas tracks signal paths
     const atlasCoverage = getCoverage();
-    expect(atlasCoverage.totalPaths).toBe(2);
+    assert.equal(atlasCoverage.totalPaths, 2);
 
     // Cortex tracks classified signals
     const cortexMetrics = getCortexMetrics();
-    expect(cortexMetrics.taxonomy.totalClassified).toBe(3);
+    assert.equal(cortexMetrics.taxonomy.totalClassified, 3);
 
     // They track different aspects of the same signals
     const spectrum = getSpectralOccupancy();
-    expect(spectrum.totalSignals).toBe(3);
+    assert.equal(spectrum.totalSignals, 3);
   });
 });
 
@@ -173,10 +174,10 @@ describe("Intelligence + Atlas Tier Enforcement", () => {
       { lat_min: 52.36, lat_max: 52.37, lng_min: 4.9, lng_max: 4.91 },
       "PUBLIC"
     );
-    expect(publicVolume.accessibleLayers).toHaveLength(2);
-    expect(publicVolume.accessibleLayers).not.toContain("interior");
-    expect(publicVolume.accessibleLayers).not.toContain("subsurface");
-    expect(publicVolume.accessibleLayers).not.toContain("material");
+    assert.equal(publicVolume.accessibleLayers.length, 2);
+    assert.ok(!publicVolume.accessibleLayers.includes("interior"));
+    assert.ok(!publicVolume.accessibleLayers.includes("subsurface"));
+    assert.ok(!publicVolume.accessibleLayers.includes("material"));
   });
 
   it("sovereign tier accesses all 5 layers", async () => {
@@ -198,25 +199,25 @@ describe("Intelligence + Atlas Tier Enforcement", () => {
       { lat_min: 52.36, lat_max: 52.37, lng_min: 4.9, lng_max: 4.91 },
       "SOVEREIGN"
     );
-    expect(sovereignVolume.accessibleLayers).toHaveLength(5);
+    assert.equal(sovereignVolume.accessibleLayers.length, 5);
   });
 
   it("intelligence and atlas intents are non-overlapping", () => {
     // Atlas-specific queries
     const atlasResult = detectAtlasIntent("Show me the atlas view of Amsterdam");
-    expect(atlasResult.isAtlasRequest).toBe(true);
-    expect(detectIntelIntent("Show me the atlas view of Amsterdam").isIntelRequest).toBe(false);
+    assert.equal(atlasResult.isAtlasRequest, true);
+    assert.equal(detectIntelIntent("Show me the atlas view of Amsterdam").isIntelRequest, false);
 
     // Intelligence-specific queries
     const intelResult = detectIntelIntent("What is the weather intelligence data?");
-    expect(intelResult.isIntelRequest).toBe(true);
-    expect(detectAtlasIntent("What is the weather intelligence data?").isAtlasRequest).toBe(false);
+    assert.equal(intelResult.isIntelRequest, true);
+    assert.equal(detectAtlasIntent("What is the weather intelligence data?").isAtlasRequest, false);
 
     // Cortex-specific queries
     const cortexResult = detectCortexIntent("Show signal taxonomy");
-    expect(cortexResult.isCortexRequest).toBe(true);
-    expect(detectAtlasIntent("Show signal taxonomy").isAtlasRequest).toBe(false);
-    expect(detectIntelIntent("Show signal taxonomy").isIntelRequest).toBe(false);
+    assert.equal(cortexResult.isCortexRequest, true);
+    assert.equal(detectAtlasIntent("Show signal taxonomy").isAtlasRequest, false);
+    assert.equal(detectIntelIntent("Show signal taxonomy").isIntelRequest, false);
   });
 });
 
@@ -229,40 +230,40 @@ describe("Privacy Architecture Hardening", () => {
 
   it("ABSOLUTE zones never have interior data — residential", () => {
     const zone = detectPrivacyZone({ keywords: ["residential"] });
-    expect(zone.interior_data_exists).toBe(false);
-    expect(zone.interior_reconstructable).toBe(false);
-    expect(zone.data_retention).toBe("NONE");
+    assert.equal(zone.interior_data_exists, false);
+    assert.equal(zone.interior_reconstructable, false);
+    assert.equal(zone.data_retention, "NONE");
   });
 
   it("ABSOLUTE zones never have interior data — medical", () => {
     const zone = detectPrivacyZone({ keywords: ["medical"] });
-    expect(zone.interior_data_exists).toBe(false);
-    expect(zone.interior_reconstructable).toBe(false);
-    expect(zone.protection_level).toBe("ABSOLUTE");
+    assert.equal(zone.interior_data_exists, false);
+    assert.equal(zone.interior_reconstructable, false);
+    assert.equal(zone.protection_level, "ABSOLUTE");
   });
 
   it("ABSOLUTE zones never have interior data — religious", () => {
     const zone = detectPrivacyZone({ keywords: ["religious"] });
-    expect(zone.interior_data_exists).toBe(false);
-    expect(zone.interior_reconstructable).toBe(false);
+    assert.equal(zone.interior_data_exists, false);
+    assert.equal(zone.interior_reconstructable, false);
   });
 
   it("presence suppression is permanent at all tiers", () => {
     for (const tier of ["PUBLIC", "RESEARCH", "SOVEREIGN"]) {
       const result = suppressPresenceDetection({ tier });
-      expect(result.suppressed).toBe(true);
-      expect(result.tier_override_possible).toBe(false);
-      expect(result.individual_data_available).toBe(false);
+      assert.equal(result.suppressed, true);
+      assert.equal(result.tier_override_possible, false);
+      assert.equal(result.individual_data_available, false);
     }
   });
 
   it("vehicle tracking suppression is permanent at all tiers", () => {
     for (const tier of ["PUBLIC", "RESEARCH", "SOVEREIGN"]) {
       const result = suppressVehicleTracking({ tier });
-      expect(result.suppressed).toBe(true);
-      expect(result.tier_override_possible).toBe(false);
-      expect(result.individual_data_available).toBe(false);
-      expect(result.aggregate_available).toBe(true);
+      assert.equal(result.suppressed, true);
+      assert.equal(result.tier_override_possible, false);
+      assert.equal(result.individual_data_available, false);
+      assert.equal(result.aggregate_available, true);
     }
   });
 
@@ -274,12 +275,12 @@ describe("Privacy Architecture Hardening", () => {
     detectPrivacyZone({ keywords: ["commercial"] });
 
     const stats = getPrivacyStats();
-    expect(stats.totalZones).toBe(5);
-    expect(stats.byProtectionLevel.ABSOLUTE).toBe(3);
-    expect(stats.byProtectionLevel.RESTRICTED).toBe(1);
-    expect(stats.byProtectionLevel.CONTROLLED).toBe(1);
-    expect(stats.byClassification.residential).toBe(2);
-    expect(stats.byClassification.medical).toBe(1);
+    assert.equal(stats.totalZones, 5);
+    assert.equal(stats.byProtectionLevel.ABSOLUTE, 3);
+    assert.equal(stats.byProtectionLevel.RESTRICTED, 1);
+    assert.equal(stats.byProtectionLevel.CONTROLLED, 1);
+    assert.equal(stats.byClassification.residential, 2);
+    assert.equal(stats.byClassification.medical, 1);
   });
 
   it("zone verification confirms no interior data for ABSOLUTE zones", () => {
@@ -287,8 +288,8 @@ describe("Privacy Architecture Hardening", () => {
     const zones = getPrivacyZones();
     const verified = zones.zones[0];
 
-    expect(verified.interior_data_exists).toBe(false);
-    expect(verified.interior_reconstructable).toBe(false);
+    assert.equal(verified.interior_data_exists, false);
+    assert.equal(verified.interior_reconstructable, false);
   });
 });
 
@@ -302,53 +303,53 @@ describe("Safety Frequency Enforcement", () => {
   it("aviation frequencies [108-137 MHz] are always forbidden", () => {
     for (const freq of [108, 115, 121.5, 130, 137]) {
       const sig = cortexClassifySignal({ frequency: freq });
-      expect(sig.adjustability).toBe("ADJUST_FORBIDDEN");
+      assert.equal(sig.adjustability, "ADJUST_FORBIDDEN");
     }
   });
 
   it("aviation DME/SSR [960-1215 MHz] are always forbidden", () => {
     for (const freq of [960, 1090, 1215]) {
       const sig = cortexClassifySignal({ frequency: freq });
-      expect(sig.adjustability).toBe("ADJUST_FORBIDDEN");
+      assert.equal(sig.adjustability, "ADJUST_FORBIDDEN");
     }
   });
 
   it("medical ISM [2400-2500 MHz] are always forbidden", () => {
     for (const freq of [2400, 2450, 2500]) {
       const sig = cortexClassifySignal({ frequency: freq });
-      expect(sig.adjustability).toBe("ADJUST_FORBIDDEN");
+      assert.equal(sig.adjustability, "ADJUST_FORBIDDEN");
     }
   });
 
   it("emergency frequencies are always forbidden", () => {
     for (const freq of [121.5, 156.8, 406]) {
       const sig = cortexClassifySignal({ frequency: freq });
-      expect(sig.adjustability).toBe("ADJUST_FORBIDDEN");
+      assert.equal(sig.adjustability, "ADJUST_FORBIDDEN");
     }
   });
 
   it("military UHF [225-400 MHz] are always forbidden", () => {
     for (const freq of [225, 300, 350, 400]) {
       const sig = cortexClassifySignal({ frequency: freq });
-      expect(sig.adjustability).toBe("ADJUST_FORBIDDEN");
+      assert.equal(sig.adjustability, "ADJUST_FORBIDDEN");
     }
   });
 
   it("jamming is always forbidden regardless of frequency", () => {
     const sig = cortexClassifySignal({ frequency: 800, keywords: ["cellular"] });
     const result = checkAdjustmentPermission(sig.id, ADJUSTMENT_TYPES.JAMMING);
-    expect(result.permitted).toBe(false);
-    expect(result.reason).toBe("jamming_permanently_forbidden");
-    expect(result.authorization_required).toBe("HARDCODED_DENY");
+    assert.equal(result.permitted, false);
+    assert.equal(result.reason, "jamming_permanently_forbidden");
+    assert.equal(result.authorization_required, "HARDCODED_DENY");
   });
 
   it("safe frequencies allow permitted adjustments", () => {
     // 800 MHz is cellular, not in any safety band
     const sig = cortexClassifySignal({ frequency: 800, keywords: ["cellular"] });
-    expect(sig.adjustability).toBe("RESPOND_ALLOWED");
+    assert.equal(sig.adjustability, "RESPOND_ALLOWED");
 
     const result = checkAdjustmentPermission(sig.id, ADJUSTMENT_TYPES.GAMMA_MODULATION);
-    expect(result.permitted).toBe(true);
+    assert.equal(result.permitted, true);
   });
 });
 
@@ -360,9 +361,9 @@ describe("Module Initialization", () => {
     const cortexResult = await initializeCortex({});
     const intelResult = await initializeIntelligence({});
 
-    expect(atlasResult.ok).toBe(true);
-    expect(cortexResult.ok).toBe(true);
-    expect(intelResult.ok).toBe(true);
+    assert.equal(atlasResult.ok, true);
+    assert.equal(cortexResult.ok, true);
+    assert.equal(intelResult.ok, true);
   });
 
   it("all modules report metrics after initialization", async () => {
@@ -371,13 +372,13 @@ describe("Module Initialization", () => {
     await initializeIntelligence({});
 
     const atlasMetrics = getAtlasMetrics();
-    expect(atlasMetrics.initialized).toBe(true);
+    assert.equal(atlasMetrics.initialized, true);
 
     const cortexMetrics = getCortexMetrics();
-    expect(cortexMetrics.initialized).toBe(true);
+    assert.equal(cortexMetrics.initialized, true);
 
     const intelMetrics = getIntelligenceMetrics();
-    expect(intelMetrics.initialized).toBe(true);
+    assert.equal(intelMetrics.initialized, true);
   });
 
   it("state reset is complete for all modules", async () => {
@@ -393,11 +394,11 @@ describe("Module Initialization", () => {
     _resetCortexState();
     _resetIntelligenceState();
 
-    expect(getAtlasMetrics().initialized).toBe(false);
-    expect(getCortexMetrics().initialized).toBe(false);
-    expect(getIntelligenceMetrics().initialized).toBe(false);
-    expect(getAtlasMetrics().stats.signalsCollected).toBe(0);
-    expect(getCortexMetrics().stats.signalsClassified).toBe(0);
+    assert.equal(getAtlasMetrics().initialized, false);
+    assert.equal(getCortexMetrics().initialized, false);
+    assert.equal(getIntelligenceMetrics().initialized, false);
+    assert.equal(getAtlasMetrics().stats.signalsCollected, 0);
+    assert.equal(getCortexMetrics().stats.signalsClassified, 0);
   });
 });
 
@@ -406,23 +407,23 @@ describe("Module Initialization", () => {
 describe("Edge Cases & Robustness", () => {
   it("cortex handles signals with missing optional fields", () => {
     const result = cortexClassifySignal({ frequency: 800 });
-    expect(result).not.toBeNull();
-    expect(result.category).toBeDefined();
-    expect(result.location.origin).toBeNull();
-    expect(result.measurement.power).toBe(0);
-    expect(result.measurement.multipath).toEqual([]);
+    assert.notEqual(result, null);
+    assert.notEqual(result.category, undefined);
+    assert.equal(result.location.origin, null);
+    assert.equal(result.measurement.power, 0);
+    assert.deepEqual(result.measurement.multipath, []);
   });
 
   it("cortex handles signals with zero frequency", () => {
     const result = cortexClassifySignal({ frequency: 0 });
-    expect(result).not.toBeNull();
-    expect(result.category).toBe("UNKNOWN");
+    assert.notEqual(result, null);
+    assert.equal(result.category, "UNKNOWN");
   });
 
   it("cortex handles very high frequencies", () => {
     const result = cortexClassifySignal({ frequency: 1000000 });
-    expect(result).not.toBeNull();
-    expect(result.category).toBe("UNKNOWN");
+    assert.notEqual(result, null);
+    assert.equal(result.category, "UNKNOWN");
   });
 
   it("privacy zone boundary check handles edge coordinates", () => {
@@ -435,11 +436,11 @@ describe("Edge Cases & Robustness", () => {
     });
 
     // Exactly on boundary
-    expect(checkPrivacy({ lat: 0, lng: 0 }).allowed).toBe(false);
-    expect(checkPrivacy({ lat: 1, lng: 1 }).allowed).toBe(false);
+    assert.equal(checkPrivacy({ lat: 0, lng: 0 }).allowed, false);
+    assert.equal(checkPrivacy({ lat: 1, lng: 1 }).allowed, false);
 
     // Just outside
-    expect(checkPrivacy({ lat: 1.1, lng: 0.5 }).allowed).toBe(true);
+    assert.equal(checkPrivacy({ lat: 1.1, lng: 0.5 }).allowed, true);
   });
 
   it("taxonomy pruning keeps within bounds", () => {
@@ -448,7 +449,7 @@ describe("Edge Cases & Robustness", () => {
       cortexClassifySignal({ frequency: 800 + i });
     }
     const taxonomy = getTaxonomy("all", 200);
-    expect(taxonomy.totalClassified).toBe(100);
+    assert.equal(taxonomy.totalClassified, 100);
   });
 
   it("unknown signals queue respects max size", () => {
@@ -457,19 +458,19 @@ describe("Edge Cases & Robustness", () => {
       cortexClassifySignal({ frequency: 50000 + i }); // all UNKNOWN
     }
     const unknown = getUnknownSignals(200);
-    expect(unknown.count).toBeLessThanOrEqual(200);
+    assert.ok(unknown.count <= 200);
   });
 
   it("atlas handles path modeling with same source and destination", () => {
     const pos = { lat: 52.367, lng: 4.904 };
     const result = modelPath(pos, pos, { frequency: 2400, signalStrength: -65 });
     // Zero-distance path is invalid for propagation modeling (no free-space loss)
-    expect(result).toBeNull();
+    assert.equal(result, null);
   });
 
   it("intelligence handles empty content gracefully", () => {
     const result = processSignalIntelligence({ category: "weather", content: "", source: "test" });
-    expect(result).toBeDefined();
+    assert.notEqual(result, undefined);
   });
 });
 
@@ -477,36 +478,36 @@ describe("Edge Cases & Robustness", () => {
 
 describe("Production Readiness", () => {
   it("all exported constants are frozen (immutable in production)", () => {
-    expect(Object.isFrozen(SIGNAL_CATEGORIES)).toBe(true);
-    expect(Object.isFrozen(ALL_SIGNAL_CATEGORIES)).toBe(true);
-    expect(Object.isFrozen(SIGNAL_PURPOSES)).toBe(true);
-    expect(Object.isFrozen(ADJUSTMENT_PERMISSIONS)).toBe(true);
-    expect(Object.isFrozen(ADJUSTMENT_TYPES)).toBe(true);
-    expect(Object.isFrozen(PRIVACY_LEVELS)).toBe(true);
-    expect(Object.isFrozen(ZONE_PROTECTION)).toBe(true);
-    expect(Object.isFrozen(TIERS)).toBe(true);
-    expect(Object.isFrozen(CLASSIFICATIONS)).toBe(true);
-    expect(Object.isFrozen(PUBLIC_CATEGORIES)).toBe(true);
+    assert.equal(Object.isFrozen(SIGNAL_CATEGORIES), true);
+    assert.equal(Object.isFrozen(ALL_SIGNAL_CATEGORIES), true);
+    assert.equal(Object.isFrozen(SIGNAL_PURPOSES), true);
+    assert.equal(Object.isFrozen(ADJUSTMENT_PERMISSIONS), true);
+    assert.equal(Object.isFrozen(ADJUSTMENT_TYPES), true);
+    assert.equal(Object.isFrozen(PRIVACY_LEVELS), true);
+    assert.equal(Object.isFrozen(ZONE_PROTECTION), true);
+    assert.equal(Object.isFrozen(TIERS), true);
+    assert.equal(Object.isFrozen(CLASSIFICATIONS), true);
+    assert.equal(Object.isFrozen(PUBLIC_CATEGORIES), true);
   });
 
   it("signal IDs are unique across classifications", () => {
     const ids = new Set();
     for (let i = 0; i < 50; i++) {
       const result = cortexClassifySignal({ frequency: 800 + i });
-      expect(ids.has(result.id)).toBe(false);
+      assert.equal(ids.has(result.id), false);
       ids.add(result.id);
     }
-    expect(ids.size).toBe(50);
+    assert.equal(ids.size, 50);
   });
 
   it("privacy zone IDs are unique", () => {
     const ids = new Set();
     for (let i = 0; i < 20; i++) {
       const zone = detectPrivacyZone({ keywords: ["residential"] });
-      expect(ids.has(zone.id)).toBe(false);
+      assert.equal(ids.has(zone.id), false);
       ids.add(zone.id);
     }
-    expect(ids.size).toBe(20);
+    assert.equal(ids.size, 20);
   });
 
   it("metrics reflect actual state accurately", async () => {
@@ -519,11 +520,11 @@ describe("Production Readiness", () => {
     suppressVehicleTracking({});
 
     const metrics = getCortexMetrics();
-    expect(metrics.stats.signalsClassified).toBe(2);
-    expect(metrics.stats.unknownSignals).toBe(1);
-    expect(metrics.stats.privacyZonesCreated).toBe(1);
-    expect(metrics.stats.presenceDetectionsSuppressed).toBe(1);
-    expect(metrics.stats.vehicleTrackingSuppressed).toBe(1);
+    assert.equal(metrics.stats.signalsClassified, 2);
+    assert.equal(metrics.stats.unknownSignals, 1);
+    assert.equal(metrics.stats.privacyZonesCreated, 1);
+    assert.equal(metrics.stats.presenceDetectionsSuppressed, 1);
+    assert.equal(metrics.stats.vehicleTrackingSuppressed, 1);
   });
 
   it("classification performance is consistent (50 signals < 100ms)", () => {
@@ -538,6 +539,6 @@ describe("Production Readiness", () => {
       });
     }
     const elapsed = Date.now() - start;
-    expect(elapsed).toBeLessThan(100);
+    assert.ok(elapsed < 100);
   });
 });

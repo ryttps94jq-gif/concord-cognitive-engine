@@ -11,7 +11,8 @@
  *   - Metrics and heartbeat
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, beforeEach } from "node:test";
+import assert from "node:assert/strict";
 
 import {
   TIERS,
@@ -52,51 +53,51 @@ beforeEach(() => {
 
 describe("Constants", () => {
   it("defines three tiers", () => {
-    expect(TIERS.PUBLIC).toBe("PUBLIC");
-    expect(TIERS.RESEARCH).toBe("RESEARCH");
-    expect(TIERS.SOVEREIGN).toBe("SOVEREIGN");
+    assert.equal(TIERS.PUBLIC, "PUBLIC");
+    assert.equal(TIERS.RESEARCH, "RESEARCH");
+    assert.equal(TIERS.SOVEREIGN, "SOVEREIGN");
   });
 
   it("defines three classifications", () => {
-    expect(CLASSIFICATIONS.OPEN).toBe("OPEN");
-    expect(CLASSIFICATIONS.RESTRICTED).toBe("RESTRICTED");
-    expect(CLASSIFICATIONS.ABSOLUTE).toBe("ABSOLUTE");
+    assert.equal(CLASSIFICATIONS.OPEN, "OPEN");
+    assert.equal(CLASSIFICATIONS.RESTRICTED, "RESTRICTED");
+    assert.equal(CLASSIFICATIONS.ABSOLUTE, "ABSOLUTE");
   });
 
   it("defines 7 public categories", () => {
-    expect(PUBLIC_CATEGORIES).toHaveLength(7);
-    expect(PUBLIC_CATEGORIES).toContain("weather");
-    expect(PUBLIC_CATEGORIES).toContain("geology");
-    expect(PUBLIC_CATEGORIES).toContain("energy");
-    expect(PUBLIC_CATEGORIES).toContain("ocean");
-    expect(PUBLIC_CATEGORIES).toContain("seismic");
-    expect(PUBLIC_CATEGORIES).toContain("agriculture");
-    expect(PUBLIC_CATEGORIES).toContain("environment");
+    assert.equal(PUBLIC_CATEGORIES.length, 7);
+    assert.ok(PUBLIC_CATEGORIES.includes("weather"));
+    assert.ok(PUBLIC_CATEGORIES.includes("geology"));
+    assert.ok(PUBLIC_CATEGORIES.includes("energy"));
+    assert.ok(PUBLIC_CATEGORIES.includes("ocean"));
+    assert.ok(PUBLIC_CATEGORIES.includes("seismic"));
+    assert.ok(PUBLIC_CATEGORIES.includes("agriculture"));
+    assert.ok(PUBLIC_CATEGORIES.includes("environment"));
   });
 
   it("defines 5 research categories", () => {
-    expect(RESEARCH_CATEGORIES).toHaveLength(5);
-    expect(RESEARCH_CATEGORIES).toContain("cross_medium_synthesis");
-    expect(RESEARCH_CATEGORIES).toContain("historical_archaeology");
-    expect(RESEARCH_CATEGORIES).toContain("deep_geological");
-    expect(RESEARCH_CATEGORIES).toContain("advanced_atmospheric");
-    expect(RESEARCH_CATEGORIES).toContain("marine_deep");
+    assert.equal(RESEARCH_CATEGORIES.length, 5);
+    assert.ok(RESEARCH_CATEGORIES.includes("cross_medium_synthesis"));
+    assert.ok(RESEARCH_CATEGORIES.includes("historical_archaeology"));
+    assert.ok(RESEARCH_CATEGORIES.includes("deep_geological"));
+    assert.ok(RESEARCH_CATEGORIES.includes("advanced_atmospheric"));
+    assert.ok(RESEARCH_CATEGORIES.includes("marine_deep"));
   });
 
   it("defines 6 sovereign categories", () => {
-    expect(SOVEREIGN_CATEGORIES).toHaveLength(6);
-    expect(SOVEREIGN_CATEGORIES).toContain("military_installation");
-    expect(SOVEREIGN_CATEGORIES).toContain("naval_movement");
-    expect(SOVEREIGN_CATEGORIES).toContain("nuclear_facility");
-    expect(SOVEREIGN_CATEGORIES).toContain("infrastructure_vulnerability");
-    expect(SOVEREIGN_CATEGORIES).toContain("population_behavioral");
-    expect(SOVEREIGN_CATEGORIES).toContain("communication_topology");
+    assert.equal(SOVEREIGN_CATEGORIES.length, 6);
+    assert.ok(SOVEREIGN_CATEGORIES.includes("military_installation"));
+    assert.ok(SOVEREIGN_CATEGORIES.includes("naval_movement"));
+    assert.ok(SOVEREIGN_CATEGORIES.includes("nuclear_facility"));
+    assert.ok(SOVEREIGN_CATEGORIES.includes("infrastructure_vulnerability"));
+    assert.ok(SOVEREIGN_CATEGORIES.includes("population_behavioral"));
+    assert.ok(SOVEREIGN_CATEGORIES.includes("communication_topology"));
   });
 
   it("frozen arrays are immutable", () => {
-    expect(Object.isFrozen(PUBLIC_CATEGORIES)).toBe(true);
-    expect(Object.isFrozen(RESEARCH_CATEGORIES)).toBe(true);
-    expect(Object.isFrozen(SOVEREIGN_CATEGORIES)).toBe(true);
+    assert.equal(Object.isFrozen(PUBLIC_CATEGORIES), true);
+    assert.equal(Object.isFrozen(RESEARCH_CATEGORIES), true);
+    assert.equal(Object.isFrozen(SOVEREIGN_CATEGORIES), true);
   });
 });
 
@@ -105,8 +106,8 @@ describe("Constants", () => {
 describe("Sovereign Classifier", () => {
   it("classifies null data as public", () => {
     const result = classifySignal(null);
-    expect(result.tier).toBe(TIERS.PUBLIC);
-    expect(result.sovereignMatch).toBe(false);
+    assert.equal(result.tier, TIERS.PUBLIC);
+    assert.equal(result.sovereignMatch, false);
   });
 
   it("classifies benign weather data as public", () => {
@@ -115,9 +116,9 @@ describe("Sovereign Classifier", () => {
       summary: "Temperature reading from radio propagation analysis",
       measurements: { temperature: 22.5, humidity: 65 },
     });
-    expect(result.tier).toBe(TIERS.PUBLIC);
-    expect(result.category).toBe("weather");
-    expect(result.sovereignMatch).toBe(false);
+    assert.equal(result.tier, TIERS.PUBLIC);
+    assert.equal(result.category, "weather");
+    assert.equal(result.sovereignMatch, false);
   });
 
   it("classifies military signals as sovereign", () => {
@@ -125,9 +126,9 @@ describe("Sovereign Classifier", () => {
       summary: "High power radar installation detected at military base with weapons signatures",
       measurements: { signal_strength: -30, frequency: 9400 },
     });
-    expect(result.tier).toBe(TIERS.SOVEREIGN);
-    expect(result.category).toBe("military_installation");
-    expect(result.sovereignMatch).toBe(true);
+    assert.equal(result.tier, TIERS.SOVEREIGN);
+    assert.equal(result.category, "military_installation");
+    assert.equal(result.sovereignMatch, true);
   });
 
   it("classifies nuclear facility patterns as sovereign", () => {
@@ -136,27 +137,27 @@ describe("Sovereign Classifier", () => {
       measurements: { power_level: 100 },
       energyLevel: 60,
     });
-    expect(result.tier).toBe(TIERS.SOVEREIGN);
-    expect(result.category).toBe("nuclear_facility");
-    expect(result.sovereignMatch).toBe(true);
+    assert.equal(result.tier, TIERS.SOVEREIGN);
+    assert.equal(result.category, "nuclear_facility");
+    assert.equal(result.sovereignMatch, true);
   });
 
   it("classifies naval movement as sovereign", () => {
     const result = classifySignal({
       summary: "Submarine detected via undersea cable disturbance and VLF communication naval fleet movement",
     });
-    expect(result.tier).toBe(TIERS.SOVEREIGN);
-    expect(result.category).toBe("naval_movement");
-    expect(result.sovereignMatch).toBe(true);
+    assert.equal(result.tier, TIERS.SOVEREIGN);
+    assert.equal(result.category, "naval_movement");
+    assert.equal(result.sovereignMatch, true);
   });
 
   it("classifies infrastructure vulnerabilities as sovereign", () => {
     const result = classifySignal({
       summary: "SCADA unprotected control system exposed with vulnerability exploit potential and critical infrastructure leak",
     });
-    expect(result.tier).toBe(TIERS.SOVEREIGN);
-    expect(result.category).toBe("infrastructure_vulnerability");
-    expect(result.sovereignMatch).toBe(true);
+    assert.equal(result.tier, TIERS.SOVEREIGN);
+    assert.equal(result.category, "infrastructure_vulnerability");
+    assert.equal(result.sovereignMatch, true);
   });
 
   it("classifies population behavioral patterns as sovereign", () => {
@@ -164,18 +165,18 @@ describe("Sovereign Classifier", () => {
       summary: "Population tracking mass surveillance behavioral aggregate detected",
       populationScale: 50000,
     });
-    expect(result.tier).toBe(TIERS.SOVEREIGN);
-    expect(result.category).toBe("population_behavioral");
-    expect(result.sovereignMatch).toBe(true);
+    assert.equal(result.tier, TIERS.SOVEREIGN);
+    assert.equal(result.category, "population_behavioral");
+    assert.equal(result.sovereignMatch, true);
   });
 
   it("classifies communication topology as sovereign", () => {
     const result = classifySignal({
       summary: "Government network intelligence agency classified comm diplomatic channel command structure encrypted topology multi hop classified",
     });
-    expect(result.tier).toBe(TIERS.SOVEREIGN);
-    expect(result.category).toBe("communication_topology");
-    expect(result.sovereignMatch).toBe(true);
+    assert.equal(result.tier, TIERS.SOVEREIGN);
+    assert.equal(result.category, "communication_topology");
+    assert.equal(result.sovereignMatch, true);
   });
 
   it("errs on the side of caution — ambiguous data goes UP", () => {
@@ -184,8 +185,8 @@ describe("Sovereign Classifier", () => {
       summary: "Unusual radar pattern detected near military facility",
     });
     // Should be upgraded to sovereign due to caution principle
-    expect(result.tier).toBe(TIERS.SOVEREIGN);
-    expect(result.sovereignMatch).toBe(true);
+    assert.equal(result.tier, TIERS.SOVEREIGN);
+    assert.equal(result.sovereignMatch, true);
   });
 
   it("classifies research-level data correctly", () => {
@@ -193,8 +194,8 @@ describe("Sovereign Classifier", () => {
       summary: "Cross-medium synthesis multi-signal correlation analysis of ionospheric patterns",
       mediaCount: 3,
     });
-    expect(result.tier).toBe(TIERS.RESEARCH);
-    expect(result.researchMatch).toBe(true);
+    assert.equal(result.tier, TIERS.RESEARCH);
+    assert.equal(result.researchMatch, true);
   });
 
   it("detects deep geological research patterns", () => {
@@ -202,8 +203,8 @@ describe("Sovereign Classifier", () => {
       summary: "Aquifer mineral deposit subsurface detail tectonic mapping",
       precision: 0.9,
     });
-    expect(result.tier).toBe(TIERS.RESEARCH);
-    expect(result.category).toBe("deep_geological");
+    assert.equal(result.tier, TIERS.RESEARCH);
+    assert.equal(result.category, "deep_geological");
   });
 
   it("classifies geology category for public data", () => {
@@ -211,8 +212,8 @@ describe("Sovereign Classifier", () => {
       category: "geology",
       summary: "General terrain analysis",
     });
-    expect(result.tier).toBe(TIERS.PUBLIC);
-    expect(result.category).toBe("geology");
+    assert.equal(result.tier, TIERS.PUBLIC);
+    assert.equal(result.category, "geology");
   });
 
   it("classifies energy category for public data", () => {
@@ -220,8 +221,8 @@ describe("Sovereign Classifier", () => {
       category: "energy",
       summary: "Grid load analysis",
     });
-    expect(result.tier).toBe(TIERS.PUBLIC);
-    expect(result.category).toBe("energy");
+    assert.equal(result.tier, TIERS.PUBLIC);
+    assert.equal(result.category, "energy");
   });
 
   it("classifies ocean monitoring as public", () => {
@@ -229,8 +230,8 @@ describe("Sovereign Classifier", () => {
       category: "ocean",
       summary: "Sea state observation from coastal sensors",
     });
-    expect(result.tier).toBe(TIERS.PUBLIC);
-    expect(result.category).toBe("ocean");
+    assert.equal(result.tier, TIERS.PUBLIC);
+    assert.equal(result.category, "ocean");
   });
 
   it("updates classifier stats", () => {
@@ -238,8 +239,8 @@ describe("Sovereign Classifier", () => {
     classifySignal({ summary: "Nuclear reactor enrichment facility radiation artifact" });
 
     const status = getClassifierStatus();
-    expect(status.stats.totalClassified).toBe(2);
-    expect(status.stats.routedPublic).toBeGreaterThanOrEqual(1);
+    assert.equal(status.stats.totalClassified, 2);
+    assert.ok(status.stats.routedPublic >= 1);
   });
 });
 
@@ -250,38 +251,38 @@ describe("Tier Routing", () => {
     const classification = { tier: TIERS.SOVEREIGN, category: "military_installation", confidence: 0.8 };
     const result = routeIntelligence({ summary: "classified" }, classification);
 
-    expect(result.routed).toBe(true);
-    expect(result.tier).toBe(TIERS.SOVEREIGN);
-    expect(result.dtuCreated).toBe(false);
-    expect(result.latticeEntry).toBe(false);
+    assert.equal(result.routed, true);
+    assert.equal(result.tier, TIERS.SOVEREIGN);
+    assert.equal(result.dtuCreated, false);
+    assert.equal(result.latticeEntry, false);
   });
 
   it("routes research data to restricted partition with DTU", () => {
     const classification = { tier: TIERS.RESEARCH, category: "deep_geological", confidence: 0.7 };
     const result = routeIntelligence({ summary: "research data" }, classification);
 
-    expect(result.routed).toBe(true);
-    expect(result.tier).toBe(TIERS.RESEARCH);
-    expect(result.dtuCreated).toBe(true);
-    expect(result.partition).toBe("restricted");
-    expect(result.dtu).toBeDefined();
-    expect(result.dtu.lineage_tracking).toBe("enforced");
+    assert.equal(result.routed, true);
+    assert.equal(result.tier, TIERS.RESEARCH);
+    assert.equal(result.dtuCreated, true);
+    assert.equal(result.partition, "restricted");
+    assert.notEqual(result.dtu, undefined);
+    assert.equal(result.dtu.lineage_tracking, "enforced");
   });
 
   it("routes public data to standard lattice with DTU", () => {
     const classification = { tier: TIERS.PUBLIC, category: "weather", confidence: 0.9 };
     const result = routeIntelligence({ summary: "weather data" }, classification);
 
-    expect(result.routed).toBe(true);
-    expect(result.tier).toBe(TIERS.PUBLIC);
-    expect(result.dtuCreated).toBe(true);
-    expect(result.partition).toBe("standard");
-    expect(result.dtu).toBeDefined();
-    expect(result.dtu.commercially_licensable).toBe(true);
+    assert.equal(result.routed, true);
+    assert.equal(result.tier, TIERS.PUBLIC);
+    assert.equal(result.dtuCreated, true);
+    assert.equal(result.partition, "standard");
+    assert.notEqual(result.dtu, undefined);
+    assert.equal(result.dtu.commercially_licensable, true);
   });
 
   it("returns null for null classification", () => {
-    expect(routeIntelligence({}, null)).toBeNull();
+    assert.equal(routeIntelligence({}, null), null);
   });
 
   it("increments sovereign vault count", () => {
@@ -290,9 +291,9 @@ describe("Tier Routing", () => {
     routeIntelligence({}, { tier: TIERS.SOVEREIGN, category: "military_installation" });
 
     const status = getSovereignVaultStatus();
-    expect(status.count).toBe(3);
-    expect(status.categories.nuclear_facility).toBe(2);
-    expect(status.categories.military_installation).toBe(1);
+    assert.equal(status.count, 3);
+    assert.equal(status.categories.nuclear_facility, 2);
+    assert.equal(status.categories.military_installation, 1);
   });
 });
 
@@ -305,24 +306,24 @@ describe("Public DTU Creation", () => {
       { category: "weather", confidence: 0.9 }
     );
 
-    expect(dtu.id).toMatch(/^pub_intel_/);
-    expect(dtu.type).toBe("FOUNDATION_INTEL");
-    expect(dtu.tier).toBe(TIERS.PUBLIC);
-    expect(dtu.category).toBe("weather");
-    expect(dtu.classification).toBe(CLASSIFICATIONS.OPEN);
-    expect(dtu.commercially_licensable).toBe(true);
-    expect(dtu.confidence).toBe(0.9);
-    expect(dtu.sources).toBe(5);
-    expect(dtu.scope).toBe("global");
-    expect(dtu.tags).toContain("public");
-    expect(dtu.tags).toContain("weather");
-    expect(dtu.coverage_area).toBeDefined();
-    expect(dtu.temporal_range).toBeDefined();
+    assert.match(dtu.id, /^pub_intel_/);
+    assert.equal(dtu.type, "FOUNDATION_INTEL");
+    assert.equal(dtu.tier, TIERS.PUBLIC);
+    assert.equal(dtu.category, "weather");
+    assert.equal(dtu.classification, CLASSIFICATIONS.OPEN);
+    assert.equal(dtu.commercially_licensable, true);
+    assert.equal(dtu.confidence, 0.9);
+    assert.equal(dtu.sources, 5);
+    assert.equal(dtu.scope, "global");
+    assert.ok(dtu.tags.includes("public"));
+    assert.ok(dtu.tags.includes("weather"));
+    assert.notEqual(dtu.coverage_area, undefined);
+    assert.notEqual(dtu.temporal_range, undefined);
   });
 
   it("clamps confidence between 0 and 1", () => {
     const dtu = createPublicDTU({}, { category: "weather", confidence: 5.0 });
-    expect(dtu.confidence).toBe(1);
+    assert.equal(dtu.confidence, 1);
   });
 });
 
@@ -333,16 +334,16 @@ describe("Research DTU Creation", () => {
       { category: "cross_medium_synthesis", confidence: 0.7 }
     );
 
-    expect(dtu.id).toMatch(/^res_intel_/);
-    expect(dtu.type).toBe("FOUNDATION_INTEL");
-    expect(dtu.tier).toBe(TIERS.RESEARCH);
-    expect(dtu.category).toBe("cross_medium_synthesis");
-    expect(dtu.classification).toBe(CLASSIFICATIONS.RESTRICTED);
-    expect(dtu.access_required).toBe("governance_approved");
-    expect(dtu.lineage_tracking).toBe("enforced");
-    expect(dtu.transfer_prohibited).toBe(true);
-    expect(dtu.usage_agreement).toBe("no_weaponization_no_resale_no_transfer");
-    expect(dtu.scope).toBe("restricted");
+    assert.match(dtu.id, /^res_intel_/);
+    assert.equal(dtu.type, "FOUNDATION_INTEL");
+    assert.equal(dtu.tier, TIERS.RESEARCH);
+    assert.equal(dtu.category, "cross_medium_synthesis");
+    assert.equal(dtu.classification, CLASSIFICATIONS.RESTRICTED);
+    assert.equal(dtu.access_required, "governance_approved");
+    assert.equal(dtu.lineage_tracking, "enforced");
+    assert.equal(dtu.transfer_prohibited, true);
+    assert.equal(dtu.usage_agreement, "no_weaponization_no_resale_no_transfer");
+    assert.equal(dtu.scope, "restricted");
   });
 });
 
@@ -351,8 +352,8 @@ describe("Research DTU Creation", () => {
 describe("Full Classification Pipeline", () => {
   it("rejects when classifier not active", () => {
     const result = processSignalIntelligence({ summary: "test" });
-    expect(result.ok).toBe(false);
-    expect(result.error).toBe("classifier_not_active");
+    assert.equal(result.ok, false);
+    assert.equal(result.error, "classifier_not_active");
   });
 
   it("processes public intelligence after initialization", async () => {
@@ -362,9 +363,9 @@ describe("Full Classification Pipeline", () => {
       summary: "Temperature and pressure readings from radio propagation",
     });
 
-    expect(result.ok).toBe(true);
-    expect(result.classification.tier).toBe(TIERS.PUBLIC);
-    expect(result.routing.dtuCreated).toBe(true);
+    assert.equal(result.ok, true);
+    assert.equal(result.classification.tier, TIERS.PUBLIC);
+    assert.equal(result.routing.dtuCreated, true);
   });
 
   it("processes sovereign intelligence — no DTU created", async () => {
@@ -374,17 +375,17 @@ describe("Full Classification Pipeline", () => {
       energyLevel: 100,
     });
 
-    expect(result.ok).toBe(true);
-    expect(result.classification.tier).toBe(TIERS.SOVEREIGN);
-    expect(result.routing.dtuCreated).toBe(false);
-    expect(result.routing.latticeEntry).toBe(false);
+    assert.equal(result.ok, true);
+    assert.equal(result.classification.tier, TIERS.SOVEREIGN);
+    assert.equal(result.routing.dtuCreated, false);
+    assert.equal(result.routing.latticeEntry, false);
   });
 
   it("rejects null signal data", async () => {
     await initializeIntelligence({});
     const result = processSignalIntelligence(null);
-    expect(result.ok).toBe(false);
-    expect(result.error).toBe("no_signal_data");
+    assert.equal(result.ok, false);
+    assert.equal(result.error, "no_signal_data");
   });
 });
 
@@ -395,39 +396,39 @@ describe("Research Applications", () => {
     const result = submitResearchApplication(
       "researcher_001", "MIT", "Climate study", ["cross_medium_synthesis"]
     );
-    expect(result.ok).toBe(true);
-    expect(result.applicationId).toMatch(/^research_app_/);
-    expect(result.status).toBe("pending");
+    assert.equal(result.ok, true);
+    assert.match(result.applicationId, /^research_app_/);
+    assert.equal(result.status, "pending");
   });
 
   it("retrieves application status", () => {
     const app = submitResearchApplication("researcher_002", "Stanford", "Geology", ["deep_geological"]);
     const status = getResearchApplicationStatus(app.applicationId);
-    expect(status.ok).toBe(true);
-    expect(status.application.status).toBe("pending");
-    expect(status.application.institution).toBe("Stanford");
+    assert.equal(status.ok, true);
+    assert.equal(status.application.status, "pending");
+    assert.equal(status.application.institution, "Stanford");
   });
 
   it("returns error for unknown application", () => {
     const result = getResearchApplicationStatus("nonexistent");
-    expect(result.ok).toBe(false);
-    expect(result.error).toBe("application_not_found");
+    assert.equal(result.ok, false);
+    assert.equal(result.error, "application_not_found");
   });
 
   it("approves application and grants access", () => {
     const app = submitResearchApplication("researcher_003", "Oxford", "Marine study", ["marine_deep"]);
     const review = reviewResearchApplication(app.applicationId, true, "council");
 
-    expect(review.ok).toBe(true);
-    expect(review.status).toBe("approved");
-    expect(hasResearchAccess("researcher_003", "marine_deep")).toBe(true);
+    assert.equal(review.ok, true);
+    assert.equal(review.status, "approved");
+    assert.equal(hasResearchAccess("researcher_003", "marine_deep"), true);
   });
 
   it("denies application — no access granted", () => {
     const app = submitResearchApplication("researcher_004", "Unknown", "Suspicious", []);
     reviewResearchApplication(app.applicationId, false, "council");
 
-    expect(hasResearchAccess("researcher_004")).toBe(false);
+    assert.equal(hasResearchAccess("researcher_004"), false);
   });
 
   it("prevents double review", () => {
@@ -435,23 +436,23 @@ describe("Research Applications", () => {
     reviewResearchApplication(app.applicationId, true, "council");
     const secondReview = reviewResearchApplication(app.applicationId, false, "council");
 
-    expect(secondReview.ok).toBe(false);
-    expect(secondReview.error).toBe("already_reviewed");
+    assert.equal(secondReview.ok, false);
+    assert.equal(secondReview.error, "already_reviewed");
   });
 
   it("revokes research access", () => {
     const app = submitResearchApplication("researcher_006", "Caltech", "Study", ["advanced_atmospheric"]);
     reviewResearchApplication(app.applicationId, true, "council");
 
-    expect(hasResearchAccess("researcher_006")).toBe(true);
+    assert.equal(hasResearchAccess("researcher_006"), true);
     revokeResearchAccess("researcher_006");
-    expect(hasResearchAccess("researcher_006")).toBe(false);
+    assert.equal(hasResearchAccess("researcher_006"), false);
   });
 
   it("revoke returns false for non-existent researcher", () => {
     const result = revokeResearchAccess("nonexistent");
-    expect(result.ok).toBe(true);
-    expect(result.revoked).toBe(false);
+    assert.equal(result.ok, true);
+    assert.equal(result.revoked, false);
   });
 });
 
@@ -464,17 +465,17 @@ describe("Public Intelligence Retrieval", () => {
 
   it("returns empty list for new category", () => {
     const result = getPublicIntelligence("weather");
-    expect(result.ok).toBe(true);
-    expect(result.tier).toBe(TIERS.PUBLIC);
-    expect(result.category).toBe("weather");
-    expect(result.count).toBe(0);
+    assert.equal(result.ok, true);
+    assert.equal(result.tier, TIERS.PUBLIC);
+    assert.equal(result.category, "weather");
+    assert.equal(result.count, 0);
   });
 
   it("rejects invalid category", () => {
     const result = getPublicIntelligence("invalid_category");
-    expect(result.ok).toBe(false);
-    expect(result.error).toBe("invalid_category");
-    expect(result.validCategories).toEqual(PUBLIC_CATEGORIES);
+    assert.equal(result.ok, false);
+    assert.equal(result.error, "invalid_category");
+    assert.deepEqual(result.validCategories, PUBLIC_CATEGORIES);
   });
 
   it("returns data after processing", () => {
@@ -482,9 +483,9 @@ describe("Public Intelligence Retrieval", () => {
     processSignalIntelligence({ category: "weather", summary: "Pressure reading" });
 
     const result = getPublicIntelligence("weather");
-    expect(result.ok).toBe(true);
-    expect(result.count).toBe(2);
-    expect(result.data[0].type).toBe("FOUNDATION_INTEL");
+    assert.equal(result.ok, true);
+    assert.equal(result.count, 2);
+    assert.equal(result.data[0].type, "FOUNDATION_INTEL");
   });
 
   it("respects limit parameter", () => {
@@ -493,7 +494,7 @@ describe("Public Intelligence Retrieval", () => {
     }
 
     const result = getPublicIntelligence("seismic", 5);
-    expect(result.count).toBe(5);
+    assert.equal(result.count, 5);
   });
 
   it("returns all category summaries", () => {
@@ -501,10 +502,10 @@ describe("Public Intelligence Retrieval", () => {
     processSignalIntelligence({ category: "geology", summary: "test" });
 
     const result = getAllPublicCategories();
-    expect(result.ok).toBe(true);
-    expect(result.categories.weather.count).toBe(1);
-    expect(result.categories.geology.count).toBe(1);
-    expect(result.categories.ocean.count).toBe(0);
+    assert.equal(result.ok, true);
+    assert.equal(result.categories.weather.count, 1);
+    assert.equal(result.categories.geology.count, 1);
+    assert.equal(result.categories.ocean.count, 0);
   });
 });
 
@@ -517,8 +518,8 @@ describe("Research Intelligence Retrieval", () => {
 
   it("denies access without approval", () => {
     const result = getResearchIntelligence("unauthorized_user", "cross_medium_synthesis");
-    expect(result.ok).toBe(false);
-    expect(result.error).toBe("access_denied");
+    assert.equal(result.ok, false);
+    assert.equal(result.error, "access_denied");
   });
 
   it("grants access after approval", () => {
@@ -532,9 +533,9 @@ describe("Research Intelligence Retrieval", () => {
     });
 
     const result = getResearchIntelligence("approved_researcher", "cross_medium_synthesis");
-    expect(result.ok).toBe(true);
-    expect(result.tier).toBe(TIERS.RESEARCH);
-    expect(result.lineage_tracking).toBe("enforced");
+    assert.equal(result.ok, true);
+    assert.equal(result.tier, TIERS.RESEARCH);
+    assert.equal(result.lineage_tracking, "enforced");
   });
 
   it("provides synthesis shorthand", () => {
@@ -542,7 +543,7 @@ describe("Research Intelligence Retrieval", () => {
     reviewResearchApplication(app.applicationId, true, "council");
 
     const result = getResearchSynthesis("synth_researcher");
-    expect(result.ok).toBe(true);
+    assert.equal(result.ok, true);
   });
 
   it("provides archive shorthand", () => {
@@ -550,7 +551,7 @@ describe("Research Intelligence Retrieval", () => {
     reviewResearchApplication(app.applicationId, true, "council");
 
     const result = getResearchArchive("archive_researcher");
-    expect(result.ok).toBe(true);
+    assert.equal(result.ok, true);
   });
 });
 
@@ -559,21 +560,21 @@ describe("Research Intelligence Retrieval", () => {
 describe("Sovereign Vault", () => {
   it("reports isolation status", () => {
     const status = getSovereignVaultStatus();
-    expect(status.exists).toBe(true);
-    expect(status.isolated).toBe(true);
-    expect(status.latticeConnected).toBe(false);
-    expect(status.apiAccessible).toBe(false);
-    expect(status.count).toBe(0);
+    assert.equal(status.exists, true);
+    assert.equal(status.isolated, true);
+    assert.equal(status.latticeConnected, false);
+    assert.equal(status.apiAccessible, false);
+    assert.equal(status.count, 0);
   });
 
   it("tracks metadata only — no data exposure", () => {
     routeIntelligence({}, { tier: TIERS.SOVEREIGN, category: "military_installation" });
 
     const status = getSovereignVaultStatus();
-    expect(status.count).toBe(1);
-    expect(status.categories.military_installation).toBe(1);
+    assert.equal(status.count, 1);
+    assert.equal(status.categories.military_installation, 1);
     // No data field — only counts
-    expect(status).not.toHaveProperty("data");
+    assert.ok(!status.hasOwnProperty("data"));
   });
 
   it("accumulates across categories", async () => {
@@ -584,7 +585,7 @@ describe("Sovereign Vault", () => {
     processSignalIntelligence({ summary: "Submarine naval fleet undersea cable disturbance VLF communication" });
 
     const status = getSovereignVaultStatus();
-    expect(status.count).toBe(3);
+    assert.equal(status.count, 3);
   });
 });
 
@@ -593,29 +594,29 @@ describe("Sovereign Vault", () => {
 describe("Classifier Management", () => {
   it("returns classifier status", () => {
     const status = getClassifierStatus();
-    expect(status.active).toBe(false); // Not initialized yet
-    expect(status.sovereignCategories).toEqual(SOVEREIGN_CATEGORIES);
-    expect(status.researchCategories).toEqual(RESEARCH_CATEGORIES);
-    expect(status.publicCategories).toEqual(PUBLIC_CATEGORIES);
+    assert.equal(status.active, false); // Not initialized yet
+    assert.deepEqual(status.sovereignCategories, SOVEREIGN_CATEGORIES);
+    assert.deepEqual(status.researchCategories, RESEARCH_CATEGORIES);
+    assert.deepEqual(status.publicCategories, PUBLIC_CATEGORIES);
   });
 
   it("reports active after initialization", async () => {
     await initializeIntelligence({});
     const status = getClassifierStatus();
-    expect(status.active).toBe(true);
+    assert.equal(status.active, true);
   });
 
   it("updates thresholds", () => {
     const result = updateClassifierThresholds(0.4, 0.7);
-    expect(result.ok).toBe(true);
-    expect(result.sensitivity).toBe(0.4);
-    expect(result.sovereign).toBe(0.7);
+    assert.equal(result.ok, true);
+    assert.equal(result.sensitivity, 0.4);
+    assert.equal(result.sovereign, 0.7);
   });
 
   it("clamps thresholds to valid range", () => {
     const result = updateClassifierThresholds(0.01, 1.5);
-    expect(result.sensitivity).toBe(0.1); // min 0.1
-    expect(result.sovereign).toBe(1.0);   // max 1.0
+    assert.equal(result.sensitivity, 0.1); // min 0.1
+    assert.equal(result.sovereign, 1.0);   // max 1.0
   });
 });
 
@@ -623,73 +624,73 @@ describe("Classifier Management", () => {
 
 describe("Chat Intent Detection", () => {
   it("returns false for empty input", () => {
-    expect(detectIntelIntent("").isIntelRequest).toBe(false);
-    expect(detectIntelIntent(null).isIntelRequest).toBe(false);
+    assert.equal(detectIntelIntent("").isIntelRequest, false);
+    assert.equal(detectIntelIntent(null).isIntelRequest, false);
   });
 
   it("detects weather intelligence requests", () => {
     const result = detectIntelIntent("Show me the weather intelligence data");
-    expect(result.isIntelRequest).toBe(true);
-    expect(result.action).toBe("weather");
+    assert.equal(result.isIntelRequest, true);
+    assert.equal(result.action, "weather");
   });
 
   it("detects geological survey requests", () => {
     const result = detectIntelIntent("What geological survey data is available?");
-    expect(result.isIntelRequest).toBe(true);
-    expect(result.action).toBe("geology");
+    assert.equal(result.isIntelRequest, true);
+    assert.equal(result.action, "geology");
   });
 
   it("detects energy intelligence requests", () => {
     const result = detectIntelIntent("Show energy intelligence distribution");
-    expect(result.isIntelRequest).toBe(true);
-    expect(result.action).toBe("energy");
+    assert.equal(result.isIntelRequest, true);
+    assert.equal(result.action, "energy");
   });
 
   it("detects ocean monitoring requests", () => {
     const result = detectIntelIntent("What ocean monitoring intel is available?");
-    expect(result.isIntelRequest).toBe(true);
-    expect(result.action).toBe("ocean");
+    assert.equal(result.isIntelRequest, true);
+    assert.equal(result.action, "ocean");
   });
 
   it("detects seismic monitoring requests", () => {
     const result = detectIntelIntent("Show seismic activity readings");
-    expect(result.isIntelRequest).toBe(true);
-    expect(result.action).toBe("seismic");
+    assert.equal(result.isIntelRequest, true);
+    assert.equal(result.action, "seismic");
   });
 
   it("detects agriculture requests", () => {
     const result = detectIntelIntent("What agricultural data do you have?");
-    expect(result.isIntelRequest).toBe(true);
-    expect(result.action).toBe("agriculture");
+    assert.equal(result.isIntelRequest, true);
+    assert.equal(result.action, "agriculture");
   });
 
   it("detects environment assessment requests", () => {
     const result = detectIntelIntent("Show environment intelligence assessment");
-    expect(result.isIntelRequest).toBe(true);
-    expect(result.action).toBe("environment");
+    assert.equal(result.isIntelRequest, true);
+    assert.equal(result.action, "environment");
   });
 
   it("detects classifier status requests", () => {
     const result = detectIntelIntent("What is the intelligence classifier status?");
-    expect(result.isIntelRequest).toBe(true);
-    expect(result.action).toBe("classifier_status");
+    assert.equal(result.isIntelRequest, true);
+    assert.equal(result.action, "classifier_status");
   });
 
   it("detects research access requests", () => {
     const result = detectIntelIntent("How do I get research access to data?");
-    expect(result.isIntelRequest).toBe(true);
-    expect(result.action).toBe("research_status");
+    assert.equal(result.isIntelRequest, true);
+    assert.equal(result.action, "research_status");
   });
 
   it("detects sovereign vault status requests", () => {
     const result = detectIntelIntent("What is the sovereign vault status?");
-    expect(result.isIntelRequest).toBe(true);
-    expect(result.action).toBe("sovereign_status");
+    assert.equal(result.isIntelRequest, true);
+    assert.equal(result.action, "sovereign_status");
   });
 
   it("does not match unrelated queries", () => {
-    expect(detectIntelIntent("How do I make a sandwich?").isIntelRequest).toBe(false);
-    expect(detectIntelIntent("Tell me a joke").isIntelRequest).toBe(false);
+    assert.equal(detectIntelIntent("How do I make a sandwich?").isIntelRequest, false);
+    assert.equal(detectIntelIntent("Tell me a joke").isIntelRequest, false);
   });
 });
 
@@ -701,16 +702,16 @@ describe("Intelligence Metrics", () => {
     processSignalIntelligence({ category: "weather", summary: "Temp reading" });
 
     const metrics = getIntelligenceMetrics();
-    expect(metrics.initialized).toBe(true);
-    expect(metrics.classifierActive).toBe(true);
-    expect(metrics.classifier.totalClassified).toBeGreaterThanOrEqual(1);
-    expect(metrics.tiers.public).toBeDefined();
-    expect(metrics.tiers.research).toBeDefined();
-    expect(metrics.tiers.sovereign).toBeDefined();
-    expect(metrics.tiers.sovereign.isolated).toBe(true);
-    expect(metrics.tiers.sovereign.apiAccessible).toBe(false);
-    expect(metrics.stats.totalIntelDTUsCreated).toBeGreaterThanOrEqual(1);
-    expect(metrics.uptime).toBeGreaterThanOrEqual(0);
+    assert.equal(metrics.initialized, true);
+    assert.equal(metrics.classifierActive, true);
+    assert.ok(metrics.classifier.totalClassified >= 1);
+    assert.notEqual(metrics.tiers.public, undefined);
+    assert.notEqual(metrics.tiers.research, undefined);
+    assert.notEqual(metrics.tiers.sovereign, undefined);
+    assert.equal(metrics.tiers.sovereign.isolated, true);
+    assert.equal(metrics.tiers.sovereign.apiAccessible, false);
+    assert.ok(metrics.stats.totalIntelDTUsCreated >= 1);
+    assert.ok(metrics.uptime >= 0);
   });
 });
 
@@ -719,7 +720,7 @@ describe("Intelligence Metrics", () => {
 describe("Intelligence Heartbeat", () => {
   it("runs without error", async () => {
     await initializeIntelligence({});
-    await expect(intelligenceHeartbeatTick({}, 1)).resolves.not.toThrow();
+    await intelligenceHeartbeatTick({}, 1);
   });
 });
 
@@ -728,20 +729,20 @@ describe("Intelligence Heartbeat", () => {
 describe("Initialization", () => {
   it("initializes successfully", async () => {
     const result = await initializeIntelligence({});
-    expect(result.ok).toBe(true);
-    expect(result.classifierActive).toBe(true);
-    expect(result.tiers).toEqual([TIERS.PUBLIC, TIERS.RESEARCH, TIERS.SOVEREIGN]);
-    expect(result.publicCategories).toEqual(PUBLIC_CATEGORIES);
-    expect(result.researchCategories).toEqual(RESEARCH_CATEGORIES);
+    assert.equal(result.ok, true);
+    assert.equal(result.classifierActive, true);
+    assert.deepEqual(result.tiers, [TIERS.PUBLIC, TIERS.RESEARCH, TIERS.SOVEREIGN]);
+    assert.deepEqual(result.publicCategories, PUBLIC_CATEGORIES);
+    assert.deepEqual(result.researchCategories, RESEARCH_CATEGORIES);
     // Sovereign categories count only — don't expose names
-    expect(result.sovereignCategories).toBe(6);
+    assert.equal(result.sovereignCategories, 6);
   });
 
   it("returns alreadyInitialized on second call", async () => {
     await initializeIntelligence({});
     const result = await initializeIntelligence({});
-    expect(result.ok).toBe(true);
-    expect(result.alreadyInitialized).toBe(true);
+    assert.equal(result.ok, true);
+    assert.equal(result.alreadyInitialized, true);
   });
 });
 
@@ -755,9 +756,9 @@ describe("State Reset", () => {
     _resetIntelligenceState();
 
     const metrics = getIntelligenceMetrics();
-    expect(metrics.initialized).toBe(false);
-    expect(metrics.classifierActive).toBe(false);
-    expect(metrics.stats.totalIntelDTUsCreated).toBe(0);
+    assert.equal(metrics.initialized, false);
+    assert.equal(metrics.classifierActive, false);
+    assert.equal(metrics.stats.totalIntelDTUsCreated, 0);
   });
 });
 
@@ -776,13 +777,13 @@ describe("Cross-Module Integration", () => {
       sources: 3,
     });
 
-    expect(result.ok).toBe(true);
-    expect(result.classification.tier).toBe(TIERS.PUBLIC);
+    assert.equal(result.ok, true);
+    assert.equal(result.classification.tier, TIERS.PUBLIC);
 
     const weather = getPublicIntelligence("weather");
-    expect(weather.ok).toBe(true);
-    expect(weather.count).toBe(1);
-    expect(weather.data[0].commercially_licensable).toBe(true);
+    assert.equal(weather.ok, true);
+    assert.equal(weather.count, 1);
+    assert.equal(weather.data[0].commercially_licensable, true);
   });
 
   it("full pipeline: classify → route → quarantine for sovereign", () => {
@@ -790,17 +791,17 @@ describe("Cross-Module Integration", () => {
       summary: "Military base radar weapons installation detected with high power encrypted burst jamming",
     });
 
-    expect(result.ok).toBe(true);
-    expect(result.classification.tier).toBe(TIERS.SOVEREIGN);
-    expect(result.routing.dtuCreated).toBe(false);
+    assert.equal(result.ok, true);
+    assert.equal(result.classification.tier, TIERS.SOVEREIGN);
+    assert.equal(result.routing.dtuCreated, false);
 
     // Public weather should be empty — sovereign data never enters public
     const weather = getPublicIntelligence("weather");
-    expect(weather.count).toBe(0);
+    assert.equal(weather.count, 0);
 
     // Vault tracks count only
     const vault = getSovereignVaultStatus();
-    expect(vault.count).toBe(1);
+    assert.equal(vault.count, 1);
   });
 
   it("full pipeline: classify → route → restrict for research", () => {
@@ -809,14 +810,14 @@ describe("Cross-Module Integration", () => {
       mediaCount: 4,
     });
 
-    expect(result.ok).toBe(true);
-    expect(result.classification.tier).toBe(TIERS.RESEARCH);
-    expect(result.routing.dtu.lineage_tracking).toBe("enforced");
-    expect(result.routing.dtu.transfer_prohibited).toBe(true);
+    assert.equal(result.ok, true);
+    assert.equal(result.classification.tier, TIERS.RESEARCH);
+    assert.equal(result.routing.dtu.lineage_tracking, "enforced");
+    assert.equal(result.routing.dtu.transfer_prohibited, true);
 
     // Unauthorized access denied
     const data = getResearchIntelligence("random_user");
-    expect(data.ok).toBe(false);
+    assert.equal(data.ok, false);
   });
 
   it("processes multiple categories in sequence", () => {
@@ -826,8 +827,8 @@ describe("Cross-Module Integration", () => {
     processSignalIntelligence({ summary: "Nuclear reactor radiation enrichment facility artifact" });
 
     const metrics = getIntelligenceMetrics();
-    expect(metrics.stats.totalPublicDTUs).toBe(3);
-    expect(metrics.stats.sovereignInterceptions).toBe(1);
-    expect(metrics.classifier.totalClassified).toBe(4);
+    assert.equal(metrics.stats.totalPublicDTUs, 3);
+    assert.equal(metrics.stats.sovereignInterceptions, 1);
+    assert.equal(metrics.classifier.totalClassified, 4);
   });
 });
