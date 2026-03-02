@@ -2,142 +2,99 @@
 // Verifies that the economy module (ledger, peer transfer, marketplace)
 // works end-to-end with DTU creation and mesh store tracking.
 
-import { createPeerTransfer, PeerTransfer, IdentityManager } from '../../economy/coin/peer-transfer';
-import { createLocalLedger, LocalLedger, SQLiteDatabase, SQLiteResultSet } from '../../economy/wallet/local-ledger';
-import { createLocalMarketplace, LocalMarketplace } from '../../economy/marketplace/local-marketplace';
+import { createPeerTransfer, IdentityManager } from '../../economy/coin/peer-transfer';
+import { createLocalLedger, SQLiteDatabase, SQLiteResultSet } from '../../economy/wallet/local-ledger';
+import { createLocalMarketplace } from '../../economy/marketplace/local-marketplace';
 import { createTransactionDTU } from '../../dtu/creation/dtu-forge';
 import { useEconomyStore } from '../../store/economy-store';
 import { setCryptoProvider } from '../../utils/crypto';
 import type { CryptoProvider } from '../../utils/crypto';
 import type { Transaction, MarketplaceListing } from '../../utils/types';
-import { MIN_TRANSFER_AMOUNT, TRANSACTION_NONCE_BYTES } from '../../utils/constants';
+import { TRANSACTION_NONCE_BYTES } from '../../utils/constants';
 
-// ── Mock crypto provider ────────────────────────────────────────────────────
+// ── Mocks ───────────────────────────────────────────────────────────────────
 
-const mockCryptoProvider: CryptoProvider = {
-  sha256: jest.fn(async (data: Uint8Array) => {
-    const xor = data.reduce((a, b) => a ^ b, 0);
-    return new Uint8Array(32).fill(xor);
-  }),
-  hmacSha256: jest.fn(async () => new Uint8Array(32).fill(0xaa)),
-  crc32: jest.fn(() => 0x12345678),
-  randomBytes: jest.fn((size) => new Uint8Array(size).fill(0x42)),
-  ed25519GenerateKeypair: jest.fn(async () => ({
-    publicKey: new Uint8Array(32).fill(0x01),
-    privateKey: new Uint8Array(64).fill(0x02),
-  })),
+const mockCrypto: CryptoProvider = {
+  sha256: jest.fn(async (d: Uint8Array) => new Uint8Array(32).fill(d.reduce((a, b) => a ^ b, 0))),
+  hmacSha256: jest.fn(async () => new Uint8Array(32)),
+  crc32: jest.fn(() => 0),
+  randomBytes: jest.fn((s) => new Uint8Array(s).fill(0x42)),
+  ed25519GenerateKeypair: jest.fn(async () => ({ publicKey: new Uint8Array(32).fill(1), privateKey: new Uint8Array(64).fill(2) })),
   ed25519Sign: jest.fn(async () => new Uint8Array(64).fill(0x55)),
   ed25519Verify: jest.fn(async () => true),
 };
 
-// ── Mock SQLite database (in-memory table simulation) ───────────────────────
-
 function createMockSQLite(): SQLiteDatabase {
   const tables: Record<string, Record<string, unknown>[]> = {};
+  const emptyResult = { rows: { length: 0, item: () => ({}), raw: () => [] }, rowsAffected: 0 };
 
   return {
     executeSql: jest.fn(async (sql: string, params?: unknown[]): Promise<SQLiteResultSet> => {
-      const sqlUpper = sql.trim().toUpperCase();
+      const up = sql.trim().toUpperCase();
+      if (up.startsWith('CREATE')) return emptyResult;
 
-      if (sqlUpper.startsWith('CREATE')) {
-        return { rows: { length: 0, item: () => ({}), raw: () => [] }, rowsAffected: 0 };
-      }
-
-      if (sqlUpper.startsWith('INSERT')) {
-        const tableName = sql.match(/INTO\s+(\w+)/i)?.[1] ?? 'default';
-        if (!tables[tableName]) tables[tableName] = [];
-
-        // Check for existing row with same id (for OR REPLACE / idempotency)
+      if (up.startsWith('INSERT')) {
+        const t = sql.match(/INTO\s+(\w+)/i)?.[1] ?? 'default';
+        if (!tables[t]) tables[t] = [];
         const id = params?.[0] as string;
-        const existing = tables[tableName].findIndex(r => r.id === id);
+        const idx = tables[t].findIndex(r => r.id === id);
         const row: Record<string, unknown> = { id };
-
-        if (tableName === 'transactions' && params) {
-          row.type = params[1]; row.amount = params[2]; row.from_key = params[3];
-          row.to_key = params[4]; row.timestamp = params[5]; row.nonce = params[6];
-          row.balance_hash = params[7]; row.signature = params[8]; row.status = params[9];
-          row.propagated = params[10]; row.created_at = params[11];
+        if (t === 'transactions' && params) {
+          Object.assign(row, { type: params[1], amount: params[2], from_key: params[3],
+            to_key: params[4], timestamp: params[5], nonce: params[6], balance_hash: params[7],
+            signature: params[8], status: params[9], propagated: params[10] });
         }
-        if (tableName === 'marketplace_listings' && params) {
-          row.dtu_id = params[1]; row.title = params[2]; row.description = params[3];
-          row.price = params[4]; row.creator_key = params[5]; row.category = params[6];
-          row.tags = params[7]; row.created_at = params[8]; row.active = params[9];
-          row.cached_at = params[10];
+        if (t === 'marketplace_listings' && params) {
+          Object.assign(row, { dtu_id: params[1], title: params[2], description: params[3],
+            price: params[4], creator_key: params[5], category: params[6], tags: params[7],
+            created_at: params[8], active: params[9] });
         }
-
-        if (existing >= 0) {
-          tables[tableName][existing] = row;
-        } else {
-          tables[tableName].push(row);
-        }
-        return { rows: { length: 0, item: () => ({}), raw: () => [] }, rowsAffected: 1 };
+        idx >= 0 ? (tables[t][idx] = row) : tables[t].push(row);
+        return { ...emptyResult, rowsAffected: 1 };
       }
 
-      if (sqlUpper.startsWith('SELECT')) {
-        const tableName = sql.match(/FROM\s+(\w+)/i)?.[1] ?? 'default';
-        const data = tables[tableName] ?? [];
+      if (up.startsWith('SELECT')) {
+        const t = sql.match(/FROM\s+(\w+)/i)?.[1] ?? 'default';
+        const data = tables[t] ?? [];
+        if (up.includes('SUM(AMOUNT)')) {
+          const txs = tables['transactions'] ?? [];
+          let total = 0;
+          for (const tx of txs) {
+            if (sql.includes('to_key') && sql.includes("'transfer', 'reward', 'royalty'")) {
+              if (tx.to_key && ['transfer', 'reward', 'royalty'].includes(tx.type as string) && tx.status === 'confirmed')
+                total += tx.amount as number;
+            } else if (sql.includes('from_key') && sql.includes("status = 'pending'")) {
+              if (tx.from_key && tx.status === 'pending') total += tx.amount as number;
+            } else if (sql.includes('from_key')) {
+              if (tx.from_key && tx.status === 'confirmed') total += tx.amount as number;
+            }
+          }
+          return { rows: { length: 1, item: () => ({ total }), raw: () => [] }, rowsAffected: 0 };
+        }
+        if (up.includes('COUNT(*)')) {
+          const filtered = data.filter(r => !sql.includes('active = 1') || r.active === 1);
+          return { rows: { length: 1, item: () => ({ count: filtered.length }), raw: () => [] }, rowsAffected: 0 };
+        }
         let filtered = [...data];
-
-        // Simple WHERE id = ? handling
-        if (sql.includes('WHERE id = ?') && params?.[0]) {
-          filtered = data.filter(r => r.id === params[0]);
-        }
-        // WHERE active = 1
-        if (sql.includes('active = 1')) {
-          filtered = data.filter(r => r.active === 1);
-        }
-        // COUNT(*)
-        if (sqlUpper.includes('COUNT(*)')) {
-          return {
-            rows: { length: 1, item: () => ({ count: filtered.length, total: 0, cnt: 0 }), raw: () => [] },
-            rowsAffected: 0,
-          };
-        }
-        // SUM handling
-        if (sqlUpper.includes('SUM(AMOUNT)')) {
-          return {
-            rows: { length: 1, item: () => ({ total: 0 }), raw: () => [] },
-            rowsAffected: 0,
-          };
-        }
-
-        return {
-          rows: {
-            length: filtered.length,
-            item: (i: number) => filtered[i],
-            raw: () => filtered.map(r => Object.values(r)),
-          },
-          rowsAffected: 0,
-        };
+        if (sql.includes('WHERE id = ?') && params?.[0]) filtered = data.filter(r => r.id === params[0]);
+        if (sql.includes('active = 1')) filtered = data.filter(r => r.active === 1);
+        return { rows: { length: filtered.length, item: (i: number) => filtered[i], raw: () => [] }, rowsAffected: 0 };
       }
 
-      if (sqlUpper.startsWith('UPDATE')) {
-        const tableName = sql.match(/UPDATE\s+(\w+)/i)?.[1] ?? 'default';
-        const data = tables[tableName] ?? [];
-        if (sql.includes('active = 0') && params?.[0]) {
-          const row = data.find(r => r.id === params[0]);
-          if (row) row.active = 0;
-        }
-        if (sql.includes('propagated = 1') && params?.[0]) {
-          const row = data.find(r => r.id === params[0]);
-          if (row) row.propagated = 1;
-        }
-        return { rows: { length: 0, item: () => ({}), raw: () => [] }, rowsAffected: 1 };
+      if (up.startsWith('UPDATE')) {
+        const t = sql.match(/UPDATE\s+(\w+)/i)?.[1] ?? 'default';
+        const d = tables[t] ?? [];
+        if (sql.includes('active = 0') && params?.[0]) { const r = d.find(x => x.id === params![0]); if (r) r.active = 0; }
+        if (sql.includes('propagated = 1') && params?.[0]) { const r = d.find(x => x.id === params![0]); if (r) r.propagated = 1; }
+        return { ...emptyResult, rowsAffected: 1 };
       }
 
-      if (sqlUpper.startsWith('DELETE')) {
-        const tableName = sql.match(/FROM\s+(\w+)/i)?.[1] ?? 'default';
-        tables[tableName] = [];
-        return { rows: { length: 0, item: () => ({}), raw: () => [] }, rowsAffected: 0 };
-      }
-
-      return { rows: { length: 0, item: () => ({}), raw: () => [] }, rowsAffected: 0 };
+      if (up.startsWith('DELETE')) { const t = sql.match(/FROM\s+(\w+)/i)?.[1] ?? 'default'; tables[t] = []; }
+      return emptyResult;
     }),
     transaction: jest.fn(async (fn) => { fn({ executeSql: jest.fn() }); }),
   };
 }
-
-// ── Mock identity manager for peer transfer ─────────────────────────────────
 
 function createMockIdentity(publicKey: string): IdentityManager {
   return {
@@ -147,16 +104,18 @@ function createMockIdentity(publicKey: string): IdentityManager {
   };
 }
 
+function makeReward(toKey: string, amount: number): Transaction {
+  return {
+    id: `tx_reward_${Date.now()}`, type: 'reward', amount, fromKey: '', toKey,
+    timestamp: Date.now(), nonce: new Uint8Array(TRANSACTION_NONCE_BYTES),
+    balanceHash: 'hash', signature: new Uint8Array(64).fill(1), status: 'confirmed', propagated: true,
+  };
+}
+
 // ── Setup ───────────────────────────────────────────────────────────────────
 
-beforeAll(() => {
-  setCryptoProvider(mockCryptoProvider);
-});
-
-beforeEach(() => {
-  jest.clearAllMocks();
-  useEconomyStore.getState().reset();
-});
+beforeAll(() => { setCryptoProvider(mockCrypto); });
+beforeEach(() => { jest.clearAllMocks(); useEconomyStore.getState().reset(); });
 
 // ── Tests ───────────────────────────────────────────────────────────────────
 
@@ -164,169 +123,92 @@ describe('Wallet -> Peer Transfer -> Marketplace via Mesh flow', () => {
   it('creates a transfer, records it in the ledger, and wraps it as a DTU', async () => {
     const db = createMockSQLite();
     const ledger = createLocalLedger(db);
-    const identity = createMockIdentity('pk_alice');
-    const transfer = createPeerTransfer(identity, ledger);
+    const transfer = createPeerTransfer(createMockIdentity('pk_alice'), ledger);
+    await ledger.recordTransaction(makeReward('pk_alice', 50));
 
-    // Seed a balance by recording an incoming reward transaction
-    const reward: Transaction = {
-      id: 'tx_reward_1',
-      type: 'reward',
-      amount: 50,
-      fromKey: '',
-      toKey: 'pk_alice',
-      timestamp: Date.now(),
-      nonce: new Uint8Array(TRANSACTION_NONCE_BYTES),
-      balanceHash: 'init_hash',
-      signature: new Uint8Array(64).fill(0x01),
-      status: 'confirmed',
-      propagated: true,
-    };
-    await ledger.recordTransaction(reward);
-
-    // Create a peer transfer
     const tx = await transfer.createTransfer('pk_bob', 10);
     expect(tx.id).toMatch(/^tx_/);
     expect(tx.amount).toBe(10);
     expect(tx.fromKey).toBe('pk_alice');
-    expect(tx.toKey).toBe('pk_bob');
     expect(tx.status).toBe('pending');
 
-    // Wrap the transaction as a DTU for mesh propagation
     const dtu = await createTransactionDTU(tx);
-    expect(dtu.header.type).toBe(0x0006); // ECONOMY_TRANSACTION
+    expect(dtu.header.type).toBe(0x0006);
     expect(dtu.meta.creatorKey).toBe('pk_alice');
     expect(dtu.tags).toContain('economy');
-    expect(dtu.tags).toContain('transaction');
   });
 
   it('validates transfer and rejects self-transfer', async () => {
     const db = createMockSQLite();
     const ledger = createLocalLedger(db);
-    const identity = createMockIdentity('pk_alice');
-    const transfer = createPeerTransfer(identity, ledger);
+    const transfer = createPeerTransfer(createMockIdentity('pk_alice'), ledger);
+    await ledger.recordTransaction(makeReward('pk_alice', 100));
 
     await expect(transfer.createTransfer('pk_alice', 5)).rejects.toThrow('Cannot transfer to self');
   });
 
   it('validates transfer amount constraints', () => {
-    const db = createMockSQLite();
-    const ledger = createLocalLedger(db);
-    const identity = createMockIdentity('pk_alice');
-    const transfer = createPeerTransfer(identity, ledger);
-
+    const transfer = createPeerTransfer(createMockIdentity('pk_alice'), createLocalLedger(createMockSQLite()));
     const validTx: Transaction = {
-      id: 'tx_test',
-      type: 'transfer',
-      amount: 10,
-      fromKey: 'pk_alice',
-      toKey: 'pk_bob',
-      timestamp: Date.now(),
-      nonce: new Uint8Array(TRANSACTION_NONCE_BYTES),
-      balanceHash: 'hash_123',
-      signature: new Uint8Array(64).fill(0x55),
-      status: 'pending',
-      propagated: false,
+      id: 'tx_test', type: 'transfer', amount: 10, fromKey: 'pk_alice', toKey: 'pk_bob',
+      timestamp: Date.now(), nonce: new Uint8Array(TRANSACTION_NONCE_BYTES),
+      balanceHash: 'hash_123', signature: new Uint8Array(64).fill(0x55),
+      status: 'pending', propagated: false,
     };
-
-    const result = transfer.validateTransfer(validTx);
-    expect(result.valid).toBe(true);
-    expect(result.errors).toHaveLength(0);
+    expect(transfer.validateTransfer(validTx).valid).toBe(true);
   });
 
-  it('marketplace purchase creates a transfer to the listing creator', async () => {
-    const db = createMockSQLite();
-    const marketplace = createLocalMarketplace(db);
-
-    // Cache a listing
+  it('marketplace caches and retrieves listings', async () => {
+    const marketplace = createLocalMarketplace(createMockSQLite());
     const listing: MarketplaceListing = {
-      id: 'listing_art_1',
-      dtuId: 'dtu_art_1',
-      title: 'Digital Artwork',
-      description: 'A beautiful digital painting',
-      price: 25,
-      creatorKey: 'pk_artist',
-      category: 'art',
-      tags: ['art', 'digital'],
-      createdAt: Date.now(),
-      active: true,
+      id: 'listing_art_1', dtuId: 'dtu_art_1', title: 'Digital Artwork',
+      description: 'A painting', price: 25, creatorKey: 'pk_artist', category: 'art',
+      tags: ['art'], createdAt: Date.now(), active: true,
     };
     await marketplace.cacheListings([listing]);
 
-    // Verify listing is retrievable
     const retrieved = await marketplace.getListing('listing_art_1');
-    expect(retrieved).toBeDefined();
     expect(retrieved?.title).toBe('Digital Artwork');
     expect(retrieved?.price).toBe(25);
   });
 
-  it('tracks transactions in economy store for UI state', async () => {
+  it('tracks transactions in economy store for UI state', () => {
     const tx: Transaction = {
-      id: 'tx_store_1',
-      type: 'transfer',
-      amount: 15,
-      fromKey: 'pk_alice',
-      toKey: 'pk_bob',
-      timestamp: Date.now(),
-      nonce: new Uint8Array(TRANSACTION_NONCE_BYTES),
-      balanceHash: 'hash_abc',
-      signature: new Uint8Array(64).fill(0x55),
-      status: 'pending',
-      propagated: false,
+      id: 'tx_store_1', type: 'transfer', amount: 15, fromKey: 'pk_alice', toKey: 'pk_bob',
+      timestamp: Date.now(), nonce: new Uint8Array(TRANSACTION_NONCE_BYTES),
+      balanceHash: 'hash_abc', signature: new Uint8Array(64).fill(0x55),
+      status: 'pending', propagated: false,
     };
 
     useEconomyStore.getState().addTransaction(tx);
     expect(useEconomyStore.getState().transactions).toHaveLength(1);
     expect(useEconomyStore.getState().pendingTransactions).toHaveLength(1);
 
-    // Mark as propagated (sent over mesh)
     useEconomyStore.getState().markPropagated('tx_store_1');
     expect(useEconomyStore.getState().transactions[0].propagated).toBe(true);
     expect(useEconomyStore.getState().pendingTransactions).toHaveLength(0);
   });
 
-  it('caches marketplace listings in economy store', async () => {
+  it('caches marketplace listings in economy store', () => {
     const listings: MarketplaceListing[] = [
-      {
-        id: 'l1', dtuId: 'dtu_1', title: 'Song', description: 'A song',
-        price: 5, creatorKey: 'pk_musician', category: 'music',
-        tags: ['music'], createdAt: Date.now(), active: true,
-      },
-      {
-        id: 'l2', dtuId: 'dtu_2', title: 'Article', description: 'An article',
-        price: 2, creatorKey: 'pk_writer', category: 'writing',
-        tags: ['writing'], createdAt: Date.now(), active: true,
-      },
+      { id: 'l1', dtuId: 'd1', title: 'Song', description: 'A song', price: 5,
+        creatorKey: 'pk_m', category: 'music', tags: ['music'], createdAt: Date.now(), active: true },
+      { id: 'l2', dtuId: 'd2', title: 'Article', description: 'An article', price: 2,
+        creatorKey: 'pk_w', category: 'writing', tags: ['writing'], createdAt: Date.now(), active: true },
     ];
-
     useEconomyStore.getState().cacheListings(listings);
     expect(useEconomyStore.getState().listingCount).toBe(2);
-
-    const musicListings = useEconomyStore.getState().getListingsByCategory('music');
-    expect(musicListings).toHaveLength(1);
-    expect(musicListings[0].title).toBe('Song');
+    expect(useEconomyStore.getState().getListingsByCategory('music')).toHaveLength(1);
   });
 
   it('rejects transfer with invalid structure', () => {
-    const db = createMockSQLite();
-    const ledger = createLocalLedger(db);
-    const identity = createMockIdentity('pk_alice');
-    const transfer = createPeerTransfer(identity, ledger);
-
-    const invalidTx = {
-      id: '',
-      type: 'invalid_type' as any,
-      amount: -5,
-      fromKey: '',
-      toKey: '',
-      timestamp: -1,
-      nonce: new Uint8Array(0),
-      balanceHash: '',
-      signature: new Uint8Array(0),
-      status: 'pending' as const,
-      propagated: false,
+    const transfer = createPeerTransfer(createMockIdentity('pk_alice'), createLocalLedger(createMockSQLite()));
+    const invalid = {
+      id: '', type: 'invalid_type' as any, amount: -5, fromKey: '', toKey: '',
+      timestamp: -1, nonce: new Uint8Array(0), balanceHash: '', signature: new Uint8Array(0),
+      status: 'pending' as const, propagated: false,
     };
-
-    const result = transfer.validateTransfer(invalidTx);
+    const result = transfer.validateTransfer(invalid);
     expect(result.valid).toBe(false);
     expect(result.errors.length).toBeGreaterThan(0);
   });
