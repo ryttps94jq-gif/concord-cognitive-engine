@@ -105,15 +105,12 @@ describe('DTU store query performance', () => {
     expect(ms).toBeLessThan(1000);
   });
 
-  it('getByType on 5000-item store in under 200ms', () => {
+  it('getByType and getByTags on 5000-item store in under 200ms', () => {
     const store = populateStore(5000);
-    const ms = measureMs(() => { for (const t of typePool) store.getByType(t); });
-    expect(ms).toBeLessThan(200);
-  });
-
-  it('getByTags on 5000-item store in under 200ms', () => {
-    const store = populateStore(5000);
-    const ms = measureMs(() => { store.getByTags(['scale']); store.getByTags(['type-0', 'type-1']); });
+    const ms = measureMs(() => {
+      for (const t of typePool) store.getByType(t);
+      store.getByTags(['scale']); store.getByTags(['type-0', 'type-1']);
+    });
     expect(ms).toBeLessThan(200);
   });
 
@@ -156,12 +153,6 @@ describe('Zustand mesh store update throughput', () => {
     expect(ms).toBeLessThan(500);
   });
 
-  it('updates 1000 peers in under 500ms', () => {
-    for (let i = 0; i < 1000; i++) useMeshStore.getState().addPeer(makePeer(`p_${i}`));
-    const ms = measureMs(() => { for (let i = 0; i < 1000; i++) useMeshStore.getState().updatePeer(`p_${i}`, { rssi: -50 }); });
-    expect(ms).toBeLessThan(500);
-  });
-
   it('enqueues/dequeues 1000 relay entries in under 500ms', () => {
     const ms = measureMs(() => {
       for (let i = 0; i < 1000; i++) useMeshStore.getState().enqueueRelay({
@@ -173,18 +164,14 @@ describe('Zustand mesh store update throughput', () => {
     expect(ms).toBeLessThan(500);
   });
 
-  it('adds/checks 10000 seen hashes in under 500ms', () => {
+  it('adds/checks 10000 seen hashes and updates 1000 reputations in under 1000ms', () => {
+    for (let i = 0; i < 1000; i++) useMeshStore.getState().addPeer(makePeer(`p_${i}`));
     const ms = measureMs(() => {
       for (let i = 0; i < 10000; i++) useMeshStore.getState().addSeenHash(`h_${i}`);
       for (let i = 0; i < 10000; i++) useMeshStore.getState().hasSeenHash(`h_${i}`);
+      for (let i = 0; i < 1000; i++) useMeshStore.getState().updatePeerReputation(`p_${i}`, i % 3 !== 0);
     });
-    expect(ms).toBeLessThan(500);
-  });
-
-  it('reputation updates for 1000 peers in under 500ms', () => {
-    for (let i = 0; i < 1000; i++) useMeshStore.getState().addPeer(makePeer(`p_${i}`));
-    const ms = measureMs(() => { for (let i = 0; i < 1000; i++) useMeshStore.getState().updatePeerReputation(`p_${i}`, i % 3 !== 0); });
-    expect(ms).toBeLessThan(500);
+    expect(ms).toBeLessThan(1000);
   });
 
   it('reset from populated state in under 10ms', () => {

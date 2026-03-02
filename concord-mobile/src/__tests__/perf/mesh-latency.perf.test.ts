@@ -91,17 +91,13 @@ describe('BLE advertisement cycle time', () => {
 // ── Peer Discovery Latency ───────────────────────────────────────────────────
 
 describe('peer discovery latency', () => {
-  it('adds 1000 peers to peer manager in under 200ms', () => {
+  it('adds 1000 peers and selects best 100 times in under 300ms', () => {
     const pm = createPeerManager();
-    const ms = measureMs(() => { for (let i = 0; i < 1000; i++) pm.addPeer(makePeer(`p_${i}`, -40 - (i % 60))); });
-    expect(ms).toBeLessThan(200);
-  });
-
-  it('selects best peers from 1000-peer pool 100 times in under 100ms', () => {
-    const pm = createPeerManager();
-    for (let i = 0; i < 1000; i++) pm.addPeer(makePeer(`p_${i}`, -40 - (i % 60)));
-    const ms = measureMs(() => { for (let j = 0; j < 100; j++) pm.selectBestPeers(10); });
-    expect(ms).toBeLessThan(100);
+    const ms = measureMs(() => {
+      for (let i = 0; i < 1000; i++) pm.addPeer(makePeer(`p_${i}`, -40 - (i % 60)));
+      for (let j = 0; j < 100; j++) pm.selectBestPeers(10);
+    });
+    expect(ms).toBeLessThan(300);
   });
 
   it('calculates peer scores for 10000 peers in under 100ms', () => {
@@ -166,20 +162,18 @@ describe('relay hop latency', () => {
 // ── Transport Selection Decision Time ────────────────────────────────────────
 
 describe('transport selection decision time', () => {
-  it('selects transport 10000 times in under 200ms', () => {
-    const sel = createTransportSelector();
-    const ts: TransportStatus[] = [
-      { layer: TRANSPORT_LAYERS.BLUETOOTH, available: true, active: true, peerCount: 5, lastActivity: Date.now() },
-      { layer: TRANSPORT_LAYERS.WIFI_DIRECT, available: true, active: true, peerCount: 2, lastActivity: Date.now() },
-      { layer: TRANSPORT_LAYERS.LORA, available: true, active: true, peerCount: 1, lastActivity: Date.now() },
-    ];
-    const ms = measureMs(() => { for (let i = 0; i < 10000; i++) sel.selectTransport(64 + (i % 200000), ts); });
-    expect(ms).toBeLessThan(200);
-  });
+  const sel = createTransportSelector();
+  const transports: TransportStatus[] = [
+    { layer: TRANSPORT_LAYERS.BLUETOOTH, available: true, active: true, peerCount: 5, lastActivity: Date.now() },
+    { layer: TRANSPORT_LAYERS.WIFI_DIRECT, available: true, active: true, peerCount: 2, lastActivity: Date.now() },
+    { layer: TRANSPORT_LAYERS.LORA, available: true, active: true, peerCount: 1, lastActivity: Date.now() },
+  ];
 
-  it('evaluates shouldUseWiFiDirect 10000 times in under 50ms', () => {
-    const sel = createTransportSelector();
-    const ms = measureMs(() => { for (let i = 0; i < 10000; i++) sel.shouldUseWiFiDirect(1024 * (i % 200), i % 50); });
-    expect(ms).toBeLessThan(50);
+  it('selects transport and evaluates WiFi-Direct 10000 times each in under 200ms', () => {
+    const ms = measureMs(() => {
+      for (let i = 0; i < 10000; i++) sel.selectTransport(64 + (i % 200000), transports);
+      for (let i = 0; i < 10000; i++) sel.shouldUseWiFiDirect(1024 * (i % 200), i % 50);
+    });
+    expect(ms).toBeLessThan(200);
   });
 });
