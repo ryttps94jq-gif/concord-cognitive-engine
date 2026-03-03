@@ -56,15 +56,15 @@ function freshState() {
 describe("Conscious Brain Prompt", () => {
   it("should build a basic prompt with defaults", () => {
     const prompt = buildConsciousPrompt();
-    assert.ok(prompt.includes("IDENTITY"));
+    assert.ok(prompt.includes("WHO YOU ARE"));
     assert.ok(prompt.includes("Concord"));
-    assert.ok(prompt.includes("EVIDENCE-FIRST"));
-    assert.ok(prompt.includes("CONVERSATIONAL AWARENESS"));
+    assert.ok(prompt.includes("EVIDENCE"));
+    assert.ok(prompt.includes("CURRENT AWARENESS"));
   });
 
   it("should inject DTU count and domain count", () => {
     const prompt = buildConsciousPrompt({ dtu_count: 5000, domain_count: 42 });
-    assert.ok(prompt.includes("5000"));
+    assert.ok(prompt.includes("5,000") || prompt.includes("5000"));
     assert.ok(prompt.includes("42"));
   });
 
@@ -113,9 +113,9 @@ describe("Conscious Brain Prompt", () => {
 
   it("should include autonomy rules", () => {
     const prompt = buildConsciousPrompt();
-    assert.ok(prompt.includes("Disagree with the user"));
-    assert.ok(prompt.includes("Not Allowed"));
-    assert.ok(prompt.includes("rude or dismissive"));
+    assert.ok(prompt.includes("willing to disagree"));
+    assert.ok(prompt.includes("WHAT YOU DON'T DO"));
+    assert.ok(prompt.includes("Not rudely"));
   });
 });
 
@@ -147,7 +147,7 @@ describe("Subconscious Brain Prompt", () => {
     for (const mode of Object.values(SUBCONSCIOUS_MODES)) {
       const prompt = buildSubconsciousPrompt({ mode });
       assert.ok(prompt.includes("MODE:"), `Missing MODE for ${mode}`);
-      assert.ok(prompt.includes("subconscious mind"), `Missing role for ${mode}`);
+      assert.ok(prompt.includes("Subconscious Cortex"), `Missing role for ${mode}`);
     }
   });
 
@@ -200,9 +200,9 @@ describe("Subconscious Brain Params", () => {
 describe("Utility Brain Prompt", () => {
   it("should build a basic utility prompt", () => {
     const prompt = buildUtilityPrompt({ action: "analyze", lens: "physics" });
-    assert.ok(prompt.includes("utility brain"));
+    assert.ok(prompt.includes("Utility Cortex"));
     assert.ok(prompt.includes("physics specialist"));
-    assert.ok(prompt.includes("Precision over creativity"));
+    assert.ok(prompt.includes("PRECISE"));
   });
 
   it("should include marketplace awareness when flagged", () => {
@@ -240,9 +240,9 @@ describe("Utility Brain Params", () => {
 describe("Repair Brain Prompt", () => {
   it("should build strict validation prompt", () => {
     const prompt = buildRepairPrompt({ action: "validate", domain: "physics" });
-    assert.ok(prompt.includes("repair cortex"));
-    assert.ok(prompt.includes("Strict validation"));
-    assert.ok(prompt.includes("valid or invalid"));
+    assert.ok(prompt.includes("Repair Cortex"));
+    assert.ok(prompt.includes("vigilant"));
+    assert.ok(prompt.includes("immune system"));
     assert.ok(prompt.includes("OUTPUT FORMAT"));
   });
 
