@@ -59,6 +59,19 @@ export const DTU_BINARY_LAYOUT = Object.freeze({
     0x09: "mixed_content",
     0x0A: "condensed_knowledge",
     0x0B: "culture_memory",
+    // Domain types (mesh/mobile semantic types)
+    0x10: "sensor_reading",
+    0x11: "shield_threat",
+    0x12: "economy_transaction",
+    0x13: "identity_assertion",
+    0x14: "mesh_control",
+    0x15: "emergency_alert",
+    0x16: "broadcast_relay",
+    0x17: "atlas_signal",
+    0x18: "lineage_ref",
+    0x19: "geospatial",
+    0x1A: "time_series",
+    0x1B: "structured_knowledge",
   },
 
   metadata: {
@@ -116,6 +129,38 @@ export const DTU_OS_ACTIONS = Object.freeze({
     culture_memory: {
       action: "Open in Concord DTU Viewer",
       display: "Render culture content chronologically with resonance/reflection data",
+    },
+    sensor_reading: {
+      action: "Open in Concord DTU Viewer",
+      display: "Render sensor data with timeline visualization and geo-grid overlay",
+    },
+    shield_threat: {
+      action: "Open in Concord DTU Viewer",
+      display: "Render threat assessment with severity indicators and mitigation guidance",
+    },
+    economy_transaction: {
+      action: "Open in Concord DTU Viewer",
+      display: "Render transaction details with lineage, verification status, and audit trail",
+    },
+    identity_assertion: {
+      action: "Open in Concord DTU Viewer",
+      display: "Render cryptographic identity proof with verification status",
+    },
+    mesh_control: {
+      action: "Open in Concord DTU Viewer",
+      display: "Render mesh network control message with topology context",
+    },
+    emergency_alert: {
+      action: "Open in Concord DTU Viewer",
+      display: "Render emergency alert with severity, location, and propagation status",
+    },
+    broadcast_relay: {
+      action: "Open in Concord DTU Viewer",
+      display: "Render broadcast content with source attribution and signal metadata",
+    },
+    atlas_signal: {
+      action: "Open in Concord DTU Viewer",
+      display: "Render Atlas knowledge signal with epistemic classification and evidence chain",
     },
   },
 
@@ -335,7 +380,7 @@ export const DTU_FORMAT_CONSTANTS = Object.freeze({
   TYPE_MEGA: 1,
   TYPE_HYPER: 2,
 
-  // Primary type codes
+  // Primary type codes — media/content types (0x01–0x0F)
   PRIMARY_PLAY_AUDIO: 0x01,
   PRIMARY_DISPLAY_IMAGE: 0x02,
   PRIMARY_PLAY_VIDEO: 0x03,
@@ -347,6 +392,21 @@ export const DTU_FORMAT_CONSTANTS = Object.freeze({
   PRIMARY_MIXED: 0x09,
   PRIMARY_CONDENSED: 0x0A,
   PRIMARY_CULTURE: 0x0B,
+
+  // Domain type codes — semantic/functional types (0x10–0x1F)
+  // These correspond to mobile DTU_TYPES and enable cross-platform type bridging.
+  DOMAIN_SENSOR_READING: 0x10,
+  DOMAIN_SHIELD_THREAT: 0x11,
+  DOMAIN_ECONOMY_TRANSACTION: 0x12,
+  DOMAIN_IDENTITY_ASSERTION: 0x13,
+  DOMAIN_MESH_CONTROL: 0x14,
+  DOMAIN_EMERGENCY_ALERT: 0x15,
+  DOMAIN_BROADCAST_RELAY: 0x16,
+  DOMAIN_ATLAS_SIGNAL: 0x17,
+  DOMAIN_LINEAGE_REF: 0x18,
+  DOMAIN_GEOSPATIAL: 0x19,
+  DOMAIN_TIME_SERIES: 0x1A,
+  DOMAIN_STRUCTURED_KNOWLEDGE: 0x1B,
 
   // Compression codes
   COMPRESSION_NONE: 0,

@@ -171,6 +171,58 @@ export function tickGlobal(STATE) {
       }
     }
 
+    // ── Phase 5: Cross-domain synthesis (max 5 per tick) ──────────────
+    // Find DTU pairs from different domains that can produce novel insights.
+    // Creates synthesis candidate markers for the autogen pipeline.
+    results.synthesisCandidates = 0;
+    const SYNTHESIS_PAIRS = [
+      { domainA: "empirical",    domainB: "formal",       label: "empirical_validation" },
+      { domainA: "empirical",    domainB: "historical",   label: "temporal_pattern" },
+      { domainA: "empirical",    domainB: "interpretive", label: "theory_grounding" },
+      { domainA: "formal",       domainB: "arts",         label: "aesthetic_formalism" },
+      { domainA: "historical",   domainB: "design",       label: "design_evolution" },
+      { domainA: "model",        domainB: "empirical",    label: "model_validation" },
+    ];
+
+    const byDomain = new Map();
+    for (const dtu of globalDtus) {
+      if (dtu.status !== "VERIFIED") continue;
+      const domain = dtu.domain?.split(".")?.[0] || dtu.epistemicClass?.toLowerCase();
+      if (!domain) continue;
+      if (!byDomain.has(domain)) byDomain.set(domain, []);
+      if (byDomain.get(domain).length < 20) byDomain.get(domain).push(dtu);
+    }
+
+    let synthCount = 0;
+    for (const pair of SYNTHESIS_PAIRS) {
+      if (synthCount >= 5) break;
+      const dtusA = byDomain.get(pair.domainA) || [];
+      const dtusB = byDomain.get(pair.domainB) || [];
+      if (dtusA.length === 0 || dtusB.length === 0) continue;
+
+      // Pick highest-scored DTU from each domain
+      const bestA = dtusA.reduce((best, d) => (d.score > (best?.score || 0)) ? d : best, dtusA[0]);
+      const bestB = dtusB.reduce((best, d) => (d.score > (best?.score || 0)) ? d : best, dtusB[0]);
+
+      // Check if this synthesis pair has already been flagged
+      const synthKey = `${bestA.id}:${bestB.id}`;
+      if (bestA._synthesisCandidates?.includes(synthKey)) continue;
+
+      // Mark for synthesis
+      if (!bestA._synthesisCandidates) bestA._synthesisCandidates = [];
+      bestA._synthesisCandidates.push(synthKey);
+      if (!bestA._synthesisPartners) bestA._synthesisPartners = [];
+      bestA._synthesisPartners.push({
+        partnerId: bestB.id,
+        partnerDomain: pair.domainB,
+        synthesisType: pair.label,
+        flaggedAt: ts,
+      });
+
+      results.synthesisCandidates++;
+      synthCount++;
+    }
+
   } catch {
     _tickState.global.errors++;
   } finally {
