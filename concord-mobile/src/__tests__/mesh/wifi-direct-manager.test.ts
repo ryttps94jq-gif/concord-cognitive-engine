@@ -167,13 +167,18 @@ describe('createWiFiDirectManager', () => {
       (mockP2P.getAvailablePeers as jest.Mock).mockResolvedValue([]);
       const manager = createWiFiDirectManager(mockP2P);
 
-      // This will time out but should eventually return empty
-      // Mock setTimeout to be instant
+      // Use fake timers to control the polling loop
       jest.useFakeTimers();
       const peersPromise = manager.discoverPeers();
-      jest.advanceTimersByTime(WIFI_DIRECT_GROUP_TIMEOUT_MS + 1000);
-      jest.useRealTimers();
 
+      // Advance timers incrementally to let async loop iterations run
+      for (let i = 0; i < Math.ceil((WIFI_DIRECT_GROUP_TIMEOUT_MS + 1000) / 500); i++) {
+        await Promise.resolve(); // let pending microtasks run
+        jest.advanceTimersByTime(500);
+        await Promise.resolve(); // let resolved setTimeout callbacks run
+      }
+
+      jest.useRealTimers();
       const peers = await peersPromise;
       expect(peers).toEqual([]);
     });
