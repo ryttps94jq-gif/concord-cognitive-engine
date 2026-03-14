@@ -23,6 +23,7 @@
  */
 
 import crypto from "crypto";
+import logger from '../logger.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -113,7 +114,7 @@ function resolveInspirations(inspirations) {
     try {
       const state = getState();
       if (state) { const dtu = typeof state.getDTU === "function" ? state.getDTU(id) : null; if (dtu) { results.push(dtu); continue; } }
-    } catch { /* silent */ }
+    } catch (_e) { logger.debug('emergent:creative-generation', 'silent', { error: _e?.message }); }
     results.push({ id, title: `Inspiration: ${id}`, content: "", tags: [], confidence: 0.5 });
   }
   if (results.length === 0) {
@@ -515,7 +516,7 @@ function promoteMasterworkToDTU(work) {
       machine: { kind: "creative_masterwork", workId: work.workId, creatorId: work.creatorId, mode: work.mode, aestheticScore: work.aestheticScore, avgReception: work.avgReception, receptionCount: work.receptions.length },
       createdAt: nowISO(),
     });
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:creative-generation', 'silent', { error: _e?.message }); }
 }
 
 /**
@@ -595,7 +596,7 @@ export function exhibit(workId) {
           createdAt: nowISO(),
         });
       }
-    } catch { /* silent */ }
+    } catch (_e) { logger.debug('emergent:creative-generation', 'silent', { error: _e?.message }); }
     return { ok: true, exhibitedAt: work.exhibitedAt };
   } catch { return { ok: false, error: "exhibit_failed" }; }
 }

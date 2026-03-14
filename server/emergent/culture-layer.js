@@ -30,6 +30,7 @@
  */
 
 import crypto from "crypto";
+import logger from '../logger.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -1311,7 +1312,7 @@ function _recordTraditionObservation(traditionId, entityId, observationId, times
 
     // Adherence score increases with observations (diminishing returns)
     record.score = clamp01(1 - Math.exp(-record.observations * 0.3));
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:culture-layer', 'silent', { error: _e?.message }); }
 }
 
 /**
@@ -1349,7 +1350,7 @@ function _recomputeAdherence(traditionId) {
       participantFactor * 0.3 +
       observationFactor * 0.3
     );
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:culture-layer', 'silent', { error: _e?.message }); }
 }
 
 /**
@@ -1390,7 +1391,7 @@ function _recomputeCulturalValues() {
         derivedFrom: data.derivedFrom.slice(0, 10),
       });
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:culture-layer', 'silent', { error: _e?.message }); }
 }
 
 /**
@@ -1470,7 +1471,7 @@ function _inferValuesFromTradition(tradition) {
           break;
       }
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:culture-layer', 'silent', { error: _e?.message }); }
 
   return values;
 }
@@ -1525,7 +1526,7 @@ function _deriveCharacterTraits() {
     const significantStories = Array.from(_stories.values())
       .filter(s => s.significance > 0.5);
     if (significantStories.length > 5) traits.push("storytelling");
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:culture-layer', 'silent', { error: _e?.message }); }
 
   return traits;
 }
@@ -1621,7 +1622,7 @@ function _extractTags(behavior) {
       const words = String(behavior.approach).toLowerCase().split(/\s+/).filter(w => w.length > 3);
       tags.push(...words.slice(0, 3));
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:culture-layer', 'silent', { error: _e?.message }); }
   return [...new Set(tags)].slice(0, 15);
 }
 
@@ -1649,7 +1650,7 @@ function _pruneOldestObservations(count) {
         if (hashEntries.length === 0) _behaviorIndex.delete(obs.behaviorHash);
       }
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:culture-layer', 'silent', { error: _e?.message }); }
 }
 
 /**
@@ -1664,5 +1665,5 @@ function _pruneLeastSignificantStories(count) {
     for (const [storyId] of toRemove) {
       _stories.delete(storyId);
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:culture-layer', 'silent', { error: _e?.message }); }
 }

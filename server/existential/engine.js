@@ -10,6 +10,7 @@
  */
 
 import { existentialOS, getExistentialOS } from "./registry.js";
+import logger from '../logger.js';
 
 const HISTORY_MAX = 50; // Rolling window of past snapshots
 
@@ -394,7 +395,7 @@ export class QualiaEngine {
           if (typeof globalThis.realtimeEmit === "function") {
             globalThis.realtimeEmit("qualia:policy", event);
           }
-        } catch { /* silent */ }
+        } catch (_e) { logger.debug('engine', 'silent', { error: _e?.message }); }
 
         return event;
       }

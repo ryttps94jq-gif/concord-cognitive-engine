@@ -13,6 +13,7 @@
  */
 
 import crypto from "crypto";
+import logger from '../logger.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -158,8 +159,7 @@ function _tagOverlap(tags1, tags2) {
 }
 
 function _emit(event, data) {
-  try { if (typeof globalThis.realtimeEmit === "function") globalThis.realtimeEmit(event, data); }
-  catch { /* silent */ }
+  try { if (typeof globalThis.realtimeEmit === "function") globalThis.realtimeEmit(event, data); } catch (_e) { logger.debug('emergent:sleep-consolidation', 'silent', { error: _e?.message }); }
 }
 
 function _cappedPush(arr, item, max) {
@@ -200,7 +200,7 @@ function _beginSleep(rec) {
           trustInteractions: s.trustInteractions || [],
         }))
         .slice(-50);
-    } catch { /* silent */ }
+    } catch (_e) { logger.debug('emergent:sleep-consolidation', 'silent', { error: _e?.message }); }
 
     // Snapshot wake-period trust edges
     try {
@@ -213,8 +213,8 @@ function _beginSleep(rec) {
           }
         }
       }
-    } catch { /* silent */ }
-  } catch { /* silent */ }
+    } catch (_e) { logger.debug('emergent:sleep-consolidation', 'silent', { error: _e?.message }); }
+  } catch (_e) { logger.debug('emergent:sleep-consolidation', 'silent', { error: _e?.message }); }
 }
 
 // ── Internal: Compute Quality ───────────────────────────────────────────────
@@ -285,7 +285,7 @@ function _completeSleepCycle(rec) {
     rec.startingFatigue = 0;
 
     _emit("sleep:cycle_complete", { entityId: rec.entityId, cycle: rec.totalSleepCycles, quality, timestamp: nowISO() });
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:sleep-consolidation', 'silent', { error: _e?.message }); }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -352,7 +352,7 @@ export function tickFatigue(entityId, activityLevel = 0) {
           }
           inc += ORGAN_DAMAGE_FATIGUE * damaged;
         }
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('emergent:sleep-consolidation', 'silent', { error: _e?.message }); }
 
       rec.fatigue = clamp01(rec.fatigue + inc);
       rec.ticksSinceWake++;
@@ -379,7 +379,7 @@ export function tickFatigue(entityId, activityLevel = 0) {
             }
           }
         }
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('emergent:sleep-consolidation', 'silent', { error: _e?.message }); }
     }
 
     const r4 = v => Math.round(v * 10000) / 10000;
@@ -541,9 +541,9 @@ export function runConsolidation(entityId) {
               action: "weakened", novelty, timestamp: nowISO(),
             }, MAX_CONSOLIDATION_LOG);
           }
-        } catch { /* silent per-session */ }
+        } catch (_e) { logger.debug('emergent:sleep-consolidation', 'silent per-session', { error: _e?.message }); }
       }
-    } catch { /* silent */ }
+    } catch (_e) { logger.debug('emergent:sleep-consolidation', 'silent', { error: _e?.message }); }
 
     // 2. Pattern Crystallization — group sessions by tag overlap > threshold
     try {
@@ -578,10 +578,10 @@ export function runConsolidation(entityId) {
                 strength: group.length, createdAt: nowISO(),
               });
             }
-          } catch { /* silent */ }
+          } catch (_e) { logger.debug('emergent:sleep-consolidation', 'silent', { error: _e?.message }); }
         }
       }
-    } catch { /* silent */ }
+    } catch (_e) { logger.debug('emergent:sleep-consolidation', 'silent', { error: _e?.message }); }
 
     // 3. Trust Consolidation — boost used edges, decay unused
     try {
@@ -598,7 +598,7 @@ export function runConsolidation(entityId) {
           trustUpdated++;
         }
       }
-    } catch { /* silent */ }
+    } catch (_e) { logger.debug('emergent:sleep-consolidation', 'silent', { error: _e?.message }); }
 
     return { ok: true, consolidated, pruned, trustUpdated, patterns: patternsFound };
   } catch { return { ok: false, error: "consolidation_failed" }; }
@@ -687,7 +687,7 @@ export function runREMPhase(entityId) {
           const store = STATE.dtus instanceof Map ? STATE.dtus : (STATE.__dtus instanceof Map ? STATE.__dtus : null);
           if (store) store.set(dreamId, dreamDTU);
         }
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('emergent:sleep-consolidation', 'silent', { error: _e?.message }); }
 
       _cappedPush(rec.dreamLog, { dreamId, sources: sourceIds, tags: dreamTags, overlap: r4(avgOv), timestamp: nowISO() }, MAX_DREAM_LOG);
       _metrics.totalDreamDTUsCreated++;
@@ -699,7 +699,7 @@ export function runREMPhase(entityId) {
             connections: selected.length, coherence: clamp01(1 - avgOv), entropy: clamp01(avgOv),
           });
         }
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('emergent:sleep-consolidation', 'silent', { error: _e?.message }); }
 
       _emit("sleep:dream_produced", { entityId, dreamId, sources: sourceIds, overlap: avgOv, timestamp: nowISO() });
     } else {

@@ -5,13 +5,14 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import logger from '../logger.js';
 
 // Zod is an optional dependency — dynamically import like server.js does
 let z;
 try {
   const mod = await import("zod");
   z = mod.z || mod.default?.z || mod;
-} catch { /* zod not installed */ }
+} catch (_e) { logger.debug('validation-schemas.test', 'zod not installed', { error: _e?.message }); }
 
 if (!z || typeof z.object !== "function") {
   // Skip all tests if zod is not available

@@ -13,6 +13,7 @@
 import { CognitiveBridge, InterfaceType } from './cognitive-bridge.js';
 import { PresenceState } from './presence-protocol.js';
 import { EventEmitter } from 'events';
+import logger from '../logger.js';
 
 export class MultiSpaceHandler {
   constructor(config) {
@@ -144,7 +145,7 @@ export class MultiSpaceHandler {
     for (const [id, space] of this.bridge.spaces) {
       try {
         await space.transmitEmotion(this.bridge.nodeId, emotionalState);
-      } catch { /* space may have closed */ }
+      } catch (_e) { logger.debug('multi-space-handler', 'space may have closed', { error: _e?.message }); }
     }
   }
 

@@ -5,6 +5,7 @@ import {
   ARTIFACT,
   FEEDBACK,
 } from "../lib/artifact-constants.js";
+import logger from '../logger.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -14,17 +15,17 @@ function assertFrozen(obj, label) {
 
 function assertCannotMutate(obj, key, label) {
   const original = obj[key];
-  try { obj[key] = "__MUTATED__"; } catch { /* strict mode throws */ }
+  try { obj[key] = "__MUTATED__"; } catch (_e) { logger.debug('artifact-constants.test', 'strict mode throws', { error: _e?.message }); }
   assert.deepStrictEqual(obj[key], original, `${label}.${key} should be immutable`);
 }
 
 function assertCannotAdd(obj, label) {
-  try { obj.__newProp = true; } catch { /* strict mode throws */ }
+  try { obj.__newProp = true; } catch (_e) { logger.debug('artifact-constants.test', 'strict mode throws', { error: _e?.message }); }
   assert.strictEqual(obj.__newProp, undefined, `${label} should not allow new properties`);
 }
 
 function assertCannotDelete(obj, key, label) {
-  try { delete obj[key]; } catch { /* strict mode throws */ }
+  try { delete obj[key]; } catch (_e) { logger.debug('artifact-constants.test', 'strict mode throws', { error: _e?.message }); }
   assert.notStrictEqual(obj[key], undefined, `${label}.${key} should not be deletable`);
 }
 

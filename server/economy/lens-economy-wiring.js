@@ -8,6 +8,7 @@ import { executeTransfer } from "./transfer.js";
 import { recordTransaction, generateTxId } from "./ledger.js";
 import { registerCitation, distributeRoyalties } from "./royalty-cascade.js";
 import { getBalance } from "./balances.js";
+import logger from '../logger.js';
 
 function uid(prefix = "lew") {
   return `${prefix}_` + randomUUID().replace(/-/g, "").slice(0, 16);
@@ -61,7 +62,7 @@ export function tipContent(db, {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(uid("tip"), tipperId, creatorId, contentId,
       contentType || "unknown", lensId || "unknown", amount, refId, nowISO());
-  } catch { /* table may not exist yet — tip still happened via ledger */ }
+  } catch (_e) { logger.debug('lens-economy-wiring', 'table may not exist yet — tip still happened via ledger', { error: _e?.message }); }
 
   // Award merit credit for tipping activity
   awardMeritCredit(db, tipperId, "tip_given", 1, { contentId, lensId });
@@ -284,12 +285,12 @@ export function purchaseDTU(db, {
         purchase_amount, ledger_ref_id, created_at)
       VALUES (?, ?, ?, 'PURCHASE', ?, ?, ?)
     `).run(uid("own"), dtuId, buyerId, amount, refId, nowISO());
-  } catch { /* ownership table may not exist yet */ }
+  } catch (_e) { logger.debug('lens-economy-wiring', 'ownership table may not exist yet', { error: _e?.message }); }
 
   // Execute royalty cascade if this DTU cites others
   try {
     distributeRoyalties(db, { contentId: dtuId, transactionAmount: amount, buyerId, sellerId, requestId, ip });
-  } catch { /* cascade is supplementary, purchase still valid */ }
+  } catch (_e) { logger.debug('lens-economy-wiring', 'cascade is supplementary, purchase still valid', { error: _e?.message }); }
 
   // Award merit
   awardMeritCredit(db, buyerId, "dtu_purchased", 2, { dtuId, lensId });

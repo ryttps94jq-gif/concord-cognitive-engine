@@ -10,6 +10,7 @@
  */
 
 import { embed, cosineSimilarity, getEmbedding, embedDTU } from "./embeddings.js";
+import logger from './logger.js';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -141,7 +142,7 @@ Return JSON only: {"needsUpdate": true/false, "updatedContent": "..." or null, "
 
             updated++;
           }
-        } catch { /* JSON parse failed */ }
+        } catch (_e) { logger.debug('selfHealing', 'JSON parse failed', { error: _e?.message }); }
       }
     } catch (e) {
       if (_log) _log("warn", "dream_review_error", { dtuId: review.dtuId, error: String(e?.message || e) });

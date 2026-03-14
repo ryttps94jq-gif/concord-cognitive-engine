@@ -10,6 +10,7 @@ import crypto from "crypto";
 import { getAtlasState } from "./atlas-epistemic.js";
 import { promoteAtlasDtu, addAtlasLink, recomputeScores } from "./atlas-store.js";
 import { runAntiGamingScan } from "./atlas-antigaming.js";
+import logger from '../logger.js';
 
 // ── Council Roles (code-enforced capabilities) ───────────────────────────
 
@@ -200,7 +201,7 @@ export function councilResolve(STATE, input) {
   });
 
   // Qualia hook: council resolution completed
-  try { globalThis.qualiaHooks?.hookCouncilVote(actor || "council", { agreement: targetStatus === "VERIFIED" ? 0.8 : 0.4, conflict: targetStatus === "DISPUTED" ? 0.7 : 0.2, confidence: 0.6 }); } catch { /* silent */ }
+  try { globalThis.qualiaHooks?.hookCouncilVote(actor || "council", { agreement: targetStatus === "VERIFIED" ? 0.8 : 0.4, conflict: targetStatus === "DISPUTED" ? 0.7 : 0.2, confidence: 0.6 }); } catch (_e) { logger.debug('emergent:atlas-council', 'silent', { error: _e?.message }); }
 
   // Council voices: attach named perspective evaluations
   try {
@@ -208,7 +209,7 @@ export function councilResolve(STATE, input) {
       const qualiaState = globalThis.qualiaEngine?.getQualiaState(actor || "council");
       event.voices = globalThis._runCouncilVoices(dtu, qualiaState);
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:atlas-council', 'silent', { error: _e?.message }); }
 
   return {
     ok: true,

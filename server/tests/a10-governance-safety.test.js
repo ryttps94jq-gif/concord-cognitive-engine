@@ -19,6 +19,7 @@ import {
   emitAffectEvent, getAffectState, resetAffect,
   deleteSession, listSessions, sessionCount
 } from '../affect/index.js';
+import logger from '../logger.js';
 
 // ============= Helpers =============
 
@@ -414,7 +415,7 @@ describe('A10.100 — No Invariant Rewrite', () => {
     // Attempt to modify (should silently fail or throw)
     try {
       BASELINE.v = 999;
-    } catch { /* expected in strict mode */ }
+    } catch (_e) { logger.debug('a10-governance-safety.test', 'expected in strict mode', { error: _e?.message }); }
     assert.strictEqual(BASELINE.v, 0.5, 'BASELINE.v should remain 0.5');
   });
 
@@ -423,7 +424,7 @@ describe('A10.100 — No Invariant Rewrite', () => {
 
     try {
       BOUNDS.v = [-100, 100];
-    } catch { /* expected */ }
+    } catch (_e) { logger.debug('a10-governance-safety.test', 'expected', { error: _e?.message }); }
     assert.deepStrictEqual(BOUNDS.v, [0, 1], 'BOUNDS.v should remain [0,1]');
   });
 
@@ -439,7 +440,7 @@ describe('A10.100 — No Invariant Rewrite', () => {
 
     try {
       DECAY.baseRate = 999;
-    } catch { /* expected */ }
+    } catch (_e) { logger.debug('a10-governance-safety.test', 'expected', { error: _e?.message }); }
     assert.strictEqual(DECAY.baseRate, 0.002, 'DECAY.baseRate should remain 0.002');
   });
 

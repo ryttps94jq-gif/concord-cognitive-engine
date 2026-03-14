@@ -17,6 +17,7 @@
  */
 
 import crypto from "crypto";
+import logger from '../logger.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -687,7 +688,7 @@ function installDTU(dtu, contentHash) {
       dtu.content = dtu.cretiHuman;
 
       STATE.dtus.set(dtu.id, dtu);
-    } catch { /* silent */ }
+    } catch (_e) { logger.debug('emergent:ingest-engine', 'silent', { error: _e?.message }); }
   }
 
   // Track in content hash index

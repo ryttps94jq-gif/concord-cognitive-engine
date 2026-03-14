@@ -23,6 +23,7 @@
  */
 
 import crypto from "crypto";
+import logger from '../logger.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -143,14 +144,14 @@ function addToIndex(status, id) {
   try {
     if (!jobIndex.has(status)) jobIndex.set(status, new Set());
     jobIndex.get(status).add(id);
-  } catch (_) { /* silent */ }
+  } catch (_e) { logger.debug('emergent:research-jobs', 'silent', { error: _e?.message }); }
 }
 
 function removeFromIndex(status, id) {
   try {
     const set = jobIndex.get(status);
     if (set) set.delete(id);
-  } catch (_) { /* silent */ }
+  } catch (_e) { logger.debug('emergent:research-jobs', 'silent', { error: _e?.message }); }
 }
 
 function transitionStatus(job, newStatus) {
@@ -160,7 +161,7 @@ function transitionStatus(job, newStatus) {
     removeFromIndex(oldStatus, job.id);
     job.status = newStatus;
     addToIndex(newStatus, job.id);
-  } catch (_) { /* silent */ }
+  } catch (_e) { logger.debug('emergent:research-jobs', 'silent', { error: _e?.message }); }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -305,7 +306,7 @@ function executeIngest(job) {
           gapType:    "explicit",
           ingestedAt: nowISO(),
         });
-      } catch (_) { /* silent */ }
+      } catch (_e) { logger.debug('emergent:research-jobs', 'silent', { error: _e?.message }); }
     }
 
     // Generate ingest candidates from gaps
@@ -974,7 +975,7 @@ export function runResearchStep(jobId) {
         transitionStatus(job, RESEARCH_STATUSES.FAILED);
         job.completedAt = nowISO();
       }
-    } catch (_) { /* silent */ }
+    } catch (_e) { logger.debug('emergent:research-jobs', 'silent', { error: _e?.message }); }
     return { ok: false, error: e.message };
   }
 }

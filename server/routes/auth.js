@@ -4,6 +4,7 @@
  */
 import express from "express";
 import crypto from "crypto";
+import logger from '../logger.js';
 
 export default function createAuthRouter({
   AuthDB,
@@ -85,7 +86,7 @@ export default function createAuthRouter({
     try {
       const decoded = jwt.decode(refreshToken);
       if (decoded?.family) _REFRESH_FAMILIES.set(decoded.family, { userId, currentJti: decoded.jti, rotatedAt: Date.now() });
-    } catch {}
+    } catch (_e) { logger.debug('auth', 'silent catch', { error: _e?.message }); }
 
     // Audit log registration
     auditLog("auth", "register", {
@@ -139,7 +140,7 @@ export default function createAuthRouter({
         const decoded = jwt.decode(refreshToken);
         if (decoded?.family) _REFRESH_FAMILIES.set(decoded.family, { userId: user.id, currentJti: decoded.jti, rotatedAt: Date.now() });
       }
-    } catch {}
+    } catch (_e) { logger.debug('auth', 'silent catch', { error: _e?.message }); }
 
     // Audit successful login
     auditLog("auth", "login_success", {
@@ -181,7 +182,7 @@ export default function createAuthRouter({
           const expiresAt = decoded.exp ? decoded.exp * 1000 : Date.now() + 7 * 86400000;
           _TOKEN_BLACKLIST.revoke(decoded.jti, expiresAt, decoded.userId || decoded.sub || (req.user && req.user.id));
         }
-      } catch {}
+      } catch (_e) { logger.debug('auth', 'silent catch', { error: _e?.message }); }
     }
 
     // Also revoke refresh token
@@ -191,7 +192,7 @@ export default function createAuthRouter({
         const decoded = jwt.decode(refreshCookie);
         if (decoded?.jti) _TOKEN_BLACKLIST.revoke(decoded.jti, Date.now() + 30 * 86400000, decoded.userId || decoded.sub || (req.user && req.user.id));
         if (decoded?.family) _REFRESH_FAMILIES.delete(decoded.family);
-      } catch {}
+      } catch (_e) { logger.debug('auth', 'silent catch', { error: _e?.message }); }
     }
 
     // Audit logout
@@ -262,7 +263,7 @@ export default function createAuthRouter({
       if (newDecoded?.family) {
         _REFRESH_FAMILIES.set(newDecoded.family, { userId: user.id, currentJti: newDecoded.jti, rotatedAt: Date.now() });
       }
-    } catch {}
+    } catch (_e) { logger.debug('auth', 'silent catch', { error: _e?.message }); }
 
     auditLog("auth", "token_refresh", { userId: user.id, ip: req.ip });
 

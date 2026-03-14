@@ -24,6 +24,7 @@ import { promisify } from "util";
 import path from "path";
 import { fileURLToPath } from "url";
 import crypto from "crypto";
+import logger from '../logger.js';
 
 const execFileAsync = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -468,12 +469,12 @@ export function createBackupScheduler(db, opts = {}) {
       if (lastBackup?.metadata && typeof lastBackup.metadata === "string") {
         try {
           lastBackup.metadata = JSON.parse(lastBackup.metadata);
-        } catch { /* leave as string */ }
+        } catch (_e) { logger.debug('backup-scheduler', 'leave as string', { error: _e?.message }); }
       }
       if (lastSuccessful?.metadata && typeof lastSuccessful.metadata === "string") {
         try {
           lastSuccessful.metadata = JSON.parse(lastSuccessful.metadata);
-        } catch { /* leave as string */ }
+        } catch (_e) { logger.debug('backup-scheduler', 'leave as string', { error: _e?.message }); }
       }
 
       return {
@@ -551,7 +552,7 @@ export function createBackupScheduler(db, opts = {}) {
           if (row.metadata && typeof row.metadata === "string") {
             try {
               row.metadata = JSON.parse(row.metadata);
-            } catch { /* leave as string */ }
+            } catch (_e) { logger.debug('backup-scheduler', 'leave as string', { error: _e?.message }); }
           }
         }
 

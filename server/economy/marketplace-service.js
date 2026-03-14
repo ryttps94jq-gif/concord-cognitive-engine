@@ -11,6 +11,7 @@ import { distributeRoyalties } from "./royalty-cascade.js";
 import { createPurchase, transitionPurchase, recordSettlement } from "./purchases.js";
 import { economyAudit } from "./audit.js";
 import { isEmergentAccount } from "./emergent-accounts.js";
+import logger from '../logger.js';
 
 function uid(prefix = "lst") {
   return `${prefix}_` + randomUUID().replace(/-/g, "").slice(0, 16);
@@ -451,7 +452,7 @@ export function checkWashTrading(db, { accountA, accountB, contentId }) {
         INSERT INTO wash_trade_flags (id, account_a, account_b, content_id, trade_count, flagged_at)
         VALUES (?, ?, ?, ?, ?, ?)
       `).run(uid("wtf"), accountA, accountB, contentId, recentTrades, nowISO());
-    } catch { /* ignore duplicate flags */ }
+    } catch (_e) { logger.debug('marketplace-service', 'ignore duplicate flags', { error: _e?.message }); }
 
     return { flagged: true, tradeCount: recentTrades };
   }

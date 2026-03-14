@@ -13,6 +13,7 @@
  */
 
 import crypto from "crypto";
+import logger from '../logger.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -38,7 +39,7 @@ function constraintsToQuery(constraints) {
 async function retrieveDTUs(query, opts = {}) {
   // Use global retrieval if available
   if (typeof globalThis._concordRetrieve === "function") {
-    try { return await globalThis._concordRetrieve(query, opts); } catch { /* fallback */ }
+    try { return await globalThis._concordRetrieve(query, opts); } catch (_e) { logger.debug('emergent:reality-explorer', 'fallback', { error: _e?.message }); }
   }
   // Fallback: basic keyword search over STATE.dtus
   const STATE = getSTATE();
@@ -218,7 +219,7 @@ export async function exploreAdjacent(constraints, domain) {
           premise: `Given constraints: ${JSON.stringify(constraints)}, is configuration ${JSON.stringify(config.configuration)} feasible?`,
           domain,
         });
-      } catch { /* HLR unavailable */ }
+      } catch (_e) { logger.debug('emergent:reality-explorer', 'HLR unavailable', { error: _e?.message }); }
     }
   }
 
@@ -313,7 +314,7 @@ export function handleExploreCommand(parts) {
     case "explore": {
       const domain = parts[1];
       let constraints = {};
-      try { constraints = JSON.parse(parts.slice(2).join(" ")); } catch { /* empty */ }
+      try { constraints = JSON.parse(parts.slice(2).join(" ")); } catch (_e) { logger.debug('emergent:reality-explorer', 'empty', { error: _e?.message }); }
       return exploreAdjacent(constraints, domain);
     }
     case "explore-history":

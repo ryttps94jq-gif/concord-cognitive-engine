@@ -15,6 +15,7 @@
  */
 
 import { listEmergents, getEmergentState } from "./store.js";
+import logger from '../logger.js';
 
 // ── Scope Constants ──────────────────────────────────────────────────────────
 
@@ -616,7 +617,7 @@ export function runGlobalTick(STATE) {
   try {
     const es = getEmergentState(STATE);
     globalEmergents = listEmergents(es, { active: true, instanceScope: "global" });
-  } catch { /* store not initialized yet — ok, just empty */ }
+  } catch (_e) { logger.debug('emergent:scope-separation', 'store not initialized yet — ok, just empty', { error: _e?.message }); }
 
   ss.globalTick.lastTickAt = new Date().toISOString();
   ss.globalTick.tickCount++;

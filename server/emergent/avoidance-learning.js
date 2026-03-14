@@ -17,6 +17,7 @@
  */
 
 import crypto from "crypto";
+import logger from '../logger.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -233,7 +234,7 @@ function _createWound(entityId, type, severity) {
           timestamp: now,
         });
       }
-    } catch { /* silent */ }
+    } catch (_e) { logger.debug('emergent:avoidance-learning', 'silent', { error: _e?.message }); }
 
     return wound;
   } catch {
@@ -340,7 +341,7 @@ function _createAvoidanceMemory(entityId, painRecord) {
           timestamp: now,
         });
       }
-    } catch { /* silent */ }
+    } catch (_e) { logger.debug('emergent:avoidance-learning', 'silent', { error: _e?.message }); }
 
     return avoidance;
   } catch {
@@ -371,7 +372,7 @@ function _emitPainToAffect(entityId, severity) {
           timestamp: nowISO(),
         });
       }
-    } catch { /* silent */ }
+    } catch (_e) { logger.debug('emergent:avoidance-learning', 'silent', { error: _e?.message }); }
 
     // Try qualia engine if available
     try {
@@ -383,8 +384,8 @@ function _emitPainToAffect(entityId, severity) {
           "trauma_aware_os.overwhelm_risk": clamp01(severity * 0.6),
         });
       }
-    } catch { /* silent */ }
-  } catch { /* silent */ }
+    } catch (_e) { logger.debug('emergent:avoidance-learning', 'silent', { error: _e?.message }); }
+  } catch (_e) { logger.debug('emergent:avoidance-learning', 'silent', { error: _e?.message }); }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -466,7 +467,7 @@ export function recordPain(entityId, type, severity = 0, source = "", context = 
           timestamp: now,
         });
       }
-    } catch { /* silent */ }
+    } catch (_e) { logger.debug('emergent:avoidance-learning', 'silent', { error: _e?.message }); }
 
     return { ok: true, painId, severity: effectiveSeverity };
   } catch {
@@ -575,7 +576,7 @@ export function processPain(painId) {
           timestamp: nowISO(),
         });
       }
-    } catch { /* silent */ }
+    } catch (_e) { logger.debug('emergent:avoidance-learning', 'silent', { error: _e?.message }); }
 
     return result;
   } catch {
@@ -670,7 +671,7 @@ export function checkAvoidance(entityId, context = {}) {
             activations: av.activations,
           });
         }
-      } catch { /* silent per-avoidance */ }
+      } catch (_e) { logger.debug('emergent:avoidance-learning', 'silent per-avoidance', { error: _e?.message }); }
     }
 
     return {
@@ -712,7 +713,7 @@ export function getActiveWounds(entityId) {
             inflictedAt: w.inflictedAt,
           });
         }
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('emergent:avoidance-learning', 'silent', { error: _e?.message }); }
     }
 
     return active;
@@ -813,7 +814,7 @@ export function healWound(woundId, amount = 0.1) {
           const idx = ps.activeWounds.indexOf(woundId);
           if (idx !== -1) ps.activeWounds.splice(idx, 1);
         }
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('emergent:avoidance-learning', 'silent', { error: _e?.message }); }
 
       // Emit healed event
       try {
@@ -825,7 +826,7 @@ export function healWound(woundId, amount = 0.1) {
             timestamp: wound.healedAt,
           });
         }
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('emergent:avoidance-learning', 'silent', { error: _e?.message }); }
 
       return { ok: true, healed: true, remaining: 0 };
     }
@@ -914,9 +915,9 @@ export function tickWounds(entityId, modifiers = {}) {
                 timestamp: wound.healedAt,
               });
             }
-          } catch { /* silent */ }
+          } catch (_e) { logger.debug('emergent:avoidance-learning', 'silent', { error: _e?.message }); }
         }
-      } catch { /* silent per-wound */ }
+      } catch (_e) { logger.debug('emergent:avoidance-learning', 'silent per-wound', { error: _e?.message }); }
     }
 
     // Clean up healed/invalid wounds from active list
@@ -964,7 +965,7 @@ export function getAvoidanceMemories(entityId) {
             source_pain: av.source_pain,
           });
         }
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('emergent:avoidance-learning', 'silent', { error: _e?.message }); }
     }
 
     return memories;
@@ -1019,7 +1020,7 @@ export function decayAvoidances(entityId) {
             if (hoursSinceActivation < 24) {
               effectiveDecay *= 0.25;
             }
-          } catch { /* use default decay */ }
+          } catch (_e) { logger.debug('emergent:avoidance-learning', 'use default decay', { error: _e?.message }); }
         }
 
         // High-activation avoidances also decay slower (reinforced patterns)
@@ -1034,7 +1035,7 @@ export function decayAvoidances(entityId) {
           toRemove.push(avoidanceId);
           removed++;
         }
-      } catch { /* silent per-avoidance */ }
+      } catch (_e) { logger.debug('emergent:avoidance-learning', 'silent per-avoidance', { error: _e?.message }); }
     }
 
     // Clean up dead avoidances
@@ -1083,7 +1084,7 @@ export function getPainHistory(entityId, limit = 20) {
             recoveredAt: p.recoveredAt,
           });
         }
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('emergent:avoidance-learning', 'silent', { error: _e?.message }); }
     }
 
     return history;
@@ -1121,7 +1122,7 @@ export function getPainMetrics() {
         } else {
           healedWounds++;
         }
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('emergent:avoidance-learning', 'silent', { error: _e?.message }); }
     }
 
     // Active avoidances
@@ -1133,7 +1134,7 @@ export function getPainMetrics() {
           activeAvoidances++;
           totalAvoidanceStrength += av.strength;
         }
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('emergent:avoidance-learning', 'silent', { error: _e?.message }); }
     }
 
     // Pain severity stats
@@ -1141,7 +1142,7 @@ export function getPainMetrics() {
       try {
         totalSeverity += p.severity;
         if (p.severity > maxSeverity) maxSeverity = p.severity;
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('emergent:avoidance-learning', 'silent', { error: _e?.message }); }
     }
 
     // Entity-level averages
@@ -1149,7 +1150,7 @@ export function getPainMetrics() {
       try {
         avgTolerance += ps.tolerance;
         avgResilience += ps.resilience;
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('emergent:avoidance-learning', 'silent', { error: _e?.message }); }
     }
 
     // Pain type distribution
@@ -1162,7 +1163,7 @@ export function getPainMetrics() {
         if (typeDistribution[p.type] !== undefined) {
           typeDistribution[p.type]++;
         }
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('emergent:avoidance-learning', 'silent', { error: _e?.message }); }
     }
 
     return {

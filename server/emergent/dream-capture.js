@@ -12,6 +12,7 @@
  */
 
 import crypto from "crypto";
+import logger from '../logger.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -25,7 +26,7 @@ function getSTATE() { return globalThis._concordSTATE || null; }
 
 async function retrieveDTUs(query, opts = {}) {
   if (typeof globalThis._concordRetrieve === "function") {
-    try { return await globalThis._concordRetrieve(query, opts); } catch { /* fallback */ }
+    try { return await globalThis._concordRetrieve(query, opts); } catch (_e) { logger.debug('emergent:dream-capture', 'fallback', { error: _e?.message }); }
   }
   const STATE = getSTATE();
   if (!STATE?.dtus) return [];

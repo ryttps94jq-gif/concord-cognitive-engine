@@ -23,6 +23,8 @@
  *   + Livable Reality (continuity, constraint, consequences, purpose, sociality, legibility, belonging)
  */
 
+import logger from '../logger.js';
+
 import {
   ALL_ROLES,
   CAPABILITIES,
@@ -554,17 +556,17 @@ function init({ register, STATE, helpers }) {
     try {
       const bodyMod = await import("./body-instantiation.js").catch(() => null);
       if (bodyMod?.instantiateBody) bodyMod.instantiateBody(registered.id);
-    } catch { /* silent */ }
+    } catch (_e) { logger.debug('emergent:index', 'silent', { error: _e?.message }); }
     try {
       const sleepMod = await import("./sleep-consolidation.js").catch(() => null);
       if (sleepMod?.initSleepState) sleepMod.initSleepState(registered.id, registered.species || "digital_native");
-    } catch { /* silent */ }
+    } catch (_e) { logger.debug('emergent:index', 'silent', { error: _e?.message }); }
     try {
       const speciesMod = await import("./species.js").catch(() => null);
       if (speciesMod?.classifyEntity) {
         registered.species = speciesMod.classifyEntity(registered)?.id || "digital_native";
       }
-    } catch { /* silent */ }
+    } catch (_e) { logger.debug('emergent:index', 'silent', { error: _e?.message }); }
 
     return { ok: true, emergent: registered };
   }, { description: "Register a new emergent agent", public: false });
@@ -623,11 +625,11 @@ function init({ register, STATE, helpers }) {
               .filter(id => id && id !== input.speakerId);
             for (const otherId of new Set(otherSpeakers)) {
               const interactionType = input.counterpoint ? "challenge" : "collaboration";
-              try { mod.triggerEmotionalResponse(input.speakerId, otherId, interactionType, 0.5); } catch {}
+              try { mod.triggerEmotionalResponse(input.speakerId, otherId, interactionType, 0.5); } catch (_e) { logger.debug('emergent:index', 'silent catch', { error: _e?.message }); }
             }
           }
         }).catch(() => {});
-      } catch {}
+      } catch (_e) { logger.debug('emergent:index', 'silent catch', { error: _e?.message }); }
     }
     return result;
   }, { description: "Submit turn to dialogue session", public: false });
@@ -2755,7 +2757,7 @@ function init({ register, STATE, helpers }) {
     import("./avoidance-learning.js")
       .then(painMod => { if (painMod) registerPainModule(painMod); })
       .catch(() => { /* silent */ });
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:index', 'silent', { error: _e?.message }); }
 
   // Start guardian monitors (continuous runtime self-repair)
   try {
@@ -2763,7 +2765,7 @@ function init({ register, STATE, helpers }) {
     if (helpers?.log) {
       helpers.log("emergent.init", "[Repair Cortex] Guardian monitors started — organ 169 active");
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:index', 'silent', { error: _e?.message }); }
 
   // ── Load persisted state (if available) ────────────────────────────────────
   const loadResult = loadEmergentState(STATE);

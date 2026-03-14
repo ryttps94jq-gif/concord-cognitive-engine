@@ -13,6 +13,8 @@
  * Replay: decisions, transfers, attention scheduling, learning updates
  */
 
+import logger from '../logger.js';
+
 const EVENT_TYPES = Object.freeze([
   "episode_recorded",
   "transfer_extracted",
@@ -89,7 +91,7 @@ function emit(type, payload = {}, meta = {}) {
   const typeSubscribers = subscribers.get(type);
   if (typeSubscribers) {
     for (const cb of typeSubscribers) {
-      try { cb(event); } catch { /* subscriber errors don't break the bus */ }
+      try { cb(event); } catch (_e) { logger.debug('cognition-bus', 'subscriber errors don\'t break the bus', { error: _e?.message }); }
     }
   }
 
@@ -97,7 +99,7 @@ function emit(type, payload = {}, meta = {}) {
   const wildcardSubscribers = subscribers.get("*");
   if (wildcardSubscribers) {
     for (const cb of wildcardSubscribers) {
-      try { cb(event); } catch { /* subscriber errors don't break the bus */ }
+      try { cb(event); } catch (_e) { logger.debug('cognition-bus', 'subscriber errors don\'t break the bus', { error: _e?.message }); }
     }
   }
 

@@ -11,6 +11,7 @@ import express from "express";
 import crypto from "crypto";
 import vm from "node:vm";
 import { asyncHandler } from "../lib/async-handler.js";
+import logger from '../logger.js';
 
 const SOVEREIGN_USERNAME = process.env.SOVEREIGN_USERNAME || "dutch";
 
@@ -68,14 +69,14 @@ function createSovereignDTU(STATE, action, input, output) {
   // Best-effort: trigger state save
   try {
     if (typeof globalThis.saveStateDebounced === "function") globalThis.saveStateDebounced();
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('sovereign', 'silent', { error: _e?.message }); }
 
   // Best-effort: emit realtime event
   try {
     if (typeof globalThis.realtimeEmit === "function") {
       globalThis.realtimeEmit("dtu:created", { dtu: { id: dtu.id, type: dtu.type, tags: dtu.tags } });
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('sovereign', 'silent', { error: _e?.message }); }
 
   return dtu;
 }
@@ -173,7 +174,7 @@ export default function createSovereignRouter({ STATE, makeCtx, runMacro, saveSt
       if (globalThis.qualiaEngine) {
         qualiaSummary = globalThis.qualiaEngine.getAllSummaries();
       }
-    } catch { /* silent */ }
+    } catch (_e) { logger.debug('sovereign', 'silent', { error: _e?.message }); }
 
     return res.json({
       ok: true,
@@ -751,7 +752,7 @@ export default function createSovereignRouter({ STATE, makeCtx, runMacro, saveSt
     try {
       if (_saveDebounced) _saveDebounced();
       else if (typeof globalThis.saveStateDebounced === "function") globalThis.saveStateDebounced();
-    } catch { /* silent */ }
+    } catch (_e) { logger.debug('sovereign', 'silent', { error: _e?.message }); }
   }
 
   function tryEmit(event, payload) {
@@ -759,7 +760,7 @@ export default function createSovereignRouter({ STATE, makeCtx, runMacro, saveSt
       if (typeof globalThis.realtimeEmit === "function") {
         globalThis.realtimeEmit(event, payload);
       }
-    } catch { /* silent */ }
+    } catch (_e) { logger.debug('sovereign', 'silent', { error: _e?.message }); }
   }
 
   // GET /sovereign/dashboard — Sovereign dashboard overview

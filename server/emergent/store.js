@@ -10,6 +10,7 @@
  */
 
 import { MEMORY_POLICIES } from "./schema.js";
+import logger from '../logger.js';
 
 /**
  * Create the emergent state namespace.
@@ -100,7 +101,7 @@ export function registerEmergent(state, emergent) {
     import("./body-instantiation.js").then(mod => {
       if (mod?.instantiateBody) mod.instantiateBody(emergent.id, { generation: 1 });
     }).catch(() => {});
-  } catch {}
+  } catch (_e) { logger.debug('emergent:store', 'silent catch', { error: _e?.message }); }
 
   // Wire species classification
   try {
@@ -116,7 +117,7 @@ export function registerEmergent(state, emergent) {
         }
       }
     }).catch(() => {});
-  } catch {}
+  } catch (_e) { logger.debug('emergent:store', 'silent catch', { error: _e?.message }); }
 
   // Wire subjective time initialization
   try {
@@ -127,7 +128,7 @@ export function registerEmergent(state, emergent) {
         mod.recordTick(dummyState, emergent.id);
       }
     }).catch(() => {});
-  } catch {}
+  } catch (_e) { logger.debug('emergent:store', 'silent catch', { error: _e?.message }); }
 
   return emergent;
 }

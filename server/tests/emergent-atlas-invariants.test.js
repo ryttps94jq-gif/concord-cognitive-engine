@@ -20,6 +20,7 @@ import {
   getInvariantLog,
   resetInvariantMetrics,
 } from "../emergent/atlas-invariants.js";
+import logger from '../logger.js';
 
 // ── Reset before each test ────────────────────────────────────────────────────
 
@@ -68,7 +69,7 @@ describe("atlas-invariants", () => {
     });
 
     it("increments thrown on fail (hard)", () => {
-      try { assertInvariant("Z", false, {}, true); } catch { /* expected */ }
+      try { assertInvariant("Z", false, {}, true); } catch (_e) { logger.debug('emergent-atlas-invariants.test', 'expected', { error: _e?.message }); }
       const m = getInvariantMetrics();
       assert.equal(m.failed, 1);
       assert.equal(m.thrown, 1);

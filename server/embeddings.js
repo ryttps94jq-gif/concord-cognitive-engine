@@ -19,6 +19,7 @@
  */
 
 import crypto from "crypto";
+import logger from './logger.js';
 
 // ── Configuration ──────────────────────────────────────────────────────────
 const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || "nomic-embed-text";
@@ -350,7 +351,7 @@ export function removeEmbedding(dtuId) {
   if (_db) {
     try {
       _db.prepare("UPDATE dtus SET embedding = NULL WHERE id = ?").run(dtuId);
-    } catch { /* silent */ }
+    } catch (_e) { logger.debug('embeddings', 'silent', { error: _e?.message }); }
   }
 }
 

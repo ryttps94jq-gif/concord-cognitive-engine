@@ -1,3 +1,4 @@
+// @ts-nocheck — Express middleware patterns require complex type overrides; incremental migration
 /**
  * @fileoverview Centralized middleware configuration for the Concord server.
  * Extracted from server.js to improve modularity while preserving the monolith architecture.
@@ -8,6 +9,7 @@
  */
 
 import crypto from "crypto";
+import logger from '../logger.js';
 
 /**
  * Configure all middleware on the Express app.
@@ -170,7 +172,7 @@ export default function configureMiddleware(app, deps) {
             console.warn("[CORS] WARNING: Allowing same-host origin without ALLOWED_ORIGINS:", origin, "— Set ALLOWED_ORIGINS for production.");
             return callback(null, true);
           }
-        } catch { /* invalid origin URL, fall through to reject */ }
+        } catch (_e) { logger.debug('index', 'invalid origin URL, fall through to reject', { error: _e?.message }); }
         console.error("[CORS] REJECTED: No ALLOWED_ORIGINS configured in production. Origin:", origin, "— Set ALLOWED_ORIGINS=https://your-frontend-domain");
         const err = new Error("CORS not configured");
         err.code = "CORS_NOT_CONFIGURED";

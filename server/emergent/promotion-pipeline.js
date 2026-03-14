@@ -9,6 +9,7 @@
  */
 
 import crypto from "crypto";
+import logger from '../logger.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -56,7 +57,7 @@ function getItem(itemId, itemType, STATE) {
     try {
       const apps = globalThis._concordApps;
       if (apps instanceof Map) return apps.get(itemId);
-    } catch { /* fallback */ }
+    } catch (_e) { logger.debug('emergent:promotion-pipeline', 'fallback', { error: _e?.message }); }
   }
   if (itemType === "dtu" && STATE?.dtus instanceof Map) {
     return STATE.dtus.get(itemId);

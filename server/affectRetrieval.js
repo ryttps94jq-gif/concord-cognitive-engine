@@ -10,6 +10,7 @@
  */
 
 import { embed, cosineSimilarity, isEmbeddingAvailable, getEmbedding } from "./embeddings.js";
+import logger from './logger.js';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -74,9 +75,9 @@ Recent context: ${historyStr}`;
               primary: parsed.primary || affect.primary,
             };
           }
-        } catch { /* JSON parse failed, use rule-based */ }
+        } catch (_e) { logger.debug('affectRetrieval', 'JSON parse failed, use rule-based', { error: _e?.message }); }
       }
-    } catch { /* Brain call failed, use rule-based */ }
+    } catch (_e) { logger.debug('affectRetrieval', 'Brain call failed, use rule-based', { error: _e?.message }); }
   }
 
   return affect;

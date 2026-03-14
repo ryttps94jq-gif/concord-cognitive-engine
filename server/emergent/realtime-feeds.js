@@ -1,3 +1,4 @@
+import logger from '../logger.js';
 // server/emergent/realtime-feeds.js
 // Centralized real-time data fetching service — runs on heartbeat ticks,
 // pushes data via WebSocket (realtimeEmit).
@@ -80,7 +81,7 @@ async function tickFinancialFeeds(STATE, realtimeEmit, callBrain) {
             });
           }
         }
-      } catch { /* individual symbol failure is ok */ }
+      } catch (_e) { logger.debug('emergent:realtime-feeds', 'individual symbol failure is ok', { error: _e?.message }); }
     }
 
     if (quotes.length > 0) {
@@ -179,7 +180,7 @@ async function tickNewsFeeds(STATE, realtimeEmit) {
           if (title) articles.push({ source: feed.name, title: title.replace(/<!\[CDATA\[|\]\]>/g, ""), link, pubDate });
         }
       }
-    } catch { /* individual feed failure is ok */ }
+    } catch (_e) { logger.debug('emergent:realtime-feeds', 'individual feed failure is ok', { error: _e?.message }); }
   }
 
   if (articles.length > 0) {
@@ -268,7 +269,7 @@ async function tickResearchFeeds(STATE, realtimeEmit) {
           if (title) papers.push({ category: cat, title, summary, id, published });
         }
       }
-    } catch { /* individual category failure is ok */ }
+    } catch (_e) { logger.debug('emergent:realtime-feeds', 'individual category failure is ok', { error: _e?.message }); }
   }
 
   if (papers.length > 0) {
@@ -314,7 +315,7 @@ async function tickEconomyFeeds(STATE, realtimeEmit) {
           const values = json?.[1]?.filter(v => v.value != null).slice(0, 3) || [];
           data.push({ indicator: ind.name, code: ind.code, values: values.map(v => ({ year: v.date, value: v.value })) });
         }
-      } catch {}
+      } catch (_e) { logger.debug('emergent:realtime-feeds', 'silent catch', { error: _e?.message }); }
     }
     if (data.length > 0) {
       const payload = { ok: true, indicators: data, fetchedAt: new Date().toISOString() };

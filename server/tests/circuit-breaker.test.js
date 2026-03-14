@@ -13,6 +13,7 @@ import {
   createCircuitBreaker,
   createBreakerRegistry,
 } from "../lib/circuit-breaker.js";
+import logger from '../logger.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -234,7 +235,7 @@ describe("Breaker Registry", () => {
     const reg = createBreakerRegistry();
     // Open the ollama breaker
     for (let i = 0; i < 5; i++) {
-      try { await reg.ollama.call(failFn()); } catch {}
+      try { await reg.ollama.call(failFn()); } catch (_e) { logger.debug('circuit-breaker.test', 'silent catch', { error: _e?.message }); }
     }
     assert.equal(reg.ollama.state, "open");
     reg.resetAll();
