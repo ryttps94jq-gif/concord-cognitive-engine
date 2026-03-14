@@ -16,6 +16,7 @@
  */
 
 import crypto from "crypto";
+import logger from '../logger.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -137,13 +138,13 @@ function _boostOrgan(entityId, organId, delta) {
   try {
     const organ = _body(entityId)?.organs?.get(organId);
     if (organ) organ.maturity.score = clamp01(organ.maturity.score + delta);
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:entity-teaching', 'silent', { error: _e?.message }); }
 }
 function _boostTrust(from, to, delta) {
   try {
     const edge = getSTATE()?.__emergent?._trustNetwork?.edges.get(`${from}\u2192${to}`);
     if (edge) { edge.score = clamp01(edge.score + delta); edge.interactions = (edge.interactions || 0) + 1; edge.lastUpdated = nowISO(); }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:entity-teaching', 'silent', { error: _e?.message }); }
 }
 
 // ── Active Counts & Eligibility ─────────────────────────────────────────────
@@ -208,7 +209,7 @@ function _recordLessonScore(mentorId, score) {
     p.totalLessonsGiven++; p.lastUpdatedAt = nowISO();
     if (p.totalLessonsGiven % 10 === 0 && p.avgLessonScore > ADVANCE_SCORE)
       {p.teachingReputation = clamp01(p.teachingReputation + 0.01);}
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:entity-teaching', 'silent', { error: _e?.message }); }
 }
 
 function _recordGraduation(mentorId, domain, improvement) {
@@ -221,7 +222,7 @@ function _recordGraduation(mentorId, domain, improvement) {
     if (!p.specialties.includes(domain)) p.specialties.push(domain);
     if (n >= 3 && !p.tags.includes("master_teacher")) p.tags.push("master_teacher");
     p.lastUpdatedAt = nowISO();
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:entity-teaching', 'silent', { error: _e?.message }); }
 }
 
 function _recordDissolution(mentorId) {
@@ -229,7 +230,7 @@ function _recordDissolution(mentorId) {
     const p = _ensureProfile(mentorId);
     p.teachingReputation = clamp01(p.teachingReputation - 0.02);
     p.lastUpdatedAt = nowISO();
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:entity-teaching', 'silent', { error: _e?.message }); }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -535,7 +536,7 @@ function _insertRemedial(m, afterIdx) {
     });
     for (let i = afterIdx + 1; i < m.curriculum.length; i++) m.curriculum[i].stepIndex = i;
     m.lessonsTotal = m.curriculum.length;
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:entity-teaching', 'silent', { error: _e?.message }); }
 }
 
 /**

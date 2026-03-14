@@ -5,6 +5,8 @@
  * Part of Concord Spec v2.1 — User-Driven Evolution Loop.
  */
 
+import logger from '../logger.js';
+
 const FEEDBACK_TYPES = Object.freeze({
   LIKE: { weight: 0.3, signal: "positive" },
   DISLIKE: { weight: -0.3, signal: "negative" },
@@ -141,7 +143,7 @@ export async function processFeedbackQueue(STATE, options = {}) {
             meta: { createdBy: "system", lens: "governance", type: "evolution_proposal", tags: ["governance", "evolution", targetId], createdAt: new Date().toISOString() },
           };
           STATE.dtus.set(proposalDtu.id, proposalDtu);
-        } catch {}
+        } catch (_e) { logger.debug('feedback-engine', 'silent catch', { error: _e?.message }); }
       }
     }
 

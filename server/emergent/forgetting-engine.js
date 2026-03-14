@@ -14,6 +14,7 @@
  */
 
 import crypto from "crypto";
+import logger from '../logger.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -161,7 +162,7 @@ async function forgetDTU(dtu, STATE, reason) {
         severity: 0.1,
         context: { dtuId: dtu.id, reason },
       });
-    } catch { /* silent */ }
+    } catch (_e) { logger.debug('emergent:forgetting-engine', 'silent', { error: _e?.message }); }
   }
 
   return tombstone;
@@ -228,7 +229,7 @@ export async function runForgettingCycle(dryRun = false) {
       try {
         const tombstone = await forgetDTU(dtu, STATE, `retention_score=${score.toFixed(4)}_below_threshold=${_threshold}`);
         forgotten.push({ id: dtu.id, tombstoneId: tombstone.id, score });
-      } catch { /* skip on error */ }
+      } catch (_e) { logger.debug('emergent:forgetting-engine', 'skip on error', { error: _e?.message }); }
     }
 
     _lifetimeForgotten += forgotten.length;

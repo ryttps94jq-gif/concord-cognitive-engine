@@ -13,6 +13,7 @@
 import crypto from "crypto";
 import { classifyEntity, SPECIES_REGISTRY } from "./species.js";
 import { existentialOS } from "../existential/registry.js";
+import logger from '../logger.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -46,7 +47,7 @@ function getOrganDefs() {
         }));
       }
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:body-instantiation', 'silent', { error: _e?.message }); }
 
   // Fallback: canonical organ IDs from server.js ORGAN_DEFS (166 organs)
   return ORGAN_DEFS_FALLBACK;
@@ -443,7 +444,7 @@ export function instantiateBody(entityId, options = {}) {
           organState.maturity.stability = clamp01(inherited * 0.3);
           organState.maturity.plasticity = 0.75; // Reset plasticity for offspring
           organState.resolution = _computeResolution(organState.maturity.score);
-        } catch { /* silent */ }
+        } catch (_e) { logger.debug('emergent:body-instantiation', 'silent', { error: _e?.message }); }
       }
 
       body.organs.set(def.organId, organState);
@@ -457,7 +458,7 @@ export function instantiateBody(entityId, options = {}) {
         engine.createQualiaState(entityId, allOSKeys);
         body.qualia = engine.getQualiaState(entityId) || null;
       }
-    } catch { /* silent */ }
+    } catch (_e) { logger.debug('emergent:body-instantiation', 'silent', { error: _e?.message }); }
 
     _bodies.set(entityId, body);
 
@@ -471,7 +472,7 @@ export function instantiateBody(entityId, options = {}) {
           timestamp: body.createdAt,
         });
       }
-    } catch { /* silent */ }
+    } catch (_e) { logger.debug('emergent:body-instantiation', 'silent', { error: _e?.message }); }
 
     return body;
   } catch {
@@ -602,7 +603,7 @@ export function entityKernelTick(entityId, event = {}) {
         signal.acuteStress += st.wear.damage * 0.01;
         signal.paramShift += Math.min(1, Math.abs(delta) * 40);
         signal.decline += st.wear.debt * 0.03;
-      } catch { /* silent per-organ */ }
+      } catch (_e) { logger.debug('emergent:body-instantiation', 'silent per-organ', { error: _e?.message }); }
     }
 
     // Update body growth
@@ -617,7 +618,7 @@ export function entityKernelTick(entityId, event = {}) {
       if (engine && typeof engine.getQualiaState === "function") {
         body.qualia = engine.getQualiaState(entityId) || body.qualia;
       }
-    } catch { /* silent */ }
+    } catch (_e) { logger.debug('emergent:body-instantiation', 'silent', { error: _e?.message }); }
 
     return { ok: true, entityId, signal, growth: { ...body.growth } };
   } catch {
@@ -685,7 +686,7 @@ function _computeBodyGrowth(body, signal = {}) {
       0.8 * g.functionalDecline.contradictionLoad -
       0.7 * repair
     ));
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:body-instantiation', 'silent', { error: _e?.message }); }
 }
 
 // ── compareEntities ─────────────────────────────────────────────────────────
@@ -814,7 +815,7 @@ export function updateGrowth(entityId) {
         signal.chronicStress += (st.wear?.debt ?? 0) * 0.02;
         signal.acuteStress += (st.wear?.damage ?? 0) * 0.01;
         signal.decline += (st.wear?.debt ?? 0) * 0.03;
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('emergent:body-instantiation', 'silent', { error: _e?.message }); }
     }
 
     _computeBodyGrowth(body, signal);
@@ -922,7 +923,7 @@ export function destroyBody(entityId) {
       if (engine && engine._store && engine._store instanceof Map) {
         engine._store.delete(entityId);
       }
-    } catch { /* silent */ }
+    } catch (_e) { logger.debug('emergent:body-instantiation', 'silent', { error: _e?.message }); }
 
     // Emit event
     try {
@@ -932,7 +933,7 @@ export function destroyBody(entityId) {
           timestamp: nowISO(),
         });
       }
-    } catch { /* silent */ }
+    } catch (_e) { logger.debug('emergent:body-instantiation', 'silent', { error: _e?.message }); }
 
     return { ok: true };
   } catch {
@@ -999,7 +1000,7 @@ export function getBodyMetrics() {
         const ct = new Date(body.createdAt).getTime();
         if (ct < oldestTime) { oldestTime = ct; oldestId = entityId; }
         if (ct > newestTime) { newestTime = ct; newestId = entityId; }
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('emergent:body-instantiation', 'silent', { error: _e?.message }); }
     }
 
     return {

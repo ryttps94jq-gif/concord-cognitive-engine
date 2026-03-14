@@ -9,6 +9,7 @@
  */
 
 import crypto from "crypto";
+import logger from '../logger.js';
 
 // ── Configuration ───────────────────────────────────────────────────────────
 
@@ -130,7 +131,7 @@ export function checkCompatibility(sig1, sig2) {
         return { compatible: false, reason: `Species incompatible: ${s1} × ${s2}` };
       }
     }
-  } catch { /* silent — species module not loaded */ }
+  } catch (_e) { logger.debug('emergent:reproduction', 'silent — species module not loaded', { error: _e?.message }); }
 
   // Invariant sets must not directly contradict
   const inv1 = new Set((sig1.invariants || []).map(i => typeof i === "string" ? i : i.id || JSON.stringify(i)));
@@ -403,7 +404,7 @@ export async function attemptReproduction(entity1, entity2, STATE, runMacro, mak
       genesisOverlap: genesis.overlap,
     };
     offspringDtu.meta = { ...(offspringDtu.meta || {}), ...birthProposal.meta };
-    try { if (typeof globalThis.saveStateDebounced === "function") globalThis.saveStateDebounced(); } catch { /* silent */ }
+    try { if (typeof globalThis.saveStateDebounced === "function") globalThis.saveStateDebounced(); } catch (_e) { logger.debug('emergent:reproduction', 'silent', { error: _e?.message }); }
   }
 
   return {

@@ -3,6 +3,7 @@
  * Registered directly on app (mixed prefixes)
  */
 import { asyncHandler } from "../lib/async-handler.js";
+import logger from '../logger.js';
 export default function registerChatRoutes(app, {
   STATE,
   makeCtx,
@@ -59,7 +60,7 @@ export default function registerChatRoutes(app, {
           try {
             res.write(`event: ${event}\n`);
             res.write(`data: ${JSON.stringify(data)}\n\n`);
-          } catch {}
+          } catch (_e) { logger.debug('chat', 'silent catch', { error: _e?.message }); }
         };
 
         // Lightweight chunker over a final answer (keeps architecture unchanged).
@@ -81,7 +82,7 @@ export default function registerChatRoutes(app, {
         }
         sse("final", _withAck(out, req, ["state","logs","shadow"], ["/api/state/latest","/api/logs"], null, { panel: "chat" }));
         kernelTick({ type: "USER_MSG", meta: { path: req.path, stream: true }, signals: { benefit: out?.ok?0.2:0, error: out?.ok?0:0.2 } });
-        try { res.end(); } catch {}
+        try { res.end(); } catch (_e) { logger.debug('chat', 'silent catch', { error: _e?.message }); }
         return;
       }
 

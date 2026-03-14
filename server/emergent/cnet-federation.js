@@ -23,6 +23,7 @@
  */
 
 import crypto from "crypto";
+import logger from '../logger.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -119,7 +120,7 @@ function logEvent(type, data) {
       _eventLog.splice(0, _eventLog.length - MAX_EVENT_LOG);
     }
     return entry;
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:cnet-federation', 'silent', { error: _e?.message }); }
 }
 
 function validateConsentFlags(flags) {

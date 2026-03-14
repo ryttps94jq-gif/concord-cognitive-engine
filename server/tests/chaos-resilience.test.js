@@ -13,6 +13,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import logger from '../logger.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -25,7 +26,7 @@ function makeTmpDir(prefix = 'chaos-test-') {
 
 /** Remove a directory tree, swallowing errors. */
 function rmrf(dir) {
-  try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ }
+  try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_e) { logger.debug('chaos-resilience.test', 'best effort', { error: _e?.message }); }
 }
 
 // ============= 1. Crash-during-write simulation ============================

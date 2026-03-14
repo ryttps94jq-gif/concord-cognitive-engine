@@ -25,6 +25,7 @@ import { getEmergentState } from "./store.js";
 import { getEdgeStore, createEdge, queryEdges } from "./edges.js";
 import { recordNeed } from "./purpose-tracking.js";
 import { recordEpoch, getSubjectiveAge, recordTick } from "./subjective-time.js";
+import logger from '../logger.js';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -404,7 +405,7 @@ REASONING: <derivation path, 2-4 sentences>`;
       recordTick(STATE, selectedEmergent, { isNovel: true, depth: 1 });
       recordTick(STATE, selectedEmergent, { isNovel: true, depth: 1 });
       recordTick(STATE, selectedEmergent, { isNovel: true, depth: 1 });
-    } catch (_) {}
+    } catch (_e) { logger.debug('emergent:meta-derivation', 'silent catch', { error: _e?.message }); }
   }
 
   // Return the session setup — actual LLM call handled by the caller
@@ -670,7 +671,7 @@ export function commitMetaInvariant(STATE, validated, opts = {}) {
         provenance: { source: "meta-derivation", role: "source_invariant" },
       });
       edgesCreated++;
-    } catch (_) {}
+    } catch (_e) { logger.debug('emergent:meta-derivation', 'silent catch', { error: _e?.message }); }
   }
 
   // If prediction targets an existing domain, create predicts edges
@@ -688,7 +689,7 @@ export function commitMetaInvariant(STATE, validated, opts = {}) {
             provenance: { source: "meta-derivation", role: "prediction_target" },
           });
           edgesCreated++;
-        } catch (_) {}
+        } catch (_e) { logger.debug('emergent:meta-derivation', 'silent catch', { error: _e?.message }); }
         if (edgesCreated > 20) break; // cap edge creation
       }
     }
@@ -715,7 +716,7 @@ export function commitMetaInvariant(STATE, validated, opts = {}) {
         description: `Meta-invariant [${dtuId}] predicts "${validated.prediction}" about ${validated.predictedDomain}. Needs empirical verification.`,
       });
       needCreated = true;
-    } catch (_) {}
+    } catch (_e) { logger.debug('emergent:meta-derivation', 'silent catch', { error: _e?.message }); }
   }
 
   // Emit lattice event
@@ -728,7 +729,7 @@ export function commitMetaInvariant(STATE, validated, opts = {}) {
         predictedDomain: validated.predictedDomain,
         sectorId: 7, // deep consciousness
       });
-    } catch (_) {}
+    } catch (_e) { logger.debug('emergent:meta-derivation', 'silent catch', { error: _e?.message }); }
   }
 
   return { ok: true, dtu, needCreated, edgesCreated };
@@ -915,7 +916,7 @@ export function runConvergenceCheck(STATE, opts = {}) {
             provenance: { source: "convergence", role: "dream_input" } });
           createEdge(STATE, { sourceId: convDtuId, targetId: metaDtu.id, edgeType: "derives", weight: 1.0,
             provenance: { source: "convergence", role: "meta_derivation" } });
-        } catch (_) {}
+        } catch (_e) { logger.debug('emergent:meta-derivation', 'silent catch', { error: _e?.message }); }
       }
 
       // Emit lattice event
@@ -928,7 +929,7 @@ export function runConvergenceCheck(STATE, opts = {}) {
             similarity,
             sectorId: 7,
           });
-        } catch (_) {}
+        } catch (_e) { logger.debug('emergent:meta-derivation', 'silent catch', { error: _e?.message }); }
       }
     }
   }

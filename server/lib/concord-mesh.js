@@ -31,6 +31,7 @@
  */
 
 import crypto from "crypto";
+import logger from '../logger.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -747,7 +748,7 @@ export function classifyRelayPriority(packet) {
     if (content.includes('"type":"KNOWLEDGE"') || content.includes('"type":"THEOREM"')) {
       return RELAY_PRIORITIES.KNOWLEDGE;
     }
-  } catch { /* classify as general */ }
+  } catch (_e) { logger.debug('concord-mesh', 'classify as general', { error: _e?.message }); }
 
   return RELAY_PRIORITIES.GENERAL;
 }
@@ -1235,7 +1236,7 @@ export async function meshHeartbeatTick(STATE, tick) {
   // Process relay queue every tick
   try {
     processRelayQueue();
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('concord-mesh', 'silent', { error: _e?.message }); }
 
   // Broadcast beacon every 10th mesh tick
   if (tick % 10 === 0) {
@@ -1244,7 +1245,7 @@ export async function meshHeartbeatTick(STATE, tick) {
       if (STATE?.dtus) {
         STATE.dtus.set(beacon.id, beacon);
       }
-    } catch { /* silent */ }
+    } catch (_e) { logger.debug('concord-mesh', 'silent', { error: _e?.message }); }
   }
 
   // Clean stale peers and completed transfers every 50th tick
@@ -1264,7 +1265,7 @@ export async function meshHeartbeatTick(STATE, tick) {
           _meshState.activeTransfers.delete(id);
         }
       }
-    } catch { /* silent */ }
+    } catch (_e) { logger.debug('concord-mesh', 'silent', { error: _e?.message }); }
   }
 }
 

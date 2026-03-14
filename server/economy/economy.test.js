@@ -18,6 +18,7 @@ import { calculateFee, PLATFORM_ACCOUNT_ID } from "./fees.js";
 import { validateAmount, validateUsers, validateTransfer } from "./validators.js";
 import { executeTransfer, executePurchase, executeMarketplacePurchase, executeReversal } from "./transfer.js";
 import { requestWithdrawal, approveWithdrawal, processWithdrawal, cancelWithdrawal } from "./withdrawals.js";
+import logger from '../logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TEST_DB_PATH = path.join(__dirname, ".test_economy.db");
@@ -26,7 +27,7 @@ let db;
 
 function setupTestDb() {
   // Clean slate
-  try { fs.unlinkSync(TEST_DB_PATH); } catch { /* ok */ }
+  try { fs.unlinkSync(TEST_DB_PATH); } catch (_e) { logger.debug('economy.test', 'ok', { error: _e?.message }); }
 
   db = new Database(TEST_DB_PATH);
   db.pragma("journal_mode = WAL");
@@ -110,7 +111,7 @@ before(() => {
 
 after(() => {
   if (db) db.close();
-  try { fs.unlinkSync(TEST_DB_PATH); } catch { /* ok */ }
+  try { fs.unlinkSync(TEST_DB_PATH); } catch (_e) { logger.debug('economy.test', 'ok', { error: _e?.message }); }
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════

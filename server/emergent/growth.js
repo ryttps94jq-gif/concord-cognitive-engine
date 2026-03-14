@@ -31,6 +31,7 @@ import {
 
 import { recordCycle, recordTick, recordEpoch } from "./subjective-time.js";
 import { extractTrustFromSession } from "./trust-network.js";
+import logger from '../logger.js';
 
 // ── 1. Pattern Acquisition ──────────────────────────────────────────────────
 
@@ -227,7 +228,7 @@ export function distillSession(STATE, sessionId) {
       if (isMetaDerivation) {
         recordEpoch(STATE, pid, "meta_derivation");
       }
-    } catch (_) { /* best-effort */ }
+    } catch (_e) { logger.debug('emergent:growth', 'best-effort', { error: _e?.message }); }
   }
 
   // ── Trust extraction from session ──
@@ -235,7 +236,7 @@ export function distillSession(STATE, sessionId) {
   try {
     const trustResult = extractTrustFromSession(STATE, session);
     trustEvents = trustResult.eventsRecorded || 0;
-  } catch (_) { /* best-effort */ }
+  } catch (_e) { logger.debug('emergent:growth', 'best-effort', { error: _e?.message }); }
 
   // ── Co-activation edge extraction ──
   // Find DTU pairs that co-appeared in the working set across 3+ queries.

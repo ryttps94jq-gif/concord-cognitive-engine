@@ -25,6 +25,7 @@ import {
   generateTxId,
   nowISO,
 } from "../economy/ledger.js";
+import logger from '../logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TEST_DB_PATH = path.join(__dirname, ".test_ledger_unit.db");
@@ -70,7 +71,7 @@ function createTestDb() {
  */
 function createTestDbWithoutRefId() {
   const dbPath = TEST_DB_PATH + ".noref";
-  try { fs.unlinkSync(dbPath); } catch { /* ok */ }
+  try { fs.unlinkSync(dbPath); } catch (_e) { logger.debug('ledger.test', 'ok', { error: _e?.message }); }
   const db = new Database(dbPath);
   db.pragma("journal_mode = WAL");
 
@@ -115,14 +116,14 @@ function countRows(db) {
 let db;
 
 beforeEach(() => {
-  try { fs.unlinkSync(TEST_DB_PATH); } catch { /* ok */ }
+  try { fs.unlinkSync(TEST_DB_PATH); } catch (_e) { logger.debug('ledger.test', 'ok', { error: _e?.message }); }
   db = createTestDb();
 });
 
 afterEach(() => {
   if (db && db.open) db.close();
-  try { fs.unlinkSync(TEST_DB_PATH); } catch { /* ok */ }
-  try { fs.unlinkSync(TEST_DB_PATH + ".noref"); } catch { /* ok */ }
+  try { fs.unlinkSync(TEST_DB_PATH); } catch (_e) { logger.debug('ledger.test', 'ok', { error: _e?.message }); }
+  try { fs.unlinkSync(TEST_DB_PATH + ".noref"); } catch (_e) { logger.debug('ledger.test', 'ok', { error: _e?.message }); }
 });
 
 // ═════════════════════════════════════════════════════════════════════════════

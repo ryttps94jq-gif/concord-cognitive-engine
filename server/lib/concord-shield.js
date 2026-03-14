@@ -33,6 +33,7 @@
 import crypto from "crypto";
 import { exec as execCb } from "child_process";
 import { promisify } from "util";
+import logger from '../logger.js';
 
 const execAsync = promisify(execCb);
 
@@ -1200,7 +1201,7 @@ export async function shieldHeartbeatTick(STATE, tick) {
     if (tick % 10 === 0 && STATE?.dtus) {
       const activeFamilies = getActiveThreatFamilies(STATE);
       for (const family of activeFamilies.slice(0, 3)) {
-        try { runProphet(family, STATE); } catch {}
+        try { runProphet(family, STATE); } catch (_e) { logger.debug('concord-shield', 'silent catch', { error: _e?.message }); }
       }
     }
 
@@ -1426,8 +1427,8 @@ export async function performSweep(STATE, opts = {}) {
   for (const threat of results.threatsFound) {
     const threatDtu = STATE?.dtus?.get(threat.threat);
     if (threatDtu) {
-      try { runGuardian(threatDtu, STATE); } catch {}
-      try { runSurgeon(threatDtu); } catch {}
+      try { runGuardian(threatDtu, STATE); } catch (_e) { logger.debug('concord-shield', 'silent catch', { error: _e?.message }); }
+      try { runSurgeon(threatDtu); } catch (_e) { logger.debug('concord-shield', 'silent catch', { error: _e?.message }); }
     }
   }
 

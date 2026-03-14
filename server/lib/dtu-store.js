@@ -12,6 +12,8 @@
  *   - Transparent: callers use the same Map-like API
  */
 
+import logger from '../logger.js';
+
 /**
  * Initialize the DTU store table in SQLite.
  * Call once at boot after db is initialized.
@@ -188,7 +190,7 @@ export function createDTUStore(db, memoryMap, opts = {}) {
     delete(id) {
       const s = stmts();
       if (s) {
-        try { s.delete.run(id); } catch {}
+        try { s.delete.run(id); } catch (_e) { logger.debug('dtu-store', 'silent catch', { error: _e?.message }); }
       }
       return memoryMap.delete(id);
     },
@@ -203,7 +205,7 @@ export function createDTUStore(db, memoryMap, opts = {}) {
         try {
           const row = s.count.get();
           return row ? row.count : memoryMap.size;
-        } catch {}
+        } catch (_e) { logger.debug('dtu-store', 'silent catch', { error: _e?.message }); }
       }
       return memoryMap.size;
     },
@@ -252,7 +254,7 @@ export function createDTUStore(db, memoryMap, opts = {}) {
      */
     clear() {
       if (db) {
-        try { db.exec("DELETE FROM dtu_store"); } catch {}
+        try { db.exec("DELETE FROM dtu_store"); } catch (_e) { logger.debug('dtu-store', 'silent catch', { error: _e?.message }); }
       }
       memoryMap.clear();
     },
@@ -362,7 +364,7 @@ export function createDTUStore(db, memoryMap, opts = {}) {
       const s = stmts();
       let sqliteCount = 0;
       if (s) {
-        try { sqliteCount = s.count.get()?.count || 0; } catch {}
+        try { sqliteCount = s.count.get()?.count || 0; } catch (_e) { logger.debug('dtu-store', 'silent catch', { error: _e?.message }); }
       }
       return {
         memoryCount: memoryMap.size,

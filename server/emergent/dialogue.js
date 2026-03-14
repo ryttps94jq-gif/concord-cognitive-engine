@@ -41,6 +41,7 @@ import {
   storeOutputBundle,
 } from "./store.js";
 import { recordTick } from "./subjective-time.js";
+import logger from '../logger.js';
 
 // ── Session Factory ─────────────────────────────────────────────────────────
 
@@ -227,7 +228,7 @@ export function submitTurn(STATE, sessionId, turn) {
     const isEcho = !isNovel && session._turnCount > 3;
     const depth = acceptedTurn.confidenceLabel === "derived" || acceptedTurn.confidenceLabel === "fact" ? 1 : 0;
     recordTick(STATE, acceptedTurn.speakerId, { isNovel, isEcho, depth });
-  } catch (_) { /* best-effort: don't block turns on time tracking */ }
+  } catch (_e) { logger.debug('emergent:dialogue', 'best-effort: don\'t block turns on time tracking', { error: _e?.message }); }
 
   // ── Update session signals ──────────────────────────────────────────────
   updateSessionSignals(session, acceptedTurn);

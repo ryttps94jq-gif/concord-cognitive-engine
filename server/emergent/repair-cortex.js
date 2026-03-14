@@ -33,6 +33,7 @@ import { exec as execCb } from "child_process";
 import { promisify } from "util";
 import fs from "fs";
 import path from "path";
+import logger from '../logger.js';
 
 const execAsync = promisify(execCb);
 
@@ -125,7 +126,7 @@ function _ensureRepairMemory() {
         _repairMemory.set(k, v);
       }
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
 }
 
 function _syncRepairMemoryToSTATE() {
@@ -137,7 +138,7 @@ function _syncRepairMemoryToSTATE() {
         S.repairMemory.set(k, v);
       }
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
 }
 
 export function addToRepairMemory(errorPattern, fix) {
@@ -163,7 +164,7 @@ export function addToRepairMemory(errorPattern, fix) {
       });
     }
     _syncRepairMemoryToSTATE();
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
 }
 
 export function recordRepairSuccess(errorPattern) {
@@ -176,7 +177,7 @@ export function recordRepairSuccess(errorPattern) {
       entry.successRate = entry.successes / entry.occurrences;
       _syncRepairMemoryToSTATE();
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
 }
 
 export function recordRepairFailure(errorPattern) {
@@ -193,7 +194,7 @@ export function recordRepairFailure(errorPattern) {
       }
       _syncRepairMemoryToSTATE();
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
 }
 
 export function lookupRepairMemory(errorPattern) {
@@ -294,7 +295,7 @@ export function observe(error, context = "unknown") {
     if (diagnosis) {
       addToRepairMemory(String(error?.message || error), diagnosis.fixes?.[0]);
     }
-  } catch { /* observe() itself NEVER throws */ }
+  } catch (_e) { logger.debug('emergent:repair-cortex', 'observe() itself NEVER throws', { error: _e?.message }); }
 }
 
 export function getErrorAccumulator() {
@@ -369,7 +370,7 @@ function logRepairDTU(phase, action, details) {
           dtuId, phase, action, timestamp: now,
         });
       }
-    } catch { /* silent */ }
+    } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
 
     return dtu;
   } catch {
@@ -395,7 +396,7 @@ function _recordRepairPain(phase, action, details) {
         }
       );
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
 }
 
 function _recordAvoidance(action, details) {
@@ -408,7 +409,7 @@ function _recordAvoidance(action, details) {
         avoidance: details?.fix?.name || "unknown",
       });
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
 }
 
 export function getRecentRepairDTUs(n = 20) {
@@ -1824,12 +1825,12 @@ const PRE_BUILD_CHECKS = {
                     const content = fs.readFileSync(fullPath, "utf-8");
                     const refs = content.matchAll(/process\.env\.(NEXT_PUBLIC_\w+)/g);
                     for (const ref of refs) envRefs.add(ref[1]);
-                  } catch { /* skip unreadable files */ }
+                  } catch (_e) { logger.debug('emergent:repair-cortex', 'skip unreadable files', { error: _e?.message }); }
                 }
               }
             };
             scanFiles(dirPath);
-          } catch { /* skip unreadable dirs */ }
+          } catch (_e) { logger.debug('emergent:repair-cortex', 'skip unreadable dirs', { error: _e?.message }); }
         }
 
         if (envRefs.size > 0) {
@@ -2104,7 +2105,7 @@ const PRE_BUILD_CHECKS = {
                 });
               }
             }
-          } catch { /* silent — openssl may not be available */ }
+          } catch (_e) { logger.debug('emergent:repair-cortex', 'silent — openssl may not be available', { error: _e?.message }); }
         }
 
         return { issues, autoFixable };
@@ -2531,7 +2532,7 @@ const GUARDIAN_MONITORS = {
           if (global.gc) global.gc();
           logRepairDTU(REPAIR_PHASES.POST_BUILD, "memory_pressure_repair", result);
         }
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
     },
   },
 
@@ -2567,7 +2568,7 @@ const GUARDIAN_MONITORS = {
             logRepairDTU(REPAIR_PHASES.POST_BUILD, "state_index_rebuilt", result);
           }
         }
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
     },
   },
 
@@ -2595,7 +2596,7 @@ const GUARDIAN_MONITORS = {
         } else if (result.warning) {
           await safeExec("find /data -name '*.log' -mtime +3 -delete 2>/dev/null");
         }
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
     },
   },
 
@@ -2636,7 +2637,7 @@ const GUARDIAN_MONITORS = {
         for (const ep of unhealthy) {
           logRepairDTU(REPAIR_PHASES.POST_BUILD, "endpoint_failure", ep);
         }
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
     },
   },
 
@@ -2662,7 +2663,7 @@ const GUARDIAN_MONITORS = {
           const res = await safeDockerExec("docker restart concord-ollama 2>/dev/null");
           logRepairDTU(REPAIR_PHASES.POST_BUILD, res.skipped ? "ollama_restart_skipped_no_docker" : "ollama_restart", result);
         }
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
     },
   },
 
@@ -2692,7 +2693,7 @@ const GUARDIAN_MONITORS = {
         if (result.enabled && !result.healthy) {
           logRepairDTU(REPAIR_PHASES.POST_BUILD, "autogen_stalled", result);
         }
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
     },
   },
 
@@ -2736,7 +2737,7 @@ const GUARDIAN_MONITORS = {
         for (const entity of (result.entities || []).filter(e => e.critical && !e.dying)) {
           logRepairDTU(REPAIR_PHASES.POST_BUILD, "entity_critical", entity);
         }
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
     },
   },
 
@@ -2762,7 +2763,7 @@ const GUARDIAN_MONITORS = {
               latencyMs: Date.now() - start,
               host: base,
             };
-          } catch { /* try next host */ }
+          } catch (_e) { logger.debug('emergent:repair-cortex', 'try next host', { error: _e?.message }); }
         }
 
         return { healthy: false, error: "Frontend unreachable on all hosts" };
@@ -2777,7 +2778,7 @@ const GUARDIAN_MONITORS = {
           const res = await safeDockerExec("docker restart concord-frontend 2>/dev/null");
           logRepairDTU(REPAIR_PHASES.POST_BUILD, res.skipped ? "frontend_restart_skipped_no_docker" : "frontend_restart", result);
         }
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
     },
   },
 
@@ -2840,7 +2841,7 @@ const GUARDIAN_MONITORS = {
             logRepairDTU(REPAIR_PHASES.POST_BUILD, "container_unhealthy", container);
           }
         }
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
     },
   },
 
@@ -2890,7 +2891,7 @@ const GUARDIAN_MONITORS = {
             });
           }
         }
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
     },
   },
 
@@ -2930,7 +2931,7 @@ const GUARDIAN_MONITORS = {
         if (!result.healthy) {
           logRepairDTU(REPAIR_PHASES.POST_BUILD, "websocket_failure", result);
         }
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
     },
   },
 
@@ -2969,7 +2970,7 @@ const GUARDIAN_MONITORS = {
             lagMs: result.lagMs,
           });
         }
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
     },
   },
 
@@ -3024,7 +3025,7 @@ const GUARDIAN_MONITORS = {
             daysLeft: result.minDaysUntilExpiry,
           });
         }
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
     },
   },
 
@@ -3095,7 +3096,7 @@ const GUARDIAN_MONITORS = {
             });
           }
         }
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
     },
   },
 
@@ -3155,7 +3156,7 @@ const GUARDIAN_MONITORS = {
             });
           }
         }
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
     },
   },
 };
@@ -3179,7 +3180,7 @@ export function startGuardian() {
           if (!result.healthy) {
             await monitor.repair(result);
           }
-        } catch { /* silent */ }
+        } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
       }, monitor.interval);
 
       // Unref so it doesn't prevent process exit
@@ -3426,7 +3427,7 @@ const EXECUTORS = {
     execute: async () => {
       try {
         globalThis.realtimeEmit("system:reconnect", { reason: "repair_cortex" });
-      } catch { /* best effort */ }
+      } catch (_e) { logger.debug('emergent:repair-cortex', 'best effort', { error: _e?.message }); }
       return { success: true };
     },
   },
@@ -3609,7 +3610,7 @@ REASONING: <why>`;
 
     let context = {};
     if (contextMatch) {
-      try { context = JSON.parse(contextMatch[1]); } catch { /* use empty */ }
+      try { context = JSON.parse(contextMatch[1]); } catch (_e) { logger.debug('emergent:repair-cortex', 'use empty', { error: _e?.message }); }
     }
 
     return { executor, context, confidence };
@@ -3703,7 +3704,7 @@ async function runRepairCycle() {
               }
             }
           }
-        } catch { /* AI layer is best-effort */ }
+        } catch (_e) { logger.debug('emergent:repair-cortex', 'AI layer is best-effort', { error: _e?.message }); }
       }
     }
 
@@ -3717,7 +3718,7 @@ async function runRepairCycle() {
           if (result.success) {
             repairs.push({ key: name, method: "proactive", executor: name, result });
           }
-        } catch { /* proactive is best-effort */ }
+        } catch (_e) { logger.debug('emergent:repair-cortex', 'proactive is best-effort', { error: _e?.message }); }
       }
     }
 
@@ -3727,7 +3728,7 @@ async function runRepairCycle() {
       if (spotCheckResult.checked > 0) {
         repairs.push({ key: "quality_spot_check", method: "proactive", executor: "spot_check", result: spotCheckResult });
       }
-    } catch { /* spot-check is best-effort */ }
+    } catch (_e) { logger.debug('emergent:repair-cortex', 'spot-check is best-effort', { error: _e?.message }); }
 
     // 3. Log cycle results
     if (repairs.length > 0) {
@@ -3809,7 +3810,7 @@ Artifact data (first 500 chars): ${JSON.stringify(artifact.data).slice(0, 500)}`
           artifact.meta.reviewNote = result.content;
         }
       }
-    } catch { /* spot-check failures are non-fatal */ }
+    } catch (_e) { logger.debug('emergent:repair-cortex', 'spot-check failures are non-fatal', { error: _e?.message }); }
   }
 
   return { checked, approved, pending: pending.length };
@@ -3824,7 +3825,7 @@ export function startRepairLoop() {
     try {
       await runRepairCycle();
     } catch (e) {
-      try { observe(e, "repair_loop_tick"); } catch { /* absolute last resort */ }
+      try { observe(e, "repair_loop_tick"); } catch (_e) { logger.debug('emergent:repair-cortex', 'absolute last resort', { error: _e?.message }); }
     }
   }, RUNTIME_REPAIR_INTERVAL);
 
@@ -3963,7 +3964,7 @@ function _updateOrganFromRepair(phase, result) {
     if (result.escalated) {
       S.repairCortex.totalEscalations++;
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
 }
 
 // ── Repair Agent ────────────────────────────────────────────────────────────
@@ -3986,7 +3987,7 @@ export async function repairAgentTick() {
         }
 
         results[name] = result;
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
     }
 
     return { ok: true, monitors: results };
@@ -4093,7 +4094,7 @@ export function registerPainModule(painModule) {
     if (painModule && typeof painModule.recordPain === "function") {
       globalThis._repairCortexPainModule = painModule;
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
 }
 
 // ── Full Deploy Pipeline ────────────────────────────────────────────────────
@@ -4138,7 +4139,7 @@ export async function runFullDeploy(projectRoot, buildCommand, upCommand) {
   if (upCommand) {
     try {
       await execAsync(upCommand, { cwd: projectRoot, timeout: 60000 });
-    } catch { /* non-fatal — guardian will detect */ }
+    } catch (_e) { logger.debug('emergent:repair-cortex', 'non-fatal — guardian will detect', { error: _e?.message }); }
   }
 
   // Phase 3: Guardian
@@ -4271,7 +4272,7 @@ const REPAIR_STRATEGIES = [
         try {
           const result = await EXECUTORS[knownFix.executor].execute(knownFix.context || {});
           if (result.success) return { fixed: true, method: "known_pattern", executor: knownFix.executor };
-        } catch {}
+        } catch (_e) { logger.debug('emergent:repair-cortex', 'silent catch', { error: _e?.message }); }
       }
       return { fixed: false };
     },
@@ -4566,7 +4567,7 @@ export async function processRepairQueue() {
           repaired = true;
           break;
         }
-      } catch {}
+      } catch (_e) { logger.debug('emergent:repair-cortex', 'silent catch', { error: _e?.message }); }
     }
     if (!repaired) {
       errorEntry.repairAttempted = true;

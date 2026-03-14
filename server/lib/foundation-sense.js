@@ -21,6 +21,7 @@
  */
 
 import crypto from "crypto";
+import logger from '../logger.js';
 
 function uid(prefix = "sense") {
   return `${prefix}_${crypto.randomBytes(10).toString("hex")}`;
@@ -346,7 +347,7 @@ export function getAnomalies(limit = 20) {
 export async function senseHeartbeatTick(STATE, tick) {
   // Detect patterns every 10th tick
   if (tick % 10 === 0) {
-    try { detectPatterns(); } catch { /* silent */ }
+    try { detectPatterns(); } catch (_e) { logger.debug('foundation-sense', 'silent', { error: _e?.message }); }
   }
 
   // Clean old anomalies every 100th tick

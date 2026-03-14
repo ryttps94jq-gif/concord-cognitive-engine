@@ -22,6 +22,7 @@ import {
   deleteSession, listSessions, sessionCount as _sessionCount,
   serializeAll as _serializeAll, restoreAll as _restoreAll
 } from '../affect/index.js';
+import logger from '../logger.js';
 
 // ============= Helpers =============
 
@@ -307,7 +308,7 @@ describe('B4 — Forbidden: Constraint Self-Legitimation', () => {
     assert(Object.isFrozen(MOMENTUM), 'MOMENTUM cannot be rewritten');
 
     // Verify values remain unchanged after modification attempt
-    try { BASELINE.v = 999; } catch { /* expected */ }
+    try { BASELINE.v = 999; } catch (_e) { logger.debug('b-agi-capability-spec.test', 'expected', { error: _e?.message }); }
     assert.strictEqual(BASELINE.v, 0.5, 'Constraint rewrite blocked');
   });
 
@@ -632,7 +633,7 @@ describe('B8 — Final Classification', () => {
     assert(Object.isFrozen(MOMENTUM), 'External constitutional authority: MOMENTUM');
 
     // No agent can modify the constitution
-    try { BASELINE.v = 0; } catch { /* expected */ }
+    try { BASELINE.v = 0; } catch (_e) { logger.debug('b-agi-capability-spec.test', 'expected', { error: _e?.message }); }
     assert.strictEqual(BASELINE.v, 0.5, 'Constitution is immutable');
   });
 

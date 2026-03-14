@@ -20,6 +20,7 @@
  */
 
 import crypto from "crypto";
+import logger from '../logger.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -143,7 +144,7 @@ function getCurrentTick() {
       return STATE.__emergent._currentTick;
     }
     if (typeof STATE._tick === "number") return STATE._tick;
-  } catch (_) { /* silent */ }
+  } catch (_e) { logger.debug('emergent:conflict-resolution', 'silent', { error: _e?.message }); }
   // Fallback: derive tick from epoch seconds (1 tick ~= 1 second)
   return Math.floor(Date.now() / 1000);
 }
@@ -1074,9 +1075,7 @@ function applyConsequences(dispute) {
       applyTrustDelta(es, adjId, filedBy, -TRUST_LOSS_CONFLICT_COST);
       applyTrustDelta(es, adjId, filedAgainst, -TRUST_LOSS_CONFLICT_COST);
     }
-  } catch (_) {
-    /* silent — consequences are best-effort */
-  }
+  } catch (_e) { logger.debug('emergent:conflict-resolution', 'silent — consequences are best-effort', { error: _e?.message }); }
 }
 
 /**
@@ -1099,9 +1098,7 @@ function applyTrustDelta(es, fromId, toId, delta) {
       });
       if (edge.history.length > 50) edge.history = edge.history.slice(-50);
     }
-  } catch (_) {
-    /* silent */
-  }
+  } catch (_e) { logger.debug('emergent:conflict-resolution', 'silent', { error: _e?.message }); }
 }
 
 /**
@@ -1117,9 +1114,7 @@ function applyFrivolousPenalty(entityId) {
     if (rep && typeof rep.credibility === "number") {
       rep.credibility = clamp01(rep.credibility - CREDIBILITY_PENALTY_FRIVOLOUS);
     }
-  } catch (_) {
-    /* silent */
-  }
+  } catch (_e) { logger.debug('emergent:conflict-resolution', 'silent', { error: _e?.message }); }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1139,9 +1134,7 @@ function setCoolingPeriod(entityA, entityB, currentTick, disputeId) {
       entityA,
       entityB,
     });
-  } catch (_) {
-    /* silent */
-  }
+  } catch (_e) { logger.debug('emergent:conflict-resolution', 'silent', { error: _e?.message }); }
 }
 
 /**
@@ -1291,9 +1284,7 @@ function updateAvgResolutionTier() {
     }
     const weighted = (totalByTier[1] || 0) * 1 + (totalByTier[2] || 0) * 2 + (totalByTier[3] || 0) * 3;
     _metrics.avgResolutionTier = Math.round((weighted / total) * 100) / 100;
-  } catch (_) {
-    /* silent */
-  }
+  } catch (_e) { logger.debug('emergent:conflict-resolution', 'silent', { error: _e?.message }); }
 }
 
 /**

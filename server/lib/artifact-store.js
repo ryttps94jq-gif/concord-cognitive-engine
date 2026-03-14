@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import zlib from "zlib";
+import logger from '../logger.js';
 
 const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), "data");
 const ARTIFACT_ROOT = process.env.ARTIFACT_DIR || path.join(DATA_DIR, "artifacts");
@@ -216,9 +217,9 @@ export function getArtifactDiskUsage() {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const full = path.join(dir, entry.name);
         if (entry.isDirectory()) walk(full);
-        else try { total += fs.statSync(full).size; } catch {}
+        else try { total += fs.statSync(full).size; } catch (_e) { logger.debug('artifact-store', 'silent catch', { error: _e?.message }); }
       }
-    } catch {}
+    } catch (_e) { logger.debug('artifact-store', 'silent catch', { error: _e?.message }); }
   };
   walk(ARTIFACT_ROOT);
   return total;

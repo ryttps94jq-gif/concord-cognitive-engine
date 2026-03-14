@@ -3,13 +3,14 @@
 // Does not depend on global middleware — enforces locally.
 
 import crypto from "crypto";
+import logger from '../logger.js';
 
 const FOUNDER_SECRET = process.env.FOUNDER_SECRET || "";
 
 /**
  * Check if the request is from an admin or founder.
  * Uses: JWT role claim, FOUNDER_SECRET header, or wildcard scope.
- * @returns {{ ok: boolean, error?: string }}
+ * @returns {{ ok: boolean, error?: string, status?: number, method?: string, role?: string }}
  */
 export function requireAdmin(req) {
   // Public auth mode — allow (global middleware handles this)
@@ -25,7 +26,7 @@ export function requireAdmin(req) {
         if (crypto.timingSafeEqual(a, b)) {
           return { ok: true, method: "founder_secret" };
         }
-      } catch { /* length mismatch or encoding error — fall through */ }
+      } catch (_e) { logger.debug('guards', 'length mismatch or encoding error — fall through', { error: _e?.message }); }
     }
   }
 

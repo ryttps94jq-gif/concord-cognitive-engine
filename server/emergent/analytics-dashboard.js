@@ -6,6 +6,7 @@
  */
 
 import { getAtlasState } from "./atlas-epistemic.js";
+import logger from '../logger.js';
 
 // ── Analytics State ──────────────────────────────────────────────────────
 
@@ -86,7 +87,7 @@ export function takeSnapshot(STATE) {
     for (const [domain, ids] of (atlas.byDomainType || new Map())) {
       snapshot.atlasByDomain[domain] = ids.size;
     }
-  } catch { /* atlas may not be initialized */ }
+  } catch (_e) { logger.debug('emergent:analytics-dashboard', 'atlas may not be initialized', { error: _e?.message }); }
 
   analytics.snapshots.push(snapshot);
   analytics.lastSnapshotAt = now;
@@ -317,7 +318,7 @@ export function getKnowledgeDensity(STATE) {
     atlasDtus = atlas.dtus?.size || 0;
     atlasLinks = atlas.links?.length || 0;
     atlasEntities = atlas.entities?.size || 0;
-  } catch { /* ok */ }
+  } catch (_e) { logger.debug('emergent:analytics-dashboard', 'ok', { error: _e?.message }); }
 
   // Density = edges per DTU (higher = more interconnected)
   const density = totalDtus > 0 ? Math.round((totalEdges / totalDtus) * 100) / 100 : 0;

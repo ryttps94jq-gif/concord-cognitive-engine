@@ -22,6 +22,7 @@ import {
   getReconciliationHistory,
   DRIFT_THRESHOLD,
 } from "../economy/treasury-reconciliation.js";
+import logger from '../logger.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -225,7 +226,7 @@ beforeEach(() => {
 afterEach(() => {
   console.error = originalConsoleError;
   if (db) {
-    try { db.close(); } catch { /* ignore */ }
+    try { db.close(); } catch (_e) { logger.debug('treasury-reconciliation.test', 'ignore', { error: _e?.message }); }
   }
 });
 

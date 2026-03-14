@@ -9,6 +9,7 @@
 import express from "express";
 import crypto from "crypto";
 import { asyncHandler } from "../lib/async-handler.js";
+import logger from '../logger.js';
 
 const SOVEREIGN_USERNAME = process.env.SOVEREIGN_USERNAME || "dutch";
 
@@ -44,8 +45,8 @@ function createSovereignDTU(STATE, action, input, output) {
       updatedAt: nowISO(),
     };
     STATE.dtus.set(dtu.id, dtu);
-    try { if (typeof globalThis.saveStateDebounced === "function") globalThis.saveStateDebounced(); } catch { /* silent */ }
-    try { if (typeof globalThis.realtimeEmit === "function") globalThis.realtimeEmit("dtu:created", { dtu: { id: dtu.id, type: dtu.type, tags: dtu.tags } }); } catch { /* silent */ }
+    try { if (typeof globalThis.saveStateDebounced === "function") globalThis.saveStateDebounced(); } catch (_e) { logger.debug('sovereign-emergent', 'silent', { error: _e?.message }); }
+    try { if (typeof globalThis.realtimeEmit === "function") globalThis.realtimeEmit("dtu:created", { dtu: { id: dtu.id, type: dtu.type, tags: dtu.tags } }); } catch (_e) { logger.debug('sovereign-emergent', 'silent', { error: _e?.message }); }
     return dtu;
   } catch { return null; }
 }

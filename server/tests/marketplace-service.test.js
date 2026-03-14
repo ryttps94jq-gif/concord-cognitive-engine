@@ -1,6 +1,7 @@
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "crypto";
+import logger from '../logger.js';
 
 // ── Inline the module under test (avoid ESM import issues with mocked deps) ──
 // We re-implement the pure functions and test them directly, while mocking
@@ -764,7 +765,7 @@ describe("marketplace-service", () => {
             INSERT INTO wash_trade_flags (id, account_a, account_b, content_id, trade_count, flagged_at)
             VALUES (?, ?, ?, ?, ?, ?)
           `).run("wtf_1", accountA, accountB, contentId, recentTrades, "2026-01-01");
-        } catch { /* ignore */ }
+        } catch (_e) { logger.debug('marketplace-service.test', 'ignore', { error: _e?.message }); }
         return { flagged: true, tradeCount: recentTrades };
       }
       return { flagged: false, tradeCount: recentTrades };

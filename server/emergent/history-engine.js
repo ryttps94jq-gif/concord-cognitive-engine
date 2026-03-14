@@ -20,6 +20,7 @@
  */
 
 import crypto from "crypto";
+import logger from '../logger.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -134,7 +135,7 @@ function indexEvent(map, key, eventId) {
     if (!key) return;
     if (!map.has(key)) map.set(key, []);
     map.get(key).push(eventId);
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:history-engine', 'silent', { error: _e?.message }); }
 }
 
 function insertIntoTimeline(eventId, timestamp) {
@@ -152,7 +153,7 @@ function insertIntoTimeline(eventId, timestamp) {
       }
     }
     _timeline.splice(lo, 0, eventId);
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:history-engine', 'silent', { error: _e?.message }); }
 }
 
 // ── Counter Updates ─────────────────────────────────────────────────────────
@@ -216,7 +217,7 @@ function updateCounters(type) {
       default:
         break;
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:history-engine', 'silent', { error: _e?.message }); }
 }
 
 // ── Milestone Detection ─────────────────────────────────────────────────────
@@ -247,7 +248,7 @@ function checkPopulationMilestones() {
         return evt;
       }
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:history-engine', 'silent', { error: _e?.message }); }
   return null;
 }
 
@@ -276,7 +277,7 @@ function checkKnowledgeMilestones() {
         return evt;
       }
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:history-engine', 'silent', { error: _e?.message }); }
   return null;
 }
 
@@ -306,7 +307,7 @@ function checkResearchMilestones() {
         return evt;
       }
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:history-engine', 'silent', { error: _e?.message }); }
   return null;
 }
 
@@ -349,7 +350,7 @@ function checkGovernanceMilestones() {
         metadata: { milestone: "first_amendment", amendments: _counters.amendments },
       });
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:history-engine', 'silent', { error: _e?.message }); }
   return null;
 }
 
@@ -362,7 +363,7 @@ function runMilestoneChecks() {
     checkKnowledgeMilestones();
     checkResearchMilestones();
     checkGovernanceMilestones();
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:history-engine', 'silent', { error: _e?.message }); }
 }
 
 // ── Era Transition Detection ────────────────────────────────────────────────

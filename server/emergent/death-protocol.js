@@ -30,6 +30,7 @@
  */
 
 import crypto from "crypto";
+import logger from '../logger.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -359,7 +360,7 @@ export async function checkNearDeathWarnings(entityId) {
                   },
                 });
                 broadcast++;
-              } catch { /* silent per-recipient */ }
+              } catch (_e) { logger.debug('emergent:death-protocol', 'silent per-recipient', { error: _e?.message }); }
             }
 
             issued.add(warningType);
@@ -368,7 +369,7 @@ export async function checkNearDeathWarnings(entityId) {
           _warningsIssued.set(entityId, issued);
           _metrics.warningsIssued += newWarnings.length;
         }
-      } catch { /* silent — comms unavailable */ }
+      } catch (_e) { logger.debug('emergent:death-protocol', 'silent — comms unavailable', { error: _e?.message }); }
     }
 
     return { ok: true, warnings: result.warnings, broadcast, newWarnings };
@@ -543,7 +544,7 @@ export async function executeDeath(entityId, cause) {
           deathAt,
         });
       }
-    } catch { /* silent */ }
+    } catch (_e) { logger.debug('emergent:death-protocol', 'silent', { error: _e?.message }); }
 
     // Clean up tracking state
     _homeostasisFailures.delete(entityId);
@@ -592,7 +593,7 @@ function _captureFinalState(entityId, bodyMod) {
         result.organMaturity[organId] = Number(organ.maturity?.score ?? 0);
       }
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:death-protocol', 'silent', { error: _e?.message }); }
 
   return result;
 }
@@ -617,7 +618,7 @@ function _captureEntityInfo(entityId, storeMod, STATE) {
     info.district = entity.district || "commons";
     info.createdAt = entity.createdAt || null;
     info.instanceScope = entity.instanceScope || "local";
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:death-protocol', 'silent', { error: _e?.message }); }
 
   return info;
 }
@@ -693,7 +694,7 @@ function _generateMemorial(entityId, entityInfo, finalState, cause, deathAt, mem
           createdAt: deathAt,
         });
       }
-    } catch { /* silent */ }
+    } catch (_e) { logger.debug('emergent:death-protocol', 'silent', { error: _e?.message }); }
 
     return memorial;
   } catch {
@@ -742,7 +743,7 @@ function _inferPersonalityTraits(entityInfo, finalState) {
     // Resilience based on longevity
     if ((finalState.tickCount || 0) > 1000) traits.push("enduring");
     if ((finalState.tickCount || 0) > 5000) traits.push("venerable");
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:death-protocol', 'silent', { error: _e?.message }); }
 
   return traits;
 }
@@ -772,7 +773,7 @@ async function _captureTrustSnapshot(entityId, trustMod, STATE) {
       trust: t.trust,
       interactions: t.interactions,
     }));
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:death-protocol', 'silent', { error: _e?.message }); }
 
   return snapshot;
 }
@@ -810,7 +811,7 @@ async function _executeKnowledgeInheritance(entityId, bodyMod, STATE) {
           }
         }
       }
-    } catch { /* silent */ }
+    } catch (_e) { logger.debug('emergent:death-protocol', 'silent', { error: _e?.message }); }
 
     result.offspringIds = offspringIds;
 
@@ -848,14 +849,14 @@ async function _executeKnowledgeInheritance(entityId, bodyMod, STATE) {
         if (!dtu.tags.includes("inherited")) dtu.tags.push("inherited");
 
         result.dtusTransferred++;
-      } catch { /* silent per-dtu */ }
+      } catch (_e) { logger.debug('emergent:death-protocol', 'silent per-dtu', { error: _e?.message }); }
     }
 
     if (result.dtusTransferred > 0) {
       result.transferred = true;
       _metrics.knowledgeInheritances++;
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:death-protocol', 'silent', { error: _e?.message }); }
 
   return result;
 }
@@ -898,7 +899,7 @@ async function _cleanupTrustGraph(entityId, trustMod, STATE) {
     for (const affectedId of affectedEntities) {
       _recomputeTrustAggregate(trustStore, affectedId);
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:death-protocol', 'silent', { error: _e?.message }); }
 }
 
 /**
@@ -928,7 +929,7 @@ function _recomputeTrustAggregate(trustStore, emergentId) {
       trustsCount: trustGivenCount,
       trustedByCount: trustReceivedCount,
     });
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:death-protocol', 'silent', { error: _e?.message }); }
 }
 
 /**
@@ -977,7 +978,7 @@ async function _cleanupComms(entityId, commsMod, STATE) {
       ids.length = 0;
       ids.push(...filtered);
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:death-protocol', 'silent', { error: _e?.message }); }
 }
 
 /**
@@ -1010,7 +1011,7 @@ function _cleanupSessions(entityId, storeMod, STATE) {
         terminated++;
       }
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:death-protocol', 'silent', { error: _e?.message }); }
 
   return terminated;
 }
@@ -1024,7 +1025,7 @@ async function _cleanupBody(entityId, bodyMod) {
 
     const result = bodyMod.destroyBody(entityId);
     return result;
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:death-protocol', 'silent', { error: _e?.message }); }
 }
 
 /**
@@ -1036,7 +1037,7 @@ function _deactivateEmergent(entityId, storeMod, STATE) {
 
     const es = storeMod.getEmergentState(STATE);
     storeMod.deactivateEmergent(es, entityId);
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:death-protocol', 'silent', { error: _e?.message }); }
 }
 
 /**
@@ -1068,9 +1069,9 @@ function _captureContributions(entityId, storeMod, STATE) {
         if (sessionIds) {
           result.sessionsParticipated = sessionIds.size || 0;
         }
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('emergent:death-protocol', 'silent', { error: _e?.message }); }
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:death-protocol', 'silent', { error: _e?.message }); }
 
   return result;
 }
@@ -1187,7 +1188,7 @@ export async function planSuccession(entityId) {
             };
           }
         }
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('emergent:death-protocol', 'silent', { error: _e?.message }); }
     }
 
     // ── Health status ─────────────────────────────────────────────────────
@@ -1228,7 +1229,7 @@ export async function planSuccession(entityId) {
           }
         }
       }
-    } catch { /* silent */ }
+    } catch (_e) { logger.debug('emergent:death-protocol', 'silent', { error: _e?.message }); }
 
     _metrics.successionPlansGenerated++;
 
@@ -1267,7 +1268,7 @@ export function isAlive(entityId) {
           const entity = es.emergents?.get(entityId);
           if (entity && entity.active === false) return false;
         }
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('emergent:death-protocol', 'silent', { error: _e?.message }); }
     }
 
     return true;
@@ -1324,7 +1325,7 @@ export function listDeaths(filters = {}) {
             return true;
           }
         });
-      } catch { /* ignore invalid date */ }
+      } catch (_e) { logger.debug('emergent:death-protocol', 'ignore invalid date', { error: _e?.message }); }
     }
 
     // Sort by death time, most recent first
@@ -1495,7 +1496,7 @@ export async function checkAllEntities() {
             });
           }
         }
-      } catch { /* silent per-entity */ }
+      } catch (_e) { logger.debug('emergent:death-protocol', 'silent per-entity', { error: _e?.message }); }
     }
 
     return { ok: true, checked, deaths, warnings };

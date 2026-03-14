@@ -13,8 +13,8 @@ export default [
       },
     },
     rules: {
-      // Allow empty catch blocks - intentionally used for graceful fallbacks in this codebase
-      'no-empty': ['error', { allowEmptyCatch: true }],
+      // Disallow empty catch blocks - use logger.debug() for silent failures
+      'no-empty': ['error', { allowEmptyCatch: false }],
       'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       'no-console': ['warn', { allow: ['warn', 'error'] }],
       'prefer-const': 'warn',

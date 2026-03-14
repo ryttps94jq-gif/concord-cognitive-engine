@@ -6,6 +6,7 @@
 import { findPurchasesByStatus, transitionPurchase, getPurchase } from "./purchases.js";
 import { checkRefIdProcessed, generateTxId, recordTransactionBatch } from "./ledger.js";
 import { economyAudit } from "./audit.js";
+import logger from '../logger.js';
 
 /**
  * Run a full reconciliation sweep. Designed to be called by cron or admin endpoint.
@@ -150,7 +151,7 @@ export function runReconciliation(db, {
         actions: actions.slice(0, 50), // cap logged details
       },
     });
-  } catch { /* non-critical */ }
+  } catch (_e) { logger.debug('reconciliation', 'non-critical', { error: _e?.message }); }
 
   return {
     ok: errors.length === 0,
@@ -511,7 +512,7 @@ export function getPurchaseReceipt(db, purchaseId) {
     ledgerEntries = db.prepare(
       "SELECT * FROM economy_ledger WHERE ref_id = ? ORDER BY created_at ASC"
     ).all(refId);
-  } catch { /* ref_id column may not exist */ }
+  } catch (_e) { logger.debug('reconciliation', 'ref_id column may not exist', { error: _e?.message }); }
 
   // Get correction entries
   let corrections = [];
@@ -519,7 +520,7 @@ export function getPurchaseReceipt(db, purchaseId) {
     corrections = db.prepare(
       "SELECT * FROM economy_ledger WHERE ref_id LIKE ? ORDER BY created_at ASC"
     ).all(`correction:%:${purchaseId}:%`);
-  } catch { /* ignore */ }
+  } catch (_e) { logger.debug('reconciliation', 'ignore', { error: _e?.message }); }
 
   // Get status history
   let history = [];
@@ -527,7 +528,7 @@ export function getPurchaseReceipt(db, purchaseId) {
     history = db.prepare(
       "SELECT * FROM purchase_status_history WHERE purchase_id = ? ORDER BY created_at ASC"
     ).all(purchaseId);
-  } catch { /* table may not exist */ }
+  } catch (_e) { logger.debug('reconciliation', 'table may not exist', { error: _e?.message }); }
 
   // Build breakdown
   const breakdown = {

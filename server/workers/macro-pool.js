@@ -18,6 +18,7 @@ import { Worker } from "node:worker_threads";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
+import logger from '../logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -122,7 +123,7 @@ export function syncState(snapshot) {
   for (const w of workers) {
     try {
       w.postMessage({ type: "state-sync", state: snapshot });
-    } catch { /* worker may be dead, will restart */ }
+    } catch (_e) { logger.debug('macro-pool', 'worker may be dead, will restart', { error: _e?.message }); }
   }
 }
 
@@ -154,7 +155,7 @@ export function getPoolStats() {
 export function shutdownPool() {
   _poolReady = false;
   for (const w of workers) {
-    try { w.postMessage({ type: "shutdown" }); } catch { /* silent */ }
+    try { w.postMessage({ type: "shutdown" }); } catch (_e) { logger.debug('macro-pool', 'silent', { error: _e?.message }); }
   }
   // Reject any queued tasks
   for (const task of queue) {

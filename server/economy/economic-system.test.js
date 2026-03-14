@@ -35,6 +35,7 @@ import {
 } from "./marketplace-service.js";
 import { distributeFee, getFeeSplitBalances } from "./fee-split.js";
 import { runTreasuryReconciliation } from "./treasury-reconciliation.js";
+import logger from '../logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TEST_DB_PATH = path.join(__dirname, ".test_economic_system.db");
@@ -42,7 +43,7 @@ const TEST_DB_PATH = path.join(__dirname, ".test_economic_system.db");
 let db;
 
 function setupTestDb() {
-  try { fs.unlinkSync(TEST_DB_PATH); } catch { /* ok */ }
+  try { fs.unlinkSync(TEST_DB_PATH); } catch (_e) { logger.debug('economic-system.test', 'ok', { error: _e?.message }); }
 
   db = new Database(TEST_DB_PATH);
   db.pragma("journal_mode = WAL");
@@ -213,7 +214,7 @@ describe("Concord Economic System", () => {
   before(() => setupTestDb());
   after(() => {
     db?.close();
-    try { fs.unlinkSync(TEST_DB_PATH); } catch { /* ok */ }
+    try { fs.unlinkSync(TEST_DB_PATH); } catch (_e) { logger.debug('economic-system.test', 'ok', { error: _e?.message }); }
   });
 
   // ── Fee Structure ─────────────────────────────────────────────────────

@@ -17,6 +17,7 @@
  */
 
 import { runEmpiricalGates } from "./empirical-gates.js";
+import logger from '../logger.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -631,7 +632,7 @@ export async function runHeartbeatBridgeTick(STATE, opts = {}) {
           result.avoidance = { domainsAvoided: avoidedDomains.size };
         }
       }
-    } catch { /* avoidance bridge is non-critical */ }
+    } catch (_e) { logger.debug('emergent:capability-bridge', 'avoidance bridge is non-critical', { error: _e?.message }); }
   }
 
   // 5. Culture → governance voting weight influence
@@ -651,7 +652,7 @@ export async function runHeartbeatBridgeTick(STATE, opts = {}) {
           result.culture = { traditions: traditionCount, strictnessModifier: culturalStrictness };
         }
       }
-    } catch { /* culture bridge is non-critical */ }
+    } catch (_e) { logger.debug('emergent:capability-bridge', 'culture bridge is non-critical', { error: _e?.message }); }
   }
 
   // 6. Creative masterworks → council governance promotion
@@ -692,7 +693,7 @@ export async function runHeartbeatBridgeTick(STATE, opts = {}) {
         }
         if (promoted > 0) result.creative = { masterworksPromoted: promoted };
       }
-    } catch { /* creative bridge is non-critical */ }
+    } catch (_e) { logger.debug('emergent:capability-bridge', 'creative bridge is non-critical', { error: _e?.message }); }
   }
 
   // 7. HLR → Hypothesis Engine: feed HLR reasoning findings into hypotheses
@@ -713,14 +714,14 @@ export async function runHeartbeatBridgeTick(STATE, opts = {}) {
                 hypoMod.proposeHypothesis(statement, finding.domain || "general", "normal");
                 finding._hypothesized = true;
                 proposed++;
-              } catch {}
+              } catch (_e) { logger.debug('emergent:capability-bridge', 'silent catch', { error: _e?.message }); }
             }
           }
           if (proposed >= 3) break; // cap per tick
         }
         if (proposed > 0) result.hlr = { hypothesesProposed: proposed };
       }
-    } catch { /* HLR bridge is non-critical */ }
+    } catch (_e) { logger.debug('emergent:capability-bridge', 'HLR bridge is non-critical', { error: _e?.message }); }
   }
 
   return result;

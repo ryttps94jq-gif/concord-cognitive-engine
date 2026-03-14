@@ -26,6 +26,7 @@ import { searchAtlasDtus, contentHash } from "./atlas-store.js";
 import crypto from "crypto";
 import { assertInvariant } from "./atlas-invariants.js";
 import { validateMarketplaceListing, resolveLicense } from "./atlas-rights.js";
+import logger from '../logger.js';
 
 // ── Scope State Initialization ──────────────────────────────────────────────
 
@@ -530,7 +531,7 @@ export function getLocalQualityHints(STATE, dtuId) {
   try {
     const { findNearDuplicates: _findDupes } = await_free_import_dupes();
     // Inline check since we can't async import in sync function
-  } catch { /* skip */ }
+  } catch (_e) { logger.debug('emergent:atlas-scope-router', 'skip', { error: _e?.message }); }
 
   // Low structural score
   const structural = dtu.scores?.credibility_structural || 0;

@@ -7,6 +7,7 @@
  */
 import { asyncHandler } from "../lib/async-handler.js";
 import { validateBody, llmGenerateSchema } from "../lib/validators/mutation-schemas.js";
+import logger from '../logger.js';
 
 export default function registerSystemRoutes(app, {
   STATE,
@@ -409,7 +410,7 @@ export default function registerSystemRoutes(app, {
       if (typeof computeSubstrateStats === "function") {
         substrateStats = computeSubstrateStats(STATE.dtus, STATE.shadowDtus);
       }
-    } catch { /* fallback below */ }
+    } catch (_e) { logger.debug('system', 'fallback below', { error: _e?.message }); }
 
     const stats = {
       dtus: substrateStats ? {

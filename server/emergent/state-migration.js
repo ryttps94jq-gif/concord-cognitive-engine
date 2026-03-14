@@ -20,6 +20,7 @@
  */
 
 import crypto from "crypto";
+import logger from '../logger.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -133,23 +134,23 @@ async function _getModuleMaps() {
   try {
     const mod = await import("./hypothesis-engine.js");
     if (typeof mod.listHypotheses === "function") m.hypotheses = mod.listHypotheses;
-  } catch { /**/ }
+  } catch (_e) { logger.debug('emergent:state-migration', '', { error: _e?.message }); }
   try {
     const mod = await import("./research-jobs.js");
     if (typeof mod.listResearchJobs === "function") m.researchJobs = mod.listResearchJobs;
-  } catch { /**/ }
+  } catch (_e) { logger.debug('emergent:state-migration', '', { error: _e?.message }); }
   try {
     const mod = await import("./body-instantiation.js");
     if (typeof mod.listBodies === "function") m.listBodies = mod.listBodies;
-  } catch { /**/ }
+  } catch (_e) { logger.debug('emergent:state-migration', '', { error: _e?.message }); }
   try {
     const mod = await import("./death-protocol.js");
     if (typeof mod.listDeaths === "function") m.listDeaths = mod.listDeaths;
-  } catch { /**/ }
+  } catch (_e) { logger.debug('emergent:state-migration', '', { error: _e?.message }); }
   try {
     const mod = await import("./microbond-governance.js");
     if (typeof mod.listBonds === "function") m.listBonds = mod.listBonds;
-  } catch { /**/ }
+  } catch (_e) { logger.debug('emergent:state-migration', '', { error: _e?.message }); }
   return m;
 }
 
@@ -268,7 +269,7 @@ async function snapshotState(STATE) {
     if (mods.researchJobs) researchJobs = safeListResult(mods.researchJobs);
     if (mods.listDeaths) deaths = safeListResult(mods.listDeaths);
     if (mods.listBonds) bonds = safeListResult(mods.listBonds);
-  } catch { /* modules may not be loaded yet */ }
+  } catch (_e) { logger.debug('emergent:state-migration', 'modules may not be loaded yet', { error: _e?.message }); }
 
   const trustNetwork = trust ? mapEntriesToArray(trust.edges) : [];
 
@@ -789,7 +790,7 @@ function postImportValidation(STATE, summary) {
         try {
           const [fromId, toId] = key.split("\u2192");
           if (!es.emergents.has(fromId) && !es.emergents.has(toId)) orphaned++;
-        } catch { /**/ }
+        } catch (_e) { logger.debug('emergent:state-migration', '', { error: _e?.message }); }
       }
       if (orphaned > 0) {
         warnings.push(`${orphaned} trust edge(s) reference non-existent entities`);

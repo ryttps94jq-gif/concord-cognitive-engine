@@ -20,6 +20,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { getEmergentState } from "./store.js";
+import logger from '../logger.js';
 
 // ── Configuration ───────────────────────────────────────────────────────────
 
@@ -317,7 +318,7 @@ export function persistEmergentState(STATE, opts = {}) {
   } catch (e) {
     _errors++;
     // Clean up temp file on failure
-    try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch { /* ignore */ }
+    try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch (_e) { logger.debug('emergent:persistence', 'ignore', { error: _e?.message }); }
     return { ok: false, error: e.message };
   }
 }

@@ -7,6 +7,7 @@ import { randomUUID } from "crypto";
 import { getTreasuryState, verifyTreasuryInvariant } from "./coin-service.js";
 import { economyAudit } from "./audit.js";
 import { PLATFORM_ACCOUNT_ID } from "./fees.js";
+import logger from '../logger.js';
 
 function uid(prefix = "rec") {
   return `${prefix}_` + randomUUID().replace(/-/g, "").slice(0, 16);
@@ -120,7 +121,7 @@ export function runTreasuryReconciliation(db, { stripeBalance, alertCallback } =
     console.error(`[TREASURY ALERT] ${alertMessage}`);
 
     if (alertCallback) {
-      try { alertCallback(alertMessage, details); } catch { /* non-critical */ }
+      try { alertCallback(alertMessage, details); } catch (_e) { logger.debug('treasury-reconciliation', 'non-critical', { error: _e?.message }); }
     }
 
     economyAudit(db, {

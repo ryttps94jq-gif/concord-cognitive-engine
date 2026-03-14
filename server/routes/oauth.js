@@ -24,6 +24,7 @@ import {
   exchangeGoogleCode,
   exchangeAppleCode,
 } from "../lib/oauth-providers.js";
+import logger from '../logger.js';
 
 // In-memory store for OAuth state tokens (CSRF protection)
 // State tokens expire after 10 minutes
@@ -175,7 +176,7 @@ export default function registerOAuthRoutes(app, {
             rotatedAt: Date.now(),
           });
         }
-      } catch {}
+      } catch (_e) { logger.debug('oauth', 'silent catch', { error: _e?.message }); }
     }
 
     // Audit log
@@ -358,7 +359,7 @@ export default function registerOAuthRoutes(app, {
             const { firstName, lastName } = userFormData.name;
             userName = [firstName, lastName].filter(Boolean).join(" ");
           }
-        } catch {}
+        } catch (_e) { logger.debug('oauth', 'silent catch', { error: _e?.message }); }
       }
 
       if (!appleUser.email && !appleUser.sub) {

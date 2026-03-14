@@ -12,6 +12,7 @@
 
 import { randomUUID } from "crypto";
 import fs from "fs";
+import logger from './logger.js';
 
 function uid(prefix = "") {
   return prefix ? `${prefix}_${randomUUID().replace(/-/g, "").slice(0, 16)}` : randomUUID().replace(/-/g, "").slice(0, 20);
@@ -183,7 +184,7 @@ export function registerGuidanceEndpoints(app, db) {
       try {
         db.prepare("SELECT 1").get();
         dbWritable = true;
-      } catch { /* not writable */ }
+      } catch (_e) { logger.debug('guidance', 'not writable', { error: _e?.message }); }
 
       // Storage writable test
       let storageWritable = false;
@@ -191,14 +192,14 @@ export function registerGuidanceEndpoints(app, db) {
         const dataDir = process.env.DATA_DIR || "data";
         fs.accessSync(`${dataDir}/artifacts`, fs.constants.W_OK);
         storageWritable = true;
-      } catch { /* not writable */ }
+      } catch (_e) { logger.debug('guidance', 'not writable', { error: _e?.message }); }
 
       // Job queue health
       const jobCounts = {};
       try {
         const rows = db.prepare("SELECT status, COUNT(*) as c FROM jobs GROUP BY status").all();
         for (const r of rows) jobCounts[r.status] = r.c;
-      } catch { /* no jobs table yet */ }
+      } catch (_e) { logger.debug('guidance', 'no jobs table yet', { error: _e?.message }); }
 
       // Recent errors (last 5 minutes)
       const recentErrors = [];
@@ -207,7 +208,7 @@ export function registerGuidanceEndpoints(app, db) {
         recentErrors.push(...db.prepare(
           "SELECT id, type, created_at, payload_json FROM events WHERE type LIKE '%error%' OR type LIKE '%FAILED%' AND created_at > ? ORDER BY created_at DESC LIMIT 10"
         ).all(fiveMinAgo));
-      } catch { /* ok */ }
+      } catch (_e) { logger.debug('guidance', 'ok', { error: _e?.message }); }
 
       // Counts
       const counts = {};
@@ -321,7 +322,7 @@ export function registerGuidanceEndpoints(app, db) {
             undoToken: p?._undoToken || null,
           };
         });
-      } catch { /* ok */ }
+      } catch (_e) { logger.debug('guidance', 'ok', { error: _e?.message }); }
 
       res.json({
         ok: true,
@@ -775,7 +776,7 @@ export function registerGuidanceEndpoints(app, db) {
       try {
         const globalEvent = db.prepare("SELECT id FROM events WHERE type = 'LENS_ITEM_SYNCED' LIMIT 1").get();
         viewedGlobal = Boolean(globalEvent);
-      } catch { /* ok */ }
+      } catch (_e) { logger.debug('guidance', 'ok', { error: _e?.message }); }
 
       const steps = [
         { id: "create_dtu", label: "Create your first DTU", completed: dtuCount > 0 },

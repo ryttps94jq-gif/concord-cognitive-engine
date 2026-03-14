@@ -19,6 +19,7 @@
  */
 
 import { checkRobotsTxt, WEB_POLICY } from "./entity-web-exploration.js";
+import logger from '../logger.js';
 
 // ── Chat User Agent ─────────────────────────────────────────────────────────
 
@@ -149,7 +150,7 @@ export async function webSearchForChat(queries) {
               });
             }
           }
-        } catch { /* HN is supplementary — silent fail */ }
+        } catch (_e) { logger.debug('emergent:conscious-web-search', 'HN is supplementary — silent fail', { error: _e?.message }); }
       }
     } catch (err) {
       // Search is best-effort — continue with next query

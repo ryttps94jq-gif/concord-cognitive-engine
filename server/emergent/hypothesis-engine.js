@@ -15,6 +15,7 @@
  */
 
 import crypto from "crypto";
+import logger from '../logger.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -173,7 +174,7 @@ function _promoteToFact(hyp) {
     };
     _factDTUs.set(factId, factDTU);
     h.lifecycle.push({ event: "promoted_to_fact", by: "system", at: nowISO(), note: `Fact DTU created: ${factId}` });
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:hypothesis-engine', 'silent', { error: _e?.message }); }
 }
 
 /**
@@ -198,7 +199,7 @@ function _createRejectionDTU(hyp, reason) {
     };
     _rejectionDTUs.set(rejId, rejDTU);
     h.lifecycle.push({ event: "rejection_dtu_created", by: "system", at: nowISO(), note: `Rejection DTU created: ${rejId}` });
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:hypothesis-engine', 'silent', { error: _e?.message }); }
 }
 
 // ── Core CRUD ───────────────────────────────────────────────────────────────

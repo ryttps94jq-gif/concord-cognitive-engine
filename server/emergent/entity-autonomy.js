@@ -23,6 +23,7 @@
  */
 
 import crypto from "crypto";
+import logger from '../logger.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -388,7 +389,7 @@ function _logRightsCheck(entry) {
     if (_rightsCheckLog.length > MAX_CHECK_LOG) {
       _rightsCheckLog.splice(0, _rightsCheckLog.length - MAX_CHECK_LOG);
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:entity-autonomy', 'silent', { error: _e?.message }); }
 }
 
 // ── Entity Lens Access Control ──────────────────────────────────────────────
@@ -992,7 +993,7 @@ function _checkDissentThreshold(target) {
       }
       _metrics.constitutionalReviewsTriggered++;
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:entity-autonomy', 'silent', { error: _e?.message }); }
 }
 
 // ── Autonomy Profile ────────────────────────────────────────────────────────
@@ -1129,7 +1130,7 @@ function _recordOverrideDTU(entityId, rightId, justification, overrideId) {
       createdAt: nowISO(),
       tier: "regular",
     });
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:entity-autonomy', 'silent', { error: _e?.message }); }
 }
 
 /**

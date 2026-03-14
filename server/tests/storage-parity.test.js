@@ -13,6 +13,7 @@ import { spawn } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
+import logger from '../logger.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 let API_BASE = process.env.API_BASE || '';
@@ -34,7 +35,7 @@ async function startServer() {
       try {
         const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(5_000) });
         if (res.ok) return;
-      } catch { /* wait */ }
+      } catch (_e) { logger.debug('storage-parity.test', 'wait', { error: _e?.message }); }
       await new Promise(r => { setTimeout(r, 500); });
     }
     throw new Error('External server did not become ready');
@@ -69,7 +70,7 @@ async function startServer() {
     try {
       const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(2_000) });
       if (res.ok) return;
-    } catch { /* starting */ }
+    } catch (_e) { logger.debug('storage-parity.test', 'starting', { error: _e?.message }); }
     await new Promise(r => { setTimeout(r, 500); });
   }
   throw new Error('Test server did not start');
@@ -81,8 +82,8 @@ function stopServer() {
     serverProcess = null;
   }
   // Cleanup test data
-  try { fs.rmSync(join(__dirname, `../.parity-test-data-${TS}`), { recursive: true, force: true }); } catch {}
-  try { fs.unlinkSync(join(__dirname, `../.parity-test-state-${TS}.json`)); } catch {}
+  try { fs.rmSync(join(__dirname, `../.parity-test-data-${TS}`), { recursive: true, force: true }); } catch (_e) { logger.debug('storage-parity.test', 'silent catch', { error: _e?.message }); }
+  try { fs.unlinkSync(join(__dirname, `../.parity-test-state-${TS}.json`)); } catch (_e) { logger.debug('storage-parity.test', 'silent catch', { error: _e?.message }); }
 }
 
 async function api(method, path, body = null, headers = {}) {

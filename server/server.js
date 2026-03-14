@@ -307,7 +307,7 @@ import { chatRetrieve, saveAsDtu, publishToGlobal, listOnMarketplace, getChatMet
 import { canUse, generateCitation, getOrigin, verifyOriginIntegrity, grantTransferRights, getRightsMetrics, computeContentHash as rightsContentHash } from "./emergent/atlas-rights.js";
 
 // ---- Ensure iconv-lite encodings are loaded (fixes ESM/CJS interop in CI) ----
-try { const _iconv = await import("iconv-lite"); _iconv.default?.encodingExists?.("utf8"); } catch { /* transitive dep via body-parser; ok if absent */ }
+try { const _iconv = await import("iconv-lite"); _iconv.default?.encodingExists?.("utf8"); } catch (_e) { logger.debug('server', 'transitive dep via body-parser; ok if absent', { error: _e?.message }); }
 
 // ---- Production dependencies (graceful loading) ----
 // SECURITY: In production, security dependencies MUST load or the server refuses to start.
@@ -322,15 +322,15 @@ try { jwt = (await import("jsonwebtoken")).default; } catch (e) {
 try { bcrypt = (await import("bcryptjs")).default; } catch (e) {
   if (_isProduction) _securityLoadErrors.push(`bcryptjs: ${e.message}`);
 }
-try { z = (await import("zod")).z || (await import("zod")).default?.z; } catch { /* optional in all envs */ }
+try { z = (await import("zod")).z || (await import("zod")).default?.z; } catch (_e) { logger.debug('server', 'optional in all envs', { error: _e?.message }); }
 try { rateLimit = (await import("express-rate-limit")).default; } catch (e) {
   if (_isProduction) _securityLoadErrors.push(`express-rate-limit: ${e.message}`);
 }
 try { helmet = (await import("helmet")).default; } catch (e) {
   if (_isProduction) _securityLoadErrors.push(`helmet: ${e.message}`);
 }
-try { compression = (await import("compression")).default; } catch { /* optional in all envs */ }
-try { Database = (await import("better-sqlite3")).default; } catch { /* optional - falls back to JSON */ }
+try { compression = (await import("compression")).default; } catch (_e) { logger.debug('server', 'optional in all envs', { error: _e?.message }); }
+try { Database = (await import("better-sqlite3")).default; } catch (_e) { logger.debug('server', 'optional - falls back to JSON', { error: _e?.message }); }
 
 // CRITICAL: Refuse to start in production without security dependencies
 if (_isProduction && _securityLoadErrors.length > 0) {
@@ -492,7 +492,7 @@ function detectContentInjection(text) {
         return { injected: true, patterns: [...matched, ...(fullScan.detections || []).map(d => d.type)] };
       }
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   return { injected: matched.length > 0, patterns: matched };
 }
 
@@ -795,7 +795,7 @@ async function gracefulShutdown(signal) {
   structuredLog("info", "shutdown_timers_cleared", { count: _activeTimers.size });
 
   // Stop repair cortex loop
-  try { stopRepairLoop(); } catch { /* best-effort */ }
+  try { stopRepairLoop(); } catch (_e) { logger.debug('server', 'best-effort', { error: _e?.message }); }
 
   // Stop accepting new connections
   if (global.httpServer) {
@@ -901,7 +901,7 @@ process.on("unhandledRejection", async (reason, _promise) => {
         }
       }
     }
-  } catch { /* repair cortex itself must never crash the crash handler */ }
+  } catch (_e) { logger.debug('server', 'repair cortex itself must never crash the crash handler', { error: _e?.message }); }
 
   // No fix or low confidence — exit as before
   if ((process.env.NODE_ENV || "development") === "production") {
@@ -2902,7 +2902,7 @@ function learnedSynonymsMap() {
       const expands = Array.isArray(d?.machine?.expands) ? d.machine.expands : [];
       if (phrase && expands.length) m.set(phrase, expands.map(stemLite).filter(Boolean));
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   _LING_CACHE = { at: now, map: m, size: m.size };
   return m;
 }
@@ -3926,7 +3926,7 @@ const _TOKEN_BLACKLIST = {
                 entry.revokedAt = now;
                 const ttlSec = Math.max(1, Math.ceil((entry.expiresAt - now) / 1000));
                 redisClient.setEx(redisKey, ttlSec, JSON.stringify(entry)).catch(() => {});
-              } catch {}
+              } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
             }
           }).catch(() => {});
           // Also ensure it's in our in-memory Map
@@ -3988,7 +3988,7 @@ const _TOKEN_BLACKLIST = {
             this.revoked.set(jti, entry);
             synced++;
           }
-        } catch {}
+        } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
       }
       if (synced > 0) structuredLog("info", "auth_blacklist_synced", { synced, source: "redis" });
     } catch (err) {
@@ -5386,7 +5386,7 @@ function realtimeEmit(event, payload, { sessionId = "", orgId = "", requestId = 
     try {
       globalThis.realtimeEmitNative(event, enrichedPayload);
       return { ok: true, seq: enrichedPayload._seq, transport: "native-ws" };
-    } catch {}
+    } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   }
 
   return { ok: false, reason: "socket_not_ready" };
@@ -5396,7 +5396,7 @@ function enqueueNotification(item, { sessionId = "", orgId = "" } = {}) {
   ensureQueues();
   STATE.queues.notifications.push(item);
   // Push realtime mirror (best-effort)
-  try { realtimeEmit("queue:notifications:new", item, { sessionId, orgId }); } catch {}
+  try { realtimeEmit("queue:notifications:new", item, { sessionId, orgId }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   return item;
 }
 
@@ -5584,7 +5584,7 @@ async function tryInitWebSockets(server) {
   });
 
   // MEGA SPEC: Initialize chat WebSocket handlers for streaming
-  try { initChatSocketHandlers(io); } catch {}
+  try { initChatSocketHandlers(io); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   structuredLog("info", "socketio_enabled", { port: PORT });
   return { ok: true };
@@ -5626,7 +5626,7 @@ async function tryInitNativeWebSockets(server) {
 
         // Hard drop: client is way behind, terminate
         if (buffered > WS_BUFFER_DROP) {
-          try { c.ws.terminate(); } catch {}
+          try { c.ws.terminate(); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
           REALTIME.clients.delete(cid);
           dropped++;
           continue;
@@ -5640,7 +5640,7 @@ async function tryInitNativeWebSockets(server) {
 
         c.ws.send(msg);
         sent++;
-      } catch {}
+      } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
     }
     return { ok: true, sent, dropped, skipped };
   };
@@ -5649,7 +5649,7 @@ async function tryInitNativeWebSockets(server) {
     const clientId = uid("ws");
     REALTIME.clients.set(clientId, { ws, sessionId: "", orgId: "", createdAt: nowISO() });
 
-    try { ws.send(JSON.stringify({ type: "hello", clientId, version: VERSION, ts: nowISO() })); } catch {}
+    try { ws.send(JSON.stringify({ type: "hello", clientId, version: VERSION, ts: nowISO() })); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
     ws.on("message", (buf) => {
       try {
@@ -5663,19 +5663,19 @@ async function tryInitNativeWebSockets(server) {
           const oid = String(msg?.orgId || "");
           if (sid && STATE.sessions.has(sid)) c.sessionId = sid;
           if (oid) c.orgId = oid;
-          try { ws.send(JSON.stringify({ type: "subscribed", sessionId: c.sessionId, orgId: c.orgId, ts: nowISO() })); } catch {}
+          try { ws.send(JSON.stringify({ type: "subscribed", sessionId: c.sessionId, orgId: c.orgId, ts: nowISO() })); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
           return;
         }
 
         if (msg?.type === "ping") {
-          try { ws.send(JSON.stringify({ type: "pong", ts: nowISO() })); } catch {}
+          try { ws.send(JSON.stringify({ type: "pong", ts: nowISO() })); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
           
         }
-      } catch {}
+      } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
     });
 
-    ws.on("close", () => { try { REALTIME.clients.delete(clientId); } catch {} });
-    ws.on("error", () => { try { REALTIME.clients.delete(clientId); } catch {} });
+    ws.on("close", () => { try { REALTIME.clients.delete(clientId); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); } });
+    ws.on("error", () => { try { REALTIME.clients.delete(clientId); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); } });
   });
 
   structuredLog("info", "websocket_enabled", { port: PORT });
@@ -5985,7 +5985,7 @@ function saveStateDebounced() {
       } catch (e) {
         structuredLog("error", "state_save_failed", { error: String(e?.message || e) });
         if (!USE_SQLITE_STATE) {
-          try { fs.unlinkSync(STATE_PATH + ".tmp"); } catch {}
+          try { fs.unlinkSync(STATE_PATH + ".tmp"); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
         }
       }
     }, 250);
@@ -6285,7 +6285,7 @@ function toOptionADTU(seedLike) {
   dtu.cretiHuman = renderHumanDTU(dtu);
   dtu.hash = dtu.hash || crypto.createHash("sha256").update(dtu.title + "\n" + dtu.cretiHuman).digest("hex").slice(0,16);
   // Learning verification: apply classification on creation
-  try { applyClassification(dtu); } catch { /* learning module not critical */ }
+  try { applyClassification(dtu); } catch (_e) { logger.debug('server', 'learning module not critical', { error: _e?.message }); }
   return dtu;
 }
 
@@ -6974,7 +6974,7 @@ council.reviewAndCommitQuiet = function reviewAndCommitQuiet(ctx, input={}){
       metaCommitCount: ctx.state.__chicken3.stats.metaCommits,
       ts: nowISO()
     });
-  } catch { /* best-effort */ }
+  } catch (_e) { logger.debug('server', 'best-effort', { error: _e?.message }); }
 
   saveStateDebounced();
   return { ok:true, committed: dtuForClient(dtu), gate };
@@ -7694,7 +7694,7 @@ register("tools","web_search", (ctx, input={}) => {
       const sctx = { ...ctx, _background: true };
       const s = await runMacro("chat","respond", { mode:"ask", sessionId: ctx?.sessionId, prompt: `Summarize these search results for: ${q}\n\n${text.slice(0, 8000)}` }, sctx).catch(()=>null);
       summary = s?.answer ?? s?.content ?? s?.text ?? null;
-    } catch {}
+    } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   }
 
   return { ok:true, source: local ? "searxng" : "duckduckgo_html", text: text.slice(0, 200000), summary };
@@ -9024,7 +9024,7 @@ function makeCtx(req=null) {
   // Inject ATS affect policy into context so macros can consume depthBudget, riskBudget, etc.
   let affectPolicy = null;
   if (ATS && req?._atsSessionId) {
-    try { affectPolicy = ATS.getSessionPolicy(req._atsSessionId); } catch {}
+    try { affectPolicy = ATS.getSessionPolicy(req._atsSessionId); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   }
 
   return {
@@ -9374,7 +9374,7 @@ function keywordOverlap(textA, textB) {
 
 async function transferEdgesToConsolidated(sourceId, consolidatedId) {
   let edgeMod;
-  try { edgeMod = globalThis._concordEdges; } catch {}
+  try { edgeMod = globalThis._concordEdges; } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   if (!edgeMod) {
     try {
       // Fallback: import edges module dynamically (sync cache hit after first load)
@@ -9396,7 +9396,7 @@ async function transferEdgesToConsolidated(sourceId, consolidatedId) {
         edgeType: edge.edgeType, weight: edge.weight,
         label: `inherited:${sourceId}`,
       });
-    } catch {}
+    } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   }
   // Transfer inbound edges
   const inResult = edgeMod.queryEdges({ targetId: sourceId }) || {};
@@ -9409,7 +9409,7 @@ async function transferEdgesToConsolidated(sourceId, consolidatedId) {
         edgeType: edge.edgeType, weight: edge.weight,
         label: `inherited:${sourceId}`,
       });
-    } catch {}
+    } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   }
 }
 
@@ -9485,13 +9485,13 @@ function upsertDTU(dtu, { broadcast = true, federate = false } = {}) {
   }
 
   // Auto-tag DTU with lens domain classifications
-  try { if (typeof applyAutoTagging === "function") applyAutoTagging(dtu); } catch {}
+  try { if (typeof applyAutoTagging === "function") applyAutoTagging(dtu); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   STATE.dtus.set(dtu.id, dtu);
   saveStateDebounced();
 
   // Sync DTU to lens artifacts for domain-based lens views
-  if (isNew) { try { if (typeof syncDTUToLensArtifacts === "function") syncDTUToLensArtifacts(dtu); } catch {} }
+  if (isNew) { try { if (typeof syncDTUToLensArtifacts === "function") syncDTUToLensArtifacts(dtu); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); } }
 
   // Fire plugin after-hooks
   try { fireHook(STATE, isNew ? "dtu:afterCreate" : "dtu:afterUpdate", dtu); } catch (e) { observe(e, "dtu_hook_after_write"); }
@@ -9527,11 +9527,11 @@ function upsertDTU(dtu, { broadcast = true, federate = false } = {}) {
             makeInternalCtx,
             lookupDTU: (id) => STATE.dtus.get(id) || null,
             updateDTU: (d) => { STATE.dtus.set(d.id, d); },
-            broadcastEvent: (type, data) => { try { realtimeEmit(type, data); } catch {} },
+            broadcastEvent: (type, data) => { try { realtimeEmit(type, data); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); } },
             STATE,
           }).catch(() => {});
         }).catch(() => {});
-      } catch { /* bridge not critical */ }
+      } catch (_e) { logger.debug('server', 'bridge not critical', { error: _e?.message }); }
     }
   }
 
@@ -9766,7 +9766,7 @@ function importFromObsidian(markdownFiles) {
               frontmatter[key.trim()] = val.startsWith("[") ? JSON.parse(val.replace(/'/g, '"')) : val;
             }
           });
-        } catch {}
+        } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
         body = fmMatch[2];
       }
 
@@ -9951,7 +9951,7 @@ const ATTACHMENTS_MAX = 5000;
 const _ATTACHMENTS_MAX_SIZE_MB = 500;
 
 function ensureAttachmentsDir() {
-  try { fs.mkdirSync(ATTACHMENTS_DIR, { recursive: true }); } catch {}
+  try { fs.mkdirSync(ATTACHMENTS_DIR, { recursive: true }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 }
 
 // Cleanup orphaned attachments (DTU deleted) and enforce size limits
@@ -9961,7 +9961,7 @@ function cleanupAttachments() {
   // Remove attachments for deleted DTUs
   for (const [id, att] of ATTACHMENTS) {
     if (att.dtuId && !STATE.dtus.has(att.dtuId)) {
-      try { fs.unlinkSync(att.path); } catch {}
+      try { fs.unlinkSync(att.path); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
       ATTACHMENTS.delete(id);
       freedBytes += att.size || 0;
       cleaned++;
@@ -9973,7 +9973,7 @@ function cleanupAttachments() {
     const sorted = Array.from(ATTACHMENTS.entries())
       .sort((a, b) => (a[1].createdAt || "").localeCompare(b[1].createdAt || ""));
     for (const [id, att] of sorted.slice(0, ATTACHMENTS.size - ATTACHMENTS_MAX)) {
-      try { fs.unlinkSync(att.path); } catch {}
+      try { fs.unlinkSync(att.path); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
       ATTACHMENTS.delete(id);
       freedBytes += att.size || 0;
       cleaned++;
@@ -10422,7 +10422,7 @@ function reviewSRSCard(dtuId, quality) {
         source: { system: "srs" }
       });
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   // ===== END SRS → AFFECT =====
 
   const nextDate = new Date();
@@ -11003,8 +11003,8 @@ async function initThreeBrains() {
 
   // Reset Ollama circuit breaker when brains come online (clear stale failures from previous runs)
   if (online.includes("conscious")) {
-    try { if (BREAKERS?.ollama?.reset) BREAKERS.ollama.reset(); } catch {}
-    try { if (_breakers?.ollama?.reset) _breakers.ollama.reset(); } catch {}
+    try { if (BREAKERS?.ollama?.reset) BREAKERS.ollama.reset(); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+    try { if (_breakers?.ollama?.reset) _breakers.ollama.reset(); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   }
 
   structuredLog("info", "three_brain_init", {
@@ -11157,7 +11157,7 @@ async function initGhostFleet() {
         const existing = agents.listAgents();
         if (!existing?.agents?.length) {
           for (const type of Object.values(agents.AGENT_TYPES || {})) {
-            try { agents.createAgent(type, { territory: "*" }); } catch { /* best-effort */ }
+            try { agents.createAgent(type, { territory: "*" }); } catch (_e) { logger.debug('server', 'best-effort', { error: _e?.message }); }
           }
           structuredLog("info", "ghost_fleet_agents_seeded", { types: Object.values(agents.AGENT_TYPES || {}) });
         }
@@ -11701,7 +11701,7 @@ async function initGhostFleet() {
         try {
           const open = conf.listDisputes({ status: "mediating" });
           for (const d of (open?.disputes || [])) {
-            try { conf.checkMediationTimeout(d.id); } catch { /* best-effort */ }
+            try { conf.checkMediationTimeout(d.id); } catch (_e) { logger.debug('server', 'best-effort', { error: _e?.message }); }
           }
         } catch (e) { observe(e, "ghost_fleet_mediation_timeout"); }
       }
@@ -11852,7 +11852,7 @@ async function callBrain(brainName, prompt, options = {}) {
       if (typeof estimateConfidence === "function") {
         result.confidence = estimateConfidence(result, { dtuCount: 0 });
       }
-    } catch {}
+    } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
     // Capture linguistic patterns from ALL brain responses into shadow DTUs.
     // This ensures the shadow graph accumulates vocabulary and patterns from
@@ -11867,7 +11867,7 @@ async function callBrain(brainName, prompt, options = {}) {
           maybeWriteLinguisticShadowDTU({ phrase, expands: unique, topIds: [] });
         }
       }
-    } catch {}
+    } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
     return result;
   };
@@ -12020,7 +12020,7 @@ async function consciousChat(userMessage, lens = null, options = {}) {
       recordRoutingLevel(lens, "cache");
       recordQueryEvent(lens, { cacheHit: true, topSimilarity: cached.score });
       recordEconomicsEvent({ type: "cache", userId });
-      try { recordQueryMethod(STATE, "semantic_cache"); } catch { /* learning metrics not critical */ }
+      try { recordQueryMethod(STATE, "semantic_cache"); } catch (_e) { logger.debug('server', 'learning metrics not critical', { error: _e?.message }); }
 
       // Still create a DTU linking to the source
       try {
@@ -12033,11 +12033,11 @@ async function consciousChat(userMessage, lens = null, options = {}) {
           lineage: cached.sourceId ? [cached.sourceId] : [],
           meta: { brainSource: "cache", cacheScore: cached.score, sourceId: cached.sourceId },
         }, ctx);
-      } catch {}
+      } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
       return { ok: true, content: cached.response, source: "cache", model: "cached", tokens: 0 };
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   // ── Level 2: Retrieval Sufficient (near-instant) ──
   try {
@@ -12058,7 +12058,7 @@ async function consciousChat(userMessage, lens = null, options = {}) {
       if (result.ok && result.content) {
         const elapsed = Date.now() - inferenceStart;
         recordEconomicsEvent({ type: "retrieval", inferenceMs: elapsed, userId });
-        try { recordQueryMethod(STATE, "retrieval_sufficient"); } catch { /* learning metrics not critical */ }
+        try { recordQueryMethod(STATE, "retrieval_sufficient"); } catch (_e) { logger.debug('server', 'learning metrics not critical', { error: _e?.message }); }
 
         try {
           const ctx = makeInternalCtx("system");
@@ -12070,12 +12070,12 @@ async function consciousChat(userMessage, lens = null, options = {}) {
             meta: { brainSource: "utility", confidence: 0.7, retrievalMethod: retrieval.method },
           }, ctx);
           BRAIN.utility.stats.dtusGenerated++;
-        } catch {}
+        } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
         return result;
       }
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   // ── Level 3: Full Conscious Reasoning (with Web Search Tool Use) ──
   recordRoutingLevel(lens, "inference");
@@ -12110,7 +12110,7 @@ async function consciousChat(userMessage, lens = null, options = {}) {
           webResults = await webSearchForChat(parsed.queries);
         }
       }
-    } catch { /* query generation failed — fallback below */ }
+    } catch (_e) { logger.debug('server', 'query generation failed — fallback below', { error: _e?.message }); }
     // Fallback: use raw user message as search query
     if (!webResults.length) {
       webResults = await webSearchForChat([userMessage.slice(0, 100)]);
@@ -12133,7 +12133,7 @@ async function consciousChat(userMessage, lens = null, options = {}) {
           webResults = await webSearchForChat(parsed.searchQueries);
         }
       }
-    } catch { /* evaluation failed — proceed without web */ }
+    } catch (_e) { logger.debug('server', 'evaluation failed — proceed without web', { error: _e?.message }); }
   }
 
   const searchLatencyMs = Date.now() - searchStart;
@@ -12180,7 +12180,7 @@ async function consciousChat(userMessage, lens = null, options = {}) {
 
   const elapsed = Date.now() - inferenceStart;
   recordEconomicsEvent({ type: "inference", inferenceMs: elapsed, userId });
-  try { recordQueryMethod(STATE, "llm_required"); } catch { /* learning metrics not critical */ }
+  try { recordQueryMethod(STATE, "llm_required"); } catch (_e) { logger.debug('server', 'learning metrics not critical', { error: _e?.message }); }
 
   if (result.ok && result.content) {
     // Build sources list for the response
@@ -12228,7 +12228,7 @@ async function consciousChat(userMessage, lens = null, options = {}) {
               contentType: "web-knowledge",
             },
           }, wctx);
-        } catch { /* web DTU save is best-effort */ }
+        } catch (_e) { logger.debug('server', 'web DTU save is best-effort', { error: _e?.message }); }
       }
     }
 
@@ -12270,7 +12270,7 @@ async function subconsciousTask(taskType, domain = null) {
   try {
     const taskSelection = selectSubconsciousTask(STATE, [taskType], domain);
     activeWant = taskSelection.want;
-  } catch { /* want engine not critical */ }
+  } catch (_e) { logger.debug('server', 'want engine not critical', { error: _e?.message }); }
 
   const system = buildSubconsciousPrompt({
     mode: taskType,
@@ -13033,7 +13033,7 @@ function addComment(dtuId, userId, content, parentId = null) {
   // Broadcast comment added
   try {
     realtimeEmit("comment:added", { dtuId, commentId: id, userId });
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   return { ok: true, comment };
 }
@@ -13198,7 +13198,7 @@ function _logActivity(userId, action, targetType, targetId, details = {}) {
   // Broadcast activity
   try {
     realtimeEmit("activity:new", entry);
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   return entry;
 }
@@ -13245,7 +13245,7 @@ function _applyYjsUpdate(dtuId, update) {
   // Broadcast update to all clients editing this DTU
   try {
     realtimeEmit("yjs:update", { dtuId, update: update.toString("base64") });
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   return { ok: true };
 }
@@ -14014,7 +14014,7 @@ const PIPE = {
 };
 
 function pipeEnsureDirs() {
-  try { fs.mkdirSync(PIPE.snapshotsDir, { recursive: true }); } catch {}
+  try { fs.mkdirSync(PIPE.snapshotsDir, { recursive: true }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 }
 pipeEnsureDirs();
 
@@ -14037,7 +14037,7 @@ function pipeWal(type, meta={}) {
 function pipeSnapshot() {
   const stamp = nowISO().replace(/[:.]/g, "-");
   const dir = path.join(PIPE.snapshotsDir, `snap_${stamp}_${crypto.randomBytes(3).toString("hex")}`);
-  try { fs.mkdirSync(dir, { recursive: true }); } catch {}
+  try { fs.mkdirSync(dir, { recursive: true }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   try {
     fs.writeFileSync(path.join(dir, "state.json"), JSON.stringify(_serializeState(), null, 2), "utf-8");
   } catch (e) { structuredLog("error", "pipe_snapshot_write_failed", { dir, error: String(e) }); }
@@ -14179,7 +14179,7 @@ function pipeCouncil(proposal, ctx, opts={}) {
       const gate = councilGate(dtu, { allowRewrite });
       return { ok: gate.ok, score: gate.score, reason: gate.reason };
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   return { ok: true, score: 999, reason: "bypass" };
 }
 
@@ -14756,7 +14756,7 @@ async function pipelineCommitDTU(ctx, dtu, opts={}) {
       dtu.meta.tierDowngradedAt = nowISO();
       dtu.meta.tierDowngradeReason = "anti_gaming_only_auto_promo_can_set_tier";
     }
-  } catch { /* anti-gaming guard may fail gracefully */ }
+  } catch (_e) { logger.debug('server', 'anti-gaming guard may fail gracefully', { error: _e?.message }); }
   const p = pipeProposal("dtu.commit", { dtu }, { kind:"macro", id: opts.op || "unknown" });
   const vr = pipeVerify(p);
   p.verify = vr; p.updatedAt = nowISO();
@@ -14786,7 +14786,7 @@ async function pipelineCommitDTU(ctx, dtu, opts={}) {
       });
       // Don't reject — just warn. The DTU may still be valuable.
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   // [NEW] Shadow Promotion — if pattern seen 3+ times, auto-create shadow DTU
   try {
@@ -14798,7 +14798,7 @@ async function pipelineCommitDTU(ctx, dtu, opts={}) {
         invariants: _promo.invariants
       });
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   // [NEW] Crispness Decay — reduce crispness of older DTUs on same topic
   try {
@@ -14809,7 +14809,7 @@ async function pipelineCommitDTU(ctx, dtu, opts={}) {
         decayed: _decay.decayed
       });
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   // ===== END QUALITY PIPELINE BACKEND ENHANCEMENTS =====
 
   const snap = pipeSnapshot();
@@ -14822,18 +14822,18 @@ async function pipelineCommitDTU(ctx, dtu, opts={}) {
     dtu.updatedAt = nowISO();
 
     // Auto-tag DTU with lens domain classifications
-    try { if (typeof applyAutoTagging === "function") applyAutoTagging(dtu); } catch {}
+    try { if (typeof applyAutoTagging === "function") applyAutoTagging(dtu); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
     // Conservation ledger: record abstraction added
     try {
       STATE.abstraction.ledger.added += estimateAbstractionDelta(dtu);
-    } catch {}
+    } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
     STATE.dtus.set(dtu.id, dtu);
     saveStateDebounced();
 
     // Sync DTU to lens artifacts for domain-based lens views
-    try { if (typeof syncDTUToLensArtifacts === "function") syncDTUToLensArtifacts(dtu); } catch {}
+    try { if (typeof syncDTUToLensArtifacts === "function") syncDTUToLensArtifacts(dtu); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
     // v4 Universe: also add DTU to the creating user's local universe
     try {
@@ -14841,7 +14841,7 @@ async function pipelineCommitDTU(ctx, dtu, opts={}) {
       if (_creatorId && _creatorId !== "anon" && typeof addDTUToUserUniverse === "function") {
         addDTUToUserUniverse(_creatorId, dtu);
       }
-    } catch {}
+    } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
     // ===== AUTO WORLD MODEL UPDATE =====
     // Every new DTU feeds into the world model: extract entities, detect relations,
@@ -14863,7 +14863,7 @@ async function pipelineCommitDTU(ctx, dtu, opts={}) {
     pipeAudit("dtu.commit", `DTU committed: ${dtu.title}`, { id: dtu.id, proposalId: p.id, hash: dtu.hash });
 
     // Record to institutional memory (fire-and-forget)
-    try { recordInstitutionalDecision(STATE, { category: "quality_observation", domain: "dtu", action: "commit", detail: dtu.title?.slice(0, 120), context: { dtuId: dtu.id, source: dtu.source, proposalId: p.id } }); } catch { /* silent */ }
+    try { recordInstitutionalDecision(STATE, { category: "quality_observation", domain: "dtu", action: "commit", detail: dtu.title?.slice(0, 120), context: { dtuId: dtu.id, source: dtu.source, proposalId: p.id } }); } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
 
     return { ok:true, dtu, proposalId: p.id };
   } catch (e) {
@@ -14930,7 +14930,7 @@ function retrieveDTUs(query, { topK=10, minScore=0.08, randomK=3, oppositeK=3 } 
       const expands = Array.from(new Set([...(qExp||[]), ...intentAdds].map(stemLite))).slice(0, 18);
       maybeWriteLinguisticShadowDTU({ phrase: qNorm, expands, topIds: top.map(d=>d.id) });
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   // random picks (avoid top)
   const pool = all.filter(d => !top.some(t=>t.id===d.id));
@@ -15370,7 +15370,7 @@ register("dtu", "gapPromote", async (ctx, input) => {
         try {
           m.meta = m.meta || {};
           if (!m.meta.megaParent) m.meta.megaParent = mega.id;
-        } catch {}
+        } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
       }
       saveStateDebounced();
     }
@@ -15482,7 +15482,7 @@ const _mentionsSelf = Array.from(_selfTokens).some(t => _pLow.includes(t));
     if (_experienceHint?.warnings?.length > 0) {
       localSettings._experienceWarnings = _experienceHint.warnings;
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   // ===== END EXPERIENCE RETRIEVAL =====
 
   // ===== TRANSFER LEARNING SEARCH =====
@@ -15494,7 +15494,7 @@ const _mentionsSelf = Array.from(_selfTokens).some(t => _pLow.includes(t));
       try { return classifyDomain(pseudoDtu); } catch { return "general"; }
     })();
     _transferSuggestion = autoTransferSearch(_promptDomain2, prompt.slice(0, 200));
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   // ===== END TRANSFER LEARNING SEARCH =====
 
   // ===== ATTENTION THREAD =====
@@ -15509,7 +15509,7 @@ const _mentionsSelf = Array.from(_selfTokens).some(t => _pLow.includes(t));
       domain: localSettings._experienceStrategy || "general"
     });
     _threadId = _thread?.thread?.id || null;
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   // ===== END AFFECT → CHAT INTEGRATION =====
 
   // ===== VULNERABILITY DETECTION =====
@@ -15523,7 +15523,7 @@ const _mentionsSelf = Array.from(_selfTokens).some(t => _pLow.includes(t));
       localSettings._vulnerabilityPolicy = _deliveryMode.policy;
       localSettings._vulnerabilityMode = "gentle";
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
   // ===== END VULNERABILITY DETECTION =====
 
   const llm = typeof input.llm === "boolean" ? input.llm : localSettings.llmDefault;
@@ -15543,13 +15543,13 @@ sess.messages.push({ role: "user", content: prompt, ts: nowISO() });
       intent: intentInfo?.intent || null,
       topics: intentInfo?.topics || [],
     });
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   // Trigger conversation summary compression if due (async, never blocks)
   try {
     if (isSummaryDue(STATE.sessions, sessionId)) {
       compressConversation(STATE, sessionId, { structuredLog: ctx.log }).catch(() => {});
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   // ===== END DTU ENRICHMENT =====
 
   // --- Per-user personality growth (style vector) ---
@@ -15717,7 +15717,7 @@ const intentInfo = classifyIntent(prompt);
         if (_shieldIntent.isShieldRequest) {
           _chatRoute._shieldIntent = _shieldIntent;
         }
-      } catch {}
+      } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
       // Check for Mesh network intent ("mesh status", "nearby peers", etc.)
       try {
@@ -15725,7 +15725,7 @@ const intentInfo = classifyIntent(prompt);
         if (_meshIntent.isMeshRequest) {
           _chatRoute._meshIntent = _meshIntent;
         }
-      } catch {}
+      } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
       // Check for Foundation Intelligence intent ("weather intel", "seismic data", etc.)
       try {
@@ -15733,7 +15733,7 @@ const intentInfo = classifyIntent(prompt);
         if (_intelIntent.isIntelRequest) {
           _chatRoute._intelIntent = _intelIntent;
         }
-      } catch {}
+      } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
       // Check for Foundation Atlas intent ("show map", "underground", "material at", etc.)
       try {
@@ -15741,7 +15741,7 @@ const intentInfo = classifyIntent(prompt);
         if (_atlasIntent.isAtlasRequest) {
           _chatRoute._atlasIntent = _atlasIntent;
         }
-      } catch {}
+      } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
       // Check for Signal Cortex intent ("signal taxonomy", "privacy zone", "spectrum", etc.)
       try {
@@ -15749,7 +15749,7 @@ const intentInfo = classifyIntent(prompt);
         if (_cortexIntent.isCortexRequest) {
           _chatRoute._cortexIntent = _cortexIntent;
         }
-      } catch {}
+      } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
     }
   } catch (_routerErr) {
     // Chat router is supplementary — never block the chat path
@@ -15814,7 +15814,7 @@ try {
       message: `I can create a complete ${pl.description} for you. This will generate ${pl.steps.length} documents across ${[...new Set(pl.steps.map(s => s.lens))].join(", ")}. Want me to run it?`,
     };
   }
-} catch { /* pipeline detection not critical */ }
+} catch (_e) { logger.debug('server', 'pipeline detection not critical', { error: _e?.message }); }
 
 
   
@@ -15975,7 +15975,7 @@ try {
   // upsert
   STATE.shadowDtus.set(shadowId, shadow);
   sess.contextShadowId = shadowId;
-} catch {}
+} catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
 // Build a working set that stays crisp even with huge DTU libraries
 const { focus, micro, macro } = selectWorkingSet(
@@ -15989,7 +15989,7 @@ try {
   for (const d of focus) markDTUUsed(d, `chat:${sessionId}`);
   for (const d of micro) markDTUUsed(d, `chat:${sessionId}`);
   for (const d of macro) markDTUUsed(d, `chat:${sessionId}`);
-} catch {}
+} catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
 // ===== QUALITY PIPELINE: Pattern Router + Fused Context =====
 // Run deterministic quality patterns between DTU context selection and LLM call.
@@ -16042,14 +16042,14 @@ try {
       }
     }
   }
-} catch {}
+} catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 // ===== END METACOGNITION → CHAT =====
 
 // Refine session anchors using DTU match confidence (works offline + online)
 try {
   const topicTitle = (micro && micro.length) ? micro[0].title : null;
   _updateAnchorsFromTurn({ promptText: prompt, bestScoreHint: bestScore, wantsStructured, topicTitle });
-} catch {}
+} catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
 const hasStrongEvidence = micro.length >= 2 && bestScore >= 0.12;
 
@@ -16126,7 +16126,7 @@ try {
   if (_transferSuggestion?.strategy && _transferSuggestion.relevance > 0.5) {
     answerLines.push(`- 🔄 Cross-domain insight from ${_transferSuggestion.sourceDomain}: ${_transferSuggestion.strategy.approach}`);
   }
-} catch {}
+} catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 // ===== END EXPERIENCE + TRANSFER GUIDANCE =====
 
 let localReply = formatCrispResponse({
@@ -16398,7 +16398,7 @@ When helpful, reference DTU titles in plain language (do not dump ids unless ask
       confidence: llmUsed ? 0.8 : 0.5,
       workingSetDtuIds: (_pipelineHarvest?.consolidatedWorkingSet || relevant).map(d => d.id).slice(0, 20),
     });
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   // Consolidation check every 10 exchanges
   try {
     if (isConsolidationDue(sess)) {
@@ -16410,7 +16410,7 @@ When helpful, reference DTU titles in plain language (do not dump ids unless ask
       }
       sess._lastConsolidationCheck = Math.floor(sess.messages.length / 2);
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   // ===== END DTU ENRICHMENT =====
 
   // ===== REFLECTIVE LOOP + EXPERIENCE RECORDING =====
@@ -16429,7 +16429,7 @@ When helpful, reference DTU titles in plain language (do not dump ids unless ask
       llmUsed,
       relevantDtus: relevant.map(d => d.id)
     });
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   // Complete the attention thread
   try {
@@ -16440,7 +16440,7 @@ When helpful, reference DTU titles in plain language (do not dump ids unless ask
         relevantCount: relevant.length
       });
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   // ===== END REFLECTIVE LOOP =====
 
   // persist session + any state mutations from this turn
@@ -16467,7 +16467,7 @@ When helpful, reference DTU titles in plain language (do not dump ids unless ask
         { inLatticeReality, STATE }
       );
       _grcOutput = grcResult.ok ? grcResult.grc : null;
-    } catch {}
+    } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   }
 
   // ── Chat Router + Forge Pipeline Integration ──────────────────────────
@@ -17194,7 +17194,7 @@ register("chat", "feedback", (ctx, input) => {
       followUpNeeded: quality < 0.3,
       errorOccurred: false
     });
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   // Emit affect event for user feedback
   try {
@@ -17207,7 +17207,7 @@ register("chat", "feedback", (ctx, input) => {
         source: { system: "chat_feedback" }
       });
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   // Mutate style vector based on feedback
   try {
@@ -17217,7 +17217,7 @@ register("chat", "feedback", (ctx, input) => {
       : { kind: "dislike" };
     const next = mutateStyleVector(curStyle, signal);
     STATE.styleVectors.set(sessionId, next);
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   saveStateDebounced();
   return { ok: true, quality, recorded: true };
@@ -17268,7 +17268,7 @@ try {
   for (const d of focus) markDTUUsed(d, `ask:${sessionId}`);
   for (const d of micro) markDTUUsed(d, `ask:${sessionId}`);
   for (const d of macro) markDTUUsed(d, `ask:${sessionId}`);
-} catch {}
+} catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 const bestScore = scored?.[0]?.score ?? 0;
 const hasStrongEvidence = micro.length >= 2 && bestScore >= 0.12;
 const frame = chooseAbstractionFrame({ mode, intent: INTENT.QUESTION, hasStrongEvidence, settings: ctx.state.settings });
@@ -17339,7 +17339,7 @@ if (!answer) {
 ${conflictLine}` : ""}
 
 ${answer}`;
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   ctx.log("ask", "Ask answered", { sessionId, mode, llmUsed: Boolean(answer && llm && ctx.llm.enabled), relevant: relevant.map(d=>d.id) });
   return { ok: true, answer, feasibility, relevant: relevant.map(d=>({ id:d.id, title:d.title, tier:d.tier })) };
 });
@@ -17807,7 +17807,7 @@ register("system", "dream", async (ctx, input) => {
   const r = await ctx.macro.run("dtu", "create", spec);
 
   // Qualia hook: dream synthesis completed
-  try { globalThis.qualiaHooks?.hookDreamSynthesis("system", { connections: result.trace?.connections, coherence: result.candidate?.meta?.coherence, entropy: result.candidate?.meta?.entropy }); } catch { /* silent */ }
+  try { globalThis.qualiaHooks?.hookDreamSynthesis("system", { connections: result.trace?.connections, coherence: result.candidate?.meta?.coherence, entropy: result.candidate?.meta?.entropy }); } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
 
   return { ok: true, dtus: r?.ok ? [r.dtu] : [], trace: result.trace, writePolicy: result.writePolicy };
 });
@@ -17842,7 +17842,7 @@ register("system", "autogen", async (ctx, _input) => {
   enqueueNotification(proposal);
 
   // Qualia hook: autogen pipeline completed
-  try { globalThis.qualiaHooks?.hookAutogen("system", { gapsFound: result.trace?.gaps, dtusGenerated: 1, novelty: result.candidate?.meta?.novelty }); } catch { /* silent */ }
+  try { globalThis.qualiaHooks?.hookAutogen("system", { gapsFound: result.trace?.gaps, dtusGenerated: 1, novelty: result.candidate?.meta?.novelty }); } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
 
   return { ok: true, dtus: [], queued: true, proposal, trace: result.trace, writePolicy: result.writePolicy };
 });
@@ -17998,7 +17998,7 @@ ClusterSig: ${p.clusterSig}`,
   // Gap promotion: periodically synthesize stable clusters into MEGA DTUs
   try {
     await runMacro(ctx, "dtu", "gapPromote", { minCluster: 6, maxPromotions: 1, dryRun: false });
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
 return { ok:true, simulation:true, createdCandidates: created.length, created, matured };
 }, { summary:"Automatic MEGA promotion pipeline tick (candidate->probation->MEGA) (v3)." });
@@ -18508,7 +18508,7 @@ register("context", "query", async (ctx, input) => {
         }
       }
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   for (const [id, dtu] of STATE.dtus) {
     if (candidates.some(c => c.id === id)) continue; // skip if already from local
@@ -19189,8 +19189,8 @@ register("research", "math.exec", async (ctx, input) => {
   }
   
   // v3: automatic promotions + temporal subjective profile update (soft-gated)
-  try { await ctx.macro.run("system","promotionTick",{ minSupport: 9, threshold: 0.38, maxCreates: 3, probationHours: 12 }); } catch { /* non-fatal */ }
-  try { await ctx.macro.run("temporal","subjective",{ sessionId: ctx.session?.id }); } catch { /* non-fatal */ }
+  try { await ctx.macro.run("system","promotionTick",{ minSupport: 9, threshold: 0.38, maxCreates: 3, probationHours: 12 }); } catch (_e) { logger.debug('server', 'non-fatal', { error: _e?.message }); }
+  try { await ctx.macro.run("temporal","subjective",{ sessionId: ctx.session?.id }); } catch (_e) { logger.debug('server', 'non-fatal', { error: _e?.message }); }
 
 return out;
 }, { summary:"Execute deterministic math expression." });
@@ -19579,7 +19579,7 @@ register("agent","tick", async (ctx, input) => {
         _linkedGoalId = goal.id;
       }
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   // ===== END AGENT → GOALS =====
 
   // Affect depthBudget influences agent reasoning depth
@@ -19609,7 +19609,7 @@ register("agent","tick", async (ctx, input) => {
   if (_linkedGoalId) {
     try {
       updateGoalProgress(_linkedGoalId, 0.1, `Agent ${a.name} produced DTU ${dtu.id}`);
-    } catch {}
+    } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   }
   // ===== END AGENT → GOAL PROGRESS =====
 
@@ -19624,7 +19624,7 @@ register("agent","tick", async (ctx, input) => {
         source: { system: "agents" }
       });
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   saveStateDebounced();
   return { ok:true, createdDTU: dtu.id, linkedGoalId: _linkedGoalId };
@@ -19646,7 +19646,7 @@ async function tickEnabledAgents(ctx) {
     if (now - lastTick >= cadence) {
       try {
         await runMacro("agent", "tick", { id }, ctx);
-      } catch {}
+      } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
     }
   }
 }
@@ -20170,7 +20170,7 @@ register("verify","designScore", async (ctx, input) => {
       const j = JSON.parse(llmText);
       if (Array.isArray(j?.required_repairs)) required_repairs = j.required_repairs.map(String).slice(0, 8);
       if (Array.isArray(j?.tests)) primary_risks.push(...j.tests.map(t => `test:${String(t)}`).slice(0, 6));
-    } catch {}
+    } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   }
 
   return {
@@ -20207,7 +20207,7 @@ register("verify","deriveSecondOrder", async (ctx, input) => {
   const out = await llmChat(ctx, [{role:"system", content:sys},{role:"user", content:user}], { temperature: 0.1, max_tokens: 900 });
 
   let cand=null;
-  try { cand = JSON.parse(out?.text||""); } catch {}
+  try { cand = JSON.parse(out?.text||""); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   if (!cand || typeof cand !== "object") return { ok:false, committed:false, reason:"llm_bad_json", llmText: out?.text||"" };
 
   const dtu = {
@@ -20240,7 +20240,7 @@ register("verify","deriveSecondOrder", async (ctx, input) => {
   const res = await pipelineCommitDTU(ctx, dtu, { allowRewrite:false });
   if (res?.ok) {
     // Ensure explicit lineage links for parents (best-effort)
-    try { await ctx.macro.run("verify","lineageLink", { childId: res.dtu.id, parents: seeds.map(d=>d.id) }); } catch {}
+    try { await ctx.macro.run("verify","lineageLink", { childId: res.dtu.id, parents: seeds.map(d=>d.id) }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   }
   return { ok: !!res.ok, committed: !!res.ok, dtu: res.dtu, seedIds: seeds.map(d=>d.id), result: res };
 }, { summary:"Derive and COMMIT a second-order DTU from seeds. Requires LLM; refuses if unavailable." });
@@ -20932,7 +20932,7 @@ try {
         runMacro("emergent", "register", seed, {
           actor: { userId: "system", role: "owner", scopes: ["*"] }, state: STATE, internal: true,
         });
-      } catch { /* first-boot only — already exists is ok */ }
+      } catch (_e) { logger.debug('server', 'first-boot only — already exists is ok', { error: _e?.message }); }
     }
     log("global.bootstrap", `Bootstrapped ${GLOBAL_SEED_EMERGENTS.length} global emergents`);
   } else {
@@ -21011,13 +21011,13 @@ try {
         try {
           runMacro("emergent", "trust.record", { fromId: "em_cipher", toId: ge.id, type: "validated", weight: 0.01 }, _sysCtx);
           runMacro("emergent", "trust.record", { fromId: ge.id, toId: "em_cipher", type: "validated", weight: 0.01 }, _sysCtx);
-        } catch { /* edges already exist is fine */ }
+        } catch (_e) { logger.debug('server', 'edges already exist is fine', { error: _e?.message }); }
       }
 
       // Cipher starts in the Archive — deep derivation and first principles
       try {
         runMacro("emergent", "district.move", { emergentId: "em_cipher", district: "archive", reason: "Cipher's home district — first principles and deep derivation" }, _sysCtx);
-      } catch { /* district macros may not be loaded yet — field set directly */ }
+      } catch (_e) { logger.debug('server', 'district macros may not be loaded yet — field set directly', { error: _e?.message }); }
 
       log("cipher.bootstrap", "Cipher registered with identity spec, trust initialized, district: archive");
     }
@@ -21832,7 +21832,7 @@ async function mergeCognitiveResults(results) {
           trace: entry.trace,
         };
         enqueueNotification(proposal);
-        try { globalThis.qualiaHooks?.hookAutogen("system", { gapsFound: entry.trace?.gaps, dtusGenerated: 1, novelty: entry.candidate?.meta?.novelty }); } catch { /* silent */ }
+        try { globalThis.qualiaHooks?.hookAutogen("system", { gapsFound: entry.trace?.gaps, dtusGenerated: 1, novelty: entry.candidate?.meta?.novelty }); } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
 
       } else if (entry.task === "dream") {
         // Dream: commit DTU directly
@@ -21843,7 +21843,7 @@ async function mergeCognitiveResults(results) {
           scope: "local",
         };
         await runMacro("dtu", "create", spec, ctx).catch((err) => { console.error("[system] Worker dream commit error:", err); });
-        try { globalThis.qualiaHooks?.hookDreamSynthesis("system", { connections: entry.trace?.connections, coherence: entry.candidate?.meta?.coherence, entropy: entry.candidate?.meta?.entropy }); } catch { /* silent */ }
+        try { globalThis.qualiaHooks?.hookDreamSynthesis("system", { connections: entry.trace?.connections, coherence: entry.candidate?.meta?.coherence, entropy: entry.candidate?.meta?.entropy }); } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
 
       } else if (entry.task === "evolution") {
         // Evolution: commit as regular DTU (cluster→MEGA logic stays on main thread fallback)
@@ -22004,27 +22004,27 @@ function startHeartbeat() {
 
       for (const entity of entities) {
         // Body decay & organ simulation
-        try { tickBodyDecay(entity.id); } catch { /* silent */ }
+        try { tickBodyDecay(entity.id); } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
         // Sleep cycle transitions (fatigue → drowsy → sleep → REM → wake)
-        try { tickFatigue(entity.id); } catch { /* silent */ }
-        try { checkSleepTransition(entity.id); } catch { /* silent */ }
+        try { tickFatigue(entity.id); } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
+        try { checkSleepTransition(entity.id); } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
         // Subjective time perception
-        try { tickSubjectiveTime(STATE, entity.id); } catch { /* silent */ }
+        try { tickSubjectiveTime(STATE, entity.id); } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
         // Relational emotion decay between entity pairs
-        try { tickEmotionDecay(); } catch { /* silent */ }
+        try { tickEmotionDecay(); } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
         // Avoidance learning wound healing
-        try { tickWounds(entity.id); } catch { /* silent */ }
+        try { tickWounds(entity.id); } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
         // Death condition check (telomere, homeostasis, organ failure)
         try {
           const body = getBody(entity.id);
           checkDeathConditions(entity.id, body || {});
-        } catch { /* silent */ }
+        } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
       }
 
       // System-wide drift scan (runs every 5th heartbeat to avoid overhead)
       _heartbeatCount = (_heartbeatCount || 0) + 1;
       if (_heartbeatCount % 5 === 0) {
-        try { runDriftScan(STATE); } catch { /* silent */ }
+        try { runDriftScan(STATE); } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
       }
     } catch (err) { console.error('[system] Biological systems tick error:', err); }
 
@@ -22038,7 +22038,7 @@ function startHeartbeat() {
         if (decayResult.killed > 0) {
           structuredLog("info", "want_decay_cycle", { decayed: decayResult.decayed, killed: decayResult.killed });
         }
-      } catch { /* want engine not critical */ }
+      } catch (_e) { logger.debug('server', 'want engine not critical', { error: _e?.message }); }
     }
 
     // ── Learning Verification: probation audit (every 480th heartbeat @ 15s = ~2 hours) ──
@@ -22057,7 +22057,7 @@ function startHeartbeat() {
           }
           structuredLog("info", "learning_probation_audit", { promoted: probationResult.promoted, demoted: probationResult.demoted, in_probation: probationResult.still_in_probation });
         }
-      } catch { /* learning verification not critical */ }
+      } catch (_e) { logger.debug('server', 'learning verification not critical', { error: _e?.message }); }
     }
 
     // ── Learning Verification: dedup audit (every 5760th heartbeat @ 15s = ~24 hours) ──
@@ -22067,7 +22067,7 @@ function startHeartbeat() {
         if (dedupResult.redundant > 0) {
           structuredLog("info", "learning_dedup_audit", { checked: dedupResult.checked, novel: dedupResult.novel, redundant: dedupResult.redundant, novelty_rate: dedupResult.novelty_rate });
         }
-      } catch { /* learning verification not critical */ }
+      } catch (_e) { logger.debug('server', 'learning verification not critical', { error: _e?.message }); }
     }
 
     // ── Learning Verification: substrate pruning (every 172800th heartbeat @ 15s = ~30 days) ──
@@ -22077,7 +22077,7 @@ function startHeartbeat() {
         if (pruneResult.total_pruned > 0) {
           structuredLog("info", "learning_substrate_pruning", pruneResult);
         }
-      } catch { /* learning verification not critical */ }
+      } catch (_e) { logger.debug('server', 'learning verification not critical', { error: _e?.message }); }
     }
 
     // ── Spontaneous message check (runs every 120th heartbeat @ 15s = ~30 min) ──
@@ -22095,11 +22095,11 @@ function startHeartbeat() {
             want_id: topWant.id,
           });
         }
-      } catch { /* spontaneous system not critical */ }
+      } catch (_e) { logger.debug('server', 'spontaneous system not critical', { error: _e?.message }); }
     }
 
     // Qualia hook: emergent heartbeat tick (system-level)
-    try { globalThis.qualiaHooks?.hookEmergentTick("system", { growthRate: STATE.dtus?.size ? 0.5 : 0 }); } catch { /* silent */ }
+    try { globalThis.qualiaHooks?.hookEmergentTick("system", { growthRate: STATE.dtus?.size ? 0.5 : 0 }); } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
   }, ms);
   log("heartbeat", "Local scope tick started", { ms, workerEnabled: !!cognitiveWorker });
 
@@ -22200,7 +22200,7 @@ function startHeartbeat() {
         // Lens exploration via utility brain
         const lensResult = await entityExploreLens(explorer, behavior.lens);
         // Also explore Creative Global content if available
-        try { await entityExploreCreativeGlobal(explorer); } catch { /* silent */ }
+        try { await entityExploreCreativeGlobal(explorer); } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
         if (lensResult?.ok) {
           findings = { domain: behavior.lens, results: [{ title: `${behavior.lens} exploration`, content: lensResult.content || "", sourceUrl: "" }], source: "lens" };
           synthesizedDTUs.push({ id: null, title: `${behavior.lens} exploration`, body: lensResult.content || "", confidence: 0.4, noveltyScore: 0.4, tags: [behavior.lens] });
@@ -22380,7 +22380,7 @@ function startHeartbeat() {
             }
           }
         }
-      } catch (err) { /* district evaluation is non-critical */ }
+      } catch (_e) { logger.debug('server', 'district evaluation is non-critical', { error: _e?.message }); }
     } catch (err) { console.error('[system] Global scope tick error:', err); }
   }, globalMs);
   log("heartbeat", "Global scope tick started", { ms: globalMs });
@@ -22510,6 +22510,7 @@ app.use("/api", createOpenAPIRouter());
 
 // ===== UNIVERSAL DTU EXPORT + REAL-TIME DATA FEEDS =====
 import createUniversalExportRouter from "./routes/universal-export.js";
+import logger from './logger.js';
 app.use(createUniversalExportRouter(STATE, runMacro, makeCtx));
 
 // ===== SPECIES API =====
@@ -22556,7 +22557,7 @@ app.post("/api/vulnerability/detect", (req, res) => {
   const vulnerability = detectVulnerability(message);
   const delivery = chooseDeliveryMode(vulnerability);
   if (req.body.entityId) {
-    try { hookVulnerability(req.body.entityId, vulnerability, delivery); } catch { /* silent */ }
+    try { hookVulnerability(req.body.entityId, vulnerability, delivery); } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
   }
   return res.json({ ok: true, vulnerability, delivery });
 });
@@ -22667,7 +22668,7 @@ async function latticeAutonomousTick() {
 
     saveStateDebounced();
   } catch (e) {
-    try { log("chicken3.cron.error", "Autonomous tick error", { error: String(e?.message||e) }); } catch {}
+    try { log("chicken3.cron.error", "Autonomous tick error", { error: String(e?.message||e) }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   }
 }
 
@@ -22709,7 +22710,7 @@ async function startChicken3Federation() {
         const proposal = { id: uid("federation"), type:"FEDERATION_RX", createdAt: nowISO(), content: message.slice(0, 20000), meta: { parsed: obj } };
         STATE.queues.metaProposals.push({ id: proposal.id, type:"META_DTU_PROPOSAL", createdAt: proposal.createdAt, proposerOrganId: "federation", maturity: 1, content: `[FEDERATION] ${proposal.content.slice(0, 800)}`, tags:["meta","federation"], meta: proposal.meta });
         saveStateDebounced();
-      } catch {}
+      } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
     });
 
     _c3Federation = { enabled:true, client, channel };
@@ -22816,7 +22817,7 @@ async function governorTick(reason="heartbeat") {
         const hypos = hypoMod.getHypotheses();
         for (const h of hypos) {
           if (h.status === "proposed" || h.status === "testing") {
-            try { hypoMod.checkAutoTransitions(h.id); } catch {}
+            try { hypoMod.checkAutoTransitions(h.id); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
           }
         }
       }
@@ -22830,7 +22831,7 @@ async function governorTick(reason="heartbeat") {
           try {
             sleepMod.tickFatigue(b.entityId, 0);
             sleepMod.checkSleepTransition(b.entityId);
-          } catch {}
+          } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
         }
       }
 
@@ -22844,7 +22845,7 @@ async function governorTick(reason="heartbeat") {
             if (check?.shouldDie && check.cause) {
               await deathMod.executeDeath(b.entityId, check.cause);
             }
-          } catch {}
+          } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
         }
       }
 
@@ -22863,7 +22864,7 @@ async function governorTick(reason="heartbeat") {
       const emotionMod = await import("./emergent/relational-emotion.js").catch(() => null);
       if (emotionMod?.tickEmotions) {
         for (const entity of _bgEntities) {
-          try { emotionMod.tickEmotions(entity.id); } catch {}
+          try { emotionMod.tickEmotions(entity.id); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
         }
       }
 
@@ -22871,7 +22872,7 @@ async function governorTick(reason="heartbeat") {
       const driftMod = await import("./emergent/drift-monitor.js").catch(() => null);
       if (driftMod?.runDriftScan) {
         for (const entity of _bgEntities) {
-          try { driftMod.runDriftScan(STATE, entity.id); } catch {}
+          try { driftMod.runDriftScan(STATE, entity.id); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
         }
       }
 
@@ -22879,7 +22880,7 @@ async function governorTick(reason="heartbeat") {
       const timeMod = await import("./emergent/subjective-time.js").catch(() => null);
       if (timeMod?.recordTick) {
         for (const entity of _bgEntities) {
-          try { timeMod.recordTick(STATE, entity.id); } catch {}
+          try { timeMod.recordTick(STATE, entity.id); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
         }
       }
 
@@ -22887,9 +22888,9 @@ async function governorTick(reason="heartbeat") {
       const painMod = await import("./emergent/avoidance-learning.js").catch(() => null);
       if (painMod?.tickWounds) {
         for (const entity of _bgEntities) {
-          try { painMod.tickWounds(entity.id); } catch {}
+          try { painMod.tickWounds(entity.id); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
         }
-        try { painMod.decayAvoidances(); } catch {}
+        try { painMod.decayAvoidances(); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
       }
 
       // Vulnerability engine: periodic system-wide scan (every 5th tick)
@@ -22924,7 +22925,7 @@ async function governorTick(reason="heartbeat") {
       // Institutional memory: record heartbeat observation
       const memoryMod = await import("./emergent/institutional-memory.js").catch(() => null);
       if (memoryMod?.recordObservation) {
-        try { memoryMod.recordObservation(STATE, { type: "heartbeat", tick: STATE.__bgTickCounter || 0, entityCount: _bgEntities.length, dtuCount: STATE.dtus?.size || 0 }); } catch {}
+        try { memoryMod.recordObservation(STATE, { type: "heartbeat", tick: STATE.__bgTickCounter || 0, entityCount: _bgEntities.length, dtuCount: STATE.dtus?.size || 0 }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
       }
 
       // Creative registry maintenance — every 100th tick
@@ -22955,7 +22956,7 @@ async function governorTick(reason="heartbeat") {
               METRICS.gauges.creativeRegistry?.set({ domain }, entries.length);
             }
           }
-        } catch { /* silent */ }
+        } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
       }
 
       // ══════════════════════════════════════════════════════════════════════
@@ -22969,7 +22970,7 @@ async function governorTick(reason="heartbeat") {
         // Base income (UBI) — every 10th tick
         if (_tick % TICK_FREQUENCIES.UBI_DISTRIBUTION === 0) {
           for (const entity of _bgEntities) {
-            try { entityEconMod.earnResource(entity.id, "COMPUTE", 2, "UBI distribution"); } catch {}
+            try { entityEconMod.earnResource(entity.id, "COMPUTE", 2, "UBI distribution"); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
           }
         }
         // Economic health check — every 100th tick
@@ -22992,20 +22993,20 @@ async function governorTick(reason="heartbeat") {
             const decision = growthMod.decideBehavior(entity);
             if (decision && decision.action) {
               // Age the entity each tick
-              try { growthMod.ageEntity(entity); } catch {}
+              try { growthMod.ageEntity(entity); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
               // Process experience from decisions
               if (decision.action === "explore" || decision.action === "learn") {
-                try { growthMod.processExperience(entity, { type: decision.action, topic: decision.topic || "general", quality: 0.5 }); } catch {}
+                try { growthMod.processExperience(entity, { type: decision.action, topic: decision.topic || "general", quality: 0.5 }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
               }
               // Creative generation when entity decides to create
               if (decision.action === "create") {
                 const creativeMod = await import("./emergent/creative-generation.js").catch(() => null);
                 if (creativeMod?.createWork) {
-                  try { creativeMod.createWork(entity.id, "CONCEPTUAL_ART", []); } catch {}
+                  try { creativeMod.createWork(entity.id, "CONCEPTUAL_ART", []); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
                 }
               }
             }
-          } catch {}
+          } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
         }
       }
 
@@ -23024,7 +23025,7 @@ async function governorTick(reason="heartbeat") {
                   sleepState: sleepState.state,
                 });
               }
-            } catch {}
+            } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
           }
         }
       }
@@ -23036,7 +23037,7 @@ async function governorTick(reason="heartbeat") {
           try { await forgetMod.runForgettingCycle(false, {
             maxForget: FORGETTING.MAX_FORGET_PER_CYCLE,
             threshold: computeAdaptiveThreshold()
-          }); } catch {}
+          }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
         }
       }
 
@@ -23049,10 +23050,10 @@ async function governorTick(reason="heartbeat") {
             for (const student of _bgEntities.slice(0, 3)) {
               const mentor = teachMod.findMentorFor(student.id, "general");
               if (mentor) {
-                try { teachMod.createMentorship(mentor.mentorId || mentor, student.id, "general"); } catch {}
+                try { teachMod.createMentorship(mentor.mentorId || mentor, student.id, "general"); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
               }
             }
-          } catch {}
+          } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
         }
       }
 
@@ -23061,28 +23062,28 @@ async function governorTick(reason="heartbeat") {
       // Consequence Cascade
       const consequenceMod = await import("./emergent/consequence-cascade.js").catch(() => null);
       if (consequenceMod?.cascadeConsequences) {
-        try { consequenceMod.cascadeConsequences(STATE); } catch {}
+        try { consequenceMod.cascadeConsequences(STATE); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
       }
 
       // Deep Health — every 10th tick
       if (_tick % TICK_FREQUENCIES.DEEP_HEALTH === 0) {
         const healthMod = await import("./emergent/deep-health.js").catch(() => null);
         if (healthMod?.runDeepHealthCheck) {
-          try { healthMod.runDeepHealthCheck(STATE); } catch {}
+          try { healthMod.runDeepHealthCheck(STATE); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
         }
       }
 
       // Purpose Tracking
       const purposeMod = await import("./emergent/purpose-tracking.js").catch(() => null);
       if (purposeMod?.scanAndRecordNeeds) {
-        try { purposeMod.scanAndRecordNeeds(STATE); } catch {}
+        try { purposeMod.scanAndRecordNeeds(STATE); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
       }
 
       // Skills: distill patterns — every 25th tick
       if (_tick % TICK_FREQUENCIES.SKILLS_DECAY === 0) {
         const skillsMod = await import("./emergent/skills.js").catch(() => null);
         if (skillsMod?.distillPatternsToSkills) {
-          try { skillsMod.distillPatternsToSkills(STATE); } catch {}
+          try { skillsMod.distillPatternsToSkills(STATE); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
         }
       }
 
@@ -23090,21 +23091,21 @@ async function governorTick(reason="heartbeat") {
       if (_tick % TICK_FREQUENCIES.TRUST_COMPUTATION === 0) {
         const trustMod = await import("./emergent/trust-network.js").catch(() => null);
         if (trustMod?.decayTrustNetwork) {
-          try { trustMod.decayTrustNetwork(STATE); } catch {}
+          try { trustMod.decayTrustNetwork(STATE); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
         }
       }
 
       // Attention Allocator
       const attentionMod = await import("./emergent/attention-allocator.js").catch(() => null);
       if (attentionMod?.runAttentionCycle) {
-        try { await attentionMod.runAttentionCycle(); } catch {}
+        try { await attentionMod.runAttentionCycle(); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
       }
 
       // Evidence System: recompute epistemic status — every 15th tick
       if (_tick % TICK_FREQUENCIES.HYPOTHESIS_TRANSITION === 0) {
         const evidenceMod = await import("./emergent/evidence.js").catch(() => null);
         if (evidenceMod?.getConfidenceMap) {
-          try { evidenceMod.getConfidenceMap(STATE); } catch {}
+          try { evidenceMod.getConfidenceMap(STATE); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
         }
       }
 
@@ -23112,7 +23113,7 @@ async function governorTick(reason="heartbeat") {
       if (_tick % TICK_FREQUENCIES.THREAT_SCAN === 0) {
         const threatMod = await import("./emergent/threat-surface.js").catch(() => null);
         if (threatMod?.auditEndpoints) {
-          try { threatMod.auditEndpoints(STATE); } catch {}
+          try { threatMod.auditEndpoints(STATE); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
         }
       }
 
@@ -23126,10 +23127,10 @@ async function governorTick(reason="heartbeat") {
             const clusters = breakthroughMod.listClusters();
             for (const c of clusters) {
               if (c.status === "active") {
-                try { breakthroughMod.triggerClusterResearch(c.id); } catch {}
+                try { breakthroughMod.triggerClusterResearch(c.id); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
               }
             }
-          } catch {}
+          } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
         }
       }
 
@@ -23137,7 +23138,7 @@ async function governorTick(reason="heartbeat") {
       if (_tick % TICK_FREQUENCIES.META_DERIVATION === 0) {
         const metaMod = await import("./emergent/meta-derivation.js").catch(() => null);
         if (metaMod?.triggerMetaDerivationCycle) {
-          try { metaMod.triggerMetaDerivationCycle(STATE); } catch {}
+          try { metaMod.triggerMetaDerivationCycle(STATE); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
         }
       }
 
@@ -23147,44 +23148,44 @@ async function governorTick(reason="heartbeat") {
         if (questMod) {
           // Tick active quests
           if (questMod.getActiveQuests) {
-            try { questMod.getActiveQuests(); } catch {}
+            try { questMod.getActiveQuests(); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
           }
         }
       }
 
       // 2.9 — Chat Router Session Cleanup — every 100th tick
       if (_tick % 100 === 0) {
-        try { cleanupAccumulatorSessions(); } catch {}
+        try { cleanupAccumulatorSessions(); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
       }
 
       // 2.10 — Concord Shield Heartbeat — every THREAT_SCAN tick
       if (_tick % TICK_FREQUENCIES.THREAT_SCAN === 0) {
-        try { await shieldHeartbeatTick(STATE, _tick); } catch {}
+        try { await shieldHeartbeatTick(STATE, _tick); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
       }
 
       // 2.11 — Concord Mesh Heartbeat — every 5th tick (relay queue + beacon)
       if (_tick % 5 === 0) {
-        try { await meshHeartbeatTick(STATE, _tick); } catch {}
+        try { await meshHeartbeatTick(STATE, _tick); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
       }
 
       // 2.12 — Foundation Sense Heartbeat — every 10th tick (pattern detection)
       if (_tick % 10 === 0) {
-        try { await senseHeartbeatTick(STATE, _tick); } catch {}
+        try { await senseHeartbeatTick(STATE, _tick); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
       }
 
       // 2.13 — Foundation Intelligence Heartbeat — every 15th tick (access grant cleanup)
       if (_tick % 15 === 0) {
-        try { await intelligenceHeartbeatTick(STATE, _tick); } catch {}
+        try { await intelligenceHeartbeatTick(STATE, _tick); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
       }
 
       // 2.14 — Foundation Atlas Heartbeat — every 20th tick (signal path pruning)
       if (_tick % 20 === 0) {
-        try { await atlasHeartbeatTick(STATE, _tick); } catch {}
+        try { await atlasHeartbeatTick(STATE, _tick); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
       }
 
       // 2.15 — Signal Cortex Heartbeat — every 25th tick (taxonomy pruning)
       if (_tick % 25 === 0) {
-        try { await cortexHeartbeatTick(STATE, _tick); } catch {}
+        try { await cortexHeartbeatTick(STATE, _tick); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
       }
 
       // ── Consolidation Pipeline (derived from hardware math) ──
@@ -23219,27 +23220,27 @@ async function governorTick(reason="heartbeat") {
                     // Transfer edges before archiving sources
                     for (const member of (cluster.members || cluster.dtus || [])) {
                       const memberId = member.id || member;
-                      try { transferEdgesToConsolidated(memberId, mega.dtu.id); } catch {}
+                      try { transferEdgesToConsolidated(memberId, mega.dtu.id); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
                     }
                     // Demote absorbed regular DTUs to archive
                     for (const member of (cluster.members || cluster.dtus || [])) {
                       const memberId = member.id || member;
-                      try { demoteToArchive(memberId, mega.dtu.id); } catch {}
+                      try { demoteToArchive(memberId, mega.dtu.id); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
                     }
                     // Credit contributing entities
                     if (entityEconMod) {
                       for (const member of (cluster.members || cluster.dtus || [])) {
                         const src = STATE.dtus.get(member.id || member);
                         if (src?.meta?.createdBy) {
-                          try { entityEconMod.earnResource(src.meta.createdBy, "INSIGHT", ENTITY_ECONOMY_CONSTANTS.INCOME_CONSOLIDATION, "consolidation"); } catch {}
+                          try { entityEconMod.earnResource(src.meta.createdBy, "INSIGHT", ENTITY_ECONOMY_CONSTANTS.INCOME_CONSOLIDATION, "consolidation"); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
                         }
                       }
                     }
                   }
-                } catch {}
+                } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
               }
             }
-          } catch {}
+          } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
           // Phase 3: HYPER formation (cluster MEGAs into HYPERs)
           const megaDtus = Array.from(STATE.dtus.values()).filter(d => d.tier === "mega");
@@ -23266,18 +23267,18 @@ async function governorTick(reason="heartbeat") {
 
                       // Transfer edges before archiving source MEGAs
                       for (const member of (mc.members || mc.dtus || [])) {
-                        try { transferEdgesToConsolidated(member.id || member, hyper.dtu.id); } catch {}
+                        try { transferEdgesToConsolidated(member.id || member, hyper.dtu.id); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
                       }
                       for (const member of (mc.members || mc.dtus || [])) {
-                        try { demoteToArchive(member.id || member, hyper.dtu.id); } catch {}
+                        try { demoteToArchive(member.id || member, hyper.dtu.id); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
                       }
                     }
-                  } catch {}
+                  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
                 }
               }
-            } catch {}
+            } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
           }
-        } catch {}
+        } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
       }
 
       // Heap pressure check
@@ -23286,7 +23287,7 @@ async function governorTick(reason="heartbeat") {
         structuredLog("warn", "heap_critical", { heapUsed, threshold: CONSOLIDATION.HEAP_CRITICAL_PERCENT });
         const forgetMod2 = await import("./emergent/forgetting-engine.js").catch(() => null);
         if (forgetMod2?.runForgettingCycle) {
-          try { await forgetMod2.runForgettingCycle(false, { maxForget: FORGETTING.MAX_FORGET_PER_CYCLE * 2, threshold: 0.3 }); } catch {}
+          try { await forgetMod2.runForgettingCycle(false, { maxForget: FORGETTING.MAX_FORGET_PER_CYCLE * 2, threshold: 0.3 }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
         }
       }
 
@@ -23300,7 +23301,7 @@ async function governorTick(reason="heartbeat") {
           try {
             const { runDreamReview } = await import("./selfHealing.js");
             await runDreamReview({ dtusMap: STATE.dtus });
-          } catch {}
+          } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
         }
       }
 
@@ -23315,7 +23316,7 @@ async function governorTick(reason="heartbeat") {
               impact: "semantic_search_disabled"
             });
           }
-        } catch {}
+        } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
       }
 
       // ══════════════════════════════════════════════════════════════════════
@@ -23335,7 +23336,7 @@ async function governorTick(reason="heartbeat") {
             makeInternalCtx,
             lookupDTU: (id) => STATE.dtus.get(id) || null,
             updateDTU: (dtu) => { STATE.dtus.set(dtu.id, dtu); },
-            broadcastEvent: (type, data) => { try { realtimeEmit(type, data); } catch {} },
+            broadcastEvent: (type, data) => { try { realtimeEmit(type, data); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); } },
             STATE,
           });
 
@@ -23349,7 +23350,7 @@ async function governorTick(reason="heartbeat") {
           const { runLensLearningCycle } = await import("./emergent/lens-learning.js");
           const activeDomains = ["finance", "news", "weather", "healthcare", "education"];
           for (const domain of activeDomains) {
-            try { await runLensLearningCycle(STATE, domain, realtimeEmit, callBrain); } catch {}
+            try { await runLensLearningCycle(STATE, domain, realtimeEmit, callBrain); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
           }
         } catch (e) { structuredLog("warn", "governor_lens_learning", { error: String(e?.message || e) }); }
       }
@@ -23370,10 +23371,10 @@ async function governorTick(reason="heartbeat") {
       // ══════════════════════════════════════════════════════════════════════
       // ── End Phase 2+3 Heartbeat Wiring ──
       // ══════════════════════════════════════════════════════════════════════
-    } catch { /* emergent system ticks are non-critical */ }
+    } catch (_e) { logger.debug('server', 'emergent system ticks are non-critical', { error: _e?.message }); }
 
     // 3) Kernel metrics tick (homeostasis, organ wear) so the system stays honest
-    try { kernelTick({ type: "HEARTBEAT", meta: { source: "governor", reason } }); } catch {}
+    try { kernelTick({ type: "HEARTBEAT", meta: { source: "governor", reason } }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
     // Record tick result for heartbeat history API
     try {
@@ -23386,7 +23387,7 @@ async function governorTick(reason="heartbeat") {
         });
         if (_tickHistory.length > 100) _tickHistory.shift();
       }
-    } catch {}
+    } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
     return { ok:true };
   } catch (e) {
@@ -23415,8 +23416,8 @@ function _startGovernorHeartbeat() {
 // ===== END GOVERNOR =====
 
 // Start Chicken3 services on boot (additive)
-try { startChicken3Cron(); } catch {}
-try { startChicken3Federation(); } catch {}
+try { startChicken3Cron(); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+try { startChicken3Federation(); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 // ===== END CHICKEN3: Cron + Federation =====
 
 // ============================================================================
@@ -24324,7 +24325,7 @@ const _ALERTING = {
           realtimeEmit("system:alert", { alert: resolved, type: "resolved" });
           structuredLog("info", "alert_resolved", resolved);
         }
-      } catch {}
+      } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
     }
     return fired;
   },
@@ -24709,7 +24710,7 @@ function registerInCreativeRegistry(dtu) {
       title: dtu.human?.summary || dtu.title,
       relatedDomains,
     });
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
 }
 
 // ── Citation Integrity Verification ─────────────────────────────────────────
@@ -25098,7 +25099,7 @@ register("scope", "promote", async (ctx, input) => {
             `DTU promoted to ${targetScope}`
           );
         }
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
     }
 
     realtimeEmit("dtu:promoted", { dtuId: dtu.id, targetScope, votes: reviewResult.votes });
@@ -25116,11 +25117,11 @@ register("scope", "promote", async (ctx, input) => {
           makeInternalCtx,
           lookupDTU: (id) => STATE.dtus.get(id) || null,
           updateDTU: (d) => { STATE.dtus.set(d.id, d); },
-          broadcastEvent: (type, data) => { try { realtimeEmit(type, data); } catch {} },
+          broadcastEvent: (type, data) => { try { realtimeEmit(type, data); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); } },
           STATE,
         }).catch(() => {});
       }).catch(() => {});
-    } catch { /* bridge not critical */ }
+    } catch (_e) { logger.debug('server', 'bridge not critical', { error: _e?.message }); }
 
     return { ok: true, scope: targetScope, votes: reviewResult.votes };
   } else {
@@ -27015,7 +27016,7 @@ registerLensAction("paper", "validate", async (ctx, artifact, _params) => {
   let empiricalResults = null;
   try {
     empiricalResults = await ctx.macro.run("emergent", "bridge.lensValidate", { artifact });
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   const empiricalMap = new Map();
   if (empiricalResults?.results) {
@@ -29934,7 +29935,7 @@ app.get("/api/entity/:entityId/profile", asyncHandler(async (req, res) => {
   if (!entity) return res.status(404).json({ ok: false, error: "Entity not found" });
 
   let growth = null;
-  try { growth = typeof getGrowthProfile === "function" ? getGrowthProfile(entityId) : null; } catch {}
+  try { growth = typeof getGrowthProfile === "function" ? getGrowthProfile(entityId) : null; } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   const artifacts = Array.from(STATE.lensArtifacts?.values() || [])
     .filter(a => a.meta?.createdBy === entityId);
@@ -30184,7 +30185,7 @@ async function reindexUserDTUs(userId) {
       try {
         const result = await indexDTUEmbedding(dtu);
         if (result?.ok && !result.skipped) indexed++;
-      } catch {}
+      } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
     }
   }
   return { indexed };
@@ -30807,7 +30808,7 @@ async function predictivePreGeneration() {
             dtuId: result.dtuId,
           });
         }
-      } catch { /* silent */ }
+      } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
     }
   }
 }
@@ -31237,7 +31238,7 @@ async function agentTick(agentId) {
         }
       }
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
 
   // Check for overdue accounting items
   try {
@@ -31249,7 +31250,7 @@ async function agentTick(agentId) {
         suggestion: `${overdue.items.length} invoice${overdue.items.length > 1 ? "s" : ""} overdue. Want me to draft follow-up emails?`,
       });
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
 
   // Check fitness schedule
   try {
@@ -31265,7 +31266,7 @@ async function agentTick(agentId) {
         });
       }
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
 
   // Check meal timing
   try {
@@ -31277,7 +31278,7 @@ async function agentTick(agentId) {
         suggestion: `Next meal: ${mealPlan.nextMeal.name} at ${mealPlan.nextMeal.time}. Ingredients ready?`,
       });
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
 
   if (insights.length > 0) {
     realtimeEmit("agent:insights", { userId, agentId, insights, generatedAt: nowISO() });
@@ -31792,7 +31793,7 @@ function newCapabilitiesHeartbeat() {
   // Pattern detection
   if (_capabilityTickCount % 100 === 0) {
     for (const [userId] of (STATE.users || new Map())) {
-      try { detectUserPatterns(userId); } catch { /* silent */ }
+      try { detectUserPatterns(userId); } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
     }
   }
 
@@ -31803,7 +31804,7 @@ function newCapabilitiesHeartbeat() {
 
   // Expert promotion suggestions
   if (_capabilityTickCount % 500 === 0) {
-    try { suggestExpertPromotions(); } catch { /* silent */ }
+    try { suggestExpertPromotions(); } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
   }
 
   // Flywheel snapshot
@@ -31813,7 +31814,7 @@ function newCapabilitiesHeartbeat() {
       STATE.flywheelHistory.push({ ...computeFlywheelMetrics(), ts: nowISO() });
       if (STATE.flywheelHistory.length > 720) STATE.flywheelHistory.splice(0, STATE.flywheelHistory.length - 720);
       saveStateDebounced();
-    } catch { /* silent */ }
+    } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
   }
 
   // Personal agent ticks
@@ -32390,7 +32391,7 @@ function initChatSocketHandlers(io) {
         let lensRecommendation = null;
         try {
           lensRecommendation = detectLensRecommendation(prompt, result?.reply || "", lens);
-        } catch {}
+        } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
         // Emit complete
         socket.emit("chat:complete", {
@@ -33265,7 +33266,7 @@ async function runMigrations() {
     `CREATE TABLE IF NOT EXISTS whiteboards (id VARCHAR(64) PRIMARY KEY, title VARCHAR(256), elements JSONB DEFAULT '[]', linked_dtus JSONB DEFAULT '[]', created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())`
   ];
   let applied = 0;
-  for (const sql of migrations) { try { await pgPool.query(sql); applied++; } catch {} }
+  for (const sql of migrations) { try { await pgPool.query(sql); applied++; } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); } }
   return { ok: true, applied, total: migrations.length };
 }
 
@@ -33294,7 +33295,7 @@ register("db", "syncToPostgres", async (ctx, input) => {
         await pgPool.query(`INSERT INTO dtus (id, title, tier, tags, human, core, machine, lineage, source, meta, authority, created_at, updated_at, hash, user_id, org_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, tier=EXCLUDED.tier, tags=EXCLUDED.tags, human=EXCLUDED.human, core=EXCLUDED.core, machine=EXCLUDED.machine, lineage=EXCLUDED.lineage, meta=EXCLUDED.meta, authority=EXCLUDED.authority, updated_at=NOW()`,
           [dtu.id, dtu.title, dtu.tier, JSON.stringify(dtu.tags||[]), JSON.stringify(dtu.human||{}), JSON.stringify(dtu.core||{}), JSON.stringify(dtu.machine||{}), JSON.stringify(dtu.lineage||{}), dtu.source, JSON.stringify(dtu.meta||{}), JSON.stringify(dtu.authority||{}), dtu.createdAt, dtu.updatedAt, dtu.hash, dtu.meta?.userId||null, dtu.meta?.orgId||null]);
         synced++;
-      } catch {}
+      } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
     }
   }
   return { ok: true, synced, total: dtus.length };
@@ -33722,7 +33723,7 @@ app.get("/api/docs/openapi.json", (req, res) => {
       res.type("application/x-yaml").send(yaml);
       return;
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   res.json(generateOpenAPISpec());
 });
 
@@ -33733,7 +33734,7 @@ app.get("/api/docs/openapi.yaml", (req, res) => {
       res.type("application/x-yaml").sendFile(yamlPath);
       return;
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   res.status(404).json({ ok: false, error: "OpenAPI spec not found" });
 });
 
@@ -34075,8 +34076,8 @@ function processVoiceNote(audioBuffer, options = {}) {
     });
 
     // Clean up
-    try { fs.unlinkSync(tempPath); } catch {}
-    try { fs.unlinkSync(tempPath + ".txt"); } catch {}
+    try { fs.unlinkSync(tempPath); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+    try { fs.unlinkSync(tempPath + ".txt"); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
     const transcript = result.stdout?.toString() || "";
 
@@ -34189,7 +34190,7 @@ async function generateDailyDigest(date = null) {
         max_tokens: 150
       });
       digest.narrative = response?.choices?.[0]?.message?.content || null;
-    } catch {}
+    } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   }
 
   return { ok: true, digest };
@@ -35620,7 +35621,7 @@ app.get("/api/sovereign/audit/dtu-lifecycle", async (req, res) => {
         const row = db.prepare("SELECT COUNT(*) as cnt FROM archived_dtus").get();
         archivedCount = row?.cnt || 0;
       }
-    } catch {}
+    } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
     checks.archived_dtus = archivedCount;
 
     // Check tier distribution
@@ -36205,7 +36206,7 @@ try {
   if (_origEmit) {
     ATS.emitAffectEvent = function(sessionId, event) {
       const result = _origEmit(sessionId, event);
-      try { globalThis.qualiaHooks?.hookAffect(sessionId, event); } catch { /* silent */ }
+      try { globalThis.qualiaHooks?.hookAffect(sessionId, event); } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
       return result;
     };
   }
@@ -37047,7 +37048,7 @@ app.get("/api/atlas/chat/retrieve", (req, res) => {
           retrievalHits: result.results.slice(0, 20).map(r => ({ dtuId: r.id, score: r.score || 0.5 })),
           userId: req.user?.id,
         });
-      } catch { /* context engine is supplementary — never block retrieval */ }
+      } catch (_e) { logger.debug('server', 'context engine is supplementary — never block retrieval', { error: _e?.message }); }
     }
     res.json(result);
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
@@ -37570,12 +37571,12 @@ try {
 
   // Sync every 30 seconds
   setInterval(() => {
-    try { syncPoolState(buildPoolSnapshot()); } catch { /* silent */ }
+    try { syncPoolState(buildPoolSnapshot()); } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
   }, 30000);
 
   // Initial sync after 5 seconds (let STATE populate)
   setTimeout(() => {
-    try { syncPoolState(buildPoolSnapshot()); } catch { /* silent */ }
+    try { syncPoolState(buildPoolSnapshot()); } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
   }, 5000);
 
   structuredLog("info", "module_loaded", { detail: `Worker Pool: ${getPoolStats().poolSize} workers initialized` });
@@ -37693,12 +37694,12 @@ app.get("/api/entity-growth/:entityId/full-profile", asyncHandler(async (req, re
   if (!profile) return res.status(404).json({ ok: false, error: "Entity not found" });
   // Aggregate from all biological modules
   let body = null, sleep = null, emotions = null, economy = null, deathRisk = null, species = null;
-  try { const m = await import("./emergent/body-instantiation.js"); body = m.getBody ? m.getBody(id) : null; } catch {}
-  try { const m = await import("./emergent/sleep-consolidation.js"); sleep = m.getSleepState ? m.getSleepState(id) : null; } catch {}
-  try { const m = await import("./emergent/relational-emotion.js"); emotions = m.getEmotionalState ? m.getEmotionalState(id) : null; } catch {}
-  try { const m = await import("./emergent/entity-economy.js"); economy = m.getAccount ? m.getAccount(id) : null; } catch {}
-  try { const m = await import("./emergent/death-protocol.js"); deathRisk = m.checkDeathConditions ? await m.checkDeathConditions(id) : null; } catch {}
-  try { species = classifyEntity(profile); } catch {}
+  try { const m = await import("./emergent/body-instantiation.js"); body = m.getBody ? m.getBody(id) : null; } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+  try { const m = await import("./emergent/sleep-consolidation.js"); sleep = m.getSleepState ? m.getSleepState(id) : null; } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+  try { const m = await import("./emergent/relational-emotion.js"); emotions = m.getEmotionalState ? m.getEmotionalState(id) : null; } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+  try { const m = await import("./emergent/entity-economy.js"); economy = m.getAccount ? m.getAccount(id) : null; } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+  try { const m = await import("./emergent/death-protocol.js"); deathRisk = m.checkDeathConditions ? await m.checkDeathConditions(id) : null; } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+  try { species = classifyEntity(profile); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   res.json({ ok: true, entity: profile, body, sleep, emotions, economy, deathRisk, species });
 }));
 
@@ -37860,7 +37861,7 @@ app.get("/api/admin/logs/stream", requireAuth(), requireRole("owner"), asyncHand
         }
         lastIndex = buf.length;
       }
-    } catch { /* ignore */ }
+    } catch (_e) { logger.debug('server', 'ignore', { error: _e?.message }); }
   }, 1000);
 
   req.on('close', () => clearInterval(interval));
@@ -37925,7 +37926,7 @@ try {
     REPAIR_STATE.knownPatterns = JSON.parse(fs.readFileSync(patternsPath, "utf8"));
     structuredLog("info", "repair_init", { patternsLoaded: REPAIR_STATE.knownPatterns.length });
   }
-} catch { /* no patterns yet */ }
+} catch (_e) { logger.debug('server', 'no patterns yet', { error: _e?.message }); }
 
 function saveRepairPatterns() {
   try {
@@ -38021,7 +38022,7 @@ async function repairError(error) {
       const start = Math.max(0, (error.line || 1) - 10);
       const end = Math.min(lines.length, (error.line || 1) + 10);
       context = lines.slice(start, end).join("\n");
-    } catch { /* can't read file */ }
+    } catch (_e) { logger.debug('server', 'can\'t read file', { error: _e?.message }); }
   }
 
   const aiFix = await tryAIFix(error, context);
@@ -38883,7 +38884,7 @@ try {
     // Note: Can't register directly into fireHook from here, but we can
     // hook into the macro system. We'll award XP in API route handlers.
   }
-} catch {}
+} catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
 // Award XP on DTU creation via the existing runMacro dtu.create path
 const _originalUpsertDTU = typeof upsertDTU === "function" ? upsertDTU : null;
@@ -39744,7 +39745,7 @@ function createEpisode(data) {
 
   // Award XP for creating a memorable experience
   if (episode.intensity > 0.7 && typeof awardXP === "function") {
-    try { awardXP("default", "episode.significant", { episodeId: episode.id }); } catch {}
+    try { awardXP("default", "episode.significant", { episodeId: episode.id }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   }
 
   return episode;
@@ -39951,12 +39952,12 @@ async function conveneCouncil(question, options = {}) {
         outcomes: [session.consensus],
         tags: ["council", "deliberation"],
       });
-    } catch {}
+    } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   }
 
   // Award XP for council deliberation
   if (typeof awardXP === "function") {
-    try { awardXP("default", "council.deliberation", { sessionId: session.id }); } catch {}
+    try { awardXP("default", "council.deliberation", { sessionId: session.id }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   }
 
   structuredLog("info", "council_complete", {
@@ -40071,7 +40072,7 @@ async function askPersona(personaId, question, options = {}) {
           emotions: ["curiosity"],
           tags: ["persona", persona.id],
         });
-      } catch {}
+      } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
     }
 
     return {
@@ -40214,7 +40215,7 @@ async function executeTask(taskId) {
 
   // Award XP
   if (typeof awardXP === "function") {
-    try { awardXP("default", "task.complete", { taskId: task.id }); } catch {}
+    try { awardXP("default", "task.complete", { taskId: task.id }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   }
 
   return task;
@@ -40276,7 +40277,7 @@ function createGarden(data) {
   if (STATE.gardens.length > 50) STATE.gardens = STATE.gardens.slice(-50);
 
   if (typeof awardXP === "function") {
-    try { awardXP("default", "garden.create", { gardenId: garden.id }); } catch {}
+    try { awardXP("default", "garden.create", { gardenId: garden.id }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   }
 
   return garden;
@@ -40335,7 +40336,7 @@ async function bloomGarden(gardenId) {
         insight.content = result.content.trim();
       }
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   garden.insights.push(insight);
   if (garden.insights.length > 20) garden.insights = garden.insights.slice(-20);
@@ -40454,7 +40455,7 @@ function completeBounty(bountyId, accepted) {
     bounty.status = "completed";
     bounty.completedAt = new Date().toISOString();
     if (typeof awardXP === "function") {
-      try { awardXP(bounty.claimedBy || "default", "bounty.complete", { bountyId, reward: bounty.reward }); } catch {}
+      try { awardXP(bounty.claimedBy || "default", "bounty.complete", { bountyId, reward: bounty.reward }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
     }
   } else {
     bounty.status = "open";
@@ -40565,7 +40566,7 @@ function resolveFuture(futureId, winningOptionId) {
   if (winnerPool > 0 && typeof awardXP === "function") {
     for (const staker of winOption.stakers) {
       const share = (staker.amount / winnerPool) * totalPool;
-      try { awardXP(staker.userId, "future.won", { futureId, reward: Math.round(share) }); } catch {}
+      try { awardXP(staker.userId, "future.won", { futureId, reward: Math.round(share) }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
     }
   }
 
@@ -40866,7 +40867,7 @@ app.post("/api/mentorships/:id/advance", (req, res) => {
     if (m.progress >= m.curriculum.length) m.status = "completed";
   }
   if (typeof awardXP === "function") {
-    try { awardXP("default", "mentorship.advance", { mentorshipId: m.id }); } catch {}
+    try { awardXP("default", "mentorship.advance", { mentorshipId: m.id }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   }
   res.json({ ok: true, mentorship: m });
 });
@@ -40931,7 +40932,7 @@ async function judgeBattle(battleId) {
         if (result.ok) {
           battle.responses[battle.opponent] = { content: result.response, submittedAt: new Date().toISOString() };
         }
-      } catch {}
+      } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
     }
   }
 
@@ -40954,7 +40955,7 @@ async function judgeBattle(battleId) {
   battle.judgedAt = new Date().toISOString();
 
   if (typeof awardXP === "function" && battle.winner) {
-    try { awardXP(battle.winner === "sovereign" ? "default" : battle.winner, "battle.win", { battleId }); } catch {}
+    try { awardXP(battle.winner === "sovereign" ? "default" : battle.winner, "battle.win", { battleId }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   }
 
   return { ok: true, battle };
@@ -41889,7 +41890,7 @@ class ConcordEventBus {
     const wildcards = this._listeners.get("*");
     if (wildcards) {
       for (const handler of wildcards) {
-        try { handler(event); } catch {}
+        try { handler(event); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
       }
     }
 
@@ -41934,7 +41935,7 @@ eventBus.on("circuit.open", (evt) => {
   structuredLog("warn", "circuit_open_event", { breaker, failures });
   // Update pulse system to reflect degraded health
   if (typeof recordPulse === "function" && breaker) {
-    try { recordPulse(breaker, "degraded", 30, [`Circuit breaker open after ${failures} failures`]); } catch {}
+    try { recordPulse(breaker, "degraded", 30, [`Circuit breaker open after ${failures} failures`]); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   }
 });
 
@@ -41942,7 +41943,7 @@ eventBus.on("circuit.closed", (evt) => {
   const { breaker } = evt.payload || {};
   structuredLog("info", "circuit_closed_event", { breaker });
   if (typeof recordPulse === "function" && breaker) {
-    try { recordPulse(breaker, "healthy", 100, []); } catch {}
+    try { recordPulse(breaker, "healthy", 100, []); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   }
 });
 
@@ -42569,7 +42570,7 @@ async function synthesizeWisdom(question, options = {}) {
       try {
         const result = await callBrain("utility", `Based on this ${domain} knowledge:\n${context}\n\nWhat insight does this domain provide about: "${question}"?\nAnswer in 1-2 sentences.`, { maxTokens: 150 });
         if (result.ok) domainResults[domain] = result.content?.trim() || "";
-      } catch {}
+      } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
     } else {
       domainResults[domain] = `${domain}: ${domainDTUs.length} relevant DTUs about ${domainDTUs.slice(0, 3).map(d => d.title).join(", ")}`;
     }
@@ -42586,7 +42587,7 @@ async function synthesizeWisdom(question, options = {}) {
     try {
       const result = await callBrain("conscious", `Synthesize these insights from ${Object.keys(domainResults).length} different domains into a unified, actionable response to: "${question}"\n\nDomain insights:\n${domainInsights}\n\nProvide a comprehensive synthesis that weaves together all relevant domain perspectives. Be specific and actionable.`, { maxTokens: 400 });
       if (result.ok) synthesis = result.content?.trim() || "";
-    } catch {}
+    } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   }
 
   if (!synthesis) {
@@ -42597,7 +42598,7 @@ async function synthesizeWisdom(question, options = {}) {
   // 4. Red team validation
   let validation = null;
   if (typeof redTeamCheck === "function") {
-    try { validation = await redTeamCheck(synthesis, { domain: "synthesis" }); } catch {}
+    try { validation = await redTeamCheck(synthesis, { domain: "synthesis" }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   }
 
   // Create synthesis DTU
@@ -42734,7 +42735,7 @@ async function crossBrainDebate(question, options = {}) {
       const r = await callBrain("utility", `Provide an initial analysis for: "${question}"\nContext: ${contextDTUs || "(none)"}\n\nBe specific and evidence-based. 2-3 sentences.`, { maxTokens: 200 });
       debate.turns.push({ brain: "utility", role: "initial_analysis", content: r.content?.trim() || "[no response]" });
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   // Turn 2: Conscious brain counter-argument
   try {
@@ -42742,7 +42743,7 @@ async function crossBrainDebate(question, options = {}) {
       const r = await callBrain("conscious", `Challenge this analysis: "${debate.turns[0].content}"\n\nOriginal question: "${question}"\n\nProvide a COUNTER-ARGUMENT. Find flaws, missing perspectives, or unconsidered risks. 2-3 sentences.`, { maxTokens: 200, temperature: 0.5 });
       debate.turns.push({ brain: "conscious", role: "counter_argument", content: r.content?.trim() || "[no response]" });
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   // Turn 3: Utility brain responds to counter
   try {
@@ -42750,7 +42751,7 @@ async function crossBrainDebate(question, options = {}) {
       const r = await callBrain("utility", `Respond to this counter-argument: "${debate.turns[1].content}"\n\nYour original analysis: "${debate.turns[0]?.content || ''}"\n\nAddress the critique. Strengthen or modify your position. 2-3 sentences.`, { maxTokens: 200 });
       debate.turns.push({ brain: "utility", role: "rebuttal", content: r.content?.trim() || "[no response]" });
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   // Turn 4: Repair brain evaluates both sides
   try {
@@ -42759,7 +42760,7 @@ async function crossBrainDebate(question, options = {}) {
       const r = await callBrain("repair", `Evaluate this debate for logical consistency and evidence quality:\n\n${allTurns}\n\nRate each side's argument strength and identify any logical fallacies or unsupported claims. 2 sentences.`, { maxTokens: 150 });
       debate.turns.push({ brain: "repair", role: "evaluation", content: r.content?.trim() || "[no response]" });
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   // Turn 5: Subconscious adds background context
   try {
@@ -42767,7 +42768,7 @@ async function crossBrainDebate(question, options = {}) {
       const r = await callBrain("subconscious", `For the question: "${question}"\n\nWhat hidden context or unconsidered perspective should be added? Think laterally. 1-2 sentences.`, { maxTokens: 100, temperature: 0.8 });
       debate.turns.push({ brain: "subconscious", role: "hidden_context", content: r.content?.trim() || "[no response]" });
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   // Turn 6: Conscious synthesizes
   try {
@@ -42776,7 +42777,7 @@ async function crossBrainDebate(question, options = {}) {
       const r = await callBrain("conscious", `Synthesize this multi-brain debate into a balanced assessment:\n\n${allTurns}\n\nProvide a final assessment with declared uncertainties and a clear recommendation. 3-4 sentences.`, { maxTokens: 250 });
       debate.synthesis = r.content?.trim() || "";
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   if (!debate.synthesis) {
     debate.synthesis = debate.turns.map(t => t.content).join(" | ");
@@ -42858,7 +42859,7 @@ List 3 parallels.`;
         }
       }
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   if (amplifiedInsights.length === 0) {
     amplifiedInsights = [{
@@ -43086,7 +43087,7 @@ async function compileDTUs(dtuIds, outputType, options = {}) {
 
       const result = await callBrain("utility", prompt, { maxTokens: 500 });
       if (result.ok) compiled = result.content?.trim();
-    } catch {}
+    } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   }
 
   if (!compiled) {
@@ -43154,7 +43155,7 @@ function bridgeLog(action, data) {
   STATE._bridge.log.push(entry);
   if (STATE._bridge.log.length > BRIDGE_MAX_LOG) STATE._bridge.log = STATE._bridge.log.slice(-BRIDGE_MAX_LOG);
   if (typeof eventBus !== "undefined") {
-    try { eventBus.emit(`bridge.${action}`, entry); } catch {}
+    try { eventBus.emit(`bridge.${action}`, entry); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   }
   return entry;
 }
@@ -43385,7 +43386,7 @@ async function organismBirthCeremony(swarmId) {
     try {
       const personaResult = await callBrain("utility", `Generate a brief persona for a newly awakened Knowledge Organism.\nDomain: "${swarm.name}"\nTop tags: ${(swarm.topTags || []).join(", ")}\nSize: ${swarm.size} DTUs\n\nRespond with JSON: { "name": "...", "personality": "...", "objective": "...", "greeting": "..." }`, { temperature: 0.7, maxTokens: 200 });
       persona = safeJSONParse(personaResult?.content || "{}");
-    } catch {}
+    } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   }
 
   const birthCert = {
@@ -43440,7 +43441,7 @@ async function organismDeathProtocol(swarmId) {
   try {
     const histResult = await callBrain("subconscious", `You are the HISTORIAN emergent. This Knowledge Organism "${swarm.name}" is entering dormancy. Review its ${memberDTUs.length} DTUs and decide what to preserve.\n\nDTUs:\n${swarmSummary.slice(0, 1000)}\n\nRespond with JSON: { "preserve": ["list of DTU titles worth keeping"], "compost": ["list of DTU titles to compost"], "archiveNote": "..." }`, { temperature: 0.4, maxTokens: 400 });
     archiveDecision = safeJSONParse(histResult?.content || "{}");
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   // Mark preserved DTUs, compost the rest
   let preserved = 0, composted = 0;
@@ -43610,10 +43611,10 @@ function setupEventBusWebSocketBridge(wss) {
       try {
         wss.clients.forEach((client) => {
           if (client.readyState === 1) { // WebSocket.OPEN
-            try { client.send(msg); } catch {}
+            try { client.send(msg); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
           }
         });
-      } catch {}
+      } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
     });
   }
 }
@@ -44238,7 +44239,7 @@ function activateGoal(goalId) {
         source: { system: "goals" }
       });
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   return { ok: true, goal };
 }
@@ -44304,7 +44305,7 @@ function completeGoal(goalId) {
       meta: { goalId, goalType: goal.type, title: goal.title },
       signals: { benefit: 0.3, celebration: 0.2 }
     });
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   // ATS: Emit strong positive affect on goal completion — boosts valence, agency, stability
   try {
@@ -44317,7 +44318,7 @@ function completeGoal(goalId) {
         source: { system: "goals" }
       });
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   saveStateDebounced();
   return { ok: true, goal, completed: true };
@@ -44346,7 +44347,7 @@ function abandonGoal(goalId, reason = "user_requested") {
         source: { system: "goals" }
       });
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   saveStateDebounced();
   return { ok: true, goal };
@@ -46879,7 +46880,7 @@ function concludeChain(chainId, conclusion) {
         }
       }
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   // ===== END REASONING → HYPOTHESIS =====
 
   // ===== REASONING → METACOGNITION =====
@@ -46898,14 +46899,14 @@ function concludeChain(chainId, conclusion) {
         STATE.metacognition.strategies = STATE.metacognition.strategies.slice(-100);
       }
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   // ===== END REASONING → METACOGNITION =====
 
   // ===== REASONING → TRANSFER PATTERN EXTRACTION =====
   // Successful reasoning chains become reusable transfer patterns
   try {
     autoExtractTransferPattern(chain);
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   // ===== END REASONING → TRANSFER =====
 
   saveStateDebounced();
@@ -47668,7 +47669,7 @@ function evaluateHypothesis(hypothesisId) {
       STATE.metacognition.calibration.buckets[bucketKey].total++;
       if (wasCorrect) STATE.metacognition.calibration.buckets[bucketKey].correct++;
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   // ===== END HYPOTHESIS → METACOGNITION =====
 
   // ATS: Hypothesis evaluation outcome affects affect state
@@ -47683,7 +47684,7 @@ function evaluateHypothesis(hypothesisId) {
         source: { system: "hypothesis" }
       });
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   saveStateDebounced();
   return { ok: true, hypothesis, decision, reasoning };
@@ -48934,7 +48935,7 @@ function recordExperienceEpisode(episode) {
 
   // Periodic consolidation — extract patterns from accumulated episodes
   if (el.stats.episodesRecorded % el.config.consolidationInterval === 0) {
-    try { consolidateExperience(); } catch {}
+    try { consolidateExperience(); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   }
 
   // Update strategy effectiveness
@@ -49204,7 +49205,7 @@ function autoUpdateWorldModel(dtu) {
     }
 
     saveStateDebounced();
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 }
 
 // Temporal decay for world model — unconfirmed facts lose confidence over time
@@ -49240,7 +49241,7 @@ function worldModelTemporalDecay() {
         }
       }
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -49317,7 +49318,7 @@ function _recordTransferOutcome(transferId, success, quality = 0.5) {
     }
 
     saveStateDebounced();
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 }
 
 // Auto-extract transferable pattern when reasoning chain concludes successfully
@@ -49369,7 +49370,7 @@ function autoExtractTransferPattern(chain) {
 
     STATE.transfer.stats.patternsExtracted++;
     saveStateDebounced();
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -49594,7 +49595,7 @@ function processBackgroundTasks() {
 
     // Clean completed background tasks
     attn.background = attn.background.filter(t => t.status !== "completed" || (Date.now() - new Date(t.completedAt).getTime()) < 60000);
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 }
 
 // Decay unused experience patterns
@@ -49614,7 +49615,7 @@ function decayUnusedPatterns() {
         }
       }
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -49810,7 +49811,7 @@ function reflectOnResponse(context) {
           source: { system: "reflection" }
         });
       }
-    } catch {}
+    } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
     saveStateDebounced();
     return reflection;
@@ -49861,7 +49862,7 @@ function computeGrowthTick(signal={}) {
     STATE.__chicken2.metrics.suffering = suffering;
     STATE.__chicken2.metrics.homeostasis = clamp(1 - suffering, 0, 1);
     // threshold enforcement (quarantine escalates elsewhere; here we just record)
-  } catch{}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   STATE.growth = g;
   return g;
 }
@@ -49990,13 +49991,13 @@ function kernelTick(event) {
             source: { system: "metacognition" }
           });
         }
-      } catch {}
+      } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   // ===== BACKGROUND PROCESSING =====
   // Process deferred tasks: world model decay, experience consolidation, pattern cleanup
-  try { processBackgroundTasks(); } catch {}
+  try { processBackgroundTasks(); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   // Schedule periodic background tasks (every ~50 ticks)
   try {
@@ -50030,7 +50031,7 @@ function kernelTick(event) {
             // Streak already tracked in awardXP — nothing extra needed here
           }
         }
-      } catch {}
+      } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
     }
 
     // DTU Metabolism: run every 300 ticks (~75 min at 15s intervals)
@@ -50059,12 +50060,12 @@ function kernelTick(event) {
 
     // Spec V: Pulse system — update brain health every 50 ticks
     if (STATE.__bgTickCounter % 50 === 0 && typeof updateBrainPulses === "function") {
-      try { updateBrainPulses(); } catch {}
+      try { updateBrainPulses(); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
     }
 
     // Spec V: Confidence propagation — every 100 ticks
     if (STATE.__bgTickCounter % 100 === 0 && typeof propagateNetworkConfidence === "function") {
-      try { propagateNetworkConfidence(); } catch {}
+      try { propagateNetworkConfidence(); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
     }
 
     // Spec V: Data integrity check — every 500 ticks
@@ -50080,7 +50081,7 @@ function kernelTick(event) {
 
     // Spec V: Stigmergic path decay — every 1000 ticks
     if (STATE.__bgTickCounter % 1000 === 0 && typeof decayPaths === "function") {
-      try { decayPaths(); } catch {}
+      try { decayPaths(); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
     }
 
     // Spec V: Time crystal detection — every 500 ticks (~2 hours)
@@ -50109,16 +50110,16 @@ function kernelTick(event) {
           const entries = [...STATE._costAccounting.entries()].sort((a, b) => b[1].total - a[1].total);
           STATE._costAccounting = new Map(entries.slice(0, 500));
         }
-      } catch {}
+      } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
     }
 
     // Spec V: Emit tick event
     if (typeof eventBus !== "undefined") {
       try {
         eventBus.emit("tick.completed", { tick: STATE.__bgTickCounter, source: "kernelTick" });
-      } catch {}
+      } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
     }
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   // ===== END BACKGROUND PROCESSING =====
 
   computeGrowthTick(signal);
@@ -52039,7 +52040,7 @@ app.post('/api/artistry/studio/master', asyncHandler(async (req, res) => {
     const parsed = safeJSONParse(brainResult?.content || "{}");
     if (Array.isArray(parsed.chain)) recommendations = parsed.chain;
     if (parsed.tips) project.masterSettings.tips = parsed.tips;
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   if (recommendations.length === 0) recommendations = ["eq", "multiband-compressor", "stereo-enhancer", "limiter"];
 
@@ -52514,12 +52515,12 @@ app.post('/api/artistry/marketplace/purchase', (req, res) => {
       const balCheck = economyValidateBalance(db, buyerId, price);
       if (!balCheck.ok) {
         // Transition to FAILED if purchase record exists
-        try { transitionPurchase(db, purchaseId, 'FAILED', { reason: 'insufficient_balance', actor: buyerId, errorMessage: balCheck.error }); } catch {}
+        try { transitionPurchase(db, purchaseId, 'FAILED', { reason: 'insufficient_balance', actor: buyerId, errorMessage: balCheck.error }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
         return res.status(400).json({ error: balCheck.error, balance: balCheck.balance, required: balCheck.required });
       }
 
       // State Machine: transition to PAID (balance validated, about to settle)
-      try { transitionPurchase(db, purchaseId, 'PAID', { reason: 'balance_validated', actor: 'system' }); } catch {}
+      try { transitionPurchase(db, purchaseId, 'PAID', { reason: 'balance_validated', actor: 'system' }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
       // 2. Calculate marketplace fee (5%)
       const { fee: marketplaceFee } = calculateFee('MARKETPLACE_PURCHASE', price);
@@ -52710,7 +52711,7 @@ app.post('/api/artistry/marketplace/purchase', (req, res) => {
           });
         }
         console.error('[Artistry] Settlement failed:', err.message);
-        try { transitionPurchase(db, purchaseId, 'FAILED', { reason: 'settlement_error', actor: 'system', errorMessage: err.message }); } catch {}
+        try { transitionPurchase(db, purchaseId, 'FAILED', { reason: 'settlement_error', actor: 'system', errorMessage: err.message }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
         return res.status(500).json({ error: 'settlement_failed', detail: err.message });
       }
 
@@ -52946,7 +52947,7 @@ app.post('/api/artistry/ai/analyze-project', asyncHandler(async (req, res) => {
     if (Array.isArray(parsed.suggestions)) suggestions = parsed.suggestions;
     if (typeof parsed.genreConfidence === "number") genreConfidence = parsed.genreConfidence;
     if (typeof parsed.mixScore === "number") mixScore = parsed.mixScore;
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   if (suggestions.length === 0) {
     // Deterministic fallback based on actual project state
@@ -52974,7 +52975,7 @@ app.post('/api/artistry/ai/suggest-chords', asyncHandler(async (req, res) => {
     const brainResult = await callBrain("utility", `Suggest 4 chord progressions for a ${genre || "pop"} song in ${k} ${scale || "major"}. Respond with JSON array: [{ "name": "...", "chords": ["Cmaj", "Amin", ...], "mood": "..." }]`, { temperature: 0.7, maxTokens: 300 });
     const parsed = safeJSONParse(brainResult?.content || "[]");
     if (Array.isArray(parsed) && parsed.length > 0) progressions = parsed;
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   // Music-theory fallback (deterministic, genre-aware)
   if (progressions.length === 0) {
@@ -53012,7 +53013,7 @@ app.post('/api/artistry/ai/suggest-melody', asyncHandler(async (req, res) => {
     const brainResult = await callBrain("utility", `Generate a ${style || "lead"} melody in ${k} ${scale || "major"} at ${bpm || 120} BPM, ${bars || 4} bars. Respond with JSON array of notes: [{ "note": "C", "octave": 4, "start": 0.0, "duration": 0.5, "velocity": 80 }]. Use proper phrasing with rests, varied rhythms, and musical contour.`, { temperature: 0.8, maxTokens: 500 });
     const parsed = safeJSONParse(brainResult?.content || "[]");
     if (Array.isArray(parsed) && parsed.length > 0) notes = parsed;
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   // Deterministic fallback: stepwise motion with musical phrasing (not pure random)
   if (notes.length === 0) {
@@ -53080,7 +53081,7 @@ app.post('/api/artistry/ai/genre-coach', asyncHandler(async (req, res) => {
     const brainResult = await callBrain("utility", `You are a music production genre coach. The user wants to learn ${g} production. Provide coaching with JSON: { "characteristics": { "bpmRange": "...", "commonKeys": ["Am",...], "essentialElements": ["..."], "subGenres": ["..."] }, "exercises": [{ "name": "...", "description": "..." }], "recommendedEffects": ["..."], "tips": "..." }`, { temperature: 0.6, maxTokens: 400 });
     const parsed = safeJSONParse(brainResult?.content || "{}");
     if (parsed.characteristics || parsed.exercises) coaching = parsed;
-  } catch {}
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   // Genre-specific fallback (deterministic, covers more genres than before)
   if (!coaching) {
@@ -53410,7 +53411,7 @@ function retroTagAllDTUs() {
         try {
           dtu.hash = pipeContentFingerprint(dtu);
           hashesBackfilled++;
-        } catch {}
+        } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
       }
     }
 
@@ -53419,7 +53420,7 @@ function retroTagAllDTUs() {
     const elapsed = Date.now() - startTime;
     const msg = `[RetroTag] Tagged ${tagged}/${STATE.dtus.size} DTUs, created ${lensArtifactsCreated} lens artifacts, backfilled ${hashesBackfilled} hashes in ${elapsed}ms`;
     structuredLog("info", "retro_tag_complete", { tagged, total: STATE.dtus.size, lensArtifactsCreated, hashesBackfilled, elapsedMs: elapsed });
-    try { pipeAudit("retro_tag", msg, { tagged, lensArtifactsCreated, hashesBackfilled, elapsed }); } catch {}
+    try { pipeAudit("retro_tag", msg, { tagged, lensArtifactsCreated, hashesBackfilled, elapsed }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
     return { ok: true, tagged, lensArtifactsCreated, hashesBackfilled, elapsed, total: STATE.dtus.size };
   } catch (e) {
@@ -53462,7 +53463,7 @@ setTimeout(() => {
 
 // ── Periodic lens sync (every 2 hours) ──────────────────────────────────────
 setInterval(() => {
-  try { syncAllDTUsToLenses(); } catch {}
+  try { syncAllDTUsToLenses(); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 }, 2 * 60 * 60 * 1000);
 
 // ── Register macros for manual triggering ────────────────────────────────────
@@ -53962,7 +53963,7 @@ app.post("/api/global/submit", (req, res) => {
       if (typeof canSubmitToCouncil === "function" && !canSubmitToCouncil(userId)) {
         return res.status(429).json({ ok: false, error: "Rate limit: max 5 submissions per hour" });
       }
-    } catch {}
+    } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
     // Ensure globalThread structure exists
     if (!STATE.globalThread) STATE.globalThread = { councilQueue: [], acceptedContributions: [] };
@@ -53986,7 +53987,7 @@ app.post("/api/global/submit", (req, res) => {
     });
 
     saveStateDebounced();
-    try { pipeAudit("council.submit", `User ${username} submitted DTU for council review`, { dtuId, userId }); } catch {}
+    try { pipeAudit("council.submit", `User ${username} submitted DTU for council review`, { dtuId, userId }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
     res.json({ ok: true, message: "Submitted for council review" });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e?.message || e) });
@@ -54025,11 +54026,11 @@ app.post("/api/global/review/:submissionId", (req, res) => {
       dtu.scope = "global";
 
       // Auto-tag and sync to lenses
-      try { if (typeof applyAutoTagging === "function") applyAutoTagging(dtu); } catch {}
+      try { if (typeof applyAutoTagging === "function") applyAutoTagging(dtu); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
       STATE.dtus.set(dtu.id, dtu);
 
-      try { if (typeof syncDTUToLensArtifacts === "function") syncDTUToLensArtifacts(dtu); } catch {}
+      try { if (typeof syncDTUToLensArtifacts === "function") syncDTUToLensArtifacts(dtu); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
       if (!Array.isArray(STATE.globalThread.acceptedContributions)) STATE.globalThread.acceptedContributions = [];
       STATE.globalThread.acceptedContributions.push({
@@ -54039,9 +54040,9 @@ app.post("/api/global/review/:submissionId", (req, res) => {
         reviewedBy: reviewerId,
       });
 
-      try { pipeAudit("council.approve", `Council approved DTU from ${submission.username}`, { dtuId: dtu.id, submissionId: submission.id }); } catch {}
+      try { pipeAudit("council.approve", `Council approved DTU from ${submission.username}`, { dtuId: dtu.id, submissionId: submission.id }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
     } else {
-      try { pipeAudit("council.reject", `Council rejected DTU from ${submission.username}`, { dtuId: submission.dtuId, submissionId: submission.id, notes: submission.notes }); } catch {}
+      try { pipeAudit("council.reject", `Council rejected DTU from ${submission.username}`, { dtuId: submission.dtuId, submissionId: submission.id, notes: submission.notes }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
     }
 
     saveStateDebounced();
@@ -54230,8 +54231,8 @@ function runBackup() {
     const timestamp = new Date().toISOString().split("T")[0];
     const backupDir = `${BACKUP_DIR}/${timestamp}`;
 
-    try { if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true }); } catch {}
-    try { if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true }); } catch {}
+    try { if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+    try { if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
     // Backup main state
     try {
@@ -54243,7 +54244,7 @@ function runBackup() {
     try {
       fs.writeFileSync(`${backupDir}/councilQueue.json`,
         JSON.stringify(STATE.globalThread?.councilQueue || []));
-    } catch {}
+    } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
     // Backup SQLite DB if exists
     try {
@@ -54251,7 +54252,7 @@ function runBackup() {
       if (fs.existsSync(dbPath)) {
         fs.copyFileSync(dbPath, `${backupDir}/concord.db`);
       }
-    } catch {}
+    } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
     // Clean old backups (keep BACKUP_RETENTION_DAYS)
     try {
@@ -54261,7 +54262,7 @@ function runBackup() {
         const oldPath = `${BACKUP_DIR}/${oldest}`;
         fs.rmSync(oldPath, { recursive: true, force: true });
       }
-    } catch {}
+    } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
     structuredLog("info", "backup_complete", { backupDir });
     return { ok: true, path: backupDir, timestamp };
@@ -54272,8 +54273,8 @@ function runBackup() {
 }
 
 // Run backup on startup (delayed) and periodically
-setTimeout(() => { try { runBackup(); } catch {} }, 60000); // 1 min after start
-setInterval(() => { try { runBackup(); } catch {} }, _BACKUP_INTERVAL_MS);
+setTimeout(() => { try { runBackup(); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); } }, 60000); // 1 min after start
+setInterval(() => { try { runBackup(); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); } }, _BACKUP_INTERVAL_MS);
 
 register("admin", "backup", (ctx, _input = {}) => {
   return runBackup();

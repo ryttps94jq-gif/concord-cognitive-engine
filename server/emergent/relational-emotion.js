@@ -14,6 +14,7 @@
  */
 
 import crypto from "crypto";
+import logger from '../logger.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -166,7 +167,7 @@ function addHistoryEntry(bond, entry) {
     if (bond.history.length > MAX_HISTORY_PER_BOND) {
       bond.history = bond.history.slice(-MAX_HISTORY_PER_BOND);
     }
-  } catch { /* silent */ }
+  } catch (_e) { logger.debug('emergent:relational-emotion', 'silent', { error: _e?.message }); }
 }
 
 /** Find dominant emotion in an emotion map. */
@@ -508,7 +509,7 @@ export function tickEmotions() {
         bond.bondStrength = computeBondStrength(emotions);
         bond.bondType = classifyBondType(emotions);
         bond.updatedAt = nowISO();
-      } catch { /* skip bond */ }
+      } catch (_e) { logger.debug('emergent:relational-emotion', 'skip bond', { error: _e?.message }); }
     }
 
     _metrics.ticksProcessed++;

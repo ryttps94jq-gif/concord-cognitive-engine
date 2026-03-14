@@ -3,9 +3,11 @@
  * Validation schemas for affective state, events, and policy.
  */
 
+import logger from '../logger.js';
+
 // Zod is optional in the server; graceful fallback
 let z = null;
-try { z = (await import("zod")).z || (await import("zod")).default?.z; } catch { /* optional */ }
+try { z = (await import("zod")).z || (await import("zod")).default?.z; } catch (_e) { logger.debug('schema', 'optional', { error: _e?.message }); }
 
 /** Clamp a number to [min, max] */
 function clamp(n, min, max) {
