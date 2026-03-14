@@ -38,7 +38,8 @@ ENV CI_SKIP_TYPECHECK=$CI_SKIP_TYPECHECK
 ENV CI_SKIP_LINT_IN_BUILD=$CI_SKIP_LINT_IN_BUILD
 
 # Build Next.js app
-RUN npm run build
+# Skip prophet-check (requires ../server which isn't in the Docker context)
+RUN npx next build
 
 # Production image, copy all the files and run next
 FROM base AS runner
