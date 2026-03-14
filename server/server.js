@@ -9529,8 +9529,8 @@ function upsertDTU(dtu, { broadcast = true, federate = false } = {}) {
             updateDTU: (d) => { STATE.dtus.set(d.id, d); },
             broadcastEvent: (type, data) => { try { realtimeEmit(type, data); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); } },
             STATE,
-          }).catch(() => {});
-        }).catch(() => {});
+          }).catch((_e) => { logger.debug('event-bridge', 'bridgeEventToDTU failed', { error: _e?.message }); });
+        }).catch((_e) => { logger.debug('event-bridge', 'event-to-dtu-bridge import failed', { error: _e?.message }); });
       } catch (_e) { logger.debug('server', 'bridge not critical', { error: _e?.message }); }
     }
   }
@@ -25119,8 +25119,8 @@ register("scope", "promote", async (ctx, input) => {
           updateDTU: (d) => { STATE.dtus.set(d.id, d); },
           broadcastEvent: (type, data) => { try { realtimeEmit(type, data); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); } },
           STATE,
-        }).catch(() => {});
-      }).catch(() => {});
+        }).catch((_e) => { logger.debug('event-bridge', 'promotion bridgeEventToDTU failed', { error: _e?.message }); });
+      }).catch((_e) => { logger.debug('event-bridge', 'event-to-dtu-bridge import failed', { error: _e?.message }); });
     } catch (_e) { logger.debug('server', 'bridge not critical', { error: _e?.message }); }
 
     return { ok: true, scope: targetScope, votes: reviewResult.votes };

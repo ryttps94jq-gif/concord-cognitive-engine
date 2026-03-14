@@ -78,6 +78,30 @@ export function determinePrimaryType(artifactType, contentType) {
 
   if (artifactType && typeMap[artifactType]) return typeMap[artifactType];
 
+  // Domain-specific content types (mesh/mobile semantic types)
+  const domainMap = {
+    sensor_reading: C.DOMAIN_SENSOR_READING,
+    sensor: C.DOMAIN_SENSOR_READING,
+    shield_threat: C.DOMAIN_SHIELD_THREAT,
+    threat: C.DOMAIN_SHIELD_THREAT,
+    economy_transaction: C.DOMAIN_ECONOMY_TRANSACTION,
+    transaction: C.DOMAIN_ECONOMY_TRANSACTION,
+    identity_assertion: C.DOMAIN_IDENTITY_ASSERTION,
+    identity: C.DOMAIN_IDENTITY_ASSERTION,
+    mesh_control: C.DOMAIN_MESH_CONTROL,
+    emergency_alert: C.DOMAIN_EMERGENCY_ALERT,
+    emergency: C.DOMAIN_EMERGENCY_ALERT,
+    broadcast_relay: C.DOMAIN_BROADCAST_RELAY,
+    broadcast: C.DOMAIN_BROADCAST_RELAY,
+    atlas_signal: C.DOMAIN_ATLAS_SIGNAL,
+    lineage_ref: C.DOMAIN_LINEAGE_REF,
+    geospatial: C.DOMAIN_GEOSPATIAL,
+    time_series: C.DOMAIN_TIME_SERIES,
+    structured_knowledge: C.DOMAIN_STRUCTURED_KNOWLEDGE,
+  };
+
+  if (contentType && domainMap[contentType]) return domainMap[contentType];
+
   // Culture content
   if (contentType === "text") return C.PRIMARY_CULTURE;
   if (contentType === "image") return C.PRIMARY_DISPLAY_IMAGE;
