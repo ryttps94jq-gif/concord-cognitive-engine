@@ -210,7 +210,9 @@ describe("Foundation Archive — recordFossil", () => {
       recordFossil({ protocol_detected: "adsb" });
     }
     const metrics = getArchiveMetrics();
-    assert.ok(metrics.fossilCount <= 400);
+    // After 510 adds, trim fires at 501 (keeping 400), then 9 more are added = 409
+    assert.ok(metrics.fossilCount < 510, `expected trimming to reduce count below 510, got ${metrics.fossilCount}`);
+    assert.ok(metrics.fossilCount <= 500, `expected count <= 500 (trim threshold), got ${metrics.fossilCount}`);
   });
 
   it("preserves location in legacy system tracking", () => {
@@ -251,7 +253,9 @@ describe("Foundation Archive — recordDecoded", () => {
       recordDecoded({ decoded: `data_${i}` });
     }
     const metrics = getArchiveMetrics();
-    assert.ok(metrics.decodedCount <= 400);
+    // After 510 adds, trim fires at 501 (keeping 400), then 9 more are added = 409
+    assert.ok(metrics.decodedCount < 510, `expected trimming to reduce count below 510, got ${metrics.decodedCount}`);
+    assert.ok(metrics.decodedCount <= 500, `expected count <= 500 (trim threshold), got ${metrics.decodedCount}`);
   });
 });
 

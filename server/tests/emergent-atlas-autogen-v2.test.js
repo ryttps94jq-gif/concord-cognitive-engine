@@ -21,7 +21,7 @@ import {
   getAutogenV2Metrics,
 } from "../emergent/atlas-autogen-v2.js";
 
-import { initAtlasState } from "../emergent/atlas-epistemic.js";
+import { initAtlasState, getAtlasState } from "../emergent/atlas-epistemic.js";
 import { createAtlasDtu, addAtlasLink } from "../emergent/atlas-store.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -51,7 +51,7 @@ function seedDtus(STATE, count = 5) {
     });
     if (result.ok) {
       // Boost scores to meet MIN_INPUT_CONFIDENCE
-      const atlas = STATE._atlas;
+      const atlas = getAtlasState(STATE);
       const dtu = atlas.dtus.get(result.dtu.id);
       dtu.scores.confidence_factual = 0.6;
       dtu.scores.credibility_structural = 0.6;
@@ -92,7 +92,7 @@ describe("selectInputDtus", () => {
 
   it("filters out QUARANTINED DTUs", () => {
     const ids = seedDtus(STATE, 3);
-    const atlas = STATE._atlas;
+    const atlas = getAtlasState(STATE);
     atlas.dtus.get(ids[0]).status = "QUARANTINED";
     const result = selectInputDtus(STATE, { domainType: "empirical.physics" });
     // One quarantined should be excluded
@@ -101,7 +101,7 @@ describe("selectInputDtus", () => {
 
   it("filters out DEPRECATED DTUs", () => {
     const ids = seedDtus(STATE, 3);
-    const atlas = STATE._atlas;
+    const atlas = getAtlasState(STATE);
     atlas.dtus.get(ids[0]).status = "DEPRECATED";
     const result = selectInputDtus(STATE);
     assert.ok(result.inputs.every(d => d.status !== "DEPRECATED"));
@@ -110,7 +110,7 @@ describe("selectInputDtus", () => {
   it("filters by minimum confidence", () => {
     seedDtus(STATE, 3);
     // Set one DTU below threshold
-    const atlas = STATE._atlas;
+    const atlas = getAtlasState(STATE);
     const firstId = Array.from(atlas.dtus.keys())[0];
     atlas.dtus.get(firstId).scores.confidence_overall = 0.1;
     const result = selectInputDtus(STATE);
@@ -171,7 +171,7 @@ describe("runAutogenV2", () => {
   it("stores run in atlas autogenRuns", () => {
     seedDtus(STATE, 5);
     const result = runAutogenV2(STATE);
-    const atlas = STATE._atlas;
+    const atlas = getAtlasState(STATE);
     assert.ok(atlas.autogenRuns.size > 0);
   });
 
@@ -318,7 +318,7 @@ describe("propagateConfidence", () => {
     if (src.ok && dst.ok) {
       addAtlasLink(STATE, src.dtu.id, dst.dtu.id, "supports", { strength: 0.8 });
 
-      const atlas = STATE._atlas;
+      const atlas = getAtlasState(STATE);
       atlas.dtus.get(src.dtu.id).scores.confidence_overall = 0.8;
 
       const result = propagateConfidence(STATE, src.dtu.id);
@@ -341,7 +341,7 @@ describe("propagateConfidence", () => {
   it("does not propagate when boost < threshold", () => {
     const ids = seedDtus(STATE, 2);
     addAtlasLink(STATE, ids[0], ids[1], "supports", { strength: 0.001 });
-    const atlas = STATE._atlas;
+    const atlas = getAtlasState(STATE);
     atlas.dtus.get(ids[0]).scores.confidence_overall = 0.01;
     const result = propagateConfidence(STATE, ids[0], 2, 0.5);
     assert.equal(result.ok, true);

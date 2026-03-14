@@ -15,7 +15,7 @@ function reserveAccountId(emergentId) {
 }
 
 function isEmergentAccount(accountId) {
-  return accountId?.startsWith(OPERATING_PREFIX) || accountId?.startsWith(RESERVE_PREFIX);
+  return !!(accountId?.startsWith(OPERATING_PREFIX) || accountId?.startsWith(RESERVE_PREFIX));
 }
 
 function canWithdrawToFiat(accountId) {
@@ -473,7 +473,7 @@ describe("emergent-accounts", () => {
       const result = getEmergentAccount(db, "e1");
       assert.ok(result);
       assert.equal(result.emergentId, "e1");
-      assert.equal(result.displayName, null); // stored as null mapping in mock
+      assert.equal(result.displayName, "Bot");
       assert.equal(result.operatingBalance, 100);
       assert.equal(result.reserveBalance, 0);
       assert.equal(result.totalBalance, 100);

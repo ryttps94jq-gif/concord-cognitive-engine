@@ -128,7 +128,7 @@ export function createDTU(db, {
  * List a DTU on the marketplace for sale.
  */
 export function listDTU(db, { dtuId, sellerId, price, licenseType = "standard" }) {
-  if (!dtuId || !sellerId || !price) return { ok: false, error: "missing_params" };
+  if (!dtuId || !sellerId || price == null) return { ok: false, error: "missing_params" };
   if (price <= 0) return { ok: false, error: "price_must_be_positive" };
 
   const now = nowISO();

@@ -263,8 +263,8 @@ export function searchAtlasDtus(STATE, query = {}) {
     const set = atlas.byDomainType.get(query.domainType);
     if (set) {
       for (const id of set) candidates.add(id);
-      filtered = true;
     }
+    filtered = true;
   }
 
   // Filter by epistemic class
@@ -278,8 +278,8 @@ export function searchAtlasDtus(STATE, query = {}) {
       candidates = intersection;
     } else if (set) {
       for (const id of set) candidates.add(id);
-      filtered = true;
     }
+    filtered = true;
   }
 
   // Filter by status
@@ -293,8 +293,8 @@ export function searchAtlasDtus(STATE, query = {}) {
       candidates = intersection;
     } else if (set) {
       for (const id of set) candidates.add(id);
-      filtered = true;
     }
+    filtered = true;
   }
 
   // Filter by lane (defense in depth — every query can include lane predicate)
@@ -309,8 +309,8 @@ export function searchAtlasDtus(STATE, query = {}) {
       candidates = intersection;
     } else if (laneSet) {
       for (const id of laneSet) candidates.add(id);
-      filtered = true;
     }
+    filtered = true;
   }
 
   // If no filters, start with all

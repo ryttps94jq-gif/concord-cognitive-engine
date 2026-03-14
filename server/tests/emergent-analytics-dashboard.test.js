@@ -20,6 +20,8 @@ import {
   getDashboardSummary,
 } from "../emergent/analytics-dashboard.js";
 
+import { initAtlasState, getAtlasState } from "../emergent/atlas-epistemic.js";
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function makeSTATE() {
@@ -106,6 +108,8 @@ describe("takeSnapshot", () => {
 
   it("caps snapshots at 288", () => {
     const STATE = makeSTATE();
+    // First call initializes STATE._analytics
+    takeSnapshot(STATE);
     // Force many snapshots by resetting lastSnapshotAt
     for (let i = 0; i < 300; i++) {
       STATE._analytics.lastSnapshotAt = 0;
@@ -124,14 +128,11 @@ describe("takeSnapshot", () => {
 
   it("reads atlas byStatus and byDomainType", () => {
     const STATE = makeSTATE();
-    // The atlas state is initialized via getAtlasState which adds _atlas to STATE
-    STATE._atlas = {
-      dtus: new Map([["ad1", {}]]),
-      byStatus: new Map([["active", new Set(["ad1"])]]),
-      byDomainType: new Map([["physics", new Set(["ad1"])]]),
-      links: [],
-      entities: new Map(),
-    };
+    // Initialize atlas state through the proper API
+    const atlas = initAtlasState(STATE);
+    atlas.dtus.set("ad1", {});
+    atlas.byStatus.set("active", new Set(["ad1"]));
+    atlas.byDomainType.set("physics", new Set(["ad1"]));
     const result = takeSnapshot(STATE);
     assert.equal(result.ok, true);
     // It may or may not pick up atlas depending on getAtlasState implementation,

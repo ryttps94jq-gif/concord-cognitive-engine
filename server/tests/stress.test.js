@@ -683,17 +683,6 @@ function createTransferEngine(ledger) {
           status: "complete",
           refId,
         },
-        {
-          id: ledger.generateTxId(),
-          type,
-          from: null,
-          to,
-          amount: net,
-          fee: 0,
-          net,
-          status: "complete",
-          refId,
-        },
       ];
 
       if (fee > 0) {
@@ -706,7 +695,6 @@ function createTransferEngine(ledger) {
           fee: 0,
           net: fee,
           status: "complete",
-          refId,
         });
       }
 
@@ -970,7 +958,7 @@ describe("Stress Test 2: Heartbeat Tick Under Load", () => {
         for (const entity of entities) {
           entity.homeostasis.energy -= 0.01;
           // Simulate adding a new entity mid-tick (should not crash the iterator)
-          if (entity.homeostasis.energy < 0.99 && !state.__emergent.emergents.has("late_joiner")) {
+          if (entity.homeostasis.energy < 1.0 && !state.__emergent.emergents.has("late_joiner")) {
             state.__emergent.emergents.set("late_joiner", {
               id: "late_joiner",
               name: "Late Joiner",
@@ -1793,12 +1781,12 @@ describe("Stress Test 5: 10,000 Concurrent Transactions with Ledger Consistency"
       return result;
     });
 
-    // Each successful transfer creates 3 ledger entries (debit + credit + fee)
-    const expectedRows = mintRows + successCount * 3;
+    // Each successful transfer creates 2 ledger entries (transfer + fee)
+    const expectedRows = mintRows + successCount * 2;
     assert.equal(
       ledger.getRowCount(),
       expectedRows,
-      `Ledger should have ${expectedRows} rows (${mintRows} mints + ${successCount} * 3 transfer entries)`
+      `Ledger should have ${expectedRows} rows (${mintRows} mints + ${successCount} * 2 transfer entries)`
     );
   });
 

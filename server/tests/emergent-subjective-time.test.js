@@ -24,7 +24,7 @@ function makeSTATE() {
 }
 
 function addEmergent(STATE, id) {
-  registerEmergent(STATE, { id, name: id, role: "builder", active: true });
+  registerEmergent(getEmergentState(STATE), { id, name: id, role: "builder", active: true });
 }
 
 describe("subjective-time", () => {
