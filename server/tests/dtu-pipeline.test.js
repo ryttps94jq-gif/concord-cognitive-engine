@@ -51,15 +51,39 @@ function createMockDb() {
         run(...params) {
           db._calls.push({ sql, params });
           if (sql.includes("INSERT INTO dtus")) {
-            tables.dtus.push({
-              id: params[0], creator_id: params[1], title: params[2],
-              content: params[3], content_type: params[4], lens_id: params[5],
-              tier: params[6], tags_json: params[7], price: params[8],
-              preview_policy: params[9], creti_score: params[10],
-              size_kb: params[11], metadata_json: params[12],
-              status: "published", version: 1,
-              created_at: params[13], updated_at: params[14],
-            });
+            // Detect which INSERT variant is being used based on hardcoded values in SQL
+            if (sql.includes("'mega_dtu'") && sql.includes("'MEGA'")) {
+              // compressToDMega: VALUES (?, ?, ?, ?, 'mega_dtu', ?, 'MEGA', '[]', ?, ?, ?, 'published', 1, ?, ?)
+              tables.dtus.push({
+                id: params[0], creator_id: params[1], title: params[2],
+                content: params[3], content_type: "mega_dtu", lens_id: params[4],
+                tier: "MEGA", tags_json: "[]", price: params[5],
+                creti_score: params[6], metadata_json: params[7],
+                status: "published", version: 1,
+                created_at: params[8], updated_at: params[9],
+              });
+            } else if (sql.includes("'hyper_dtu'") && sql.includes("'HYPER'")) {
+              // compressToHyper: VALUES (?, ?, ?, ?, 'hyper_dtu', ?, 'HYPER', '[]', ?, ?, ?, 'published', 1, ?, ?)
+              tables.dtus.push({
+                id: params[0], creator_id: params[1], title: params[2],
+                content: params[3], content_type: "hyper_dtu", lens_id: params[4],
+                tier: "HYPER", tags_json: "[]", price: params[5],
+                creti_score: params[6], metadata_json: params[7],
+                status: "published", version: 1,
+                created_at: params[8], updated_at: params[9],
+              });
+            } else {
+              // createDTU: all values as params
+              tables.dtus.push({
+                id: params[0], creator_id: params[1], title: params[2],
+                content: params[3], content_type: params[4], lens_id: params[5],
+                tier: params[6], tags_json: params[7], price: params[8],
+                preview_policy: params[9], creti_score: params[10],
+                size_kb: params[11], metadata_json: params[12],
+                status: "published", version: 1,
+                created_at: params[13], updated_at: params[14],
+              });
+            }
           }
           if (sql.includes("INSERT INTO dtu_ownership")) {
             tables.dtu_ownership.push({ id: params[0], dtu_id: params[1], owner_id: params[2] });

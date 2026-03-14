@@ -16,6 +16,7 @@ function nowISO() {
 }
 
 function safeJsonParse(str) {
+  if (str == null) return [];
   try { return JSON.parse(str); } catch { return []; }
 }
 

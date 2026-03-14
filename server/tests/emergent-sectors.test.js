@@ -30,15 +30,15 @@ import {
 
 function makeSTATE() {
   const STATE = {};
-  createEmergentState(STATE);
+  getEmergentState(STATE); // lazily creates STATE.__emergent
   STATE.dtus = new Map();
   STATE.shadowDtus = new Map();
   return STATE;
 }
 
 function addEmergent(STATE, id, role, sessions = 0, cred = 0, patterns = 0) {
-  registerEmergent(STATE, { id, name: id, role, active: true });
   const es = getEmergentState(STATE);
+  registerEmergent(es, { id, name: id, role, active: true });
   // simulate sessions
   if (!es.sessionsByEmergent.has(id)) es.sessionsByEmergent.set(id, new Set());
   for (let i = 0; i < sessions; i++) es.sessionsByEmergent.get(id).add(`s_${id}_${i}`);

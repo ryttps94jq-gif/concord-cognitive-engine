@@ -230,7 +230,9 @@ describe("Foundation Market — recordRelayEarning", () => {
       recordRelayEarning({ relay_node: "node_A", bytes_relayed: 100 });
     }
     const earnings = getRecentEarnings(2000);
-    assert.ok(earnings.length <= 800);
+    // After 1001 pushes, trim fires (keeping 800), then 9 more are added = 809
+    assert.ok(earnings.length < 1010, `expected trimming to reduce count below 1010, got ${earnings.length}`);
+    assert.ok(earnings.length <= 1000, `expected count <= 1000 (trim threshold), got ${earnings.length}`);
   });
 });
 

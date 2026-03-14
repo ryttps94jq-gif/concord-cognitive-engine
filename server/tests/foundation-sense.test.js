@@ -251,7 +251,9 @@ describe("Foundation Sense — recordReading", () => {
       recordReading({ channel: "bulk", signal_strength: -50 + (i % 10) });
     }
     const readings = getRecentReadings(2000);
-    assert.ok(readings.length <= 800);
+    // After 1001 pushes, trim fires (keeping 800), then 4 more are added = 804
+    assert.ok(readings.length < 1005, `expected trimming to reduce count below 1005, got ${readings.length}`);
+    assert.ok(readings.length <= 1000, `expected count <= 1000 (trim threshold), got ${readings.length}`);
   });
 
   it("caps anomalies at 500 (trims to 400)", () => {

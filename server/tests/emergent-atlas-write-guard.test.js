@@ -22,7 +22,7 @@ import {
   WRITE_OPS,
 } from "../emergent/atlas-write-guard.js";
 
-import { initAtlasState } from "../emergent/atlas-epistemic.js";
+import { initAtlasState, getAtlasState } from "../emergent/atlas-epistemic.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -190,7 +190,7 @@ describe("applyWrite — PROMOTE", () => {
     const create = applyWrite(STATE, WRITE_OPS.CREATE, validPayload(), { scope: "local" });
     assert.equal(create.ok, true);
     // Manually set to DRAFT for promote test
-    const atlas = STATE._atlas;
+    const atlas = getAtlasState(STATE);
     const dtu = atlas.dtus.get(create.dtu.id);
     dtu.status = "DRAFT";
     atlas.byStatus.get("LOCAL_DRAFT")?.delete(dtu.id);
@@ -227,7 +227,7 @@ describe("runAutoPromoteGate", () => {
 
   it("returns gate result with checks", () => {
     const create = applyWrite(STATE, WRITE_OPS.CREATE, validPayload(), { scope: "local" });
-    const atlas = STATE._atlas;
+    const atlas = getAtlasState(STATE);
     const dtu = atlas.dtus.get(create.dtu.id);
     const result = runAutoPromoteGate(STATE, dtu);
     assert.ok(typeof result.pass === "boolean");
@@ -237,7 +237,7 @@ describe("runAutoPromoteGate", () => {
 
   it("includes structural, factual, contradiction checks", () => {
     const create = applyWrite(STATE, WRITE_OPS.CREATE, validPayload(), { scope: "local" });
-    const atlas = STATE._atlas;
+    const atlas = getAtlasState(STATE);
     const dtu = atlas.dtus.get(create.dtu.id);
     const result = runAutoPromoteGate(STATE, dtu);
     const checkNames = result.checks.map(c => c.name);
@@ -252,7 +252,7 @@ describe("runAutoPromoteGate", () => {
     const create = applyWrite(STATE, WRITE_OPS.CREATE, validPayload({
       claims: [{ text: "Bare uncited claim", claimType: "FACT" }],
     }), { scope: "local" });
-    const atlas = STATE._atlas;
+    const atlas = getAtlasState(STATE);
     const dtu = atlas.dtus.get(create.dtu.id);
     dtu.scores = { confidence_factual: 0, credibility_structural: 0, confidence_overall: 0 };
     const result = runAutoPromoteGate(STATE, dtu);

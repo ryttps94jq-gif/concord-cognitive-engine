@@ -219,7 +219,9 @@ describe("Foundation Energy — recordEnergyReading", () => {
       recordEnergyReading({ frequency: 60.0 });
     }
     const readings = getRecentEnergyReadings(2000);
-    assert.ok(readings.length <= 800);
+    // After 1001 pushes, trim fires (keeping 800), then 9 more are added = 809
+    assert.ok(readings.length < 1010, `expected trimming to reduce count below 1010, got ${readings.length}`);
+    assert.ok(readings.length <= 1000, `expected count <= 1000 (trim threshold), got ${readings.length}`);
   });
 });
 

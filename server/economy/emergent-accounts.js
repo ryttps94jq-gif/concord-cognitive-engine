@@ -324,7 +324,7 @@ export function suspendEmergentAccount(db, { emergentId, reason }) {
  * Check if an account ID belongs to an emergent entity.
  */
 export function isEmergentAccount(accountId) {
-  return accountId?.startsWith(OPERATING_PREFIX) || accountId?.startsWith(RESERVE_PREFIX);
+  return !!(accountId?.startsWith(OPERATING_PREFIX) || accountId?.startsWith(RESERVE_PREFIX));
 }
 
 /**

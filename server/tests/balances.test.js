@@ -216,12 +216,12 @@ describe("getSystemBalanceSummary", () => {
     const db = createMockDb([
       { to_user_id: "alice", from_user_id: null, net: 100, amount: 100, status: "complete" },
       // bob has no credits → balance is 0
-      { from_user_id: "bob", to_user_id: "alice", net: 10, amount: 10, status: "complete" },
+      { from_user_id: "bob", to_user_id: "carol", net: 10, amount: 10, status: "complete" },
     ]);
     const result = getSystemBalanceSummary(db);
-    // alice: 100 credit - 0 debit = 100. bob: 0 credit - 10 debit = -10 (skipped).
-    assert.equal(result.users.count, 1);
-    assert.equal(result.users.totalBalance, 100);
+    // alice: 100 credit - 0 debit = 100. bob: 0 credit - 10 debit = -10 (skipped). carol: 10 credit - 0 debit = 10.
+    assert.equal(result.users.count, 2);
+    assert.equal(result.users.totalBalance, 110);
   });
 
   it("skips null account_id entries", () => {

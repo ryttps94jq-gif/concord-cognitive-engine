@@ -445,10 +445,10 @@ describe("queueWebhookDelivery", () => {
 
   it("skips inactive webhooks", () => {
     const reg = setupActivePlugin();
-    registerWebhook(reg.pluginId, "https://x.com/hook", ["entity.born"]);
+    registerWebhook(reg.pluginId, "https://x.com/hook", ["entity.died"]);
     suspendPlugin(reg.pluginId); // pauses webhooks
 
-    const r = queueWebhookDelivery("entity.born", {});
+    const r = queueWebhookDelivery("entity.died", {});
     assert.ok(r.ok);
     assert.equal(r.queued, 0);
   });

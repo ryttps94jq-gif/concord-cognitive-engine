@@ -57,12 +57,8 @@ export function generateOAuthState() {
  * @returns {string} Full authorization URL
  */
 export function getGoogleAuthUrl(state) {
-  if (!process.env.GOOGLE_CLIENT_ID) {
-    throw new Error("Google OAuth is not configured: GOOGLE_CLIENT_ID environment variable is missing");
-  }
-
   const params = new URLSearchParams({
-    client_id: process.env.GOOGLE_CLIENT_ID,
+    client_id: process.env.GOOGLE_CLIENT_ID || "",
     redirect_uri: process.env.GOOGLE_REDIRECT_URI || `${process.env.PUBLIC_URL || "http://localhost:5050"}/api/auth/google/callback`,
     response_type: "code",
     scope: GOOGLE_CONFIG.scopes.join(" "),
@@ -145,12 +141,8 @@ export async function exchangeGoogleCode(code) {
  * @returns {string} Full authorization URL
  */
 export function getAppleAuthUrl(state) {
-  if (!process.env.APPLE_CLIENT_ID) {
-    throw new Error("Apple OAuth is not configured: APPLE_CLIENT_ID environment variable is missing");
-  }
-
   const params = new URLSearchParams({
-    client_id: process.env.APPLE_CLIENT_ID,
+    client_id: process.env.APPLE_CLIENT_ID || "",
     redirect_uri: process.env.APPLE_REDIRECT_URI || `${process.env.PUBLIC_URL || "http://localhost:5050"}/api/auth/apple/callback`,
     response_type: "code",
     scope: APPLE_CONFIG.scopes.join(" "),

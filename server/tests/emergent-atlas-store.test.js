@@ -27,7 +27,7 @@ import {
   getAtlasMetrics,
 } from "../emergent/atlas-store.js";
 
-import { initAtlasState, ATLAS_STATUS } from "../emergent/atlas-epistemic.js";
+import { initAtlasState, getAtlasState, ATLAS_STATUS } from "../emergent/atlas-epistemic.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -208,7 +208,7 @@ describe("createAtlasDtu", () => {
   it("indexes by domain, class, status", () => {
     const result = createAtlasDtu(STATE, validInput());
     assert.equal(result.ok, true);
-    const atlas = STATE._atlas;
+    const atlas = getAtlasState(STATE);
     assert.ok(atlas.byDomainType.get("empirical.physics")?.has(result.dtu.id));
     assert.ok(atlas.byEpistemicClass.get("EMPIRICAL")?.has(result.dtu.id));
     assert.ok(atlas.byStatus.get("DRAFT")?.has(result.dtu.id));
@@ -217,7 +217,7 @@ describe("createAtlasDtu", () => {
   it("indexes claim sources by url", () => {
     const result = createAtlasDtu(STATE, validInput());
     assert.equal(result.ok, true);
-    const atlas = STATE._atlas;
+    const atlas = getAtlasState(STATE);
     assert.ok(atlas.sources.get("https://example.com/rel")?.has(result.dtu.id));
   });
 
@@ -226,7 +226,7 @@ describe("createAtlasDtu", () => {
       links: { about: [{ entityId: "ent_x" }] },
     }));
     assert.equal(result.ok, true);
-    const atlas = STATE._atlas;
+    const atlas = getAtlasState(STATE);
     assert.ok(atlas.about.get(result.dtu.id)?.has("ent_x"));
   });
 
@@ -421,7 +421,7 @@ describe("promoteAtlasDtu", () => {
   it("updates status index on promote", () => {
     const { dtu } = createAtlasDtu(STATE, validInput());
     promoteAtlasDtu(STATE, dtu.id, "PROPOSED");
-    const atlas = STATE._atlas;
+    const atlas = getAtlasState(STATE);
     assert.ok(!atlas.byStatus.get("DRAFT")?.has(dtu.id));
     assert.ok(atlas.byStatus.get("PROPOSED")?.has(dtu.id));
   });
@@ -430,7 +430,7 @@ describe("promoteAtlasDtu", () => {
     const { dtu } = createAtlasDtu(STATE, validInput());
     promoteAtlasDtu(STATE, dtu.id, "PROPOSED");
     // Force promote to VERIFIED (skip gate)
-    const atlas = STATE._atlas;
+    const atlas = getAtlasState(STATE);
     const d = atlas.dtus.get(dtu.id);
     d.status = "PROPOSED";
     // Try to promote — may fail gate check, that's fine, testing metric path
@@ -457,7 +457,7 @@ describe("promoteAtlasDtu", () => {
   it("adds audit event on promote", () => {
     const { dtu } = createAtlasDtu(STATE, validInput());
     promoteAtlasDtu(STATE, dtu.id, "PROPOSED", "actor1");
-    const atlas = STATE._atlas;
+    const atlas = getAtlasState(STATE);
     const d = atlas.dtus.get(dtu.id);
     const statusEvent = d.audit.events.find(e => e.action === "STATUS_CHANGE");
     assert.ok(statusEvent);
@@ -467,7 +467,7 @@ describe("promoteAtlasDtu", () => {
   it("logs to atlas audit", () => {
     const { dtu } = createAtlasDtu(STATE, validInput());
     promoteAtlasDtu(STATE, dtu.id, "PROPOSED");
-    const atlas = STATE._atlas;
+    const atlas = getAtlasState(STATE);
     assert.ok(atlas.audit.length > 0);
     assert.equal(atlas.audit[atlas.audit.length - 1].action, "PROMOTE");
   });
@@ -493,7 +493,7 @@ describe("addAtlasLink", () => {
     const result = addAtlasLink(STATE, src.id, dst.id, "contradicts", { severity: "MEDIUM" });
     assert.equal(result.ok, true);
 
-    const atlas = STATE._atlas;
+    const atlas = getAtlasState(STATE);
     const dstDtu = atlas.dtus.get(dst.id);
     assert.ok(dstDtu.links.contradicts.length > 0);
     assert.equal(dstDtu.links.contradicts[0].targetDtuId, src.id);
@@ -533,7 +533,7 @@ describe("addAtlasLink", () => {
     const { dtu: src } = createAtlasDtu(STATE, validInput({ title: "Src" }));
     const { dtu: dst } = createAtlasDtu(STATE, validInput({ title: "Dst" }));
     addAtlasLink(STATE, src.id, dst.id, "supports", { actor: "me" });
-    const atlas = STATE._atlas;
+    const atlas = getAtlasState(STATE);
     const s = atlas.dtus.get(src.id);
     const linkEvent = s.audit.events.find(e => e.action === "LINK_SUPPORTS");
     assert.ok(linkEvent);
@@ -543,7 +543,7 @@ describe("addAtlasLink", () => {
     const { dtu: src } = createAtlasDtu(STATE, validInput({ title: "Src" }));
     const { dtu: dst } = createAtlasDtu(STATE, validInput({ title: "Dst" }));
     addAtlasLink(STATE, src.id, dst.id, "sameAs");
-    const atlas = STATE._atlas;
+    const atlas = getAtlasState(STATE);
     assert.ok(atlas.links.length > 0);
   });
 
@@ -551,7 +551,7 @@ describe("addAtlasLink", () => {
     const { dtu: src } = createAtlasDtu(STATE, validInput({ title: "Src" }));
     const { dtu: dst } = createAtlasDtu(STATE, validInput({ title: "Dst" }));
     // Delete the about array to test initialization
-    const atlas = STATE._atlas;
+    const atlas = getAtlasState(STATE);
     const s = atlas.dtus.get(src.id);
     delete s.links.about;
     const result = addAtlasLink(STATE, src.id, dst.id, "about");

@@ -33,6 +33,7 @@ function hashContent(content) {
 }
 
 function safeJsonParse(str) {
+  if (str == null) return [];
   try { return JSON.parse(str); } catch { return []; }
 }
 
@@ -647,11 +648,12 @@ describe("marketplace-service", () => {
       if (!listing) return { ok: false, error: "listing_not_found_or_not_owner" };
       if (listing.status !== "active") return { ok: false, error: "listing_not_active" };
 
+      const oldPrice = listing.price;
       dbInst.prepare(
         "UPDATE marketplace_economy_listings SET price = ?, updated_at = ? WHERE id = ?"
       ).run(newPrice, "2026-01-01", listingId);
 
-      return { ok: true, listingId, oldPrice: listing.price, newPrice };
+      return { ok: true, listingId, oldPrice, newPrice };
     }
 
     beforeEach(() => {

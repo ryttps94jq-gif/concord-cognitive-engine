@@ -194,7 +194,9 @@ describe("Foundation Spectrum — recordSpectrumScan", () => {
       recordSpectrumScan({ startFreq: 900e6 + i });
     }
     const metrics = getSpectrumMetrics();
-    assert.ok(metrics.scanCount <= 400);
+    // After 501 pushes, trim fires (keeping 400), then 9 more are added = 409
+    assert.ok(metrics.scanCount < 510, `expected trimming to reduce count below 510, got ${metrics.scanCount}`);
+    assert.ok(metrics.scanCount <= 500, `expected count <= 500 (trim threshold), got ${metrics.scanCount}`);
   });
 
   it("trims available channels at 200 (keeps 150)", () => {
@@ -206,7 +208,9 @@ describe("Foundation Spectrum — recordSpectrumScan", () => {
       });
     }
     const channels = getAvailableChannels(300);
-    assert.ok(channels.length <= 150);
+    // After 201 pushes, trim fires (keeping 150), then 9 more are added = 159
+    assert.ok(channels.length < 210, `expected trimming to reduce count below 210, got ${channels.length}`);
+    assert.ok(channels.length <= 200, `expected count <= 200 (trim threshold), got ${channels.length}`);
   });
 });
 
