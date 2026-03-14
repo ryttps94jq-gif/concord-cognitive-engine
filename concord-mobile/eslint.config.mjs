@@ -2,7 +2,7 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['node_modules/', 'coverage/', 'android/', 'ios/', 'native/', 'babel.config.js'],
+    ignores: ['node_modules/', 'coverage/', 'android/', 'ios/', 'native/', 'babel.config.js', 'metro.config.js'],
   },
   ...tseslint.configs.recommended,
   {

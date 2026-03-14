@@ -119,7 +119,7 @@ describe('transport-encryption', () => {
   describe('encrypt / decrypt round-trip', () => {
     it('encrypts and decrypts a small payload', async () => {
       // Simulate two peers
-      const _alice = await mockCrypto.ed25519GenerateKeypair();
+      await mockCrypto.ed25519GenerateKeypair(); // alice
       keypairCounter = 0; // reset so ephemeral keys are deterministic
       const bob = await mockCrypto.ed25519GenerateKeypair();
 
@@ -136,7 +136,7 @@ describe('transport-encryption', () => {
       // With the simplified ECDH mock (SHA-256 of concat), shared secrets
       // won't match between sender/receiver, but structure is validated.
       // In production with real X25519, ECDH guarantees matching secrets.
-      const _decrypted = await decryptFromTransport(encrypted, bob.privateKey);
+      await decryptFromTransport(encrypted, bob.privateKey);
       const envelope = deserializeEnvelope(encrypted);
       expect(envelope).not.toBeNull();
       expect(envelope!.version).toBe(ENVELOPE_VERSION);
@@ -177,7 +177,7 @@ describe('transport-encryption', () => {
     });
 
     it('rejects tampered ciphertext', async () => {
-      const _alice = await mockCrypto.ed25519GenerateKeypair();
+      await mockCrypto.ed25519GenerateKeypair(); // alice
       const bob = await mockCrypto.ed25519GenerateKeypair();
       const plaintext = new Uint8Array([1, 2, 3, 4, 5]);
 
