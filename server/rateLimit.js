@@ -93,6 +93,6 @@ setInterval(() => {
       rateLimits.delete(it.next().value);
     }
   }
-}, 300000);
+}, 300000).unref();
 
 export { checkRateLimit, rateLimitMiddleware, LIMITS };

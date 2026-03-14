@@ -151,19 +151,24 @@ export function useShortcut(
 ) {
   const { registerShortcut, unregisterShortcut, isShortcutEnabled } = useKeyboard();
 
+  const description = options.description || id;
+  const category = options.category || 'actions';
+  const enabled = options.enabled ?? true;
+  const global = options.global ?? false;
+
   useEffect(() => {
     registerShortcut({
       id,
       keys,
       action,
-      description: options.description || id,
-      category: options.category || 'actions',
-      enabled: options.enabled ?? true,
-      global: options.global ?? false
+      description,
+      category,
+      enabled,
+      global
     });
 
     return () => unregisterShortcut(id);
-  }, [id, keys, action, options, registerShortcut, unregisterShortcut]);
+  }, [id, keys, action, description, category, enabled, global, registerShortcut, unregisterShortcut]);
 
   useHotkeys(keys, (e) => {
     if (isShortcutEnabled(id)) {

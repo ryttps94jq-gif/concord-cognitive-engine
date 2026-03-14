@@ -284,7 +284,7 @@ setInterval(() => {
   for (const [key, bucket] of apiRateBuckets) {
     if (now - bucket.windowStart > 120000) apiRateBuckets.delete(key);
   }
-}, 60000);
+}, 60000).unref();
 
 // ── API Metrics ──────────────────────────────────────────────────────────
 

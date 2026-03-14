@@ -832,7 +832,7 @@ function pruneExpiredSandboxes() {
 }
 
 // Prune expired sandboxes every 60 seconds
-setInterval(pruneExpiredSandboxes, 60000);
+setInterval(pruneExpiredSandboxes, 60000).unref();
 
 // ── Rate Limiting ───────────────────────────────────────────────────────────
 
@@ -1075,4 +1075,4 @@ setInterval(() => {
   } catch {
     // silent
   }
-}, 120000);
+}, 120000).unref();

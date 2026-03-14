@@ -2,18 +2,13 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, act, fireEvent } from '@testing-library/react';
 import React from 'react';
 
-// We must mock react-hotkeys-hook BEFORE importing the module under test
-vi.mock('react-hotkeys-hook', () => {
-  const registeredHotkeys: Record<string, (e: Partial<KeyboardEvent>) => void> = {};
+const { mockUseHotkeys } = vi.hoisted(() => ({
+  mockUseHotkeys: vi.fn(),
+}));
 
-  return {
-    useHotkeys: vi.fn((keys: string, callback: (e: Partial<KeyboardEvent>) => void) => {
-      registeredHotkeys[keys] = callback;
-    }),
-    // expose for test assertions
-    __registeredHotkeys: registeredHotkeys,
-  };
-});
+vi.mock('react-hotkeys-hook', () => ({
+  useHotkeys: mockUseHotkeys,
+}));
 
 import {
   SHORTCUT_CATEGORIES,
@@ -439,8 +434,8 @@ describe('keyboard module', () => {
       expect(screen.getByTestId('global-shortcuts')).toBeInTheDocument();
     });
 
-    it('registers hotkeys via useHotkeys', async () => {
-      const { useHotkeys } = await import('react-hotkeys-hook');
+    it('registers hotkeys via useHotkeys', () => {
+      mockUseHotkeys.mockClear();
       const handlers = {
         'command-palette': vi.fn(),
         'quick-capture': vi.fn(),
@@ -456,10 +451,10 @@ describe('keyboard module', () => {
       );
 
       // useHotkeys should have been called for each handler
-      expect(useHotkeys).toHaveBeenCalled();
+      expect(mockUseHotkeys).toHaveBeenCalled();
 
       // Check that specific key combos were registered
-      const calledKeys = (useHotkeys as ReturnType<typeof vi.fn>).mock.calls.map(
+      const calledKeys = mockUseHotkeys.mock.calls.map(
         (call: unknown[]) => call[0]
       );
       expect(calledKeys).toContain('mod+?');
