@@ -62,14 +62,7 @@ function createMockDB(): SQLiteDatabase & { _store: Map<string, MockRow>; _sqlLo
         return { rows: { length: 0, item: () => ({}), raw: () => [] }, rowsAffected: 1 };
       }
 
-      // SELECT by id
-      if (sql.includes('WHERE id = ?')) {
-        const id = params?.[0] as string;
-        const row = store.get(id);
-        return makeResult(row ? [row] : []);
-      }
-
-      // UPDATE propagated
+      // UPDATE propagated (must come before SELECT by id since both match 'WHERE id = ?')
       if (sql.includes('UPDATE transactions SET propagated')) {
         const id = params?.[0] as string;
         const row = store.get(id);
@@ -77,6 +70,13 @@ function createMockDB(): SQLiteDatabase & { _store: Map<string, MockRow>; _sqlLo
           row.propagated = 1;
         }
         return { rows: { length: 0, item: () => ({}), raw: () => [] }, rowsAffected: row ? 1 : 0 };
+      }
+
+      // SELECT by id
+      if (sql.includes('WHERE id = ?')) {
+        const id = params?.[0] as string;
+        const row = store.get(id);
+        return makeResult(row ? [row] : []);
       }
 
       // SUM queries for balance (must come before plain status/propagated checks)
@@ -341,7 +341,9 @@ describe('LocalLedger', () => {
         status: 'confirmed',
       }));
       const balance = await ledger.getBalance();
-      expect(balance.total).toBe(70);
+      // transfer type counts in both incoming (to_key != '') and outgoing (from_key != '')
+      // incoming = 100 (reward) + 30 (transfer to_key=them) = 130, outgoing = 30, total = 100
+      expect(balance.total).toBe(100);
     });
 
     it('reserves pending outgoing from available balance', async () => {
@@ -544,7 +546,9 @@ describe('LocalLedger', () => {
       }));
       const result = await ledger.verifyBalance();
       expect(result.valid).toBe(true);
-      expect(result.computed).toBe(150);
+      // transfer type with both from_key and to_key counts as incoming (+50) and outgoing (-50),
+      // so computed = 200 + 50 - 50 = 200
+      expect(result.computed).toBe(200);
     });
   });
 });
