@@ -158,9 +158,9 @@ export function createLocalLedger(db: SQLiteDatabase): LocalLedger {
   async function getBalance(): Promise<CoinBalance> {
     await ensureInitialized();
 
-    // Incoming confirmed
+    // Incoming confirmed (exclude outgoing transfers that also have to_key set)
     const incomingResult = await db.executeSql(
-      `SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE to_key != '' AND status = 'confirmed' AND type IN ('transfer', 'reward', 'royalty')`,
+      `SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE to_key != '' AND from_key = '' AND status = 'confirmed' AND type IN ('transfer', 'reward', 'royalty')`,
       []
     );
     const incoming = (incomingResult.rows.item(0).total as number) || 0;
@@ -287,16 +287,15 @@ export function createLocalLedger(db: SQLiteDatabase): LocalLedger {
       const type = row.type as string;
       const amount = row.amount as number;
 
-      if (type === 'transfer' || type === 'reward' || type === 'royalty') {
-        // Incoming
-        if (row.to_key) {
-          computed += amount;
-        }
-      }
-      if (type === 'transfer' || type === 'marketplace_purchase') {
-        // Outgoing
-        if (row.from_key) {
+      if (row.from_key) {
+        // Outgoing: has a sender (from_key set)
+        if (type === 'transfer' || type === 'marketplace_purchase') {
           computed -= amount;
+        }
+      } else if (row.to_key) {
+        // Incoming: no sender (from_key empty), has recipient
+        if (type === 'transfer' || type === 'reward' || type === 'royalty') {
+          computed += amount;
         }
       }
     }

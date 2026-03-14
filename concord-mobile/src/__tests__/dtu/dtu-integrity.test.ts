@@ -371,9 +371,9 @@ describe('verifySignature', () => {
     await verifySignature(dtu, pubKey);
 
     expect(mockEd25519Verify).toHaveBeenCalledTimes(1);
-    const [message, passedSig, passedKey] = mockEd25519Verify.mock.calls[0];
+    const [message, passedSig, passedKey] = mockEd25519Verify.mock.calls[0] as unknown as [Uint8Array, Uint8Array, Uint8Array];
     // message should be header (48 bytes) + content
-    expect(message.length).toBe(DTU_HEADER_SIZE + dtu.content.length);
+    expect(message!.length).toBe(DTU_HEADER_SIZE + dtu.content.length);
     expect(passedSig).toBe(sig);
     expect(passedKey).toBe(pubKey);
   });
@@ -403,10 +403,10 @@ describe('verifySignature', () => {
 
     await verifySignature(dtu, pubKey);
 
-    const [message] = mockEd25519Verify.mock.calls[0];
+    const [message] = mockEd25519Verify.mock.calls[0] as unknown as [Uint8Array];
     const expectedHeader = encodeHeader(dtu.header);
     // First 48 bytes should match encoded header
-    const headerPortion = message.slice(0, DTU_HEADER_SIZE);
+    const headerPortion = message!.slice(0, DTU_HEADER_SIZE);
     expect(headerPortion).toEqual(expectedHeader);
   });
 
@@ -417,8 +417,8 @@ describe('verifySignature', () => {
 
     await verifySignature(dtu, pubKey);
 
-    const [message] = mockEd25519Verify.mock.calls[0];
-    const contentPortion = message.slice(DTU_HEADER_SIZE);
+    const [message] = mockEd25519Verify.mock.calls[0] as unknown as [Uint8Array];
+    const contentPortion = message!.slice(DTU_HEADER_SIZE);
     expect(contentPortion).toEqual(dtu.content);
   });
 });

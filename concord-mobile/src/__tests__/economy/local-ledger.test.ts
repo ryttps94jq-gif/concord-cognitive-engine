@@ -62,26 +62,7 @@ function createMockDB(): SQLiteDatabase & { _store: Map<string, MockRow>; _sqlLo
         return { rows: { length: 0, item: () => ({}), raw: () => [] }, rowsAffected: 1 };
       }
 
-      // SELECT by id
-      if (sql.includes('WHERE id = ?')) {
-        const id = params?.[0] as string;
-        const row = store.get(id);
-        return makeResult(row ? [row] : []);
-      }
-
-      // SELECT pending
-      if (sql.includes("status = 'pending'")) {
-        const rows = Array.from(store.values()).filter(r => r.status === 'pending');
-        return makeResult(rows);
-      }
-
-      // SELECT unpropagated
-      if (sql.includes('propagated = 0')) {
-        const rows = Array.from(store.values()).filter(r => r.propagated === 0);
-        return makeResult(rows);
-      }
-
-      // UPDATE propagated
+      // UPDATE propagated (must be before SELECT by id since both match 'WHERE id = ?')
       if (sql.includes('UPDATE transactions SET propagated')) {
         const id = params?.[0] as string;
         const row = store.get(id);
@@ -91,15 +72,22 @@ function createMockDB(): SQLiteDatabase & { _store: Map<string, MockRow>; _sqlLo
         return { rows: { length: 0, item: () => ({}), raw: () => [] }, rowsAffected: row ? 1 : 0 };
       }
 
-      // SUM queries for balance
+      // SELECT by id
+      if (sql.includes('WHERE id = ?')) {
+        const id = params?.[0] as string;
+        const row = store.get(id);
+        return makeResult(row ? [row] : []);
+      }
+
+      // SUM queries for balance (must be before general status checks)
       if (sql.includes('SUM(amount)') && sql.includes("status = 'confirmed'")) {
         const rows = Array.from(store.values()).filter(r => r.status === 'confirmed');
         let total = 0;
 
-        if (sql.includes("to_key != ''") && sql.includes("('transfer', 'reward', 'royalty')")) {
-          // Incoming
+        if (sql.includes("to_key != ''") && sql.includes("from_key = ''") && sql.includes("('transfer', 'reward', 'royalty')")) {
+          // Incoming (only where from_key is empty — excludes outgoing transfers)
           for (const row of rows) {
-            if (['transfer', 'reward', 'royalty'].includes(row.type as string) && row.to_key) {
+            if (['transfer', 'reward', 'royalty'].includes(row.type as string) && row.to_key && !row.from_key) {
               total += row.amount as number;
             }
           }
@@ -124,6 +112,18 @@ function createMockDB(): SQLiteDatabase & { _store: Map<string, MockRow>; _sqlLo
           }
         }
         return makeResult([{ total }]);
+      }
+
+      // SELECT pending
+      if (sql.includes('SELECT *') && sql.includes("status = 'pending'") && !sql.includes('SUM')) {
+        const rows = Array.from(store.values()).filter(r => r.status === 'pending');
+        return makeResult(rows);
+      }
+
+      // SELECT unpropagated
+      if (sql.includes('propagated = 0')) {
+        const rows = Array.from(store.values()).filter(r => r.propagated === 0);
+        return makeResult(rows);
       }
 
       // SELECT all (for getTransactions and verifyBalance)

@@ -50,6 +50,15 @@ export default [
     },
   },
   {
+    files: ['tests/**/*.js', '**/*.test.js'],
+    rules: {
+      // Test files may use throw literals and promise executor returns for test assertions
+      'no-throw-literal': 'warn',
+      'no-promise-executor-return': 'warn',
+      'no-prototype-builtins': 'warn',
+    },
+  },
+  {
     ignores: ['node_modules/', '*.min.js', 'dist/', 'build/'],
   },
 ];

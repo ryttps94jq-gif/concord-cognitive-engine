@@ -163,20 +163,23 @@ describe('createWiFiDirectManager', () => {
 
     it('returns empty array when no peers found', async () => {
       const mockP2P = createMockWiFiP2P({ peers: [] });
-      // Override to always return empty peers quickly
       (mockP2P.getAvailablePeers as jest.Mock).mockResolvedValue([]);
       const manager = createWiFiDirectManager(mockP2P);
 
-      // This will time out but should eventually return empty
-      // Mock setTimeout to be instant
-      jest.useFakeTimers();
-      const peersPromise = manager.discoverPeers();
-      jest.advanceTimersByTime(WIFI_DIRECT_GROUP_TIMEOUT_MS + 1000);
-      jest.useRealTimers();
+      // Mock Date.now to jump past timeout so the polling loop exits immediately
+      const realNow = Date.now();
+      let callCount = 0;
+      const spy = jest.spyOn(Date, 'now').mockImplementation(() => {
+        callCount++;
+        // First call captures startTime, second call exceeds timeout
+        if (callCount === 1) return realNow;
+        return realNow + WIFI_DIRECT_GROUP_TIMEOUT_MS + 1000;
+      });
 
-      const peers = await peersPromise;
+      const peers = await manager.discoverPeers();
       expect(peers).toEqual([]);
-    });
+      spy.mockRestore();
+    }, 10000);
   });
 
   // ── connect ──

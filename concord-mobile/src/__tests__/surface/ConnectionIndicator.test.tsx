@@ -5,17 +5,11 @@ import { render, screen } from '@testing-library/react-native';
 import { ConnectionIndicator } from '../../surface/components/ConnectionIndicator';
 import type { ConnectionState } from '../../utils/types';
 
-// Mock react-native to avoid native module issues in tests
-jest.mock('react-native', () => {
-  const RN = jest.requireActual('react-native');
-  return {
-    ...RN,
-    StyleSheet: {
-      ...RN.StyleSheet,
-      create: (styles: Record<string, any>) => styles,
-    },
-  };
-});
+// Override only StyleSheet.create — keep the rest from jest-expo preset
+const actualRN = jest.requireActual('react-native');
+jest.spyOn(actualRN.StyleSheet, 'create').mockImplementation(
+  ((styles: Record<string, any>) => styles) as any,
+);
 
 describe('ConnectionIndicator', () => {
   describe('online state', () => {

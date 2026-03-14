@@ -49,7 +49,7 @@ export function createQuarantineManager(maxSize?: number): QuarantineManager {
     if (_records.has(dtu.id)) {
       const existing = _records.get(dtu.id)!;
       existing.entry.reason = reason;
-      existing.entry.threats = threats;
+      existing.entry.threats = threats.map(t => ({ ...t }));
       existing.entry.quarantinedAt = Date.now();
       return;
     }
@@ -60,7 +60,7 @@ export function createQuarantineManager(maxSize?: number): QuarantineManager {
     const entry: QuarantineEntry = {
       dtuId: dtu.id,
       reason,
-      threats: [...threats],
+      threats: threats.map(t => ({ ...t })),
       quarantinedAt: Date.now(),
       released: false,
     };
@@ -112,7 +112,7 @@ export function createQuarantineManager(maxSize?: number): QuarantineManager {
 
     const toRemove: string[] = [];
     for (const [id, record] of _records) {
-      if (record.entry.quarantinedAt < cutoff) {
+      if (record.entry.quarantinedAt <= cutoff) {
         toRemove.push(id);
       }
     }

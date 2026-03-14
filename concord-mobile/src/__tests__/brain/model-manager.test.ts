@@ -14,7 +14,6 @@ function createMockFS(): FileSystem & {
 
   return {
     _files: files,
-    _downloadCalls: 0,
     exists: jest.fn(async (path: string) => files.has(path) || path === 'models'),
     readFile: jest.fn(async (path: string) => {
       const content = files.get(path);
@@ -48,7 +47,7 @@ function createMockFS(): FileSystem & {
       return { statusCode: 200, bytesWritten: 1000 };
     }),
     hash: jest.fn(async (_path: string, _algo: string) => 'sha256_mock_hash_abc123'),
-    get downloadCalls() { return downloadCalls; },
+    get _downloadCalls() { return downloadCalls; },
   };
 }
 

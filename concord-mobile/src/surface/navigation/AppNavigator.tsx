@@ -2,7 +2,7 @@
 // Bottom tab navigation with core screens
 
 import React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, type LinkingOptions } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
@@ -81,7 +81,7 @@ function MainTabs() {
 }
 
 // Deep linking configuration for checkout return flow
-const linking = {
+const linking: LinkingOptions<RootStackParamList> = {
   prefixes: ['concordapp://'],
   config: {
     screens: {
@@ -89,7 +89,7 @@ const linking = {
         screens: {
           Wallet: 'checkout-complete',
         },
-      },
+      } as any, // Nested tab navigator linking
       BuyCoins: 'buy-coins',
     },
   },

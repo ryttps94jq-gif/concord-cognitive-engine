@@ -23,6 +23,15 @@ const eslintConfig = [
     },
   },
   {
+    files: ['tests/**/*.ts', 'tests/**/*.tsx', '**/*.test.ts', '**/*.test.tsx', '**/*.spec.ts', '**/*.spec.tsx'],
+    rules: {
+      // Test files use require() for mocking patterns (jest.mock, vi.mock)
+      '@typescript-eslint/no-require-imports': 'off',
+      // Test files use anonymous arrow function components in mocks
+      'react/display-name': 'off',
+    },
+  },
+  {
     ignores: ['node_modules/', '.next/', 'out/', 'dist/', 'build/', '*.min.js'],
   },
 ];

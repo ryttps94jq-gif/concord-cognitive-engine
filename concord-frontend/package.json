@@ -9,7 +9,7 @@
     "lint": "eslint . --ext .ts,.tsx",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:coverage": "vitest run --coverage",
+    "test:coverage": "NODE_OPTIONS='--max-old-space-size=4096' vitest run --coverage",
     "test:e2e": "playwright test",
     "test:a11y": "npx playwright test tests/e2e/accessibility.spec.ts",
     "type-check": "tsc --noEmit",

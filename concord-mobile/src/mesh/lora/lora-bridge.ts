@@ -7,7 +7,7 @@ import {
   DTU_TYPES,
 } from '../../utils/constants';
 import { toHex, toBase64, fromBase64, crc32 } from '../../utils/crypto';
-import type { DTU, LoRaConfig, LoRaPacket } from '../../utils/types';
+import type { DTU, DTUTypeCode, LoRaConfig, LoRaPacket } from '../../utils/types';
 
 // ── External BLE Manager Interface ───────────────────────────────────────────
 
@@ -91,12 +91,15 @@ const SF_BANDWIDTH_MAP: Record<number, number> = {
  *   [remaining: compressed content]
  */
 export function compressDTUForLoRa(dtu: DTU): Uint8Array {
-  const idBytes = new TextEncoder().encode(dtu.id.slice(0, 16));
+  const rawIdBytes = new TextEncoder().encode(dtu.id.slice(0, 16));
+  // Fixed 16-byte ID field (zero-padded) ensures constant 26-byte header
+  const idBytes = new Uint8Array(16);
+  idBytes.set(rawIdBytes);
   const contentBytes = dtu.content;
   const priority = getDTUPriority(dtu);
 
   // Header: 4 fixed bytes + 4 CRC + 2 length + 16 id = 26 overhead
-  const overhead = 4 + 4 + 2 + idBytes.length;
+  const overhead = 26;
   const maxContent = LORA_MAX_PACKET_BYTES - overhead;
 
   const contentToSend = contentBytes.length <= maxContent
@@ -116,14 +119,14 @@ export function compressDTUForLoRa(dtu: DTU): Uint8Array {
   const checksum = crc32(dtu.content);
   view.setUint32(4, checksum, false);
 
-  // Content length (original)
+  // Content length
   view.setUint16(8, contentToSend.length, false);
 
-  // ID (variable length, padded/truncated to match)
+  // ID (fixed 16-byte field)
   packet.set(idBytes, 10);
 
   // Content
-  packet.set(contentToSend, 10 + idBytes.length);
+  packet.set(contentToSend, 26);
 
   return packet;
 }
@@ -268,7 +271,7 @@ export function createLoRaBridge(bleManager: BLEManager): LoRaBridge {
                 header: {
                   version,
                   flags,
-                  type,
+                  type: type as DTUTypeCode,
                   timestamp: Date.now(),
                   contentLength: content.length,
                   contentHash: new Uint8Array(32), // Placeholder; real hash computed by receiver
@@ -344,8 +347,8 @@ export function createLoRaBridge(bleManager: BLEManager): LoRaBridge {
         compressed,
       });
 
-      // Trigger async queue processing
-      processQueue().catch(() => {});
+      // Schedule queue processing in next tick to allow batching multiple sends
+      setTimeout(() => processQueue().catch(() => {}), 0);
       return true;
     },
 

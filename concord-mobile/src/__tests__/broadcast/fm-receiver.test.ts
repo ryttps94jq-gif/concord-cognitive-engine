@@ -23,7 +23,6 @@ function createMockRadioModule(available: boolean = true): FMRadioModule & {
   let listening = false;
 
   return {
-    _sampleCallback: null,
     _listening: false,
     isAvailable: jest.fn(() => available),
     startListening: jest.fn(async (_freq: number, onSamples: (samples: Float32Array) => void) => {
@@ -36,7 +35,7 @@ function createMockRadioModule(available: boolean = true): FMRadioModule & {
     }),
     isListening: jest.fn(() => listening),
     getSignalStrength: jest.fn(() => 0.75),
-    get _actualSampleCallback() { return sampleCallback; },
+    get _sampleCallback() { return sampleCallback; },
   };
 }
 

@@ -51,7 +51,7 @@ describe('LocalInference', () => {
   let inference: LocalInference;
 
   beforeEach(() => {
-    jest.useFakeTimers();
+    jest.useFakeTimers({ legacyFakeTimers: true });
     runtime = createMockRuntime();
     inference = createLocalInference(runtime);
   });
@@ -300,6 +300,9 @@ describe('LocalInference', () => {
 
       const p1 = inference.generate(makeRequest({ id: 'r1' }));
       const p2 = inference.generate(makeRequest({ id: 'r2' }));
+
+      // Suppress unhandled rejection from p1 (it will reject via timeout)
+      p1.catch(() => {});
 
       // Abort all
       inference.abort();

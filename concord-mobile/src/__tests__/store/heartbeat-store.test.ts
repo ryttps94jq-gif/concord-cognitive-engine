@@ -309,12 +309,14 @@ describe('HeartbeatEngine', () => {
 
   describe('timing', () => {
     it('first tick fires after interval', () => {
+      const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
       engine.start();
       expect(deps.meshController.scanPeers).not.toHaveBeenCalled();
 
       jest.advanceTimersByTime(HEARTBEAT_INTERVAL_MS);
       // Timer fires but async tick may not complete in sync timer advancement
-      expect(setTimeout).toHaveBeenCalled();
+      expect(setTimeoutSpy).toHaveBeenCalled();
+      setTimeoutSpy.mockRestore();
     });
 
     it('uses correct interval for normal battery', () => {

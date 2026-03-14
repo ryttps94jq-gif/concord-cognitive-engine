@@ -9,6 +9,16 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./tests/setup.ts'],
     include: ['tests/**/*.test.{ts,tsx}', 'components/**/*.test.{ts,tsx}'],
+    pool: 'forks',
+    fileParallelism: false,
+    poolOptions: {
+      forks: {
+        maxForks: 1,
+        execArgv: ['--max-old-space-size=4096'],
+        // Isolate each test file in a fresh worker to prevent OOM from accumulated state
+        isolate: true,
+      },
+    },
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html', 'lcov'],

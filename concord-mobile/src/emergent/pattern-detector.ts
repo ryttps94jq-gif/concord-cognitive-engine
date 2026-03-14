@@ -88,8 +88,10 @@ function collectAllDTUs(store: DTUStore): DTU[] {
 function geoGridKey(geo: GeoGrid, cellSizeMeters: number): string {
   // Approximate: 1 degree lat ~ 111,320 m, 1 degree lon ~ 111,320 * cos(lat) m
   const latDeg = cellSizeMeters / 111320;
-  const lonDeg = cellSizeMeters / (111320 * Math.cos((geo.lat * Math.PI) / 180));
   const gridLat = Math.floor(geo.lat / latDeg) * latDeg;
+  // Use gridLat (not geo.lat) for longitude correction so all DTUs in the same
+  // latitude band produce a consistent longitude grid, avoiding floating-point divergence.
+  const lonDeg = cellSizeMeters / (111320 * Math.cos((gridLat * Math.PI) / 180));
   const gridLon = Math.floor(geo.lon / lonDeg) * lonDeg;
   return `${gridLat.toFixed(6)},${gridLon.toFixed(6)}`;
 }

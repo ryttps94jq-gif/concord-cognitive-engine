@@ -1,7 +1,7 @@
 // Concord Mobile — Telephone Layer
 // V.92 modem-style encoding over voice call (landline or cellular)
 
-import { toHex, toBase64, fromBase64, crc32 } from '../../utils/crypto';
+import { toHex, toBase64, fromBase64 } from '../../utils/crypto';
 import type { DTU, AudioCodecConfig } from '../../utils/types';
 import type { AudioCodec } from '../rf/audio-codec';
 
@@ -18,10 +18,7 @@ const TELEPHONE_CONFIG: AudioCodecConfig = {
   preambleMs: 150,   // V.92 negotiation preamble
 };
 
-// V.92 modem characteristics
-const V92_MARK_FREQ = 1200;   // Hz
-const V92_SPACE_FREQ = 2200;  // Hz
-const V92_BAUD_RATE = 300;    // Conservative for AMR codec survival
+// V.92 modem characteristics (reserved for future analog modem implementation)
 
 // ── Telephone Layer Interface ────────────────────────────────────────────────
 
@@ -112,7 +109,7 @@ export function createTelephoneLayer(codec: AudioCodec): TelephoneLayer {
 
     decodeDTUFromCall(audio: Float32Array): DTU | null {
       // Step 1: Decode AFSK from phone audio
-      const { data: fecBytes, errors: afskErrors } = codec.decodeAFSK(
+      const { data: fecBytes } = codec.decodeAFSK(
         audio,
         TELEPHONE_CONFIG,
       );

@@ -26,6 +26,9 @@ jest.mock('../../surface/screens/AtlasScreen', () => ({
 jest.mock('../../surface/screens/SettingsScreen', () => ({
   SettingsScreen: () => 'SettingsScreen',
 }));
+jest.mock('../../surface/screens/BuyCoinsScreen', () => ({
+  BuyCoinsScreen: () => 'BuyCoinsScreen',
+}));
 
 // Track registered screens via the navigator mocks
 const registeredTabScreens: string[] = [];
@@ -55,11 +58,12 @@ jest.mock('@react-navigation/native-stack', () => {
       Navigator: ({ children }: { children: React.ReactNode }) => (
         <>{children}</>
       ),
-      Screen: ({ name }: { name: string }) => {
+      Screen: ({ name, component: Component }: { name: string; component?: React.ComponentType }) => {
         if (!registeredStackScreens.includes(name)) {
           registeredStackScreens.push(name);
         }
-        return null;
+        // Render the component so nested navigators (e.g. MainTabs) execute
+        return Component ? <Component /> : null;
       },
     }),
   };
@@ -105,6 +109,7 @@ describe('AppNavigator', () => {
       'Main',
       'Atlas',
       'Settings',
+      'BuyCoins',
     ];
     for (const stackScreen of expectedStacks) {
       expect(registeredStackScreens).toContain(stackScreen);
@@ -116,9 +121,9 @@ describe('AppNavigator', () => {
     expect(registeredTabScreens).toHaveLength(5);
   });
 
-  it('registers exactly 3 stack screens', () => {
+  it('registers exactly 4 stack screens', () => {
     render(<AppNavigator />);
-    expect(registeredStackScreens).toHaveLength(3);
+    expect(registeredStackScreens).toHaveLength(4);
   });
 
   it('does not register duplicate screen names in tabs', () => {
@@ -151,11 +156,12 @@ describe('AppNavigator', () => {
       Main: true,
       Atlas: true,
       Settings: true,
+      BuyCoins: true,
       LensDetail: true,
       DTUDetail: true,
       PeerDetail: true,
       TransactionDetail: true,
     };
-    expect(Object.keys(stackKeys)).toHaveLength(7);
+    expect(Object.keys(stackKeys)).toHaveLength(8);
   });
 });
