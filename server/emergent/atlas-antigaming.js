@@ -59,7 +59,7 @@ setInterval(() => {
   for (const [key, bucket] of rateBuckets) {
     if (now - bucket.windowStart > HOUR_MS * 2) rateBuckets.delete(key);
   }
-}, HOUR_MS);
+}, HOUR_MS).unref();
 
 // ── Cycle Detection ──────────────────────────────────────────────────────
 
