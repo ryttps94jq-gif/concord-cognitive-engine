@@ -46,6 +46,7 @@ test.describe('Accessibility (axe-core)', () => {
     });
 
     test('Login page should have no critical accessibility violations', async ({ page }) => {
+      test.setTimeout(60_000); // axe-core scans are CPU-heavy in CI
       const response = await page.goto('/login');
       expect(response?.status()).toBeLessThan(500);
       await page.waitForLoadState('networkidle').catch(() => {});
