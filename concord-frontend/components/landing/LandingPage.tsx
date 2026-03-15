@@ -94,7 +94,7 @@ export function LandingPage(_props: LandingPageProps) {
 
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mt-20">
-          <Stat value="112" label="Cognitive Lenses" />
+          <Stat value="112" label="Domain Lenses" />
           <Stat value="110+" label="Neural Organs" />
           <Stat value="70%" label="Sovereignty Lock" />
           <Stat value="100%" label="Local Control" />
@@ -115,13 +115,13 @@ export function LandingPage(_props: LandingPageProps) {
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             <FeatureCard
               icon={<Database className="w-6 h-6" />}
-              title="Discrete Thought Units"
+              title="DTU-Based Memory"
               description="Every piece of knowledge is a DTU - atomic, linkable, and evolvable. Watch ideas compound into Mega and Hyper nodes."
               color="cyan"
             />
             <FeatureCard
               icon={<Network className="w-6 h-6" />}
-              title="112 Cognitive Lenses"
+              title="112 Domain Lenses"
               description="View your knowledge through different perspectives: healthcare, education, creative arts, science, AI, finance, and 100+ more specialized lenses."
               color="blue"
             />
@@ -145,8 +145,8 @@ export function LandingPage(_props: LandingPageProps) {
             />
             <FeatureCard
               icon={<Layers className="w-6 h-6" />}
-              title="Scientific Method Engine"
-              description="Form hypotheses, design experiments, track evidence. Let your ideas evolve through evidence."
+              title="Sovereign by Design"
+              description="70% sovereignty lock with immutable ethical invariants. No telemetry, no ads, no secret monitoring. You own every byte."
               color="orange"
             />
           </div>
