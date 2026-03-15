@@ -6,9 +6,6 @@ import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { CommandPalette } from './CommandPalette';
 import { useUIStore } from '@/store/ui';
-
-/** Routes that render their own chrome and should skip the AppShell layout. */
-const STANDALONE_PREFIXES = ['/legal/'];
 import { Toasts } from '@/components/common/Toasts';
 import { OperatorErrorBanner } from '@/components/common/OperatorErrorBanner';
 import { SystemStatus } from '@/components/common/SystemStatus';
@@ -19,6 +16,9 @@ import { InstallPrompt } from '@/components/pwa/InstallPrompt';
 import { OfflineFallback } from '@/components/pwa/OfflineFallback';
 import { QuickCapture, useQuickCapture } from '@/components/capture/QuickCapture';
 import { NowPlayingBar } from '@/components/music/NowPlayingBar';
+
+/** Routes that render their own chrome and should skip the AppShell layout. */
+const STANDALONE_PREFIXES = ['/legal/'];
 
 interface AppShellProps {
   children: React.ReactNode;

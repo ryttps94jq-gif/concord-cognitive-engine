@@ -2,11 +2,13 @@ import { test, expect } from '@playwright/test';
 
 /**
  * Helper: set a session cookie so middleware allows access to protected routes.
+ * Uses concord_refresh (not concord_auth) to avoid backend JWT validation
+ * of the fake test token — the middleware accepts either cookie.
  */
 async function authenticateContext(context: import('@playwright/test').BrowserContext) {
   await context.addCookies([
     {
-      name: 'concord_auth',
+      name: 'concord_refresh',
       value: 'e2e_test_token',
       domain: 'localhost',
       path: '/',
@@ -227,7 +229,7 @@ test.describe('Connect Mode', () => {
     expect(response?.status()).toBeLessThan(500);
     await page.waitForLoadState('networkidle');
 
-    // Skip if redirected to login (auth cookie not recognised)
+    // Skip if redirected to login (refresh cookie not recognised)
     if (/\/login/.test(page.url())) return;
 
     const connectButton = page.locator(

@@ -2,12 +2,13 @@ import { test, expect } from '@playwright/test';
 
 /**
  * Helper: set a session cookie so middleware allows access to protected routes.
- * The middleware checks for 'concord_auth', 'token', or 'connect.sid'.
+ * Uses concord_refresh (not concord_auth) to avoid backend JWT validation
+ * of the fake test token — the middleware accepts either cookie.
  */
 async function authenticateContext(context: import('@playwright/test').BrowserContext) {
   await context.addCookies([
     {
-      name: 'concord_auth',
+      name: 'concord_refresh',
       value: 'e2e_test_token',
       domain: 'localhost',
       path: '/',

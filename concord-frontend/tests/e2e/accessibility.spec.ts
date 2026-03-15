@@ -1,11 +1,13 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
-// Helper to authenticate
+// Helper: set a session cookie so middleware allows access to protected routes.
+// Uses concord_refresh (not concord_auth) to avoid backend JWT validation
+// of the fake test token — the middleware accepts either cookie.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function authenticate(context: any) {
   await context.addCookies([{
-    name: 'concord_auth',
+    name: 'concord_refresh',
     value: 'e2e_test_token',
     domain: 'localhost',
     path: '/',
