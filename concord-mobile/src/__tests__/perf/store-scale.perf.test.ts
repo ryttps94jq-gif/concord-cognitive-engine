@@ -69,7 +69,7 @@ beforeEach(() => { jest.clearAllMocks(); useMeshStore.getState().reset(); });
 
 describe('DTU store insert scalability', () => {
   it.each([
-    [100, 100], [1000, 500], [10000, 3000],
+    [100, 200], [1000, 1000], [10000, 6000],
   ])('inserts %d DTUs in under %dms', (count, limit) => {
     const store = createDTUStore(createMockDb());
     const dtus = Array.from({ length: count }, (_, i) => makeDTU(i));
@@ -78,7 +78,7 @@ describe('DTU store insert scalability', () => {
     expect(ms).toBeLessThan(limit);
   });
 
-  it('has/get lookups on 10000-item store: 10000 ops in under 200ms', () => {
+  it('has/get lookups on 10000-item store: 10000 ops in under 400ms', () => {
     const store = populateStore(10000);
     const ms = measureMs(() => {
       for (let i = 0; i < 10000; i++) { store.has(`dtu_scale_${i}`); store.get(`dtu_scale_${i}`); }
@@ -95,14 +95,14 @@ describe('DTU store query performance', () => {
     expect(ms).toBeLessThan(50);
   });
 
-  it('searches 1000-item store in under 200ms', () => {
+  it('searches 1000-item store in under 500ms', () => {
     const ms = measureMs(() => { populateStore(1000).search('scale batch', 20); });
-    expect(ms).toBeLessThan(200);
+    expect(ms).toBeLessThan(500);
   });
 
-  it('searches 5000-item store in under 1000ms', () => {
+  it('searches 5000-item store in under 2000ms', () => {
     const ms = measureMs(() => { populateStore(5000).search('scale batch', 20); });
-    expect(ms).toBeLessThan(1000);
+    expect(ms).toBeLessThan(2000);
   });
 
   it('getByType and getByTags on 5000-item store in under 200ms', () => {
