@@ -2,13 +2,13 @@ import { test, expect } from '@playwright/test';
 
 /**
  * Helper: set a session cookie so middleware allows access to protected routes.
- * The middleware checks for 'concord_session', 'token', or 'connect.sid'.
+ * The middleware checks for 'concord_auth', 'token', or 'connect.sid'.
  */
 async function authenticateContext(context: import('@playwright/test').BrowserContext) {
   await context.addCookies([
     {
-      name: 'concord_session',
-      value: 'e2e_test_session',
+      name: 'concord_auth',
+      value: 'e2e_test_token',
       domain: 'localhost',
       path: '/',
     },

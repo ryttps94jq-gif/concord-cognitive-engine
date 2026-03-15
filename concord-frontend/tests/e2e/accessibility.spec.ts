@@ -5,8 +5,8 @@ import AxeBuilder from '@axe-core/playwright';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function authenticate(context: any) {
   await context.addCookies([{
-    name: 'concord_session',
-    value: 'test-session-token',
+    name: 'concord_auth',
+    value: 'e2e_test_token',
     domain: 'localhost',
     path: '/',
     httpOnly: true,

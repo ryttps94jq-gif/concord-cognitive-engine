@@ -6,8 +6,8 @@ import { test, expect } from '@playwright/test';
 async function authenticateContext(context: import('@playwright/test').BrowserContext) {
   await context.addCookies([
     {
-      name: 'concord_session',
-      value: 'e2e_test_session',
+      name: 'concord_auth',
+      value: 'e2e_test_token',
       domain: 'localhost',
       path: '/',
     },

@@ -110,20 +110,20 @@ describe('Auth Middleware', () => {
       expect(url.searchParams.get('from')).toBe('/lenses/chat');
     });
 
-    it('allows through with concord_session cookie', () => {
-      middleware(makeRequest('/hub', { concord_session: 'abc123' }));
+    it('allows through with concord_auth cookie', () => {
+      middleware(makeRequest('/hub', { concord_auth: 'jwt-token' }));
       expect(mockNext).toHaveBeenCalled();
       expect(mockRedirect).not.toHaveBeenCalled();
     });
 
-    it('allows through with token cookie', () => {
-      middleware(makeRequest('/lenses/graph', { token: 'jwt-token' }));
+    it('allows through with concord_refresh cookie', () => {
+      middleware(makeRequest('/lenses/graph', { concord_refresh: 'refresh-token' }));
       expect(mockNext).toHaveBeenCalled();
     });
 
-    it('allows through with connect.sid cookie', () => {
+    it('rejects legacy cookie names that are no longer recognised', () => {
       middleware(makeRequest('/lenses/code', { 'connect.sid': 'session-id' }));
-      expect(mockNext).toHaveBeenCalled();
+      expect(mockRedirect).toHaveBeenCalled();
     });
   });
 
