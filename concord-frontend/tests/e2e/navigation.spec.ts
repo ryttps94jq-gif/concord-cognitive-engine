@@ -393,7 +393,8 @@ test.describe('Command Palette', () => {
   });
 
   test('command palette has search input with combobox role', async ({ page }) => {
-    await page.goto('/lenses/chat');
+    const response = await page.goto('/lenses/chat');
+    expect(response?.status()).toBeLessThan(500);
     await page.waitForLoadState('networkidle');
 
     await page.keyboard.press('Control+k');
@@ -409,7 +410,8 @@ test.describe('Command Palette', () => {
   });
 
   test('command palette shows results in listbox', async ({ page }) => {
-    await page.goto('/lenses/chat');
+    const response = await page.goto('/lenses/chat');
+    expect(response?.status()).toBeLessThan(500);
     await page.waitForLoadState('networkidle');
 
     await page.keyboard.press('Control+k');
@@ -427,7 +429,8 @@ test.describe('Command Palette', () => {
   });
 
   test('command palette filters results on typing', async ({ page }) => {
-    await page.goto('/lenses/chat');
+    const response = await page.goto('/lenses/chat');
+    expect(response?.status()).toBeLessThan(500);
     await page.waitForLoadState('networkidle');
 
     await page.keyboard.press('Control+k');
@@ -445,7 +448,8 @@ test.describe('Command Palette', () => {
   });
 
   test('command palette shows "no results" for nonexistent query', async ({ page }) => {
-    await page.goto('/lenses/chat');
+    const response = await page.goto('/lenses/chat');
+    expect(response?.status()).toBeLessThan(500);
     await page.waitForLoadState('networkidle');
 
     await page.keyboard.press('Control+k');
@@ -463,7 +467,8 @@ test.describe('Command Palette', () => {
   });
 
   test('command palette closes on Escape', async ({ page }) => {
-    await page.goto('/lenses/chat');
+    const response = await page.goto('/lenses/chat');
+    expect(response?.status()).toBeLessThan(500);
     await page.waitForLoadState('networkidle');
 
     await page.keyboard.press('Control+k');

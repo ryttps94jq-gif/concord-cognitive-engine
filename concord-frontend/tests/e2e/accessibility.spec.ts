@@ -192,7 +192,8 @@ test.describe('Accessibility (axe-core)', () => {
 
   test.describe('Keyboard navigation', () => {
     test('Login page should be fully navigable via keyboard', async ({ page }) => {
-      await page.goto('/login');
+      const response = await page.goto('/login');
+      expect(response?.status()).toBeLessThan(500);
 
       const usernameVisible = await page.locator('#username').isVisible().catch(() => false);
       if (!usernameVisible) {
@@ -240,7 +241,8 @@ test.describe('Accessibility (axe-core)', () => {
         });
       });
 
-      await page.goto('/lenses/chat');
+      const response = await page.goto('/lenses/chat');
+      expect(response?.status()).toBeLessThan(500);
       await page.waitForLoadState('domcontentloaded');
 
       // Should have main content area
