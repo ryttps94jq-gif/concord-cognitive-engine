@@ -198,7 +198,8 @@ test.describe('App Shell Navigation', () => {
   });
 
   test('sidebar shows Workspaces section label', async ({ page }) => {
-    await page.goto('/lenses/chat');
+    const response = await page.goto('/lenses/chat');
+    expect(response?.status()).toBeLessThan(500);
     await page.waitForLoadState('networkidle');
 
     // "Workspaces" label appears when sidebar is expanded
@@ -209,7 +210,8 @@ test.describe('App Shell Navigation', () => {
   });
 
   test('sidebar shows version and sovereignty info', async ({ page }) => {
-    await page.goto('/lenses/chat');
+    const response = await page.goto('/lenses/chat');
+    expect(response?.status()).toBeLessThan(500);
     await page.waitForLoadState('networkidle');
 
     // Footer shows "Concord OS v5.0" and "70% Sovereign"
@@ -220,7 +222,8 @@ test.describe('App Shell Navigation', () => {
   });
 
   test('sidebar collapse toggle works', async ({ page }) => {
-    await page.goto('/lenses/chat');
+    const response = await page.goto('/lenses/chat');
+    expect(response?.status()).toBeLessThan(500);
     await page.waitForLoadState('networkidle');
 
     // Find the collapse button (desktop only, hidden on mobile)
@@ -237,7 +240,8 @@ test.describe('App Shell Navigation', () => {
   });
 
   test('sidebar highlights active lens', async ({ page }) => {
-    await page.goto('/lenses/chat');
+    const response = await page.goto('/lenses/chat');
+    expect(response?.status()).toBeLessThan(500);
     await page.waitForLoadState('networkidle');
 
     // The Chat link should have aria-current="page" when active
@@ -259,7 +263,8 @@ test.describe('Topbar', () => {
   });
 
   test('topbar renders with banner role', async ({ page }) => {
-    await page.goto('/lenses/chat');
+    const response = await page.goto('/lenses/chat');
+    expect(response?.status()).toBeLessThan(500);
     await page.waitForLoadState('networkidle');
 
     const topbar = page.locator('header[role="banner"]');
@@ -269,7 +274,8 @@ test.describe('Topbar', () => {
   });
 
   test('topbar shows current lens name', async ({ page }) => {
-    await page.goto('/lenses/chat');
+    const response = await page.goto('/lenses/chat');
+    expect(response?.status()).toBeLessThan(500);
     await page.waitForLoadState('networkidle');
 
     // The topbar h1 should display the current lens name
@@ -280,7 +286,8 @@ test.describe('Topbar', () => {
   });
 
   test('topbar has command palette trigger', async ({ page }) => {
-    await page.goto('/lenses/chat');
+    const response = await page.goto('/lenses/chat');
+    expect(response?.status()).toBeLessThan(500);
     await page.waitForLoadState('networkidle');
 
     // Search button that opens the command palette

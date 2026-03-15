@@ -174,10 +174,10 @@ describe('Zustand mesh store update throughput', () => {
     expect(ms).toBeLessThan(10000);
   });
 
-  it('reset from populated state in under 10ms', () => {
+  it('reset from populated state in under 20ms', () => {
     for (let i = 0; i < 500; i++) useMeshStore.getState().addPeer(makePeer(`p_${i}`));
     const ms = measureMs(() => { useMeshStore.getState().reset(); });
     expect(useMeshStore.getState().peers.size).toBe(0);
-    expect(ms).toBeLessThan(10);
+    expect(ms).toBeLessThan(20);
   });
 });

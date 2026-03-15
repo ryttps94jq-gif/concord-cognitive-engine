@@ -257,7 +257,8 @@ test.describe('Email/Password Form Validation', () => {
   });
 
   test('register form validates email format', async ({ page }) => {
-    await page.goto('/register');
+    const response = await page.goto('/register');
+    expect(response?.status()).toBeLessThan(500);
 
     const emailInput = page.locator('#email');
     const visible = await emailInput.isVisible().catch(() => false);
@@ -287,7 +288,8 @@ test.describe('Error State Display', () => {
       })
     );
 
-    await page.goto('/login');
+    const response = await page.goto('/login');
+    expect(response?.status()).toBeLessThan(500);
 
     const usernameInput = page.locator('#username');
     const passwordInput = page.locator('#password');
@@ -325,7 +327,8 @@ test.describe('Error State Display', () => {
       )
     );
 
-    await page.goto('/login');
+    const response = await page.goto('/login');
+    expect(response?.status()).toBeLessThan(500);
 
     const usernameInput = page.locator('#username');
     const passwordInput = page.locator('#password');
@@ -362,7 +365,8 @@ test.describe('Error State Display', () => {
       })
     );
 
-    await page.goto('/register');
+    const response = await page.goto('/register');
+    expect(response?.status()).toBeLessThan(500);
 
     const usernameInput = page.locator('#username');
     const emailInput = page.locator('#email');
