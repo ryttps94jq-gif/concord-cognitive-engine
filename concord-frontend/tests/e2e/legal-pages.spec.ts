@@ -234,7 +234,7 @@ test.describe('DMCA Policy Page', () => {
       'button[type="submit"], button:has-text("Submit")'
     );
     if (await submitButton.first().isVisible().catch(() => false)) {
-      await submitButton.first().click();
+      await submitButton.first().click({ force: true });
 
       // Form should stay on page (browser validation or custom validation prevents submit)
       await page.waitForURL(/\/legal\/dmca/, { timeout: 5000 }).catch(() => {});
