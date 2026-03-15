@@ -1,6 +1,7 @@
 import { test, expect, devices } from '@playwright/test';
 
-test.use({ ...devices['iPhone 13'] });
+// Use Pixel 5 (Chromium) instead of iPhone 13 (requires WebKit) for CI compatibility
+test.use({ ...devices['Pixel 5'] });
 
 test.describe('Mobile Responsiveness', () => {
   test('should render main page on mobile', async ({ page }) => {
