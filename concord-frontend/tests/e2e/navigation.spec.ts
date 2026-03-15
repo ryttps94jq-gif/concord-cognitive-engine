@@ -480,7 +480,8 @@ test.describe('Command Palette', () => {
   });
 
   test('command palette closes on backdrop click', async ({ page }) => {
-    await page.goto('/lenses/chat');
+    const response = await page.goto('/lenses/chat');
+    expect(response?.status()).toBeLessThan(500);
     await page.waitForLoadState('networkidle');
 
     await page.keyboard.press('Control+k');
@@ -496,7 +497,8 @@ test.describe('Command Palette', () => {
   });
 
   test('command palette supports keyboard navigation', async ({ page }) => {
-    await page.goto('/lenses/chat');
+    const response = await page.goto('/lenses/chat');
+    expect(response?.status()).toBeLessThan(500);
     await page.waitForLoadState('networkidle');
 
     await page.keyboard.press('Control+k');
@@ -519,7 +521,8 @@ test.describe('Command Palette', () => {
   });
 
   test('command palette shows footer with keyboard hints', async ({ page }) => {
-    await page.goto('/lenses/chat');
+    const response = await page.goto('/lenses/chat');
+    expect(response?.status()).toBeLessThan(500);
     await page.waitForLoadState('networkidle');
 
     await page.keyboard.press('Control+k');
@@ -591,7 +594,8 @@ test.describe('Accessibility - Skip to Content', () => {
   });
 
   test('skip-to-content link exists and targets main content', async ({ page }) => {
-    await page.goto('/lenses/chat');
+    const response = await page.goto('/lenses/chat');
+    expect(response?.status()).toBeLessThan(500);
     await page.waitForLoadState('networkidle');
 
     // The AppShell renders a skip link with href="#main-content"
