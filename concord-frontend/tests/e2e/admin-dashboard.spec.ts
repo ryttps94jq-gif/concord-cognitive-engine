@@ -309,8 +309,11 @@ test.describe('Admin Page Responsiveness', () => {
 
     expect(response?.status()).toBeLessThan(500);
 
-    const bodyWidth = await page.evaluate(() => document.body.scrollWidth);
-    const viewportWidth = await page.evaluate(() => window.innerWidth);
+    // Combine evaluates into one call to avoid context destruction from client-side navigations
+    const { bodyWidth, viewportWidth } = await page.evaluate(() => ({
+      bodyWidth: document.body.scrollWidth,
+      viewportWidth: window.innerWidth,
+    }));
 
     expect(bodyWidth).toBeLessThanOrEqual(viewportWidth + 5);
   });

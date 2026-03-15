@@ -17,6 +17,7 @@ const PUBLIC_PREFIXES = [
   '/api/',
   '/_next/',
   '/icons/',
+  '/legal/',
   '/manifest.json',
   '/robots.txt',
   '/favicon.ico',
