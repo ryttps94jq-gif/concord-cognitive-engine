@@ -35,7 +35,8 @@ test.describe('Chat Rail Mode Selector', () => {
   });
 
   test('chat rail renders mode selector with 5 modes', async ({ page }) => {
-    await page.goto('/lenses/chat');
+    const response = await page.goto('/lenses/chat');
+    expect(response?.status()).toBeLessThan(500);
     await page.waitForLoadState('networkidle');
 
     // The 5 modes: Welcome, Assist, Explore, Connect, Chat
@@ -54,7 +55,8 @@ test.describe('Chat Rail Mode Selector', () => {
   });
 
   test('mode selector buttons are clickable', async ({ page }) => {
-    await page.goto('/lenses/chat');
+    const response = await page.goto('/lenses/chat');
+    expect(response?.status()).toBeLessThan(500);
     await page.waitForLoadState('networkidle');
 
     const modeLabels = ['Assist', 'Explore', 'Connect', 'Chat'];
@@ -84,7 +86,8 @@ test.describe('Welcome Mode', () => {
   });
 
   test('welcome mode shows greeting content', async ({ page }) => {
-    await page.goto('/lenses/chat');
+    const response = await page.goto('/lenses/chat');
+    expect(response?.status()).toBeLessThan(500);
     await page.waitForLoadState('networkidle');
 
     // Welcome mode is the default when 0 messages
