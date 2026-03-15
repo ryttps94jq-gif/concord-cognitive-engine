@@ -654,7 +654,8 @@ test.describe('Responsive Design', () => {
 
   test('desktop viewport renders correctly', async ({ page }) => {
     await page.setViewportSize({ width: 1920, height: 1080 });
-    await page.goto('/');
+    const response = await page.goto('/');
+    expect(response?.status()).toBeLessThan(500);
 
     const body = page.locator('body');
     if (await body.isVisible().catch(() => false)) {
@@ -672,8 +673,10 @@ test.describe('Responsive Design', () => {
 test.describe('Performance', () => {
   test('landing page loads within acceptable time', async ({ page }) => {
     const startTime = Date.now();
-    await page.goto('/');
+    const response = await page.goto('/');
     const loadTime = Date.now() - startTime;
+
+    expect(response?.status()).toBeLessThan(500);
 
     // Page should load within 10 seconds (generous for CI)
     expect(loadTime).toBeLessThan(10000);
@@ -688,7 +691,8 @@ test.describe('Performance', () => {
       }
     });
 
-    await page.goto('/');
+    const response = await page.goto('/');
+    expect(response?.status()).toBeLessThan(500);
     await page.waitForTimeout(1000);
 
     // Filter out expected/benign errors in a test environment
@@ -721,7 +725,8 @@ test.describe('Navigation Flows', () => {
     const errors: string[] = [];
     page.on('pageerror', (err) => errors.push(err.message));
 
-    await page.goto('/lenses/chat');
+    const response = await page.goto('/lenses/chat');
+    expect(response?.status()).toBeLessThan(500);
     await page.waitForLoadState('networkidle');
 
     // Navigate to Graph via sidebar link (if visible)
@@ -751,7 +756,8 @@ test.describe('Navigation Flows', () => {
   });
 
   test('sidebar navigation links produce correct URLs', async ({ page }) => {
-    await page.goto('/lenses/chat');
+    const response = await page.goto('/lenses/chat');
+    expect(response?.status()).toBeLessThan(500);
     await page.waitForLoadState('networkidle');
 
     const expectedPaths = [
