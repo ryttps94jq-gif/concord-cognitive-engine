@@ -50,7 +50,7 @@ export default function LegalLayout({ children }: { children: React.ReactNode })
         </div>
       </header>
 
-      <div className="mx-auto flex max-w-6xl gap-8 px-6 py-10">
+      <div className="mx-auto flex flex-col md:flex-row max-w-6xl gap-8 px-6 py-10">
         {/* Sidebar navigation */}
         <aside className="hidden w-56 shrink-0 md:block">
           <nav className="sticky top-20 space-y-1">
