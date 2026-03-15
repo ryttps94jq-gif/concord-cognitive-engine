@@ -512,11 +512,11 @@ test.describe('Authentication Flow', () => {
   // ── Session Management ──────────────────────────────────────────
 
   test('session cookie grants access to protected routes', async ({ page, context }) => {
-    // Set a mock session cookie matching what the middleware checks
+    // Set a mock auth cookie matching what the middleware checks
     await context.addCookies([
       {
-        name: 'concord_session',
-        value: 'mock_session_value',
+        name: 'concord_auth',
+        value: 'e2e_test_token',
         domain: 'localhost',
         path: '/',
       },
@@ -532,8 +532,8 @@ test.describe('Authentication Flow', () => {
   test('session persists across page reloads', async ({ page, context }) => {
     await context.addCookies([
       {
-        name: 'concord_session',
-        value: 'valid_session_token',
+        name: 'concord_auth',
+        value: 'e2e_test_token',
         domain: 'localhost',
         path: '/',
         httpOnly: true,
@@ -547,7 +547,7 @@ test.describe('Authentication Flow', () => {
 
     // Cookie should still be present after reload
     const cookies = await context.cookies();
-    const authCookie = cookies.find((c) => c.name === 'concord_session');
+    const authCookie = cookies.find((c) => c.name === 'concord_auth');
     expect(authCookie).toBeDefined();
 
     // Should still not redirect

@@ -68,13 +68,13 @@ export function middleware(request: NextRequest) {
     return applySecurityHeaders(NextResponse.next(), nonce);
   }
 
-  // Check for session cookie (httpOnly cookie set by backend on login)
+  // Check for session cookie (httpOnly cookie set by backend on login).
+  // Only concord_auth and concord_refresh are set by the backend (server.js).
+  // Legacy cookie names (token, connect.sid, concord_session) were removed —
+  // they were never set by the server and only existed in test mocks.
   const hasSession =
     request.cookies.has('concord_auth') ||
-    request.cookies.has('concord_refresh') ||
-    request.cookies.has('concord_session') ||
-    request.cookies.has('token') ||
-    request.cookies.has('connect.sid');
+    request.cookies.has('concord_refresh');
 
   if (!hasSession) {
     const loginUrl = new URL('/login', request.url);

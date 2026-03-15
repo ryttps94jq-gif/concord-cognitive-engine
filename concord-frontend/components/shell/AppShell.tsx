@@ -1,10 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { CommandPalette } from './CommandPalette';
 import { useUIStore } from '@/store/ui';
+
+/** Routes that render their own chrome and should skip the AppShell layout. */
+const STANDALONE_PREFIXES = ['/legal/'];
 import { Toasts } from '@/components/common/Toasts';
 import { OperatorErrorBanner } from '@/components/common/OperatorErrorBanner';
 import { SystemStatus } from '@/components/common/SystemStatus';
@@ -21,7 +25,11 @@ interface AppShellProps {
 }
 
 export function AppShell({ children }: AppShellProps) {
-  const { sidebarCollapsed, commandPaletteOpen, setCommandPaletteOpen, fullPageMode } = useUIStore();
+  const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed);
+  const commandPaletteOpen = useUIStore((s) => s.commandPaletteOpen);
+  const setCommandPaletteOpen = useUIStore((s) => s.setCommandPaletteOpen);
+  const fullPageMode = useUIStore((s) => s.fullPageMode);
+  const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   const quickCapture = useQuickCapture();
 
@@ -62,8 +70,9 @@ export function AppShell({ children }: AppShellProps) {
     );
   }
 
-  // Full page mode: render children without shell chrome (for landing page, etc.)
-  if (fullPageMode) {
+  // Full page mode OR standalone route: render children without shell chrome.
+  const isStandalone = STANDALONE_PREFIXES.some((p) => pathname.startsWith(p));
+  if (fullPageMode || isStandalone) {
     return <>{children}</>;
   }
 

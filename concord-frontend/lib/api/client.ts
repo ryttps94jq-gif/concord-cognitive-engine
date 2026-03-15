@@ -160,10 +160,17 @@ api.interceptors.response.use(
         if (requestUrl.includes('/api/auth/me') || requestUrl.includes('/api/auth/csrf-token')) {
           return Promise.reject(error);
         }
-        // Redirect to login if not already on an auth page
-        // Session is managed via httpOnly cookies, cleared by server
+        // Don't redirect on public pages that don't require auth.
+        // These pages may trigger incidental API calls (e.g. via shared
+        // components) but should never force a login redirect.
         const path = window.location.pathname;
-        if (!path.includes('/login') && !path.includes('/register')) {
+        const isPublicPage =
+          path.startsWith('/legal/') ||
+          path === '/' ||
+          path === '/login' ||
+          path === '/register' ||
+          path === '/forgot-password';
+        if (!isPublicPage) {
           // Clear entered flag to prevent redirect loop on next visit
           try { localStorage.removeItem('concord_entered'); } catch {}
           window.location.href = '/login';

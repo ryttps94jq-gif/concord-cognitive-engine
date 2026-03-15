@@ -1,6 +1,12 @@
 /**
  * FE-009: UI State Store — Zustand (client-only, ephemeral + persisted subset).
  *
+ * Composed from focused slices for maintainability:
+ *   - layout  — sidebar, command palette, theme, fullPageMode
+ *   - toast   — transient notifications
+ *   - lens    — active lens tracking
+ *   - status  — request errors, auth posture, user role
+ *
  * STATE OWNERSHIP BOUNDARIES:
  * ┌──────────────────────────────────────────────────────┐
  * │ Zustand (this store)                                 │
@@ -28,151 +34,30 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-interface UIState {
-  // Sidebar
-  sidebarOpen: boolean;
-  sidebarCollapsed: boolean;
+import { createLayoutSlice, type LayoutSlice } from './slices/layout';
+import { createToastSlice, type ToastSlice, type Toast } from './slices/toast';
+import { createLensSlice, type LensSlice } from './slices/lens';
+import {
+  createStatusSlice,
+  type StatusSlice,
+  type RequestError,
+  type AuthPosture,
+} from './slices/status';
 
-  // Command palette
-  commandPaletteOpen: boolean;
+// Combined state type
+export type UIState = LayoutSlice & ToastSlice & LensSlice & StatusSlice;
 
-  // Current lens
-  activeLens: string;
-
-  // Theme
-  theme: 'dark' | 'light';
-
-  // Full page mode (hides shell chrome)
-  fullPageMode: boolean;
-
-  // Toast notifications
-  toasts: Toast[];
-
-  // Operator-facing request failures
-  requestErrors: RequestError[];
-
-  // Active backend auth posture
-  authPosture: AuthPosture;
-
-  // User role (sovereign | user)
-  userRole: 'sovereign' | 'user';
-
-  // Actions
-  toggleSidebar: () => void;
-  setSidebarOpen: (open: boolean) => void;
-  setSidebarCollapsed: (collapsed: boolean) => void;
-  toggleCommandPalette: () => void;
-  setCommandPaletteOpen: (open: boolean) => void;
-  setActiveLens: (lens: string) => void;
-  setTheme: (theme: 'dark' | 'light') => void;
-  setFullPageMode: (mode: boolean) => void;
-  addToast: (toast: Omit<Toast, 'id'>) => void;
-  removeToast: (id: string) => void;
-  addRequestError: (error: Omit<RequestError, 'id' | 'at'>) => void;
-  clearRequestErrors: () => void;
-  setAuthPosture: (authPosture: Partial<AuthPosture>) => void;
-  setUserRole: (role: 'sovereign' | 'user') => void;
-}
-
-
-interface RequestError {
-  id: string;
-  at: string;
-  path?: string;
-  method?: string;
-  status?: number;
-  code?: string;
-  requestId?: string;
-  message: string;
-  reason?: string;
-}
-
-interface AuthPosture {
-  mode: 'public' | 'apikey' | 'jwt' | 'hybrid' | 'unknown';
-  usesJwt: boolean;
-  usesApiKey: boolean;
-}
-
-interface Toast {
-  id: string;
-  type: 'success' | 'error' | 'warning' | 'info';
-  message: string;
-  duration?: number;
-}
+// Re-export slice types for direct consumer use
+export type { LayoutSlice, ToastSlice, LensSlice, StatusSlice };
+export type { Toast, RequestError, AuthPosture };
 
 export const useUIStore = create<UIState>()(
   persist(
-    (set) => ({
-      // Initial state
-      sidebarOpen: true,
-      sidebarCollapsed: false,
-      commandPaletteOpen: false,
-      activeLens: 'chat',
-      theme: 'dark',
-      fullPageMode: false,
-      toasts: [],
-      requestErrors: [],
-      authPosture: { mode: 'unknown', usesJwt: false, usesApiKey: false },
-      userRole: 'sovereign',
-
-      // Actions
-      toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
-      setSidebarOpen: (open) => set({ sidebarOpen: open }),
-      setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
-
-      toggleCommandPalette: () =>
-        set((state) => ({ commandPaletteOpen: !state.commandPaletteOpen })),
-      setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
-
-      setActiveLens: (lens) => set({ activeLens: lens }),
-
-      setTheme: (theme) => set({ theme }),
-
-      setFullPageMode: (mode) => set({ fullPageMode: mode }),
-
-      addToast: (toast) =>
-        set((state) => ({
-          toasts: [
-            ...state.toasts,
-            { ...toast, id: `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` },
-          ],
-        })),
-
-      removeToast: (id) =>
-        set((state) => ({
-          toasts: state.toasts.filter((t) => t.id !== id),
-        })),
-
-      addRequestError: (error) =>
-        set((state) => {
-          // Deduplicate: skip if same path+status already exists within last 10 seconds
-          const now = Date.now();
-          const isDuplicate = state.requestErrors.some(
-            (e) =>
-              e.path === error.path &&
-              e.status === error.status &&
-              now - new Date(e.at).getTime() < 10_000
-          );
-          if (isDuplicate) return state;
-
-          return {
-            requestErrors: [
-              ...state.requestErrors.slice(-19),
-              {
-                ...error,
-                id: `reqerr-${now}-${Math.random().toString(36).slice(2, 9)}`,
-                at: new Date().toISOString(),
-              },
-            ],
-          };
-        }),
-
-      clearRequestErrors: () => set({ requestErrors: [] }),
-
-      setAuthPosture: (authPosture) =>
-        set((state) => ({ authPosture: { ...state.authPosture, ...authPosture } })),
-
-      setUserRole: (role) => set({ userRole: role }),
+    (...a) => ({
+      ...createLayoutSlice(...a),
+      ...createToastSlice(...a),
+      ...createLensSlice(...a),
+      ...createStatusSlice(...a),
     }),
     {
       name: 'concord-ui-store',
@@ -181,6 +66,6 @@ export const useUIStore = create<UIState>()(
         theme: state.theme,
         activeLens: state.activeLens,
       }),
-    }
-  )
+    },
+  ),
 );
