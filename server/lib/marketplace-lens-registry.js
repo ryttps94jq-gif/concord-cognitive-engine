@@ -168,7 +168,7 @@ export const MARKETPLACE_LENS_REGISTRY = Object.freeze([
     category: "CORE",
     classification: "CREATIVE",
     icon: "terminal",
-    subTabs: ["Debug", "Database", "Repos"],
+    subTabs: ["Debug", "Database", "Repos", "Forge"],
     marketplaceDTUs: [
       { type: "code_snippet", description: "Code snippets and utility functions", price: priceRange(0.25, 5) },
       { type: "application_template", description: "Full application templates and boilerplate", price: priceRange(25, 200) },
@@ -178,6 +178,9 @@ export const MARKETPLACE_LENS_REGISTRY = Object.freeze([
       { type: "cicd_pipeline", description: "CI/CD pipeline templates", price: priceRange(10, 50) },
       { type: "linting_config", description: "Linting and code quality configurations", price: priceRange(2, 10) },
       { type: "migration_script", description: "Database migration scripts", price: priceRange(5, 25) },
+      { type: "forge_app_template", description: "Forge polyglot monolith templates — 13-section single-file apps with self-healing repair cortex", price: priceRange(0, 50) },
+      { type: "forge_subsystem_pack", description: "Custom Forge subsystem implementations (auth providers, payment gateways, ML bridges)", price: priceRange(5, 25) },
+      { type: "forge_repair_pattern", description: "Repair cortex pattern packs from production-tested Forge apps", price: priceRange(2, 15) },
     ],
     economics: {
       description: "Every developer tool currently sold through GitHub marketplace, npm, or indie platforms migrates here at 95% instead of 70%. Code snippets to full applications.",

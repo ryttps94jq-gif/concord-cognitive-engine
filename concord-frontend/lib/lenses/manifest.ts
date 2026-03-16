@@ -70,7 +70,7 @@ export const LENS_MANIFESTS: LensManifest[] = [
     artifacts: ['file', 'snippet', 'project', 'workspace', 'diff', 'review'],
     macros: { list: 'lens.code.list', get: 'lens.code.get', create: 'lens.code.create', update: 'lens.code.update', delete: 'lens.code.delete', run: 'lens.code.run', export: 'lens.code.export' },
     exports: ['json', 'zip', 'tar', 'patch'],
-    actions: ['execute', 'lint', 'format', 'refactor', 'diff', 'review', 'test', 'package'],
+    actions: ['execute', 'lint', 'format', 'refactor', 'diff', 'review', 'test', 'package', 'forge-generate', 'forge-validate', 'forge-export'],
     category: 'knowledge',
   },
   {

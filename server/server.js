@@ -22495,6 +22495,10 @@ import createLensFeatureRouter from "./routes/lens-features.js";
 import { LENS_FEATURES } from "./lib/lens-features.js";
 app.use("/api/lens-features", createLensFeatureRouter(db, LENS_FEATURES));
 
+// ===== FORGE — POLYGLOT MONOLITH TEMPLATE ENGINE (Code Lens Mode) =====
+import createForgeRouter from "./routes/forge.js";
+app.use("/api/forge", createForgeRouter({ db }));
+
 // ===== CONNECTIVE TISSUE (economy wiring, DTU pipeline, CRETI, compression, fork, preview, search, emergent/bot auth) =====
 import createConnectiveTissueRouter from "./routes/connective-tissue.js";
 app.use("/api/ct", createConnectiveTissueRouter(db));

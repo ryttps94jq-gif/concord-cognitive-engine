@@ -18,8 +18,9 @@ import {
   Sparkles, RefreshCw, Copy,
   Download, Zap, Music, Waves, SlidersHorizontal,
   Loader2, BookOpen,
-  Save, Maximize2, Minimize2, Layers
+  Save, Maximize2, Minimize2, Layers, Hammer
 } from 'lucide-react';
+import { ForgeWorkbench } from '@/components/forge/ForgeWorkbench';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
@@ -616,6 +617,7 @@ export default function CodeLensPage() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [outputTab, setOutputTab] = useState<'output' | 'console'>('output');
   const [showFeatures, setShowFeatures] = useState(false);
+  const [codeMode, setCodeMode] = useState<'script' | 'forge'>('script');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
@@ -794,11 +796,68 @@ export default function CodeLensPage() {
     );
   }
 
+  // ── Forge mode renders its own workbench ──
+  if (codeMode === 'forge') {
+    return (
+      <div className={`flex flex-col ${isFullscreen ? 'fixed inset-0 z-50 bg-lattice-deep' : 'h-full'}`}>
+        {/* Mode switcher bar */}
+        <div className="flex items-center gap-1 px-4 py-1.5 bg-lattice-deep border-b border-lattice-border">
+          <div className="flex items-center gap-1 bg-lattice-surface/50 rounded-lg p-0.5">
+            <button
+              onClick={() => setCodeMode('script')}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-md text-sm text-gray-500 hover:text-gray-300 transition-colors"
+            >
+              <Music className="w-3.5 h-3.5" />
+              Script Studio
+            </button>
+            <button
+              onClick={() => setCodeMode('forge')}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-md text-sm bg-orange-500/20 text-orange-400 transition-colors"
+            >
+              <Hammer className="w-3.5 h-3.5" />
+              Forge
+            </button>
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} compact />
+            <DTUExportButton domain="code" data={realtimeData || {}} compact />
+            <button
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              className="p-1.5 rounded-lg hover:bg-lattice-elevated text-gray-400"
+            >
+              {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-hidden">
+          <ForgeWorkbench />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`flex flex-col ${isFullscreen ? 'fixed inset-0 z-50 bg-lattice-deep' : 'h-full'}`}>
       {/* Header */}
       <header className="flex items-center justify-between px-4 py-2 border-b border-lattice-border bg-lattice-surface/50">
         <div className="flex items-center gap-3">
+          {/* Mode switcher */}
+          <div className="flex items-center gap-1 bg-lattice-deep rounded-lg p-0.5 mr-2">
+            <button
+              onClick={() => setCodeMode('script')}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs bg-lattice-elevated text-white transition-colors"
+            >
+              <Music className="w-3 h-3" />
+              Script
+            </button>
+            <button
+              onClick={() => setCodeMode('forge')}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs text-gray-500 hover:text-orange-400 transition-colors"
+            >
+              <Hammer className="w-3 h-3" />
+              Forge
+            </button>
+          </div>
           <span className="text-2xl">🎹</span>
           <div>
             <h1 className="text-lg font-bold">Script Studio</h1>
