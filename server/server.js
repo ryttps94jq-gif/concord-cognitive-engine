@@ -70,6 +70,7 @@ import createQualiaRouter from "./routes/qualia.js";
 import createSovereignRouter from "./routes/sovereign.js";
 import createSovereignEmergentRouter from "./routes/sovereign-emergent.js";
 import createFederationRouter from "./routes/federation.js";
+import registerForgeTemplateRoutes from "./routes/forge-template.js";
 import registerOAuthRoutes from "./routes/oauth.js";
 import { QualiaEngine, hooks as qualiaHooks } from "./existential/index.js";
 import { rateLimitMiddleware as perEndpointRateLimit } from "./rateLimit.js";
@@ -22494,6 +22495,9 @@ app.use("/api/marketplace-lens-registry", createMarketplaceLensRegistryRouter(db
 import createLensFeatureRouter from "./routes/lens-features.js";
 import { LENS_FEATURES } from "./lib/lens-features.js";
 app.use("/api/lens-features", createLensFeatureRouter(db, LENS_FEATURES));
+
+// ===== FORGE TEMPLATE ENGINE (Code Lens single-file app generator) =====
+registerForgeTemplateRoutes(app, { db });
 
 // ===== CONNECTIVE TISSUE (economy wiring, DTU pipeline, CRETI, compression, fork, preview, search, emergent/bot auth) =====
 import createConnectiveTissueRouter from "./routes/connective-tissue.js";

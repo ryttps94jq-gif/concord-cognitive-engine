@@ -18,7 +18,8 @@ import {
   Sparkles, RefreshCw, Copy,
   Download, Zap, Music, Waves, SlidersHorizontal,
   Loader2, BookOpen,
-  Save, Maximize2, Minimize2, Layers
+  Save, Maximize2, Minimize2, Layers,
+  Hammer, Package, Eye, Upload, Database, Shield, Globe, Server, Clock, Cpu, TestTube, Rocket
 } from 'lucide-react';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -56,6 +57,47 @@ const SCRIPT_TYPES: { id: ScriptType; name: string; icon: React.ElementType; col
   { id: 'sampler', name: 'Sampler', icon: RefreshCw, color: 'text-neon-cyan', description: 'Script sample playback patterns' },
   { id: 'generator', name: 'Generator', icon: Sparkles, color: 'text-red-400', description: 'Algorithmic music generation scripts' },
 ];
+
+// ── Forge Template Types ──────────────────────────────────────────────────
+
+interface ForgeSection {
+  id: string;
+  name: string;
+  icon: React.ElementType;
+  description: string;
+  enabled: boolean;
+}
+
+interface ForgePreset {
+  id: string;
+  name: string;
+  category: string;
+  description: string;
+}
+
+const FORGE_SECTIONS: ForgeSection[] = [
+  { id: 'dependencies', name: 'Dependencies', icon: Package, description: 'Express, SQLite, JWT, bcrypt, WebSocket — all pre-loaded', enabled: true },
+  { id: 'config', name: 'Config', icon: SlidersHorizontal, description: 'One object. Port, secrets, CORS, rate limits, all settings', enabled: true },
+  { id: 'database', name: 'Database Schema', icon: Database, description: 'Declarative tables, auto-migration on boot', enabled: true },
+  { id: 'auth', name: 'Auth', icon: Shield, description: 'Registration, login, JWT, sessions, password reset', enabled: true },
+  { id: 'payments', name: 'Payments', icon: Zap, description: 'Stripe checkout, webhooks, subscriptions, refunds', enabled: false },
+  { id: 'api', name: 'API Routes', icon: Globe, description: 'Business logic routes with validation and error handling', enabled: true },
+  { id: 'frontend', name: 'Frontend', icon: Eye, description: 'SSR HTML, components as functions, inline styles', enabled: true },
+  { id: 'websocket', name: 'WebSocket', icon: Waves, description: 'Channels, rooms, broadcast, private messaging', enabled: false },
+  { id: 'background_jobs', name: 'Background Jobs', icon: Clock, description: 'Scheduled tasks, queue processing, worker threads', enabled: false },
+  { id: 'thread_manager', name: 'Thread Manager', icon: Cpu, description: 'Dynamic thread allocation, CPU/memory monitoring', enabled: true },
+  { id: 'testing', name: 'Testing', icon: TestTube, description: 'Inline tests, coverage, one-command run', enabled: true },
+  { id: 'deployment', name: 'Deployment', icon: Rocket, description: 'Dockerfile gen, systemd, graceful shutdown', enabled: true },
+];
+
+const FORGE_PRESETS: ForgePreset[] = [
+  { id: 'saas', name: 'SaaS Starter', category: 'saas', description: 'Full SaaS with auth, payments, and dashboard' },
+  { id: 'ecommerce', name: 'E-Commerce', category: 'ecommerce', description: 'Product catalog, cart, checkout, orders' },
+  { id: 'api_only', name: 'API Backend', category: 'api_only', description: 'Pure REST API with auth and rate limiting' },
+  { id: 'realtime', name: 'Realtime App', category: 'realtime', description: 'WebSocket-first with channels and presence' },
+];
+
+type CodeLensMode = 'script' | 'forge';
 
 const TEMPLATE_FILES: FileNode[] = [
   {
@@ -616,6 +658,78 @@ export default function CodeLensPage() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [outputTab, setOutputTab] = useState<'output' | 'console'>('output');
   const [showFeatures, setShowFeatures] = useState(false);
+  const [codeLensMode, setCodeLensMode] = useState<CodeLensMode>('script');
+
+  // ── Forge State ──
+  const [forgeAppName, setForgeAppName] = useState('MyApp');
+  const [forgeDbDriver, setForgeDbDriver] = useState('sqlite');
+  const [forgeSections, setForgeSections] = useState<ForgeSection[]>(FORGE_SECTIONS);
+  const [forgePreset, setForgePreset] = useState<string | null>(null);
+  const [forgeGeneratedCode, setForgeGeneratedCode] = useState<string | null>(null);
+  const [forgePreviewSection, setForgePreviewSection] = useState<string | null>(null);
+  const [forgeTemplateId, setForgeTemplateId] = useState<string | null>(null);
+  const [forgeConcordNode, setForgeConcordNode] = useState(false);
+
+  const forgeToggleSection = (sectionId: string) => {
+    setForgeSections(prev => prev.map(s =>
+      s.id === sectionId ? { ...s, enabled: !s.enabled } : s
+    ));
+    setForgeGeneratedCode(null); // invalidate
+  };
+
+  const forgeApplyPreset = (presetId: string) => {
+    setForgePreset(presetId);
+    // Enable/disable sections based on preset
+    const enableMap: Record<string, string[]> = {
+      saas: ['dependencies', 'config', 'database', 'auth', 'payments', 'api', 'frontend', 'background_jobs', 'thread_manager', 'testing', 'deployment'],
+      ecommerce: ['dependencies', 'config', 'database', 'auth', 'payments', 'api', 'frontend', 'background_jobs', 'thread_manager', 'testing', 'deployment'],
+      api_only: ['dependencies', 'config', 'database', 'auth', 'api', 'thread_manager', 'testing', 'deployment'],
+      realtime: ['dependencies', 'config', 'database', 'auth', 'api', 'frontend', 'websocket', 'thread_manager', 'testing', 'deployment'],
+    };
+    const enabled = enableMap[presetId] || [];
+    setForgeSections(prev => prev.map(s => ({ ...s, enabled: enabled.includes(s.id) })));
+    setForgeGeneratedCode(null);
+  };
+
+  const forgeGenerateMutation = useMutation({
+    mutationFn: async () => {
+      // Build spec from current state
+      const spec = {
+        config: { appName: forgeAppName, dbDriver: forgeDbDriver },
+        category: forgePreset || 'custom',
+        description: `Generated from Code Lens Forge`,
+        concordNode: forgeConcordNode,
+      };
+      // Add section flags
+      for (const s of forgeSections) {
+        (spec as any)[s.id] = { include: s.enabled };
+      }
+
+      const res = await api.post('/api/forge-template/templates', spec);
+      const templateResult = res.data;
+      if (!templateResult.ok) throw new Error(templateResult.error);
+
+      // Generate the code
+      const genRes = await api.post(`/api/forge-template/templates/${templateResult.template.id}/generate`);
+      const genResult = genRes.data;
+      if (!genResult.ok) throw new Error(genResult.error);
+
+      return { templateId: templateResult.template.id, code: genResult.code, lineCount: genResult.generation.lineCount, sections: genResult.generation.enabledSections };
+    },
+    onSuccess: (data) => {
+      setForgeTemplateId(data.templateId);
+      setForgeGeneratedCode(data.code);
+    },
+  });
+
+  const forgePublishMutation = useMutation({
+    mutationFn: async () => {
+      if (!forgeTemplateId) throw new Error('Generate first');
+      const res = await api.post(`/api/forge-template/templates/${forgeTemplateId}/publish`);
+      return res.data;
+    },
+  });
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
@@ -799,10 +913,10 @@ export default function CodeLensPage() {
       {/* Header */}
       <header className="flex items-center justify-between px-4 py-2 border-b border-lattice-border bg-lattice-surface/50">
         <div className="flex items-center gap-3">
-          <span className="text-2xl">🎹</span>
+          <span className="text-2xl">{codeLensMode === 'forge' ? '🔨' : '🎹'}</span>
           <div>
-            <h1 className="text-lg font-bold">Script Studio</h1>
-            <p className="text-xs text-gray-400">MIDI scripting, automation & macros</p>
+            <h1 className="text-lg font-bold">{codeLensMode === 'forge' ? 'Forge' : 'Script Studio'}</h1>
+            <p className="text-xs text-gray-400">{codeLensMode === 'forge' ? 'Single-file app generator — one file, one process' : 'MIDI scripting, automation & macros'}</p>
           </div>
 
       {/* Real-time Enhancement Toolbar */}
@@ -818,7 +932,32 @@ export default function CodeLensPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Script Type Selector */}
+          {/* Mode Toggle: Script Studio vs Forge */}
+          <div className="flex items-center gap-1 bg-lattice-deep rounded-lg p-1 mr-2">
+            <button
+              onClick={() => setCodeLensMode('script')}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${
+                codeLensMode === 'script' ? 'bg-lattice-elevated text-neon-blue' : 'text-gray-500 hover:text-gray-300'
+              }`}
+              title="Script Studio — MIDI, effects, automation"
+            >
+              <Music className="w-3.5 h-3.5" />
+              Scripts
+            </button>
+            <button
+              onClick={() => setCodeLensMode('forge')}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${
+                codeLensMode === 'forge' ? 'bg-lattice-elevated text-neon-yellow' : 'text-gray-500 hover:text-gray-300'
+              }`}
+              title="Forge — Single-file app generator"
+            >
+              <Hammer className="w-3.5 h-3.5" />
+              Forge
+            </button>
+          </div>
+
+          {/* Script Type Selector (only in script mode) */}
+          {codeLensMode === 'script' && (
           <div className="flex items-center gap-1 bg-lattice-deep rounded-lg p-1">
             {SCRIPT_TYPES.map((stype) => {
               const Icon = stype.icon;
@@ -838,6 +977,7 @@ export default function CodeLensPage() {
               );
             })}
           </div>
+          )}
 
           <button
             onClick={() => runScriptMutation.mutate()}
@@ -873,6 +1013,250 @@ export default function CodeLensPage() {
 
       {/* AI Actions */}
       <UniversalActions domain="code" artifactId={savedScripts[0]?.id} compact />
+
+      {/* ═══ FORGE MODE ═══ */}
+      {codeLensMode === 'forge' && (
+        <div className="flex-1 flex overflow-hidden">
+          {/* Forge Config Sidebar */}
+          <div className="w-72 border-r border-lattice-border bg-lattice-surface/30 overflow-y-auto">
+            <div className="p-3 border-b border-lattice-border">
+              <h3 className="text-xs font-semibold text-neon-yellow uppercase tracking-wider flex items-center gap-2">
+                <Hammer className="w-3.5 h-3.5" />
+                Forge Template Builder
+              </h3>
+              <p className="text-xs text-gray-500 mt-1">One file. One process. Everything pre-wired.</p>
+            </div>
+
+            {/* App Name */}
+            <div className="p-3 border-b border-lattice-border space-y-2">
+              <label className="text-xs font-medium text-gray-400">App Name</label>
+              <input
+                type="text"
+                value={forgeAppName}
+                onChange={(e) => { setForgeAppName(e.target.value); setForgeGeneratedCode(null); }}
+                className="w-full px-2 py-1.5 bg-lattice-deep border border-lattice-border rounded text-sm text-white focus:outline-none focus:border-neon-yellow"
+              />
+              <label className="text-xs font-medium text-gray-400">Database</label>
+              <select
+                value={forgeDbDriver}
+                onChange={(e) => { setForgeDbDriver(e.target.value); setForgeGeneratedCode(null); }}
+                className="w-full px-2 py-1.5 bg-lattice-deep border border-lattice-border rounded text-sm text-white focus:outline-none"
+              >
+                <option value="sqlite">SQLite (zero config)</option>
+                <option value="postgres">PostgreSQL</option>
+              </select>
+              <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer mt-1">
+                <input
+                  type="checkbox"
+                  checked={forgeConcordNode}
+                  onChange={(e) => { setForgeConcordNode(e.target.checked); setForgeGeneratedCode(null); }}
+                  className="rounded"
+                />
+                Concord Node Integration
+              </label>
+            </div>
+
+            {/* Presets */}
+            <div className="p-3 border-b border-lattice-border">
+              <label className="text-xs font-medium text-gray-400 uppercase tracking-wider">Quick Start Presets</label>
+              <div className="mt-2 space-y-1">
+                {FORGE_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    onClick={() => forgeApplyPreset(preset.id)}
+                    className={cn(
+                      'w-full text-left px-2 py-1.5 rounded text-xs transition-colors',
+                      forgePreset === preset.id
+                        ? 'bg-neon-yellow/20 text-neon-yellow border border-neon-yellow/30'
+                        : 'text-gray-400 hover:bg-lattice-elevated hover:text-white'
+                    )}
+                  >
+                    <span className="font-medium">{preset.name}</span>
+                    <p className="text-gray-500 text-[10px] mt-0.5">{preset.description}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Section Toggles */}
+            <div className="p-3">
+              <label className="text-xs font-medium text-gray-400 uppercase tracking-wider">Subsystems</label>
+              <div className="mt-2 space-y-0.5">
+                {forgeSections.map((section) => {
+                  const Icon = section.icon;
+                  return (
+                    <button
+                      key={section.id}
+                      onClick={() => forgeToggleSection(section.id)}
+                      className={cn(
+                        'w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs transition-colors',
+                        section.enabled
+                          ? 'text-white bg-lattice-elevated/50'
+                          : 'text-gray-600 hover:text-gray-400'
+                      )}
+                    >
+                      <span className={cn('w-2 h-2 rounded-full flex-shrink-0', section.enabled ? 'bg-green-400' : 'bg-gray-700')} />
+                      <Icon className="w-3.5 h-3.5 flex-shrink-0" />
+                      <span className="truncate">{section.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-gray-600 mt-2">
+                {forgeSections.filter(s => s.enabled).length} of {forgeSections.length} subsystems enabled
+              </p>
+            </div>
+
+            {/* DTU Context */}
+            <div className="p-3 border-t border-white/10 space-y-3">
+              <LensContextPanel
+                hyperDTUs={hyperDTUs}
+                megaDTUs={megaDTUs}
+                regularDTUs={regularDTUs}
+                tierDistribution={tierDistribution}
+                onPublish={(dtu) => publishToMarketplace({ dtuId: dtu.id })}
+                title="Forge DTUs"
+                className="!bg-transparent !border-0 !p-0"
+              />
+            </div>
+          </div>
+
+          {/* Forge Output Area */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Forge Action Bar */}
+            <div className="flex items-center justify-between px-3 py-2 bg-lattice-deep border-b border-lattice-border">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => forgeGenerateMutation.mutate()}
+                  disabled={forgeGenerateMutation.isPending}
+                  className="btn-neon flex items-center gap-2 text-sm"
+                >
+                  {forgeGenerateMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Hammer className="w-4 h-4" />
+                  )}
+                  Generate App
+                </button>
+                {forgeGeneratedCode && (
+                  <>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard?.writeText(forgeGeneratedCode);
+                      }}
+                      className="p-2 rounded hover:bg-lattice-elevated text-gray-400 hover:text-white transition-colors"
+                      title="Copy to clipboard"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        const blob = new Blob([forgeGeneratedCode], { type: 'text/plain' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `${forgeAppName.toLowerCase().replace(/\s+/g, '-')}.ts`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      }}
+                      className="p-2 rounded hover:bg-lattice-elevated text-gray-400 hover:text-white transition-colors"
+                      title="Download file"
+                    >
+                      <Download className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => forgePublishMutation.mutate()}
+                      disabled={forgePublishMutation.isPending}
+                      className="px-3 py-1.5 rounded bg-neon-purple/20 text-neon-purple hover:bg-neon-purple/30 text-xs font-medium transition-colors flex items-center gap-1.5"
+                      title="Publish as marketplace DTU"
+                    >
+                      {forgePublishMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                      Publish DTU
+                    </button>
+                  </>
+                )}
+              </div>
+              <div className="text-xs text-gray-500">
+                {forgeGeneratedCode ? (
+                  <span className="text-green-400">{forgeGeneratedCode.split('\n').length} lines generated</span>
+                ) : (
+                  <span>Configure sections, then generate</span>
+                )}
+              </div>
+            </div>
+
+            {/* Generated Code Display */}
+            <div className="flex-1 overflow-hidden">
+              {forgeGenerateMutation.isPending ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center space-y-3">
+                    <Loader2 className="w-8 h-8 animate-spin text-neon-yellow mx-auto" />
+                    <p className="text-sm text-gray-400">Forging your application...</p>
+                    <p className="text-xs text-gray-600">Generating {forgeSections.filter(s => s.enabled).length} subsystems</p>
+                  </div>
+                </div>
+              ) : forgeGeneratedCode ? (
+                <div className="h-full flex">
+                  {/* Line numbers */}
+                  <div className="w-12 bg-lattice-deep border-r border-lattice-border text-right py-4 pr-3 text-xs text-gray-600 font-mono select-none overflow-hidden">
+                    {forgeGeneratedCode.split('\n').slice(0, 500).map((_: string, idx: number) => (
+                      <div key={idx} className="leading-5">{idx + 1}</div>
+                    ))}
+                  </div>
+                  <pre className="flex-1 bg-lattice-deep p-4 font-mono text-xs text-gray-300 overflow-auto leading-5 whitespace-pre">{forgeGeneratedCode}</pre>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center space-y-4 max-w-md">
+                    <Hammer className="w-16 h-16 text-neon-yellow/20 mx-auto" />
+                    <div>
+                      <h3 className="text-lg font-bold text-white">Forge App Generator</h3>
+                      <p className="text-sm text-gray-400 mt-1">
+                        Configure your app with the sidebar, pick a preset, then hit Generate.
+                        One file, one process, everything pre-wired.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs text-gray-500">
+                      <div className="bg-lattice-elevated/30 rounded p-2">Auth + JWT + Sessions</div>
+                      <div className="bg-lattice-elevated/30 rounded p-2">SQLite auto-migrate</div>
+                      <div className="bg-lattice-elevated/30 rounded p-2">SSR Frontend</div>
+                      <div className="bg-lattice-elevated/30 rounded p-2">Thread Manager</div>
+                      <div className="bg-lattice-elevated/30 rounded p-2">Stripe Payments</div>
+                      <div className="bg-lattice-elevated/30 rounded p-2">WebSocket Realtime</div>
+                      <div className="bg-lattice-elevated/30 rounded p-2">Background Jobs</div>
+                      <div className="bg-lattice-elevated/30 rounded p-2">One-Click Deploy</div>
+                    </div>
+                    {forgeGenerateMutation.isError && (
+                      <div className="text-xs text-red-400 bg-red-500/10 rounded p-2">
+                        {(forgeGenerateMutation.error as Error)?.message || 'Generation failed'}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Forge Status Bar */}
+            <div className="flex items-center justify-between px-3 py-1 bg-lattice-deep border-t border-lattice-border text-xs text-gray-500">
+              <div className="flex items-center gap-4">
+                <span className="flex items-center gap-1">
+                  <Hammer className="w-3 h-3 text-neon-yellow" />
+                  Forge Engine
+                </span>
+                <span>{forgeDbDriver === 'sqlite' ? 'SQLite' : 'PostgreSQL'}</span>
+                <span>{forgeSections.filter(s => s.enabled).length} subsystems</span>
+              </div>
+              <div className="flex items-center gap-4">
+                {forgeConcordNode && <span className="text-neon-cyan">Concord Node</span>}
+                {forgePreset && <span className="text-neon-yellow">{FORGE_PRESETS.find(p => p.id === forgePreset)?.name}</span>}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ SCRIPT MODE ═══ */}
+      {codeLensMode === 'script' && (
       <div className="flex-1 flex overflow-hidden">
         {/* File Tree Sidebar */}
         <AnimatePresence>
@@ -1166,6 +1550,8 @@ export default function CodeLensPage() {
             </div>
           </div>
         </div>
+      </div>
+      )}
 
       {/* Real-time Data Panel */}
       {realtimeData && (
