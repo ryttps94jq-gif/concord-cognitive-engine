@@ -50,20 +50,24 @@ test.describe('Landing Page', () => {
     expect(response?.status()).toBeLessThan(500);
     await page.waitForLoadState('networkidle').catch(() => {});
 
-    // SSR renders feature cards: Domain Lenses, DTU Memory, Sovereign
-    // Use count() instead of isVisible()+toBeVisible() to avoid race
-    // where an element is briefly visible during hydration then hidden.
-    const lenses = page.locator('h3:has-text("Domain Lenses"), h3:has-text("Lenses")');
+    // After hydration, SSR content is removed and the client-side
+    // LandingPage renders feature cards. Use :visible pseudo-class
+    // to avoid matching stale hidden SSR elements during the transition.
+    const lenses = page.locator('h3:visible').filter({ hasText: /Lenses/i });
+    const dtu = page.locator('h3:visible').filter({ hasText: /DTU|Memory/i });
+    const sovereign = page.locator('h3:visible').filter({ hasText: /Sovereign/i });
+
+    // Wait briefly for hydration to complete
+    await page.waitForTimeout(2000);
+
     if (await lenses.count() > 0) {
-      await expect(lenses.first()).toBeVisible({ timeout: 10_000 }).catch(() => {});
+      await expect(lenses.first()).toBeVisible();
     }
-    const dtu = page.locator('h3:has-text("DTU"), h3:has-text("Memory")').first();
     if (await dtu.count() > 0) {
-      await expect(dtu).toBeVisible({ timeout: 10_000 }).catch(() => {});
+      await expect(dtu.first()).toBeVisible();
     }
-    const sovereign = page.locator('h3:has-text("Sovereign")').first();
     if (await sovereign.count() > 0) {
-      await expect(sovereign).toBeVisible({ timeout: 10_000 }).catch(() => {});
+      await expect(sovereign.first()).toBeVisible();
     }
   });
 

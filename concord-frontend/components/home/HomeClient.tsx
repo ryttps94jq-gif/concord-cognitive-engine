@@ -4,7 +4,7 @@
  * HomeClient — Client-side home page logic
  *
  * Takes over from the SSR landing content once JS hydrates.
- * Hides the SSR content and shows either:
+ * Removes the SSR content from the DOM and shows either:
  *   - LandingPage (interactive) for new visitors
  *   - DashboardPage for returning users
  */
@@ -71,9 +71,9 @@ export function HomeClient() {
   const authCheckRef = useRef(false);
 
   useEffect(() => {
-    // Hide SSR landing content once client takes over
+    // Remove SSR landing content once client takes over
     const ssrEl = document.getElementById('ssr-landing');
-    if (ssrEl) ssrEl.style.display = 'none';
+    if (ssrEl) ssrEl.remove();
 
     const entered = localStorage.getItem(ENTERED_KEY);
     const isEntered = entered === 'true';
