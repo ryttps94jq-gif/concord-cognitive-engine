@@ -338,7 +338,7 @@ export default function DTUBrowserPage() {
           {/* Right sidebar: live feed */}
           {showFeed && (
             <aside className="w-80 flex-shrink-0 hidden xl:block">
-              <LiveDTUFeed limit={15} />
+              <LiveDTUFeed limit={15} onDtuClick={(id) => setSelectedDtuId(id)} />
             </aside>
           )}
         </div>

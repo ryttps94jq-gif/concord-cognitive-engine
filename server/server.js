@@ -16214,10 +16214,11 @@ let localReply = formatCrispResponse({
     : (process.env.BRAIN_CONSCIOUS_MODEL || "qwen2.5:14b-instruct-q4_K_M");
 
   // ===== FULL PIPELINE (with timeout guard) → FAST PATH FALLBACK =====
-  // Spec 12: Try the full pipeline first (unified context + DTU harvest + web search
-  // + LLM call) with a capped timeout of 30-60s. On failure or timeout, fall back to
-  // fast path (localReply). Conversation-to-DTU saving runs in BOTH paths (see
-  // post-response DTU ENRICHMENT section below).
+  // Spec 12: Try the full pipeline first (unified context + DTU harvest + LLM call)
+  // with a capped timeout of 30-60s. On failure or timeout, fall back to fast path
+  // (localReply). Conversation-to-DTU saving runs in BOTH paths (see post-response
+  // DTU ENRICHMENT section below).
+  // Pipeline timeout guard: caps pipeline between 30-60 seconds.
   const _pipelineTimeoutMs = Math.min(Math.max(Number(input.timeoutMs) || 60000, 30000), 60000);
 
   let finalReply = localReply;
@@ -16226,13 +16227,8 @@ let localReply = formatCrispResponse({
   let _pipelineBudget = null;
   let _pipelineDtuCount = 0;
   let _enrichedFocus = [...focus];
-  let _webResults = [];
-  let _webSearchType = "skipped";
   const semanticUsed = Boolean(semanticEnhancement && semanticEnhancement.confidence > 0.4);
-  let _pipelineUsedFullPath = false;
 
-  // ── Full pipeline runner (all heavy work: context engine + harvest + web + LLM) ──
-  const _runFullPipeline = async () => {
   // ===== UNIFIED CONTEXT ENGINE: Retrieve DTUs across all tiers =====
   // Pull context from the unified context engine spanning regular + MEGA + HYPER tiers
   // to enrich the LLM prompt with the broadest relevant knowledge.
@@ -16283,20 +16279,37 @@ let localReply = formatCrispResponse({
       entityStateBlock: _entityBlock,
       conversationSummary: _convSummary,
       userMessage: prompt,
-  let finalReply = localReply;
-  let llmUsed = false;
+      workingSetDtus: _pipelineHarvest.consolidatedWorkingSet || _enrichedFocus,
+      activationMeta: (_pipelineHarvest.consolidatedWorkingSet || []).map(d => ({ dtuId: d.id, score: d._activationScore || 0.5 })),
+    });
+
+    _pipelineDtuCount = _pipelineBudget.dtuCount || 0;
+
+    ctx.log("chat_pipeline", "Context pipeline assembled", {
+      sessionId,
+      sources: _pipelineHarvest.sources,
+      dtuCount: _pipelineDtuCount,
+      tokenEstimate: _pipelineBudget.tokenEstimate,
+      truncatedCount: _pipelineBudget.truncatedCount,
+      budgetPct: _pipelineBudget.budgetUtilization?.total?.pct,
+    });
+  } catch (_pipeErr) {
+    // Pipeline is enhancement-only; failures fall through to original logic
+    ctx.log("chat_pipeline.error", "Context pipeline failed, using fallback", { error: String(_pipeErr?.message || _pipeErr) });
+  }
+  // ===== END DTU CONTEXT PIPELINE =====
+
   let _subconsciousReflection = null;
-  const semanticUsed = Boolean(semanticEnhancement && semanticEnhancement.confidence > 0.4);
 
   // ===== FULL MULTI-STAGE PIPELINE (primary path) =====
   // Stage 1: Input processing + DTU context enrichment (already done above)
   // Stage 2: Subconscious reflection (parallel) + Conscious response via consciousChat()
   // Stage 3: Output processing (below)
-  // Falls back to fast path on failure/timeout (60s).
+  // Falls back to fast path on failure/timeout.
+  // Pipeline timeout guard: capped between 30-60 seconds (Spec 12 preservation rule 1).
   let _pipelineSucceeded = false;
   try {
     const _pipelineStart = Date.now();
-    const PIPELINE_TIMEOUT_MS = 60000;
 
     // Build override context from the enriched pipeline (DTU context + quality pipeline)
     const _pipelineDtuContext = (_fusedContext && _fusedContext.fusedContext)
@@ -16319,7 +16332,7 @@ let localReply = formatCrispResponse({
             }),
             temperature: 0.6,
             maxTokens: 300,
-            timeout: Math.min(PIPELINE_TIMEOUT_MS - 5000, 20000),
+            timeout: Math.min(_pipelineTimeoutMs - 5000, 20000),
           })
       : Promise.resolve({ ok: false, content: null })
     ).catch((_e) => {
@@ -16338,13 +16351,13 @@ let localReply = formatCrispResponse({
         0.1, 0.9
       ),
       maxTokens: Math.round(700 * (0.6 + 0.8 * (_affStyle.verbosity ?? 0.5))),
-      timeout: PIPELINE_TIMEOUT_MS - 2000,
+      timeout: _pipelineTimeoutMs - 2000,
       _exchangeCount: (sess.messages || []).length,
     });
 
     // Race both against the pipeline timeout
     const _timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("pipeline_timeout")), PIPELINE_TIMEOUT_MS)
+      setTimeout(() => reject(new Error("pipeline_timeout")), _pipelineTimeoutMs)
     );
 
     // Wait for conscious (required) + subconscious (best-effort parallel)

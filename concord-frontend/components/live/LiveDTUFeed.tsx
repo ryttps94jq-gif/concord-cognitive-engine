@@ -50,7 +50,7 @@ const TYPE_COLORS: Record<string, string> = {
   capture: 'bg-emerald-500/20 text-emerald-400',
 };
 
-export function LiveDTUFeed({ limit = 10 }: { limit?: number }) {
+export function LiveDTUFeed({ limit = 10, onDtuClick }: { limit?: number; onDtuClick?: (id: string) => void }) {
   const [liveDtus, setLiveDtus] = useState<DTUEvent[]>([]);
   const feedRef = useRef<HTMLDivElement>(null);
 
@@ -134,7 +134,12 @@ export function LiveDTUFeed({ limit = 10 }: { limit?: number }) {
             return (
               <div
                 key={dtu.id}
+                onClick={() => onDtuClick?.(dtu.id)}
+                role={onDtuClick ? 'button' : undefined}
+                tabIndex={onDtuClick ? 0 : undefined}
                 className={`flex items-start gap-2 px-2 py-2 rounded-lg transition-all ${
+                  onDtuClick ? 'cursor-pointer' : ''
+                } ${
                   dtu.isNew
                     ? 'bg-neon-cyan/10 border border-neon-cyan/30 animate-pulse'
                     : 'hover:bg-lattice-deep/50'

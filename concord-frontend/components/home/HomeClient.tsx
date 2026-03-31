@@ -386,7 +386,7 @@ function DashboardPage() {
       {/* Live Feed + Emergent Council + Governance — each wrapped independently */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <LensErrorBoundary name="Live DTU Feed">
-          <LiveDTUFeed limit={12} />
+          <LiveDTUFeed limit={12} onDtuClick={(id) => setInspecting({ type: 'dtu', id })} />
         </LensErrorBoundary>
         <LensErrorBoundary name="Emergent Panel">
           <EmergentPanel />

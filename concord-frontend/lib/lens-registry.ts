@@ -171,6 +171,7 @@ export const LENS_REGISTRY: LensEntry[] = [
   { id: 'graph', name: 'Graph', icon: Share2, description: 'Knowledge graph and entity exploration', category: 'core', showInSidebar: true, showInCommandPalette: true, path: '/lenses/graph', order: 3, keywords: ['network', 'nodes', 'edges', 'knowledge', 'schema'] },
   { id: 'code', name: 'Code', icon: Code, description: 'Editor, debugger, and repository browser', category: 'core', showInSidebar: true, showInCommandPalette: true, path: '/lenses/code', order: 4, keywords: ['editor', 'programming', 'dev', 'debug', 'database'] },
   { id: 'studio', name: 'Studio', icon: Music, description: 'Music, art, game dev, and creative production', category: 'core', showInSidebar: true, showInCommandPalette: true, path: '/lenses/studio', order: 5, keywords: ['production', 'audio', 'mix', 'master', 'art', 'music'] },
+  { id: 'dtus', name: 'DTU Browser', icon: Database, description: 'Browse, search, and manage Discrete Thought Units', category: 'knowledge', showInSidebar: true, showInCommandPalette: true, path: '/lenses/dtus', order: 6, keywords: ['dtu', 'browse', 'search', 'thoughts', 'knowledge', 'units'] },
 
   // ── Absorbed into Chat ──────────────────────────────────────────
   { id: 'thread', name: 'Threads', icon: MessageCircle, description: 'Threaded conversations', category: 'core', showInSidebar: false, showInCommandPalette: true, path: '/lenses/thread', order: 10, keywords: ['conversation', 'discussion'], coreLens: 'chat', tabLabel: 'Threads' },

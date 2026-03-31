@@ -413,6 +413,125 @@ function StatsTab({ stats, loading }: { stats: Record<string, unknown> | null; l
   );
 }
 
+// ── My DTUs Tab ───────────────────────────────────────────────────────────────
+
+function MyDTUsTab() {
+  const [page, setPage] = useState(0);
+  const [selectedDtuId, setSelectedDtuId] = useState<string | null>(null);
+  const PAGE_SIZE = 20;
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['my-dtus', page],
+    queryFn: async () => {
+      const res = await apiHelpers.dtus.myDtus({ limit: PAGE_SIZE, offset: page * PAGE_SIZE });
+      return res.data as { ok: boolean; dtus?: DTU[]; items?: DTU[]; total?: number };
+    },
+    staleTime: 30_000,
+  });
+
+  const dtus: DTU[] = data?.dtus || data?.items || [];
+  const total = data?.total || 0;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="w-8 h-8 border-2 border-neon-blue border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (dtus.length === 0 && page === 0) {
+    return (
+      <div className={cn(ds.panel, 'text-center py-16')}>
+        <Database className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+        <h3 className="text-lg font-semibold text-gray-300 mb-2">No DTUs yet</h3>
+        <p className="text-gray-500 text-sm max-w-md mx-auto">
+          Your discrete thought units will appear here as you create them
+          through chat, lenses, or the DTU browser.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className={cn(ds.panel, 'p-0 divide-y divide-lattice-border/50')}>
+        {dtus.map((dtu) => (
+          <button
+            key={dtu.id}
+            onClick={() => setSelectedDtuId(dtu.id)}
+            className="w-full text-left px-4 py-3 hover:bg-lattice-surface/50 transition-colors"
+          >
+            <div className="flex items-start gap-3">
+              <span className={cn(
+                'text-[10px] px-1.5 py-0.5 rounded uppercase font-medium flex-shrink-0 mt-0.5',
+                dtu.tier === 'mega' ? 'bg-neon-purple/20 text-neon-purple' :
+                dtu.tier === 'hyper' ? 'bg-neon-pink/20 text-neon-pink' :
+                dtu.tier === 'shadow' ? 'bg-gray-500/20 text-gray-400' :
+                'bg-neon-blue/20 text-neon-blue'
+              )}>
+                {dtu.tier}
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-200 truncate">
+                  {dtu.title || dtu.summary || dtu.id.slice(0, 20)}
+                </p>
+                {dtu.summary && dtu.summary !== dtu.title && (
+                  <p className="text-xs text-gray-500 truncate mt-0.5">{dtu.summary}</p>
+                )}
+                <div className="flex items-center gap-3 mt-1 text-[10px] text-gray-600">
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    {new Date(dtu.timestamp).toLocaleDateString()}
+                  </span>
+                  {dtu.tags && dtu.tags.length > 0 && (
+                    <span className="flex items-center gap-1">
+                      <Tag className="w-3 h-3" />
+                      {dtu.tags.slice(0, 2).map(t => `#${t}`).join(' ')}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {/* Pagination */}
+      {total > PAGE_SIZE && (
+        <div className="flex items-center justify-between text-xs text-gray-500">
+          <span>Showing {page * PAGE_SIZE + 1}-{Math.min((page + 1) * PAGE_SIZE, total)} of {total}</span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setPage(p => Math.max(0, p - 1))}
+              disabled={page === 0}
+              className="px-3 py-1 border border-lattice-border rounded disabled:opacity-30 hover:bg-lattice-surface"
+            >
+              Previous
+            </button>
+            <button
+              onClick={() => setPage(p => p + 1)}
+              disabled={(page + 1) * PAGE_SIZE >= total}
+              className="px-3 py-1 border border-lattice-border rounded disabled:opacity-30 hover:bg-lattice-surface"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Detail modal */}
+      {selectedDtuId && (
+        <DTUDetailView
+          dtuId={selectedDtuId}
+          onClose={() => setSelectedDtuId(null)}
+          onNavigate={(id) => setSelectedDtuId(id)}
+        />
+      )}
+    </div>
+  );
+}
+
 function StatCard({ label, value, color, icon }: { label: string; value: string | number; color: string; icon: React.ReactNode }) {
   const colors: Record<string, string> = {
     blue: 'text-neon-blue border-neon-blue/20 bg-neon-blue/5',
