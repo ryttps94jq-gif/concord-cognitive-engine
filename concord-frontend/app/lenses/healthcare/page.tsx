@@ -1422,7 +1422,7 @@ export default function HealthcareLensPage() {
                       <div className={cn(ds.panel, 'space-y-3')}>
                         <h3 className={ds.heading3}>Symptom Severity Trend</h3>
                         <div className="flex items-end gap-1 h-24">
-                          {sorted.map((item, i) => {
+                          {sorted.map((item, _i) => {
                             const d = item.data as unknown as HealthcareArtifact;
                             const sev = d.severity ?? 5;
                             const pct = (sev / 10) * 100;

@@ -423,7 +423,7 @@ export default function EcoLensPage() {
           Population Growth Curves
         </h2>
         <div className="h-40 flex items-end gap-2">
-          {filteredPopulations.slice(0, 12).map((pop, i) => {
+          {filteredPopulations.slice(0, 12).map((pop, _i) => {
             const maxPop = Math.max(...filteredPopulations.map(p => p.population));
             const normalizedHeight = Math.max(5, (pop.population / maxPop) * 100);
             const CategoryIcon = CATEGORY_ICONS[pop.category] || Bug;

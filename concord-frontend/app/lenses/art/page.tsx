@@ -44,7 +44,7 @@ import { ErrorState } from '@/components/common/EmptyState';
 import { useLensDTUs } from '@/hooks/useLensDTUs';
 import type { DTU } from '@/lib/api/generated-types';
 import { LensContextPanel } from '@/components/lens/LensContextPanel';
-import { LensWrapper } from '@/components/lens/LensWrapper';
+
 import { ArtifactRenderer } from '@/components/artifact/ArtifactRenderer';
 import { ArtifactUploader } from '@/components/artifact/ArtifactUploader';
 import { FeedbackWidget } from '@/components/feedback/FeedbackWidget';

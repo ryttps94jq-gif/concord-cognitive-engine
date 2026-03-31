@@ -3,7 +3,7 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { apiHelpers } from '@/lib/api/client';
-import { useUIStore } from '@/store/ui';
+
 import { Loading } from '@/components/common/Loading';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo } from 'react';

@@ -106,7 +106,7 @@ function valenceColor(v: number): string {
 // ── Component ───────────────────────────────────────────────────────────────
 
 export default function QualiaSensoryFeed({
-  entityId,
+  entityId: _entityId,
   channels,
   overloadActive = false,
 }: QualiaSensoryFeedProps) {

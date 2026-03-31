@@ -198,7 +198,7 @@ export default function TimelineLensPage() {
   });
 
   const friendAction = useMutation({
-    mutationFn: ({ friendId, action }: { friendId: string; action: string }) => apiHelpers.social.follow(friendId),
+    mutationFn: ({ friendId, action: _action }: { friendId: string; action: string }) => apiHelpers.social.follow(friendId),
     onSuccess: (_, { action }) => useUIStore.getState().addToast({ type: 'success', message: action === 'confirm' ? 'Friend request accepted' : 'Request removed' }),
   });
 

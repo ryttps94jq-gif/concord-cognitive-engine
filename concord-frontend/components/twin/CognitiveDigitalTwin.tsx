@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Brain, Clock, Target, TrendingUp, AlertTriangle, Sun, Moon,
+  Brain, Clock, Target, AlertTriangle, Sun, Moon,
   ChevronDown, ChevronUp, RefreshCw, Loader2, Sparkles, Send,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';

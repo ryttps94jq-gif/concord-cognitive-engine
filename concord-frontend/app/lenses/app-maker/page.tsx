@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Boxes, Plus, CheckCircle, AlertTriangle, ArrowUp, ArrowDown, Layers, ChevronDown, Rocket, Layout, ShoppingCart, Briefcase, UserCircle } from 'lucide-react';
+import { Boxes, Plus, CheckCircle, ArrowUp, Layers, ChevronDown, Rocket, Layout, ShoppingCart, Briefcase, UserCircle } from 'lucide-react';
 import { apiHelpers } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';

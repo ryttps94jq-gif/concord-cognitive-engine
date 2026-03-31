@@ -2,7 +2,7 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, apiHelpers } from '@/lib/api/client';
+import { apiHelpers } from '@/lib/api/client';
 import { useState } from 'react';
 import { Plug, Webhook, Zap, Code, FileText, Plus, Trash2, Play, ToggleLeft, ToggleRight, Layers, ChevronDown } from 'lucide-react';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';

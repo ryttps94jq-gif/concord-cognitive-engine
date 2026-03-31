@@ -6,9 +6,8 @@ import {
   Play, Pause, Clock, ListMusic, Edit3, Trash2,
   Share2, Globe, Lock,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { useMusicStore } from '@/lib/music/store';
-import type { Playlist, MusicTrack } from '@/lib/music/types';
+import type { Playlist } from '@/lib/music/types';
 import { TrackCard } from './TrackCard';
 
 function formatDuration(seconds: number): string {
@@ -149,7 +148,7 @@ export function PlaylistView({
 
       {/* Track list */}
       <div className="space-y-0.5">
-        {playlist.tracks.map((pt, i) => (
+        {playlist.tracks.map((pt, _i) => (
           <div key={pt.trackId} className="group flex items-center">
             <div className="flex-1">
               <TrackCard

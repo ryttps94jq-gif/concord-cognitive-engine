@@ -6,8 +6,8 @@ import { api, apiHelpers } from '@/lib/api/client';
 import { useState, useMemo } from 'react';
 import {
   Heart, Activity, Zap, TrendingUp, TrendingDown, RefreshCw,
-  AlertTriangle, CheckCircle, Clock, Shield, Wrench, Eye,
-  ChevronDown, ChevronRight, Search, BarChart3, Layers,
+  AlertTriangle, Clock, Shield, Wrench,
+  ChevronDown, Search, BarChart3, Layers,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';

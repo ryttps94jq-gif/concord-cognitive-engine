@@ -7,8 +7,8 @@ import { apiHelpers } from '@/lib/api/client';
 import { MarketEmpireListing } from '@/components/market/MarketEmpireListing';
 import {
   Store, TrendingUp, Package, Coins, Search, Filter, X,
-  ShoppingCart, Tag, ArrowUpRight, ArrowDownRight, BarChart3,
-  Clock, Star, RefreshCw, Layers, ChevronDown,
+  ShoppingCart, Tag, ArrowUpRight, ArrowDownRight,
+  RefreshCw, Layers, ChevronDown,
 } from 'lucide-react';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { ErrorState } from '@/components/common/EmptyState';

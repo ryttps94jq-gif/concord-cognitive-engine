@@ -13,7 +13,7 @@ import {
   Video,
   FileText,
   Radio,
-  Tag,
+
   Lock,
   Globe,
   Users,

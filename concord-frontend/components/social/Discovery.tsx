@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -679,7 +679,7 @@ export function Discovery({
               </div>
             ) : mediaFeedQuery.data && mediaFeedQuery.data.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {mediaFeedQuery.data.map((item, idx) => (
+                {mediaFeedQuery.data.map((item, _idx) => (
                   <MediaCard key={item.dtuId} item={item} onNavigate={onNavigateToContent} />
                 ))}
               </div>

@@ -5,7 +5,7 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { api } from '@/lib/api/client';
 import {
   Network, ArrowLeftRight, Shield, MessageSquare, Skull,
-  Baby, Eye, AlertTriangle, CheckCircle2, XCircle,
+  Baby, Eye, CheckCircle2, XCircle,
   RefreshCw, ChevronDown, ChevronRight, Loader2, Search,
   Users, Zap, Activity, Layers,
 } from 'lucide-react';
@@ -226,7 +226,7 @@ function ActivityTab({ log }: { log: BridgeLogEntry[] }) {
   );
 }
 
-function OrganismsTab({ organisms, onRefresh }: { organisms: Organism[]; onRefresh: () => void }) {
+function OrganismsTab({ organisms, onRefresh: _onRefresh }: { organisms: Organism[]; onRefresh: () => void }) {
   if (organisms.length === 0) return <EmptyCard icon={<Network />} message="No organisms detected" hint="DTU swarms with 10+ members can be awakened as Knowledge Organisms." />;
 
   return (

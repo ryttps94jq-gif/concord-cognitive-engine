@@ -11,7 +11,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { ProactiveMessage, ProactiveTrigger } from './ChatModeTypes';
+import type { ProactiveMessage } from './ChatModeTypes';
 
 const IDLE_TIMEOUT_MS = 30_000; // 30 seconds
 

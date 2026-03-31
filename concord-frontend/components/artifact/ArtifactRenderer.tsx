@@ -276,7 +276,7 @@ function CSVTablePreview({ dtuId, filename, downloadUrl }: { dtuId: string; file
 }
 
 // MEGA SPEC: MIDI Preview
-function MidiPreview({ dtuId, filename, downloadUrl }: { dtuId: string; filename: string; downloadUrl: string }) {
+function MidiPreview({ dtuId: _dtuId, filename, downloadUrl }: { dtuId: string; filename: string; downloadUrl: string }) {
   return (
     <div className="space-y-2 p-3 rounded-lg bg-zinc-900 border border-zinc-700">
       <div className="flex items-center gap-2">

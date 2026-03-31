@@ -148,7 +148,7 @@ function dimBgColor(value: number): string {
   return 'bg-red-500';
 }
 
-function formatTimestamp(ts: unknown): string {
+function _formatTimestamp(ts: unknown): string {
   if (!ts) return '';
   try {
     const d = new Date(String(ts));

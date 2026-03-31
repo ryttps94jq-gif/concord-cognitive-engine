@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation';
 import {
   Shield, Activity, Brain, Layers, Puzzle, Cpu, Users, Settings,
   AlertTriangle, Moon, FileText, Pause, Play,
-  Save, Trash2, XCircle, Eye, Clock, ArrowUp,
+  Save, Trash2, XCircle, Clock, ArrowUp,
   Zap, Send, MapPin, Focus, ShieldAlert, ChevronDown,
 } from 'lucide-react';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';

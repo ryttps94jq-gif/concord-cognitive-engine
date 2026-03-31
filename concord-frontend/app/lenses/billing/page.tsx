@@ -7,7 +7,7 @@ import { apiHelpers } from '@/lib/api/client';
 import {
   Coins, Check, Zap, Crown,
   ArrowRight, Sparkles, ShieldCheck, TrendingUp,
-  Download, Filter, BarChart3, ArrowUpDown,
+  Download, BarChart3,
   CreditCard, History, Wallet, ChevronDown, Layers,
 } from 'lucide-react';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';

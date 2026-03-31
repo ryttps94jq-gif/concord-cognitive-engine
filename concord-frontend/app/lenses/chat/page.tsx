@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useMemo, useCallback, useEffect } from 'react';
+import Image from 'next/image';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, apiHelpers } from '@/lib/api/client';
@@ -1582,9 +1583,11 @@ export default function ChatLensPage() {
                     className="flex items-center gap-2 px-3 py-1.5 bg-lattice-bg border border-lattice-border rounded-lg text-sm"
                   >
                     {att.preview ? (
-                      <img
+                      <Image
                         src={att.preview}
                         alt={att.name}
+                        width={24}
+                        height={24}
                         className="w-6 h-6 rounded object-cover"
                       />
                     ) : (
