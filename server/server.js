@@ -16258,14 +16258,11 @@ let localReply = formatCrispResponse({
   // Merge unified context DTUs with focus set (deduplicated)
   const _focusIds = new Set(focus.map(d => d.id));
   const _extraUnifiedDtus = _unifiedContextDtus.filter(d => !_focusIds.has(d.id));
-  const _enrichedFocus = [...focus, ..._extraUnifiedDtus];
+  _enrichedFocus = [...focus, ..._extraUnifiedDtus];
   // ===== END UNIFIED CONTEXT ENGINE =====
   // ===== END CONSCIOUS BRAIN ROUTING =====
 
   // ===== DTU CONTEXT PIPELINE: Four-Source Harvest + Token Budget Assembly =====
-  let _pipelineHarvest = null;
-  let _pipelineBudget = null;
-  let _pipelineDtuCount = 0;
   try {
     // Phase 1: Context Harvest (4 sources)
     _pipelineHarvest = runContextHarvest(STATE, {

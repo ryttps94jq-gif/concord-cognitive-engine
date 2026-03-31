@@ -78,6 +78,7 @@ export default function ProfilePage() {
           <div className={ds.tabBar}>
             {([
               { id: 'personality' as TabId, label: 'Personality', icon: <Sparkles className="w-4 h-4" /> },
+              { id: 'my-dtus' as TabId, label: 'My DTUs', icon: <Database className="w-4 h-4" /> },
               { id: 'dreams' as TabId, label: 'Dream Log', icon: <Moon className="w-4 h-4" /> },
               { id: 'stats' as TabId, label: 'Universe Stats', icon: <TrendingUp className="w-4 h-4" /> },
             ]).map((tab) => (
@@ -98,6 +99,9 @@ export default function ProfilePage() {
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-6">
         {activeTab === 'personality' && (
           <PersonalityTab personality={personality} loading={personalityLoading} />
+        )}
+        {activeTab === 'my-dtus' && (
+          <MyDTUsTab />
         )}
         {activeTab === 'dreams' && (
           <DreamsTab dreams={dreams} loading={dreamsLoading} total={dreamsData?.total || 0} />
