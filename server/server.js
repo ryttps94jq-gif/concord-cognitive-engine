@@ -36811,6 +36811,212 @@ app.get("/api/social/metrics", (req, res) => {
   try { res.json(getSocialMetrics(STATE)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
+// ---- Social Layer: Posts, Reactions, Comments, Shares, Bookmarks, Feeds, DMs, Notifications, etc. ----
+
+app.post("/api/social/post", (req, res) => {
+  try { res.json(createPost(STATE, { userId: req.body?.userId || req.user?.id, ...req.body })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/post/:postId", (req, res) => {
+  try { res.json(getPost(STATE, req.params.postId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.delete("/api/social/post/:postId", (req, res) => {
+  try { res.json(deletePost(STATE, { userId: req.body?.userId || req.user?.id, postId: req.params.postId })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/posts/:userId", (req, res) => {
+  try { res.json(getUserPosts(STATE, req.params.userId, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/social/react", (req, res) => {
+  try { res.json(addReaction(STATE, { userId: req.body?.userId || req.user?.id, postId: req.body?.postId, type: req.body?.type })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/reactions/:postId", (req, res) => {
+  try { res.json(getReactions(STATE, req.params.postId, req.query.userId || req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/social/comment", (req, res) => {
+  try { res.json(addComment(STATE, { userId: req.body?.userId || req.user?.id, postId: req.body?.postId, content: req.body?.content, parentCommentId: req.body?.parentCommentId })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.delete("/api/social/comment/:postId/:commentId", (req, res) => {
+  try { res.json(deleteComment(STATE, { userId: req.body?.userId || req.user?.id, postId: req.params.postId, commentId: req.params.commentId })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/comments/:postId", (req, res) => {
+  try { res.json(getComments(STATE, req.params.postId, { limit: Number(req.query.limit || 50) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/social/share", (req, res) => {
+  try { res.json(sharePost(STATE, { userId: req.body?.userId || req.user?.id, postId: req.body?.postId, commentary: req.body?.commentary })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/shares/:postId", (req, res) => {
+  try { res.json(getShares(STATE, req.params.postId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/social/bookmark", (req, res) => {
+  try { res.json(bookmarkPost(STATE, { userId: req.body?.userId || req.user?.id, postId: req.body?.postId })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/bookmarks", (req, res) => {
+  try { res.json(getUserBookmarks(STATE, req.query.userId || req.user?.id, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/feed/foryou", (req, res) => {
+  try { res.json(getForYouFeed(STATE, req.query.userId || req.user?.id, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/feed/following", (req, res) => {
+  try { res.json(getFollowingFeed(STATE, req.query.userId || req.user?.id, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/feed/explore", (req, res) => {
+  try { res.json(getExploreFeed(STATE, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0), topic: req.query.topic })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/social/dm", (req, res) => {
+  try { res.json(sendMessage(STATE, { fromUserId: req.body?.fromUserId || req.user?.id, toUserId: req.body?.toUserId, content: req.body?.content, mediaUrl: req.body?.mediaUrl })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/dm/conversations", (req, res) => {
+  try { res.json(getConversations(STATE, req.query.userId || req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/dm/:conversationId", (req, res) => {
+  try { res.json(getMessages(STATE, req.params.conversationId, { limit: Number(req.query.limit || 50), offset: Number(req.query.offset || 0) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/social/dm/:conversationId/read", (req, res) => {
+  try { res.json(markMessagesRead(STATE, { userId: req.body?.userId || req.user?.id, conversationId: req.params.conversationId })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/notifications", (req, res) => {
+  try { res.json(getNotifications(STATE, req.query.userId || req.user?.id, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0), unreadOnly: req.query.unreadOnly === "true" })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/social/notifications/:id/read", (req, res) => {
+  try { res.json(markNotificationRead(STATE, { userId: req.body?.userId || req.user?.id, notificationId: req.params.id })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/social/notifications/read-all", (req, res) => {
+  try { res.json(markAllNotificationsRead(STATE, req.body?.userId || req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/notifications/count", (req, res) => {
+  try { res.json(getUnreadCount(STATE, req.query.userId || req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.delete("/api/social/notifications/:id", (req, res) => {
+  try { res.json(deleteNotification(STATE, { userId: req.body?.userId || req.user?.id, notificationId: req.params.id })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/stories", (req, res) => {
+  try { res.json(getActiveStories(STATE, req.query.userId || req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/social/stories/:storyId/view", (req, res) => {
+  try { res.json(viewStory(STATE, { userId: req.body?.userId || req.user?.id, storyId: req.params.storyId })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/social/poll/vote", (req, res) => {
+  try { res.json(votePoll(STATE, { userId: req.body?.userId || req.user?.id, postId: req.body?.postId, optionIndex: req.body?.optionIndex })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/poll/:postId", (req, res) => {
+  try { res.json(getPollResults(STATE, req.params.postId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/topics/trending", (req, res) => {
+  try { res.json(getTrendingTopics(STATE, { limit: Number(req.query.limit || 20) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/topics/:topic", (req, res) => {
+  try { res.json(getPostsByTopic(STATE, req.params.topic, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/social/group", (req, res) => {
+  try { res.json(createGroup(STATE, { userId: req.body?.userId || req.user?.id, name: req.body?.name, description: req.body?.description, rules: req.body?.rules, tags: req.body?.tags })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/social/group/:groupId/join", (req, res) => {
+  try { res.json(joinGroup(STATE, { userId: req.body?.userId || req.user?.id, groupId: req.params.groupId })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/social/group/:groupId/leave", (req, res) => {
+  try { res.json(leaveGroup(STATE, { userId: req.body?.userId || req.user?.id, groupId: req.params.groupId })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/group/:groupId/feed", (req, res) => {
+  try { res.json(getGroupFeed(STATE, req.params.groupId, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/social/group/:groupId/post", (req, res) => {
+  try { res.json(postToGroup(STATE, { userId: req.body?.userId || req.user?.id, groupId: req.params.groupId, postId: req.body?.postId })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/groups", (req, res) => {
+  try { res.json(listGroups(STATE, { limit: Number(req.query.limit || 50), search: req.query.search })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/group/:groupId/members", (req, res) => {
+  try { res.json(getGroupMembers(STATE, req.params.groupId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/analytics/creator", (req, res) => {
+  try { res.json(getCreatorAnalytics(STATE, req.query.userId || req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/analytics/post/:postId", (req, res) => {
+  try { res.json(getPostAnalytics(STATE, req.params.postId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/streak", (req, res) => {
+  try { res.json(getStreak(STATE, req.query.userId || req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/social/commerce/tag", (req, res) => {
+  try { res.json(tagListing(STATE, { postId: req.body?.postId, listingId: req.body?.listingId })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/commerce/post/:postId/sales", (req, res) => {
+  try { res.json(getPostSales(STATE, req.params.postId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/commerce/post/:postId/earnings", (req, res) => {
+  try { res.json(getPostEarnings(STATE, req.params.postId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/social/pin", (req, res) => {
+  try { res.json(pinPost(STATE, { userId: req.body?.userId || req.user?.id, postId: req.body?.postId })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.delete("/api/social/pin/:postId", (req, res) => {
+  try { res.json(unpinPost(STATE, { userId: req.body?.userId || req.user?.id, postId: req.params.postId })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/pins/:userId", (req, res) => {
+  try { res.json(getPinnedPosts(STATE, req.params.userId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/social/watchtime", (req, res) => {
+  try { res.json(recordWatchTime(STATE, { userId: req.body?.userId || req.user?.id, postId: req.body?.postId, durationMs: req.body?.durationMs })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/social/schedule", (req, res) => {
+  try { res.json(schedulePost(STATE, { userId: req.body?.userId || req.user?.id, postData: req.body?.postData, scheduledAt: req.body?.scheduledAt })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/scheduled", (req, res) => {
+  try { res.json(getScheduledPosts(STATE, req.query.userId || req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.delete("/api/social/scheduled/:postId", (req, res) => {
+  try { res.json(cancelScheduledPost(STATE, { userId: req.body?.userId || req.user?.id, postId: req.params.postId })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 // ---- Collaboration ----
 app.post("/api/collab/workspace", (req, res) => {
   try { res.json(collabCreateWorkspace(STATE, { ...req.body, ownerId: req.body?.ownerId || req.user?.id })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
