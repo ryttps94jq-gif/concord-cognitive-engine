@@ -9,7 +9,9 @@ import { HeartbeatBar } from '@/components/live/HeartbeatBar';
 import { XPWidget } from '@/components/gamification/XPWidget';
 import { WalletBadge } from '@/components/economy/WalletBadge';
 import { LensTitle } from './topbar/LensTitle';
-import { NotificationBell } from './topbar/NotificationBell';
+import { NotificationBell as LegacyNotificationBell } from './topbar/NotificationBell';
+import { NotificationBell } from '@/components/social/NotificationBell';
+import { DMIndicator } from '@/components/social/DMIndicator';
 import { UserMenu } from './topbar/UserMenu';
 
 export function Topbar() {
@@ -136,16 +138,27 @@ export function Topbar() {
           <HeartbeatBar />
         </div>
 
-        <NotificationBell />
+        {/* Social indicators: DM + Notifications */}
+        <DMIndicator userId={userData?.id || userData?._id} />
+        <NotificationBell userId={userData?.id || userData?._id} />
 
-        {/* User name + menu */}
+        {/* User name + avatar with online status dot */}
         <div className="flex items-center gap-1.5">
           {userName && (
             <span className="hidden lg:inline text-xs text-gray-400 max-w-[100px] truncate">
               {userName}
             </span>
           )}
-          <UserMenu />
+          <div className="relative">
+            <UserMenu />
+            {/* Online status indicator */}
+            {isOnline && (
+              <span
+                className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-green-400 border-2 border-lattice-surface"
+                title="Online"
+              />
+            )}
+          </div>
         </div>
       </div>
     </header>

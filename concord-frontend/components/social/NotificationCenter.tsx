@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import { api } from '@/lib/api/client';
+import { getSocket, subscribe, SocketEvent } from '@/lib/realtime/socket';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -51,6 +52,11 @@ interface Notification {
   read: boolean;
   createdAt: string;
   metadata?: Record<string, unknown>;
+}
+
+interface GroupedNotification extends Notification {
+  groupedActors?: Array<{ id: string; name: string }>;
+  groupCount?: number;
 }
 
 interface NotificationCenterProps {
@@ -128,87 +134,86 @@ const FILTER_OPTIONS: Array<{ id: NotificationFilter; label: string }> = [
   { id: 'system', label: 'System' },
 ];
 
-// ── Mock data generator (used when API doesn't have notifications yet) ───────
+// ── Grouping Logic ──────────────────────────────────────────────────────────
 
-function generateMockNotifications(): Notification[] {
-  const now = Date.now();
-  return [
-    {
-      id: 'notif-1',
-      type: 'follow',
-      title: 'New Follower',
-      message: 'started following you',
-      actorId: 'user-alice',
-      actorName: 'Alice Chen',
-      read: false,
-      createdAt: new Date(now - 1000 * 60 * 5).toISOString(),
-    },
-    {
-      id: 'notif-2',
-      type: 'like',
-      title: 'Content Liked',
-      message: 'liked your DTU',
-      actorId: 'user-bob',
-      actorName: 'Bob Martinez',
-      targetId: 'dtu-123',
-      targetTitle: 'Neural Architecture Overview',
-      read: false,
-      createdAt: new Date(now - 1000 * 60 * 30).toISOString(),
-    },
-    {
-      id: 'notif-3',
-      type: 'comment',
-      title: 'New Comment',
-      message: 'commented on your media',
-      actorId: 'user-carol',
-      actorName: 'Carol Wu',
-      targetId: 'media-456',
-      targetTitle: 'Audio Track: Emergence',
-      read: true,
-      createdAt: new Date(now - 1000 * 60 * 60 * 2).toISOString(),
-    },
-    {
-      id: 'notif-4',
-      type: 'citation',
-      title: 'DTU Cited',
-      message: 'cited your DTU in their research',
-      actorId: 'user-dave',
-      actorName: 'Dave Kim',
-      targetId: 'dtu-789',
-      targetTitle: 'Lattice Theory Fundamentals',
-      read: true,
-      createdAt: new Date(now - 1000 * 60 * 60 * 6).toISOString(),
-    },
-    {
-      id: 'notif-5',
-      type: 'tip',
-      title: 'Tip Received',
-      message: 'sent you a tip',
-      actorId: 'user-eve',
-      actorName: 'Eve Johnson',
-      targetId: 'dtu-101',
-      targetTitle: 'Creative Synthesis',
-      amount: 25,
-      read: false,
-      createdAt: new Date(now - 1000 * 60 * 60 * 12).toISOString(),
-    },
-    {
-      id: 'notif-6',
-      type: 'system',
-      title: 'System Update',
-      message: 'Media transcoding infrastructure updated. Faster processing now available.',
-      read: true,
-      createdAt: new Date(now - 1000 * 60 * 60 * 24).toISOString(),
-    },
-    {
-      id: 'notif-7',
-      type: 'achievement',
-      title: 'Achievement Unlocked',
-      message: 'You reached 100 citations across your published DTUs!',
-      read: false,
-      createdAt: new Date(now - 1000 * 60 * 60 * 48).toISOString(),
-    },
-  ];
+function groupNotifications(notifications: Notification[]): GroupedNotification[] {
+  // Group by type + targetId within a 24-hour window
+  const groupMap = new Map<string, Notification[]>();
+  const ungroupable: Notification[] = [];
+
+  for (const n of notifications) {
+    // Only group likes, comments, follows (not tips, system, achievements)
+    if (['like', 'comment', 'follow'].includes(n.type) && n.targetId) {
+      const key = `${n.type}:${n.targetId}`;
+      if (!groupMap.has(key)) {
+        groupMap.set(key, []);
+      }
+      groupMap.get(key)!.push(n);
+    } else if (n.type === 'follow' && !n.targetId) {
+      const key = 'follow:no-target';
+      if (!groupMap.has(key)) {
+        groupMap.set(key, []);
+      }
+      groupMap.get(key)!.push(n);
+    } else {
+      ungroupable.push(n);
+    }
+  }
+
+  const result: GroupedNotification[] = [];
+
+  for (const [, group] of groupMap) {
+    if (group.length === 1) {
+      result.push(group[0]);
+    } else {
+      // Use most recent as the base notification
+      const sorted = group.sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      const base = sorted[0];
+      const actors = sorted
+        .filter((n) => n.actorId && n.actorName)
+        .map((n) => ({ id: n.actorId!, name: n.actorName! }));
+
+      // Deduplicate actors
+      const uniqueActors = Array.from(
+        new Map(actors.map((a) => [a.id, a])).values()
+      );
+
+      const othersCount = uniqueActors.length - 1;
+      let groupMessage = base.message;
+      if (othersCount > 0 && uniqueActors.length > 0) {
+        const verb =
+          base.type === 'like'
+            ? 'liked your post'
+            : base.type === 'comment'
+              ? 'commented on your post'
+              : 'started following you';
+        groupMessage =
+          othersCount === 1
+            ? `and ${uniqueActors[1]?.name || '1 other'} ${verb}`
+            : `and ${othersCount} others ${verb}`;
+      }
+
+      result.push({
+        ...base,
+        message: groupMessage,
+        read: sorted.every((n) => n.read),
+        groupedActors: uniqueActors,
+        groupCount: uniqueActors.length,
+      });
+    }
+  }
+
+  // Add ungroupable notifications
+  result.push(...ungroupable);
+
+  // Sort all by date descending
+  result.sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+
+  return result;
 }
 
 // ── Single Notification Item ─────────────────────────────────────────────────
@@ -216,16 +221,19 @@ function generateMockNotifications(): Notification[] {
 function NotificationItem({
   notification,
   onMarkRead,
+  onDelete,
   onNavigateToUser,
   onNavigateToContent,
 }: {
-  notification: Notification;
+  notification: GroupedNotification;
   onMarkRead: (id: string) => void;
+  onDelete: (id: string) => void;
   onNavigateToUser?: (userId: string) => void;
   onNavigateToContent?: (contentId: string) => void;
 }) {
   const config = NOTIFICATION_CONFIG[notification.type] || NOTIFICATION_CONFIG.system;
   const Icon = config.icon;
+  const [showActions, setShowActions] = useState(false);
 
   const handleClick = useCallback(() => {
     if (!notification.read) {
@@ -245,8 +253,10 @@ function NotificationItem({
       exit={{ opacity: 0, x: 10, height: 0 }}
       layout
       onClick={handleClick}
+      onMouseEnter={() => setShowActions(true)}
+      onMouseLeave={() => setShowActions(false)}
       className={cn(
-        'flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors border-b border-lattice-border/50 last:border-b-0',
+        'flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors border-b border-lattice-border/50 last:border-b-0 relative group',
         notification.read
           ? 'hover:bg-lattice-deep/50'
           : 'bg-neon-cyan/[0.02] hover:bg-neon-cyan/[0.05]'
@@ -265,7 +275,10 @@ function NotificationItem({
             <p className="text-sm">
               {notification.actorName && (
                 <button
-                  onClick={e => { e.stopPropagation(); onNavigateToUser?.(notification.actorId!); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onNavigateToUser?.(notification.actorId!);
+                  }}
                   className="font-medium text-white hover:text-neon-cyan transition-colors"
                 >
                   {notification.actorName}
@@ -274,6 +287,27 @@ function NotificationItem({
               {notification.actorName && ' '}
               <span className="text-gray-400">{notification.message}</span>
             </p>
+
+            {/* Grouped actors preview */}
+            {notification.groupCount && notification.groupCount > 1 && notification.groupedActors && (
+              <div className="flex items-center gap-1 mt-1">
+                {notification.groupedActors.slice(0, 4).map((actor, i) => (
+                  <div
+                    key={actor.id}
+                    className="w-5 h-5 rounded-full bg-gradient-to-br from-neon-purple to-neon-blue flex items-center justify-center text-[8px] text-white font-bold"
+                    style={{ marginLeft: i > 0 ? '-4px' : 0, zIndex: 4 - i }}
+                    title={actor.name}
+                  >
+                    {actor.name.charAt(0).toUpperCase()}
+                  </div>
+                ))}
+                {notification.groupCount > 4 && (
+                  <span className="text-xs text-gray-500 ml-1">
+                    +{notification.groupCount - 4}
+                  </span>
+                )}
+              </div>
+            )}
 
             {/* Target */}
             {notification.targetTitle && (
@@ -291,19 +325,36 @@ function NotificationItem({
             )}
 
             {/* System messages show full text */}
-            {(notification.type === 'system' || notification.type === 'achievement') && !notification.actorName && (
-              <p className="text-sm text-gray-300 mt-0.5">{notification.message}</p>
-            )}
+            {(notification.type === 'system' || notification.type === 'achievement') &&
+              !notification.actorName && (
+                <p className="text-sm text-gray-300 mt-0.5">{notification.message}</p>
+              )}
           </div>
 
-          {/* Unread indicator */}
-          {!notification.read && (
-            <div className="w-2 h-2 rounded-full bg-neon-cyan flex-shrink-0 mt-2" />
-          )}
+          {/* Unread indicator + actions */}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {showActions && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(notification.id);
+                }}
+                className="p-1 text-gray-500 hover:text-red-400 rounded transition-colors"
+                title="Delete notification"
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            )}
+            {!notification.read && (
+              <div className="w-2 h-2 rounded-full bg-neon-cyan mt-0.5" />
+            )}
+          </div>
         </div>
 
         {/* Timestamp */}
-        <p className="text-xs text-gray-600 mt-1">{formatRelativeTime(notification.createdAt)}</p>
+        <p className="text-xs text-gray-600 mt-1">
+          {formatRelativeTime(notification.createdAt)}
+        </p>
       </div>
     </motion.div>
   );
@@ -329,31 +380,53 @@ export function NotificationCenter({
   const notificationsQuery = useQuery({
     queryKey: ['notifications', userId],
     queryFn: async () => {
-      try {
-        const res = await api.get('/api/social/notifications', {
-          params: { userId, limit: 50 },
-        });
-        return (res.data.notifications || []) as Notification[];
-      } catch {
-        // Fallback to mock data if API doesn't exist yet
-        return generateMockNotifications();
+      const params: Record<string, unknown> = { userId, limit: 50 };
+      if (filter === 'unread') {
+        params.unreadOnly = true;
       }
+      const res = await api.get('/api/social/notifications', { params });
+      return (res.data.notifications || res.data || []) as Notification[];
     },
-    refetchInterval: 30000, // Poll every 30 seconds
+    refetchInterval: 30000,
   });
 
-  const notifications = useMemo(() => notificationsQuery.data || [], [notificationsQuery.data]);
+  const notifications = useMemo(
+    () => notificationsQuery.data || [],
+    [notificationsQuery.data]
+  );
 
-  // ── Filtering ────────────────────────────────────────────────────────
+  // ── Real-time socket subscription ───────────────────────────────────
+
+  useEffect(() => {
+    try {
+      const socket = getSocket();
+      if (!socket) return;
+
+      const unsub = subscribe('queue:notifications:new' as SocketEvent, () => {
+        queryClient.invalidateQueries({ queryKey: ['notifications', userId] });
+        queryClient.invalidateQueries({ queryKey: ['notification-count', userId] });
+      });
+
+      return unsub;
+    } catch {
+      // Socket not available
+    }
+  }, [userId, queryClient]);
+
+  // ── Filtering + Grouping ────────────────────────────────────────────
 
   const filteredNotifications = useMemo(() => {
-    if (filter === 'all') return notifications;
-    if (filter === 'unread') return notifications.filter(n => !n.read);
-    return notifications.filter(n => n.type === filter);
+    let filtered = notifications;
+    if (filter === 'unread') {
+      filtered = notifications.filter((n) => !n.read);
+    } else if (filter !== 'all') {
+      filtered = notifications.filter((n) => n.type === filter);
+    }
+    return groupNotifications(filtered);
   }, [notifications, filter]);
 
   const unreadCount = useMemo(
-    () => notifications.filter(n => !n.read).length,
+    () => notifications.filter((n) => !n.read).length,
     [notifications]
   );
 
@@ -361,62 +434,115 @@ export function NotificationCenter({
 
   const markReadMutation = useMutation({
     mutationFn: async (notificationId: string) => {
-      try {
-        await api.post(`/api/social/notifications/${notificationId}/read`, { userId });
-      } catch {
-        // Optimistically handle if API doesn't exist
-      }
+      await api.post(`/api/social/notifications/${notificationId}/read`, { userId });
     },
     onMutate: async (notificationId: string) => {
-      // Optimistic update
-      queryClient.setQueryData(['notifications', userId], (old: Notification[] | undefined) => {
-        if (!old) return [];
-        return old.map(n => n.id === notificationId ? { ...n, read: true } : n);
-      });
+      await queryClient.cancelQueries({ queryKey: ['notifications', userId] });
+      queryClient.setQueryData(
+        ['notifications', userId],
+        (old: Notification[] | undefined) => {
+          if (!old) return [];
+          return old.map((n) =>
+            n.id === notificationId ? { ...n, read: true } : n
+          );
+        }
+      );
+      // Also update count cache
+      queryClient.setQueryData(
+        ['notification-count', userId],
+        (old: { count: number } | undefined) => ({
+          count: Math.max(0, (old?.count ?? 1) - 1),
+        })
+      );
+    },
+    onError: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications', userId] });
     },
   });
 
   const markAllReadMutation = useMutation({
     mutationFn: async () => {
-      try {
-        await api.post('/api/social/notifications/read-all', { userId });
-      } catch {
-        // Optimistically handle if API doesn't exist
-      }
+      await api.post('/api/social/notifications/read-all', { userId });
     },
     onMutate: async () => {
-      queryClient.setQueryData(['notifications', userId], (old: Notification[] | undefined) => {
-        if (!old) return [];
-        return old.map(n => ({ ...n, read: true }));
-      });
+      await queryClient.cancelQueries({ queryKey: ['notifications', userId] });
+      queryClient.setQueryData(
+        ['notifications', userId],
+        (old: Notification[] | undefined) => {
+          if (!old) return [];
+          return old.map((n) => ({ ...n, read: true }));
+        }
+      );
+      queryClient.setQueryData(['notification-count', userId], { count: 0 });
+    },
+    onError: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications', userId] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (notificationId: string) => {
+      await api.delete(`/api/social/notifications/${notificationId}`);
+    },
+    onMutate: async (notificationId: string) => {
+      await queryClient.cancelQueries({ queryKey: ['notifications', userId] });
+      const previous = queryClient.getQueryData<Notification[]>([
+        'notifications',
+        userId,
+      ]);
+      queryClient.setQueryData(
+        ['notifications', userId],
+        (old: Notification[] | undefined) => {
+          if (!old) return [];
+          return old.filter((n) => n.id !== notificationId);
+        }
+      );
+      return { previous };
+    },
+    onError: (_err, _id, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(['notifications', userId], context.previous);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['notification-count', userId] });
     },
   });
 
   const clearAllMutation = useMutation({
     mutationFn: async () => {
-      try {
-        await api.delete('/api/social/notifications', { data: { userId } });
-      } catch {
-        // Optimistically handle
-      }
+      await api.delete('/api/social/notifications', { data: { userId } });
     },
     onMutate: async () => {
       queryClient.setQueryData(['notifications', userId], []);
+      queryClient.setQueryData(['notification-count', userId], { count: 0 });
     },
   });
 
-  const handleMarkRead = useCallback((id: string) => {
-    markReadMutation.mutate(id);
-  }, [markReadMutation]);
+  const handleMarkRead = useCallback(
+    (id: string) => {
+      markReadMutation.mutate(id);
+    },
+    [markReadMutation]
+  );
+
+  const handleDelete = useCallback(
+    (id: string) => {
+      deleteMutation.mutate(id);
+    },
+    [deleteMutation]
+  );
 
   // ── Render ───────────────────────────────────────────────────────────
 
   const content = (
-    <div className={cn(
-      'flex flex-col',
-      mode === 'dropdown' ? 'max-h-[480px]' : 'h-full',
-      className
-    )}>
+    <div
+      className={cn(
+        'flex flex-col',
+        mode === 'dropdown' ? 'max-h-[480px]' : 'h-full',
+        className
+      )}
+    >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-lattice-border flex-shrink-0">
         <div className="flex items-center gap-2">
@@ -439,10 +565,12 @@ export function NotificationCenter({
             </button>
           )}
           <button
-            onClick={() => setShowFilters(prev => !prev)}
+            onClick={() => setShowFilters((prev) => !prev)}
             className={cn(
               'p-1.5 rounded-lg transition-colors',
-              showFilters ? 'text-neon-cyan bg-neon-cyan/10' : 'text-gray-400 hover:text-white'
+              showFilters
+                ? 'text-neon-cyan bg-neon-cyan/10'
+                : 'text-gray-400 hover:text-white'
             )}
             title="Filter notifications"
           >
@@ -478,7 +606,7 @@ export function NotificationCenter({
             className="overflow-hidden border-b border-lattice-border flex-shrink-0"
           >
             <div className="flex flex-wrap gap-1.5 px-4 py-2">
-              {FILTER_OPTIONS.map(opt => (
+              {FILTER_OPTIONS.map((opt) => (
                 <button
                   key={opt.id}
                   onClick={() => setFilter(opt.id)}
@@ -508,11 +636,12 @@ export function NotificationCenter({
           </div>
         ) : filteredNotifications.length > 0 ? (
           <AnimatePresence mode="popLayout">
-            {filteredNotifications.map(notification => (
+            {filteredNotifications.map((notification) => (
               <NotificationItem
                 key={notification.id}
                 notification={notification}
                 onMarkRead={handleMarkRead}
+                onDelete={handleDelete}
                 onNavigateToUser={onNavigateToUser}
                 onNavigateToContent={onNavigateToContent}
               />
@@ -566,89 +695,13 @@ export function NotificationCenter({
 
   // Panel mode
   return (
-    <div className={cn(
-      'bg-lattice-surface border border-lattice-border rounded-xl overflow-hidden',
-      className
-    )}>
-      {content}
-    </div>
-  );
-}
-
-// ── Notification Bell Button (for use in navbars) ────────────────────────────
-
-interface NotificationBellProps {
-  userId: string;
-  onNavigateToUser?: (userId: string) => void;
-  onNavigateToContent?: (contentId: string) => void;
-  className?: string;
-}
-
-export function NotificationBell({
-  userId,
-  onNavigateToUser,
-  onNavigateToContent,
-  className,
-}: NotificationBellProps) {
-  const [isOpen, setIsOpen] = useState(false);
-
-  const notificationsQuery = useQuery({
-    queryKey: ['notifications', userId],
-    queryFn: async () => {
-      try {
-        const res = await api.get('/api/social/notifications', {
-          params: { userId, limit: 50 },
-        });
-        return (res.data.notifications || []) as Notification[];
-      } catch {
-        return generateMockNotifications();
-      }
-    },
-    refetchInterval: 30000,
-  });
-
-  const unreadCount = useMemo(
-    () => (notificationsQuery.data || []).filter((n: Notification) => !n.read).length,
-    [notificationsQuery.data]
-  );
-
-  return (
-    <div className={cn('relative', className)}>
-      <button
-        onClick={() => setIsOpen(prev => !prev)}
-        className={cn(
-          'relative p-2 rounded-lg transition-colors',
-          isOpen ? 'bg-neon-cyan/10 text-neon-cyan' : 'text-gray-400 hover:text-white hover:bg-lattice-deep'
-        )}
-      >
-        <Bell className="w-5 h-5" />
-        {unreadCount > 0 && (
-          <motion.span
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-neon-pink text-[10px] text-white font-bold flex items-center justify-center"
-          >
-            {unreadCount > 9 ? '9+' : unreadCount}
-          </motion.span>
-        )}
-      </button>
-
-      <NotificationCenter
-        userId={userId}
-        isOpen={isOpen}
-        onClose={() => setIsOpen(false)}
-        onNavigateToUser={onNavigateToUser}
-        onNavigateToContent={onNavigateToContent}
-        mode="dropdown"
-      />
-
-      {/* Backdrop */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 z-40"
-          onClick={() => setIsOpen(false)}
-        />
+    <div
+      className={cn(
+        'bg-lattice-surface border border-lattice-border rounded-xl overflow-hidden',
+        className
       )}
+    >
+      {content}
     </div>
   );
 }
