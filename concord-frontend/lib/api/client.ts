@@ -283,6 +283,14 @@ export const apiHelpers = {
 
     update: (id: string, patch: Record<string, unknown>) =>
       api.patch(`/api/dtus/${id}`, patch),
+
+    get: (id: string) => api.get(`/api/dtus/${id}`),
+    delete: (id: string) => api.delete(`/api/dtus/${id}`),
+    search: (query: string) => api.get('/api/dtus/search', { params: { q: query } }),
+    lineage: (id: string) => api.get(`/api/dtus/${id}/lineage`),
+    children: (id: string) => api.get(`/api/dtus/${id}/children`),
+    myDtus: (params?: { limit?: number; offset?: number }) =>
+      api.get('/api/dtus/mine', { params }),
   },
 
   // Ingest operations

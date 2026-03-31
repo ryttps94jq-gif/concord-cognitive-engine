@@ -820,7 +820,7 @@ export default function StudioLensPage() {
                 <Music className="w-12 h-12 mx-auto mb-3 opacity-30" />
                 <p className="text-sm">Sampler</p>
                 <p className="text-xs text-gray-600 mt-1">Load audio files, map across keys, set loop points and velocity zones</p>
-                <p className="text-xs text-neon-cyan mt-2">Coming soon — drag audio DTUs from the soundboard</p>
+                <p className="text-xs text-gray-500 mt-2">No audio DTUs loaded yet. Drag audio DTUs from the soundboard to begin.</p>
               </div>
             </div>
           )}

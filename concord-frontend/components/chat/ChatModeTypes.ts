@@ -67,7 +67,7 @@ export const CHAT_MODES: ChatModeConfig[] = [
 
 // ── Proactive message types ────────────────────────────────────
 
-export type ProactiveTrigger = 'time_based' | 'lens_navigation' | 'idle' | 'dtu_event';
+export type ProactiveTrigger = 'time_based' | 'lens_navigation' | 'idle' | 'dtu_event' | 'server_initiative';
 
 export interface ProactiveMessage {
   id: string;

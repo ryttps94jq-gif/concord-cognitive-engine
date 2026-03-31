@@ -195,6 +195,111 @@ const SLASH_COMMANDS: SlashCommand[] = [
 const ACCEPTED_FILE_TYPES = '.txt,.md,.json,.csv,.pdf,.png,.jpg,.jpeg';
 const MAX_BASE64_SIZE = 512 * 1024; // 512KB — encode files smaller than this
 
+const STORAGE_KEY_CONVERSATIONS = 'concord_chat_conversations';
+const STORAGE_KEY_SESSION = 'concord_chat_session';
+const STORAGE_KEY_MESSAGES_PREFIX = 'concord_chat_msgs_';
+
+// ──────────────────────────────────────────────
+// Helper: UUID generation
+// ──────────────────────────────────────────────
+
+function generateUUID(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
+// ──────────────────────────────────────────────
+// Helper: localStorage-backed conversation registry
+// ──────────────────────────────────────────────
+
+function loadConversations(): Conversation[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_CONVERSATIONS);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveConversations(convs: Conversation[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEY_CONVERSATIONS, JSON.stringify(convs));
+  } catch {
+    // Storage full or unavailable
+  }
+}
+
+function loadSessionId(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return localStorage.getItem(STORAGE_KEY_SESSION);
+  } catch {
+    return null;
+  }
+}
+
+function saveSessionId(id: string | null) {
+  if (typeof window === 'undefined') return;
+  try {
+    if (id) {
+      localStorage.setItem(STORAGE_KEY_SESSION, id);
+    } else {
+      localStorage.removeItem(STORAGE_KEY_SESSION);
+    }
+  } catch {
+    // Storage unavailable
+  }
+}
+
+function loadMessagesForSession(sessionId: string): Message[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_MESSAGES_PREFIX + sessionId);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveMessagesForSession(sessionId: string, messages: Message[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEY_MESSAGES_PREFIX + sessionId, JSON.stringify(messages));
+  } catch {
+    // Storage full
+  }
+}
+
+function deleteMessagesForSession(sessionId: string) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(STORAGE_KEY_MESSAGES_PREFIX + sessionId);
+  } catch {
+    // noop
+  }
+}
+
+function formatRelativeTime(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diffMs = now - then;
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return 'Just now';
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay < 7) return `${diffDay}d ago`;
+  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
 // ──────────────────────────────────────────────
 // Helper: file to base64
 // ──────────────────────────────────────────────
@@ -225,7 +330,7 @@ export default function ChatLensPage() {
 
   // Existing state
   const [input, setInput] = useState('');
-  const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
+  const [selectedConversation, setSelectedConversation] = useState<string | null>(() => loadSessionId());
   const [aiMode, setAiMode] = useState<AIMode>(AI_MODES[0]);
   const [showModeSelect, setShowModeSelect] = useState(false);
   const [localMessages, setLocalMessages] = useState<Message[]>([]);
@@ -234,6 +339,7 @@ export default function ChatLensPage() {
   const [conversationSearch, setConversationSearch] = useState('');
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showFeatures, setShowFeatures] = useState(false);
+  const [storedConversations, setStoredConversations] = useState<Conversation[]>(() => loadConversations());
 
   // New state — Persona picker
   const [selectedPersona, setSelectedPersona] = useState<Persona>(PERSONAS[0]);
@@ -268,41 +374,35 @@ export default function ChatLensPage() {
     refetchInterval: 10000,
   });
 
-  const { data: conversations, isError: isError2, error: error2, refetch: refetch2 } = useQuery({
-    queryKey: ['conversations'],
-    queryFn: () => apiHelpers.eventsLog.list({ type: 'chat', limit: 50 }).then(r =>
-      (r.data?.events || []).map((s: Record<string, unknown>) => ({
-        id: s.id || s.sessionId,
-        title: s.title || 'New Conversation',
-        lastMessage: s.lastMessage || '',
-        updatedAt: s.updatedAt || new Date().toISOString(),
-        messageCount: s.messageCount || 0
-      }))
-    ),
-  });
+  // Persist selectedConversation to localStorage whenever it changes
+  useEffect(() => {
+    saveSessionId(selectedConversation);
+  }, [selectedConversation]);
 
-  const { data: serverMessages, isError: isError3, error: error3, refetch: refetch3 } = useQuery({
-    queryKey: ['messages', selectedConversation],
-    queryFn: () => apiHelpers.cognitive.status().then(r =>
-      (r.data?.lastMessages || []).map((m: Record<string, unknown>, i: number) => ({
-        id: m.id || `msg-${i}`,
-        role: m.role,
-        content: m.content,
-        timestamp: m.timestamp || new Date().toISOString(),
-        model: m.model,
-        tokens: m.tokens,
-        refs: m.refs
-      }))
-    ),
-    enabled: !!selectedConversation,
-  });
+  // Load messages from localStorage when switching conversations
+  useEffect(() => {
+    if (selectedConversation) {
+      const saved = loadMessagesForSession(selectedConversation);
+      setLocalMessages(saved);
+    }
+  }, [selectedConversation]);
 
-  const messages = useMemo(() => selectedConversation ? (serverMessages || []) : localMessages, [selectedConversation, serverMessages, localMessages]);
+  // Persist messages whenever they change (debounced via the conversation id)
+  useEffect(() => {
+    if (selectedConversation && localMessages.length > 0) {
+      saveMessagesForSession(selectedConversation, localMessages);
+    }
+  }, [localMessages, selectedConversation]);
+
+  // Conversations are managed in local state (backed by localStorage)
+  const conversations = storedConversations;
+
+  const messages = localMessages;
 
   const filteredConversations = useMemo(() => {
     if (!conversations || !conversationSearch.trim()) return conversations || [];
     const q = conversationSearch.toLowerCase();
-    return (conversations as Conversation[]).filter(
+    return conversations.filter(
       (c) => c.title.toLowerCase().includes(q) || c.lastMessage?.toLowerCase().includes(q)
     );
   }, [conversations, conversationSearch]);
@@ -459,9 +559,27 @@ export default function ChatLensPage() {
         quotedContent: quotedMessage?.content ? quotedMessage.content.slice(0, 200) : undefined,
       };
 
+      // Ensure we have a session — if none, create one now
       if (!selectedConversation) {
-        setLocalMessages(prev => [...prev, userMsg]);
+        const newId = generateUUID();
+        const title = content.slice(0, 60) || 'New Conversation';
+        const newConv: Conversation = {
+          id: newId,
+          title,
+          lastMessage: content.slice(0, 100),
+          updatedAt: new Date().toISOString(),
+          messageCount: 1,
+        };
+        setStoredConversations(prev => {
+          const next = [newConv, ...prev];
+          saveConversations(next);
+          return next;
+        });
+        setSelectedConversation(newId);
+        // Save the user message for this new session right away
+        saveMessagesForSession(newId, [userMsg]);
       }
+      setLocalMessages(prev => [...prev, userMsg]);
 
       // Build system prompt from persona + domain context
       let systemPrompt = '';
@@ -570,12 +688,21 @@ export default function ChatLensPage() {
         webAugmented: !!data.webAugmented,
       };
 
-      if (!selectedConversation) {
-        setLocalMessages(prev => [...prev, assistantMsg]);
+      setLocalMessages(prev => [...prev, assistantMsg]);
+
+      // Update conversation registry metadata
+      if (selectedConversation) {
+        setStoredConversations(prev => {
+          const next = prev.map(c =>
+            c.id === selectedConversation
+              ? { ...c, lastMessage: (assistantMsg.content || '').slice(0, 100), updatedAt: new Date().toISOString(), messageCount: c.messageCount + 2 }
+              : c
+          );
+          saveConversations(next);
+          return next;
+        });
       }
 
-      queryClient.invalidateQueries({ queryKey: ['messages'] });
-      queryClient.invalidateQueries({ queryKey: ['conversations'] });
       queryClient.invalidateQueries({ queryKey: ['cognitive-status'] });
       setInput('');
     },
@@ -588,9 +715,7 @@ export default function ChatLensPage() {
         content: `Failed to send message: ${err instanceof Error ? err.message : 'Unknown error'}. Please try again.`,
         timestamp: new Date().toISOString()
       };
-      if (!selectedConversation) {
-        setLocalMessages(prev => [...prev, errorMsg]);
-      }
+      setLocalMessages(prev => [...prev, errorMsg]);
     },
   });
 
@@ -611,15 +736,12 @@ export default function ChatLensPage() {
         timestamp: new Date().toISOString(),
         refs: data.refs
       };
-      if (!selectedConversation) {
-        setLocalMessages(prev => {
-          const lastAssistantIdx = [...prev].reverse().findIndex(m => m.role === 'assistant');
-          if (lastAssistantIdx === -1) return [...prev, assistantMsg];
-          const idx = prev.length - 1 - lastAssistantIdx;
-          return [...prev.slice(0, idx), assistantMsg];
-        });
-      }
-      queryClient.invalidateQueries({ queryKey: ['messages'] });
+      setLocalMessages(prev => {
+        const lastAssistantIdx = [...prev].reverse().findIndex(m => m.role === 'assistant');
+        if (lastAssistantIdx === -1) return [...prev, assistantMsg];
+        const idx = prev.length - 1 - lastAssistantIdx;
+        return [...prev.slice(0, idx), assistantMsg];
+      });
       queryClient.invalidateQueries({ queryKey: ['cognitive-status'] });
     },
     onError: (err) => {
@@ -629,9 +751,7 @@ export default function ChatLensPage() {
         content: `Regeneration failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
         timestamp: new Date().toISOString()
       };
-      if (!selectedConversation) {
-        setLocalMessages(prev => [...prev, errorMsg]);
-      }
+      setLocalMessages(prev => [...prev, errorMsg]);
     },
   });
 
@@ -677,11 +797,22 @@ export default function ChatLensPage() {
 
   const deleteConversationMutation = useMutation({
     mutationFn: async (sessionId: string) => {
-      await apiHelpers.lens.delete('chat', sessionId);
+      // Try to delete on server (best-effort), but always remove locally
+      try {
+        await apiHelpers.lens.delete('chat', sessionId);
+      } catch {
+        // Server deletion failed — still remove locally
+      }
+      return sessionId;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['conversations'] });
-      if (selectedConversation) {
+    onSuccess: (deletedId: string) => {
+      deleteMessagesForSession(deletedId);
+      setStoredConversations(prev => {
+        const next = prev.filter(c => c.id !== deletedId);
+        saveConversations(next);
+        return next;
+      });
+      if (selectedConversation === deletedId) {
         setSelectedConversation(null);
         setLocalMessages([]);
       }
@@ -903,6 +1034,7 @@ export default function ChatLensPage() {
     setAttachments([]);
     setQuotedMessage(null);
     setPinnedMessages(new Set());
+    saveSessionId(null);
   }, []);
 
   const exp = cogStatus?.experience;
@@ -1126,10 +1258,10 @@ export default function ChatLensPage() {
     );
   }
 
-  if (isError || isError2 || isError3) {
+  if (isError) {
     return (
       <div className="flex items-center justify-center h-full p-8">
-        <ErrorState error={error?.message || error2?.message || error3?.message} onRetry={() => { refetch(); refetch2(); refetch3(); }} />
+        <ErrorState error={error?.message} onRetry={() => { refetch(); }} />
       </div>
     );
   }

@@ -147,6 +147,8 @@ export function PersistentChatRail({
     currentLens,
     messageCount: messages.length,
     enabled: !collapsed && chatMode !== 'chat', // disable proactive in pure chat mode
+    onSocket: on,
+    offSocket: off,
   });
 
   // ── DTU event listener for proactive notifications ─────────

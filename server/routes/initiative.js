@@ -41,10 +41,14 @@ function _getUserId(req) {
  * @param {import('express').Express} app - Express application
  * @param {object} deps - Dependencies from server wiring
  * @param {import('better-sqlite3').Database} deps.db - SQLite database
+ * @param {Function} [deps.realtimeEmit] - WebSocket broadcast function (optional)
  */
 export default function registerInitiativeRoutes(app, deps) {
   const { db } = deps;
   const engine = createInitiativeEngine(db);
+
+  // Expose engine for external callers (e.g., proactive tick in server.js)
+  app._initiativeEngine = engine;
 
   // ── GET /api/initiative/settings ─────────────────────────────────────
   // Get user's initiative settings (creates defaults if not present)
@@ -125,6 +129,24 @@ export default function registerInitiativeRoutes(app, deps) {
         priority: evaluation.suggestedPriority || "normal",
         metadata: context || {},
       });
+
+      // Broadcast via WebSocket so the frontend can display it in real time
+      try {
+        const emit = globalThis.realtimeEmit;
+        if (typeof emit === "function") {
+          emit("initiative:new", {
+            id: initiative.id,
+            triggerType: initiative.triggerType,
+            message: initiative.message,
+            priority: initiative.priority,
+            score: initiative.score,
+            status: initiative.status,
+            channel: initiative.channel,
+            metadata: initiative.metadata,
+            createdAt: initiative.createdAt,
+          });
+        }
+      } catch (_e) { /* best-effort broadcast */ }
     }
 
     res.json({

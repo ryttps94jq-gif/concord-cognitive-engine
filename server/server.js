@@ -9514,6 +9514,42 @@ function upsertDTU(dtu, { broadcast = true, federate = false } = {}) {
       });
     } catch (e) { observe(e, "dtu_realtime_broadcast"); }
 
+    // Proactive initiative: notify user of new high-value DTU discovery
+    if (isNew && app._initiativeEngine && dtu.score >= 70) {
+      try {
+        const userId = dtu.userId || dtu.entityId || null;
+        if (userId && userId !== "system" && userId !== "event_bridge") {
+          const engine = app._initiativeEngine;
+          const evaluation = engine.evaluateTrigger(userId, "substrate_discovery", {
+            relevanceScore: Math.min(1.0, (dtu.score || 50) / 100),
+            timeSensitive: dtu.tier === "gold" || dtu.tier === "platinum",
+          });
+          if (evaluation.shouldFire) {
+            const initiative = engine.createInitiative(
+              userId,
+              "substrate_discovery",
+              `New discovery in your substrate: "${dtu.title}". Want to explore it?`,
+              {
+                priority: evaluation.suggestedPriority || "normal",
+                metadata: { dtuId: dtu.id, dtuTitle: dtu.title, domain: dtu.domain, cretiScore: dtu.score },
+              }
+            );
+            realtimeEmit("initiative:new", {
+              id: initiative.id,
+              triggerType: initiative.triggerType,
+              message: initiative.message,
+              priority: initiative.priority,
+              score: initiative.score,
+              status: initiative.status,
+              channel: initiative.channel,
+              metadata: initiative.metadata,
+              createdAt: initiative.createdAt,
+            });
+          }
+        }
+      } catch (_e) { /* best-effort initiative trigger */ }
+    }
+
     // Event-to-DTU bridge: internal dtu:created events become knowledge DTUs
     // Only for new DTUs that aren't already from the bridge (prevents recursion)
     if (isNew && dtu.source !== "event_bridge" && dtu.source !== "event_bridge_compression") {

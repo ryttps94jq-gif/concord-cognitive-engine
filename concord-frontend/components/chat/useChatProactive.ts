@@ -19,6 +19,10 @@ interface UseChatProactiveOptions {
   currentLens: string;
   messageCount: number;
   enabled: boolean;
+  /** Socket event listener — if provided, subscribes to server-pushed initiative events */
+  onSocket?: (event: string, handler: (data: unknown) => void) => void;
+  /** Socket event unsubscribe */
+  offSocket?: (event: string, handler: (data: unknown) => void) => void;
 }
 
 function generateId(): string {
@@ -142,6 +146,8 @@ export function useChatProactive({
   currentLens,
   messageCount,
   enabled,
+  onSocket,
+  offSocket,
 }: UseChatProactiveOptions) {
   const [proactiveMessages, setProactiveMessages] = useState<ProactiveMessage[]>([]);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -184,6 +190,40 @@ export function useChatProactive({
     };
     setProactiveMessages(prev => [...prev.slice(-4), msg]); // Keep max 5
   }, []);
+
+  // Server-pushed initiative events via WebSocket
+  useEffect(() => {
+    if (!enabled || !onSocket || !offSocket) return;
+
+    const handleInitiative = (data: unknown) => {
+      const d = data as {
+        id?: string;
+        triggerType?: string;
+        message?: string;
+        priority?: string;
+        score?: number;
+        metadata?: Record<string, unknown>;
+        createdAt?: string;
+      };
+      if (!d?.id || !d?.message) return;
+
+      const msg: ProactiveMessage = {
+        id: d.id,
+        trigger: 'server_initiative',
+        content: d.message,
+        actionLabel: 'Tell me more',
+        actionPayload: d.message,
+        dismissed: false,
+        timestamp: d.createdAt || new Date().toISOString(),
+      };
+      setProactiveMessages(prev => [...prev.slice(-4), msg]); // Keep max 5
+    };
+
+    onSocket('initiative:new', handleInitiative);
+    return () => {
+      offSocket('initiative:new', handleInitiative);
+    };
+  }, [enabled, onSocket, offSocket]);
 
   // Time-based suggestion — once per session
   useEffect(() => {

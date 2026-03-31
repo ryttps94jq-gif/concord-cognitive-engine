@@ -3,7 +3,7 @@
 import { useUIStore } from '@/store/ui';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
-import { Search, Command, Menu } from 'lucide-react';
+import { Search, Command, Menu, Activity } from 'lucide-react';
 import { SyncStatusDot, useOnlineStatus } from '@/components/common/OfflineIndicator';
 import { HeartbeatBar } from '@/components/live/HeartbeatBar';
 import { XPWidget } from '@/components/gamification/XPWidget';
@@ -25,6 +25,26 @@ export function Topbar() {
     refetchInterval: 30000,
     retry: false,
   });
+
+  // Fetch user info for display name
+  const { data: userData } = useQuery({
+    queryKey: ['auth-me'],
+    queryFn: () => api.get('/api/auth/me').then((r) => r.data).catch(() => null),
+    staleTime: 60000,
+    retry: false,
+  });
+
+  // Fetch system health for pulse indicator
+  const { data: healthData } = useQuery({
+    queryKey: ['system-health'],
+    queryFn: () => api.get('/api/system/health').then((r) => r.data).catch(() => null),
+    refetchInterval: 60000,
+    retry: false,
+  });
+
+  const userName = userData?.username || userData?.displayName || userData?.name || userData?.email?.split('@')[0] || null;
+  const systemHealthy = healthData?.status === 'ok' || healthData?.healthy === true;
+  const systemDegraded = healthData && !systemHealthy;
 
   return (
     <header
@@ -64,7 +84,7 @@ export function Topbar() {
       </button>
 
       {/* Right Side */}
-      <div className="flex items-center gap-2 lg:gap-4">
+      <div className="flex items-center gap-2 lg:gap-3">
         {/* Mobile search button */}
         <button
           onClick={() => setCommandPaletteOpen(true)}
@@ -74,9 +94,30 @@ export function Topbar() {
           <Search className="w-5 h-5" />
         </button>
 
+        {/* System Pulse Indicator */}
+        <div
+          className="flex items-center gap-1.5 px-2 py-1"
+          title={systemDegraded ? 'System degraded' : 'System healthy'}
+        >
+          <Activity
+            className={`w-3.5 h-3.5 ${
+              systemDegraded
+                ? 'text-amber-400'
+                : systemHealthy
+                  ? 'text-green-400'
+                  : 'text-gray-500 animate-pulse'
+            }`}
+          />
+          <span className={`hidden lg:inline text-xs ${
+            systemDegraded ? 'text-amber-400' : systemHealthy ? 'text-green-400' : 'text-gray-500'
+          }`}>
+            {systemDegraded ? 'Degraded' : systemHealthy ? 'Healthy' : 'Checking'}
+          </span>
+        </div>
+
         {/* FE-010: Online/offline status indicator */}
         <div
-          className="flex items-center gap-2 px-2 py-1.5"
+          className="hidden sm:flex items-center gap-2 px-2 py-1.5"
           title={isOnline ? 'Online' : 'Offline — changes saved locally'}
         >
           <SyncStatusDot status={isOnline ? 'synced' : 'offline'} />
@@ -85,9 +126,7 @@ export function Topbar() {
           </span>
         </div>
 
-        <div className="hidden md:block">
-          <WalletBadge />
-        </div>
+        <WalletBadge />
 
         <div className="hidden md:block">
           <XPWidget />
@@ -98,7 +137,16 @@ export function Topbar() {
         </div>
 
         <NotificationBell />
-        <UserMenu />
+
+        {/* User name + menu */}
+        <div className="flex items-center gap-1.5">
+          {userName && (
+            <span className="hidden lg:inline text-xs text-gray-400 max-w-[100px] truncate">
+              {userName}
+            </span>
+          )}
+          <UserMenu />
+        </div>
       </div>
     </header>
   );
