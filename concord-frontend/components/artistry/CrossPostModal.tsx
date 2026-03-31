@@ -1,10 +1,13 @@
 'use client';
 
 import { useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import {
   X, ArrowRight,
-  Eye, Tag, Clock, Info,
+  Eye, Tag, Clock, Info, Loader2, Check, ShoppingBag,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { api } from '@/lib/api/client';
 import type { ArtistryContentType } from '@/lib/artistry/types';
 
 interface CrossPostModalProps {
@@ -17,6 +20,7 @@ interface CrossPostModalProps {
   defaultTitle: string;
   defaultDescription?: string;
   defaultTags?: string[];
+  marketplaceListingId?: string;
 }
 
 export interface CrossPostData {
@@ -43,9 +47,11 @@ export function CrossPostModal({
   onSubmit,
   contentType,
   sourceLens,
+  sourceArtifactId,
   defaultTitle,
   defaultDescription = '',
   defaultTags = [],
+  marketplaceListingId,
 }: CrossPostModalProps) {
   const [title, setTitle] = useState(defaultTitle);
   const [description, setDescription] = useState(defaultDescription);
@@ -53,6 +59,36 @@ export function CrossPostModal({
   const [tagInput, setTagInput] = useState('');
   const [previewStart, setPreviewStart] = useState(0);
   const [previewDuration, setPreviewDuration] = useState(contentType === 'video' ? 60 : 30);
+  const [includeMarketplaceTag, setIncludeMarketplaceTag] = useState(!!marketplaceListingId);
+  const [posted, setPosted] = useState(false);
+
+  const crossPostMutation = useMutation({
+    mutationFn: async (data: CrossPostData) => {
+      const postTags = [...data.tags];
+      if (includeMarketplaceTag && marketplaceListingId) {
+        postTags.push(`marketplace:${marketplaceListingId}`);
+      }
+
+      const res = await api.post('/api/social/post', {
+        content: `${data.title}\n\n${data.description}`,
+        tags: postTags,
+        sourceArtifactId,
+        sourceLens,
+        contentType,
+        previewStart: data.previewStart,
+        previewDuration: data.previewDuration,
+        marketplaceListingId: includeMarketplaceTag ? marketplaceListingId : undefined,
+      });
+      return res.data;
+    },
+    onSuccess: () => {
+      setPosted(true);
+      setTimeout(() => {
+        setPosted(false);
+        onClose();
+      }, 2000);
+    },
+  });
 
   if (!isOpen) return null;
 
@@ -181,20 +217,56 @@ export function CrossPostModal({
           )}
         </div>
 
+        {/* Marketplace listing tag */}
+        {marketplaceListingId && (
+          <div className="px-5 pb-2">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={includeMarketplaceTag}
+                onChange={(e) => setIncludeMarketplaceTag(e.target.checked)}
+                className="w-4 h-4 rounded border-white/20 bg-white/5 text-neon-cyan focus:ring-neon-cyan/50"
+              />
+              <ShoppingBag className="w-3.5 h-3.5 text-neon-green" />
+              <span className="text-xs text-gray-300">Tag marketplace listing for social commerce</span>
+            </label>
+          </div>
+        )}
+
         {/* Footer */}
         <div className="flex items-center justify-between px-5 py-4 border-t border-white/5 bg-white/[0.02]">
           <span className="text-[10px] text-gray-500">Free to post · No cost to browse</span>
           <div className="flex items-center gap-2">
             <button onClick={onClose} className="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancel</button>
-            <button
-              onClick={() => onSubmit({ title, description, tags, previewStart, previewDuration })}
-              disabled={!title.trim()}
-              className="px-5 py-2 rounded-lg bg-neon-cyan text-black text-sm font-semibold hover:brightness-110 disabled:opacity-30 transition"
-            >
-              Post to Artistry
-            </button>
+            {posted ? (
+              <div className="flex items-center gap-2 px-5 py-2 rounded-lg bg-green-500/15 text-green-400 text-sm font-semibold">
+                <Check className="w-4 h-4" />
+                Posted!
+              </div>
+            ) : (
+              <button
+                onClick={() => {
+                  const data = { title, description, tags, previewStart, previewDuration };
+                  crossPostMutation.mutate(data);
+                  onSubmit(data);
+                }}
+                disabled={!title.trim() || crossPostMutation.isPending}
+                className={cn(
+                  'px-5 py-2 rounded-lg bg-neon-cyan text-black text-sm font-semibold hover:brightness-110 disabled:opacity-30 transition flex items-center gap-2'
+                )}
+              >
+                {crossPostMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+                Post to Artistry
+              </button>
+            )}
           </div>
         </div>
+
+        {crossPostMutation.isError && (
+          <div className="px-5 pb-3 text-xs text-red-400">
+            Failed to cross-post. Please try again.
+          </div>
+        )}
       </div>
     </div>
   );
