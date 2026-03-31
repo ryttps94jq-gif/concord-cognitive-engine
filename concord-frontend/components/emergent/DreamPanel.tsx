@@ -109,6 +109,12 @@ export function DreamPanel() {
             <div key={d.id} className="bg-lattice-deep rounded p-2 text-xs flex items-center justify-between">
               <div className="flex-1 truncate">
                 <span className="text-gray-300">{d.title}</span>
+                {d.capturedAt && (
+                  <span className="text-gray-600 ml-2 flex items-center gap-0.5 inline-flex">
+                    <Clock className="w-2.5 h-2.5" />
+                    {new Date(d.capturedAt).toLocaleTimeString()}
+                  </span>
+                )}
               </div>
               {d.convergence && (
                 <span className="text-green-400 flex items-center gap-1 ml-2">

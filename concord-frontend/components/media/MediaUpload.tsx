@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useMemo } from 'react';
+import NextImage from 'next/image';
 import { useMutation } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -385,10 +386,13 @@ export function MediaUpload({
               <div className="flex-shrink-0">
                 {uploadFile.previewUrl ? (
                   <div className="w-20 h-20 rounded-lg overflow-hidden bg-gray-800">
-                    <img
+                    <NextImage
                       src={uploadFile.previewUrl}
                       alt={uploadFile.name}
+                      width={80}
+                      height={80}
                       className="w-full h-full object-cover"
+                      unoptimized
                     />
                   </div>
                 ) : (

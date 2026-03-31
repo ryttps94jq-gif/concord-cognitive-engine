@@ -10,7 +10,6 @@ import {
   X,
   ChevronRight,
   Loader2,
-  ExternalLink,
   RefreshCw,
   AlertCircle,
 } from 'lucide-react';

@@ -5,8 +5,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Activity, Shield, Zap, Eye, AlertTriangle, CheckCircle,
-  XCircle, RefreshCw, ChevronDown, ChevronUp, Loader2, Send,
+  Activity, Shield, Zap,
+  ChevronDown, ChevronUp, Loader2,
   Brain, Sparkles, Wrench, Lock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -76,7 +76,11 @@ export function NervousSystem({ className }: { className?: string }) {
   });
 
   const [wisdomQ, setWisdomQ] = useState('');
-  const [wisdomResult, setWisdomResult] = useState<any>(null);
+  const [wisdomResult, setWisdomResult] = useState<{
+    synthesis: string;
+    domains?: Record<string, unknown>;
+    validation?: { severity: string; vulnerabilities?: unknown[] };
+  } | null>(null);
   const wisdomMutation = useMutation({
     mutationFn: (q: string) => api.post('/api/wisdom/synthesize', { question: q }),
     onSuccess: (r) => { setWisdomResult(r.data); setWisdomQ(''); },
@@ -107,7 +111,7 @@ export function NervousSystem({ className }: { className?: string }) {
         <div className="flex items-center gap-2">
           {/* Circuit breaker status dots */}
           <div className="flex items-center gap-1">
-            {Object.entries(circuitData?.breakers || {}).map(([name, breaker]: [string, any]) => (
+            {Object.entries(circuitData?.breakers || {}).map(([name, breaker]: [string, { state: string; stats: { totalCalls: number; totalFailures: number; opens: number } }]) => (
               <div
                 key={name}
                 className={cn('w-2 h-2 rounded-full', breaker.state === 'closed' ? 'bg-green-400' : breaker.state === 'open' ? 'bg-red-400' : 'bg-yellow-400')}
@@ -126,7 +130,7 @@ export function NervousSystem({ className }: { className?: string }) {
 
       {/* Component health grid */}
       <div className="p-4 grid grid-cols-5 gap-2">
-        {Object.entries(pulseData?.components || {}).map(([name, comp]: [string, any]) => {
+        {Object.entries(pulseData?.components || {}).map(([name, comp]: [string, { status: string; score: number }]) => {
           const Icon = BRAIN_ICONS[name] || Activity;
           return (
             <div key={name} className="text-center">
@@ -167,7 +171,7 @@ export function NervousSystem({ className }: { className?: string }) {
               {/* Pulse tab */}
               {activeTab === 'pulse' && pulseData?.components && (
                 <div className="space-y-2">
-                  {Object.entries(pulseData.components).map(([name, comp]: [string, any]) => (
+                  {Object.entries(pulseData.components).map(([name, comp]: [string, { status: string; score: number }]) => (
                     <div key={name} className="p-2 bg-lattice-deep rounded-lg flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className={cn('w-2 h-2 rounded-full', comp.status === 'healthy' ? 'bg-green-400' : comp.status === 'degraded' ? 'bg-yellow-400' : 'bg-red-400')} />
@@ -182,7 +186,7 @@ export function NervousSystem({ className }: { className?: string }) {
               {/* Circuits tab */}
               {activeTab === 'circuits' && circuitData?.breakers && (
                 <div className="space-y-2">
-                  {Object.entries(circuitData.breakers).map(([name, breaker]: [string, any]) => (
+                  {Object.entries(circuitData.breakers).map(([name, breaker]: [string, { state: string; stats: { totalCalls: number; totalFailures: number; opens: number } }]) => (
                     <div key={name} className="p-2 bg-lattice-deep rounded-lg">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">

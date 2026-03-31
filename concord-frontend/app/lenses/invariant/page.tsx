@@ -5,7 +5,7 @@ import { useState, useCallback } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
-import { Shield, Check, X, AlertTriangle, Lock, Eye, Zap, Loader2, Layers, ChevronDown, Gauge, Scale, ShieldOff, Database, Activity, Ban } from 'lucide-react';
+import { Shield, Check, X, AlertTriangle, Lock, Eye, Zap, Loader2, Layers, ChevronDown, Gauge, Scale, ShieldOff, Activity, Ban } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';

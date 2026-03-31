@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Sliders, Power, ChevronDown, ChevronUp, GripVertical, Trash2, Save } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DEFAULT_EFFECT_PRESETS } from '@/lib/daw/engine';
@@ -180,7 +180,7 @@ function formatParamValue(key: string, value: number): string {
 export function EffectsPanel({ track, onUpdateEffects, onSaveChainAsDTU }: EffectsPanelProps) {
   const [showCatalog, setShowCatalog] = useState(false);
 
-  const effects = track?.effectChain || [];
+  const effects = useMemo(() => track?.effectChain || [], [track]);
 
   const handleAddEffect = useCallback((type: EffectType, name: string) => {
     if (!track) return;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 
 interface ArtifactInfo {
   type: string;
@@ -84,11 +85,11 @@ export function ArtifactRenderer({ dtuId, artifact, mode = "inline" }: ArtifactR
   // Image
   if (artifact.type.startsWith("image/")) {
     if (mode === "thumbnail") {
-      return <img src={streamUrl} className="w-full h-32 object-cover rounded" alt={artifact.filename} />;
+      return <Image src={streamUrl} className="w-full h-32 object-cover rounded" alt={artifact.filename} width={400} height={128} unoptimized />;
     }
     return (
       <div className="space-y-2">
-        <img src={streamUrl} alt={artifact.filename} className="w-full rounded-lg max-h-96 object-contain bg-zinc-900" />
+        <Image src={streamUrl} alt={artifact.filename} className="w-full rounded-lg max-h-96 object-contain bg-zinc-900" width={800} height={384} unoptimized />
         <div className="flex items-center justify-between text-xs text-zinc-400">
           <span>{artifact.filename} — {formatSize(artifact.sizeBytes)}</span>
           <DownloadButton url={downloadUrl} filename={artifact.filename} />
@@ -135,7 +136,7 @@ export function ArtifactRenderer({ dtuId, artifact, mode = "inline" }: ArtifactR
     return (
       <div className="space-y-2">
         <div className="bg-zinc-900 rounded-lg border border-zinc-700 p-4 flex items-center justify-center">
-          <img src={streamUrl} alt={artifact.filename} className="max-w-full max-h-96" />
+          <Image src={streamUrl} alt={artifact.filename} className="max-w-full max-h-96" width={800} height={384} unoptimized />
         </div>
         <div className="flex items-center justify-between text-xs text-zinc-400">
           <span>{artifact.filename} — {formatSize(artifact.sizeBytes)}</span>

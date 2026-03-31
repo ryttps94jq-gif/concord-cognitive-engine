@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useMutation } from '@tanstack/react-query';
-import { api, apiHelpers } from '@/lib/api/client';
+import { apiHelpers } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -858,6 +858,15 @@ export default function CodeLensPage() {
             title="API Reference"
           >
             <BookOpen className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={() => refetchDTUs()}
+            disabled={dtusLoading}
+            className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400 disabled:opacity-50"
+            title="Refresh DTUs"
+          >
+            {dtusLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
           </button>
 
           <button

@@ -263,6 +263,7 @@ export default function StudioLensPage() {
       }
     }, 50);
 
+    const synthEngines = synthEnginesRef.current;
     return () => {
       unsub();
       unsubDTU();
@@ -271,7 +272,7 @@ export default function StudioLensPage() {
       mixerRef.current?.dispose();
       drumEngineRef.current?.dispose();
       recorderRef.current?.dispose();
-      synthEnginesRef.current.forEach(s => s.dispose());
+      synthEngines.forEach(s => s.dispose());
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

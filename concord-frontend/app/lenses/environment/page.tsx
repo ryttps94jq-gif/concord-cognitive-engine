@@ -493,6 +493,11 @@ export default function EnvironmentLensPage() {
       ? goalItems.reduce((sum, i) => sum + ((i.data as unknown as SustainabilityGoal).progress || 0), 0) / goalItems.length
       : 0;
 
+    const totalResources = resourceItems.length;
+    const avgResourceValue = resourceItems.length > 0
+      ? resourceItems.reduce((sum, i) => sum + ((i.data as unknown as ResourceMetric).value || 0), 0) / resourceItems.length
+      : 0;
+
     return {
       activeSites,
       totalSpecies,
@@ -511,8 +516,10 @@ export default function EnvironmentLensPage() {
       totalGoals,
       completedGoals,
       avgGoalProgress,
+      totalResources,
+      avgResourceValue,
     };
-  }, [siteItems, speciesItems, sampleItems, trailItems, wasteItems, complianceItems, carbonItems, goalItems]);
+  }, [siteItems, speciesItems, sampleItems, trailItems, wasteItems, complianceItems, carbonItems, resourceItems, goalItems]);
 
   /* ---- export geojson ---- */
   const exportGeoJSON = () => {
@@ -1916,6 +1923,13 @@ export default function EnvironmentLensPage() {
                 <span className="text-sm text-gray-300">Compliance Records</span>
               </div>
               <span className={ds.heading3}>{complianceItems.length}</span>
+            </div>
+            <div className="flex items-center justify-between p-3 rounded-lg bg-lattice-elevated/30">
+              <div className="flex items-center gap-2">
+                <Droplets className="w-5 h-5 text-neon-orange" />
+                <span className="text-sm text-gray-300">Resource Metrics</span>
+              </div>
+              <span className={ds.heading3}>{resourceItems.length}</span>
             </div>
           </div>
         </div>

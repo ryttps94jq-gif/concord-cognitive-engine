@@ -900,6 +900,8 @@ export default function PaperLensPage() {
         </>
       )}
 
+      <RealtimeDataPanel data={realtimeInsights} />
+
       {/* Lens Features */}
       <div className="border-t border-white/10">
         <button

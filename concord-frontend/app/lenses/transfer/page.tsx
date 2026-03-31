@@ -3,7 +3,7 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLensBridge } from '@/lib/hooks/use-lens-bridge';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
@@ -47,7 +47,7 @@ export default function TransferLensPage() {
     onError: (err) => console.error('classifyDomain failed:', err instanceof Error ? err.message : err),
   });
 
-  const transfers = history?.transfers || history || [];
+  const transfers = useMemo(() => history?.transfers || history || [], [history]);
 
   // Bridge transfer history into lens artifacts
   useEffect(() => {

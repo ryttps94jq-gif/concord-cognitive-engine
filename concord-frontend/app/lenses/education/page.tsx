@@ -58,7 +58,6 @@ import {
   Video,
   FileType,
   ExternalLink,
-  Copy,
   type LucideIcon,
 } from 'lucide-react';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';

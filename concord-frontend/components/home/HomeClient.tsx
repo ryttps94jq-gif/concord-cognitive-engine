@@ -9,9 +9,8 @@
  *   - DashboardPage for returning users
  */
 
-import { useState, useEffect, useRef, useMemo, Suspense } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { api, apiHelpers, ensureCsrfToken } from '@/lib/api/client';
 import dynamic from 'next/dynamic';
@@ -67,7 +66,6 @@ export function HomeClient() {
   const [hasEntered, setHasEntered] = useState<boolean | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const setFullPageMode = useUIStore((state) => state.setFullPageMode);
-  const router = useRouter();
   const authCheckRef = useRef(false);
 
   useEffect(() => {

@@ -63,11 +63,11 @@ const CATEGORY_CONFIG: Record<string, { icon: React.ElementType; color: string; 
   intelligence: { icon: Brain, color: 'text-violet-400', label: 'Intelligence' },
 };
 
-const STATUS_CONFIG: Record<string, { color: string; label: string }> = {
-  active: { color: 'bg-neon-green/20 text-neon-green', label: 'Active' },
-  beta: { color: 'bg-yellow-500/20 text-yellow-400', label: 'Beta' },
-  planned: { color: 'bg-blue-500/20 text-blue-400', label: 'Planned' },
-  deprecated: { color: 'bg-red-500/20 text-red-400', label: 'Deprecated' },
+const STATUS_CONFIG: Record<string, { icon: React.ElementType; color: string; label: string }> = {
+  active: { icon: CheckCircle2, color: 'bg-neon-green/20 text-neon-green', label: 'Active' },
+  beta: { icon: Zap, color: 'bg-yellow-500/20 text-yellow-400', label: 'Beta' },
+  planned: { icon: Clock, color: 'bg-blue-500/20 text-blue-400', label: 'Planned' },
+  deprecated: { icon: Clock, color: 'bg-red-500/20 text-red-400', label: 'Deprecated' },
 };
 
 export function LensFeaturePanel({ lensId, className, compact = false }: LensFeaturePanelProps) {
@@ -82,7 +82,7 @@ export function LensFeaturePanel({ lensId, className, compact = false }: LensFea
     staleTime: 60000,
   });
 
-  const features: LensFeature[] = data?.features || [];
+  const features: LensFeature[] = useMemo(() => data?.features || [], [data]);
   const summary: LensFeatureSummary | null = data?.summary || null;
 
   const categories = useMemo(() => {
@@ -233,6 +233,7 @@ export function LensFeaturePanel({ lensId, className, compact = false }: LensFea
           const cat = CATEGORY_CONFIG[feature.category] || CATEGORY_CONFIG.infrastructure;
           const CatIcon = cat.icon;
           const statusCfg = STATUS_CONFIG[feature.status] || STATUS_CONFIG.active;
+          const StatusIcon = statusCfg.icon;
           const isExpanded = expandedFeature === feature.featureId;
 
           return (
@@ -254,7 +255,8 @@ export function LensFeaturePanel({ lensId, className, compact = false }: LensFea
                     <p className="text-[11px] text-gray-500 truncate">{feature.description}</p>
                   )}
                 </div>
-                <span className={cn('px-1.5 py-0.5 rounded text-[9px] font-medium flex-shrink-0', statusCfg.color)}>
+                <span className={cn('px-1.5 py-0.5 rounded text-[9px] font-medium flex-shrink-0 inline-flex items-center gap-0.5', statusCfg.color)}>
+                  <StatusIcon className="w-2.5 h-2.5" />
                   {statusCfg.label}
                 </span>
                 {isExpanded ? (

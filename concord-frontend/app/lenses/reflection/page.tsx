@@ -3,7 +3,7 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLensBridge } from '@/lib/hooks/use-lens-bridge';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
@@ -55,7 +55,7 @@ export default function ReflectionLensPage() {
     queryFn: () => apiHelpers.reflection.selfModel().then((r) => r.data),
   });
 
-  const reflections: Reflection[] = recent?.reflections || [];
+  const reflections: Reflection[] = useMemo(() => recent?.reflections || [], [recent]);
   const model = selfModel?.selfModel || status?.selfModel || {};
   const stats = status?.stats || {};
 

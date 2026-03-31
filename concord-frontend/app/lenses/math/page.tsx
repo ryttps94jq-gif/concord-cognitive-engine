@@ -104,7 +104,6 @@ function evaluatePlotFn(expr: string, x: number): number | null {
     // Allowlist: only permit math tokens, numbers, operators, and x
     const withX = sanitized.replace(/\bx\b/g, String(x));
     if (!SAFE_MATH_TOKEN.test(withX)) return null;
-    // eslint-disable-next-line no-new-func
     const fn = new Function(`"use strict"; return (${withX});`);
     const result = fn();
     if (typeof result === 'number' && isFinite(result)) return result;

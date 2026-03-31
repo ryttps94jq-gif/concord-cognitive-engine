@@ -7,8 +7,8 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import {
   Terminal, Eye, RefreshCw, Play, Database, Cpu, HardDrive,
-  AlertTriangle, CheckCircle, Clock, Trash2, Download, Copy,
-  ChevronDown, ChevronRight, Search, X, Filter, MemoryStick,
+  AlertTriangle, CheckCircle, Trash2, Copy,
+  ChevronDown, ChevronRight, Search, X,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';

@@ -8,7 +8,7 @@ import { useLensBridge } from '@/lib/hooks/use-lens-bridge';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   Lightbulb, Plus, Search, Database, ArrowRight, Brain,
-  Filter, X, RefreshCw, ChevronDown, ChevronRight,
+  X, RefreshCw, ChevronDown,
   Tag, Copy, BarChart3, Network, Eye, Layers,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';

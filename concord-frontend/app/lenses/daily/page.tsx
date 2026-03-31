@@ -110,7 +110,7 @@ export default function DailyLensPage() {
   const [newGenre, setNewGenre] = useState('');
   const [newDuration, setNewDuration] = useState('');
   const [showSessionForm, setShowSessionForm] = useState(false);
-  const [clips, setClips] = useState<AudioClip[]>([]);
+  const [clips, setClips] = useState<AudioClip[]>(INITIAL_CLIPS);
   const [playingClip, setPlayingClip] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);

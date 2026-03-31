@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useUIStore } from '@/store/ui';
-import { useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, MapPin,
@@ -131,7 +130,6 @@ const DAY_NAMES_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 
 export default function CalendarLensPage() {
   useLensNav('calendar');
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('calendar');
-  const queryClient = useQueryClient();
 
   // State
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -204,9 +202,9 @@ export default function CalendarLensPage() {
     }
   }, [catItems]);
 
-  // Derive project list from event data instead of hardcoded INITIAL_PROJECTS
+  // Derive project list from event data, seeded with INITIAL_PROJECTS defaults
   const projects: string[] = useMemo(() => {
-    const projectSet = new Set<string>();
+    const projectSet = new Set<string>(INITIAL_PROJECTS);
     events.forEach(e => {
       if (e.linkedProject) projectSet.add(e.linkedProject);
     });
@@ -373,6 +371,12 @@ export default function CalendarLensPage() {
     };
 
     setEvents([...events, event]);
+    // Persist to backend via useLensData
+    createEvent({
+      title: event.title,
+      data: event as unknown as Record<string, unknown>,
+      meta: { status: 'active', eventType: event.eventType },
+    });
     setShowCreateModal(false);
     setNewEvent({
       title: '',

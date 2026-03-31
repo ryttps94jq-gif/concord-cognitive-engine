@@ -22,8 +22,15 @@ export function CognitiveDigitalTwin({ className }: { className?: string }) {
   const [expanded, setExpanded] = useState(false);
   const [simQuestion, setSimQuestion] = useState('');
   const [cloneQuestion, setCloneQuestion] = useState('');
-  const [simResult, setSimResult] = useState<any>(null);
-  const [cloneResult, setCloneResult] = useState<any>(null);
+  const [simResult, setSimResult] = useState<{
+    simulations?: { path: string; scenario: string; confidence: number }[];
+  } | null>(null);
+  const [cloneResult, setCloneResult] = useState<{
+    response: string;
+    source: string;
+    confidence?: number;
+    disclaimer?: string;
+  } | null>(null);
   const queryClient = useQueryClient();
 
   const { data: twinData, isLoading } = useQuery({
@@ -107,7 +114,7 @@ export function CognitiveDigitalTwin({ className }: { className?: string }) {
         <div>
           <p className="text-xs text-gray-500 mb-1 flex items-center gap-1"><Target className="w-3 h-3" /> Top Domains</p>
           <div className="space-y-1">
-            {domains.slice(0, 3).map(([domain, data]: [string, any]) => (
+            {domains.slice(0, 3).map(([domain, data]: [string, { count: number }]) => (
               <div key={domain} className="flex items-center justify-between">
                 <span className="text-xs text-white truncate">{domain}</span>
                 <span className="text-[10px] text-gray-500">{data.count} DTUs</span>

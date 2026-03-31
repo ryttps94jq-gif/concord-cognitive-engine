@@ -265,7 +265,70 @@ export default function FoundationCard({
       return alerts ? <EmergencyView alerts={alerts} /> : null;
     case 'neural':
       return neuralReadiness ? <NeuralView readiness={neuralReadiness} /> : null;
+    case 'energy':
+      return energyReadings ? <EnergyView readings={energyReadings} /> : null;
+    case 'protocol':
+      return protocolMetrics ? <ProtocolView metrics={protocolMetrics} /> : null;
     default:
       return null;
   }
+}
+
+function EnergyView({ readings }: { readings: EnergyReading[] }) {
+  return (
+    <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <Zap size={18} className="text-violet-400" />
+        <span className="text-sm font-semibold text-zinc-200">Energy Readings</span>
+        <span className="ml-auto text-xs text-zinc-500">{readings.length} readings</span>
+      </div>
+
+      {readings.length === 0 ? (
+        <div className="text-xs text-zinc-500 text-center py-3">No energy readings yet</div>
+      ) : (
+        <div className="space-y-1">
+          {readings.slice(0, 10).map(r => (
+            <div key={r.id} className="flex items-center gap-2 p-2 bg-zinc-800 rounded text-xs">
+              <Signal size={12} className={
+                r.grid_health.anomaly_detected ? 'text-red-400' : 'text-emerald-400'
+              } />
+              <span className="text-zinc-300">{r.subtype}</span>
+              <span className="text-zinc-500 flex-1">{r.grid_health.load_estimate}</span>
+              {r.grid_health.anomaly_detected && (
+                <span className="text-red-400">anomaly</span>
+              )}
+              <span className="text-zinc-400">
+                {r.grid_health.deviation_from_nominal > 0 ? '+' : ''}{r.grid_health.deviation_from_nominal.toFixed(1)}%
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProtocolView({ metrics }: { metrics: Record<string, unknown> }) {
+  const entries = Object.entries(metrics);
+  return (
+    <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <Code2 size={18} className="text-violet-400" />
+        <span className="text-sm font-semibold text-zinc-200">Protocol Metrics</span>
+      </div>
+
+      {entries.length === 0 ? (
+        <div className="text-xs text-zinc-500 text-center py-3">No protocol data</div>
+      ) : (
+        <div className="space-y-1">
+          {entries.map(([key, value]) => (
+            <div key={key} className="flex justify-between p-1.5 bg-zinc-800 rounded text-xs">
+              <span className="text-zinc-400">{key.replace(/_/g, ' ')}</span>
+              <span className="text-zinc-300">{String(value)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }

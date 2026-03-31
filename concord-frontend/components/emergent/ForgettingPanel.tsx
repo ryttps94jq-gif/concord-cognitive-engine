@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Trash2, Shield, Play, Clock, Eye } from 'lucide-react';
+import { Trash2, Play, Clock, Eye } from 'lucide-react';
 import { apiHelpers } from '@/lib/api/client';
 
 interface ForgettingStatus {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useState } from 'react';
 import { Target, Trophy, Coins, Clock, Users, Layers, ChevronDown } from 'lucide-react';
@@ -28,7 +28,6 @@ export default function QuestmarketLensPage() {
   useLensNav('questmarket');
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('questmarket');
 
-  const queryClient = useQueryClient();
   const [filter, setFilter] = useState<string>('all');
   const [showFeatures, setShowFeatures] = useState(false);
 

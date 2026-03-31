@@ -133,16 +133,6 @@ export default function VoteLensPage() {
     onError: (err) => console.error('castVote failed:', err instanceof Error ? err.message : err),
   });
 
-  const reactComment = useMutation({
-    mutationFn: async ({ commentId, reaction }: { commentId: string; reaction: 'upvote' | 'downvote' }) => {
-      return apiHelpers.lens.run('vote', commentId, { action: reaction });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['lens', 'vote', 'list'] });
-    },
-    onError: (err) => useUIStore.getState().addToast({ type: 'error', message: `Reaction failed: ${err instanceof Error ? err.message : 'Unknown error'}` }),
-  });
-
   // Filtered proposals
   const filteredProposals = useMemo(() =>
     proposals.filter((p) => filter === 'all' ? true : p.status === filter),
@@ -462,6 +452,8 @@ export default function VoteLensPage() {
           onCreate={create}
         />
       )}
+
+      <RealtimeDataPanel data={realtimeInsights} />
 
       {/* Lens Features */}
       <div className="border-t border-white/10">

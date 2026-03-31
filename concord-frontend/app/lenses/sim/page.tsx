@@ -2,7 +2,7 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, apiHelpers } from '@/lib/api/client';
+import { apiHelpers } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useState, useMemo, useCallback, useRef } from 'react';
@@ -1216,6 +1216,8 @@ export default function SimLensPage() {
           </div>
         </div>
       )}
+
+      <RealtimeDataPanel data={realtimeInsights} />
 
       {/* ── Import Modal ──────────────────────────────────────────────────── */}
       {showImportModal && (

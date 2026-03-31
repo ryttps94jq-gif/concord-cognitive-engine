@@ -9,16 +9,15 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Music, Play, Pause, Plus, Search, Home, Disc3, ListMusic,
   Clock, Upload, BarChart3, Heart, Library, Mic2,
-  TrendingUp, ArrowRight, Sparkles, GitFork, DollarSign,
-  Users, X, Headphones, ChevronDown,
+  TrendingUp, Sparkles, GitFork, DollarSign,
+  Users, X, Headphones,
 } from 'lucide-react';
+import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { useMusicStore } from '@/lib/music/store';
-import { getPlayer } from '@/lib/music/player';
-import { TIER_RIGHTS } from '@/lib/music/types';
 import type {
-  MusicTrack, Album, Artist, ArtistStats, Playlist, PlaylistTrack,
-  MusicLensView, ArtifactTier, TierConfig, UploadProgress,
+  MusicTrack, Artist, Playlist,
+  MusicLensView, UploadProgress,
 } from '@/lib/music/types';
 import { previewRoyaltyObligations, ROYALTY_CONSTANTS } from '@/lib/music/royalty-cascade';
 import { TrackCard } from '@/components/music/TrackCard';
@@ -109,7 +108,7 @@ export default function MusicLensPage() {
   const [artists] = useState<Artist[]>(SEED_ARTISTS);
   const [playlists, setPlaylists] = useState<Playlist[]>(SEED_PLAYLISTS);
 
-  const { playTrack, addToQueue, nowPlaying, playAlbum } = useMusicStore();
+  const { playTrack, addToQueue, nowPlaying } = useMusicStore();
 
   // ---- Navigation ----
   const navigateToArtist = useCallback((artistId: string) => {
@@ -132,6 +131,41 @@ export default function MusicLensPage() {
     setSelectedArtistId(null);
     setSelectedAlbumId(null);
     setSelectedPlaylistId(null);
+  }, []);
+
+  // ---- Like toggle ----
+  const toggleLike = useCallback((trackId: string) => {
+    setLikedTrackIds(prev => {
+      const next = new Set(prev);
+      if (next.has(trackId)) next.delete(trackId);
+      else next.add(trackId);
+      return next;
+    });
+  }, []);
+
+  // ---- Playlist creation ----
+  const handleCreatePlaylist = useCallback(() => {
+    const newPlaylist: Playlist = {
+      id: `pl-${Date.now()}`,
+      name: `New Playlist ${playlists.length + 1}`,
+      description: '',
+      coverArtUrl: null,
+      creatorId: 'user-1',
+      creatorName: 'Sovereign',
+      isCollaborative: false,
+      isPublic: true,
+      tracks: [],
+      totalDuration: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    setPlaylists(prev => [...prev, newPlaylist]);
+    navigateToPlaylist(newPlaylist.id);
+  }, [playlists.length, navigateToPlaylist]);
+
+  // ---- Royalty preview ----
+  const royaltyPreview = useMemo(() => {
+    return previewRoyaltyObligations(9.99, [], new Map());
   }, []);
 
   // ---- Search ----
@@ -328,9 +362,9 @@ export default function MusicLensPage() {
                         onClick={() => navigateToArtist(artist.id)}
                         className="flex-shrink-0 text-center group"
                       >
-                        <div className="w-28 h-28 rounded-full bg-white/5 overflow-hidden group-hover:ring-2 ring-neon-cyan/30 transition-all mx-auto">
+                        <div className="relative w-28 h-28 rounded-full bg-white/5 overflow-hidden group-hover:ring-2 ring-neon-cyan/30 transition-all mx-auto">
                           {artist.avatarUrl ? (
-                            <img src={artist.avatarUrl} alt="" className="w-full h-full object-cover" />
+                            <Image src={artist.avatarUrl} alt={artist.name} fill className="object-cover" unoptimized />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-neon-purple/20 to-neon-cyan/20">
                               <Music className="w-8 h-8 text-gray-500" />
@@ -528,7 +562,7 @@ export default function MusicLensPage() {
 
                 {libraryTab === 'playlists' && (
                   <div className="space-y-2">
-                    <button className="flex items-center gap-2 w-full p-3 rounded-lg bg-white/[0.03] border border-dashed border-white/10 hover:border-neon-cyan/30 text-sm text-gray-400 hover:text-white transition-colors">
+                    <button onClick={handleCreatePlaylist} className="flex items-center gap-2 w-full p-3 rounded-lg bg-white/[0.03] border border-dashed border-white/10 hover:border-neon-cyan/30 text-sm text-gray-400 hover:text-white transition-colors">
                       <Plus className="w-4 h-4" /> Create Playlist
                     </button>
                     {playlists.map(pl => (
@@ -588,6 +622,15 @@ export default function MusicLensPage() {
                 tracks={artistTracks}
                 albums={[]}
                 onAlbumClick={navigateToAlbum}
+                onBack={navigateHome}
+              />
+            )}
+
+            {/* ---- ALBUM ---- */}
+            {view === 'album' && selectedAlbumId && (
+              <AlbumView
+                album={{ id: selectedAlbumId, title: 'Album', artistId: '', artistName: '', coverArtUrl: null, tracks: tracks.filter(t => t.albumId === selectedAlbumId), totalDuration: 0, releaseDate: '', createdAt: '', updatedAt: '' }}
+                onArtistClick={navigateToArtist}
                 onBack={navigateHome}
               />
             )}
@@ -708,12 +751,79 @@ export default function MusicLensPage() {
                   </div>
                 </div>
 
+                {/* Royalty Preview */}
+                {royaltyPreview.obligations.length > 0 && (
+                  <div className="bg-white/[0.03] rounded-xl border border-white/5 p-5 space-y-3">
+                    <h3 className="text-sm font-semibold flex items-center gap-2">
+                      <DollarSign className="w-4 h-4 text-neon-green" /> Royalty Obligations Preview
+                    </h3>
+                    <div className="space-y-2">
+                      {royaltyPreview.obligations.map((ob, i) => (
+                        <div key={i} className="flex items-center justify-between text-xs p-2 rounded bg-white/[0.02]">
+                          <div>
+                            <span className="text-gray-300">{ob.name}</span>
+                            <span className="text-gray-500 ml-2">({ob.title})</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-gray-400">{ob.rate}</span>
+                            <span className="text-neon-green font-mono">{ob.amount}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      Net to creator: ${royaltyPreview.breakdown.netToCreator.toFixed(2)} · Platform: ${royaltyPreview.breakdown.platformFee.toFixed(2)}
+                    </p>
+                  </div>
+                )}
+
                 <button onClick={navigateHome} className="text-xs text-gray-400 hover:text-white">← Back to Home</button>
               </div>
             )}
           </motion.div>
         </AnimatePresence>
       </main>
+
+      {/* Now Playing Bar */}
+      {nowPlaying.track && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-lattice-surface/95 backdrop-blur border-t border-white/5 px-6 py-3">
+          <div className="flex items-center justify-between max-w-screen-xl mx-auto">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded bg-white/5 flex items-center justify-center flex-shrink-0">
+                <Music className="w-5 h-5 text-neon-cyan" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium truncate">{nowPlaying.track.title}</p>
+                <p className="text-xs text-gray-500 truncate">{nowPlaying.track.artistName}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => toggleLike(nowPlaying.track!.id)}
+                className={cn('p-1.5 rounded transition-colors', likedTrackIds.has(nowPlaying.track.id) ? 'text-pink-400' : 'text-gray-500 hover:text-white')}
+              >
+                <Heart className={cn('w-4 h-4', likedTrackIds.has(nowPlaying.track.id) && 'fill-current')} />
+              </button>
+              <button
+                onClick={() => {
+                  if (nowPlaying.playbackState === 'playing') playTrack(nowPlaying.track!);
+                  else playTrack(nowPlaying.track!);
+                }}
+                className="p-2 rounded-full bg-white text-black hover:brightness-90 transition"
+              >
+                {nowPlaying.playbackState === 'playing' ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+              </button>
+              <button
+                onClick={() => addToQueue(nowPlaying.track!)}
+                className="p-1.5 rounded text-gray-500 hover:text-white transition-colors"
+                title="Add to queue"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Real-time panel */}
       {isLive && realtimeData && (

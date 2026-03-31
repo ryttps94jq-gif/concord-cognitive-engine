@@ -2,11 +2,10 @@
 
 import { useState } from 'react';
 import {
-  X, ArrowRight, Music, Image, FileText, Code2, Video,
+  X, ArrowRight,
   Eye, Tag, Clock, Info,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import type { ArtistryContentType, ArtistryPost } from '@/lib/artistry/types';
+import type { ArtistryContentType } from '@/lib/artistry/types';
 
 interface CrossPostModalProps {
   isOpen: boolean;

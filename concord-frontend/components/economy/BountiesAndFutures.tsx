@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
-import { motion, AnimatePresence } from 'framer-motion';
 import {
   Target, TrendingUp, Plus, Loader2, ChevronDown, ChevronUp,
   Coins, CheckCircle, Clock, Hand,
@@ -178,6 +177,13 @@ function BountiesTab({ expanded }: { expanded: boolean }) {
               <span className={cn('px-1.5 py-0.5 rounded text-[10px] capitalize', DIFFICULTY_COLORS[bounty.difficulty] || '')}>
                 {bounty.difficulty}
               </span>
+              {bounty.status === 'completed' && <CheckCircle className="w-3 h-3 text-green-400" />}
+              {bounty.deadline && (
+                <span className="flex items-center gap-0.5 text-[10px] text-gray-500">
+                  <Clock className="w-2.5 h-2.5" />
+                  {new Date(bounty.deadline).toLocaleDateString()}
+                </span>
+              )}
               <p className="text-sm text-white flex-1 truncate">{bounty.title}</p>
               <span className="flex items-center gap-1 text-xs text-yellow-400">
                 <Coins className="w-3 h-3" />

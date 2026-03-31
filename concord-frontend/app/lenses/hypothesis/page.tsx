@@ -3,7 +3,7 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLensBridge } from '@/lib/hooks/use-lens-bridge';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
@@ -94,7 +94,7 @@ export default function HypothesisLensPage() {
     onError: (err) => console.error('runExperiment failed:', err instanceof Error ? err.message : err),
   });
 
-  const hypotheses: Hypothesis[] = hypothesesData?.hypotheses || hypothesesData || [];
+  const hypotheses: Hypothesis[] = useMemo(() => hypothesesData?.hypotheses || hypothesesData || [], [hypothesesData]);
   const status = statusData?.status || statusData || {};
 
   // Bridge hypotheses into lens artifacts

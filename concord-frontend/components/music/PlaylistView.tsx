@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import {
   Play, Pause, Clock, ListMusic, Edit3, Trash2,
   Share2, Globe, Lock,
@@ -60,9 +61,9 @@ export function PlaylistView({
     <div className="space-y-6">
       {/* Header */}
       <div className="flex gap-6">
-        <div className="w-48 h-48 rounded-xl bg-white/5 overflow-hidden shadow-xl flex-shrink-0">
+        <div className="relative w-48 h-48 rounded-xl bg-white/5 overflow-hidden shadow-xl flex-shrink-0">
           {playlist.coverArtUrl ? (
-            <img src={playlist.coverArtUrl} alt="" className="w-full h-full object-cover" />
+            <Image src={playlist.coverArtUrl} alt={playlist.name || 'Playlist cover'} fill className="object-cover" unoptimized />
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-neon-cyan/20 to-neon-purple/20">
               <ListMusic className="w-16 h-16 text-gray-600" />

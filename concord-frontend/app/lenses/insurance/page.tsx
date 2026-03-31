@@ -40,13 +40,7 @@ import {
   GraduationCap,
   ChevronRight,
   Columns,
-  Upload,
   FolderOpen,
-  File,
-  Calendar,
-  Download,
-  Eye,
-  Clock,
   Layers,
   ChevronDown,
 } from 'lucide-react';
@@ -191,8 +185,6 @@ const QUOTE_STATUSES: QuoteStatus[] = ['draft', 'quoted', 'accepted', 'declined'
 const RISK_PROFILES = ['preferred', 'standard', 'substandard', 'declined'];
 const PAYMENT_FREQUENCIES = ['monthly', 'quarterly', 'semi_annual', 'annual'];
 const COMPLIANCE_TYPES = ['CE Credits', 'License Renewal', 'E&O Insurance', 'Carrier Appointment'];
-const DOCUMENT_TYPES = ['Policy Declaration', 'Endorsement', 'Certificate of Insurance', 'Binder', 'Application', 'Claim Form', 'Proof of Loss', 'Appraisal', 'Correspondence', 'Other'];
-const DOCUMENT_CATEGORIES = ['Policy Documents', 'Claim Documents', 'Client Documents', 'Compliance', 'Invoices', 'Other'];
 
 const POLICY_ICONS: Record<string, typeof Car> = {
   auto: Car,

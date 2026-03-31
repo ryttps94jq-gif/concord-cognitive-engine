@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, apiHelpers } from '@/lib/api/client';
+import { apiHelpers } from '@/lib/api/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUIStore } from '@/store/ui';
 import {
@@ -259,6 +259,11 @@ export default function ArtLensPage() {
       <div className="flex items-center gap-2">
         <Palette className="w-6 h-6 text-neon-pink" />
         <h1 className="text-xl font-bold">Art Studio</h1>
+        {dtusLoading ? (
+          <span className="ml-2 w-4 h-4 border-2 border-neon-pink border-t-transparent rounded-full animate-spin inline-block" />
+        ) : (
+          <span className="ml-2 text-xs text-gray-400">({domainDTUs.length} DTUs)</span>
+        )}
       </div>
 
       {/* Real-time Enhancement Toolbar */}

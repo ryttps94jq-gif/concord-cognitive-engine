@@ -77,6 +77,7 @@ const MODE_TABS: { id: ModeTab; label: string; icon: typeof CalendarDays }[] = [
   { id: 'events', label: 'Events', icon: CalendarDays },
   { id: 'venues', label: 'Venues', icon: Building2 },
   { id: 'vendors', label: 'Vendors', icon: Users },
+  { id: 'guests', label: 'Guests', icon: ClipboardList },
   { id: 'runofshow', label: 'Run of Show', icon: ListChecks },
   { id: 'budget', label: 'Budget', icon: DollarSign },
   { id: 'tickets', label: 'Tickets', icon: Ticket },
@@ -205,7 +206,7 @@ export default function EventsLensPage() {
     return map[mode] || [];
   }, [mode, events, venues, vendors, guests, runofshows, budgets, tickets]);
 
-  const isLoading = eventsLoading || venuesLoading || vendorsLoading || rosLoading || budgetLoading || ticketsLoading;
+  const isLoading = eventsLoading || venuesLoading || vendorsLoading || guestsLoading || rosLoading || budgetLoading || ticketsLoading;
 
   // Filtering
   const filtered = useMemo(() => {
@@ -231,6 +232,7 @@ export default function EventsLensPage() {
       case 'events': case 'dashboard': return { create: createEvent, update: updateEvent, remove: removeEvent };
       case 'venues': return { create: createVenue, update: updateVenue, remove: removeVenue };
       case 'vendors': return { create: createVendor, update: updateVendor, remove: removeVendor };
+      case 'guests': return { create: createGuest, update: updateGuest, remove: removeGuest };
       case 'runofshow': return { create: createROS, update: updateROS, remove: removeROS };
       case 'budget': return { create: createBudget, update: updateBudget, remove: removeBudget };
       case 'tickets': return { create: createTicket, update: updateTicket, remove: removeTicket };
@@ -346,6 +348,15 @@ export default function EventsLensPage() {
         { key: 'teardownTime', label: 'Teardown Time' },
         { key: 'insuranceVerified', label: 'Insurance Verified', type: 'select', options: ['true', 'false'] },
         { key: 'assignedEvent', label: 'Assigned Event' },
+        { key: 'notes', label: 'Notes', type: 'textarea' },
+      ];
+      case 'guests': return [
+        { key: 'email', label: 'Email' },
+        { key: 'phone', label: 'Phone' },
+        { key: 'eventName', label: 'Event' },
+        { key: 'rsvpStatus', label: 'RSVP Status', type: 'select', options: ['confirmed', 'pending', 'declined'] },
+        { key: 'tableAssignment', label: 'Table Assignment' },
+        { key: 'dietaryRestrictions', label: 'Dietary Restrictions' },
         { key: 'notes', label: 'Notes', type: 'textarea' },
       ];
       case 'runofshow': return [
@@ -1424,6 +1435,7 @@ export default function EventsLensPage() {
                   <label className={ds.label}>Status</label>
                   <select value={formStatus} onChange={e => setFormStatus(e.target.value)} className={ds.select}>
                     {EVENT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                    {mode === 'guests' && ['confirmed', 'pending', 'declined'].map(s => <option key={`g-${s}`} value={s}>{s}</option>)}
                     {mode === 'vendors' && ['pending', 'partial', 'paid', 'overdue'].map(s => <option key={`v-${s}`} value={s}>{s}</option>)}
                     {mode === 'venues' && ['available', 'booked', 'maintenance'].map(s => <option key={`ve-${s}`} value={s}>{s}</option>)}
                     {mode === 'runofshow' && ['draft', 'finalized'].map(s => <option key={`r-${s}`} value={s}>{s}</option>)}

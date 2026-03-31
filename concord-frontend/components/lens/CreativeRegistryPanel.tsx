@@ -74,7 +74,16 @@ export function CreativeRegistryPanel({
           <h3 className="text-sm font-semibold text-white">Creative Global</h3>
           <span className="text-xs text-gray-500">{domain}</span>
         </div>
-        <span className="text-xs text-gray-500">{total} items</span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => handleRegistryUpdate({})}
+            className="p-1 rounded hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
+            title="Refresh registry"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+          </button>
+          <span className="text-xs text-gray-500">{total} items</span>
+        </div>
       </div>
 
       <div className="space-y-2 max-h-80 overflow-y-auto">

@@ -2,7 +2,7 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, apiHelpers } from '@/lib/api/client';
+import { api } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
 import { useState } from 'react';
 import { Inbox, Play, Trash2, Clock, Zap, Globe, FileText, Layers, ChevronDown, Activity, Bot, Coins, CheckCircle2, AlertCircle, RefreshCw, BarChart3 } from 'lucide-react';

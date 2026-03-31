@@ -16,7 +16,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { formatRelativeTime } from '@/lib/utils';
-import { ds } from '@/lib/design-system';
 import {
   X,
   Sparkles,
@@ -26,7 +25,6 @@ import {
   Globe,
   Brain,
   Sun,
-  ChevronRight,
   AlertCircle,
   Eye,
   MessageCircle,
@@ -468,6 +466,11 @@ function renderMetadata(
             <span className={cn('flex items-center gap-1', config.accentColor)}>
               <Clock className="w-2.5 h-2.5" />
               {daysAgo}d idle
+            </span>
+          )}
+          {dtuTitle && (
+            <span className="text-zinc-400 truncate max-w-[150px]">
+              {dtuTitle}
             </span>
           )}
           {pendingCount !== undefined && pendingCount > 1 && (

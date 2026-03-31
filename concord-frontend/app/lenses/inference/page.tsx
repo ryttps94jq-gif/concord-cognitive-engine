@@ -130,7 +130,7 @@ export default function InferenceLensPage() {
     onError: (err) => console.error('runForwardChain failed:', err instanceof Error ? err.message : err),
   });
 
-  const statusInfo = status?.status || status || {};
+  const statusInfo = useMemo(() => status?.status || status || {}, [status]);
 
   // Bridge inference status into lens artifacts
   useEffect(() => {

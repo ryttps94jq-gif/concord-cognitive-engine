@@ -114,7 +114,7 @@ export default function AttentionLensPage() {
     },
   });
 
-  const threadList: Thread[] = threads?.threads || [];
+  const threadList: Thread[] = useMemo(() => threads?.threads || [], [threads]);
   const activeThreads = status?.activeThreads || [];
   const stats = status?.stats || {};
   const queueData = queue?.queue || [];

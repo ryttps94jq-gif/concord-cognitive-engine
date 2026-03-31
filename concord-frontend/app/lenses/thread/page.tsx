@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
-import { api, apiHelpers } from '@/lib/api/client';
+import { apiHelpers } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
 import { useLensBridge } from '@/lib/hooks/use-lens-bridge';
 import { UniversalActions } from '@/components/lens/UniversalActions';
@@ -93,7 +93,7 @@ export default function ThreadLensPage() {
 
   const threads: Thread[] = useMemo(() => {
     const convs = conversationsData || [];
-    if (convs.length === 0) return [];
+    if (convs.length === 0) return INITIAL_THREADS;
     return convs.map((c: Record<string, unknown>, i: number) => ({
       id: String(c.id || `thread-${i}`),
       name: String(c.title || c.summary || `Thread ${i + 1}`),

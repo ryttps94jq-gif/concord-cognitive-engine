@@ -3,7 +3,7 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, apiHelpers } from '@/lib/api/client';
+import { apiHelpers } from '@/lib/api/client';
 import { MarketEmpireListing } from '@/components/market/MarketEmpireListing';
 import {
   Store, TrendingUp, Package, Coins, Search, Filter, X,
@@ -382,11 +382,17 @@ export default function MarketLensPage() {
             </div>
           ) : (
             filteredListings.map((listing: MarketListingItem) => (
-              <MarketEmpireListing
-                key={listing.id}
-                listing={listing}
-                onPurchase={() => handlePurchase(listing)}
-              />
+              <div key={listing.id} className="relative">
+                {purchasingId === listing.id && (
+                  <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40 rounded-xl backdrop-blur-sm">
+                    <div className="w-6 h-6 border-2 border-neon-purple border-t-transparent rounded-full animate-spin" />
+                  </div>
+                )}
+                <MarketEmpireListing
+                  listing={listing}
+                  onPurchase={() => handlePurchase(listing)}
+                />
+              </div>
             ))
           )}
         </div>

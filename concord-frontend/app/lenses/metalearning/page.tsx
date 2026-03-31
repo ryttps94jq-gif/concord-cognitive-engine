@@ -3,7 +3,7 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLensBridge } from '@/lib/hooks/use-lens-bridge';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
@@ -75,7 +75,7 @@ export default function MetalearningLensPage() {
     onError: (err) => console.error('runCurriculum failed:', err instanceof Error ? err.message : err),
   });
 
-  const strategyList: Strategy[] = strategies?.strategies || strategies || [];
+  const strategyList: Strategy[] = useMemo(() => strategies?.strategies || strategies || [], [strategies]);
   const statusInfo = status?.status || status || {};
   const bestStrategy = best?.strategy || best || null;
 

@@ -176,6 +176,8 @@ export default function BridgeLens() {
         </>
       )}
 
+      <RealtimeDataPanel data={realtimeInsights} />
+
       {/* Lens Features */}
       <div className="border-t border-white/10">
         <button

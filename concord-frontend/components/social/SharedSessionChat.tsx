@@ -52,7 +52,7 @@ interface SharedSessionChatProps {
 }
 
 export function SharedSessionChat({ sessionId, currentUserId, onEnd }: SharedSessionChatProps) {
-  const { on, off, emit } = useSocket({ autoConnect: true });
+  const { on, off } = useSocket({ autoConnect: true });
   const [messages, setMessages] = useState<SharedMessage[]>([]);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [input, setInput] = useState('');

@@ -4,11 +4,11 @@ import { useState, useMemo, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import {
-  Leaf, Sun, Droplet, Wind, TreeDeciduous, TrendingUp, TrendingDown,
+  Leaf, Sun, Droplet, Wind, TreeDeciduous, TrendingUp,
   Loader2, Activity, BarChart3, AlertTriangle, RefreshCw,
   Thermometer, Cloud, Zap, Fish, Bug, Mountain, Globe,
   ArrowUpRight, ArrowDownRight, Eye, Shield, Waves, Sprout,
-  ChevronDown, ChevronRight, Search, Filter, X,
+  ChevronDown, ChevronRight, Search, X,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';

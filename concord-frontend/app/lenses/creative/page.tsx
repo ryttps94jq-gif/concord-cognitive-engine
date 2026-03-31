@@ -251,7 +251,7 @@ export default function CreativeLensPage() {
   const formConfig: Record<string, { key: string; label: string; type: 'input' | 'textarea' | 'select'; options?: string[] }[]> = {
     projects: [
       { key: 'client', label: 'Client', type: 'input' },
-      { key: 'projectType', label: 'Project Type', type: 'select', options: ['Video', 'Audio', 'Design', 'Writing', 'Branding', 'Campaign', 'Film', 'Social Media', 'Web', 'Print / Digital', 'Other'] },
+      { key: 'projectType', label: 'Project Type', type: 'select', options: PROJECT_TYPES.map(pt => pt.label) },
       { key: 'budget', label: 'Budget ($)', type: 'input' },
       { key: 'deadline', label: 'Deadline', type: 'input' },
       { key: 'lead', label: 'Project Lead', type: 'input' },
@@ -424,6 +424,20 @@ export default function CreativeLensPage() {
           <p className={cn(ds.textMuted, 'text-xs mt-1')}>{fmtCurrency(totalSpent)} spent ({fmtPct(utilizationRate)})</p>
         </div>
       </div>
+
+      {/* Revision Alert Row */}
+      {pendingRevisions > 0 && (
+        <div className={cn(ds.panel, 'flex items-center gap-3 border-amber-400/20')}>
+          <RotateCcw className="w-5 h-5 text-amber-400 flex-shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-amber-400">{pendingRevisions} Pending Revision{pendingRevisions !== 1 ? 's' : ''}</p>
+            <p className={cn(ds.textMuted, 'text-xs')}>Revisions awaiting feedback review</p>
+          </div>
+          <button onClick={() => setMode('revisions')} className={cn(ds.btnSecondary, ds.btnSmall)}>
+            View Revisions
+          </button>
+        </div>
+      )}
 
       {/* Second KPI Row */}
       <div className={ds.grid3}>

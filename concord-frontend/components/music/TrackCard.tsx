@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import {
   Play, Pause, Plus, Heart, ShoppingCart, MoreHorizontal,
   Music, Clock, Tag,
@@ -73,7 +74,7 @@ export function TrackCard({
         {/* Cover */}
         <div className="relative aspect-square bg-white/5 overflow-hidden">
           {track.coverArtUrl ? (
-            <img src={track.coverArtUrl} alt="" className="w-full h-full object-cover" />
+            <Image src={track.coverArtUrl} alt={track.title || 'Track cover'} fill className="object-cover" unoptimized />
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-neon-purple/20 to-neon-cyan/20">
               <Music className="w-12 h-12 text-gray-600" />
@@ -182,7 +183,7 @@ export function TrackCard({
         {/* Cover thumbnail */}
         <div className="w-10 h-10 rounded bg-white/5 overflow-hidden flex-shrink-0">
           {track.coverArtUrl ? (
-            <img src={track.coverArtUrl} alt="" className="w-full h-full object-cover" />
+            <Image src={track.coverArtUrl} alt={track.title || 'Track cover'} width={40} height={40} className="w-full h-full object-cover" unoptimized />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
               <Music className="w-4 h-4 text-gray-600" />

@@ -135,7 +135,9 @@ function EntityGrowthCard({ entity }: { entity: GrowthEntity }) {
       <div className="space-y-1 mb-2">
         <Gauge label="Curiosity" value={entity.curiosity} icon={Sparkles} color="text-yellow-400" />
         <Gauge label="Energy" value={entity.energy} icon={Zap} color="text-neon-green" />
+        <Gauge label="Vitality" value={(entity.curiosity + entity.energy) / 2} icon={Heart} color="text-red-400" />
         <Gauge label="Confidence" value={entity.confidence} icon={Target} color="text-neon-blue" />
+        <Gauge label="Insight" value={entity.insightQuality} icon={Eye} color="text-neon-cyan" />
       </div>
 
       {/* Top organs */}

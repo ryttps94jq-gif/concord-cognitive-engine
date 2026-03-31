@@ -1,7 +1,7 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useState, useMemo, useCallback } from 'react';
 import {
@@ -44,8 +44,6 @@ const IMPORTANCE_COLORS: Record<string, string> = {
 export default function NewsLensPage() {
   useLensNav('news');
   const { latestData: realtimeData, isLive, lastUpdated, insights } = useRealtimeLens('news');
-  const queryClient = useQueryClient();
-
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchText, setSearchText] = useState('');
   const [sortMode, setSortMode] = useState<SortMode>('newest');

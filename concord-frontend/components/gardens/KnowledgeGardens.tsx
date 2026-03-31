@@ -176,6 +176,10 @@ export function KnowledgeGardens({ className }: { className?: string }) {
                     >
                       <Sparkles className="w-3.5 h-3.5" />
                     </button>
+                    <span className="flex items-center gap-0.5 text-[10px] text-gray-500" title="Views">
+                      <Eye className="w-3 h-3" />
+                      {garden.stats.views}
+                    </span>
                   </div>
                 </div>
 

@@ -17,7 +17,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowDownToLine,
-  Wallet,
   ShieldCheck,
   ExternalLink,
   Loader2,

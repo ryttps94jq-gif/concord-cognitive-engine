@@ -99,7 +99,7 @@ export function CDNStatus({ className }: CDNStatusProps) {
     setIsPurging(true);
     setPurgeResult(null);
     try {
-      const resp = await api.post('/api/cdn/purge', { artifactHash: purgeHash.trim() });
+      await api.post('/api/cdn/purge', { artifactHash: purgeHash.trim() });
       setPurgeResult({ ok: true, message: `Purged ${purgeHash.trim()} from CDN cache` });
       setPurgeHash('');
       refetch();
@@ -115,7 +115,7 @@ export function CDNStatus({ className }: CDNStatusProps) {
     setIsPurgingAll(true);
     setPurgeResult(null);
     try {
-      const resp = await api.post('/api/cdn/purge-all');
+      await api.post('/api/cdn/purge-all');
       setPurgeResult({ ok: true, message: 'All CDN cache purged successfully' });
       refetch();
     } catch (e) {
@@ -129,8 +129,8 @@ export function CDNStatus({ className }: CDNStatusProps) {
     if (!testUrlHash.trim()) return;
     setTestResult(null);
     try {
-      const resp = await api.get(`/api/cdn/signed-url/${testUrlHash.trim()}?userId=admin`);
-      const data = resp.data as { signedUrl?: string; expiresAt?: string };
+      const urlResp = await api.get(`/api/cdn/signed-url/${testUrlHash.trim()}?userId=admin`);
+      const data = urlResp.data as { signedUrl?: string; expiresAt?: string };
       setTestResult(data.signedUrl || 'No URL generated');
     } catch (e) {
       setTestResult(`Error: ${e instanceof Error ? e.message : String(e)}`);

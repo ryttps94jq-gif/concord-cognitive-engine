@@ -344,10 +344,7 @@ export default function CouncilLensPage() {
   });
 
   const _debateMutation = useMutation({
-    mutationFn: async (params: { dtuA: string; dtuB: string; topic: string }) => {
-      const dtus: DTU[] = dtusData?.dtus || [];
-      const dtuA = dtus.find((d: DTU) => d.id === params.dtuA);
-      const dtuB = dtus.find((d: DTU) => d.id === params.dtuB);
+    mutationFn: async (_params: { dtuA: string; dtuB: string; topic: string }) => {
       const res = await apiHelpers.council.reviewGlobal();
       return res.data;
     },

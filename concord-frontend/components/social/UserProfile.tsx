@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useMemo } from 'react';
+import Image from 'next/image';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -8,7 +9,6 @@ import {
   UserMinus,
   Settings,
   Share2,
-  MapPin,
   Link2,
   Calendar,
   Heart,
@@ -18,8 +18,6 @@ import {
   Image as ImageIcon,
   MessageCircle,
   BookOpen,
-  TrendingUp,
-  Award,
   ExternalLink,
   Copy,
   Check,
@@ -434,12 +432,12 @@ export function UserProfile({
         <div className="flex items-end justify-between -mt-12 mb-4">
           <div
             className={cn(
-              'w-24 h-24 rounded-full flex items-center justify-center text-3xl font-bold text-white ring-4 ring-lattice-surface bg-gradient-to-br',
+              'relative w-24 h-24 rounded-full flex items-center justify-center text-3xl font-bold text-white ring-4 ring-lattice-surface bg-gradient-to-br',
               gradient
             )}
           >
             {profile.avatar ? (
-              <img src={profile.avatar} alt={profile.displayName} className="w-full h-full rounded-full object-cover" />
+              <Image src={profile.avatar} alt={profile.displayName} fill className="rounded-full object-cover" unoptimized />
             ) : (
               profile.displayName.charAt(0).toUpperCase()
             )}

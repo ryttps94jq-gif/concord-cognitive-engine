@@ -10,7 +10,6 @@ import {
   Hash,
   Sparkles,
   Filter,
-  ChevronDown,
   Music,
   Video,
   Image as ImageIcon,
@@ -25,7 +24,6 @@ import {
   Play,
   Flame,
   BookOpen,
-  BarChart3,
   X,
 } from 'lucide-react';
 import { cn, formatNumber, formatRelativeTime, debounce } from '@/lib/utils';
@@ -432,8 +430,8 @@ export function Discovery({
 
   // ── Search handler ───────────────────────────────────────────────────
 
-  const handleSearchChange = useCallback(
-    debounce((value: string) => {
+  const handleSearchChange = useMemo(
+    () => debounce((value: string) => {
       setSearchQuery(value);
     }, 300),
     []

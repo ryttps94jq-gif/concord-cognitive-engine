@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import {
   Music, Disc3, BarChart3, ExternalLink, CheckCircle2,
   PlayCircle, DollarSign, GitFork,
@@ -31,9 +32,9 @@ export function ArtistProfile({ artist, tracks, albums, onAlbumClick, onBack }: 
           style={artist.bannerUrl ? { backgroundImage: `url(${artist.bannerUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
         />
         <div className="absolute bottom-0 left-0 right-0 px-6 pb-4 flex items-end gap-4">
-          <div className="w-28 h-28 rounded-full bg-lattice-surface border-4 border-lattice-void overflow-hidden shadow-xl -mb-4">
+          <div className="relative w-28 h-28 rounded-full bg-lattice-surface border-4 border-lattice-void overflow-hidden shadow-xl -mb-4">
             {artist.avatarUrl ? (
-              <img src={artist.avatarUrl} alt="" className="w-full h-full object-cover" />
+              <Image src={artist.avatarUrl} alt={artist.name} fill className="object-cover" unoptimized />
             ) : (
               <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-neon-cyan/30 to-neon-purple/30">
                 <Music className="w-10 h-10 text-gray-400" />
@@ -120,9 +121,9 @@ export function ArtistProfile({ artist, tracks, albums, onAlbumClick, onBack }: 
                 onClick={() => onAlbumClick(album.id)}
                 className="group bg-white/[0.03] rounded-xl border border-white/5 hover:border-white/10 hover:bg-white/[0.05] transition-all overflow-hidden text-left"
               >
-                <div className="aspect-square bg-white/5 overflow-hidden">
+                <div className="relative aspect-square bg-white/5 overflow-hidden">
                   {album.coverArtUrl ? (
-                    <img src={album.coverArtUrl} alt="" className="w-full h-full object-cover" />
+                    <Image src={album.coverArtUrl} alt={album.title || 'Album cover'} fill className="object-cover" unoptimized />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-neon-purple/20 to-neon-cyan/20">
                       <Disc3 className="w-12 h-12 text-gray-600" />

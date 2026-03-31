@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -12,23 +12,15 @@ import {
   Quote,
   Coins,
   Megaphone,
-  Check,
   CheckCheck,
   Trash2,
   X,
-  ChevronRight,
-  Settings,
   Filter,
   Loader2,
-  Eye,
-  EyeOff,
-  Music,
-  Video,
-  FileText,
   Star,
   AlertCircle,
 } from 'lucide-react';
-import { cn, formatRelativeTime, formatNumber } from '@/lib/utils';
+import { cn, formatRelativeTime } from '@/lib/utils';
 import { api } from '@/lib/api/client';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -350,7 +342,7 @@ export function NotificationCenter({
     refetchInterval: 30000, // Poll every 30 seconds
   });
 
-  const notifications = notificationsQuery.data || [];
+  const notifications = useMemo(() => notificationsQuery.data || [], [notificationsQuery.data]);
 
   // ── Filtering ────────────────────────────────────────────────────────
 

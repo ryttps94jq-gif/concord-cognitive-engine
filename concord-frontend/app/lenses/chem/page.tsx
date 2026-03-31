@@ -1,7 +1,7 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useState } from 'react';
 import { Atom, Beaker, FlaskConical, Sparkles, Zap, Layers, ChevronDown } from 'lucide-react';
@@ -31,7 +31,6 @@ interface Reaction {
 export default function ChemLensPage() {
   useLensNav('chem');
 
-  const queryClient = useQueryClient();
   const [selectedCompound, setSelectedCompound] = useState<string | null>(null);
   const [reactionInput, setReactionInput] = useState('');
   const [showFeatures, setShowFeatures] = useState(false);

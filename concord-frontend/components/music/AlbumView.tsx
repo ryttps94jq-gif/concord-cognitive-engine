@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import {
   Play, Pause, Clock, Disc3,
 } from 'lucide-react';
@@ -38,9 +39,9 @@ export function AlbumView({ album, onArtistClick, onPurchase, onBack }: AlbumVie
       {/* Header */}
       <div className="flex gap-6">
         {/* Cover */}
-        <div className="w-56 h-56 rounded-xl bg-white/5 overflow-hidden shadow-2xl flex-shrink-0">
+        <div className="relative w-56 h-56 rounded-xl bg-white/5 overflow-hidden shadow-2xl flex-shrink-0">
           {album.coverArtUrl ? (
-            <img src={album.coverArtUrl} alt="" className="w-full h-full object-cover" />
+            <Image src={album.coverArtUrl} alt={album.title} fill className="object-cover" unoptimized />
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-neon-purple/20 to-neon-cyan/20">
               <Disc3 className="w-20 h-20 text-gray-600" />

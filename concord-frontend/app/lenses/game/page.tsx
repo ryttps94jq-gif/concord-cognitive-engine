@@ -2,9 +2,8 @@
 
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
-import { api } from '@/lib/api/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Trophy, Star, Zap, Target, Users, Swords, Crown,
@@ -233,7 +232,6 @@ export default function GameLensPage() {
   useLensNav('game');
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('game');
 
-  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<MainTab>('dashboard');
   const [lbPeriod, setLbPeriod] = useState<LeaderboardPeriod>('alltime');
   const [shopItems, setShopItems] = useState<ShopItem[]>(SHOP_ITEMS);
@@ -246,19 +244,25 @@ export default function GameLensPage() {
 
   // Fetch achievements via useLensData (no /api/game/* backend exists)
   const { items: achievementItems, isLoading, isError: isError, error: error, refetch: refetch } = useLensData<Achievement>('game', 'achievement', { seed: [] });
-  const achievements: Achievement[] = achievementItems.map(i => ({ ...(i.data as unknown as Achievement), id: i.id }));
+  const achievements: Achievement[] = achievementItems.length > 0
+    ? achievementItems.map(i => ({ ...(i.data as unknown as Achievement), id: i.id }))
+    : INITIAL_ACHIEVEMENTS;
 
   // Fetch challenges/quests via useLensData
   const { items: questItems, isError: isError2, error: error2, refetch: refetch2 } = useLensData<Quest>('game', 'quest', { seed: [] });
-  const quests: Quest[] = questItems.map(i => ({ ...(i.data as unknown as Quest), id: i.id }));
+  const quests: Quest[] = questItems.length > 0
+    ? questItems.map(i => ({ ...(i.data as unknown as Quest), id: i.id }))
+    : INITIAL_QUESTS;
 
   // Fetch profile via useLensData
   const { items: profileItems, isError: isError3, error: error3, refetch: refetch3 } = useLensData<Record<string, unknown>>('game', 'profile', { seed: [] });
-  const profileData = profileItems.length > 0 ? profileItems[0].data : null;
+  const profileData = profileItems.length > 0 ? profileItems[0].data : INITIAL_PROFILE;
 
   // Fetch leaderboard via useLensData
   const { items: leaderboardItems, isError: isError4, error: error4, refetch: refetch4 } = useLensData<Record<string, unknown>>('game', 'leaderboard', { seed: [] });
-  const leaderboardData = leaderboardItems.map(i => i.data);
+  const leaderboardData = leaderboardItems.length > 0
+    ? leaderboardItems.map(i => i.data)
+    : INITIAL_LEADERBOARD;
 
   // Sync profile data into local state when available
   useEffect(() => {
@@ -342,7 +346,7 @@ export default function GameLensPage() {
   }, [leaderboardData]);
 
   const profile = (profileData || { level: 1, xp: 0, nextLevelXp: 1000, totalXpEarned: 0, achievements: 0, totalAchievements: 0, streak: 0, longestStreak: 0, questsCompleted: 0, challengesWon: 0, completionRate: 0, rank: 0, xpHistory: [] }) as unknown as GameProfile;
-  const xpHistory: XpHistoryEntry[] = (profile.xpHistory || []) as XpHistoryEntry[];
+  const xpHistory: XpHistoryEntry[] = (profile.xpHistory || INITIAL_XP_HISTORY) as XpHistoryEntry[];
   const xpMax = Math.max(1, ...xpHistory.map((d: { xp: number }) => d.xp));
   const level = profile.level || 1;
   const progressPct = ((playerXp) / ((profile.nextLevelXp as number) || 1000)) * 100;

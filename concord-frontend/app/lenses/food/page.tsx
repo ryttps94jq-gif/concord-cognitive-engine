@@ -385,7 +385,11 @@ export default function FoodLensPage() {
       Object.assign(base, { employee: formEmployee, role: formRole, shiftStart: formShiftStart, shiftEnd: formShiftEnd, station: formStation, hourlyRate: parseFloat(formHourlyRate) || 15 });
     }
     const payload = { title: formName, data: base as Partial<FoodArtifact>, meta: { status: formStatus, tags: [activeArtifactType, formCategory || formSection || ''] } };
-    if (editingItem) { await update(editingItem.id, payload); } else { await create(payload); }
+    if (activeArtifactType === 'MealPlan') {
+      if (editingItem) { await updateMealPlan(editingItem.id, payload); } else { await createMealPlan(payload); }
+    } else {
+      if (editingItem) { await update(editingItem.id, payload); } else { await create(payload); }
+    }
     setEditorOpen(false);
   };
 
@@ -1303,10 +1307,17 @@ export default function FoodLensPage() {
                       {meals.length > 0 ? meals.map(m => {
                         const md = m.data as unknown as FoodArtifact;
                         return (
-                          <div key={m.id} className="text-xs p-1.5 rounded bg-neon-cyan/10 text-neon-cyan mb-1 truncate"
+                          <div key={m.id} className="group/meal flex items-center gap-1 text-xs p-1.5 rounded bg-neon-cyan/10 text-neon-cyan mb-1"
                             onClick={e => { e.stopPropagation(); openEdit(m); }}>
-                            {m.title}
-                            {md.calories ? <span className="text-gray-500 ml-1">{md.calories}cal</span> : null}
+                            <span className="truncate flex-1">{m.title}</span>
+                            {md.calories ? <span className="text-gray-500">{md.calories}cal</span> : null}
+                            <button
+                              className="opacity-0 group-hover/meal:opacity-100 text-red-400 hover:text-red-300 transition-opacity flex-shrink-0"
+                              onClick={e => { e.stopPropagation(); removeMealPlan(m.id); }}
+                              title="Remove meal"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
                           </div>
                         );
                       }) : (

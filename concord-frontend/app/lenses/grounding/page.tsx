@@ -3,7 +3,7 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLensBridge } from '@/lib/hooks/use-lens-bridge';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
@@ -84,7 +84,7 @@ export default function GroundingLensPage() {
   });
 
   const sensorList = sensors?.sensors || sensors || [];
-  const readingList = readings?.readings || readings || [];
+  const readingList = useMemo(() => readings?.readings || readings || [], [readings]);
   const statusInfo = status?.status || status || {};
   const contextInfo = context?.context || context || {};
 

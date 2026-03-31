@@ -4,7 +4,6 @@ import { useState, useCallback, useMemo, useRef } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
-import { api } from '@/lib/api/client';
 import { apiHelpers } from '@/lib/api/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -590,7 +589,12 @@ export default function FeedLensPage() {
         <header className="sticky top-0 z-10 bg-lattice-bg/80 backdrop-blur-md border-b border-lattice-border">
           <div className="flex items-center justify-between px-4 py-3">
             <h1 className="text-xl font-bold text-white">Feed</h1>
-            <Sparkles className="w-5 h-5 text-neon-cyan" />
+            <div className="flex items-center gap-2">
+              {dtusLoading && <span className="w-4 h-4 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin" />}
+              <button onClick={() => refetchDTUs()} disabled={dtusLoading} className="p-1 rounded hover:bg-lattice-surface/50 disabled:opacity-50 transition-colors" title="Refresh DTUs">
+                <Sparkles className="w-5 h-5 text-neon-cyan" />
+              </button>
+            </div>
           </div>
 
       {/* Real-time Enhancement Toolbar */}
@@ -748,7 +752,7 @@ export default function FeedLensPage() {
 
                       {/* Type-specific Content */}
                       {post.type === 'audio' && post.audio && (
-                        <WaveformPlayer {...post.audio} />
+                        <WaveformPlayer {...post.audio} waveform={post.audio.waveform?.length ? post.audio.waveform : generateWaveform()} />
                       )}
 
                       {post.type === 'release' && post.release && (
@@ -860,7 +864,7 @@ export default function FeedLensPage() {
             <TrendingUp className="w-4 h-4 text-neon-cyan" />
             <h2 className="text-base font-bold text-white">Trending in Studio</h2>
           </div>
-          {(trending || []).map(topic => (
+          {(trending || TRENDING_TOPICS).map(topic => (
             <button
               key={topic.id}
               onClick={() => setSearchQuery(topic.tag.replace('#', ''))}

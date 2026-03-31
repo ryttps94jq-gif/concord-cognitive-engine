@@ -6,9 +6,9 @@ import { useQuery } from '@tanstack/react-query';
 import { api, apiHelpers } from '@/lib/api/client';
 import {
   Activity, Brain, FlaskConical, Layers, Radio,
-  BarChart3, Zap, Shield, RefreshCw, Database,
-  Heart, TrendingUp, Clock, CheckCircle, AlertTriangle,
-  ChevronDown, ChevronRight, Search, Eye,
+  BarChart3, Zap, Shield, Database,
+  Heart, Clock, CheckCircle, AlertTriangle,
+  ChevronDown, ChevronRight, Eye,
 } from 'lucide-react';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import PipelineMonitor from '@/components/platform/PipelineMonitor';

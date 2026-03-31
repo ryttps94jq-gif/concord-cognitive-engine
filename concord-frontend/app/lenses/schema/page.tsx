@@ -1,7 +1,7 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useState } from 'react';
@@ -16,7 +16,6 @@ import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 export default function SchemaLensPage() {
   useLensNav('schema');
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('schema');
-  const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [validateData, setValidateData] = useState({ schemaName: '', data: '' });
   const [validationResult, setValidationResult] = useState<{ valid: boolean; errors?: { field: string; error: string }[] } | null>(null);
@@ -171,6 +170,8 @@ export default function SchemaLensPage() {
           </div>
         </div>
       </div>
+
+      <RealtimeDataPanel data={realtimeInsights} />
 
       {showCreate && (
         <CreateSchemaModal

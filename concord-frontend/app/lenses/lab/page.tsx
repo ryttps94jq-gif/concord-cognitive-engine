@@ -1,7 +1,7 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useState } from 'react';
@@ -18,10 +18,8 @@ export default function LabLensPage() {
   useLensNav('lab');
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('lab');
 
-  const queryClient = useQueryClient();
   const [code, setCode] = useState('');
   const [selectedOrgan, setSelectedOrgan] = useState('abstraction_governor');
-  const [showFeatures, setShowFeatures] = useState(false);
 
   const { items: organItems, isLoading, isError: isError, error: error, refetch: refetch } = useLensData<Record<string, unknown>>('lab', 'organ', { seed: [] });
   const organs = organItems.map(i => ({ id: i.id, ...(i.data || {}) })) as unknown as Record<string, unknown>[];
@@ -164,6 +162,8 @@ export default function LabLensPage() {
           </div>
         </div>
       </div>
+
+      <RealtimeDataPanel data={realtimeInsights} />
 
       {/* Adjacent Reality Explorer */}
       <RealityExplorerSection />

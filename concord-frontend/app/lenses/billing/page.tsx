@@ -159,7 +159,7 @@ export default function BillingPage() {
   });
 
   const tokenPackages: TokenPackage[] = config?.tokenPackages || [];
-  const transactions: Transaction[] = historyData?.transactions || [];
+  const transactions: Transaction[] = useMemo(() => historyData?.transactions || [], [historyData]);
 
   // Usage data for the last 7 days (derived from transactions)
   const usageByDay = useMemo(() => {
@@ -631,6 +631,8 @@ export default function BillingPage() {
           </div>
         </div>
       )}
+
+      <RealtimeDataPanel data={realtimeInsights} />
 
       {/* Lens Features */}
       <div className="border-t border-white/10">

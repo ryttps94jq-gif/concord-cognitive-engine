@@ -11,7 +11,7 @@
  * - Earnings summary for creators
  */
 
-import { useState, useCallback, useRef, useEffect, useMemo, Suspense } from 'react';
+import { useState, useCallback, useRef, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useQuery, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -31,11 +31,9 @@ import {
   ArrowDownRight,
   Repeat,
   Loader2,
-  ChevronRight,
   Sparkles,
   BarChart3,
   Calendar,
-  Filter,
 } from 'lucide-react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { api, apiHelpers } from '@/lib/api/client';
@@ -540,6 +538,35 @@ function WalletPageInner() {
                 );
               })}
             </div>
+
+            {/* Withdrawals Summary */}
+            {activeTab === 'withdrawal' && withdrawalsData && (
+              <div className="px-4 pt-4">
+                <div className="bg-lattice-deep rounded-lg p-3 border border-lattice-border mb-3">
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Recent Withdrawals</p>
+                  <div className="space-y-2">
+                    {(withdrawalsData.withdrawals || withdrawalsData.items || []).slice(0, 5).map(w => (
+                      <div key={w.id} className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <ArrowDownToLine className="w-3.5 h-3.5 text-amber-400" />
+                          <span className="font-mono text-white">{w.amount.toLocaleString()} CC</span>
+                          {w.fee > 0 && <span className="text-xs text-gray-500">(fee: {w.fee})</span>}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs px-1.5 py-0.5 rounded ${w.status === 'complete' || w.status === 'completed' ? 'bg-green-500/10 text-green-400' : 'bg-amber-500/10 text-amber-400'}`}>
+                            {w.status}
+                          </span>
+                          <span className="text-xs text-gray-500">{new Date(w.created_at).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                    ))}
+                    {(withdrawalsData.withdrawals || withdrawalsData.items || []).length === 0 && (
+                      <p className="text-xs text-gray-500">No withdrawals found</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Transaction List */}
             <div className="p-4">

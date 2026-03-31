@@ -49,7 +49,7 @@ export function DTUImportZone({
       setImporting(false);
       setTimeout(() => setResult(null), 3000);
     }
-  }, [api, domain, onImport]);
+  }, [domain, onImport]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();

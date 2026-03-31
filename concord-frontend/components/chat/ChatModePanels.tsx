@@ -32,7 +32,6 @@ import {
   Radio,
   Lightbulb,
   Zap,
-  Clock,
   Database,
   BookOpen,
   MessageSquare,
@@ -40,7 +39,7 @@ import {
   Hammer,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { ChatMode, ActionButton } from './ChatModeTypes';
+import type { ChatMode } from './ChatModeTypes';
 
 // ── Shared types ────────────────────────────────────────────────
 
@@ -312,7 +311,7 @@ export function ExplorePanel({ currentLens, onSendMessage }: ModePanelProps) {
 
 // ── Connect Panel ───────────────────────────────────────────────
 
-export function ConnectPanel({ currentLens, onSendMessage, onLensNavigate }: ModePanelProps) {
+export function ConnectPanel({ currentLens, onSendMessage }: ModePanelProps) {
   return (
     <div className="px-3 py-4 space-y-4">
       {/* Mode header */}

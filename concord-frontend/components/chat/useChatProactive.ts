@@ -237,7 +237,7 @@ export function useChatProactive({
     return () => {
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
     };
-  }, [enabled, messageCount, currentLens, proactiveMessages.length]);
+  }, [enabled, messageCount, currentLens, proactiveMessages]);
 
   // Reset idle timer when messageCount changes (user activity)
   useEffect(() => {

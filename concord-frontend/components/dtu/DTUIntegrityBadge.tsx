@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useMemo } from 'react';
 import { Shield, ShieldCheck, ShieldAlert, ShieldX, ChevronDown, ChevronUp, Archive, FileCheck } from 'lucide-react';
-import type { IntegrityStatus, IntegrityReport, CompressionResult } from '../../lib/types/canonical';
+import type { IntegrityStatus, IntegrityReport } from '../../lib/types/canonical';
 
 interface DTUIntegrityBadgeProps {
   dtuId: string;

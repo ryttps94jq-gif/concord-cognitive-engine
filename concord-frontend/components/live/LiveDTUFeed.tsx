@@ -51,7 +51,7 @@ export function LiveDTUFeed({ limit = 10 }: { limit?: number }) {
         isNew: false,
       })));
     }
-  }, [dtusData, limit]);
+  }, [dtusData, limit, liveDtus.length]);
 
   // Subscribe to real-time DTU creation
   useEffect(() => {
