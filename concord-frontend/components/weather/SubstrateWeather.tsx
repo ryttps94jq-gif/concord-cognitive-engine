@@ -118,7 +118,7 @@ export function SubstrateWeather({ className }: { className?: string }) {
       {/* Brain health */}
       <div className="px-5 pb-3">
         <div className="flex items-center gap-3">
-          {Object.entries(data.brainHealth || {}).map(([name, health]: [string, { requests: number; errors: number; enabled: boolean }]) => {
+          {(Object.entries(data.brainHealth || {}) as [string, { requests: number; errors: number; enabled: boolean }][]).map(([name, health]) => {
             const BrainIcon = BRAIN_ICONS[name] || Brain;
             return (
               <div key={name} className="flex items-center gap-1.5" title={`${name}: ${health.requests} requests, ${health.errors} errors`}>
@@ -163,7 +163,7 @@ export function SubstrateWeather({ className }: { className?: string }) {
           <div>
             <h4 className="text-xs font-medium text-gray-400 mb-1">Tier Distribution</h4>
             <div className="flex items-center gap-3">
-              {Object.entries(stats.tierDistribution || {}).map(([tier, count]: [string, number]) => (
+              {(Object.entries(stats.tierDistribution || {}) as [string, number][]).map(([tier, count]) => (
                 <span key={tier} className={cn('text-xs', tier === 'hyper' ? 'text-yellow-400' : tier === 'mega' ? 'text-purple-400' : 'text-gray-400')}>
                   {tier}: {count}
                 </span>

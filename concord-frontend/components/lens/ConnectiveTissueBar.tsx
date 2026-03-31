@@ -33,7 +33,7 @@ export function ConnectiveTissueBar({ lensId, userId, className }: ConnectiveTis
   const createDTUMutation = useCreateDTU();
   const postBountyMutation = usePostBounty();
   const forkMutation = useForkDTU();
-  const { data: searchData } = useDTUSearch(searchQuery, lensId);
+  const { data: searchData } = useDTUSearch({ query: searchQuery, lensId });
   const { data: meritData } = useMeritCredit(userId || '');
 
   const togglePanel = (panel: string) => {
@@ -140,7 +140,8 @@ export function ConnectiveTissueBar({ lensId, userId, className }: ConnectiveTis
               if (!userId) return;
               createDTUMutation.mutate({
                 lensId,
-                userId,
+                creatorId: userId,
+                title: 'New DTU',
                 content: 'New DTU',
               });
             }}
@@ -172,9 +173,9 @@ export function ConnectiveTissueBar({ lensId, userId, className }: ConnectiveTis
               placeholder="Search across all lenses..."
             />
           </div>
-          {searchData?.results && searchData.results.length > 0 ? (
+          {searchData?.data?.results && searchData.data.results.length > 0 ? (
             <div className="mt-2 space-y-1 max-h-40 overflow-y-auto">
-              {searchData.results.map((r: { id: string; title?: string; score?: number }) => (
+              {searchData.data.results.map((r: { id: string; title?: string; score?: number }) => (
                 <div key={r.id} className="text-xs text-gray-300 flex justify-between p-1 rounded bg-white/5">
                   <span className="truncate">{r.title || r.id}</span>
                   {r.score !== undefined && <span className="text-gray-500 ml-2">{r.score.toFixed(2)}</span>}
@@ -197,7 +198,7 @@ export function ConnectiveTissueBar({ lensId, userId, className }: ConnectiveTis
           </p>
           <button
             onClick={() => {
-              forkMutation.mutate({ dtuId: 'target_dtu', lensId });
+              forkMutation.mutate({ forkerId: userId || 'anonymous', originalDtuId: 'target_dtu', lensId });
             }}
             disabled={forkMutation.isPending}
             className="mt-2 px-3 py-1 bg-yellow-400/20 text-yellow-400 rounded text-sm hover:bg-yellow-400/30 transition"
@@ -266,7 +267,8 @@ function BountyForm({ lensId, userId, postBountyMutation }: { lensId: string; us
           if (!bountyDesc.trim() || !userId) return;
           postBountyMutation.mutate({
             lensId,
-            userId,
+            posterId: userId || 'anonymous',
+            title: bountyDesc.trim().slice(0, 60),
             description: bountyDesc.trim(),
             amount: parseFloat(bountyAmount) || 1,
           });

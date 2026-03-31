@@ -629,7 +629,7 @@ export default function MusicLensPage() {
             {/* ---- ALBUM ---- */}
             {view === 'album' && selectedAlbumId && (
               <AlbumView
-                album={{ id: selectedAlbumId, title: 'Album', artistId: '', artistName: '', coverArtUrl: null, tracks: tracks.filter(t => t.albumId === selectedAlbumId), totalDuration: 0, releaseDate: '', createdAt: '', updatedAt: '' }}
+                album={{ id: selectedAlbumId, title: 'Album', artistId: '', artistName: '', coverArtUrl: null, tracks: tracks.filter(t => t.albumId === selectedAlbumId), totalDuration: 0, releaseDate: '', createdAt: '', updatedAt: '', type: 'album', genre: '', description: null, trackCount: 0 }}
                 onArtistClick={navigateToArtist}
                 onBack={navigateHome}
               />
@@ -772,7 +772,7 @@ export default function MusicLensPage() {
                       ))}
                     </div>
                     <p className="text-xs text-gray-500">
-                      Net to creator: ${royaltyPreview.breakdown.netToCreator.toFixed(2)} · Platform: ${royaltyPreview.breakdown.platformFee.toFixed(2)}
+                      Net to creator: ${royaltyPreview.breakdown.creatorNet.toFixed(2)} · Platform: ${royaltyPreview.breakdown.platformFee.toFixed(2)}
                     </p>
                   </div>
                 )}

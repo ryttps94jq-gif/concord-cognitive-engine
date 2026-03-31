@@ -114,7 +114,7 @@ export function CognitiveDigitalTwin({ className }: { className?: string }) {
         <div>
           <p className="text-xs text-gray-500 mb-1 flex items-center gap-1"><Target className="w-3 h-3" /> Top Domains</p>
           <div className="space-y-1">
-            {domains.slice(0, 3).map(([domain, data]: [string, { count: number }]) => (
+            {(domains.slice(0, 3) as [string, { count: number }][]).map(([domain, data]) => (
               <div key={domain} className="flex items-center justify-between">
                 <span className="text-xs text-white truncate">{domain}</span>
                 <span className="text-[10px] text-gray-500">{data.count} DTUs</span>

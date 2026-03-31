@@ -20,7 +20,7 @@ export interface PerfMetric {
 type MetricReporter = (metric: PerfMetric) => void;
 
 let reporter: MetricReporter = (metric) => {
-  if (import.meta.env.DEV) {
+  if (process.env.NODE_ENV === 'development') {
     console.debug('[Perf]', metric.name, `${metric.value.toFixed(1)}ms`, metric.meta || '');
   }
 };
