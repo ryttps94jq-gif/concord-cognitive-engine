@@ -3,6 +3,8 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useQueryClient } from '@tanstack/react-query';
+import { api } from '@/lib/api/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Music,
@@ -22,6 +24,9 @@ import {
   Target,
   Radio,
   BarChart3,
+  PlayCircle,
+  StopCircle,
+  Upload,
 } from 'lucide-react';
 
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -188,7 +193,8 @@ function createDefaultDrumPads(): DrumPad[] {
 export default function StudioLensPage() {
   useLensNav('studio');
   const { latestData: realtimeData, alerts: _realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('studio');
-  const { isLoading: _isLoading, isError: _isError, error: _error, refetch: _refetch } = useLensData('studio', 'project', { noSeed: true });
+  const { isLoading: _isLoading, isError: _isError, error: _error, refetch: _refetch, create: createLensItem } = useLensData('studio', 'project', { noSeed: true });
+  const queryClient = useQueryClient();
 
   // ---- State ----
   const [studioView, setStudioView] = useState<StudioViewType>('arrange');

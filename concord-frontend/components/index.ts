@@ -47,6 +47,13 @@ export * from './gamification/Achievements';
 // Whiteboard Components
 // ExcalidrawWrapper removed - whiteboard page uses custom canvas implementation
 
+// DTU Components
+export * from './dtu/DTUDetailView';
+export * from './dtu/DTUQuickCreate';
+export * from './dtu/DTUDetailModal';
+export * from './dtu/DTUEmpireCard';
+export * from './dtu/DTUIntegrityBadge';
+
 // List Components
 export * from './lists/VirtualDTUList';
 

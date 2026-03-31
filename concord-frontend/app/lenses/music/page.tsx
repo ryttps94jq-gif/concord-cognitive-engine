@@ -85,7 +85,7 @@ const SEED_PLAYLISTS: Playlist[] = [
 export default function MusicLensPage() {
   useLensNav('music');
   const { latestData: realtimeData, alerts: _realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('music');
-  const { isLoading: _trackLoading, items: trackItems } = useLensData<Record<string, unknown>>('music', 'track', {
+  const { isLoading: _trackLoading, items: trackItems, create: createTrackItem } = useLensData<Record<string, unknown>>('music', 'track', {
     seed: SEED_TRACKS.map(t => ({ title: t.title, data: t as unknown as Record<string, unknown> })),
   });
   const { items: artistItems } = useLensData<Record<string, unknown>>('music', 'artist', {
@@ -210,7 +210,8 @@ export default function MusicLensPage() {
   const allGenres = useMemo(() => Object.keys(genreGroups).sort(), [genreGroups]);
 
   // ---- Upload handler ----
-  const handleUpload = useCallback((_data: unknown, _file: File) => {
+  const handleUpload = useCallback((data: unknown, _file: File) => {
+    const uploadData = data as Record<string, unknown>;
     setUploadProgress({ stage: 'uploading', progress: 0, audioAnalysis: null, error: null });
     // Simulate upload stages
     const stages: UploadProgress['stage'][] = ['uploading', 'analyzing', 'processing', 'complete'];
@@ -230,10 +231,57 @@ export default function MusicLensPage() {
         });
       } else {
         clearInterval(interval);
+        // Persist the new track so it appears in the list without refresh
+        const trackTitle = (uploadData?.title as string) || _file.name.replace(/\.[^.]+$/, '');
+        const newId = `t-upload-${Date.now()}`;
+        const newTrack: Partial<MusicTrack> = {
+          id: newId,
+          title: trackTitle,
+          artistId: 'user-1',
+          artistName: 'You',
+          albumId: null,
+          albumTitle: null,
+          coverArtUrl: null,
+          audioUrl: '', // No real audio file yet
+          previewUrl: null,
+          duration: 240,
+          trackNumber: null,
+          genre: (uploadData?.genre as string) || 'electronic',
+          subGenre: (uploadData?.subGenre as string) || null,
+          tags: (uploadData?.tags as string[]) || [],
+          bpm: 128,
+          key: 'Am',
+          loudnessLUFS: -14,
+          spectralCentroid: 2200,
+          onsetDensity: 4.2,
+          waveformPeaks: Array.from({ length: 200 }, () => Math.random() * 0.8),
+          tiers: (uploadData?.tiers as MusicTrack['tiers']) || [
+            { tier: 'listen', enabled: true, price: 0, currency: 'USD', maxLicenses: null, licensesIssued: 0 },
+            { tier: 'create', enabled: true, price: 9.99, currency: 'USD', maxLicenses: null, licensesIssued: 0 },
+            { tier: 'commercial', enabled: true, price: 99.99, currency: 'USD', maxLicenses: null, licensesIssued: 0 },
+          ],
+          playCount: 0,
+          purchaseCount: 0,
+          remixCount: 0,
+          parentTrackId: (uploadData?.parentTrackId as string) || null,
+          parentArtistId: null,
+          parentTitle: null,
+          lineageDepth: (uploadData?.parentTrackId) ? 1 : 0,
+          stems: [],
+          releaseDate: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          isExplicit: (uploadData?.isExplicit as boolean) || false,
+          lyrics: null,
+          credits: [],
+          chromaprintHash: null,
+        };
+        createTrackItem({ title: trackTitle, data: newTrack as unknown as Record<string, unknown> })
+          .catch(err => console.error('Failed to persist uploaded track:', err instanceof Error ? err.message : err));
         setTimeout(() => { setUploadProgress(null); setView('home'); }, 2000);
       }
     }, 1500);
-  }, []);
+  }, [createTrackItem]);
 
   // ---- Selected entities ----
   const selectedArtist = artists.find(a => a.id === selectedArtistId);
@@ -825,8 +873,9 @@ export default function MusicLensPage() {
               </button>
               <button
                 onClick={() => {
-                  if (nowPlaying.playbackState === 'playing') playTrack(nowPlaying.track!);
-                  else playTrack(nowPlaying.track!);
+                  const player = getPlayer();
+                  if (nowPlaying.playbackState === 'playing') player.pause();
+                  else player.play();
                 }}
                 className="p-2 rounded-full bg-white text-black hover:brightness-90 transition"
               >

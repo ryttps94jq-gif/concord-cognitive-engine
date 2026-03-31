@@ -16300,6 +16300,7 @@ let localReply = formatCrispResponse({
   // ===== END DTU CONTEXT PIPELINE =====
 
   let _subconsciousReflection = null;
+  let _webAugmented = false;
 
   // ===== FULL MULTI-STAGE PIPELINE (primary path) =====
   // Stage 1: Input processing + DTU context enrichment (already done above)
@@ -16391,6 +16392,7 @@ let localReply = formatCrispResponse({
       finalReply = _consciousResult.content.trim() || localReply;
       llmUsed = true;
       _pipelineSucceeded = true;
+      _webAugmented = _consciousResult.webAugmented || false;
       const _pipelineElapsed = Date.now() - _pipelineStart;
       ctx.log("chat_pipeline.full", "Full pipeline succeeded", {
         sessionId, mode, elapsed: _pipelineElapsed,
@@ -16538,30 +16540,12 @@ When helpful, reference DTU titles in plain language (do not dump ids unless ask
   }
   // ===== END FAST PATH FALLBACK =====
 
+  // ===== POST-RESPONSE LOGGING + WEB DTU SAVE =====
+  // (runs in both full pipeline and fast path)
   const _qpMeta = _fusedContext ? { patternsApplied: _fusedContext.meta.patternsApplied, queryIntent: _qualityPipelineResult?.queryIntent, tokenEstimate: _fusedContext.meta.tokenEstimate } : null;
   sess.messages.push({ role: "assistant", content: finalReply, ts: nowISO(), meta: { llmUsed, semanticUsed, mode, relevant: relevant.map(d=>d.id), qualityPipeline: _qpMeta, dtuCount: _pipelineDtuCount, subconsciousReflection: !!_subconsciousReflection } });
   ctx.log("chat", "Chat response generated", { sessionId, mode, llmUsed, semanticUsed, relevant: relevant.map(d=>d.id), qualityPipeline: _qpMeta, pipelineDtuCount: _pipelineDtuCount, hasSubconsciousReflection: !!_subconsciousReflection });
-
-
-  // Knowledge loop: save web sources as DTUs so future queries are answered from substrate
-  if (_webResults.length > 0 && llmUsed) {
-    for (const _wr of _webResults) {
-      try {
-        const _wctx = makeInternalCtx("system");
-        await runMacro("dtu", "create", {
-          title: `Web: ${_wr.title.slice(0, 80)}`,
-          creti: _wr.content,
-          tags: [currentLens || mode, "web-source", _wr.source].filter(Boolean),
-          source: `web.${_wr.source}`,
-          meta: { webUrl: _wr.url, webSource: _wr.source, webQuery: _wr.query, fetchedAt: _wr.fetchedAt, contentType: "web-knowledge" },
-        }, _wctx);
-      } catch (_e) { logger.debug('server', 'web DTU save is best-effort', { error: _e?.message }); }
-    }
-  }
-
-  const _qpMeta = _fusedContext ? { patternsApplied: _fusedContext.meta.patternsApplied, queryIntent: _qualityPipelineResult?.queryIntent, tokenEstimate: _fusedContext.meta.tokenEstimate } : null;
-  sess.messages.push({ role: "assistant", content: finalReply, ts: nowISO(), meta: { llmUsed, semanticUsed, mode, relevant: relevant.map(d=>d.id), qualityPipeline: _qpMeta, dtuCount: _pipelineDtuCount } });
-  ctx.log("chat", "Chat response generated", { sessionId, mode, llmUsed, semanticUsed, relevant: relevant.map(d=>d.id), qualityPipeline: _qpMeta, pipelineDtuCount: _pipelineDtuCount });
+  // Note: web search + web DTU saving is now handled inside consciousChat() — no external _webResults needed.
 
   // ===== DTU ENRICHMENT: Output DTU + Consolidation Check =====
   try {
@@ -16686,8 +16670,7 @@ When helpful, reference DTU titles in plain language (do not dump ids unless ask
   return {
     ok: true, reply: finalReply, sessionId, mode, llmUsed, semanticUsed,
     relevant: relevant.map(d=>({ id:d.id, title:d.title, tier:d.tier })),
-    webAugmented: _webResults.length > 0,
-    sources: _webResults.length > 0 ? _webResults.map(wr => ({ type: "web", title: wr.title, url: wr.url, source: wr.source, snippet: wr.snippet })) : undefined,
+    webAugmented: _webAugmented,
     dtuCount: _pipelineDtuCount,
     pipeline: _pipelineHarvest ? {
       sources: _pipelineHarvest.sources,
