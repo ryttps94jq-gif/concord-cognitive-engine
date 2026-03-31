@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Palette, Info } from 'lucide-react';
 import { ArtistryFeed } from '@/components/artistry/ArtistryFeed';
+import { useLensData } from '@/lib/hooks/use-lens-data';
 import type {
   ArtistryPost, ArtistryContentType, FeedMode, FeedFilter,
   AudioPreview, ImagePreview, TextPreview, CodePreview,
@@ -66,7 +67,10 @@ export default function ArtistryPage() {
     tags: [],
     timeRange: 'all',
   });
-  const [posts] = useState<ArtistryPost[]>(SEED_POSTS);
+  const { items: postItems } = useLensData<ArtistryPost>('artistry', 'post', {
+    seed: SEED_POSTS.map(p => ({ title: p.title, data: p as unknown as Record<string, unknown> })),
+  });
+  const posts: ArtistryPost[] = postItems.map(i => ({ ...(i.data as unknown as ArtistryPost), id: i.id }));
 
   // ---- Filtering ----
   const filteredPosts = useMemo(() => {

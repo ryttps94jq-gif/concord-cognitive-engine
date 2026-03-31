@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+
 interface RealtimeDataPanelProps {
   domain?: string;
   data: Array<{ domain: string; insight: string; confidence: number; timestamp: string }> | Record<string, unknown> | null;

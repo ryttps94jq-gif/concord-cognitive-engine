@@ -102,7 +102,7 @@ const generateWaveform = (count: number): number[] =>
 
 const INITIAL_TAKES: Take[] = [];
 
-const INITIAL_EFFECTS: EffectNode[] = [
+const DEFAULT_EFFECTS: EffectNode[] = [
   { id: 'noise-gate', name: 'Noise Gate', enabled: false, paramLabel: 'Threshold', paramValue: -40, paramMin: -80, paramMax: 0, paramUnit: 'dB' },
   { id: 'compressor', name: 'Compressor', enabled: false, paramLabel: 'Ratio', paramValue: 4, paramMin: 1, paramMax: 20, paramUnit: ':1' },
   { id: 'eq', name: 'EQ', enabled: false, paramLabel: 'Presence', paramValue: 0, paramMin: -12, paramMax: 12, paramUnit: 'dB' },
@@ -110,7 +110,7 @@ const INITIAL_EFFECTS: EffectNode[] = [
   { id: 'reverb', name: 'Reverb', enabled: false, paramLabel: 'Mix', paramValue: 10, paramMin: 0, paramMax: 100, paramUnit: '%' },
 ];
 
-const INITIAL_INPUTS = [
+const DEFAULT_INPUTS = [
   { id: 'default', label: 'Built-in Microphone' },
 ];
 
@@ -126,7 +126,7 @@ export default function VoiceLensPage() {
   const [isPlaying, setIsPlaying] = useState(false);
 
   // Takes
-  const [takes, setTakes] = useState<Take[]>(INITIAL_TAKES);
+  const [takes, setTakes] = useState<Take[]>([]);
   const { isLoading, isError: isError, error: error, refetch: refetch, items: _takeItems, create: _createTake } = useLensData<Take>('voice', 'take', {
     seed: INITIAL_TAKES.map(t => ({ title: t.name, data: t as unknown as Record<string, unknown> })),
   });
@@ -135,7 +135,7 @@ export default function VoiceLensPage() {
   const [renameValue, setRenameValue] = useState('');
 
   // Processing
-  const [effects, setEffects] = useState<EffectNode[]>(INITIAL_EFFECTS);
+  const [effects, setEffects] = useState<EffectNode[]>(DEFAULT_EFFECTS);
   const [activePreset, setActivePreset] = useState<ProcessingPreset>('raw');
 
   // Transcription
@@ -389,7 +389,7 @@ export default function VoiceLensPage() {
               onChange={(e) => setSelectedInput(e.target.value)}
               className="bg-white/5 border border-lattice-border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-neon-cyan/50"
             >
-              {INITIAL_INPUTS.map((inp) => (
+              {DEFAULT_INPUTS.map((inp) => (
                 <option key={inp.id} value={inp.id} className="bg-lattice-surface">
                   {inp.label}
                 </option>

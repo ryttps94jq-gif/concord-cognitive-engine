@@ -22,7 +22,7 @@ import type {
 import { previewRoyaltyObligations, ROYALTY_CONSTANTS } from '@/lib/music/royalty-cascade';
 import { TrackCard } from '@/components/music/TrackCard';
 import { ArtistProfile } from '@/components/music/ArtistProfile';
-import { AlbumView } from '@/components/music/AlbumView';
+// AlbumView unused until album data is wired — albums show placeholder for now
 import { UploadFlow } from '@/components/music/UploadFlow';
 import { PlaylistView } from '@/components/music/PlaylistView';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -85,12 +85,34 @@ const SEED_PLAYLISTS: Playlist[] = [
 export default function MusicLensPage() {
   useLensNav('music');
   const { latestData: realtimeData, alerts: _realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('music');
-  const { isLoading: _isLoading, isError: _isError, error: _error, refetch: _refetch, items: _trackItems } = useLensData('music', 'track', { noSeed: true });
+  const { isLoading: _trackLoading, items: trackItems } = useLensData<Record<string, unknown>>('music', 'track', {
+    seed: SEED_TRACKS.map(t => ({ title: t.title, data: t as unknown as Record<string, unknown> })),
+  });
+  const { items: artistItems } = useLensData<Record<string, unknown>>('music', 'artist', {
+    seed: SEED_ARTISTS.map(a => ({ title: a.name, data: a as unknown as Record<string, unknown> })),
+  });
+  const { items: playlistItems, create: createPlaylistItem } = useLensData<Record<string, unknown>>('music', 'playlist', {
+    seed: SEED_PLAYLISTS.map(p => ({ title: p.name, data: p as unknown as Record<string, unknown> })),
+  });
   const {
     contextDTUs: _contextDTUs, hyperDTUs: _hyperDTUs, megaDTUs: _megaDTUs, regularDTUs: _regularDTUs,
     publishToMarketplace: _publishToMarketplace,
     isLoading: _dtusLoading,
   } = useLensDTUs({ lens: 'music' });
+
+  // ---- Transform lens items to domain types ----
+  const tracks = useMemo<MusicTrack[]>(() =>
+    trackItems.map(item => ({ ...(item.data as unknown as MusicTrack), id: item.id, title: item.title })),
+    [trackItems]
+  );
+  const artists = useMemo<Artist[]>(() =>
+    artistItems.map(item => ({ ...(item.data as unknown as Artist), id: item.id, name: item.title || (item.data as Record<string, unknown>)?.name as string })),
+    [artistItems]
+  );
+  const playlists = useMemo<Playlist[]>(() =>
+    playlistItems.map(item => ({ ...(item.data as unknown as Playlist), id: item.id, name: item.title || (item.data as Record<string, unknown>)?.name as string })),
+    [playlistItems]
+  );
 
   // ---- View State ----
   const [view, setView] = useState<MusicLensView>('home');
@@ -102,11 +124,6 @@ export default function MusicLensPage() {
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
   const [libraryTab, setLibraryTab] = useState<'playlists' | 'liked' | 'purchased' | 'recent'>('playlists');
   const [likedTrackIds, setLikedTrackIds] = useState<Set<string>>(new Set());
-
-  // ---- Data (seed data for now, would come from API) ----
-  const [tracks] = useState<MusicTrack[]>(SEED_TRACKS);
-  const [artists] = useState<Artist[]>(SEED_ARTISTS);
-  const [playlists, setPlaylists] = useState<Playlist[]>(SEED_PLAYLISTS);
 
   const { playTrack, addToQueue, nowPlaying } = useMusicStore();
 
@@ -145,8 +162,7 @@ export default function MusicLensPage() {
 
   // ---- Playlist creation ----
   const handleCreatePlaylist = useCallback(() => {
-    const newPlaylist: Playlist = {
-      id: `pl-${Date.now()}`,
+    const playlistData: Partial<Playlist> = {
       name: `New Playlist ${playlists.length + 1}`,
       description: '',
       coverArtUrl: null,
@@ -159,9 +175,9 @@ export default function MusicLensPage() {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    setPlaylists(prev => [...prev, newPlaylist]);
-    navigateToPlaylist(newPlaylist.id);
-  }, [playlists.length, navigateToPlaylist]);
+    createPlaylistItem({ title: playlistData.name!, data: playlistData as unknown as Record<string, unknown> })
+      .catch(err => console.error('Failed to create playlist:', err instanceof Error ? err.message : err));
+  }, [playlists.length, createPlaylistItem]);
 
   // ---- Royalty preview ----
   const royaltyPreview = useMemo(() => {
@@ -627,12 +643,15 @@ export default function MusicLensPage() {
             )}
 
             {/* ---- ALBUM ---- */}
-            {view === 'album' && selectedAlbumId && (
-              <AlbumView
-                album={{ id: selectedAlbumId, title: 'Album', artistId: '', artistName: '', coverArtUrl: null, tracks: tracks.filter(t => t.albumId === selectedAlbumId), totalDuration: 0, releaseDate: '', createdAt: '', updatedAt: '', type: 'album', genre: '', description: null, trackCount: 0 }}
-                onArtistClick={navigateToArtist}
-                onBack={navigateHome}
-              />
+            {view === 'album' && (
+              <div className="text-center py-16 text-gray-500">
+                <Disc3 className="w-12 h-12 mx-auto mb-3 opacity-40" />
+                <p className="text-sm font-medium">No albums yet</p>
+                <p className="text-xs mt-1">Albums will appear here when artists release them.</p>
+                <button onClick={navigateHome} className="text-xs text-neon-cyan hover:underline mt-4 inline-block">
+                  &larr; Back to Home
+                </button>
+              </div>
             )}
 
             {/* ---- PLAYLIST ---- */}

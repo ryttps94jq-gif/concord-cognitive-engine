@@ -234,7 +234,17 @@ export default function GameLensPage() {
 
   const [activeTab, setActiveTab] = useState<MainTab>('dashboard');
   const [lbPeriod, setLbPeriod] = useState<LeaderboardPeriod>('alltime');
-  const [shopItems, setShopItems] = useState<ShopItem[]>(SHOP_ITEMS);
+  const { items: shopLensItems } = useLensData<ShopItem>('game', 'shop-item', {
+    seed: SHOP_ITEMS.map(s => ({ title: s.name, data: s as unknown as Record<string, unknown> })),
+  });
+  const [shopItems, setShopItems] = useState<ShopItem[]>([]);
+
+  // Sync shop items from API
+  useEffect(() => {
+    if (shopLensItems.length > 0) {
+      setShopItems(shopLensItems.map(i => ({ ...(i.data as unknown as ShopItem), id: i.id })));
+    }
+  }, [shopLensItems]);
   const [playerXp, setPlayerXp] = useState(0);
   const [expandedBranch, setExpandedBranch] = useState<SkillBranch | null>('production');
   const [showCreateChallenge, setShowCreateChallenge] = useState(false);
@@ -244,25 +254,19 @@ export default function GameLensPage() {
 
   // Fetch achievements via useLensData (no /api/game/* backend exists)
   const { items: achievementItems, isLoading, isError: isError, error: error, refetch: refetch } = useLensData<Achievement>('game', 'achievement', { seed: [] });
-  const achievements: Achievement[] = achievementItems.length > 0
-    ? achievementItems.map(i => ({ ...(i.data as unknown as Achievement), id: i.id }))
-    : INITIAL_ACHIEVEMENTS;
+  const achievements: Achievement[] = achievementItems.map(i => ({ ...(i.data as unknown as Achievement), id: i.id }));
 
   // Fetch challenges/quests via useLensData
   const { items: questItems, isError: isError2, error: error2, refetch: refetch2 } = useLensData<Quest>('game', 'quest', { seed: [] });
-  const quests: Quest[] = questItems.length > 0
-    ? questItems.map(i => ({ ...(i.data as unknown as Quest), id: i.id }))
-    : INITIAL_QUESTS;
+  const quests: Quest[] = questItems.map(i => ({ ...(i.data as unknown as Quest), id: i.id }));
 
   // Fetch profile via useLensData
   const { items: profileItems, isError: isError3, error: error3, refetch: refetch3 } = useLensData<Record<string, unknown>>('game', 'profile', { seed: [] });
-  const profileData = profileItems.length > 0 ? profileItems[0].data : INITIAL_PROFILE;
+  const profileData = profileItems.length > 0 ? profileItems[0].data : null;
 
   // Fetch leaderboard via useLensData
   const { items: leaderboardItems, isError: isError4, error: error4, refetch: refetch4 } = useLensData<Record<string, unknown>>('game', 'leaderboard', { seed: [] });
-  const leaderboardData = leaderboardItems.length > 0
-    ? leaderboardItems.map(i => i.data)
-    : INITIAL_LEADERBOARD;
+  const leaderboardData = leaderboardItems.map(i => i.data);
 
   // Sync profile data into local state when available
   useEffect(() => {
@@ -346,7 +350,7 @@ export default function GameLensPage() {
   }, [leaderboardData]);
 
   const profile = (profileData || { level: 1, xp: 0, nextLevelXp: 1000, totalXpEarned: 0, achievements: 0, totalAchievements: 0, streak: 0, longestStreak: 0, questsCompleted: 0, challengesWon: 0, completionRate: 0, rank: 0, xpHistory: [] }) as unknown as GameProfile;
-  const xpHistory: XpHistoryEntry[] = (profile.xpHistory || INITIAL_XP_HISTORY) as XpHistoryEntry[];
+  const xpHistory: XpHistoryEntry[] = (profile.xpHistory || []) as XpHistoryEntry[];
   const xpMax = Math.max(1, ...xpHistory.map((d: { xp: number }) => d.xp));
   const level = profile.level || 1;
   const progressPct = ((playerXp) / ((profile.nextLevelXp as number) || 1000)) * 100;

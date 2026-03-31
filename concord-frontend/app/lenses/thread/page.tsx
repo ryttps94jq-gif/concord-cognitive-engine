@@ -58,8 +58,6 @@ interface Thread {
   branchCount: number;
 }
 
-const INITIAL_THREADS: Thread[] = [];
-
 type ViewMode = 'tree' | 'timeline' | 'linear';
 
 export default function ThreadLensPage() {
@@ -93,7 +91,7 @@ export default function ThreadLensPage() {
 
   const threads: Thread[] = useMemo(() => {
     const convs = conversationsData || [];
-    if (convs.length === 0) return INITIAL_THREADS;
+    if (convs.length === 0) return [];
     return convs.map((c: Record<string, unknown>, i: number) => ({
       id: String(c.id || `thread-${i}`),
       name: String(c.title || c.summary || `Thread ${i + 1}`),

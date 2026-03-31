@@ -131,7 +131,7 @@ function WalletPageInner() {
   } = useQuery({
     queryKey: ['wallet-balance'],
     queryFn: () =>
-      api.get('/api/billing/balance').then((r) => r.data as BalanceData),
+      api.get('/api/economy/balance').then((r) => r.data as BalanceData),
     refetchInterval: 15000,
     retry: false,
   });
@@ -159,7 +159,7 @@ function WalletPageInner() {
     queryKey: ['wallet-transactions', activeTab],
     queryFn: ({ pageParam = 0 }) =>
       api
-        .get('/api/billing/transactions', {
+        .get('/api/economy/history', {
           params: {
             type: activeTab === 'all' ? undefined : activeTab,
             limit: TX_PAGE_SIZE,
@@ -194,8 +194,7 @@ function WalletPageInner() {
   const { data: withdrawalsData } = useQuery({
     queryKey: ['wallet-withdrawals'],
     queryFn: () =>
-      api
-        .get('/api/billing/withdrawals')
+      apiHelpers.economy.withdrawals()
         .then(
           (r) =>
             r.data as { withdrawals?: Array<{ id: string; amount: number; fee: number; net: number; status: string; created_at: string }>; items?: Array<{ id: string; amount: number; fee: number; net: number; status: string; created_at: string }> }

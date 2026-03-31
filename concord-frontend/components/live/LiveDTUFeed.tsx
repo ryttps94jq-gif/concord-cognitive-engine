@@ -4,15 +4,18 @@ import { useEffect, useState, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { subscribe, connectSocket } from '@/lib/realtime/socket';
-import { Zap, Sparkles, Star, Ghost } from 'lucide-react';
+import { Zap, Sparkles, Star, Ghost, Tag } from 'lucide-react';
 
 interface DTUEvent {
   id: string;
   title?: string;
   summary?: string;
   tier?: string;
+  type?: string;
   emergent?: string;
   actor?: string;
+  source?: string;
+  tags?: string[];
   timestamp: string;
   isNew?: boolean;
 }
@@ -22,6 +25,29 @@ const TIER_CONFIG: Record<string, { icon: typeof Zap; color: string; label: stri
   mega: { icon: Star, color: 'text-neon-cyan', label: 'Mega' },
   hyper: { icon: Sparkles, color: 'text-neon-purple', label: 'Hyper' },
   shadow: { icon: Ghost, color: 'text-gray-500', label: 'Shadow' },
+};
+
+function formatTimeAgo(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diffMs = now - then;
+  const diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 60) return 'just now';
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay < 7) return `${diffDay}d ago`;
+  return new Date(dateStr).toLocaleDateString();
+}
+
+const TYPE_COLORS: Record<string, string> = {
+  MESH_BEACON: 'bg-neon-purple/20 text-neon-purple',
+  'meta-derivation': 'bg-neon-cyan/20 text-neon-cyan',
+  synthesis: 'bg-neon-blue/20 text-neon-blue',
+  dream: 'bg-neon-pink/20 text-neon-pink',
+  capture: 'bg-emerald-500/20 text-emerald-400',
 };
 
 export function LiveDTUFeed({ limit = 10 }: { limit?: number }) {
@@ -46,7 +72,10 @@ export function LiveDTUFeed({ limit = 10 }: { limit?: number }) {
         title: d.title || d.summary || '',
         summary: d.summary || '',
         tier: d.tier || 'regular',
+        type: d.type || '',
         emergent: d.emergent || d.actor || '',
+        source: d.source || '',
+        tags: Array.isArray(d.tags) ? d.tags : [],
         timestamp: d.timestamp || new Date().toISOString(),
         isNew: false,
       })));
@@ -63,7 +92,10 @@ export function LiveDTUFeed({ limit = 10 }: { limit?: number }) {
         title: data.title as string || data.summary as string || 'New DTU',
         summary: data.summary as string || '',
         tier: data.tier as string || 'regular',
+        type: data.type as string || '',
         emergent: data.emergent as string || data.actor as string || '',
+        source: data.source as string || '',
+        tags: Array.isArray(data.tags) ? data.tags as string[] : [],
         timestamp: data.timestamp as string || new Date().toISOString(),
         isNew: true,
       };
@@ -113,15 +145,33 @@ export function LiveDTUFeed({ limit = 10 }: { limit?: number }) {
                   <p className="text-xs text-gray-200 truncate">
                     {dtu.title || dtu.summary || dtu.id.slice(0, 12)}
                   </p>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    {dtu.emergent && (
-                      <span className="text-[10px] text-neon-purple">{dtu.emergent}</span>
-                    )}
+                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                     <span className={`text-[10px] ${tierConf.color}`}>{tierConf.label}</span>
+                    {dtu.type && (
+                      <span className={`text-[10px] px-1 py-px rounded ${TYPE_COLORS[dtu.type] || 'bg-gray-500/20 text-gray-400'}`}>
+                        {dtu.type}
+                      </span>
+                    )}
+                    {dtu.source && (
+                      <span className="text-[10px] text-gray-500 truncate max-w-[80px]" title={dtu.source}>
+                        via {dtu.source}
+                      </span>
+                    )}
                   </div>
+                  {dtu.tags && dtu.tags.length > 0 && (
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <Tag className="w-2.5 h-2.5 text-gray-600" />
+                      {dtu.tags.slice(0, 3).map((tag) => (
+                        <span key={tag} className="text-[10px] text-gray-500">#{tag}</span>
+                      ))}
+                      {dtu.tags.length > 3 && (
+                        <span className="text-[10px] text-gray-600">+{dtu.tags.length - 3}</span>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <span className="text-[10px] text-gray-600 flex-shrink-0">
-                  {new Date(dtu.timestamp).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                <span className="text-[10px] text-gray-600 flex-shrink-0" title={new Date(dtu.timestamp).toLocaleString()}>
+                  {formatTimeAgo(dtu.timestamp)}
                 </span>
               </div>
             );

@@ -200,12 +200,43 @@ function DashboardPage() {
   });
 
   // Fetch graph force-directed data for the Resonance Universe
-  const { data: graphData, isLoading: graphLoading } = useQuery({
+  const { data: rawGraphData, isLoading: graphLoading } = useQuery({
     queryKey: ['graph-force'],
     queryFn: () => apiHelpers.graph.force({ maxNodes: 200 }).then((r) => r.data).catch(() => null),
     retry: 1,
     staleTime: 30000,
   });
+
+  // Also fetch graph visual data as fallback (uses /api/graph/visual)
+  const { data: rawGraphVisualData } = useQuery({
+    queryKey: ['graph-visual-home'],
+    queryFn: () => apiHelpers.graph.visual({ limit: 200 }).then((r) => r.data).catch(() => null),
+    retry: 1,
+    staleTime: 30000,
+    enabled: !rawGraphData?.nodes?.length,
+  });
+
+  // Normalize graph data: map 'title' -> 'label', 'links' -> 'edges', assign tier colors
+  const graphData = useMemo(() => {
+    const source = rawGraphData?.nodes?.length ? rawGraphData : rawGraphVisualData;
+    if (!source?.nodes?.length) return null;
+    const nodes = source.nodes.map((n: Record<string, unknown>) => ({
+      id: n.id as string,
+      label: (n.label || n.title || (n.id as string)?.slice(0, 20) || 'Untitled') as string,
+      tier: (n.tier || 'regular') as string,
+      resonance: (n.resonance ?? n.lineageDepth ?? 0) as number,
+      scope: (n.scope || n.domain) as string | undefined,
+      source: n.source as string | undefined,
+    }));
+    // Normalize edges: force endpoint returns 'links', visual returns 'edges'
+    const rawEdges = source.edges || source.links || [];
+    const edges = rawEdges.map((e: Record<string, unknown>) => ({
+      source: (e.source || e.sourceId) as string,
+      target: (e.target || e.targetId) as string,
+      weight: (e.weight ?? 1) as number,
+    }));
+    return { nodes, edges };
+  }, [rawGraphData, rawGraphVisualData]);
 
   // Normalize DTU data to handle field name variations from backend
   const rawDtus = dtusData?.dtus || dtusData?.results || [];
@@ -266,7 +297,7 @@ function DashboardPage() {
   const coherence = resonanceData?.coherence || 0;
 
   return (
-    <div className="p-4 lg:p-6 space-y-5 max-w-[1600px] mx-auto">
+    <div className="px-3 py-4 sm:p-4 lg:p-6 space-y-4 sm:space-y-5 max-w-[1600px] mx-auto">
       {/* Header */}
       <header className="flex items-center justify-between">
         <div>
@@ -313,7 +344,7 @@ function DashboardPage() {
       </LensErrorBoundary>
 
       {/* Metrics Row */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
         <MetricCard
           label="My DTUs"
           value={statusLoading ? '...' : (scopeMetrics?.localCount ?? dtuCount)}
@@ -470,7 +501,7 @@ function DashboardPage() {
       </LensErrorBoundary>
 
       {/* Queue Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
         <QueueCard label="Ingest Queue" value={status?.queues?.ingest || 0} color="blue" loading={statusLoading} />
         <QueueCard label="Autocrawl" value={status?.queues?.autocrawl || 0} color="purple" loading={statusLoading} />
         <QueueCard label="Domains" value={status?.macro?.domains?.length || 0} color="cyan" loading={statusLoading} />
@@ -489,7 +520,7 @@ function DashboardPage() {
           </Link>
         </div>
         {dtusLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {[1, 2, 3].map((i) => (
               <div key={i} className="h-28 bg-lattice-deep animate-pulse rounded-lg" />
             ))}
@@ -503,7 +534,7 @@ function DashboardPage() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {dtus.slice(0, 6).map((dtu: { id: string; tier: 'regular' | 'mega' | 'hyper' | 'shadow'; summary: string; timestamp: string; resonance?: number; tags?: string[] }) => (
               <DTUEmpireCard key={dtu.id} dtu={dtu} onClick={(d) => setInspecting({ type: 'dtu', id: d.id })} />
             ))}
@@ -524,7 +555,7 @@ function DashboardPage() {
             <Compass className="w-4 h-4 text-neon-purple" />
             Suggestions
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {guidanceData.suggestions.slice(0, 4).map((s: { id?: string; title?: string; message?: string; action?: string }, i: number) => (
               <div key={s.id || i} className="p-3 rounded-lg bg-lattice-deep border border-lattice-border/50 text-sm text-gray-300">
                 {s.title || s.message || s.action || 'Suggestion'}
@@ -535,7 +566,7 @@ function DashboardPage() {
       )}
 
       {/* Core 5 Quick Access */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
         {CORE_LENSES.map((core) => {
           const coreIcons: Record<string, React.ReactNode> = {
             chat: <MessageSquare className="w-5 h-5" />,
