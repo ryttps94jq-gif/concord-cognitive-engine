@@ -1178,9 +1178,9 @@ export default function HealthcareLensPage() {
               <button onClick={() => setActionResult(null)} className={ds.btnGhost}><X className="w-4 h-4" /></button>
             </div>
           </div>
-          {typeof actionResult === 'object' && actionResult.content ? (
+          {typeof actionResult === 'object' && 'content' in actionResult && actionResult.content ? (
             <div className="prose prose-invert prose-sm max-w-none">
-              {Boolean(actionResult.title) && <h4 className="text-sm font-semibold text-neon-cyan mb-2">{String(actionResult.title)}</h4>}
+              {actionResult.title ? <h4 className="text-sm font-semibold text-neon-cyan mb-2">{String(actionResult.title)}</h4> : null}
               <div className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed">{String(actionResult.content)}</div>
             </div>
           ) : (

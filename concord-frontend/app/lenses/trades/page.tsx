@@ -61,6 +61,7 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -2065,6 +2066,14 @@ export default function TradesLensPage() {
         </div>
         <div className="flex items-center gap-2">
           <DTUExportButton domain="trades" data={{}} compact />
+          <VisionAnalyzeButton
+            domain="trades"
+            prompt="Analyze this construction/trades job site image. Identify materials, equipment, safety concerns, progress status, and any issues. Suggest inspection notes and relevant tags."
+            onResult={(res) => {
+              setFormNotes(prev => prev ? `${prev}\n\n[Site Inspection - Vision]\n${res.analysis}` : `[Site Inspection - Vision]\n${res.analysis}`);
+              if (res.suggestedTags?.length) setFormDescription(prev => prev ? `${prev}\nTags: ${res.suggestedTags!.join(', ')}` : `Tags: ${res.suggestedTags!.join(', ')}`);
+            }}
+          />
           {selectedJob && (
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-neon-cyan/10 border border-neon-cyan/30">
               <CircleDot className="w-3 h-3 text-neon-cyan" />

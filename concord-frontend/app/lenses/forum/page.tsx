@@ -224,10 +224,10 @@ export default function ForumLensPage() {
   const [replyContent, setReplyContent] = useState('');
   const [postReplyContent, setPostReplyContent] = useState('');
 
-  const { isLoading, isError: isError, error: error, refetch: refetch, items: postItems, create: _createForumPost } = useLensData('forum', 'post', {
+  const { isLoading, isError: isError, error: error, refetch: refetch, items: postItems, create: createForumPost, update: updateForumPost, remove: removeForumPost } = useLensData('forum', 'post', {
     seed: INITIAL_POSTS.map(p => ({ title: p.title, data: p as unknown as Record<string, unknown> })),
   });
-  const { isError: isError2, error: error2, refetch: refetch2, items: communityItems } = useLensData('forum', 'community', {
+  const { isError: isError2, error: error2, refetch: refetch2, items: communityItems, create: createForumCommunity } = useLensData('forum', 'community', {
     seed: INITIAL_COMMUNITIES.map(c => ({ title: c.name, data: c as unknown as Record<string, unknown> })),
   });
 
@@ -308,18 +308,20 @@ export default function ForumLensPage() {
       pinned: false, locked: false, removed: false, awards: [], saved: false, comments: [], views: 1,
     };
     setPosts(prev => [newPost, ...prev]);
+    createForumPost({ title: newPost.title, data: newPost as unknown as Record<string, unknown>, meta: { status: 'active', tags: newPost.tags } });
     setShowCreatePost(false);
     setNewPostTitle(''); setNewPostContent(''); setNewPostCommunity(''); setNewPostTags(''); setNewPostFlair(null);
-  }, [newPostTitle, newPostContent, newPostCommunity, newPostTags, newPostFlair]);
+  }, [newPostTitle, newPostContent, newPostCommunity, newPostTags, newPostFlair, createForumPost]);
 
   const handleCreateCommunity = useCallback(() => {
     if (!newCommName.trim()) return;
     const slug = newCommName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     const newComm: Community = { id: slug, name: newCommName, description: newCommDesc, memberCount: 1, icon: '\uD83C\uDFB5', banner: 'from-neon-cyan to-neon-purple', joined: true, rules: ['Be respectful', 'Stay on topic'], createdAt: new Date().toISOString(), moderators: [DEFAULT_AUTHOR.username] };
     setCommunities(prev => [...prev, newComm]);
+    createForumCommunity({ title: newComm.name, data: newComm as unknown as Record<string, unknown>, meta: { status: 'active' } });
     setShowCreateCommunity(false);
     setNewCommName(''); setNewCommDesc('');
-  }, [newCommName, newCommDesc]);
+  }, [newCommName, newCommDesc, createForumCommunity]);
 
   const handleAddComment = useCallback((postId: string, parentCommentId: string | null, content: string) => {
     if (!content.trim()) return;
@@ -330,17 +332,32 @@ export default function ForumLensPage() {
         return { ...c, replies: insertReply(c.replies) };
       });
     }
-    setPosts(prev => prev.map(p => {
-      if (p.id !== postId) return p;
-      const updatedComments = parentCommentId ? insertReply(p.comments) : [...p.comments, newComment];
-      return { ...p, comments: updatedComments, commentCount: countAllComments(updatedComments) };
-    }));
+    setPosts(prev => {
+      const updated = prev.map(p => {
+        if (p.id !== postId) return p;
+        const updatedComments = parentCommentId ? insertReply(p.comments) : [...p.comments, newComment];
+        return { ...p, comments: updatedComments, commentCount: countAllComments(updatedComments) };
+      });
+      // Persist the updated post with new comment to backend
+      const updatedPost = updated.find(p => p.id === postId);
+      if (updatedPost) {
+        updateForumPost(postId, { data: updatedPost as unknown as Record<string, unknown> });
+      }
+      return updated;
+    });
     setReplyTo(null); setReplyContent(''); setPostReplyContent('');
-  }, []);
+  }, [updateForumPost]);
 
   const handleToggleSave = useCallback((postId: string) => {
-    setPosts(prev => prev.map(p => p.id === postId ? { ...p, saved: !p.saved } : p));
-  }, []);
+    setPosts(prev => {
+      const updated = prev.map(p => p.id === postId ? { ...p, saved: !p.saved } : p);
+      const post = updated.find(p => p.id === postId);
+      if (post) {
+        updateForumPost(postId, { data: post as unknown as Record<string, unknown> });
+      }
+      return updated;
+    });
+  }, [updateForumPost]);
 
   const handleGiveAward = useCallback((awardEmoji: string) => {
     if (!showAwardModal) return;
@@ -365,7 +382,17 @@ export default function ForumLensPage() {
       if (action === 'lock') return { ...p, locked: !p.locked };
       return { ...p, removed: true };
     }));
-  }, []);
+    if (action === 'remove') {
+      removeForumPost(postId);
+    } else {
+      // Persist pin/lock state changes to backend
+      const post = posts.find(p => p.id === postId);
+      if (post) {
+        const updated = action === 'pin' ? { ...post, pinned: !post.pinned } : { ...post, locked: !post.locked };
+        updateForumPost(postId, { data: updated as unknown as Record<string, unknown> });
+      }
+    }
+  }, [posts, removeForumPost, updateForumPost]);
 
   const handleToggleJoin = useCallback((commId: string) => {
     setCommunities(prev => prev.map(c => c.id === commId ? { ...c, joined: !c.joined, memberCount: c.memberCount + (c.joined ? -1 : 1) } : c));

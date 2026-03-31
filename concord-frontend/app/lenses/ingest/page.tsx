@@ -13,6 +13,7 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
 
 interface IngestJob {
   id: string;
@@ -121,6 +122,14 @@ export default function IngestLensPage() {
       <div className="flex items-center gap-2 flex-wrap">
         <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} compact />
         <DTUExportButton domain="ingest" data={realtimeData || {}} compact />
+        <VisionAnalyzeButton
+          domain="ingest"
+          prompt="Analyze this image and extract all text and structured data visible. Describe the content for ingestion as a DTU (Data Transfer Unit). Suggest a title, domain, and relevant tags."
+          onResult={(res) => {
+            setTextInput(res.analysis);
+            if (res.suggestedTags?.length) setDomain(res.suggestedTags[0] || '');
+          }}
+        />
         {realtimeAlerts.length > 0 && (
           <span className="text-xs px-2 py-0.5 rounded bg-yellow-500/10 text-yellow-400">
             {realtimeAlerts.length} alert{realtimeAlerts.length !== 1 ? 's' : ''}

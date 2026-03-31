@@ -21,6 +21,17 @@ function getSocialState(STATE) {
       trending: [],              // trending DTU snapshots
       trendingComputedAt: 0,
 
+      // New social structures
+      posts: new Map(),          // postId → post object
+      messages: new Map(),       // conversationId → array of messages
+      notifications: new Map(),  // userId → array of notifications
+      groups: new Map(),         // groupId → group object
+      streaks: new Map(),        // userId → { current, longest, lastPostDate }
+      scheduledPosts: new Map(), // postId → { postData, scheduledAt, userId }
+      postListings: new Map(),   // postId → Set<listingId>
+      postClicks: new Map(),     // postId → click count
+      postEarnings: new Map(),   // postId → earnings amount
+
       metrics: {
         totalProfiles: 0,
         totalFollows: 0,
@@ -30,8 +41,22 @@ function getSocialState(STATE) {
       },
     };
   }
+  // Ensure new fields exist on older state objects
+  const s = STATE._social;
+  if (!s.posts) s.posts = new Map();
+  if (!s.messages) s.messages = new Map();
+  if (!s.notifications) s.notifications = new Map();
+  if (!s.groups) s.groups = new Map();
+  if (!s.streaks) s.streaks = new Map();
+  if (!s.scheduledPosts) s.scheduledPosts = new Map();
+  if (!s.postListings) s.postListings = new Map();
+  if (!s.postClicks) s.postClicks = new Map();
+  if (!s.postEarnings) s.postEarnings = new Map();
   return STATE._social;
 }
+
+let _postIdCounter = 0;
+function nextId(prefix) { return `${prefix}_${Date.now()}_${++_postIdCounter}`; }
 
 // ── Profiles ─────────────────────────────────────────────────────────────
 

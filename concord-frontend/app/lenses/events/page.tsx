@@ -1306,6 +1306,50 @@ export default function EventsLensPage() {
   };
 
   // ---------------------------------------------------------------------------
+  // Render: Guests
+  // ---------------------------------------------------------------------------
+  const renderGuests = () => (
+    <div className="space-y-3">
+      {filtered.length === 0 ? (
+        <div className="text-center py-12">
+          <ClipboardList className="w-10 h-10 text-gray-600 mx-auto mb-3" />
+          <p className={ds.textMuted}>No guests found</p>
+          <button onClick={openCreate} className={cn(ds.btnGhost, 'mt-3')}><Plus className="w-4 h-4" /> Add Guest</button>
+        </div>
+      ) : (
+        <div className={ds.grid3}>
+          {filtered.map(item => {
+            const d = item.data as Record<string, unknown>;
+            const st = item.meta?.status as string;
+            return (
+              <div key={item.id} className={ds.panelHover} onClick={() => openEdit(item.id)}>
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Users className="w-5 h-5 text-neon-cyan shrink-0" />
+                    <h3 className={cn(ds.heading3, 'truncate')}>{item.title}</h3>
+                  </div>
+                  <span className={ds.badge(STATUS_COLORS[st] || 'gray-400')}>{st}</span>
+                </div>
+                <div className="space-y-1 mb-3">
+                  {Boolean(d.email) && <p className={ds.textMuted}>{String(d.email)}</p>}
+                  {Boolean(d.phone) && <p className="text-xs text-gray-500">{String(d.phone)}</p>}
+                  {Boolean(d.dietaryRestrictions) && <p className="text-xs text-amber-400">{String(d.dietaryRestrictions)}</p>}
+                  {Boolean(d.tableAssignment) && <p className="text-xs text-gray-400">Table: {String(d.tableAssignment)}</p>}
+                  {Boolean(d.plusOne) && <p className="text-xs text-neon-purple">+1: {String(d.plusOneName || 'Yes')}</p>}
+                </div>
+                <div className="flex items-center justify-end gap-1 pt-2 border-t border-lattice-border mt-2">
+                  <button onClick={e => { e.stopPropagation(); openEdit(item.id); }} className={ds.btnGhost}><Edit2 className="w-3.5 h-3.5" /></button>
+                  <button onClick={e => { e.stopPropagation(); removeGuest(item.id); }} className={cn(ds.btnGhost, 'hover:text-red-400')}><Trash2 className="w-3.5 h-3.5" /></button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
+  // ---------------------------------------------------------------------------
   // Render: Content by mode
   // ---------------------------------------------------------------------------
   const renderContent = () => {
@@ -1317,6 +1361,7 @@ export default function EventsLensPage() {
       case 'runofshow': return renderRunOfShow();
       case 'budget': return renderBudget();
       case 'tickets': return renderTickets();
+      case 'guests': return renderGuests();
       default: return null;
     }
   };

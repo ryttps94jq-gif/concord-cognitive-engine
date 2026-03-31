@@ -28,6 +28,7 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -2268,6 +2269,9 @@ export default function FoodLensPage() {
                 )}
               </div>
               <div className="flex items-center gap-3">
+                {editingItem && (
+                  <button onClick={() => { remove(editingItem.id); setEditorOpen(false); }} className={cn(ds.btnSecondary, 'text-red-400 hover:text-red-300')}><Trash2 className="w-4 h-4" /> Delete</button>
+                )}
                 <button onClick={() => setEditorOpen(false)} className={ds.btnSecondary}>Cancel</button>
                 <button onClick={handleSave} className={ds.btnPrimary}><CheckCircle2 className="w-4 h-4" /> {editingItem ? 'Update' : 'Create'}</button>
               </div>
@@ -2504,6 +2508,15 @@ export default function FoodLensPage() {
       <UniversalActions domain="food" artifactId={allRecipes[0]?.id} compact />
       <RealtimeDataPanel domain="food" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <DTUExportButton domain="food" data={{}} compact />
+      <VisionAnalyzeButton
+        domain="food"
+        prompt="Analyze this food image. Identify the dish or ingredients visible. List likely ingredients, suggest dietary tags (vegan, gluten-free, etc.), and estimate nutritional category."
+        onResult={(res) => {
+          setFormDescription(res.analysis);
+          if (res.suggestedTags?.length) setFormNotes(res.suggestedTags.join(', '));
+        }}
+        className="inline-flex"
+      />
       <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 overflow-x-auto">
         {MODE_TABS.map(tab => (
           <button

@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useMutation } from '@tanstack/react-query';
-import { apiHelpers } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -25,6 +25,7 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
 
 interface FileNode {
   id: string;
@@ -620,17 +621,34 @@ export default function CodeLensPage() {
 
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
 
+  const [savingOutputDTU, setSavingOutputDTU] = useState(false);
+
   const runScriptMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiHelpers.chat.ask(
-        `Analyze this ${activeScriptType} script for music production and describe what it would produce:\n\n\`\`\`javascript\n${activeTab.content}\n\`\`\``,
-        'creative'
-      );
+      const res = await api.post('/api/lens/run', {
+        domain: 'code',
+        action: 'generate',
+        input: {
+          code: activeTab.content,
+          language: activeTab.language,
+          scriptType: activeTab.scriptType || activeScriptType,
+        },
+      });
       return res.data;
     },
-    onSuccess: () => {
-      const result = generateScriptOutput(activeTab.scriptType || activeScriptType, activeTab.content);
-      setScriptOutput(result);
+    onSuccess: (data) => {
+      const serverContent = typeof data?.result === 'string'
+        ? data.result
+        : typeof data?.result?.content === 'string'
+          ? data.result.content
+          : null;
+      const localResult = generateScriptOutput(activeTab.scriptType || activeScriptType, activeTab.content);
+      setScriptOutput({
+        log: serverContent
+          ? `[Server] ${serverContent.slice(0, 500)}\n\n${localResult.log}`
+          : localResult.log,
+        visualization: localResult.visualization,
+      });
       setConsoleLog((prev) => [
         ...prev,
         `[${new Date().toLocaleTimeString()}] Script executed successfully`,
@@ -652,6 +670,27 @@ export default function CodeLensPage() {
       setOutputTab('output');
     },
   });
+
+  const handleSaveOutputAsDTU = useCallback(async () => {
+    if (!scriptOutput) return;
+    setSavingOutputDTU(true);
+    try {
+      await saveScript({
+        title: `Output: ${activeTab.name}`,
+        data: {
+          content: activeTab.content,
+          output: scriptOutput.log,
+          language: activeTab.language,
+          scriptType: activeTab.scriptType || activeScriptType,
+        },
+        meta: { tags: ['script', 'output', activeTab.scriptType || activeScriptType], status: 'active' },
+      });
+    } catch (err) {
+      console.error('[Code] Save output failed:', err);
+    } finally {
+      setSavingOutputDTU(false);
+    }
+  }, [scriptOutput, activeTab, activeScriptType, saveScript]);
 
   const updateTabContent = useCallback((content: string) => {
     setTabs((prev) =>
@@ -809,6 +848,14 @@ export default function CodeLensPage() {
       <div className="flex items-center gap-2 flex-wrap">
         <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} compact />
         <DTUExportButton domain="code" data={realtimeData || {}} compact />
+        <VisionAnalyzeButton
+          domain="code"
+          prompt="Analyze this code screenshot or error image. Identify the programming language, describe what the code does, spot any bugs or issues, and suggest fixes."
+          onResult={(res) => {
+            const comment = `// Vision Analysis Suggestion:\n// ${res.analysis.replace(/\n/g, '\n// ')}\n\n`;
+            updateTabContent(comment + (activeTab?.content || ''));
+          }}
+        />
         {realtimeAlerts.length > 0 && (
           <span className="text-xs px-2 py-0.5 rounded bg-yellow-500/10 text-yellow-400">
             {realtimeAlerts.length} alert{realtimeAlerts.length !== 1 ? 's' : ''}
@@ -1114,6 +1161,7 @@ export default function CodeLensPage() {
                                 <h4 className="text-xs font-semibold text-gray-400 uppercase mb-2">Script Log</h4>
                                 <pre className="font-mono text-xs text-green-400 whitespace-pre-wrap bg-lattice-deep rounded-lg p-3 border border-lattice-border">{scriptOutput.log}</pre>
                               </div>
+                              {scriptOutput.visualization && (
                               <div>
                                 <h4 className="text-xs font-semibold text-gray-400 uppercase mb-2">
                                   {activeScriptType === 'midi' && 'Piano Roll'}
@@ -1124,6 +1172,31 @@ export default function CodeLensPage() {
                                   {activeScriptType === 'generator' && 'Generated Output'}
                                 </h4>
                                 <pre className="font-mono text-xs text-neon-cyan whitespace-pre bg-lattice-deep rounded-lg p-3 border border-lattice-border overflow-x-auto">{scriptOutput.visualization}</pre>
+                              </div>
+                              )}
+                              <div className="flex items-center gap-2 pt-2 border-t border-lattice-border">
+                                <button
+                                  onClick={handleSaveOutputAsDTU}
+                                  disabled={savingOutputDTU}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-neon-blue/10 text-neon-blue rounded-lg text-xs hover:bg-neon-blue/20 disabled:opacity-50"
+                                >
+                                  <Save className="w-3.5 h-3.5" /> {savingOutputDTU ? 'Saving...' : 'Save as DTU'}
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    const content = `// ${activeTab.name}\n// Output:\n${scriptOutput.log}\n${scriptOutput.visualization ? `\n// Visualization:\n${scriptOutput.visualization}` : ''}`;
+                                    const blob = new Blob([content], { type: 'text/plain' });
+                                    const url = URL.createObjectURL(blob);
+                                    const a = document.createElement('a');
+                                    a.href = url;
+                                    a.download = `${activeTab.name.replace(/\.\w+$/, '')}-output.txt`;
+                                    a.click();
+                                    URL.revokeObjectURL(url);
+                                  }}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-neon-cyan/10 text-neon-cyan rounded-lg text-xs hover:bg-neon-cyan/20"
+                                >
+                                  <Download className="w-3.5 h-3.5" /> Download Output
+                                </button>
                               </div>
                             </div>
                           ) : (

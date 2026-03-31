@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
+import { api } from '@/lib/api/client';
 import { ds } from '@/lib/design-system';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
@@ -67,6 +68,7 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -578,6 +580,16 @@ export default function EducationLensPage() {
     }
   };
 
+  const handleDownloadResult = useCallback((content: string, filename: string) => {
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, []);
+
   /* ---------- gradebook helpers ---------- */
   const handleCellEdit = (studentId: string, assignmentId: string, value: string) => {
     const numVal = value === '' ? null : parseFloat(value);
@@ -1065,6 +1077,14 @@ export default function EducationLensPage() {
         </div>
         <div className="flex items-center gap-2">
           <DTUExportButton domain="education" data={{}} compact />
+          <VisionAnalyzeButton
+            domain="education"
+            prompt="Analyze this education-related image (whiteboard, diagram, textbook page, student work, etc.). Extract key concepts, suggest lesson content, and provide relevant educational tags."
+            onResult={(res) => {
+              setFormDescription(res.analysis);
+              if (res.suggestedTags?.length) setFormNotes(prev => prev ? `${prev}\nVision tags: ${res.suggestedTags!.join(', ')}` : `Vision tags: ${res.suggestedTags!.join(', ')}`);
+            }}
+          />
           <button onClick={openNewEditor} className={ds.btnPrimary}>
             <Plus className="w-4 h-4" /> New Record
           </button>
@@ -1205,9 +1225,27 @@ export default function EducationLensPage() {
         <div className={ds.panel}>
           <div className="flex items-center justify-between mb-2">
             <h3 className={ds.heading3}>Action Result</h3>
-            <button onClick={() => setActionResult(null)} className={ds.btnGhost}><X className="w-4 h-4" /></button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleDownloadResult(
+                  typeof actionResult === 'object' ? JSON.stringify(actionResult, null, 2) : String(actionResult),
+                  'education-result.txt'
+                )}
+                className={cn(ds.btnGhost, 'text-xs')}
+              >
+                <Activity className="w-3.5 h-3.5 mr-1" /> Download
+              </button>
+              <button onClick={() => setActionResult(null)} className={ds.btnGhost}><X className="w-4 h-4" /></button>
+            </div>
           </div>
-          <pre className={cn(ds.textMono, 'text-xs overflow-auto max-h-48')}>{JSON.stringify(actionResult, null, 2)}</pre>
+          {typeof actionResult === 'object' && 'content' in actionResult && actionResult.content ? (
+            <div className="prose prose-invert prose-sm max-w-none">
+              {actionResult.title ? <h4 className="text-sm font-semibold text-neon-cyan mb-2">{String(actionResult.title)}</h4> : null}
+              <div className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed">{String(actionResult.content)}</div>
+            </div>
+          ) : (
+            <pre className={cn(ds.textMono, 'text-xs overflow-auto max-h-48')}>{JSON.stringify(actionResult, null, 2)}</pre>
+          )}
         </div>
       )}
 

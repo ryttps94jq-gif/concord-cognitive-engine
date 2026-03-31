@@ -15,6 +15,7 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
 
 interface DTUResult {
   id: string;
@@ -190,6 +191,13 @@ export default function ResearchLensPage() {
       <div className="flex items-center gap-2 flex-wrap">
         <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} compact />
         <DTUExportButton domain="research" data={realtimeData || {}} compact />
+        <VisionAnalyzeButton
+          domain="research"
+          prompt="Analyze this research image (chart, graph, diagram, figure, data visualization, etc.). Extract key findings, describe the data shown, and suggest relevant research tags and domain classification."
+          onResult={(res) => {
+            setSelectedDtu({ id: `vision-${Date.now()}`, title: 'Vision Analysis', content: res.analysis, summary: res.analysis.slice(0, 200), domain: 'research', tags: res.suggestedTags || [], createdAt: new Date().toISOString() });
+          }}
+        />
         <button onClick={() => refetchDTUs()} disabled={dtusLoading} className="p-1 rounded hover:bg-lattice-surface/50 disabled:opacity-50 transition-colors" title="Refresh DTUs">
           {dtusLoading ? <span className="w-4 h-4 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin inline-block" /> : <RefreshCw className="w-4 h-4 text-gray-400" />}
         </button>

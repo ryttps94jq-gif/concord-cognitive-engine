@@ -49,6 +49,7 @@ import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
+import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -920,6 +921,15 @@ export default function InsuranceLensPage() {
       <UniversalActions domain="insurance" artifactId={policies[0]?.id} compact />
       <RealtimeDataPanel domain="insurance" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <DTUExportButton domain="insurance" data={{}} compact />
+      <VisionAnalyzeButton
+        domain="insurance"
+        prompt="Analyze this insurance-related image (damage photo, document, property, vehicle, etc.). Describe visible damage or details, estimate severity, and suggest claim description text and relevant tags."
+        onResult={(res) => {
+          setFormData(prev => ({ ...prev, description: res.analysis }));
+          if (res.suggestedTags?.length) setFormData(prev => ({ ...prev, notes: `Vision tags: ${res.suggestedTags!.join(', ')}` }));
+        }}
+        className="inline-flex"
+      />
       {/* Tabs */}
       <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 overflow-x-auto">
         {MODE_TABS.map(tab => {

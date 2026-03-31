@@ -46,6 +46,7 @@ import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
+import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -341,7 +342,7 @@ export default function FeedLensPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const composeRef = useRef<HTMLTextAreaElement>(null);
 
-  const { isError: isError, error: error, refetch: refetch, items: postLensItems, create: _createLensPost } = useLensData<Record<string, unknown>>('feed', 'post', {
+  const { isError: isError, error: error, refetch: refetch, items: postLensItems, create: createLensPost } = useLensData<Record<string, unknown>>('feed', 'post', {
     seed: INITIAL_POSTS.map(p => ({ title: p.content?.slice(0, 80) || p.id, data: p as unknown as Record<string, unknown> })),
   });
 
@@ -394,7 +395,6 @@ export default function FeedLensPage() {
         }
         return [];
       }
-      return [];
     },
   });
 
@@ -423,8 +423,10 @@ export default function FeedLensPage() {
 
   const postMutation = useMutation({
     mutationFn: (content: string) => apiHelpers.dtus.create({ content, tags: ['post'] }),
-    onSuccess: () => {
+    onSuccess: (_data, content) => {
       queryClient.invalidateQueries({ queryKey: ['feed-posts'] });
+      // Also persist to lens data for fallback consistency
+      createLensPost({ title: content.slice(0, 80), data: { content, type: 'text', createdAt: new Date().toISOString(), likes: 0, comments: 0, reposts: 0, shares: 0, views: 0, liked: false, reposted: false, bookmarked: false } });
       setNewPost('');
     },
     onError: (err) => {
@@ -659,6 +661,13 @@ export default function FeedLensPage() {
                   <button onClick={() => handleComposeHint('Poll')} className="p-2 rounded-full hover:bg-neon-cyan/10 transition-colors" title="Add poll">
                     <BarChart3 className="w-5 h-5" />
                   </button>
+                  <VisionAnalyzeButton
+                    domain="feed"
+                    prompt="Describe this image for use as alt text in a social media post. Be concise but descriptive. Also suggest relevant hashtags."
+                    onResult={(res) => {
+                      setNewPost(prev => prev ? `${prev}\n\n[Alt: ${res.analysis}]` : `[Alt: ${res.analysis}]`);
+                    }}
+                  />
                 </div>
                 <button
                   onClick={() => postMutation.mutate(newPost)}
