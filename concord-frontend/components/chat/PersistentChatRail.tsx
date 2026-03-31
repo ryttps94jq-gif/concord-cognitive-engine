@@ -182,16 +182,29 @@ export function PersistentChatRail({
   // ── Server initiative listener (rich initiative chips) ─────
 
   useEffect(() => {
+    // Convert snake_case trigger types from backend to camelCase for frontend chip styling
+    const snakeToCamel: Record<string, string> = {
+      substrate_discovery: 'substrateDiscovery',
+      citation_alert: 'citationAlert',
+      check_in: 'genuineCheckIn',
+      pending_work: 'pendingWorkReminder',
+      world_event: 'worldEventConnection',
+      reflective_followup: 'reflectiveFollowUp',
+      morning_context: 'morningContext',
+    };
+
     const handleInitiative = (data: unknown) => {
       const d = data as Initiative & { deliveredAt?: string };
       if (!d?.id || !d?.message) return;
+
+      const triggerType = snakeToCamel[d.triggerType] || d.triggerType || 'genuineCheckIn';
 
       setServerInitiatives(prev => {
         // Deduplicate by id and cap at 5
         if (prev.some(i => i.id === d.id)) return prev;
         const next = [...prev, {
           id: d.id,
-          triggerType: d.triggerType || 'genuineCheckIn',
+          triggerType,
           message: d.message,
           priority: d.priority || 'normal',
           score: d.score ?? 0.5,

@@ -16213,6 +16213,26 @@ let localReply = formatCrispResponse({
     ? BRAIN.conscious.model
     : (process.env.BRAIN_CONSCIOUS_MODEL || "qwen2.5:14b-instruct-q4_K_M");
 
+  // ===== FULL PIPELINE (with timeout guard) → FAST PATH FALLBACK =====
+  // Spec 12: Try the full pipeline first (unified context + DTU harvest + web search
+  // + LLM call) with a capped timeout of 30-60s. On failure or timeout, fall back to
+  // fast path (localReply). Conversation-to-DTU saving runs in BOTH paths (see
+  // post-response DTU ENRICHMENT section below).
+  const _pipelineTimeoutMs = Math.min(Math.max(Number(input.timeoutMs) || 60000, 30000), 60000);
+
+  let finalReply = localReply;
+  let llmUsed = false;
+  let _pipelineHarvest = null;
+  let _pipelineBudget = null;
+  let _pipelineDtuCount = 0;
+  let _enrichedFocus = [...focus];
+  let _webResults = [];
+  let _webSearchType = "skipped";
+  const semanticUsed = Boolean(semanticEnhancement && semanticEnhancement.confidence > 0.4);
+  let _pipelineUsedFullPath = false;
+
+  // ── Full pipeline runner (all heavy work: context engine + harvest + web + LLM) ──
+  const _runFullPipeline = async () => {
   // ===== UNIFIED CONTEXT ENGINE: Retrieve DTUs across all tiers =====
   // Pull context from the unified context engine spanning regular + MEGA + HYPER tiers
   // to enrich the LLM prompt with the broadest relevant knowledge.
@@ -16266,223 +16286,252 @@ let localReply = formatCrispResponse({
       entityStateBlock: _entityBlock,
       conversationSummary: _convSummary,
       userMessage: prompt,
-      workingSetDtus: _pipelineHarvest.consolidatedWorkingSet || _enrichedFocus,
-      activationMeta: (_pipelineHarvest.consolidatedWorkingSet || []).map(d => ({ dtuId: d.id, score: d._activationScore || 0.5 })),
-    });
-
-    _pipelineDtuCount = _pipelineBudget.dtuCount || 0;
-
-    ctx.log("chat_pipeline", "Context pipeline assembled", {
-      sessionId,
-      sources: _pipelineHarvest.sources,
-      dtuCount: _pipelineDtuCount,
-      tokenEstimate: _pipelineBudget.tokenEstimate,
-      truncatedCount: _pipelineBudget.truncatedCount,
-      budgetPct: _pipelineBudget.budgetUtilization?.total?.pct,
-    });
-  } catch (_pipeErr) {
-    // Pipeline is enhancement-only; failures fall through to original logic
-    ctx.log("chat_pipeline.error", "Context pipeline failed, using fallback", { error: String(_pipeErr?.message || _pipeErr) });
-  }
-  // ===== END DTU CONTEXT PIPELINE =====
-
   let finalReply = localReply;
   let llmUsed = false;
-  let _webResults = [];
-  let _webSearchType = "skipped";
+  let _subconsciousReflection = null;
   const semanticUsed = Boolean(semanticEnhancement && semanticEnhancement.confidence > 0.4);
 
-  // ===== WEB SEARCH EVALUATION (shared across all brain call paths) =====
+  // ===== FULL MULTI-STAGE PIPELINE (primary path) =====
+  // Stage 1: Input processing + DTU context enrichment (already done above)
+  // Stage 2: Subconscious reflection (parallel) + Conscious response via consciousChat()
+  // Stage 3: Output processing (below)
+  // Falls back to fast path on failure/timeout (60s).
+  let _pipelineSucceeded = false;
   try {
-    const _explicitWebTrigger = requiresWebSearch(prompt);
-    if (_explicitWebTrigger) {
-      _webSearchType = "explicit";
-      try {
-        const _wqPrompt = buildQueryGenerationPrompt(prompt, currentLens || mode);
-        const _wqResult = await callBrain("utility", _wqPrompt, { temperature: 0.3, maxTokens: 200, timeout: 10000 });
-        if (_wqResult.ok && _wqResult.content) {
-          const _wqParsed = JSON.parse(_wqResult.content.match(/\{[\s\S]*\}/)?.[0] || "{}");
-          if (_wqParsed.queries?.length) _webResults = await webSearchForChat(_wqParsed.queries);
-        }
-      } catch (_wqErr) { logger.debug('server', 'query generation failed', { error: _wqErr?.message }); }
-      if (!_webResults.length) _webResults = await webSearchForChat([prompt.slice(0, 100)]);
-    } else if (_enrichedFocus.length < 3) {
-      _webSearchType = "evaluated";
-      try {
-        const _ctxSummary = { count: _enrichedFocus.length, preview: _enrichedFocus.map(d => d.title).join(", ").slice(0, 500) || "(no relevant DTUs found)" };
-        const _evalPrompt = buildEvaluationPrompt(prompt, _ctxSummary, currentLens || mode);
-        const _evalResult = await callBrain("utility", _evalPrompt, { temperature: 0.2, maxTokens: 300, timeout: 10000 });
-        if (_evalResult.ok && _evalResult.content) {
-          const _evalParsed = JSON.parse(_evalResult.content.match(/\{[\s\S]*\}/)?.[0] || "{}");
-          if (_evalParsed.needsWeb && _evalParsed.searchQueries?.length) _webResults = await webSearchForChat(_evalParsed.searchQueries);
-        }
-      } catch (_evalErr) { logger.debug('server', 'web eval failed', { error: _evalErr?.message }); }
-    }
-  } catch (_webErr) { logger.debug('server', 'web search non-critical', { error: _webErr?.message }); }
-  // ===== END WEB SEARCH EVALUATION =====
+    const _pipelineStart = Date.now();
+    const PIPELINE_TIMEOUT_MS = 60000;
 
-  // ===== BUILD CONSCIOUS SYSTEM PROMPT (shared across all brain call paths) =====
-  const _entityBlock = _pipelineHarvest?.entityStateBlock || "";
-
-  // Affect-modulated LLM parameters
-  const _llmTemp = clamp(
-    0.35 + (_affStyle.creativity ? (_affStyle.creativity - 0.5) * 0.3 : 0),
-    0.1, 0.9
-  );
-  const _llmMaxTokens = Math.round(
-    700 * (0.6 + 0.8 * (_affStyle.verbosity ?? 0.5))
-  );
-  const _affectGuidance = _aff.policy ? [
-    _affStyle.warmth > 0.6 ? "Be warm and encouraging." : _affStyle.warmth < 0.3 ? "Be direct and precise." : "",
-    _affStyle.directness > 0.7 ? "Get to the point quickly." : "",
-    _affSafety.strictness > 0.7 ? "Be cautious with uncertain claims." : "",
-    _affCog.exploration > 0.6 ? "Explore alternative viewpoints." : "",
-  ].filter(Boolean).join(" ") : "";
-  const _dtuTitles = _enrichedFocus.map(d => d.title || d.id).filter(Boolean);
-  const _grcSystemPrompt = GRC_MODULE ? getGRCSystemPrompt({ dtus: _dtuTitles, mode }) : "";
-
-  // Web context string for prompt injection
-  const _webContextStr = _webResults.length > 0
-    ? _webResults.map((w, i) => `[WEB-${i+1}] ${w.title} (${w.source})\nURL: ${w.url}\nContent: ${(w.content || "").slice(0, 500)}`).join("\n\n")
-    : "";
-
-  // Build the full conscious personality + capability prompt
-  const _personalityState = typeof getPersonality === "function" ? getPersonality(STATE) : null;
-  const _highWants = typeof getActiveWants === "function" ? (getActiveWants(STATE)?.wants || []).filter(w => w.intensity >= 0.6) : [];
-  const _dtuCount = STATE.dtus ? STATE.dtus.size : 0;
-  const _domainCount = STATE.dtus ? new Set(Array.from(STATE.dtus.values()).flatMap(d => d.tags || [])).size : 0;
-
-  const system = buildConsciousPrompt({
-    dtu_count: _dtuCount,
-    domain_count: _domainCount,
-    lens: currentLens || mode || "general topics",
-    context: (_fusedContext && _fusedContext.fusedContext)
+    // Build override context from the enriched pipeline (DTU context + quality pipeline)
+    const _pipelineDtuContext = (_fusedContext && _fusedContext.fusedContext)
       ? _fusedContext.fusedContext
-      : _enrichedFocus.map(d => `[${(d.tier || "regular").toUpperCase()}] ${d.title}: ${(d.cretiHuman || d.creti || d.human?.summary || "").slice(0, 300)}`).join("\n"),
-    webContext: _webContextStr,
-    conversation_history: (sess.messages || []).slice(-16),
-    personality_state: _personalityState,
-    active_wants: _highWants,
-    crossDomainContext: sess_pre.crossDomainContext || {},
-    sessionLensHistory: sess_pre.lensHistory || [],
-    entityStateBlock: _entityBlock,
-    affectGuidance: _affectGuidance,
-    grcPrompt: _grcSystemPrompt,
-  });
+      : _enrichedFocus.map(d => `[${(d.tier || "regular").toUpperCase()}] ${d.title}: ${(d.cretiHuman || d.human?.summary || buildCretiText(d) || "").slice(0, 400)}`).join("\n");
 
-  // Build conversation-aware messages array (include recent history for continuity)
-  const _recentHistory = (sess.messages || []).slice(-10, -1); // exclude the just-pushed user message
-  const _historyMessages = _recentHistory.map(m => ({ role: m.role, content: String(m.content || "").slice(0, 600) }));
-
-  // DTU context as part of the user message
-  const _dtuContext = (_fusedContext && _fusedContext.fusedContext)
-    ? _fusedContext.fusedContext
-    : _enrichedFocus.map(d => `TITLE: ${d.title}\nTIER: ${d.tier}\nTAGS: ${(d.tags||[]).join(", ")}\nCRETI:\n${buildCretiText(d)}\n---`).join("\n");
-  const _pipelineMeta = (_qualityPipelineResult && _fusedContext)
-    ? `\n[Pipeline: ${_fusedContext.meta.patternsApplied.join("+")} | intent=${_qualityPipelineResult.queryIntent}]`
-    : "";
-  const _userContent = `${prompt}${_dtuContext ? `\n\nRelevant knowledge:\n${_dtuContext}${_pipelineMeta}` : ""}`;
-  const messages = [
-    ..._historyMessages,
-    { role: "user", content: _userContent }
-  ];
-  // ===== END BUILD CONSCIOUS SYSTEM PROMPT =====
-
-  if (llm && ctx.llm.enabled) {
-    const _llmSpan = startSpan("llm.chat", { mode, sessionId, promptLength: prompt.length });
-    const r = await ctx.llm.chat({
-      system, messages, temperature: _llmTemp, maxTokens: _llmMaxTokens,
-      dtuRefs: _dtuTitles,
-      macroRefs: ["chat.respond"],
-      grcMode: mode,
+    // Stage 2a: Subconscious reflection (parallel, fire-and-forget with result capture)
+    // The subconscious brain processes every message — generating reflections, emotional context,
+    // background associations. Runs in parallel with conscious response.
+    const _subconsciousPromise = (BRAIN.subconscious.enabled
+      ? callBrain("subconscious",
+          `Reflect on this user message. What emotions, associations, and background patterns do you notice? What is the user really asking? What connections to existing knowledge might be relevant?\n\nUser message: ${prompt}\n\nContext:\n${_pipelineDtuContext.slice(0, 2000)}`,
+          {
+            system: buildSubconsciousPrompt({
+              mode: "synthesis",
+              dtu_count: STATE.dtus ? STATE.dtus.size : 0,
+              domain_count: STATE.dtus ? new Set(Array.from(STATE.dtus.values()).flatMap(d => d.tags || [])).size : 0,
+              domain: mode,
+              material: _pipelineDtuContext.slice(0, 1500),
+            }),
+            temperature: 0.6,
+            maxTokens: 300,
+            timeout: Math.min(PIPELINE_TIMEOUT_MS - 5000, 20000),
+          })
+      : Promise.resolve({ ok: false, content: null })
+    ).catch((_e) => {
+      ctx.log("subconscious.reflect.error", "Subconscious reflection failed (non-blocking)", { error: String(_e?.message || _e) });
+      return { ok: false, content: null };
     });
-    if (r.ok) {
-      finalReply = r.content.trim() || localReply;
-      llmUsed = true;
-      _llmSpan.end("ok", { responseLength: finalReply.length });
-    } else {
-      _llmSpan.end("error", { error: String(r?.error || "llm_failed") });
-      ctx.log("llm.error", "LLM call via ctx.llm failed; attempting conscious brain fallback.", { error: r });
-      // ===== CONSCIOUS BRAIN FALLBACK (within ctx.llm block) =====
+
+    // Stage 2b: Conscious response via full consciousChat() pipeline
+    // This routes through: semantic cache -> retrieval sufficiency -> full conscious reasoning
+    // (including web search evaluation, personality prompts, no-hallucination rules)
+    const _consciousPromise = consciousChat(prompt, mode, {
+      userId: ctx?.actor?.userId,
+      overrideContext: _pipelineDtuContext || undefined,
+      temperature: clamp(
+        0.35 + (_affStyle.creativity ? (_affStyle.creativity - 0.5) * 0.3 : 0),
+        0.1, 0.9
+      ),
+      maxTokens: Math.round(700 * (0.6 + 0.8 * (_affStyle.verbosity ?? 0.5))),
+      timeout: PIPELINE_TIMEOUT_MS - 2000,
+      _exchangeCount: (sess.messages || []).length,
+    });
+
+    // Race both against the pipeline timeout
+    const _timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("pipeline_timeout")), PIPELINE_TIMEOUT_MS)
+    );
+
+    // Wait for conscious (required) + subconscious (best-effort parallel)
+    const [_consciousResult, _subcResult] = await Promise.race([
+      Promise.all([_consciousPromise, _subconsciousPromise]),
+      _timeoutPromise.then(() => { throw new Error("pipeline_timeout"); }),
+    ]);
+
+    // Capture subconscious reflection for downstream use
+    if (_subcResult?.ok && _subcResult.content) {
+      _subconsciousReflection = _subcResult.content.trim();
+      // Save subconscious reflection as shadow DTU (never shown directly to user)
       try {
-        const _fbAc = new AbortController();
-        const _fbTimeout = setTimeout(() => _fbAc.abort(), 120000);
-        const _fbStart = Date.now();
-        const _fbRes = await fetch(`${brainUrl}/api/chat`, {
+        const _reflShadowId = `shadow_reflection_${sessionId}_${Date.now()}`;
+        STATE.shadowDtus.set(_reflShadowId, {
+          id: _reflShadowId, tier: "shadow",
+          tags: ["shadow", "reflection", "subconscious", mode],
+          human: { summary: _subconsciousReflection.slice(0, 300), bullets: [] },
+          machine: { kind: "subconscious_reflection", sessionId, prompt: prompt.slice(0, 200) },
+          source: "subconscious.reflection", meta: { hidden: true },
+          createdAt: nowISO(), updatedAt: nowISO(),
+          authority: { model: "subconscious", score: 0 }, hash: "",
+        });
+        BRAIN.subconscious.stats.dtusGenerated++;
+      } catch (_e) { logger.debug('server', 'reflection shadow save failed', { error: _e?.message }); }
+      ctx.log("subconscious.reflect", "Subconscious reflection captured", { sessionId, reflectionLength: _subconsciousReflection.length });
+    }
+
+    // Use conscious pipeline result
+    if (_consciousResult?.ok && _consciousResult.content) {
+      finalReply = _consciousResult.content.trim() || localReply;
+      llmUsed = true;
+      _pipelineSucceeded = true;
+      const _pipelineElapsed = Date.now() - _pipelineStart;
+      ctx.log("chat_pipeline.full", "Full pipeline succeeded", {
+        sessionId, mode, elapsed: _pipelineElapsed,
+        source: _consciousResult.source || "conscious",
+        webAugmented: _consciousResult.webAugmented || false,
+        hasSubconsciousReflection: !!_subconsciousReflection,
+      });
+    }
+  } catch (_pipeErr) {
+    // Full pipeline failed or timed out — log and fall through to fast path
+    ctx.log("chat_pipeline.full.fallback", "Full pipeline failed, falling back to fast path", {
+      error: String(_pipeErr?.message || _pipeErr),
+      isTimeout: String(_pipeErr?.message || "").includes("timeout"),
+    });
+  }
+
+  // ===== FAST PATH FALLBACK (only on full pipeline failure) =====
+  if (!_pipelineSucceeded) {
+    if (llm && ctx.llm.enabled) {
+      // Affect-modulated LLM parameters
+      const _llmTemp = clamp(
+        0.35 + (_affStyle.creativity ? (_affStyle.creativity - 0.5) * 0.3 : 0),
+        0.1, 0.9
+      );
+      const _llmMaxTokens = Math.round(
+        700 * (0.6 + 0.8 * (_affStyle.verbosity ?? 0.5))
+      );
+      // Inject affect-aware behavioral guidance into system prompt
+      const _affectGuidance = _aff.policy ? [
+        _affStyle.warmth > 0.6 ? "Be warm and encouraging." : _affStyle.warmth < 0.3 ? "Be direct and precise." : "",
+        _affStyle.directness > 0.7 ? "Get to the point quickly." : "",
+        _affSafety.strictness > 0.7 ? "Be cautious with uncertain claims." : "",
+        _affCog.exploration > 0.6 ? "Explore alternative viewpoints." : "",
+      ].filter(Boolean).join(" ") : "";
+      // GRC: Inject Grounded Recursive Closure system prompt when module is available
+      const _dtuTitles = _enrichedFocus.map(d => d.title || d.id).filter(Boolean);
+      const _grcSystemPrompt = GRC_MODULE
+        ? getGRCSystemPrompt({ dtus: _dtuTitles, mode })
+        : "";
+      const system =
+`You are ConcordOS. Be natural, concise but not dry. Use DTUs as memory. Never pretend features exist.
+Mode: ${mode}.${_affectGuidance ? `\nTone: ${_affectGuidance}` : ""}
+When helpful, reference DTU titles in plain language (do not dump ids unless asked).${_grcSystemPrompt ? `\n\n${_grcSystemPrompt}` : ""}`;
+      const dtuContext = (_fusedContext && _fusedContext.fusedContext)
+        ? _fusedContext.fusedContext
+        : _enrichedFocus.map(d => `TITLE: ${d.title}\nTIER: ${d.tier}\nTAGS: ${(d.tags||[]).join(", ")}\nCRETI:\n${buildCretiText(d)}\n---`).join("\n");
+      const _pipelineMeta = (_qualityPipelineResult && _fusedContext)
+        ? `\n[Pipeline: ${_fusedContext.meta.patternsApplied.join("+")} | intent=${_qualityPipelineResult.queryIntent}]`
+        : "";
+      const messages = [
+        { role: "user", content: `User prompt:\n${prompt}\n\nRelevant DTUs:\n${dtuContext}${_pipelineMeta}\n\nRespond naturally and propose next actions.` }
+      ];
+      const _llmSpan = startSpan("llm.chat", { mode, sessionId, promptLength: prompt.length });
+      const r = await ctx.llm.chat({
+        system, messages, temperature: _llmTemp, maxTokens: _llmMaxTokens,
+        dtuRefs: _dtuTitles,
+        macroRefs: ["chat.respond"],
+        grcMode: mode,
+      });
+      if (r.ok) {
+        finalReply = r.content.trim() || localReply;
+        llmUsed = true;
+        _llmSpan.end("ok", { responseLength: finalReply.length });
+      } else {
+        _llmSpan.end("error", { error: String(r?.error || "llm_failed") });
+        ctx.log("llm.error", "Fast path ctx.llm.chat failed; attempting conscious brain fallback.", { error: r });
+        // ===== CONSCIOUS BRAIN FALLBACK (within ctx.llm block) =====
+        try {
+          const _fbAc = new AbortController();
+          const _fbTimeout = setTimeout(() => _fbAc.abort(), 120000);
+          const _fbStart = Date.now();
+          const _fbRes = await fetch(`${brainUrl}/api/chat`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: brainModel,
+              messages: [{ role: "system", content: system }, ...messages],
+              stream: false,
+              options: { temperature: _llmTemp, num_predict: _llmMaxTokens }
+            }),
+            signal: _fbAc.signal
+          }).finally(() => clearTimeout(_fbTimeout));
+          const _fbJson = await _fbRes.json().catch(() => ({}));
+          const _fbElapsed = Date.now() - _fbStart;
+          BRAIN.conscious.stats.requests++;
+          BRAIN.conscious.stats.totalMs += _fbElapsed;
+          BRAIN.conscious.stats.lastCallAt = new Date().toISOString();
+          if (_fbRes.ok && _fbJson.message?.content) {
+            finalReply = _fbJson.message.content.trim() || localReply;
+            llmUsed = true;
+            ctx.log("llm.fallback", "Conscious brain fallback succeeded.", { brainUrl, brainModel, elapsed: _fbElapsed });
+          } else {
+            BRAIN.conscious.stats.errors++;
+            ctx.log("llm.fallback.error", "Conscious brain fallback returned non-ok.", { status: _fbRes.status, error: _fbJson?.error });
+          }
+        } catch (_fbErr) {
+          BRAIN.conscious.stats.errors++;
+          ctx.log("llm.fallback.error", "Conscious brain fallback threw.", { error: String(_fbErr?.message || _fbErr) });
+        }
+        // ===== END CONSCIOUS BRAIN FALLBACK =====
+      }
+    } else {
+      // ===== DIRECT CONSCIOUS BRAIN CALL (no ctx.llm available) =====
+      try {
+        const _dtuTitlesDirect = _enrichedFocus.map(d => d.title || d.id).filter(Boolean);
+        const _directSystem = `You are ConcordOS. Be natural, concise but not dry. Use DTUs as memory. Never pretend features exist.\nMode: ${mode}.\nWhen helpful, reference DTU titles in plain language (do not dump ids unless asked).`;
+        const _directDtuContext = _enrichedFocus.map(d => `TITLE: ${d.title}\nTIER: ${d.tier}\nTAGS: ${(d.tags||[]).join(", ")}\nCRETI:\n${buildCretiText(d)}\n---`).join("\n");
+        const _directMessages = [
+          { role: "system", content: _directSystem },
+          { role: "user", content: `User prompt:\n${prompt}\n\nRelevant DTUs:\n${_directDtuContext}\n\nRespond naturally and propose next actions.` }
+        ];
+        const _directAc = new AbortController();
+        const _directTimeout = setTimeout(() => _directAc.abort(), 120000);
+        const _directStart = Date.now();
+        const _directRes = await fetch(`${brainUrl}/api/chat`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             model: brainModel,
-            messages: [{ role: "system", content: system }, ...messages],
+            messages: _directMessages,
             stream: false,
-            options: { temperature: _llmTemp, num_predict: _llmMaxTokens }
+            options: { temperature: 0.5, num_predict: 700 }
           }),
-          signal: _fbAc.signal
-        }).finally(() => clearTimeout(_fbTimeout));
-        const _fbJson = await _fbRes.json().catch(() => ({}));
-        const _fbElapsed = Date.now() - _fbStart;
+          signal: _directAc.signal
+        }).finally(() => clearTimeout(_directTimeout));
+        const _directJson = await _directRes.json().catch(() => ({}));
+        const _directElapsed = Date.now() - _directStart;
         BRAIN.conscious.stats.requests++;
-        BRAIN.conscious.stats.totalMs += _fbElapsed;
+        BRAIN.conscious.stats.totalMs += _directElapsed;
         BRAIN.conscious.stats.lastCallAt = new Date().toISOString();
-        if (_fbRes.ok && _fbJson.message?.content) {
-          finalReply = _fbJson.message.content.trim() || localReply;
+        if (_directRes.ok && _directJson.message?.content) {
+          finalReply = _directJson.message.content.trim() || localReply;
           llmUsed = true;
-          ctx.log("llm.fallback", "Conscious brain fallback succeeded.", { brainUrl, brainModel, elapsed: _fbElapsed });
+          ctx.log("llm.direct", "Direct conscious brain call succeeded (no ctx.llm).", { brainUrl, brainModel, elapsed: _directElapsed });
         } else {
           BRAIN.conscious.stats.errors++;
-          ctx.log("llm.fallback.error", "Conscious brain fallback returned non-ok.", { status: _fbRes.status, error: _fbJson?.error });
+          ctx.log("llm.direct.error", "Direct conscious brain call returned non-ok.", { status: _directRes.status, error: _directJson?.error });
         }
-      } catch (_fbErr) {
+      } catch (_directErr) {
         BRAIN.conscious.stats.errors++;
-        ctx.log("llm.fallback.error", "Conscious brain fallback threw.", { error: String(_fbErr?.message || _fbErr) });
+        ctx.log("llm.direct.error", "Direct conscious brain call threw.", { error: String(_directErr?.message || _directErr) });
       }
-      // ===== END CONSCIOUS BRAIN FALLBACK =====
+      // ===== END DIRECT CONSCIOUS BRAIN CALL =====
     }
-  } else {
-    // ===== DIRECT CONSCIOUS BRAIN CALL (no ctx.llm available) =====
-    try {
-      const _directMessages = [
-        { role: "system", content: system },
-        ...messages
-      ];
-      const _directAc = new AbortController();
-      const _directTimeout = setTimeout(() => _directAc.abort(), 120000);
-      const _directStart = Date.now();
-      const _directRes = await fetch(`${brainUrl}/api/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: brainModel,
-          messages: _directMessages,
-          stream: false,
-          options: { temperature: _llmTemp, num_predict: _llmMaxTokens }
-        }),
-        signal: _directAc.signal
-      }).finally(() => clearTimeout(_directTimeout));
-      const _directJson = await _directRes.json().catch(() => ({}));
-      const _directElapsed = Date.now() - _directStart;
-      BRAIN.conscious.stats.requests++;
-      BRAIN.conscious.stats.totalMs += _directElapsed;
-      BRAIN.conscious.stats.lastCallAt = new Date().toISOString();
-      if (_directRes.ok && _directJson.message?.content) {
-        finalReply = _directJson.message.content.trim() || localReply;
-        llmUsed = true;
-        ctx.log("llm.direct", "Direct conscious brain call succeeded (no ctx.llm).", { brainUrl, brainModel, elapsed: _directElapsed });
-      } else {
-        BRAIN.conscious.stats.errors++;
-        ctx.log("llm.direct.error", "Direct conscious brain call returned non-ok.", { status: _directRes.status, error: _directJson?.error });
-      }
-    } catch (_directErr) {
-      BRAIN.conscious.stats.errors++;
-      ctx.log("llm.direct.error", "Direct conscious brain call threw.", { error: String(_directErr?.message || _directErr) });
-    }
-    // ===== END DIRECT CONSCIOUS BRAIN CALL =====
   }
+  // ===== END FAST PATH FALLBACK =====
 
-  // Record web search metrics
-  if (_webResults.length > 0 || _webSearchType !== "skipped") {
-    try { recordChatWebMetrics(_webResults.length > 0 ? "web-augmented" : _webSearchType, 0, _webResults.length); } catch (_e) { logger.debug('server', 'web metrics non-critical', { error: _e?.message }); }
-  }
+  const _qpMeta = _fusedContext ? { patternsApplied: _fusedContext.meta.patternsApplied, queryIntent: _qualityPipelineResult?.queryIntent, tokenEstimate: _fusedContext.meta.tokenEstimate } : null;
+  sess.messages.push({ role: "assistant", content: finalReply, ts: nowISO(), meta: { llmUsed, semanticUsed, mode, relevant: relevant.map(d=>d.id), qualityPipeline: _qpMeta, dtuCount: _pipelineDtuCount, subconsciousReflection: !!_subconsciousReflection } });
+  ctx.log("chat", "Chat response generated", { sessionId, mode, llmUsed, semanticUsed, relevant: relevant.map(d=>d.id), qualityPipeline: _qpMeta, pipelineDtuCount: _pipelineDtuCount, hasSubconsciousReflection: !!_subconsciousReflection });
+
 
   // Knowledge loop: save web sources as DTUs so future queries are answered from substrate
   if (_webResults.length > 0 && llmUsed) {

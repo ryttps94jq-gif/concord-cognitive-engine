@@ -2,15 +2,18 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
 import { ds } from '@/lib/design-system';
 import {
   Brain, Sparkles, Compass, TrendingUp, Zap,
   Moon, Globe, BarChart3, BookOpen, Target,
+  Database, Clock, Tag,
 } from 'lucide-react';
+import type { DTU } from '@/lib/api/generated-types';
+import { DTUDetailView } from '@/components/dtu/DTUDetailView';
 
-type TabId = 'personality' | 'dreams' | 'stats';
+type TabId = 'personality' | 'dreams' | 'stats' | 'my-dtus';
 
 const ARCHETYPE_COLORS: Record<string, string> = {
   analytical: 'text-neon-blue',
