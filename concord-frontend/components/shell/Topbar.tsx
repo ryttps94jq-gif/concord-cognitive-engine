@@ -9,7 +9,6 @@ import { HeartbeatBar } from '@/components/live/HeartbeatBar';
 import { XPWidget } from '@/components/gamification/XPWidget';
 import { WalletBadge } from '@/components/economy/WalletBadge';
 import { LensTitle } from './topbar/LensTitle';
-import { NotificationBell as LegacyNotificationBell } from './topbar/NotificationBell';
 import { NotificationBell } from '@/components/social/NotificationBell';
 import { DMIndicator } from '@/components/social/DMIndicator';
 import { UserMenu } from './topbar/UserMenu';
