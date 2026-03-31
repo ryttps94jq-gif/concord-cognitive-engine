@@ -297,7 +297,7 @@ function DashboardPage() {
   const coherence = resonanceData?.coherence || 0;
 
   return (
-    <div className="px-3 py-4 sm:p-4 lg:p-6 space-y-4 sm:space-y-5 max-w-[1600px] mx-auto">
+    <div className="px-3 py-3 sm:p-3 lg:p-4 space-y-3 sm:space-y-3 max-w-[1600px] mx-auto">
       {/* Header */}
       <header className="flex items-center justify-between">
         <div>
@@ -314,7 +314,7 @@ function DashboardPage() {
                 {healthData?.status === 'ok' ? (
                   <span className="text-neon-green">Healthy</span>
                 ) : (
-                  <span className="text-yellow-400">Checking...</span>
+                  <span className="text-amber-400">Checking...</span>
                 )}
               </>
             )}
@@ -384,14 +384,14 @@ function DashboardPage() {
       </LensErrorBoundary>
 
       {/* Live Feed + Emergent Council + Governance — each wrapped independently */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <LensErrorBoundary name="Live DTU Feed">
           <LiveDTUFeed limit={12} />
         </LensErrorBoundary>
         <LensErrorBoundary name="Emergent Panel">
           <EmergentPanel />
         </LensErrorBoundary>
-        <div className="space-y-5">
+        <div className="space-y-3">
           <LensErrorBoundary name="Universal Import">
             <UniversalImport compact />
           </LensErrorBoundary>
@@ -402,7 +402,7 @@ function DashboardPage() {
       </div>
 
       {/* Resonance Universe Graph + Sovereignty */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <LensErrorBoundary name="Resonance Universe">
           <div className="lg:col-span-2 rounded-xl border border-lattice-border bg-lattice-surface/50 overflow-hidden">
             <div className="px-4 py-3 border-b border-lattice-border flex items-center justify-between">
@@ -451,7 +451,7 @@ function DashboardPage() {
       </div>
 
       {/* Living Substrate — Dreams, Metabolism, Memory, Council */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <LensErrorBoundary name="Substrate Dreams">
           <SubstrateDreams />
         </LensErrorBoundary>
@@ -467,7 +467,7 @@ function DashboardPage() {
       </div>
 
       {/* Multi-Agent & Economy — Personas, Tasks, Gardens, Bounties/Futures */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <LensErrorBoundary name="Agent Personas">
           <AgentPersonas />
         </LensErrorBoundary>
@@ -483,7 +483,7 @@ function DashboardPage() {
       </div>
 
       {/* Cognitive Civilization — Digital Twin, Swarms, Temporal Intelligence */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <LensErrorBoundary name="Cognitive Digital Twin">
           <CognitiveDigitalTwin />
         </LensErrorBoundary>
@@ -500,13 +500,8 @@ function DashboardPage() {
         <NervousSystem />
       </LensErrorBoundary>
 
-      {/* Queue Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-        <QueueCard label="Ingest Queue" value={status?.queues?.ingest || 0} color="blue" loading={statusLoading} />
-        <QueueCard label="Autocrawl" value={status?.queues?.autocrawl || 0} color="purple" loading={statusLoading} />
-        <QueueCard label="Domains" value={status?.macro?.domains?.length || 0} color="cyan" loading={statusLoading} />
-        <QueueCard label="Wallets" value={status?.counts?.wallets || 0} color="green" loading={statusLoading} />
-      </div>
+      {/* Queue Stats — collapse into a compact summary when all values are zero */}
+      <QueueStatsRow status={status} statusLoading={statusLoading} />
 
       {/* Recent DTUs */}
       <div className="rounded-xl border border-lattice-border bg-lattice-surface/50 p-4">
@@ -527,7 +522,7 @@ function DashboardPage() {
           </div>
         ) : dtusError ? (
           <div className="col-span-full text-center py-10">
-            <p className="text-yellow-400 mb-1">Unable to load DTUs</p>
+            <p className="text-amber-400 mb-1">Unable to load DTUs</p>
             <p className="text-gray-500 text-sm">
               Check your connection or{' '}
               <Link href="/login" className="text-neon-cyan hover:underline">sign in again</Link>
@@ -630,6 +625,37 @@ function MetricCard({
           <p className="text-xl font-bold">{value}</p>
         </div>
       </div>
+    </div>
+  );
+}
+
+function QueueStatsRow({ status, statusLoading }: { status: Record<string, unknown> | null | undefined; statusLoading: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  const queues = [
+    { label: 'Ingest Queue', value: (status?.queues as Record<string, unknown>)?.ingest as number || 0, color: 'blue' as const },
+    { label: 'Autocrawl', value: (status?.queues as Record<string, unknown>)?.autocrawl as number || 0, color: 'purple' as const },
+    { label: 'Domains', value: ((status?.macro as Record<string, unknown>)?.domains as unknown[] || []).length || 0, color: 'cyan' as const },
+    { label: 'Wallets', value: (status?.counts as Record<string, unknown>)?.wallets as number || 0, color: 'green' as const },
+  ];
+  const allZero = !statusLoading && queues.every(q => q.value === 0);
+
+  if (allZero && !expanded) {
+    return (
+      <button
+        onClick={() => setExpanded(true)}
+        className="w-full rounded-lg border border-lattice-border bg-lattice-surface/30 px-4 py-2 flex items-center justify-between text-xs text-gray-500 hover:bg-lattice-surface/50 transition-colors"
+      >
+        <span>Queues: all idle</span>
+        <span className="text-gray-600">Click to expand</span>
+      </button>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+      {queues.map(q => (
+        <QueueCard key={q.label} label={q.label} value={q.value} color={q.color} loading={statusLoading} />
+      ))}
     </div>
   );
 }

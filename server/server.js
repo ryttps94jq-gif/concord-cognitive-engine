@@ -117,6 +117,7 @@ import registerAtlasRoutes from "./routes/atlas.js";
 // Atlas Signal Cortex — signal classification, privacy architecture & adjustment control
 import { initializeCortex, getCortexMetrics, classifySignal as cortexClassifySignal, getTaxonomy, getUnknownSignals, getAnomalies, getSpectralOccupancy, detectPrivacyZone, checkPrivacy, getPrivacyZones, getPrivacyStats, verifyPrivacyZone, suppressPresenceDetection, suppressVehicleTracking, checkAdjustmentPermission, detectCortexIntent, cortexHeartbeatTick } from "./lib/atlas-signal-cortex.js";
 import registerAtlasSignalRoutes from "./routes/atlas-signals.js";
+import registerInitiativeRoutes from "./routes/initiative.js";
 
 // ── Learning Verification & Substrate Integrity ──────────────────────────────
 import {
@@ -7680,7 +7681,7 @@ register("tools","web_search", (ctx, input={}) => {
 
   // Local-first default: DuckDuckGo HTML (no API key). If you run SearxNG locally, set SEARXNG_URL.
   const local = process.env.SEARXNG_URL || "";
-  const url = local ? `${local}/search?q=${encodeURIComponent(q)}&format=json` : `https://duckduckgo.com/html/?q=${encodeURIComponent(q)}`;
+  const url = local ? `${local}/search?q=${encodeURIComponent(q)}&format=json` : `https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`;
   const r = await fetch(url, { method:"GET" }).catch(_e=>null);
   if (!r || !r.ok) return { ok:false, error:"search failed", status: r?.status || 0 };
 
@@ -10571,7 +10572,7 @@ function initLLMPipeline() {
   const ollamaUrl = process.env.OLLAMA_URL || process.env.BRAIN_CONSCIOUS_URL || process.env.OLLAMA_HOST || "http://ollama:11434";
   LLM_PIPELINE.providers.ollama.url = ollamaUrl;
   // Use BRAIN_CONSCIOUS_MODEL if set; fall back to OLLAMA_MODEL; last resort llama3.2
-  LLM_PIPELINE.providers.ollama.model = process.env.OLLAMA_MODEL || process.env.BRAIN_CONSCIOUS_MODEL || "qwen2.5:7b";
+  LLM_PIPELINE.providers.ollama.model = process.env.OLLAMA_MODEL || process.env.BRAIN_CONSCIOUS_MODEL || "qwen2.5:14b-instruct-q4_K_M";
   LLM_PIPELINE.providers.ollama.enabled = Boolean(ollamaUrl);
 
   LLM_PIPELINE.providers.openai.enabled = Boolean(OPENAI_API_KEY);
@@ -10932,28 +10933,28 @@ async function llmChat(messagesOrCtx, messagesOrOptions = {}, maybeOptions = {})
 const BRAIN = {
   conscious: {
     url: process.env.BRAIN_CONSCIOUS_URL || process.env.OLLAMA_HOST || "http://ollama-conscious:11434",
-    model: process.env.BRAIN_CONSCIOUS_MODEL || "qwen2.5:7b",
+    model: process.env.BRAIN_CONSCIOUS_MODEL || "qwen2.5:14b-instruct-q4_K_M",
     role: "chat, deep reasoning, complex queries",
     enabled: false,
     stats: { requests: 0, totalMs: 0, dtusGenerated: 0, errors: 0, lastCallAt: null },
   },
   subconscious: {
     url: process.env.BRAIN_SUBCONSCIOUS_URL || "http://ollama-subconscious:11434",
-    model: process.env.BRAIN_SUBCONSCIOUS_MODEL || "qwen2.5:1.5b",
+    model: process.env.BRAIN_SUBCONSCIOUS_MODEL || "qwen2.5:7b",
     role: "autogen, dream, evolution, synthesis, birth",
     enabled: false,
     stats: { requests: 0, totalMs: 0, dtusGenerated: 0, errors: 0, lastCallAt: null },
   },
   utility: {
     url: process.env.BRAIN_UTILITY_URL || "http://ollama-utility:11434",
-    model: process.env.BRAIN_UTILITY_MODEL || "qwen2.5:3b",
+    model: process.env.BRAIN_UTILITY_MODEL || "qwen2.5:7b",
     role: "lens interactions, entity actions, quick domain tasks",
     enabled: false,
     stats: { requests: 0, totalMs: 0, dtusGenerated: 0, errors: 0, lastCallAt: null },
   },
   repair: {
     url: process.env.BRAIN_REPAIR_URL || "http://ollama-repair:11434",
-    model: process.env.BRAIN_REPAIR_MODEL || "qwen2.5:0.5b",
+    model: process.env.BRAIN_REPAIR_MODEL || "qwen2.5:7b",
     role: "error detection, auto-fix, runtime repair",
     enabled: false,
     stats: { requests: 0, totalMs: 0, dtusGenerated: 0, errors: 0, fixes: 0, sleeping: true, lastCallAt: null },
@@ -16174,7 +16175,7 @@ let localReply = formatCrispResponse({
     : (process.env.OLLAMA_HOST || "http://ollama-conscious:11434");
   const brainModel = BRAIN.conscious.enabled
     ? BRAIN.conscious.model
-    : (process.env.BRAIN_CONSCIOUS_MODEL || "qwen2.5:7b");
+    : (process.env.BRAIN_CONSCIOUS_MODEL || "qwen2.5:14b-instruct-q4_K_M");
 
   // ===== UNIFIED CONTEXT ENGINE: Retrieve DTUs across all tiers =====
   // Pull context from the unified context engine spanning regular + MEGA + HYPER tiers
@@ -21704,6 +21705,11 @@ registerAtlasRoutes(app, {
 registerAtlasSignalRoutes(app, {
   STATE, makeCtx, runMacro, uiJson, uid, validate, perEndpointRateLimit,
 });
+
+// ---- Initiative Routes (Conversational Initiative / Living Chat) ----
+if (db) {
+  registerInitiativeRoutes(app, { db });
+}
 
 // Error handler
 app.use((err, req, res, _next) => {
@@ -31825,6 +31831,59 @@ function newCapabilitiesHeartbeat() {
         agentTick(entity.id).catch(() => {});
       }
     }
+  }
+
+  // Proactive initiative check — evaluate triggers for connected users
+  // Every 300 ticks (~5 minutes): check for idle users who might benefit from a proactive message
+  if (_capabilityTickCount % 300 === 0 && app._initiativeEngine) {
+    try {
+      const engine = app._initiativeEngine;
+      const IDLE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+      const now = Date.now();
+
+      for (const [, client] of REALTIME.clients) {
+        const userId = client.userId;
+        if (!userId) continue;
+
+        // Check if user has been idle (no recent session activity)
+        const session = STATE.sessions.get(client.sessionId);
+        const lastActivity = session?.lastActivityAt
+          ? new Date(session.lastActivityAt).getTime()
+          : (client.createdAt ? new Date(client.createdAt).getTime() : 0);
+
+        if (now - lastActivity < IDLE_THRESHOLD_MS) continue;
+
+        // Evaluate a check_in trigger for idle users
+        const evaluation = engine.evaluateTrigger(userId, "check_in", {
+          relevanceScore: 0.5,
+          idleDurationMs: now - lastActivity,
+        });
+
+        if (evaluation.shouldFire) {
+          const initiative = engine.createInitiative(
+            userId,
+            "check_in",
+            "It's been a while -- anything I can help with? I've been keeping an eye on your substrate.",
+            { priority: evaluation.suggestedPriority || "normal", metadata: { idleDurationMs: now - lastActivity } }
+          );
+
+          // Deliver via WebSocket
+          if (typeof realtimeEmit === "function") {
+            realtimeEmit("initiative:new", {
+              id: initiative.id,
+              triggerType: initiative.triggerType,
+              message: initiative.message,
+              priority: initiative.priority,
+              score: initiative.score,
+              status: initiative.status,
+              channel: initiative.channel,
+              metadata: initiative.metadata,
+              createdAt: initiative.createdAt,
+            });
+          }
+        }
+      }
+    } catch (_e) { logger.debug('server', 'initiative tick error', { error: _e?.message }); }
   }
 }
 
