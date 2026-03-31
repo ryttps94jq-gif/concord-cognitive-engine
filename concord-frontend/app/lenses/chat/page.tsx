@@ -61,6 +61,7 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { DTUDetailView } from '@/components/dtu/DTUDetailView';
 
 // ──────────────────────────────────────────────
 // Types
@@ -361,6 +362,7 @@ export default function ChatLensPage() {
 
   // New state — Domain context
   const [domainContext, setDomainContext] = useState<string>('');
+  const [inspectingDtuId, setInspectingDtuId] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -560,8 +562,10 @@ export default function ChatLensPage() {
       };
 
       // Ensure we have a session — if none, create one now
-      if (!selectedConversation) {
+      let activeSessionId = selectedConversation;
+      if (!activeSessionId) {
         const newId = generateUUID();
+        activeSessionId = newId;
         const title = content.slice(0, 60) || 'New Conversation';
         const newConv: Conversation = {
           id: newId,
@@ -611,7 +615,7 @@ export default function ChatLensPage() {
           body: JSON.stringify({
             message: messageContent,
             mode: aiMode.id,
-            sessionId: selectedConversation,
+            sessionId: activeSessionId,
             ...(systemPrompt ? { systemPrompt } : {}),
             ...(attachmentMeta.length > 0 ? { attachments: attachmentMeta } : {}),
           }),
@@ -670,7 +674,7 @@ export default function ChatLensPage() {
         const response = await api.post('/api/chat', {
           message: messageContent,
           mode: aiMode.id,
-          sessionId: selectedConversation,
+          sessionId: activeSessionId,
           ...(systemPrompt ? { systemPrompt } : {}),
           ...(attachmentMeta.length > 0 ? { attachments: attachmentMeta } : {}),
         });
@@ -1119,9 +1123,14 @@ export default function ChatLensPage() {
                 <p className="text-xs text-gray-400 mb-2">Referenced DTUs:</p>
                 <div className="flex flex-wrap gap-1">
                   {message.refs.slice(0, 5).map((ref) => (
-                    <span key={ref.id} className="text-xs px-2 py-1 bg-neon-purple/20 text-neon-purple rounded cursor-pointer hover:bg-neon-purple/30" title={ref.id}>
+                    <button
+                      key={ref.id}
+                      onClick={() => setInspectingDtuId(ref.id)}
+                      className="text-xs px-2 py-1 bg-neon-purple/20 text-neon-purple rounded cursor-pointer hover:bg-neon-purple/30 transition-colors"
+                      title={`View DTU: ${ref.id}`}
+                    >
                       {ref.title}
-                    </span>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -1314,7 +1323,7 @@ export default function ChatLensPage() {
             <button
               className="p-2 hover:bg-lattice-bg rounded-lg transition-colors"
               aria-label="Chat settings"
-              onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Chat settings coming soon' })}
+              onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Use the mode selector in the chat rail to configure chat behavior' })}
             >
               <Settings className="w-5 h-5 text-gray-400" />
             </button>
@@ -1358,27 +1367,59 @@ export default function ChatLensPage() {
         </div>
 
         <div className="flex-1 overflow-y-auto" role="list" aria-label="Conversations">
-          {filteredConversations?.map((conv: Conversation) => (
-            <button
+          {filteredConversations.length === 0 && (
+            <div className="p-6 text-center text-gray-500 text-sm">
+              {conversationSearch ? 'No matching conversations' : 'No conversations yet. Start a new chat!'}
+            </div>
+          )}
+          {filteredConversations.map((conv: Conversation) => (
+            <div
               key={conv.id}
-              onClick={() => { setSelectedConversation(conv.id); setChatSidebarOpen(false); }}
               className={cn(
-                'w-full p-4 text-left hover:bg-lattice-bg transition-colors border-b border-lattice-border/50',
+                'group relative w-full p-4 text-left hover:bg-lattice-bg transition-colors border-b border-lattice-border/50 cursor-pointer',
                 selectedConversation === conv.id && 'bg-neon-cyan/10 border-l-2 border-l-neon-cyan'
               )}
               role="listitem"
               aria-current={selectedConversation === conv.id ? 'true' : undefined}
+              onClick={() => { setSelectedConversation(conv.id); setChatSidebarOpen(false); }}
             >
               <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-lg bg-lattice-bg flex items-center justify-center flex-shrink-0">
-                  <MessageSquare className="w-5 h-5 text-neon-cyan" />
+                <div className={cn(
+                  'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0',
+                  selectedConversation === conv.id ? 'bg-neon-cyan/20' : 'bg-lattice-bg'
+                )}>
+                  <MessageSquare className={cn(
+                    'w-5 h-5',
+                    selectedConversation === conv.id ? 'text-neon-cyan' : 'text-gray-400'
+                  )} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-medium text-white truncate">{conv.title}</h3>
-                  <p className="text-sm text-gray-400 truncate">{conv.lastMessage || 'No messages'}</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="font-medium text-white truncate text-sm">{conv.title}</h3>
+                    <span className="text-[10px] text-gray-500 whitespace-nowrap flex-shrink-0">
+                      {formatRelativeTime(conv.updatedAt)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-400 truncate mt-0.5">{conv.lastMessage || 'No messages'}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-[10px] text-gray-500">{conv.messageCount} message{conv.messageCount !== 1 ? 's' : ''}</span>
+                  </div>
                 </div>
               </div>
-            </button>
+              {/* Delete button - visible on hover */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  deleteConversationMutation.mutate(conv.id);
+                }}
+                disabled={deleteConversationMutation.isPending}
+                className="absolute top-3 right-3 p-1.5 rounded-md opacity-0 group-hover:opacity-100 hover:bg-red-500/20 text-gray-500 hover:text-red-400 transition-all"
+                title="Delete conversation"
+                aria-label={`Delete conversation: ${conv.title}`}
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
           ))}
         </div>
       </aside>
@@ -1857,6 +1898,15 @@ export default function ChatLensPage() {
         )}
       </div>
       </div>
+
+      {/* DTU Detail Overlay -- opened when clicking a DTU reference */}
+      {inspectingDtuId && (
+        <DTUDetailView
+          dtuId={inspectingDtuId}
+          onClose={() => setInspectingDtuId(null)}
+          onNavigate={(id) => setInspectingDtuId(id)}
+        />
+      )}
     </div>
   );
 }

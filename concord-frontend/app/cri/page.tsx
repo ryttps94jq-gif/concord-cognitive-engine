@@ -880,7 +880,7 @@ export default function CRIDashboardPage() {
               </div>
             </div>
 
-            {/* Recent Activity Placeholder */}
+            {/* Recent Activity */}
             <div className={cn(ds.panel, 'space-y-3')}>
               <h3 className={ds.heading3}>
                 <Clock className="w-4 h-4 inline mr-2 text-gray-400" />

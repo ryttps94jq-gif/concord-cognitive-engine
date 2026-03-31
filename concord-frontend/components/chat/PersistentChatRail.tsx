@@ -64,6 +64,8 @@ import {
 import { useChatProactive } from './useChatProactive';
 import { useCrossLensMemory } from './useCrossLensMemory';
 import { ContextOverlay } from './ContextOverlay';
+import { InitiativeList } from './InitiativeChip';
+import type { Initiative } from './InitiativeChip';
 
 // ── Types ──────────────────────────────────────────────────────
 
@@ -125,6 +127,7 @@ export function PersistentChatRail({
   const [isExpanded, setIsExpanded] = useState(false);
   const [lastDtuCount, setLastDtuCount] = useState(0);
   const [contextOverlayOpen, setContextOverlayOpen] = useState(false);
+  const [serverInitiatives, setServerInitiatives] = useState<Initiative[]>([]);
 
   // ── Mode state ─────────────────────────────────────────────
 
@@ -175,6 +178,38 @@ export function PersistentChatRail({
       off('dtu:promoted', handleDTUPromoted);
     };
   }, [on, off, proactive]);
+
+  // ── Server initiative listener (rich initiative chips) ─────
+
+  useEffect(() => {
+    const handleInitiative = (data: unknown) => {
+      const d = data as Initiative & { deliveredAt?: string };
+      if (!d?.id || !d?.message) return;
+
+      setServerInitiatives(prev => {
+        // Deduplicate by id and cap at 5
+        if (prev.some(i => i.id === d.id)) return prev;
+        const next = [...prev, {
+          id: d.id,
+          triggerType: d.triggerType || 'genuineCheckIn',
+          message: d.message,
+          priority: d.priority || 'normal',
+          score: d.score ?? 0.5,
+          status: d.status || 'delivered',
+          channel: d.channel,
+          metadata: d.metadata,
+          deliveredAt: d.deliveredAt,
+          createdAt: d.createdAt || new Date().toISOString(),
+        } as Initiative];
+        return next.slice(-5);
+      });
+    };
+
+    on('initiative:new', handleInitiative);
+    return () => {
+      off('initiative:new', handleInitiative);
+    };
+  }, [on, off]);
 
   // ── Sovereignty prompt state ───────────────────────────────
 
@@ -602,7 +637,7 @@ export function PersistentChatRail({
       {/* Mode-specific panel (above messages) */}
       {renderModePanel()}
 
-      {/* Proactive messages */}
+      {/* Proactive messages (client-side suggestions) */}
       {proactive.proactiveMessages.length > 0 && (
         <div className="shrink-0">
           {proactive.proactiveMessages.slice(-2).map(pm => (
@@ -619,6 +654,42 @@ export function PersistentChatRail({
               onDismiss={() => proactive.dismissProactive(pm.id)}
             />
           ))}
+        </div>
+      )}
+
+      {/* Server-pushed initiative chips (rich proactive messages from Concord) */}
+      {serverInitiatives.length > 0 && (
+        <div className="shrink-0">
+          <InitiativeList
+            initiatives={serverInitiatives}
+            onDismiss={(id) => {
+              setServerInitiatives(prev => prev.filter(i => i.id !== id));
+            }}
+            onAction={(id, action, payload) => {
+              const initiative = serverInitiatives.find(i => i.id === id);
+              if (action === 'view_dtu' && payload?.dtuId) {
+                sendMessage(`Show me details about DTU ${payload.dtuId}`);
+              } else if (action === 'explain' || action === 'expand_thought') {
+                sendMessage(initiative?.message || 'Tell me more about this.');
+              } else if (action === 'catch_up' || action === 'morning_brief') {
+                sendMessage('Give me a catch-up summary of my substrate activity.');
+              } else if (action === 'resume_work') {
+                sendMessage('What pending work should I pick up?');
+              } else if (action === 'analyze_event') {
+                sendMessage(initiative?.message || 'Analyze this event for me.');
+              } else if (initiative?.message) {
+                sendMessage(initiative.message);
+              }
+              setServerInitiatives(prev => prev.filter(i => i.id !== id));
+            }}
+            onRespond={(id) => {
+              // Report response to backend
+              fetch(`/api/initiative/${id}/respond`, { method: 'POST' }).catch(() => {});
+              setServerInitiatives(prev => prev.filter(i => i.id !== id));
+            }}
+            maxVisible={2}
+            compact={!isExpanded}
+          />
         </div>
       )}
 

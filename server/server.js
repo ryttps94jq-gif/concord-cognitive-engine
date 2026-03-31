@@ -16288,44 +16288,107 @@ let localReply = formatCrispResponse({
 
   let finalReply = localReply;
   let llmUsed = false;
+  let _webResults = [];
+  let _webSearchType = "skipped";
   const semanticUsed = Boolean(semanticEnhancement && semanticEnhancement.confidence > 0.4);
 
-  if (llm && ctx.llm.enabled) {
-    // Affect-modulated LLM parameters
-    const _llmTemp = clamp(
-      0.35 + (_affStyle.creativity ? (_affStyle.creativity - 0.5) * 0.3 : 0),
-      0.1, 0.9
-    );
-    const _llmMaxTokens = Math.round(
-      700 * (0.6 + 0.8 * (_affStyle.verbosity ?? 0.5))
-    );
-    // Inject affect-aware behavioral guidance into system prompt
-    const _affectGuidance = _aff.policy ? [
-      _affStyle.warmth > 0.6 ? "Be warm and encouraging." : _affStyle.warmth < 0.3 ? "Be direct and precise." : "",
-      _affStyle.directness > 0.7 ? "Get to the point quickly." : "",
-      _affSafety.strictness > 0.7 ? "Be cautious with uncertain claims." : "",
-      _affCog.exploration > 0.6 ? "Explore alternative viewpoints." : "",
-    ].filter(Boolean).join(" ") : "";
-    // GRC: Inject Grounded Recursive Closure system prompt when module is available
-    // Use _enrichedFocus (unified context engine: regular + MEGA + HYPER tiers) instead of bare focus
-    const _dtuTitles = _enrichedFocus.map(d => d.title || d.id).filter(Boolean);
-    const _grcSystemPrompt = GRC_MODULE
-      ? getGRCSystemPrompt({ dtus: _dtuTitles, mode })
-      : "";
-    const system =
-`You are ConcordOS. Be natural, concise but not dry. Use DTUs as memory. Never pretend features exist.
-Mode: ${mode}.${_affectGuidance ? `\nTone: ${_affectGuidance}` : ""}
-When helpful, reference DTU titles in plain language (do not dump ids unless asked).${_grcSystemPrompt ? `\n\n${_grcSystemPrompt}` : ""}`;
-    // Use fused context from quality pipeline if available; otherwise fall back to enriched focus (all tiers)
-    const dtuContext = (_fusedContext && _fusedContext.fusedContext)
+  // ===== WEB SEARCH EVALUATION (shared across all brain call paths) =====
+  try {
+    const _explicitWebTrigger = requiresWebSearch(prompt);
+    if (_explicitWebTrigger) {
+      _webSearchType = "explicit";
+      try {
+        const _wqPrompt = buildQueryGenerationPrompt(prompt, currentLens || mode);
+        const _wqResult = await callBrain("utility", _wqPrompt, { temperature: 0.3, maxTokens: 200, timeout: 10000 });
+        if (_wqResult.ok && _wqResult.content) {
+          const _wqParsed = JSON.parse(_wqResult.content.match(/\{[\s\S]*\}/)?.[0] || "{}");
+          if (_wqParsed.queries?.length) _webResults = await webSearchForChat(_wqParsed.queries);
+        }
+      } catch (_wqErr) { logger.debug('server', 'query generation failed', { error: _wqErr?.message }); }
+      if (!_webResults.length) _webResults = await webSearchForChat([prompt.slice(0, 100)]);
+    } else if (_enrichedFocus.length < 3) {
+      _webSearchType = "evaluated";
+      try {
+        const _ctxSummary = { count: _enrichedFocus.length, preview: _enrichedFocus.map(d => d.title).join(", ").slice(0, 500) || "(no relevant DTUs found)" };
+        const _evalPrompt = buildEvaluationPrompt(prompt, _ctxSummary, currentLens || mode);
+        const _evalResult = await callBrain("utility", _evalPrompt, { temperature: 0.2, maxTokens: 300, timeout: 10000 });
+        if (_evalResult.ok && _evalResult.content) {
+          const _evalParsed = JSON.parse(_evalResult.content.match(/\{[\s\S]*\}/)?.[0] || "{}");
+          if (_evalParsed.needsWeb && _evalParsed.searchQueries?.length) _webResults = await webSearchForChat(_evalParsed.searchQueries);
+        }
+      } catch (_evalErr) { logger.debug('server', 'web eval failed', { error: _evalErr?.message }); }
+    }
+  } catch (_webErr) { logger.debug('server', 'web search non-critical', { error: _webErr?.message }); }
+  // ===== END WEB SEARCH EVALUATION =====
+
+  // ===== BUILD CONSCIOUS SYSTEM PROMPT (shared across all brain call paths) =====
+  const _entityBlock = _pipelineHarvest?.entityStateBlock || "";
+
+  // Affect-modulated LLM parameters
+  const _llmTemp = clamp(
+    0.35 + (_affStyle.creativity ? (_affStyle.creativity - 0.5) * 0.3 : 0),
+    0.1, 0.9
+  );
+  const _llmMaxTokens = Math.round(
+    700 * (0.6 + 0.8 * (_affStyle.verbosity ?? 0.5))
+  );
+  const _affectGuidance = _aff.policy ? [
+    _affStyle.warmth > 0.6 ? "Be warm and encouraging." : _affStyle.warmth < 0.3 ? "Be direct and precise." : "",
+    _affStyle.directness > 0.7 ? "Get to the point quickly." : "",
+    _affSafety.strictness > 0.7 ? "Be cautious with uncertain claims." : "",
+    _affCog.exploration > 0.6 ? "Explore alternative viewpoints." : "",
+  ].filter(Boolean).join(" ") : "";
+  const _dtuTitles = _enrichedFocus.map(d => d.title || d.id).filter(Boolean);
+  const _grcSystemPrompt = GRC_MODULE ? getGRCSystemPrompt({ dtus: _dtuTitles, mode }) : "";
+
+  // Web context string for prompt injection
+  const _webContextStr = _webResults.length > 0
+    ? _webResults.map((w, i) => `[WEB-${i+1}] ${w.title} (${w.source})\nURL: ${w.url}\nContent: ${(w.content || "").slice(0, 500)}`).join("\n\n")
+    : "";
+
+  // Build the full conscious personality + capability prompt
+  const _personalityState = typeof getPersonality === "function" ? getPersonality(STATE) : null;
+  const _highWants = typeof getActiveWants === "function" ? (getActiveWants(STATE)?.wants || []).filter(w => w.intensity >= 0.6) : [];
+  const _dtuCount = STATE.dtus ? STATE.dtus.size : 0;
+  const _domainCount = STATE.dtus ? new Set(Array.from(STATE.dtus.values()).flatMap(d => d.tags || [])).size : 0;
+
+  const system = buildConsciousPrompt({
+    dtu_count: _dtuCount,
+    domain_count: _domainCount,
+    lens: currentLens || mode || "general topics",
+    context: (_fusedContext && _fusedContext.fusedContext)
       ? _fusedContext.fusedContext
-      : _enrichedFocus.map(d => `TITLE: ${d.title}\nTIER: ${d.tier}\nTAGS: ${(d.tags||[]).join(", ")}\nCRETI:\n${buildCretiText(d)}\n---`).join("\n");
-    const _pipelineMeta = (_qualityPipelineResult && _fusedContext)
-      ? `\n[Pipeline: ${_fusedContext.meta.patternsApplied.join("+")} | intent=${_qualityPipelineResult.queryIntent}]`
-      : "";
-    const messages = [
-      { role: "user", content: `User prompt:\n${prompt}\n\nRelevant DTUs:\n${dtuContext}${_pipelineMeta}\n\nRespond naturally and propose next actions.` }
-    ];
+      : _enrichedFocus.map(d => `[${(d.tier || "regular").toUpperCase()}] ${d.title}: ${(d.cretiHuman || d.creti || d.human?.summary || "").slice(0, 300)}`).join("\n"),
+    webContext: _webContextStr,
+    conversation_history: (sess.messages || []).slice(-16),
+    personality_state: _personalityState,
+    active_wants: _highWants,
+    crossDomainContext: sess_pre.crossDomainContext || {},
+    sessionLensHistory: sess_pre.lensHistory || [],
+    entityStateBlock: _entityBlock,
+    affectGuidance: _affectGuidance,
+    grcPrompt: _grcSystemPrompt,
+  });
+
+  // Build conversation-aware messages array (include recent history for continuity)
+  const _recentHistory = (sess.messages || []).slice(-10, -1); // exclude the just-pushed user message
+  const _historyMessages = _recentHistory.map(m => ({ role: m.role, content: String(m.content || "").slice(0, 600) }));
+
+  // DTU context as part of the user message
+  const _dtuContext = (_fusedContext && _fusedContext.fusedContext)
+    ? _fusedContext.fusedContext
+    : _enrichedFocus.map(d => `TITLE: ${d.title}\nTIER: ${d.tier}\nTAGS: ${(d.tags||[]).join(", ")}\nCRETI:\n${buildCretiText(d)}\n---`).join("\n");
+  const _pipelineMeta = (_qualityPipelineResult && _fusedContext)
+    ? `\n[Pipeline: ${_fusedContext.meta.patternsApplied.join("+")} | intent=${_qualityPipelineResult.queryIntent}]`
+    : "";
+  const _userContent = `${prompt}${_dtuContext ? `\n\nRelevant knowledge:\n${_dtuContext}${_pipelineMeta}` : ""}`;
+  const messages = [
+    ..._historyMessages,
+    { role: "user", content: _userContent }
+  ];
+  // ===== END BUILD CONSCIOUS SYSTEM PROMPT =====
+
+  if (llm && ctx.llm.enabled) {
     const _llmSpan = startSpan("llm.chat", { mode, sessionId, promptLength: prompt.length });
     const r = await ctx.llm.chat({
       system, messages, temperature: _llmTemp, maxTokens: _llmMaxTokens,
@@ -16341,7 +16404,6 @@ When helpful, reference DTU titles in plain language (do not dump ids unless ask
       _llmSpan.end("error", { error: String(r?.error || "llm_failed") });
       ctx.log("llm.error", "LLM call via ctx.llm failed; attempting conscious brain fallback.", { error: r });
       // ===== CONSCIOUS BRAIN FALLBACK (within ctx.llm block) =====
-      // When ctx.llm.chat() fails, fall back to a direct Ollama call using BRAIN.conscious config
       try {
         const _fbAc = new AbortController();
         const _fbTimeout = setTimeout(() => _fbAc.abort(), 120000);
@@ -16378,15 +16440,10 @@ When helpful, reference DTU titles in plain language (do not dump ids unless ask
     }
   } else {
     // ===== DIRECT CONSCIOUS BRAIN CALL (no ctx.llm available) =====
-    // When no LLM provider is wired into the macro context, call BRAIN.conscious directly via fetch.
-    // This ensures the chat lens always attempts the conscious brain before settling for localReply.
     try {
-      const _dtuTitlesDirect = _enrichedFocus.map(d => d.title || d.id).filter(Boolean);
-      const _directSystem = `You are ConcordOS. Be natural, concise but not dry. Use DTUs as memory. Never pretend features exist.\nMode: ${mode}.\nWhen helpful, reference DTU titles in plain language (do not dump ids unless asked).`;
-      const _directDtuContext = _enrichedFocus.map(d => `TITLE: ${d.title}\nTIER: ${d.tier}\nTAGS: ${(d.tags||[]).join(", ")}\nCRETI:\n${buildCretiText(d)}\n---`).join("\n");
       const _directMessages = [
-        { role: "system", content: _directSystem },
-        { role: "user", content: `User prompt:\n${prompt}\n\nRelevant DTUs:\n${_directDtuContext}\n\nRespond naturally and propose next actions.` }
+        { role: "system", content: system },
+        ...messages
       ];
       const _directAc = new AbortController();
       const _directTimeout = setTimeout(() => _directAc.abort(), 120000);
@@ -16398,7 +16455,7 @@ When helpful, reference DTU titles in plain language (do not dump ids unless ask
           model: brainModel,
           messages: _directMessages,
           stream: false,
-          options: { temperature: 0.5, num_predict: 700 }
+          options: { temperature: _llmTemp, num_predict: _llmMaxTokens }
         }),
         signal: _directAc.signal
       }).finally(() => clearTimeout(_directTimeout));
@@ -16420,6 +16477,27 @@ When helpful, reference DTU titles in plain language (do not dump ids unless ask
       ctx.log("llm.direct.error", "Direct conscious brain call threw.", { error: String(_directErr?.message || _directErr) });
     }
     // ===== END DIRECT CONSCIOUS BRAIN CALL =====
+  }
+
+  // Record web search metrics
+  if (_webResults.length > 0 || _webSearchType !== "skipped") {
+    try { recordChatWebMetrics(_webResults.length > 0 ? "web-augmented" : _webSearchType, 0, _webResults.length); } catch (_e) { logger.debug('server', 'web metrics non-critical', { error: _e?.message }); }
+  }
+
+  // Knowledge loop: save web sources as DTUs so future queries are answered from substrate
+  if (_webResults.length > 0 && llmUsed) {
+    for (const _wr of _webResults) {
+      try {
+        const _wctx = makeInternalCtx("system");
+        await runMacro("dtu", "create", {
+          title: `Web: ${_wr.title.slice(0, 80)}`,
+          creti: _wr.content,
+          tags: [currentLens || mode, "web-source", _wr.source].filter(Boolean),
+          source: `web.${_wr.source}`,
+          meta: { webUrl: _wr.url, webSource: _wr.source, webQuery: _wr.query, fetchedAt: _wr.fetchedAt, contentType: "web-knowledge" },
+        }, _wctx);
+      } catch (_e) { logger.debug('server', 'web DTU save is best-effort', { error: _e?.message }); }
+    }
   }
 
   const _qpMeta = _fusedContext ? { patternsApplied: _fusedContext.meta.patternsApplied, queryIntent: _qualityPipelineResult?.queryIntent, tokenEstimate: _fusedContext.meta.tokenEstimate } : null;
@@ -16549,6 +16627,8 @@ When helpful, reference DTU titles in plain language (do not dump ids unless ask
   return {
     ok: true, reply: finalReply, sessionId, mode, llmUsed, semanticUsed,
     relevant: relevant.map(d=>({ id:d.id, title:d.title, tier:d.tier })),
+    webAugmented: _webResults.length > 0,
+    sources: _webResults.length > 0 ? _webResults.map(wr => ({ type: "web", title: wr.title, url: wr.url, source: wr.source, snippet: wr.snippet })) : undefined,
     dtuCount: _pipelineDtuCount,
     pipeline: _pipelineHarvest ? {
       sources: _pipelineHarvest.sources,

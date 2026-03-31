@@ -352,7 +352,7 @@ export default function IngestLensPage() {
                 <span className={`text-xs px-1.5 py-0.5 rounded ${
                   conv.active ? 'bg-neon-green/20 text-neon-green' : 'bg-gray-500/20 text-gray-500'
                 }`}>
-                  {conv.active ? 'enabled' : 'coming soon'}
+                  {conv.active ? 'enabled' : 'Requires OCR service'}
                 </span>
               </div>
             ))}

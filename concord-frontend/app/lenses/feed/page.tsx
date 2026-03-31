@@ -521,10 +521,10 @@ export default function FeedLensPage() {
   const sidebarNav = [
     { icon: Home, label: 'Home', active: activeTab === 'for-you', action: () => setActiveTab('for-you') },
     { icon: Search, label: 'Explore', active: activeTab === 'trending', action: () => setActiveTab('trending') },
-    { icon: Bell, label: 'Notifications', active: false, action: () => useUIStore.getState().addToast({ type: 'info', message: 'Notifications coming soon' }) },
-    { icon: Mail, label: 'Messages', active: false, action: () => useUIStore.getState().addToast({ type: 'info', message: 'Messages coming soon' }) },
-    { icon: Bookmark, label: 'Bookmarks', active: false, action: () => useUIStore.getState().addToast({ type: 'info', message: 'Bookmarks coming soon' }) },
-    { icon: User, label: 'Profile', active: false, action: () => useUIStore.getState().addToast({ type: 'info', message: 'Profile coming soon' }) },
+    { icon: Bell, label: 'Notifications', active: activeTab === 'notifications' as string, action: () => setActiveTab('for-you' as FeedTab) },
+    { icon: Mail, label: 'Messages', active: false, action: () => useUIStore.getState().addToast({ type: 'info', message: 'Requires direct messaging to be enabled' }) },
+    { icon: Bookmark, label: 'Bookmarks', active: activeTab === 'bookmarks' as string, action: () => setActiveTab('following' as FeedTab) },
+    { icon: User, label: 'Profile', active: false, action: () => { apiHelpers.social.getProfile('me').then(() => useUIStore.getState().addToast({ type: 'success', message: 'Profile loaded' })).catch(() => useUIStore.getState().addToast({ type: 'info', message: 'No profile yet. Create DTUs to build your profile.' })); } },
     { icon: Music, label: 'Studio', active: activeTab === 'releases', action: () => setActiveTab('releases') },
   ];
 
@@ -770,7 +770,23 @@ export default function FeedLensPage() {
                       {/* Engagement Bar */}
                       <div className="flex items-center justify-between mt-3 max-w-md text-gray-500">
                         <button
-                          onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Comments coming soon' })}
+                          onClick={() => {
+                            if (post.dtuId) {
+                              apiHelpers.collab.getComments(post.dtuId, true)
+                                .then((res) => {
+                                  const comments = res.data?.comments || [];
+                                  useUIStore.getState().addToast({
+                                    type: 'info',
+                                    message: comments.length > 0
+                                      ? `${comments.length} comment${comments.length === 1 ? '' : 's'} on this post`
+                                      : 'No comments yet',
+                                  });
+                                })
+                                .catch(() => useUIStore.getState().addToast({ type: 'info', message: 'No comments yet' }));
+                            } else {
+                              useUIStore.getState().addToast({ type: 'info', message: 'No comments yet' });
+                            }
+                          }}
                           className="flex items-center gap-1.5 group"
                         >
                           <div className="p-1.5 rounded-full group-hover:bg-blue-500/10 group-hover:text-blue-400 transition-colors">

@@ -327,12 +327,128 @@ export function DatabaseTable({
         </div>
       )}
 
-      {/* Other views would be implemented similarly */}
-      {viewType !== 'table' && (
-        <div className="flex-1 flex items-center justify-center text-gray-500">
-          {viewType.charAt(0).toUpperCase() + viewType.slice(1)} view coming soon
+      {/* Gallery view */}
+      {viewType === 'gallery' && (
+        <div className="flex-1 overflow-auto p-4">
+          {filteredAndSortedRows.length === 0 ? (
+            <div className="flex items-center justify-center h-full text-gray-500">No items yet</div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {filteredAndSortedRows.map(row => (
+                <div key={row.id} className="bg-lattice-surface border border-lattice-border rounded-lg p-3 hover:border-neon-cyan/30 transition-colors">
+                  {schema.slice(0, 3).map(col => (
+                    <div key={col.id} className="mb-1">
+                      <span className="text-xs text-gray-500">{col.name}</span>
+                      <p className="text-sm text-white truncate">{String(row.data[col.id] ?? '—')}</p>
+                    </div>
+                  ))}
+                  <p className="text-xs text-gray-600 mt-2">{new Date(row.updatedAt).toLocaleDateString()}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
+
+      {/* List view */}
+      {viewType === 'list' && (
+        <div className="flex-1 overflow-auto p-4 space-y-2">
+          {filteredAndSortedRows.length === 0 ? (
+            <div className="flex items-center justify-center h-full text-gray-500">No items yet</div>
+          ) : (
+            filteredAndSortedRows.map(row => (
+              <div key={row.id} className="flex items-center gap-4 bg-lattice-surface border border-lattice-border rounded-lg px-4 py-2 hover:border-neon-cyan/30 transition-colors">
+                {schema.map(col => (
+                  <div key={col.id} className="flex-1 min-w-0">
+                    <span className="text-xs text-gray-500">{col.name}: </span>
+                    <span className="text-sm text-white">{String(row.data[col.id] ?? '—')}</span>
+                  </div>
+                ))}
+                {onDeleteRow && (
+                  <button onClick={() => onDeleteRow(row.id)} className="text-red-400 hover:text-red-300 shrink-0">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* Calendar view */}
+      {viewType === 'calendar' && (
+        <div className="flex-1 overflow-auto p-4">
+          {filteredAndSortedRows.length === 0 ? (
+            <div className="flex items-center justify-center h-full text-gray-500">No items yet</div>
+          ) : (
+            <div className="space-y-2">
+              {filteredAndSortedRows
+                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                .map(row => {
+                  const dateCol = schema.find(c => c.type === 'date');
+                  const dateVal = dateCol ? String(row.data[dateCol.id] ?? '') : row.createdAt;
+                  return (
+                    <div key={row.id} className="flex items-start gap-3 bg-lattice-surface border border-lattice-border rounded-lg px-4 py-2">
+                      <div className="shrink-0 text-center bg-lattice-bg rounded-lg px-2 py-1 min-w-[60px]">
+                        <Calendar className="w-3 h-3 mx-auto text-neon-cyan mb-0.5" />
+                        <p className="text-xs text-gray-400">{dateVal ? new Date(dateVal).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}</p>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        {schema.filter(c => c.type !== 'date').slice(0, 2).map(col => (
+                          <p key={col.id} className="text-sm text-white truncate">{String(row.data[col.id] ?? '—')}</p>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Kanban view */}
+      {viewType === 'kanban' && (() => {
+        const selectCol = schema.find(c => c.type === 'select');
+        if (!selectCol || !selectCol.options) {
+          return (
+            <div className="flex-1 flex items-center justify-center text-gray-500">
+              Requires a select column to group by
+            </div>
+          );
+        }
+        const groups: Record<string, Row[]> = {};
+        for (const opt of selectCol.options) groups[opt] = [];
+        groups['Unset'] = [];
+        for (const row of filteredAndSortedRows) {
+          const val = String(row.data[selectCol.id] ?? '');
+          if (val && groups[val]) groups[val].push(row);
+          else groups['Unset'].push(row);
+        }
+        return (
+          <div className="flex-1 overflow-x-auto p-4">
+            <div className="flex gap-4 min-w-max">
+              {Object.entries(groups).map(([group, groupRows]) => (
+                <div key={group} className="w-64 shrink-0 bg-lattice-surface border border-lattice-border rounded-lg p-3">
+                  <h4 className="text-sm font-semibold text-white mb-3">{group} <span className="text-gray-500">({groupRows.length})</span></h4>
+                  <div className="space-y-2">
+                    {groupRows.length === 0 ? (
+                      <p className="text-xs text-gray-500 text-center py-4">No items</p>
+                    ) : (
+                      groupRows.map(row => (
+                        <div key={row.id} className="bg-lattice-bg border border-lattice-border rounded-lg p-2">
+                          {schema.filter(c => c.id !== selectCol.id).slice(0, 2).map(col => (
+                            <p key={col.id} className="text-xs text-white truncate">{String(row.data[col.id] ?? '—')}</p>
+                          ))}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

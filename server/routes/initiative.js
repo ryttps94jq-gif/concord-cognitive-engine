@@ -56,8 +56,33 @@ export default function registerInitiativeRoutes(app, deps) {
   app.get("/api/initiative/settings", asyncHandler(async (req, res) => {
     const userId = _getUserId(req);
     const settings = engine.getSettings(userId);
+    const backoff = engine.getBackoff(userId);
 
-    res.json({ ok: true, settings });
+    res.json({
+      ok: true,
+      settings,
+      backoff,
+      limits: {
+        maxPerDay: settings.maxPerDay,
+        maxPerWeek: settings.maxPerWeek,
+        minGapMs: 4 * 60 * 60 * 1000,
+      },
+      availableTriggers: engine.TRIGGER_TYPES.map(t => ({
+        id: t.replace(/_/g, '').replace(/([A-Z])/g, (m) => m),
+        label: t.split('_').map(w => w[0].toUpperCase() + w.slice(1)).join(' '),
+        description: `Triggered by ${t.replace(/_/g, ' ')} events`,
+        priority: t === 'world_event' ? 'high' : t === 'check_in' ? 'low' : 'normal',
+      })),
+      availableChannels: engine.CHANNELS.map(c => ({
+        id: c,
+        label: c === 'inApp' ? 'In-App' : c === 'push' ? 'Push Notification' : c === 'sms' ? 'SMS' : 'Email',
+        description: c === 'inApp' ? 'Messages appear in the chat rail'
+          : c === 'push' ? 'Browser/mobile push notifications'
+          : c === 'sms' ? 'Text messages to your phone'
+          : 'Email notifications',
+        requiresOptIn: c !== 'inApp',
+      })),
+    });
   }));
 
   // ── PUT /api/initiative/settings ─────────────────────────────────────

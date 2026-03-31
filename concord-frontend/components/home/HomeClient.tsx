@@ -423,10 +423,10 @@ function DashboardPage() {
                     Loading resonance graph...
                   </div>
                 </div>
-              ) : graphData?.nodes?.length > 0 ? (
+              ) : graphData?.nodes?.length ? (
                 <ResonanceEmpireGraph
-                  nodes={graphData.nodes}
-                  edges={graphData.edges || []}
+                  nodes={graphData!.nodes}
+                  edges={graphData!.edges || []}
                   height={420}
                   showLabels
                   onNodeClick={(node) => setInspecting({ type: 'dtu', id: node.id })}
