@@ -334,7 +334,7 @@ function DashboardPage() {
         />
         <MetricCard
           label="Events"
-          value={statusLoading ? '...' : status?.counts?.events || 0}
+          value={statusLoading ? '...' : (status?.counts?.events ?? events.length ?? 0)}
           icon={<TrendingUp className="w-5 h-5" />}
           color="pink"
         />
