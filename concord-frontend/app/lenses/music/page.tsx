@@ -15,6 +15,7 @@ import {
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { useMusicStore } from '@/lib/music/store';
+import { getPlayer } from '@/lib/music/player';
 import type {
   MusicTrack, Artist, Playlist,
   MusicLensView, UploadProgress,
@@ -27,6 +28,7 @@ import { UploadFlow } from '@/components/music/UploadFlow';
 import { PlaylistView } from '@/components/music/PlaylistView';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
+import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
 
 // ============================================================================
 // Sample Data — seeds for development (replaced by API in production)
@@ -316,6 +318,14 @@ export default function MusicLensPage() {
 
         <div className="flex items-center gap-3">
           {isLive && <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} />}
+          <VisionAnalyzeButton
+            domain="music"
+            prompt="Analyze this image related to music (album cover, concert photo, instrument, etc.). Describe what you see and suggest relevant genre tags, mood, and metadata for music cataloging."
+            onResult={(res) => {
+              handleCreatePlaylist();
+              console.log('[Vision] Music analysis:', res.analysis);
+            }}
+          />
           <button
             onClick={() => setView('upload')}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-neon-cyan/10 text-neon-cyan hover:bg-neon-cyan/20 transition-colors"

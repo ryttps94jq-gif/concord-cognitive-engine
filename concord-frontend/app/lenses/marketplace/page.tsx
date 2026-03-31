@@ -437,6 +437,7 @@ export default function MarketplaceLensPage() {
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [showFeatures, setShowFeatures] = useState(false);
+  const [showCheckoutConfirm, setShowCheckoutConfirm] = useState(false);
 
   // New listing form state
   const [newListingForm, setNewListingForm] = useState({
@@ -647,6 +648,14 @@ export default function MarketplaceLensPage() {
     if (completed.length > 0) {
       setPurchases(prev => [...completed, ...prev]);
       setCart(prev => prev.filter(c => !completed.some(p => p.item.id === c.item.id)));
+      // Refresh balance, listings, and purchase data after successful checkout
+      queryClient.invalidateQueries({ queryKey: ['economy-balance'] });
+      queryClient.invalidateQueries({ queryKey: ['wallet-balance'] });
+      queryClient.invalidateQueries({ queryKey: ['artistry-beats'] });
+      queryClient.invalidateQueries({ queryKey: ['artistry-stems'] });
+      queryClient.invalidateQueries({ queryKey: ['artistry-samples'] });
+      queryClient.invalidateQueries({ queryKey: ['artistry-art'] });
+      queryClient.invalidateQueries({ queryKey: ['artistry-purchases'] });
     }
     if (errors.length > 0) {
       setCheckoutError(errors.join('; '));
@@ -655,7 +664,7 @@ export default function MarketplaceLensPage() {
       setTab('purchases');
     }
     setCheckoutLoading(false);
-  }, [cart, checkoutLoading]);
+  }, [cart, checkoutLoading, queryClient]);
 
   // Clamp carousel index when featured items change
   useEffect(() => {
@@ -1057,7 +1066,7 @@ export default function MarketplaceLensPage() {
                 {checkoutError && (
                   <p className="text-xs text-red-400 bg-red-400/10 rounded-lg px-3 py-2">{checkoutError}</p>
                 )}
-                <button onClick={handleCheckout} disabled={checkoutLoading || cart.length === 0 || userBalance < cartTotal}
+                <button onClick={() => setShowCheckoutConfirm(true)} disabled={checkoutLoading || cart.length === 0 || userBalance < cartTotal}
                   className={cn('btn-neon purple w-full py-3 text-sm font-semibold flex items-center justify-center gap-2',
                     (checkoutLoading || userBalance < cartTotal) && 'opacity-50 cursor-not-allowed')}>
                   {checkoutLoading ? (
@@ -1068,6 +1077,44 @@ export default function MarketplaceLensPage() {
                     <><Check className="w-4 h-4" /> Checkout</>
                   )}
                 </button>
+
+                {/* Checkout Confirmation Dialog */}
+                <AnimatePresence>
+                  {showCheckoutConfirm && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+                      onClick={() => setShowCheckoutConfirm(false)}>
+                      <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+                        className="bg-lattice-bg border border-lattice-border rounded-xl w-full max-w-md p-6 space-y-4"
+                        onClick={e => e.stopPropagation()}>
+                        <h3 className="text-lg font-bold">Confirm Purchase</h3>
+                        <div className="space-y-2 text-sm text-gray-400">
+                          {cart.map(ci => (
+                            <div key={ci.item.id} className="flex items-center justify-between">
+                              <span className="truncate">{ci.item.title} ({ci.license})</span>
+                              <span className="text-neon-green font-mono">{formatPrice(ci.price)}</span>
+                            </div>
+                          ))}
+                          <div className="border-t border-lattice-border pt-2 flex items-center justify-between font-bold text-white">
+                            <span>Total</span>
+                            <span className="text-neon-green">{formatPrice(cartTotal)}</span>
+                          </div>
+                        </div>
+                        {checkoutError && (
+                          <p className="text-xs text-red-400 bg-red-400/10 rounded-lg px-3 py-2">{checkoutError}</p>
+                        )}
+                        <div className="flex items-center justify-end gap-2 pt-2">
+                          <button onClick={() => { setShowCheckoutConfirm(false); setCheckoutError(null); }}
+                            className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">Cancel</button>
+                          <button onClick={() => { setShowCheckoutConfirm(false); handleCheckout(); }} disabled={checkoutLoading}
+                            className={cn('btn-neon purple text-sm', checkoutLoading && 'opacity-50 cursor-not-allowed')}>
+                            {checkoutLoading ? 'Processing...' : 'Confirm Purchase'}
+                          </button>
+                        </div>
+                      </motion.div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </>
           )}

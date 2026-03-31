@@ -45,6 +45,7 @@ import {
   DEFAULT_SYNTH_PRESETS,
   DEFAULT_EFFECT_PRESETS,
   resumeAudioContext,
+  getAudioContext,
 } from '@/lib/daw/engine';
 import type {
   StudioViewType,
@@ -239,6 +240,16 @@ export default function StudioLensPage() {
   const [audioPosition, setAudioPosition] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
 
+  // Live recording state (mic capture)
+  const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
+  const [recordedUrl, setRecordedUrl] = useState<string | null>(null);
+  const [recordingTimer, setRecordingTimer] = useState(0);
+  const [isPlayingBack, setIsPlayingBack] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const playbackAudioRef = useRef<HTMLAudioElement | null>(null);
+
   // Mastering
   const [masteringAnalysis, setMasteringAnalysis] = useState<MasteringAnalysis | null>(null);
   const [spectrumData, setSpectrumData] = useState<Uint8Array | null>(null);
@@ -274,6 +285,7 @@ export default function StudioLensPage() {
       unsub();
       unsubDTU();
       clearInterval(spectrumInterval);
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
       transportRef.current?.dispose();
       mixerRef.current?.dispose();
       drumEngineRef.current?.dispose();
@@ -333,22 +345,183 @@ export default function StudioLensPage() {
   }, []);
 
   const handleStop = useCallback(() => {
+    // Stop mic recording if active
+    if (isRecording) {
+      recorderRef.current?.stopRecording();
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+      setIsRecording(false);
+    }
     transportRef.current?.stop();
     setTransportState('stopped');
     setCurrentBeat(0);
-  }, []);
+  }, [isRecording]);
 
-  const handleRecord = useCallback(() => {
+  const handleRecord = useCallback(async () => {
     resumeAudioContext();
-    transportRef.current?.record();
-    setTransportState('recording');
-    setIsRecording(true);
-  }, []);
+    // Request mic access and start MediaRecorder via the AudioRecorder engine
+    const recorder = recorderRef.current;
+    if (!recorder) return;
+
+    const hasAccess = await recorder.requestAccess();
+    if (!hasAccess) {
+      console.warn('[Studio] Microphone access denied');
+      return;
+    }
+
+    // Clear previous recording
+    if (recordedUrl) {
+      URL.revokeObjectURL(recordedUrl);
+      setRecordedUrl(null);
+    }
+    setRecordedBlob(null);
+    setSaveStatus('idle');
+
+    const started = recorder.startRecording((blob: Blob) => {
+      setRecordedBlob(blob);
+      const url = URL.createObjectURL(blob);
+      setRecordedUrl(url);
+    });
+
+    if (started) {
+      transportRef.current?.record();
+      setTransportState('recording');
+      setIsRecording(true);
+      setRecordingTimer(0);
+      // Start timer
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingTimer(prev => prev + 1);
+      }, 1000);
+    }
+  }, [recordedUrl]);
 
   const handleSeek = useCallback((beat: number) => {
     transportRef.current?.seekTo(beat);
     setCurrentBeat(beat);
   }, []);
+
+  // ---- Playback of recorded audio ----
+  const handlePlayback = useCallback(() => {
+    if (!recordedUrl) return;
+    // Stop any existing playback
+    if (playbackAudioRef.current) {
+      playbackAudioRef.current.pause();
+      playbackAudioRef.current = null;
+    }
+    const audio = new Audio(recordedUrl);
+    playbackAudioRef.current = audio;
+    setIsPlayingBack(true);
+    audio.onended = () => {
+      setIsPlayingBack(false);
+      playbackAudioRef.current = null;
+    };
+    audio.play().catch(() => setIsPlayingBack(false));
+  }, [recordedUrl]);
+
+  const handleStopPlayback = useCallback(() => {
+    if (playbackAudioRef.current) {
+      playbackAudioRef.current.pause();
+      playbackAudioRef.current.currentTime = 0;
+      playbackAudioRef.current = null;
+    }
+    setIsPlayingBack(false);
+  }, []);
+
+  // ---- Save recording to backend ----
+  const handleSaveRecording = useCallback(async () => {
+    if (!recordedBlob || !project) return;
+    setIsSaving(true);
+    setSaveStatus('idle');
+    try {
+      // Upload metadata via the /api/media/upload endpoint
+      const response = await api.post('/api/media/upload', {
+        title: `${project.title} - Recording ${new Date().toLocaleTimeString()}`,
+        description: `Studio recording from project "${project.title}" (${project.bpm} BPM, key ${project.key})`,
+        mediaType: 'audio',
+        mimeType: recordedBlob.type || 'audio/webm',
+        fileSize: recordedBlob.size,
+        originalFilename: `studio-recording-${Date.now()}.webm`,
+        tags: ['studio', 'recording', project.key, `${project.bpm}bpm`].filter(Boolean),
+        privacy: 'private',
+      });
+
+      if (response.data?.ok || response.status === 200 || response.status === 201) {
+        setSaveStatus('success');
+        // Also create a lens item for the track list
+        try {
+          await createLensItem({
+            title: `Recording - ${new Date().toLocaleTimeString()}`,
+            data: {
+              type: 'recording',
+              projectId: project.id,
+              bpm: project.bpm,
+              key: project.key,
+              duration: recordingTimer,
+              mimeType: recordedBlob.type || 'audio/webm',
+              size: recordedBlob.size,
+              createdAt: new Date().toISOString(),
+            },
+            meta: { tags: ['studio', 'recording'], status: 'active' },
+          });
+        } catch {
+          // Lens item creation is secondary - upload already succeeded
+        }
+        // Invalidate queries so the track list updates without page refresh
+        queryClient.invalidateQueries({ queryKey: ['lens', 'studio'] });
+        // Add an audio track to the project for the recording
+        updateProject(p => {
+          const track = createDefaultTrack(
+            `Rec ${new Date().toLocaleTimeString()}`,
+            'audio',
+            p.tracks.length,
+          );
+          emitTrackCreated(track, p.id);
+          return { ...p, tracks: [...p.tracks, track] };
+        });
+      } else {
+        setSaveStatus('error');
+      }
+    } catch (err) {
+      console.error('[Studio] Save recording failed:', err);
+      setSaveStatus('error');
+    } finally {
+      setIsSaving(false);
+    }
+  }, [recordedBlob, project, recordingTimer, createLensItem, queryClient, updateProject]);
+
+  // ---- Beat pad with OscillatorNode frequencies ----
+  const BEAT_PAD_FREQUENCIES = useMemo(() => [
+    { note: 'C4', freq: 261.63 },
+    { note: 'D4', freq: 293.66 },
+    { note: 'E4', freq: 329.63 },
+    { note: 'F4', freq: 349.23 },
+    { note: 'G4', freq: 392.00 },
+    { note: 'A4', freq: 440.00 },
+    { note: 'B4', freq: 493.88 },
+    { note: 'C5', freq: 523.25 },
+  ], []);
+
+  const handleBeatPadTrigger = useCallback((index: number) => {
+    if (index < 0 || index >= BEAT_PAD_FREQUENCIES.length) return;
+    const { freq } = BEAT_PAD_FREQUENCIES[index];
+    try {
+      const ctx = getAudioContext();
+      if (ctx.state === 'suspended') ctx.resume();
+      const osc = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, ctx.currentTime);
+      gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+      osc.connect(gainNode).connect(ctx.destination);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.4);
+    } catch {
+      // Audio context may not be ready
+    }
+  }, [BEAT_PAD_FREQUENCIES]);
 
   const handleBpmChange = useCallback((bpm: number) => {
     updateProject(p => ({ ...p, bpm }));
@@ -715,6 +888,82 @@ export default function StudioLensPage() {
         onExport={() => handleExport({ format: 'wav', sampleRate: 44100, bitDepth: 24, normalize: true, dithering: true, stems: false, startBeat: 0, endBeat: -1 })}
         onMaster={handleAnalyze}
       />
+
+      {/* Recording Controls & Beat Pads Strip */}
+      <div className="flex-shrink-0 border-b border-white/10 bg-black/40 px-3 py-2">
+        <div className="flex items-center gap-4 flex-wrap">
+          {/* Recording indicator */}
+          {isRecording && (
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-red-500/20 border border-red-500/40 rounded-lg">
+              <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+              <span className="text-xs text-red-400 font-mono font-semibold">REC</span>
+              <span className="text-xs text-red-300 font-mono">
+                {Math.floor(recordingTimer / 60).toString().padStart(2, '0')}:{(recordingTimer % 60).toString().padStart(2, '0')}
+              </span>
+            </div>
+          )}
+
+          {/* Playback controls for recorded audio */}
+          {recordedUrl && !isRecording && (
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-gray-400 uppercase tracking-wide">Recorded</span>
+              {!isPlayingBack ? (
+                <button
+                  onClick={handlePlayback}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-neon-green/15 text-neon-green rounded-lg text-xs hover:bg-neon-green/25 transition-colors"
+                  title="Play recorded audio"
+                >
+                  <PlayCircle className="w-3.5 h-3.5" /> Play
+                </button>
+              ) : (
+                <button
+                  onClick={handleStopPlayback}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-yellow-500/15 text-yellow-400 rounded-lg text-xs hover:bg-yellow-500/25 transition-colors"
+                  title="Stop playback"
+                >
+                  <StopCircle className="w-3.5 h-3.5" /> Stop
+                </button>
+              )}
+              <button
+                onClick={handleSaveRecording}
+                disabled={isSaving}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-neon-cyan/15 text-neon-cyan rounded-lg text-xs hover:bg-neon-cyan/25 transition-colors disabled:opacity-50"
+                title="Save recording to project"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                {isSaving ? 'Saving...' : 'Save'}
+              </button>
+              {saveStatus === 'success' && (
+                <span className="text-[10px] text-neon-green">Saved to tracks</span>
+              )}
+              {saveStatus === 'error' && (
+                <span className="text-[10px] text-red-400">Save failed</span>
+              )}
+            </div>
+          )}
+
+          <div className="flex-1" />
+
+          {/* Beat Pads */}
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] text-gray-500 mr-1">PADS</span>
+            {BEAT_PAD_FREQUENCIES.map((pad, i) => (
+              <button
+                key={pad.note}
+                onMouseDown={() => handleBeatPadTrigger(i)}
+                className="w-9 h-9 rounded-lg text-[10px] font-mono font-bold transition-all active:scale-90 active:brightness-125 border border-white/10 hover:border-white/30"
+                style={{
+                  background: `hsl(${(i * 45) % 360}, 70%, 25%)`,
+                  color: `hsl(${(i * 45) % 360}, 80%, 75%)`,
+                }}
+                title={`${pad.note} (${pad.freq} Hz)`}
+              >
+                {pad.note}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
 
       {/* Main Content Area */}
       <div className="flex-1 flex overflow-hidden min-h-0">

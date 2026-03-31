@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
-import { Search, Filter, ArrowRight, BookOpen, Tag, Calendar, Layers, ChevronDown, RefreshCw } from 'lucide-react';
+import { Search, Filter, ArrowRight, BookOpen, Tag, Calendar, Layers, ChevronDown, RefreshCw, Beaker, Download, X, AlertCircle, Zap, Save } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useLensDTUs } from '@/hooks/useLensDTUs';
@@ -45,10 +45,73 @@ export default function ResearchLensPage() {
   const [selectedDtu, setSelectedDtu] = useState<DTUResult | null>(null);
   const [showFeatures, setShowFeatures] = useState(false);
 
+  /* ---------- hypothesis / generate ---------- */
+  const [hypothesis, setHypothesis] = useState('');
+  const [generateLoading, setGenerateLoading] = useState(false);
+  const [generateResult, setGenerateResult] = useState<{ content: string; title: string } | null>(null);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+  const [savingDTU, setSavingDTU] = useState(false);
+
+  const handleRunAnalysis = useCallback(async () => {
+    if (!hypothesis.trim()) return;
+    setGenerateLoading(true);
+    setGenerateError(null);
+    setGenerateResult(null);
+    try {
+      const res = await api.post('/api/lens/run', {
+        domain: 'research',
+        action: 'generate',
+        input: { hypothesis: hypothesis.trim(), type: 'analysis' },
+      });
+      const data = res.data;
+      const content = typeof data?.result === 'string'
+        ? data.result
+        : typeof data?.result?.content === 'string'
+          ? data.result.content
+          : JSON.stringify(data?.result ?? data, null, 2);
+      setGenerateResult({
+        content,
+        title: data?.result?.title || 'Research Analysis',
+      });
+    } catch (err) {
+      setGenerateError(err instanceof Error ? err.message : 'Analysis failed');
+    } finally {
+      setGenerateLoading(false);
+    }
+  }, [hypothesis]);
+
+  const handleDownloadResult = useCallback((content: string, filename: string) => {
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, []);
+
   const { data: dtusData, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['research-dtus'],
     queryFn: () => api.get('/api/dtus?limit=200').then(r => r.data).catch(() => ({ dtus: [] })),
   });
+
+  const handleSaveAsDTU = useCallback(async () => {
+    if (!generateResult) return;
+    setSavingDTU(true);
+    try {
+      await api.post('/api/dtus', {
+        title: generateResult.title,
+        content: generateResult.content,
+        domain: 'research',
+        tags: ['research', 'analysis', 'generated'],
+      });
+      setSavingDTU(false);
+      refetch();
+      refetchDTUs();
+    } catch {
+      setSavingDTU(false);
+    }
+  }, [generateResult, refetch, refetchDTUs]);
 
   const dtus: DTUResult[] = useMemo(() => dtusData?.dtus || [], [dtusData]);
 
@@ -137,6 +200,73 @@ export default function ResearchLensPage() {
         )}
       </div>
       </header>
+
+      {/* Hypothesis / Generate Panel */}
+      <div className="p-4 bg-lattice-surface border border-lattice-border rounded-xl space-y-3">
+        <div className="flex items-center gap-2">
+          <Beaker className="w-5 h-5 text-neon-cyan" />
+          <h2 className="text-sm font-semibold text-white">Run Analysis</h2>
+        </div>
+        <div className="flex gap-3">
+          <input
+            type="text"
+            value={hypothesis}
+            onChange={(e) => setHypothesis(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleRunAnalysis()}
+            placeholder="Enter a hypothesis or research question..."
+            className="flex-1 px-4 py-2.5 bg-lattice-deep border border-lattice-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-neon-cyan text-sm"
+          />
+          <button
+            onClick={handleRunAnalysis}
+            disabled={generateLoading || !hypothesis.trim()}
+            className="flex items-center gap-2 px-5 py-2.5 bg-neon-cyan/20 text-neon-cyan rounded-lg text-sm font-medium hover:bg-neon-cyan/30 disabled:opacity-50 transition-colors whitespace-nowrap"
+          >
+            {generateLoading ? (
+              <span className="w-4 h-4 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Zap className="w-4 h-4" />
+            )}
+            {generateLoading ? 'Analyzing...' : 'Analyze'}
+          </button>
+        </div>
+        {generateError && (
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            {generateError}
+          </div>
+        )}
+        {generateResult && (
+          <div className="space-y-3">
+            <div className="p-4 rounded-lg bg-lattice-deep border border-lattice-border">
+              <h4 className="text-sm font-semibold text-neon-cyan mb-2">{generateResult.title}</h4>
+              <div className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed max-h-64 overflow-auto">
+                {generateResult.content}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleDownloadResult(generateResult.content, `${generateResult.title.replace(/\s+/g, '-').toLowerCase()}.txt`)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-neon-cyan/10 text-neon-cyan rounded-lg text-xs hover:bg-neon-cyan/20"
+              >
+                <Download className="w-3.5 h-3.5" /> Download
+              </button>
+              <button
+                onClick={handleSaveAsDTU}
+                disabled={savingDTU}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-neon-purple/10 text-neon-purple rounded-lg text-xs hover:bg-neon-purple/20 disabled:opacity-50"
+              >
+                <Save className="w-3.5 h-3.5" /> {savingDTU ? 'Saving...' : 'Save as DTU'}
+              </button>
+              <button
+                onClick={() => setGenerateResult(null)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-gray-400 hover:text-white text-xs"
+              >
+                <X className="w-3.5 h-3.5" /> Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Search bar */}
       <div className="relative">

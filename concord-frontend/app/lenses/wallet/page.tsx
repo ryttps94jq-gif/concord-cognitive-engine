@@ -669,6 +669,10 @@ function WalletPageInner() {
               queryClient.invalidateQueries({
                 queryKey: ['wallet-transactions'],
               });
+              queryClient.invalidateQueries({
+                queryKey: ['wallet-withdrawals'],
+              });
+              queryClient.invalidateQueries({ queryKey: ['economy-balance'] });
             }}
           />
         )}

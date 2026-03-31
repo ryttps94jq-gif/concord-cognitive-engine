@@ -16213,25 +16213,7 @@ let localReply = formatCrispResponse({
     ? BRAIN.conscious.model
     : (process.env.BRAIN_CONSCIOUS_MODEL || "qwen2.5:14b-instruct-q4_K_M");
 
-  // ===== FULL PIPELINE (with timeout guard) → FAST PATH FALLBACK =====
-  // Spec 12: Try the full pipeline first (unified context + DTU harvest + LLM call)
-  // with a capped timeout of 30-60s. On failure or timeout, fall back to fast path
-  // (localReply). Conversation-to-DTU saving runs in BOTH paths (see post-response
-  // DTU ENRICHMENT section below).
-  // Pipeline timeout guard: caps pipeline between 30-60 seconds.
-  const _pipelineTimeoutMs = Math.min(Math.max(Number(input.timeoutMs) || 60000, 30000), 60000);
-
-  let finalReply = localReply;
-  let llmUsed = false;
-  let _pipelineHarvest = null;
-  let _pipelineBudget = null;
-  let _pipelineDtuCount = 0;
-  let _enrichedFocus = [...focus];
-  const semanticUsed = Boolean(semanticEnhancement && semanticEnhancement.confidence > 0.4);
-
   // ===== UNIFIED CONTEXT ENGINE: Retrieve DTUs across all tiers =====
-  // Pull context from the unified context engine spanning regular + MEGA + HYPER tiers
-  // to enrich the LLM prompt with the broadest relevant knowledge.
   let _unifiedContextDtus = [];
   try {
     const _ctxResult = contextProcessQuery(STATE, sessionId, {
@@ -16242,7 +16224,6 @@ let localReply = formatCrispResponse({
       pinnedIds: [],
     });
     if (_ctxResult && _ctxResult.ok && Array.isArray(_ctxResult.workingSet)) {
-      // Resolve full DTU objects from the working set IDs
       const _wsIds = new Set(_ctxResult.workingSet.map(w => w.dtuId || w.id).filter(Boolean));
       const _allDtus = dtusArray();
       _unifiedContextDtus = _allDtus.filter(d => _wsIds.has(d.id));
@@ -16254,11 +16235,13 @@ let localReply = formatCrispResponse({
   // Merge unified context DTUs with focus set (deduplicated)
   const _focusIds = new Set(focus.map(d => d.id));
   const _extraUnifiedDtus = _unifiedContextDtus.filter(d => !_focusIds.has(d.id));
-  _enrichedFocus = [...focus, ..._extraUnifiedDtus];
+  const _enrichedFocus = [...focus, ..._extraUnifiedDtus];
   // ===== END UNIFIED CONTEXT ENGINE =====
-  // ===== END CONSCIOUS BRAIN ROUTING =====
 
   // ===== DTU CONTEXT PIPELINE: Four-Source Harvest + Token Budget Assembly =====
+  let _pipelineHarvest = null;
+  let _pipelineBudget = null;
+  let _pipelineDtuCount = 0;
   try {
     // Phase 1: Context Harvest (4 sources)
     _pipelineHarvest = runContextHarvest(STATE, {
@@ -16299,16 +16282,17 @@ let localReply = formatCrispResponse({
   }
   // ===== END DTU CONTEXT PIPELINE =====
 
+  let finalReply = localReply;
+  let llmUsed = false;
   let _subconsciousReflection = null;
-  let _webAugmented = false;
+  const semanticUsed = Boolean(semanticEnhancement && semanticEnhancement.confidence > 0.4);
 
   // ===== FULL MULTI-STAGE PIPELINE (primary path) =====
-  // Stage 1: Input processing + DTU context enrichment (already done above)
-  // Stage 2: Subconscious reflection (parallel) + Conscious response via consciousChat()
-  // Stage 3: Output processing (below)
-  // Falls back to fast path on failure/timeout.
-  // Pipeline timeout guard: capped between 30-60 seconds (Spec 12 preservation rule 1).
+  // Spec 12: Try full pipeline first, fall back to fast path on failure/timeout.
+  // Pipeline timeout guard: caps between 30-60 seconds (Spec 12 preservation rule 1).
+  const _pipelineTimeoutMs = Math.min(Math.max(Number(input.timeoutMs) || 60000, 30000), 60000);
   let _pipelineSucceeded = false;
+  let _webAugmented = false;
   try {
     const _pipelineStart = Date.now();
 
@@ -16317,7 +16301,7 @@ let localReply = formatCrispResponse({
       ? _fusedContext.fusedContext
       : _enrichedFocus.map(d => `[${(d.tier || "regular").toUpperCase()}] ${d.title}: ${(d.cretiHuman || d.human?.summary || buildCretiText(d) || "").slice(0, 400)}`).join("\n");
 
-    // Stage 2a: Subconscious reflection (parallel, fire-and-forget with result capture)
+    // Stage 2a: Subconscious reflection (parallel, best-effort)
     // The subconscious brain processes every message — generating reflections, emotional context,
     // background associations. Runs in parallel with conscious response.
     const _subconsciousPromise = (BRAIN.subconscious.enabled
@@ -16342,7 +16326,7 @@ let localReply = formatCrispResponse({
     });
 
     // Stage 2b: Conscious response via full consciousChat() pipeline
-    // This routes through: semantic cache -> retrieval sufficiency -> full conscious reasoning
+    // Routes through: semantic cache -> retrieval sufficiency -> full conscious reasoning
     // (including web search evaluation, personality prompts, no-hallucination rules)
     const _consciousPromise = consciousChat(prompt, mode, {
       userId: ctx?.actor?.userId,
@@ -16397,9 +16381,25 @@ let localReply = formatCrispResponse({
       ctx.log("chat_pipeline.full", "Full pipeline succeeded", {
         sessionId, mode, elapsed: _pipelineElapsed,
         source: _consciousResult.source || "conscious",
-        webAugmented: _consciousResult.webAugmented || false,
+        webAugmented: _webAugmented,
         hasSubconsciousReflection: !!_subconsciousReflection,
       });
+
+      // Save web sources as DTUs (knowledge loop)
+      if (_consciousResult.sources && _consciousResult.sources.length > 0) {
+        for (const _wr of _consciousResult.sources) {
+          try {
+            const _wctx = makeInternalCtx("system");
+            await runMacro("dtu", "create", {
+              title: `Web: ${(_wr.title || "").slice(0, 80)}`,
+              creti: _wr.snippet || _wr.content || "",
+              tags: [currentLens || mode, "web-source", _wr.source].filter(Boolean),
+              source: `web.${_wr.source}`,
+              meta: { webUrl: _wr.url, webSource: _wr.source, fetchedAt: _wr.fetchedAt, contentType: "web-knowledge" },
+            }, _wctx);
+          } catch (_e) { logger.debug('server', 'web DTU save is best-effort', { error: _e?.message }); }
+        }
+      }
     }
   } catch (_pipeErr) {
     // Full pipeline failed or timed out — log and fall through to fast path
@@ -16412,7 +16412,6 @@ let localReply = formatCrispResponse({
   // ===== FAST PATH FALLBACK (only on full pipeline failure) =====
   if (!_pipelineSucceeded) {
     if (llm && ctx.llm.enabled) {
-      // Affect-modulated LLM parameters
       const _llmTemp = clamp(
         0.35 + (_affStyle.creativity ? (_affStyle.creativity - 0.5) * 0.3 : 0),
         0.1, 0.9
@@ -16420,14 +16419,12 @@ let localReply = formatCrispResponse({
       const _llmMaxTokens = Math.round(
         700 * (0.6 + 0.8 * (_affStyle.verbosity ?? 0.5))
       );
-      // Inject affect-aware behavioral guidance into system prompt
       const _affectGuidance = _aff.policy ? [
         _affStyle.warmth > 0.6 ? "Be warm and encouraging." : _affStyle.warmth < 0.3 ? "Be direct and precise." : "",
         _affStyle.directness > 0.7 ? "Get to the point quickly." : "",
         _affSafety.strictness > 0.7 ? "Be cautious with uncertain claims." : "",
         _affCog.exploration > 0.6 ? "Explore alternative viewpoints." : "",
       ].filter(Boolean).join(" ") : "";
-      // GRC: Inject Grounded Recursive Closure system prompt when module is available
       const _dtuTitles = _enrichedFocus.map(d => d.title || d.id).filter(Boolean);
       const _grcSystemPrompt = GRC_MODULE
         ? getGRCSystemPrompt({ dtus: _dtuTitles, mode })
@@ -16459,7 +16456,6 @@ When helpful, reference DTU titles in plain language (do not dump ids unless ask
       } else {
         _llmSpan.end("error", { error: String(r?.error || "llm_failed") });
         ctx.log("llm.error", "Fast path ctx.llm.chat failed; attempting conscious brain fallback.", { error: r });
-        // ===== CONSCIOUS BRAIN FALLBACK (within ctx.llm block) =====
         try {
           const _fbAc = new AbortController();
           const _fbTimeout = setTimeout(() => _fbAc.abort(), 120000);
@@ -16492,10 +16488,9 @@ When helpful, reference DTU titles in plain language (do not dump ids unless ask
           BRAIN.conscious.stats.errors++;
           ctx.log("llm.fallback.error", "Conscious brain fallback threw.", { error: String(_fbErr?.message || _fbErr) });
         }
-        // ===== END CONSCIOUS BRAIN FALLBACK =====
       }
     } else {
-      // ===== DIRECT CONSCIOUS BRAIN CALL (no ctx.llm available) =====
+      // Direct conscious brain call (no ctx.llm available)
       try {
         const _dtuTitlesDirect = _enrichedFocus.map(d => d.title || d.id).filter(Boolean);
         const _directSystem = `You are ConcordOS. Be natural, concise but not dry. Use DTUs as memory. Never pretend features exist.\nMode: ${mode}.\nWhen helpful, reference DTU titles in plain language (do not dump ids unless asked).`;
@@ -16535,17 +16530,13 @@ When helpful, reference DTU titles in plain language (do not dump ids unless ask
         BRAIN.conscious.stats.errors++;
         ctx.log("llm.direct.error", "Direct conscious brain call threw.", { error: String(_directErr?.message || _directErr) });
       }
-      // ===== END DIRECT CONSCIOUS BRAIN CALL =====
     }
   }
   // ===== END FAST PATH FALLBACK =====
 
-  // ===== POST-RESPONSE LOGGING + WEB DTU SAVE =====
-  // (runs in both full pipeline and fast path)
   const _qpMeta = _fusedContext ? { patternsApplied: _fusedContext.meta.patternsApplied, queryIntent: _qualityPipelineResult?.queryIntent, tokenEstimate: _fusedContext.meta.tokenEstimate } : null;
   sess.messages.push({ role: "assistant", content: finalReply, ts: nowISO(), meta: { llmUsed, semanticUsed, mode, relevant: relevant.map(d=>d.id), qualityPipeline: _qpMeta, dtuCount: _pipelineDtuCount, subconsciousReflection: !!_subconsciousReflection } });
   ctx.log("chat", "Chat response generated", { sessionId, mode, llmUsed, semanticUsed, relevant: relevant.map(d=>d.id), qualityPipeline: _qpMeta, pipelineDtuCount: _pipelineDtuCount, hasSubconsciousReflection: !!_subconsciousReflection });
-  // Note: web search + web DTU saving is now handled inside consciousChat() — no external _webResults needed.
 
   // ===== DTU ENRICHMENT: Output DTU + Consolidation Check =====
   try {

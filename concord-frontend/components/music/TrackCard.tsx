@@ -53,7 +53,29 @@ export function TrackCard({
   const isCurrentTrack = nowPlaying.track?.id === track.id;
   const isPlaying = isCurrentTrack && nowPlaying.playbackState === 'playing';
 
+  const [noAudioWarning, setNoAudioWarning] = useState(false);
+
   const handlePlay = () => {
+    // If the track has no audio URL, show a fallback warning and play a short tone
+    if (!track.audioUrl) {
+      setNoAudioWarning(true);
+      setTimeout(() => setNoAudioWarning(false), 3000);
+      // Play a short Web Audio API tone as fallback
+      try {
+        const ctx = new AudioContext();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = 440;
+        gain.gain.value = 0.15;
+        osc.start();
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+        osc.stop(ctx.currentTime + 0.5);
+        setTimeout(() => ctx.close(), 600);
+      } catch { /* Web Audio not available */ }
+      return;
+    }
     if (isCurrentTrack) {
       const player = getPlayer();
       if (isPlaying) player.pause();
@@ -135,6 +157,11 @@ export function TrackCard({
             </div>
           </div>
 
+          {/* No audio fallback warning */}
+          {noAudioWarning && (
+            <p className="text-[10px] text-amber-400 pt-1">No audio file -- upload one</p>
+          )}
+
           {/* Tier badges */}
           {showTiers && (
             <div className="flex gap-1 pt-1">
@@ -210,6 +237,9 @@ export function TrackCard({
               </span>
             )}
           </p>
+          {noAudioWarning && (
+            <p className="text-[10px] text-amber-400">No audio file -- upload one</p>
+          )}
         </div>
 
         {/* Lineage */}

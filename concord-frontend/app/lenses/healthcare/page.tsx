@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
+import { api } from '@/lib/api/client';
 import { ds } from '@/lib/design-system';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
@@ -58,6 +59,7 @@ import {
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { cn } from '@/lib/utils';
+import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
@@ -301,6 +303,11 @@ export default function HealthcareLensPage() {
   const [editingItem, setEditingItem] = useState<LensItem<HealthcareArtifact> | null>(null);
   const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
   const [showFeatures, setShowFeatures] = useState(false);
+
+  /* ---------- generate care plan state ---------- */
+  const [generateLoading, setGenerateLoading] = useState(false);
+  const [generateResult, setGenerateResult] = useState<{ content: string; title: string } | null>(null);
+  const [generateError, setGenerateError] = useState<string | null>(null);
 
   /* ---------- patient detail drawer ---------- */
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -623,6 +630,49 @@ export default function HealthcareLensPage() {
       console.error('Action failed:', err);
     }
   };
+
+  const handleGenerateCarePlan = useCallback(async () => {
+    const symptomItems = items.filter(i => (i.data as unknown as HealthcareArtifact).artifactType === 'Symptom');
+    const symptoms = symptomItems.map(i => {
+      const d = i.data as unknown as HealthcareArtifact;
+      return `${d.symptomName || i.title} (severity: ${d.severity ?? 'unknown'}, category: ${d.symptomCategory || 'General'})`;
+    }).join('; ');
+    if (!symptoms) return;
+    setGenerateLoading(true);
+    setGenerateError(null);
+    setGenerateResult(null);
+    try {
+      const res = await api.post('/api/lens/run', {
+        domain: 'healthcare',
+        action: 'generate',
+        input: { symptoms, type: 'care-plan' },
+      });
+      const data = res.data;
+      const content = typeof data?.result === 'string'
+        ? data.result
+        : typeof data?.result?.content === 'string'
+          ? data.result.content
+          : JSON.stringify(data?.result ?? data, null, 2);
+      setGenerateResult({
+        content,
+        title: data?.result?.title || 'Generated Care Plan',
+      });
+    } catch (err) {
+      setGenerateError(err instanceof Error ? err.message : 'Failed to generate care plan');
+    } finally {
+      setGenerateLoading(false);
+    }
+  }, [items]);
+
+  const handleDownloadResult = useCallback((content: string, filename: string) => {
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, []);
 
   /* ---------- render ---------- */
 
@@ -964,6 +1014,15 @@ export default function HealthcareLensPage() {
       <UniversalActions domain="healthcare" artifactId={items[0]?.id} compact />
       <RealtimeDataPanel domain="healthcare" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <DTUExportButton domain="healthcare" data={{}} compact />
+      <VisionAnalyzeButton
+        domain="healthcare"
+        prompt="Analyze this medical image. Describe visible findings, suggest relevant clinical tags, and note anything that may warrant further review. IMPORTANT: This is AI-assisted and must be verified by a licensed healthcare professional."
+        onResult={(res) => {
+          setFormDescription(prev => prev ? `${prev}\n\n[Vision Analysis - NOT a clinical diagnosis]\n${res.analysis}` : `[Vision Analysis - NOT a clinical diagnosis]\n${res.analysis}`);
+          if (res.suggestedTags?.length) setFormNotes(prev => prev ? `${prev}\nSuggested tags: ${res.suggestedTags!.join(', ')}` : `Suggested tags: ${res.suggestedTags!.join(', ')}`);
+        }}
+        className="inline-flex"
+      />
       {/* ============================================================ */}
       {/* Mode Tabs                                                    */}
       {/* ============================================================ */}
@@ -1106,9 +1165,27 @@ export default function HealthcareLensPage() {
         <div className={ds.panel}>
           <div className="flex items-center justify-between mb-2">
             <h3 className={ds.heading3}>Action Result</h3>
-            <button onClick={() => setActionResult(null)} className={ds.btnGhost}><X className="w-4 h-4" /></button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleDownloadResult(
+                  typeof actionResult === 'object' ? JSON.stringify(actionResult, null, 2) : String(actionResult),
+                  'healthcare-result.txt'
+                )}
+                className={cn(ds.btnGhost, 'text-xs')}
+              >
+                <Download className="w-3.5 h-3.5 mr-1" /> Download
+              </button>
+              <button onClick={() => setActionResult(null)} className={ds.btnGhost}><X className="w-4 h-4" /></button>
+            </div>
           </div>
-          <pre className={cn(ds.textMono, 'text-xs overflow-auto max-h-48')}>{JSON.stringify(actionResult, null, 2)}</pre>
+          {typeof actionResult === 'object' && actionResult.content ? (
+            <div className="prose prose-invert prose-sm max-w-none">
+              {Boolean(actionResult.title) && <h4 className="text-sm font-semibold text-neon-cyan mb-2">{String(actionResult.title)}</h4>}
+              <div className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed">{String(actionResult.content)}</div>
+            </div>
+          ) : (
+            <pre className={cn(ds.textMono, 'text-xs overflow-auto max-h-48')}>{JSON.stringify(actionResult, null, 2)}</pre>
+          )}
         </div>
       )}
 
@@ -1486,6 +1563,57 @@ export default function HealthcareLensPage() {
                         </div>
                       );
                     })}
+                  </div>
+                  {/* Generate Care Plan from Symptoms */}
+                  <div className={cn(ds.panel, 'space-y-3')}>
+                    <div className="flex items-center justify-between">
+                      <h3 className={ds.heading3}>Generate Care Plan</h3>
+                      <button
+                        onClick={handleGenerateCarePlan}
+                        disabled={generateLoading || filtered.length === 0}
+                        className="flex items-center gap-2 px-4 py-2 bg-neon-cyan/20 text-neon-cyan rounded-lg text-sm hover:bg-neon-cyan/30 disabled:opacity-50 transition-colors"
+                      >
+                        {generateLoading ? (
+                          <span className="w-4 h-4 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <Zap className="w-4 h-4" />
+                        )}
+                        {generateLoading ? 'Generating...' : 'Generate from Symptoms'}
+                      </button>
+                    </div>
+                    {filtered.length === 0 && (
+                      <p className={ds.textMuted}>Add symptoms above to generate a care plan.</p>
+                    )}
+                    {generateError && (
+                      <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+                        <AlertCircle className="w-4 h-4 shrink-0" />
+                        {generateError}
+                      </div>
+                    )}
+                    {generateResult && (
+                      <div className="space-y-3">
+                        <div className="p-4 rounded-lg bg-lattice-deep border border-lattice-border">
+                          <h4 className="text-sm font-semibold text-neon-cyan mb-2">{generateResult.title}</h4>
+                          <div className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed max-h-64 overflow-auto">
+                            {generateResult.content}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleDownloadResult(generateResult.content, `${generateResult.title.replace(/\s+/g, '-').toLowerCase()}.txt`)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-neon-cyan/10 text-neon-cyan rounded-lg text-xs hover:bg-neon-cyan/20"
+                          >
+                            <Download className="w-3.5 h-3.5" /> Download
+                          </button>
+                          <button
+                            onClick={() => setGenerateResult(null)}
+                            className={cn(ds.btnGhost, 'text-xs')}
+                          >
+                            Dismiss
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
