@@ -206,7 +206,7 @@ import { createAtlasDtu, getAtlasDtu, searchAtlasDtus, promoteAtlasDtu, addAtlas
 import { runAntiGamingScan, getAntiGamingMetrics } from "./emergent/atlas-antigaming.js";
 import { runAutogenV2, getAutogenRun, acceptAutogenOutput, mergeAutogenOutput, propagateConfidence, getAutogenV2Metrics } from "./emergent/atlas-autogen-v2.js";
 import { councilResolve, getCouncilQueue, councilRequestSources, councilMerge, getCouncilActions, getCouncilMetrics } from "./emergent/atlas-council.js";
-import { upsertProfile, getProfile, listProfiles, followUser, unfollowUser, getFollowers, getFollowing, publishDtu, unpublishDtu, recordCitation, getCitedBy, getFeed, computeTrending, discoverUsers, getSocialMetrics, createPost, getPost, deletePost, getUserPosts, addReaction, getReactions, addComment, deleteComment, getComments, sharePost, getShares, bookmarkPost, getUserBookmarks, getForYouFeed, getFollowingFeed, getExploreFeed, sendMessage, getConversations, getMessages, markMessagesRead, createNotification, getNotifications, markNotificationRead, markAllNotificationsRead, getUnreadCount, deleteNotification, getActiveStories, viewStory, votePoll, getPollResults, getTrendingTopics, getPostsByTopic, createGroup, joinGroup, leaveGroup, getGroupFeed, postToGroup, listGroups, getGroupMembers, getCreatorAnalytics, getPostAnalytics, updateStreak, getStreak, tagListing, getPostSales, getPostEarnings, pinPost, unpinPost, getPinnedPosts, recordWatchTime, schedulePost, getScheduledPosts, cancelScheduledPost, processScheduledPosts } from "./emergent/social-layer.js";
+import { upsertProfile, getProfile, listProfiles, followUser, unfollowUser, getFollowers, getFollowing, publishDtu, unpublishDtu, recordCitation, getCitedBy, getFeed, computeTrending, discoverUsers, getSocialMetrics, createPost, getPost, deletePost, getUserPosts, addReaction, getReactions, addComment as socialAddComment, deleteComment as socialDeleteComment, getComments as socialGetComments, sharePost, getShares, bookmarkPost, getUserBookmarks, getForYouFeed, getFollowingFeed, getExploreFeed, sendMessage, getConversations, getMessages, markMessagesRead, createNotification, getNotifications, markNotificationRead, markAllNotificationsRead, getUnreadCount, deleteNotification, getActiveStories, viewStory, votePoll, getPollResults, getTrendingTopics, getPostsByTopic, createGroup, joinGroup, leaveGroup, getGroupFeed, postToGroup, listGroups, getGroupMembers, getCreatorAnalytics, getPostAnalytics, updateStreak, getStreak, tagListing, getPostSales, getPostEarnings, pinPost, unpinPost, getPinnedPosts, recordWatchTime, schedulePost, getScheduledPosts, cancelScheduledPost, processScheduledPosts } from "./emergent/social-layer.js";
 import { createWorkspace as collabCreateWorkspace, getWorkspace as collabGetWorkspace, listWorkspaces as collabListWorkspaces, addWorkspaceMember as collabAddWorkspaceMember, removeWorkspaceMember as collabRemoveWorkspaceMember, addDtuToWorkspace as collabAddDtuToWorkspace, addComment as collabAddComment, getComments as collabGetComments, editComment as collabEditComment, resolveComment as collabResolveComment, proposeRevision, getRevisionProposals, voteOnRevision, applyRevision, startEditSession, recordEdit, endEditSession, getCollabMetrics } from "./emergent/collaboration.js";
 import { createOrgWorkspace, getOrgWorkspace, assignRole, revokeRole, getUserRole, getOrgMembers, checkPermission, getUserPermissions, assignOrgLens, getOrgLenses, exportAuditLog, getRbacMetrics } from "./emergent/rbac.js";
 import { takeSnapshot as takeAnalyticsSnapshot, getPersonalAnalytics, getDtuGrowthTrends, getCitationAnalytics, getMarketplaceAnalytics as getMarketAnalytics, getKnowledgeDensity, getAtlasDomainAnalytics, getDashboardSummary } from "./emergent/analytics-dashboard.js";
@@ -36838,15 +36838,15 @@ app.get("/api/social/reactions/:postId", (req, res) => {
 });
 
 app.post("/api/social/comment", (req, res) => {
-  try { res.json(addComment(STATE, { userId: req.body?.userId || req.user?.id, postId: req.body?.postId, content: req.body?.content, parentCommentId: req.body?.parentCommentId })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  try { res.json(socialAddComment(STATE, { userId: req.body?.userId || req.user?.id, postId: req.body?.postId, content: req.body?.content, parentCommentId: req.body?.parentCommentId })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.delete("/api/social/comment/:postId/:commentId", (req, res) => {
-  try { res.json(deleteComment(STATE, { userId: req.body?.userId || req.user?.id, postId: req.params.postId, commentId: req.params.commentId })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  try { res.json(socialDeleteComment(STATE, { userId: req.body?.userId || req.user?.id, postId: req.params.postId, commentId: req.params.commentId })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.get("/api/social/comments/:postId", (req, res) => {
-  try { res.json(getComments(STATE, req.params.postId, { limit: Number(req.query.limit || 50) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  try { res.json(socialGetComments(STATE, req.params.postId, { limit: Number(req.query.limit || 50) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.post("/api/social/share", (req, res) => {
