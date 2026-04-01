@@ -21773,6 +21773,26 @@ allowMacro("lens", "list", _ACL_PUB);
 allowMacro("lens", "get", _ACL_PUB);
 allowMacro("lens", "export", _ACL_PUB);
 
+// Graph read macros: domain is admin-level but visualizations are used by all users.
+// Per-macro overrides allow authenticated members (and viewers via publicReadDomains bypass)
+// to access graph read operations while keeping graph mutations admin-only.
+for (const n of ["visual", "visualData", "forceGraph", "edges", "stats", "neighbors", "query"]) {
+  allowMacro("graph", n, _ACL_PUB);
+}
+
+// Council read macros: domain is owner-level but tally/status/list are needed by all users.
+for (const n of ["tally", "status", "list"]) {
+  allowMacro("council", n, _ACL_PUB);
+}
+
+// System read macros: domain is admin-level but status/health are public.
+for (const n of ["status", "getStatus", "health"]) {
+  allowMacro("system", n, _ACL_PUB);
+}
+
+// Bookmark routes: accessible to authenticated users
+allowDomain("user", _ACL_MEMBER);
+
 // Activate macro ACL enforcement
 globalThis.canRunMacro = _canRunMacro;
 
