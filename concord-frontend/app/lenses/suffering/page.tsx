@@ -62,6 +62,13 @@ export default function SufferingLensPage() {
   }
   return (
     <div className="p-6 space-y-6">
+      {/* Wellbeing Disclaimer */}
+      <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3 flex items-start gap-3">
+        <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
+        <p className="text-sm text-amber-200">
+          Not medical advice. This lens monitors system-level wellbeing metrics. For personal health or mental health concerns, consult a qualified healthcare provider.
+        </p>
+      </div>
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-2xl">💔</span>

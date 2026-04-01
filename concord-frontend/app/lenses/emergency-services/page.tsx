@@ -142,7 +142,7 @@ export default function EmergencyServicesLensPage() {
   }
 
   return (
-    <div className={cn(ds.page, 'space-y-4')}>
+    <div className={cn(ds.pageContainer, 'space-y-4')}>
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
