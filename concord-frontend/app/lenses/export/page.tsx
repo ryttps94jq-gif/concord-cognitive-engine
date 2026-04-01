@@ -4,10 +4,11 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { useState } from 'react';
+import { motion } from 'framer-motion';
 import {
   Download, FileJson, FileText, Database, Check, Package, Layers,
   ChevronDown, FileCode, FileSpreadsheet, Hash, ArrowDownToLine,
-  Loader2, FileType,
+  Loader2, FileType, Clock, Archive,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -187,31 +188,31 @@ export default function ExportLensPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <div className="lens-card">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 }} className="lens-card">
           <Database className="w-5 h-5 text-neon-blue mb-2" />
           <p className="text-2xl font-bold">{dtus.length}</p>
-          <p className="text-sm text-gray-400">Total DTUs</p>
-        </div>
-        <div className="lens-card">
-          <FileType className="w-5 h-5 text-neon-purple mb-2" />
+          <p className="text-sm text-gray-400">Total Exports</p>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="lens-card">
+          <Clock className="w-5 h-5 text-yellow-400 mb-2" />
           <p className="text-2xl font-bold">{localDtus.length}</p>
-          <p className="text-sm text-gray-400">Local DTUs</p>
-        </div>
-        <div className="lens-card">
-          <ArrowDownToLine className="w-5 h-5 text-neon-cyan mb-2" />
+          <p className="text-sm text-gray-400">Pending</p>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="lens-card">
+          <Archive className="w-5 h-5 text-neon-cyan mb-2" />
           <p className="text-2xl font-bold">{importedDtus.length}</p>
           <p className="text-sm text-gray-400">Imported</p>
-        </div>
-        <div className="lens-card">
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="lens-card">
           <FileJson className="w-5 h-5 text-neon-green mb-2" />
           <p className="text-2xl font-bold">{EXPORT_FORMATS.length}</p>
           <p className="text-sm text-gray-400">Formats</p>
-        </div>
-        <div className="lens-card">
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="lens-card">
           <Check className="w-5 h-5 text-neon-cyan mb-2" />
           <p className="text-2xl font-bold">Ready</p>
           <p className="text-sm text-gray-400">Status</p>
-        </div>
+        </motion.div>
       </div>
 
       {/* Bulk Export */}

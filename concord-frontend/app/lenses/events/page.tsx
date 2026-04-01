@@ -1,5 +1,6 @@
 'use client';
 
+import { motion } from 'framer-motion';
 import { useState, useMemo } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
@@ -641,13 +642,13 @@ export default function EventsLensPage() {
         renderEventDetail(detailItem)
       ) : (
         <div className={ds.grid3}>
-          {filtered.map(item => {
+          {filtered.map((item, index) => {
             const d = item.data as Record<string, unknown>;
             const st = item.meta?.status as string;
             const evtType = EVENT_TYPES.find(t => t.id === d.eventType);
             const EvtIcon = evtType?.icon || CalendarDays;
             return (
-              <div key={item.id} className={ds.panelHover} onClick={() => setDetailId(item.id)}>
+              <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className={ds.panelHover} onClick={() => setDetailId(item.id)}>
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex items-center gap-2 min-w-0">
                     <EvtIcon className="w-5 h-5 text-neon-pink shrink-0" />
@@ -678,7 +679,7 @@ export default function EventsLensPage() {
                     <button onClick={e => { e.stopPropagation(); removeEvent(item.id); }} className={cn(ds.btnGhost, 'hover:text-red-400')}><Trash2 className="w-3.5 h-3.5" /></button>
                   </div>
                 </div>
-              </div>
+              </motion.div>
             );
           })}
         </div>
@@ -1600,6 +1601,32 @@ export default function EventsLensPage() {
         )}
       </header>
 
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {(() => {
+          const allEvts = events;
+          const upcoming = allEvts.filter(e => e.meta?.status === 'planning' || e.meta?.status === 'confirmed').length;
+          const past = allEvts.filter(e => e.meta?.status === 'completed').length;
+          const totalCap = allEvts.reduce((s, e) => s + Number((e.data as Record<string, unknown>).capacity || 0), 0);
+          const totalReg = allEvts.reduce((s, e) => s + Number((e.data as Record<string, unknown>).registered || 0), 0);
+          const rsvpRate = totalCap > 0 ? Math.round((totalReg / totalCap) * 100) : 0;
+          return [
+            { label: 'Upcoming', value: upcoming, icon: CalendarDays },
+            { label: 'Past Events', value: past, icon: CheckCircle2 },
+            { label: 'RSVP Rate', value: `${rsvpRate}%`, icon: Users },
+            { label: 'Total Events', value: allEvts.length, icon: Sparkles },
+          ].map((stat) => (
+            <div key={stat.label} className={ds.panel + ' flex items-center gap-3 p-3'}>
+              <stat.icon className="w-5 h-5 text-neon-pink shrink-0" />
+              <div>
+                <p className="text-xs text-gray-400">{stat.label}</p>
+                <p className="text-lg font-bold text-white">{stat.value}</p>
+              </div>
+            </div>
+          ));
+        })()}
+      </div>
 
       {/* AI Actions */}
       <UniversalActions domain="events" artifactId={events[0]?.id} compact />

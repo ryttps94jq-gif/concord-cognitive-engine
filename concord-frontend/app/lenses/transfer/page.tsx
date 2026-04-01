@@ -4,10 +4,11 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useState, useEffect, useMemo } from 'react';
+import { motion } from 'framer-motion';
 import { useLensBridge } from '@/lib/hooks/use-lens-bridge';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
-  Shuffle, Search, ArrowRight, History, Layers, GitCompare, ChevronDown, Network, Globe, BookOpen, Cpu, Zap, Link2
+  Shuffle, Search, ArrowRight, History, Layers, GitCompare, ChevronDown, Network, Globe, BookOpen, Cpu, Zap, Link2, SendHorizontal, CheckCircle2,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -101,20 +102,26 @@ export default function TransferLensPage() {
       {/* AI Actions */}
       <UniversalActions domain="transfer" artifactId={bridge.selectedId} compact />
 
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+      {/* Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="lens-card">
-          <Shuffle className="w-5 h-5 text-neon-purple mb-2" />
+          <SendHorizontal className="w-5 h-5 text-neon-purple mb-2" />
+          <p className="text-2xl font-bold">{transfers.filter((t: Record<string, unknown>) => t.status === 'pending' || !t.status).length}</p>
+          <p className="text-sm text-gray-400">Transfers Pending</p>
+        </div>
+        <div className="lens-card">
+          <CheckCircle2 className="w-5 h-5 text-neon-green mb-2" />
+          <p className="text-2xl font-bold">{transfers.filter((t: Record<string, unknown>) => t.status === 'completed').length || transfers.length}</p>
+          <p className="text-sm text-gray-400">Completed</p>
+        </div>
+        <div className="lens-card">
+          <Shuffle className="w-5 h-5 text-neon-cyan mb-2" />
           <p className="text-2xl font-bold">{transfers.length}</p>
-          <p className="text-sm text-gray-400">Transfers</p>
+          <p className="text-sm text-gray-400">Total Volume</p>
         </div>
         <div className="lens-card">
-          <GitCompare className="w-5 h-5 text-neon-cyan mb-2" />
-          <p className="text-2xl font-bold">—</p>
-          <p className="text-sm text-gray-400">Analogies Found</p>
-        </div>
-        <div className="lens-card">
-          <Layers className="w-5 h-5 text-neon-green mb-2" />
-          <p className="text-2xl font-bold">—</p>
+          <GitCompare className="w-5 h-5 text-yellow-400 mb-2" />
+          <p className="text-2xl font-bold">{[...new Set(transfers.map((t: Record<string, unknown>) => t.domain || t.target).filter(Boolean))].length}</p>
           <p className="text-sm text-gray-400">Domains</p>
         </div>
       </div>
@@ -191,10 +198,10 @@ export default function TransferLensPage() {
             </h2>
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {transfers.length > 0 ? transfers.map((t: Record<string, unknown>, i: number) => (
-                <div key={i} className="lens-card text-xs">
+                <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="lens-card text-xs">
                   <p className="font-medium">{(t.source as string) || (t.pattern as string)}</p>
                   <p className="text-gray-400">{(t.target as string) || (t.domain as string)}</p>
-                </div>
+                </motion.div>
               )) : (
                 <p className="text-center py-4 text-gray-500 text-sm">No transfers yet</p>
               )}

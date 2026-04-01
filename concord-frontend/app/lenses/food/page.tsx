@@ -1,5 +1,6 @@
 'use client';
 
+import { motion } from 'framer-motion';
 import { useState, useMemo, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
@@ -1832,11 +1833,11 @@ export default function FoodLensPage() {
           </div>
         ) : (
           <div className={ds.grid3}>
-            {filtered.map(item => {
+            {filtered.map((item, index) => {
               const d = item.data as unknown as FoodArtifact;
               const plate = d.type === 'Recipe' ? costPlate(item) : null;
               return (
-                <div key={item.id} className={ds.panelHover} onClick={() => openEdit(item)}>
+                <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className={ds.panelHover} onClick={() => openEdit(item)}>
                   <div className="flex items-start justify-between mb-2">
                     <h3 className={ds.heading3}>{item.title}</h3>
                     {renderStatusBadge(d.status)}
@@ -1959,7 +1960,7 @@ export default function FoodLensPage() {
                     <button onClick={e => { e.stopPropagation(); openEdit(item); }} className={cn(ds.btnSmall, 'text-gray-400 hover:text-white')}><Edit2 className="w-3 h-3" /> Edit</button>
                     <button onClick={e => { e.stopPropagation(); remove(item.id); }} className={cn(ds.btnSmall, 'text-red-400 hover:text-red-300')}><Trash2 className="w-3 h-3" /> Delete</button>
                   </div>
-                </div>
+                </motion.div>
               );
             })}
           </div>
@@ -2510,6 +2511,28 @@ export default function FoodLensPage() {
         </div>
       </header>
 
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {(() => {
+          const recipes = allRecipes;
+          const totalCalories = recipes.reduce((s, r) => s + Number((r.data as unknown as FoodArtifact).calories || 0), 0);
+          return [
+            { label: 'Recipes', value: recipes.length, icon: ChefHat },
+            { label: 'Meals Logged', value: mealPlanItems.length, icon: UtensilsCrossed },
+            { label: 'Calories Today', value: totalCalories, icon: Flame },
+            { label: 'Pantry Items', value: pantryItems.length, icon: Warehouse },
+          ].map((stat) => (
+            <div key={stat.label} className={ds.panel + ' flex items-center gap-3 p-3'}>
+              <stat.icon className="w-5 h-5 text-orange-400 shrink-0" />
+              <div>
+                <p className="text-xs text-gray-400">{stat.label}</p>
+                <p className="text-lg font-bold text-white">{stat.value}</p>
+              </div>
+            </div>
+          ));
+        })()}
+      </div>
 
       {/* AI Actions */}
       <UniversalActions domain="food" artifactId={allRecipes[0]?.id} compact />

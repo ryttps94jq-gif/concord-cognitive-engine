@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -13,7 +14,7 @@ import {
   BarChart3, AlertTriangle, CheckCircle2, ChevronRight,
   Layers, ChevronDown, MapPin, Users, Radio,
   Target, Crosshair, Radar, Siren, Lock,
-  FileText, Clock, Eye,
+  FileText, Clock, Eye, ShieldCheck, Activity,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -195,6 +196,26 @@ export default function DefenseLensPage() {
         ))}
       </div>
 
+      {/* Stats Row */}
+      <div className="grid grid-cols-4 gap-3">
+        <div className="p-3 bg-zinc-900 rounded-lg border border-zinc-800 flex items-center gap-3">
+          <AlertTriangle className="w-5 h-5 text-red-400" />
+          <div><p className="text-lg font-bold text-white">{intel.filter(i => (i.data as IntelData).actionable).length}</p><p className="text-xs text-gray-400">Active Threats</p></div>
+        </div>
+        <div className="p-3 bg-zinc-900 rounded-lg border border-zinc-800 flex items-center gap-3">
+          <ShieldCheck className="w-5 h-5 text-green-400" />
+          <div><p className="text-lg font-bold text-white">{operations.filter(o => (o.data as OperationData).status === 'completed').length}</p><p className="text-xs text-gray-400">Blocked / Resolved</p></div>
+        </div>
+        <div className="p-3 bg-zinc-900 rounded-lg border border-zinc-800 flex items-center gap-3">
+          <Activity className="w-5 h-5 text-cyan-400" />
+          <div><p className="text-lg font-bold text-white">{assets.length > 0 ? ((stats.readyAssets / assets.length) * 100).toFixed(0) : 0}%</p><p className="text-xs text-gray-400">Security Score</p></div>
+        </div>
+        <div className="p-3 bg-zinc-900 rounded-lg border border-zinc-800 flex items-center gap-3">
+          <Users className="w-5 h-5 text-blue-400" />
+          <div><p className="text-lg font-bold text-white">{stats.deployedPersonnel}</p><p className="text-xs text-gray-400">Deployed</p></div>
+        </div>
+      </div>
+
       {/* Search */}
       <div className="flex items-center gap-2">
         <div className="flex-1 relative">
@@ -220,8 +241,8 @@ export default function DefenseLensPage() {
 
       {/* Items List */}
       <div className="space-y-2">
-        {items.map(item => (
-          <div key={item.id} className="p-4 bg-zinc-900 rounded-lg border border-zinc-800 hover:border-zinc-700 transition-colors">
+        {items.map((item, index) => (
+          <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="p-4 bg-zinc-900 rounded-lg border border-zinc-800 hover:border-zinc-700 transition-colors">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <h3 className="text-sm font-semibold text-white">{item.title}</h3>
@@ -248,7 +269,7 @@ export default function DefenseLensPage() {
             {!!(item.data as Record<string, unknown>).summary && (
               <p className="text-xs text-gray-500 mt-2">{String((item.data as Record<string, unknown>).summary)}</p>
             )}
-          </div>
+          </motion.div>
         ))}
         {items.length === 0 && (
           <div className="text-center py-12 text-gray-500">

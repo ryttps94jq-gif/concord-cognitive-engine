@@ -1,5 +1,6 @@
 'use client';
 
+import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers, api } from '@/lib/api/client';
@@ -157,6 +158,24 @@ export default function EntityLensPage() {
         </button>
       </header>
 
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Entities', value: entities.length, icon: Bot },
+          { label: 'Relationships', value: entities.reduce((s, e) => s + e.forks, 0), icon: GitFork },
+          { label: 'Active', value: entities.filter(e => e.status === 'active').length, icon: Activity },
+          { label: 'Workspaces', value: new Set(entities.map(e => e.workspace)).size, icon: Cpu },
+        ].map((stat) => (
+          <div key={stat.label} className="panel flex items-center gap-3 p-3">
+            <stat.icon className="w-5 h-5 text-neon-cyan shrink-0" />
+            <div>
+              <p className="text-xs text-gray-400">{stat.label}</p>
+              <p className="text-lg font-bold text-white">{stat.value}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* Create Entity Form */}
       {showCreate && (
         <div className="panel p-4 space-y-4">
@@ -287,8 +306,8 @@ export default function EntityLensPage() {
           <p className="text-gray-400">No entities spawned yet. Click "Spawn Entity" to create one.</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {entities.map((entity) => (
-              <div key={entity.id} className="lens-card">
+            {entities.map((entity, index) => (
+              <motion.div key={entity.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="lens-card">
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <h3 className="font-semibold">{entity.name}</h3>
@@ -344,7 +363,7 @@ export default function EntityLensPage() {
                     Fork
                   </button>
                 </div>
-              </div>
+              </motion.div>
             ))}
           </div>
         )}

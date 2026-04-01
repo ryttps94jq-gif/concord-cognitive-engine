@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useMemo, useCallback } from 'react';
+import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   PawPrint, Plus, Search, Trash2, Calendar, Heart,
-  Stethoscope, Clock, Star, Layers, ChevronDown,
+  Stethoscope, Clock, Star, Layers, ChevronDown, Syringe, ShieldCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -124,11 +125,12 @@ export default function PetsLensPage() {
         </div>
       )}
 
+      {/* Stats Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="lens-card"><PawPrint className="w-5 h-5 text-amber-400 mb-2" /><p className="text-2xl font-bold">{stats.total}</p><p className="text-sm text-gray-400">Pets</p></div>
+        <div className="lens-card"><PawPrint className="w-5 h-5 text-amber-400 mb-2" /><p className="text-2xl font-bold">{stats.total}</p><p className="text-sm text-gray-400">Pet Count</p></div>
+        <div className="lens-card"><Syringe className="w-5 h-5 text-yellow-400 mb-2" /><p className="text-2xl font-bold">{stats.needsVet}</p><p className="text-sm text-gray-400">Upcoming Vet Visits</p></div>
+        <div className="lens-card"><ShieldCheck className="w-5 h-5 text-green-400 mb-2" /><p className="text-2xl font-bold">{stats.onMeds}</p><p className="text-sm text-gray-400">Vaccination Status</p></div>
         <div className="lens-card"><Heart className="w-5 h-5 text-pink-400 mb-2" /><p className="text-2xl font-bold">{stats.species}</p><p className="text-sm text-gray-400">Species</p></div>
-        <div className="lens-card"><Stethoscope className="w-5 h-5 text-yellow-400 mb-2" /><p className="text-2xl font-bold">{stats.needsVet}</p><p className="text-sm text-gray-400">Vet Soon</p></div>
-        <div className="lens-card"><Star className="w-5 h-5 text-neon-cyan mb-2" /><p className="text-2xl font-bold">{stats.onMeds}</p><p className="text-sm text-gray-400">On Medication</p></div>
       </div>
 
       <div className="relative">
@@ -141,8 +143,8 @@ export default function PetsLensPage() {
           <div className="col-span-full panel p-6 text-center text-gray-400">Loading pets...</div>
         ) : pets.length === 0 ? (
           <div className="col-span-full panel p-6 text-center text-gray-400">No pets added yet.</div>
-        ) : pets.map(pet => (
-          <div key={pet.id} className="panel p-4">
+        ) : pets.map((pet, index) => (
+          <motion.div key={pet.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="panel p-4">
             <div className="flex items-center justify-between mb-2">
               <h3 className="font-semibold text-white truncate">{pet.name}</h3>
               <button onClick={() => remove(pet.id)} className="text-gray-500 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
@@ -155,7 +157,7 @@ export default function PetsLensPage() {
             {pet.nextVetVisit && (
               <p className="text-xs text-gray-400 flex items-center gap-1"><Calendar className="w-3 h-3" />Vet: {pet.nextVetVisit}</p>
             )}
-          </div>
+          </motion.div>
         ))}
       </div>
 

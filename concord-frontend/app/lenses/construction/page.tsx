@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { motion } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
@@ -12,7 +13,7 @@ import {
   HardHat, Ruler, ClipboardList, DollarSign, Calendar, Users,
   Plus, Search, X, Trash2, BarChart3, CheckCircle2,
   AlertTriangle, MapPin, Truck, FileText, Camera,
-  Layers, ChevronDown, Shield, Wrench, Building2, Map,
+  Layers, ChevronDown, Shield, Wrench, Building2, Map, Percent, Hammer,
 } from 'lucide-react';
 
 const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });
@@ -189,11 +190,11 @@ export default function ConstructionLensPage() {
       </div>
       {isLoading ? <div className="flex items-center justify-center py-12"><div className="w-6 h-6 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" /></div>
       : filtered.length === 0 ? <div className={cn(ds.panel, 'text-center py-12')}><HardHat className="w-12 h-12 text-gray-600 mx-auto mb-3" /><p className={ds.textMuted}>No {activeArtifactType} items yet</p><button onClick={openCreate} className={cn(ds.btnPrimary, 'mt-3')}><Plus className="w-4 h-4" /> Create First</button></div>
-      : filtered.map(item => {
+      : filtered.map((item, index) => {
         const d = item.data as unknown as ConstructionArtifact;
         const sc = STATUS_CONFIG[d.status] || STATUS_CONFIG.planned;
         return (
-          <div key={item.id} className={ds.panelHover} onClick={() => openEdit(item)}>
+          <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className={ds.panelHover} onClick={() => openEdit(item)}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3"><HardHat className="w-5 h-5 text-neon-cyan" /><div><p className="text-white font-medium">{d.name || item.title}</p><p className={ds.textMuted}>{d.client || ''} {d.address ? `- ${d.address}` : ''} {d.trade ? `[${d.trade}]` : ''}</p></div></div>
               <div className="flex items-center gap-2">
@@ -202,7 +203,7 @@ export default function ConstructionLensPage() {
                 <button onClick={e => { e.stopPropagation(); remove(item.id); }} className={ds.btnGhost}><Trash2 className="w-4 h-4 text-red-400" /></button>
               </div>
             </div>
-          </div>
+          </motion.div>
         );
       })}
     </div>
@@ -218,6 +219,32 @@ export default function ConstructionLensPage() {
         <div className="flex items-center gap-2"><DTUExportButton domain="construction" data={{}} compact /><button onClick={() => setShowDashboard(!showDashboard)} className={cn(showDashboard ? ds.btnPrimary : ds.btnSecondary)}><BarChart3 className="w-4 h-4" /> Dashboard</button></div>
       </header>
       <RealtimeDataPanel domain="construction" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
+
+      {/* Stats Row */}
+      {(() => {
+        const allJobs = items.map(i => i.data as unknown as ConstructionArtifact);
+        const activeCount = allJobs.filter(j => j.status === 'in_progress').length;
+        const budgetTotal = allJobs.reduce((s, j) => s + (j.contractValue || 0), 0);
+        const completedCount = allJobs.filter(j => j.status === 'completed').length;
+        const completionRate = allJobs.length > 0 ? ((completedCount / allJobs.length) * 100).toFixed(0) : '0';
+        return (
+          <div className="grid grid-cols-3 gap-4">
+            <div className="p-3 bg-lattice-elevated rounded-lg border border-lattice-border flex items-center gap-3">
+              <Hammer className="w-5 h-5 text-orange-400" />
+              <div><p className="text-lg font-bold text-white">{activeCount}</p><p className="text-xs text-gray-400">Active Projects</p></div>
+            </div>
+            <div className="p-3 bg-lattice-elevated rounded-lg border border-lattice-border flex items-center gap-3">
+              <DollarSign className="w-5 h-5 text-green-400" />
+              <div><p className="text-lg font-bold text-white">${budgetTotal.toLocaleString()}</p><p className="text-xs text-gray-400">Budget Total</p></div>
+            </div>
+            <div className="p-3 bg-lattice-elevated rounded-lg border border-lattice-border flex items-center gap-3">
+              <Percent className="w-5 h-5 text-cyan-400" />
+              <div><p className="text-lg font-bold text-white">{completionRate}%</p><p className="text-xs text-gray-400">Completion Rate</p></div>
+            </div>
+          </div>
+        );
+      })()}
+
       <UniversalActions domain="construction" artifactId={items[0]?.id} compact />
       <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 overflow-x-auto">{MODE_TABS.map(tab => (<button key={tab.id} onClick={() => { setActiveTab(tab.id); setShowDashboard(false); }} className={cn('flex items-center gap-2 px-4 py-2 rounded-lg transition-colors whitespace-nowrap', activeTab === tab.id && !showDashboard ? 'bg-neon-blue/20 text-neon-blue' : 'text-gray-400 hover:text-white hover:bg-lattice-elevated')}><tab.icon className="w-4 h-4" />{tab.label}</button>))}</nav>
       {activeTab === 'map' ? (

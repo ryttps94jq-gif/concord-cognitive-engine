@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { motion } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
@@ -13,7 +14,7 @@ import {
   Hammer as Pickaxe, Plus, Search, Trash2, BarChart3,
   Layers, ChevronDown, MapPin, Users,
   Mountain, Gem, HardHat, Gauge, Truck,
-  Eye, AlertTriangle, Shield, Map,
+  Eye, AlertTriangle, Shield, Map, Drill, Weight,
 } from 'lucide-react';
 
 const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });
@@ -175,6 +176,30 @@ export default function MiningLensPage() {
         </button>
       </div>
 
+      {/* Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="p-3 bg-zinc-900 rounded-lg border border-zinc-800">
+          <div className="flex items-center gap-2 mb-1"><Mountain className="w-4 h-4 text-green-400" /></div>
+          <p className="text-2xl font-bold text-green-400">{stats.activeSites}</p>
+          <p className="text-xs text-gray-400">Active Sites</p>
+        </div>
+        <div className="p-3 bg-zinc-900 rounded-lg border border-zinc-800">
+          <div className="flex items-center gap-2 mb-1"><Gem className="w-4 h-4 text-cyan-400" /></div>
+          <p className="text-2xl font-bold text-cyan-400">{[...new Set(sites.map(s => (s.data as SiteData).mineral).filter(Boolean))].length}</p>
+          <p className="text-xs text-gray-400">Ore Types</p>
+        </div>
+        <div className="p-3 bg-zinc-900 rounded-lg border border-zinc-800">
+          <div className="flex items-center gap-2 mb-1"><Drill className="w-4 h-4 text-yellow-400" /></div>
+          <p className="text-2xl font-bold text-yellow-400">{sites.reduce((s, si) => s + ((si.data as SiteData).employees || 0), 0)}</p>
+          <p className="text-xs text-gray-400">Total Employees</p>
+        </div>
+        <div className="p-3 bg-zinc-900 rounded-lg border border-zinc-800">
+          <div className="flex items-center gap-2 mb-1"><HardHat className="w-4 h-4 text-red-400" /></div>
+          <p className="text-2xl font-bold text-red-400">{stats.openIncidents}</p>
+          <p className="text-xs text-gray-400">Safety Incidents</p>
+        </div>
+      </div>
+
       {activeMode === 'Dashboard' && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
@@ -191,8 +216,8 @@ export default function MiningLensPage() {
       )}
 
       <div className="space-y-2">
-        {items.map(item => (
-          <div key={item.id} className="p-4 bg-zinc-900 rounded-lg border border-zinc-800 hover:border-zinc-700 transition-colors">
+        {items.map((item, index) => (
+          <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="p-4 bg-zinc-900 rounded-lg border border-zinc-800 hover:border-zinc-700 transition-colors">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <h3 className="text-sm font-semibold text-white">{item.title}</h3>
@@ -206,7 +231,7 @@ export default function MiningLensPage() {
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
             </div>
-          </div>
+          </motion.div>
         ))}
         {items.length === 0 && (
           <div className="text-center py-12 text-gray-500">

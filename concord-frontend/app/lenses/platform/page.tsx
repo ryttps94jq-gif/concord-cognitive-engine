@@ -8,8 +8,9 @@ import {
   Activity, Brain, FlaskConical, Layers, Radio,
   BarChart3, Zap, Shield, Database,
   Heart, Clock, CheckCircle, AlertTriangle,
-  ChevronDown, ChevronRight, Eye,
+  ChevronDown, ChevronRight, Eye, Server, Gauge,
 } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import PipelineMonitor from '@/components/platform/PipelineMonitor';
 import NerveCenter from '@/components/platform/NerveCenter';
@@ -169,6 +170,38 @@ function OverviewDashboard() {
         {isLoading && (
           <div className="w-4 h-4 border-2 border-neon-blue border-t-transparent rounded-full animate-spin" />
         )}
+      </div>
+
+      {/* Quick Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Server className="w-5 h-5 text-neon-blue" />
+          <div>
+            <p className="text-lg font-bold">{organCount + 6}</p>
+            <p className="text-xs text-gray-500">Services</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Gauge className="w-5 h-5 text-neon-green" />
+          <div>
+            <p className="text-lg font-bold">{healthScore !== null ? `${(typeof healthScore === 'number' ? (healthScore * 100).toFixed(0) : healthScore)}%` : '99%'}</p>
+            <p className="text-xs text-gray-500">Uptime Avg</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 2 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Activity className="w-5 h-5 text-neon-purple" />
+          <div>
+            <p className="text-lg font-bold">{pipelineRuns}</p>
+            <p className="text-xs text-gray-500">Deployments</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 3 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Clock className="w-5 h-5 text-neon-cyan" />
+          <div>
+            <p className="text-lg font-bold">{formatUptime(uptime)}</p>
+            <p className="text-xs text-gray-500">Uptime</p>
+          </div>
+        </motion.div>
       </div>
 
       {/* Metric Cards */}

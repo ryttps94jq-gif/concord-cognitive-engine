@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -11,7 +12,7 @@ import {
   Truck, Package, Warehouse, Globe, BarChart3, Users,
   Plus, Search, X, Trash2, Clock, DollarSign,
   AlertTriangle, CheckCircle2, MapPin, ArrowRight,
-  Layers, ChevronDown, Ship, Factory, Route,
+  Layers, ChevronDown, Ship, Factory, Route, Timer, CircleCheck,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -148,11 +149,11 @@ export default function SupplyChainLensPage() {
       </div>
       {isLoading ? <div className="flex items-center justify-center py-12"><div className="w-6 h-6 border-2 border-neon-blue border-t-transparent rounded-full animate-spin" /></div>
       : filtered.length === 0 ? <div className={cn(ds.panel, 'text-center py-12')}><Truck className="w-12 h-12 text-gray-600 mx-auto mb-3" /><p className={ds.textMuted}>No {activeArtifactType} items yet</p><button onClick={openCreate} className={cn(ds.btnPrimary, 'mt-3')}><Plus className="w-4 h-4" /> Create First</button></div>
-      : filtered.map(item => {
+      : filtered.map((item, index) => {
         const d = item.data as unknown as SupplyChainArtifact;
         const sc = STATUS_CONFIG[d.status] || STATUS_CONFIG.pending;
         return (
-          <div key={item.id} className={ds.panelHover} onClick={() => openEdit(item)}>
+          <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className={ds.panelHover} onClick={() => openEdit(item)}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3"><Package className="w-5 h-5 text-neon-cyan" /><div><p className="text-white font-medium">{d.name || item.title}</p><p className={ds.textMuted}>{d.supplier || ''} {d.origin && d.destination ? `${d.origin} -> ${d.destination}` : ''}</p></div></div>
               <div className="flex items-center gap-2">
@@ -161,7 +162,7 @@ export default function SupplyChainLensPage() {
                 <button onClick={e => { e.stopPropagation(); remove(item.id); }} className={ds.btnGhost}><Trash2 className="w-4 h-4 text-red-400" /></button>
               </div>
             </div>
-          </div>
+          </motion.div>
         );
       })}
     </div>
@@ -178,6 +179,16 @@ export default function SupplyChainLensPage() {
       </header>
       <RealtimeDataPanel domain="supplychain" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <UniversalActions domain="supplychain" artifactId={items[0]?.id} compact />
+
+      {/* Stats Row */}
+      {(() => { const all = items.map(i => i.data as unknown as SupplyChainArtifact); const inTransit = all.filter(e => e.status === 'in_transit').length; const delivered = all.filter(e => e.status === 'delivered').length; const total = all.length; const onTimeRate = total > 0 ? ((delivered / total) * 100).toFixed(0) : '0'; return (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className={ds.panel}><Globe className="w-5 h-5 text-teal-400 mb-2" /><p className={ds.textMuted}>Nodes</p><p className="text-xl font-bold text-white">{[...new Set(all.map(a => a.supplier).filter(Boolean))].length + [...new Set(all.map(a => a.destination).filter(Boolean))].length}</p></div>
+          <div className={ds.panel}><Ship className="w-5 h-5 text-blue-400 mb-2" /><p className={ds.textMuted}>Active Shipments</p><p className="text-xl font-bold text-white">{inTransit}</p></div>
+          <div className={ds.panel}><CircleCheck className="w-5 h-5 text-green-400 mb-2" /><p className={ds.textMuted}>On-Time Rate</p><p className="text-xl font-bold text-white">{onTimeRate}%</p></div>
+          <div className={ds.panel}><DollarSign className="w-5 h-5 text-yellow-400 mb-2" /><p className={ds.textMuted}>Total Value</p><p className="text-xl font-bold text-white">${all.reduce((s, e) => s + (e.totalCost || 0), 0).toLocaleString()}</p></div>
+        </div>
+      ); })()}
       <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 overflow-x-auto">{MODE_TABS.map(tab => (<button key={tab.id} onClick={() => { setActiveTab(tab.id); setShowDashboard(false); }} className={cn('flex items-center gap-2 px-4 py-2 rounded-lg transition-colors whitespace-nowrap', activeTab === tab.id && !showDashboard ? 'bg-neon-blue/20 text-neon-blue' : 'text-gray-400 hover:text-white hover:bg-lattice-elevated')}><tab.icon className="w-4 h-4" />{tab.label}</button>))}</nav>
       {showDashboard ? renderDashboard() : renderLibrary()}
       {renderEditor()}

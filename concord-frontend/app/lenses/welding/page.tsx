@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -11,7 +12,7 @@ import {
   Flame, Wrench, ClipboardList, DollarSign, Camera, Users,
   Plus, Search, X, Trash2, BarChart3, CheckCircle2,
   AlertTriangle, FileText, Shield, Award, Calculator,
-  Layers, ChevronDown, Receipt,
+  Layers, ChevronDown, Receipt, Gauge, Sparkles,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -174,9 +175,9 @@ export default function WeldingLensPage() {
       </div>
       {isLoading ? <div className="flex items-center justify-center py-12"><div className="w-6 h-6 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" /></div>
       : filtered.length === 0 ? <div className={cn(ds.panel, 'text-center py-12')}><Flame className="w-12 h-12 text-gray-600 mx-auto mb-3" /><p className={ds.textMuted}>No {activeArtifactType} items yet</p><button onClick={openCreate} className={cn(ds.btnPrimary, 'mt-3')}><Plus className="w-4 h-4" /> Create First</button></div>
-      : filtered.map(item => {
+      : filtered.map((item, index) => {
         const d = item.data as unknown as TradeArtifact; const sc = STATUS_CONFIG[d.status] || STATUS_CONFIG.pending;
-        return (<div key={item.id} className={ds.panelHover} onClick={() => openEdit(item)}><div className="flex items-center justify-between"><div className="flex items-center gap-3"><Flame className="w-5 h-5 text-neon-cyan" /><div><p className="text-white font-medium">{d.name || item.title}</p><p className={ds.textMuted}>{d.client || ''} {d.address ? `- ${d.address}` : ''}</p></div></div><div className="flex items-center gap-2">{(d.totalCost || d.amount) && <span className="text-xs text-green-400">${(d.totalCost || d.amount || 0).toLocaleString()}</span>}<span className={`text-xs px-2 py-0.5 rounded-full bg-${sc.color}/20 text-${sc.color}`}>{sc.label}</span><button onClick={e => { e.stopPropagation(); remove(item.id); }} className={ds.btnGhost}><Trash2 className="w-4 h-4 text-red-400" /></button></div></div></div>);
+        return (<motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className={ds.panelHover} onClick={() => openEdit(item)}><div className="flex items-center justify-between"><div className="flex items-center gap-3"><Flame className="w-5 h-5 text-neon-cyan" /><div><p className="text-white font-medium">{d.name || item.title}</p><p className={ds.textMuted}>{d.client || ''} {d.address ? `- ${d.address}` : ''}</p></div></div><div className="flex items-center gap-2">{(d.totalCost || d.amount) && <span className="text-xs text-green-400">${(d.totalCost || d.amount || 0).toLocaleString()}</span>}<span className={`text-xs px-2 py-0.5 rounded-full bg-${sc.color}/20 text-${sc.color}`}>{sc.label}</span><button onClick={e => { e.stopPropagation(); remove(item.id); }} className={ds.btnGhost}><Trash2 className="w-4 h-4 text-red-400" /></button></div></div></motion.div>);
       })}
     </div>
   );
@@ -192,6 +193,16 @@ export default function WeldingLensPage() {
       </header>
       <RealtimeDataPanel domain="welding" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <UniversalActions domain="welding" artifactId={items[0]?.id} compact />
+
+      {/* Stats Row */}
+      {(() => { const all = items.map(i => i.data as unknown as TradeArtifact); const totalJobs = all.length; const techniques = [...new Set(all.map(a => a.material).filter(Boolean))].length; const certs = all.filter(a => a.certType).length; const completed = all.filter(a => a.status === 'completed' || a.status === 'paid').length; return (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className={ds.panel}><Flame className="w-5 h-5 text-orange-400 mb-2" /><p className={ds.textMuted}>Projects</p><p className="text-xl font-bold text-white">{totalJobs}</p></div>
+          <div className={ds.panel}><Sparkles className="w-5 h-5 text-cyan-400 mb-2" /><p className={ds.textMuted}>Techniques Used</p><p className="text-xl font-bold text-white">{techniques}</p></div>
+          <div className={ds.panel}><Award className="w-5 h-5 text-yellow-400 mb-2" /><p className={ds.textMuted}>Certification Count</p><p className="text-xl font-bold text-white">{certs}</p></div>
+          <div className={ds.panel}><Gauge className="w-5 h-5 text-green-400 mb-2" /><p className={ds.textMuted}>Completed</p><p className="text-xl font-bold text-white">{completed}</p></div>
+        </div>
+      ); })()}
       <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 overflow-x-auto">{MODE_TABS.map(tab => (<button key={tab.id} onClick={() => { setActiveTab(tab.id); setShowDashboard(false); }} className={cn('flex items-center gap-2 px-4 py-2 rounded-lg transition-colors whitespace-nowrap', activeTab === tab.id && !showDashboard ? 'bg-neon-blue/20 text-neon-blue' : 'text-gray-400 hover:text-white hover:bg-lattice-elevated')}><tab.icon className="w-4 h-4" />{tab.label}</button>))}</nav>
       {showDashboard ? renderDashboard() : renderLibrary()}
       {renderEditor()}

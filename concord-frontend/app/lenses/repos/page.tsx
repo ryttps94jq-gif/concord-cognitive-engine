@@ -25,9 +25,12 @@ import {
   Settings,
   Shield,
   BarChart3,
-  Play
+  Play,
+  Hash,
+  Activity
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { motion } from 'framer-motion';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -238,6 +241,38 @@ export default function ReposLensPage() {
         )}
       </div>
 
+            {/* Quick Stats Row */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 * 0.05 }} className="p-3 bg-[#161b22] border border-gray-700 rounded-lg flex items-center gap-3">
+                <GitBranch className="w-5 h-5 text-blue-400" />
+                <div>
+                  <p className="text-lg font-bold">{repos?.length || 0}</p>
+                  <p className="text-xs text-gray-500">Total Repos</p>
+                </div>
+              </motion.div>
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1 * 0.05 }} className="p-3 bg-[#161b22] border border-gray-700 rounded-lg flex items-center gap-3">
+                <Hash className="w-5 h-5 text-yellow-400" />
+                <div>
+                  <p className="text-lg font-bold">{new Set(repos?.map((r: Repository) => r.language).filter(Boolean)).size}</p>
+                  <p className="text-xs text-gray-500">Languages</p>
+                </div>
+              </motion.div>
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 2 * 0.05 }} className="p-3 bg-[#161b22] border border-gray-700 rounded-lg flex items-center gap-3">
+                <Activity className="w-5 h-5 text-green-400" />
+                <div>
+                  <p className="text-lg font-bold">{commits?.length || 0}</p>
+                  <p className="text-xs text-gray-500">Total Commits</p>
+                </div>
+              </motion.div>
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 3 * 0.05 }} className="p-3 bg-[#161b22] border border-gray-700 rounded-lg flex items-center gap-3">
+                <Star className="w-5 h-5 text-orange-400" />
+                <div>
+                  <p className="text-lg font-bold">{repos?.reduce((s: number, r: Repository) => s + (r.stars || 0), 0) || 0}</p>
+                  <p className="text-xs text-gray-500">Total Stars</p>
+                </div>
+              </motion.div>
+            </div>
+
             <div className="space-y-4">
               {(!repos || repos.length === 0) && !isLoading && (
                 <div className="p-8 bg-[#161b22] border border-gray-700 rounded-lg text-center">
@@ -245,9 +280,12 @@ export default function ReposLensPage() {
                   <p className="text-gray-400 text-sm">No repositories yet</p>
                 </div>
               )}
-              {repos?.map((repo: Repository) => (
-                <div
+              {repos?.map((repo: Repository, index: number) => (
+                <motion.div
                   key={repo.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05 }}
                   className="p-4 bg-[#161b22] border border-gray-700 rounded-lg hover:border-gray-500 transition-colors"
                 >
                   <div className="flex items-start justify-between">
@@ -292,7 +330,7 @@ export default function ReposLensPage() {
                       Star
                     </button>
                   </div>
-                </div>
+                </motion.div>
               ))}
             </div>
           </div>

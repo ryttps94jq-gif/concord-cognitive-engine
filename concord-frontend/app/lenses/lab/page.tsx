@@ -5,7 +5,8 @@ import { useMutation } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useState } from 'react';
-import { FlaskConical, Play, Square, History, Zap, Search, Plus, Trash2, CheckCircle, AlertTriangle, Lightbulb, Layers, ChevronDown } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { FlaskConical, Play, Square, History, Zap, Search, Plus, Trash2, CheckCircle, AlertTriangle, Lightbulb, Layers, ChevronDown, Microscope, Activity } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -80,6 +81,22 @@ export default function LabLensPage() {
         </div>
       </header>
 
+
+      {/* Stats Row */}
+      <div className="grid grid-cols-3 gap-4">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 }} className="panel p-3 flex items-center gap-3">
+          <FlaskConical className="w-5 h-5 text-neon-purple" />
+          <div><p className="text-lg font-bold">{experiments.length}</p><p className="text-xs text-gray-400">Experiments</p></div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Microscope className="w-5 h-5 text-neon-cyan" />
+          <div><p className="text-lg font-bold">{organs.length}</p><p className="text-xs text-gray-400">Equipment Count</p></div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="panel p-3 flex items-center gap-3">
+          <Activity className="w-5 h-5 text-neon-green" />
+          <div><p className="text-lg font-bold">{organs.filter((o: Record<string, unknown>) => o.active).length}</p><p className="text-xs text-gray-400">Active Today</p></div>
+        </motion.div>
+      </div>
 
       {/* AI Actions */}
       <UniversalActions domain="lab" artifactId={organItems[0]?.id} compact />
@@ -180,8 +197,8 @@ export default function LabLensPage() {
               No experiments yet. Run your first experiment!
             </p>
           ) : (
-            experiments?.map((exp: Record<string, unknown>) => (
-              <div key={exp.id as string} className="lens-card">
+            experiments?.map((exp: Record<string, unknown>, index: number) => (
+              <motion.div key={exp.id as string} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="lens-card">
                 <div className="flex items-center justify-between">
                   <span className="font-mono text-sm">{String(exp.organ)}</span>
                   <span className="text-xs text-gray-400">
@@ -191,7 +208,7 @@ export default function LabLensPage() {
                 <pre className="text-xs text-gray-300 mt-2 overflow-auto max-h-24">
                   {String(exp.result)}
                 </pre>
-              </div>
+              </motion.div>
             ))
           )}
         </div>

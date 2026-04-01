@@ -12,6 +12,7 @@
  */
 
 import { useState, useCallback, useMemo } from 'react';
+import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
@@ -23,7 +24,7 @@ import { LiveDTUFeed } from '@/components/live/LiveDTUFeed';
 import { cn } from '@/lib/utils';
 import {
   Database, Plus, RefreshCw, ChevronLeft, ChevronRight,
-  Search, Filter, Zap, LayoutGrid, List,
+  Search, Filter, Zap, LayoutGrid, List, Tag, Clock,
 } from 'lucide-react';
 
 const PAGE_SIZE = 20;
@@ -226,6 +227,31 @@ export default function DTUBrowserPage() {
         </div>
       </header>
 
+      {/* Stats Row */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4">
+        <div className="grid grid-cols-4 gap-4">
+          <div className="p-3 bg-lattice-surface rounded-lg border border-lattice-border flex items-center gap-3">
+            <Database className="w-5 h-5 text-neon-blue" />
+            <div><p className="text-lg font-bold">{total}</p><p className="text-xs text-gray-400">Total DTUs</p></div>
+          </div>
+          <div className="p-3 bg-lattice-surface rounded-lg border border-lattice-border flex items-center gap-3">
+            <Tag className="w-5 h-5 text-neon-purple" />
+            <div>
+              <p className="text-lg font-bold">{dtus.filter(d => d.tier === 'mega' || d.tier === 'hyper').length}</p>
+              <p className="text-xs text-gray-400">Mega/Hyper</p>
+            </div>
+          </div>
+          <div className="p-3 bg-lattice-surface rounded-lg border border-lattice-border flex items-center gap-3">
+            <Zap className="w-5 h-5 text-neon-cyan" />
+            <div><p className="text-lg font-bold">{dtus.filter(d => d.tier === 'regular').length}</p><p className="text-xs text-gray-400">Regular</p></div>
+          </div>
+          <div className="p-3 bg-lattice-surface rounded-lg border border-lattice-border flex items-center gap-3">
+            <Clock className="w-5 h-5 text-gray-400" />
+            <div><p className="text-lg font-bold">{dtus.filter(d => d.tier === 'shadow').length}</p><p className="text-xs text-gray-400">Shadow</p></div>
+          </div>
+        </div>
+      </div>
+
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         <div className={cn('flex gap-6', showFeed ? '' : '')}>
@@ -253,9 +279,12 @@ export default function DTUBrowserPage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {dtus.map(dtu => (
-                  <button
+                {dtus.map((dtu, index) => (
+                  <motion.button
                     key={dtu.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.05 }}
                     onClick={() => setSelectedDtuId(dtu.id)}
                     className={cn(
                       'text-left p-4 rounded-xl border transition-all hover:border-neon-cyan/50',
@@ -290,7 +319,7 @@ export default function DTUBrowserPage() {
                         <span>#{dtu.tags[0]}</span>
                       )}
                     </div>
-                  </button>
+                  </motion.button>
                 ))}
                 {isLoading && (
                   <div className="col-span-full text-center py-8">

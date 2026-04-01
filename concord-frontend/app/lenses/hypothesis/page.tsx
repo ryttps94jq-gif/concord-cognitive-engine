@@ -4,11 +4,12 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useState, useEffect, useMemo } from 'react';
+import { motion } from 'framer-motion';
 import { useLensBridge } from '@/lib/hooks/use-lens-bridge';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   FlaskConical, Plus, CheckCircle2, XCircle, Beaker,
-  FileText, TrendingUp, ArrowRight, Layers, ChevronDown
+  FileText, TrendingUp, ArrowRight, Layers, ChevronDown, Target, Percent,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -149,26 +150,26 @@ export default function HypothesisLensPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="lens-card">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 }} className="lens-card">
           <FlaskConical className="w-5 h-5 text-neon-purple mb-2" />
-          <p className="text-2xl font-bold">{hypotheses.length}</p>
-          <p className="text-sm text-gray-400">Hypotheses</p>
-        </div>
-        <div className="lens-card">
+          <p className="text-2xl font-bold">{hypotheses.filter(h => h.status === 'pending' || h.status === 'testing').length}</p>
+          <p className="text-sm text-gray-400">Active</p>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="lens-card">
+          <Target className="w-5 h-5 text-neon-cyan mb-2" />
+          <p className="text-2xl font-bold">{status.experiments || 0}</p>
+          <p className="text-sm text-gray-400">Tested</p>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="lens-card">
           <CheckCircle2 className="w-5 h-5 text-neon-green mb-2" />
           <p className="text-2xl font-bold">{status.confirmed || 0}</p>
           <p className="text-sm text-gray-400">Confirmed</p>
-        </div>
-        <div className="lens-card">
-          <XCircle className="w-5 h-5 text-red-400 mb-2" />
-          <p className="text-2xl font-bold">{status.refuted || 0}</p>
-          <p className="text-sm text-gray-400">Refuted</p>
-        </div>
-        <div className="lens-card">
-          <Beaker className="w-5 h-5 text-neon-cyan mb-2" />
-          <p className="text-2xl font-bold">{status.experiments || 0}</p>
-          <p className="text-sm text-gray-400">Experiments</p>
-        </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="lens-card">
+          <Percent className="w-5 h-5 text-yellow-400 mb-2" />
+          <p className="text-2xl font-bold">{hypotheses.length > 0 ? (((status.confirmed || 0) / hypotheses.length) * 100).toFixed(0) : 0}%</p>
+          <p className="text-sm text-gray-400">Confirmed Rate</p>
+        </motion.div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -207,9 +208,12 @@ export default function HypothesisLensPage() {
               {hypotheses.length === 0 && (
                 <p className="text-sm text-gray-500 text-center py-4">No hypotheses yet. Create one above to get started.</p>
               )}
-              {hypotheses.map((h) => (
-                <button
+              {hypotheses.map((h, index) => (
+                <motion.button
                   key={h.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05 }}
                   onClick={() => setSelectedId(h.id)}
                   className={`w-full text-left lens-card ${
                     selectedId === h.id ? 'border-neon-cyan' : ''
@@ -226,7 +230,7 @@ export default function HypothesisLensPage() {
                       {h.status || 'pending'}
                     </span>
                   </div>
-                </button>
+                </motion.button>
               ))}
             </div>
           </div>

@@ -5,7 +5,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
 import { useState } from 'react';
-import { Plug, Webhook, Zap, Code, FileText, Plus, Trash2, Play, ToggleLeft, ToggleRight, Layers, ChevronDown } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Plug, Webhook, Zap, Code, FileText, Plus, Trash2, Play, ToggleLeft, ToggleRight, Layers, ChevronDown, Link, AlertCircle } from 'lucide-react';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -119,6 +120,26 @@ export default function IntegrationsLensPage() {
         </button>
       </header>
 
+      {/* Stats Row */}
+      <div className="grid grid-cols-4 gap-4">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 }} className="panel p-3 flex items-center gap-3">
+          <Link className="w-5 h-5 text-neon-green" />
+          <div><p className="text-lg font-bold">{integrations?.integrations?.length || 0}</p><p className="text-xs text-gray-400">Connected</p></div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Zap className="w-5 h-5 text-neon-cyan" />
+          <div><p className="text-lg font-bold">{automations?.automations?.length || 0}</p><p className="text-xs text-gray-400">Active Syncs</p></div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="panel p-3 flex items-center gap-3">
+          <Webhook className="w-5 h-5 text-neon-purple" />
+          <div><p className="text-lg font-bold">{webhooks?.count || 0}</p><p className="text-xs text-gray-400">Webhooks</p></div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="panel p-3 flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-red-400" />
+          <div><p className="text-lg font-bold">{realtimeAlerts.length}</p><p className="text-xs text-gray-400">Error Count</p></div>
+        </motion.div>
+      </div>
+
       {/* Tabs */}
       <div className="flex gap-2 border-b border-lattice-border">
         {[
@@ -151,8 +172,8 @@ export default function IntegrationsLensPage() {
           {webhooks?.webhooks?.length === 0 ? (
             <EmptyState icon={<Webhook />} message="No webhooks configured" />
           ) : (
-            webhooks?.webhooks?.map((wh: Record<string, unknown>) => (
-              <div key={wh.id as string} className="panel p-4 flex items-center justify-between">
+            webhooks?.webhooks?.map((wh: Record<string, unknown>, index: number) => (
+              <motion.div key={wh.id as string} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="panel p-4 flex items-center justify-between">
                 <div>
                   <h3 className="font-semibold">{String(wh.name)}</h3>
                   <p className="text-xs text-gray-400 truncate max-w-md">{String(wh.url)}</p>
@@ -179,7 +200,7 @@ export default function IntegrationsLensPage() {
                     <Trash2 className="w-5 h-5" />
                   </button>
                 </div>
-              </div>
+              </motion.div>
             ))
           )}
         </div>

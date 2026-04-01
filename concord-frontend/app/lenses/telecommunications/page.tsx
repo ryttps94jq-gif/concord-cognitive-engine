@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -12,7 +13,7 @@ import {
   Radio, Plus, Search, Trash2, BarChart3,
   Layers, ChevronDown, MapPin, Users,
   Wifi, Signal, Globe, Server, Cable,
-  Eye, AlertTriangle, Activity, Zap,
+  Eye, AlertTriangle, Activity, Zap, Gauge, Antenna,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -167,6 +168,30 @@ export default function TelecommunicationsLensPage() {
         </button>
       </div>
 
+      {/* Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="p-3 bg-zinc-900 rounded-lg border border-zinc-800">
+          <div className="flex items-center gap-2 mb-1"><Antenna className="w-4 h-4 text-violet-400" /></div>
+          <p className="text-2xl font-bold text-violet-400">{stats.totalNetworks + stats.totalTowers}</p>
+          <p className="text-xs text-gray-400">Connections</p>
+        </div>
+        <div className="p-3 bg-zinc-900 rounded-lg border border-zinc-800">
+          <div className="flex items-center gap-2 mb-1"><Gauge className="w-4 h-4 text-cyan-400" /></div>
+          <p className="text-2xl font-bold text-cyan-400">{networks.length > 0 ? (networks.reduce((s, n) => s + ((n.data as NetworkData).loadPercent || 0), 0) / networks.length).toFixed(0) : 0}%</p>
+          <p className="text-xs text-gray-400">Bandwidth Utilization</p>
+        </div>
+        <div className="p-3 bg-zinc-900 rounded-lg border border-zinc-800">
+          <div className="flex items-center gap-2 mb-1"><Activity className="w-4 h-4 text-green-400" /></div>
+          <p className="text-2xl font-bold text-green-400">{networks.length > 0 ? (networks.reduce((s, n) => s + ((n.data as NetworkData).uptime || 0), 0) / networks.length).toFixed(1) : 0}%</p>
+          <p className="text-xs text-gray-400">Uptime</p>
+        </div>
+        <div className="p-3 bg-zinc-900 rounded-lg border border-zinc-800">
+          <div className="flex items-center gap-2 mb-1"><AlertTriangle className="w-4 h-4 text-red-400" /></div>
+          <p className="text-2xl font-bold text-red-400">{stats.activeOutages}</p>
+          <p className="text-xs text-gray-400">Active Outages</p>
+        </div>
+      </div>
+
       {activeMode === 'Dashboard' && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
@@ -184,8 +209,8 @@ export default function TelecommunicationsLensPage() {
       )}
 
       <div className="space-y-2">
-        {items.map(item => (
-          <div key={item.id} className="p-4 bg-zinc-900 rounded-lg border border-zinc-800 hover:border-zinc-700 transition-colors">
+        {items.map((item, index) => (
+          <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="p-4 bg-zinc-900 rounded-lg border border-zinc-800 hover:border-zinc-700 transition-colors">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <h3 className="text-sm font-semibold text-white">{item.title}</h3>
@@ -199,7 +224,7 @@ export default function TelecommunicationsLensPage() {
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
             </div>
-          </div>
+          </motion.div>
         ))}
         {items.length === 0 && (
           <div className="text-center py-12 text-gray-500">

@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
-import { AlertTriangle, Heart, Brain, Zap, TrendingDown, Shield, Layers, ChevronDown } from 'lucide-react';
+import { AlertTriangle, Heart, Brain, Zap, TrendingDown, Shield, Layers, ChevronDown, Activity, Compass } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -103,8 +104,18 @@ export default function SufferingLensPage() {
 
       {/* AI Actions */}
       <UniversalActions domain="suffering" artifactId={undefined} compact />
+
+      {/* Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="lens-card"><Activity className="w-5 h-5 text-neon-cyan mb-2" /><p className="text-2xl font-bold">{wellbeingItems.length}</p><p className="text-sm text-gray-400">Tracked Items</p></div>
+        <div className="lens-card"><Compass className="w-5 h-5 text-neon-green mb-2" /><p className="text-2xl font-bold">6</p><p className="text-sm text-gray-400">Coping Strategies</p></div>
+        <div className="lens-card"><TrendingDown className="w-5 h-5 text-neon-purple mb-2" /><p className="text-2xl font-bold">{healthScore.toFixed(0)}%</p><p className="text-sm text-gray-400">Progress Score</p></div>
+        <div className="lens-card"><Heart className="w-5 h-5 text-pink-400 mb-2" /><p className="text-2xl font-bold">{(metrics.coherenceScore * 100).toFixed(0)}%</p><p className="text-sm text-gray-400">Coherence</p></div>
+      </div>
+
       {/* Main Metrics */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 * 0.05 }}>
         <MetricCard
           icon={<AlertTriangle className="w-5 h-5" />}
           label="Suffering"
@@ -112,6 +123,8 @@ export default function SufferingLensPage() {
           color="pink"
           description="Pain signal from contradictions"
         />
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1 * 0.05 }}>
         <MetricCard
           icon={<Heart className="w-5 h-5" />}
           label="Homeostasis"
@@ -119,6 +132,8 @@ export default function SufferingLensPage() {
           color="green"
           description="System balance state"
         />
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 2 * 0.05 }}>
         <MetricCard
           icon={<Brain className="w-5 h-5" />}
           label="Coherence"
@@ -126,6 +141,8 @@ export default function SufferingLensPage() {
           color="cyan"
           description="Logical consistency"
         />
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 3 * 0.05 }}>
         <MetricCard
           icon={<Zap className="w-5 h-5" />}
           label="Contradiction Load"
@@ -133,6 +150,8 @@ export default function SufferingLensPage() {
           color="purple"
           description="Unresolved conflicts"
         />
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 4 * 0.05 }}>
         <MetricCard
           icon={<TrendingDown className="w-5 h-5" />}
           label="Functional Decline"
@@ -140,6 +159,8 @@ export default function SufferingLensPage() {
           color="pink"
           description="Capability degradation"
         />
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 5 * 0.05 }}>
         <MetricCard
           icon={<Shield className="w-5 h-5" />}
           label="Stress Accumulation"
@@ -147,6 +168,7 @@ export default function SufferingLensPage() {
           color="blue"
           description="Unprocessed stress"
         />
+        </motion.div>
       </div>
 
       {/* Suffering Gauge */}

@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useMemo, useCallback } from 'react';
+import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   Baby, Plus, Search, Trash2, Calendar, Heart,
-  Star, Clock, Users, BookOpen, Layers, ChevronDown,
+  Star, Clock, Users, BookOpen, Layers, ChevronDown, Milestone, NotebookPen,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -124,10 +125,11 @@ export default function ParentingLensPage() {
         </div>
       )}
 
+      {/* Stats Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="lens-card"><Star className="w-5 h-5 text-pink-400 mb-2" /><p className="text-2xl font-bold">{stats.total}</p><p className="text-sm text-gray-400">Milestones</p></div>
-        <div className="lens-card"><Users className="w-5 h-5 text-neon-cyan mb-2" /><p className="text-2xl font-bold">{stats.children}</p><p className="text-sm text-gray-400">Children</p></div>
-        <div className="lens-card"><Calendar className="w-5 h-5 text-neon-green mb-2" /><p className="text-2xl font-bold">{stats.thisMonth}</p><p className="text-sm text-gray-400">This Month</p></div>
+        <div className="lens-card"><Milestone className="w-5 h-5 text-pink-400 mb-2" /><p className="text-2xl font-bold">{stats.total}</p><p className="text-sm text-gray-400">Milestones Tracked</p></div>
+        <div className="lens-card"><Clock className="w-5 h-5 text-neon-cyan mb-2" /><p className="text-2xl font-bold">{stats.thisMonth}</p><p className="text-sm text-gray-400">Routines</p></div>
+        <div className="lens-card"><NotebookPen className="w-5 h-5 text-neon-green mb-2" /><p className="text-2xl font-bold">{stats.children}</p><p className="text-sm text-gray-400">Resources Saved</p></div>
         <div className="lens-card"><Heart className="w-5 h-5 text-red-400 mb-2" /><p className="text-2xl font-bold">{stats.categories}</p><p className="text-sm text-gray-400">Categories</p></div>
       </div>
 
@@ -141,8 +143,8 @@ export default function ParentingLensPage() {
           <div className="panel p-6 text-center text-gray-400">Loading milestones...</div>
         ) : milestones.length === 0 ? (
           <div className="panel p-6 text-center text-gray-400">No milestones recorded yet.</div>
-        ) : milestones.map(m => (
-          <div key={m.id} className="panel p-4 flex items-center justify-between">
+        ) : milestones.map((m, index) => (
+          <motion.div key={m.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="panel p-4 flex items-center justify-between">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 mb-1">
                 <h3 className="font-semibold text-white truncate">{m.title}</h3>
@@ -154,7 +156,7 @@ export default function ParentingLensPage() {
               </div>
             </div>
             <button onClick={() => remove(m.id)} className="text-gray-500 hover:text-red-400 p-1"><Trash2 className="w-4 h-4" /></button>
-          </div>
+          </motion.div>
         ))}
       </div>
 

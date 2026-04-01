@@ -8,8 +8,9 @@ import { MarketEmpireListing } from '@/components/market/MarketEmpireListing';
 import {
   Store, TrendingUp, Package, Coins, Search, Filter, X,
   ShoppingCart, Tag, ArrowUpRight, ArrowDownRight,
-  RefreshCw, Layers, ChevronDown,
+  RefreshCw, Layers, ChevronDown, DollarSign, BarChart3,
 } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -284,6 +285,38 @@ export default function MarketLensPage() {
         </div>
       )}
 
+      {/* Quick Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Store className="w-5 h-5 text-neon-green" />
+          <div>
+            <p className="text-lg font-bold">{totalListings}</p>
+            <p className="text-xs text-gray-500">Listings</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <DollarSign className="w-5 h-5 text-neon-cyan" />
+          <div>
+            <p className="text-lg font-bold">{totalVolume} CC</p>
+            <p className="text-xs text-gray-500">Volume</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 2 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <BarChart3 className="w-5 h-5 text-neon-purple" />
+          <div>
+            <p className="text-lg font-bold">{totalTransactions}</p>
+            <p className="text-xs text-gray-500">Transactions</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 3 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <TrendingUp className="w-5 h-5 text-neon-blue" />
+          <div>
+            <p className="text-lg font-bold">{filteredListings.length > 0 ? `${((filteredListings.reduce((a, l) => a + (l.price || 0), 0) / filteredListings.length) || 0).toFixed(0)} CC` : '--'}</p>
+            <p className="text-xs text-gray-500">Avg Price</p>
+          </div>
+        </motion.div>
+      </div>
+
       {/* Market Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard icon={<Store className="w-5 h-5" />} label="Active Listings" value={totalListings} trend={totalListings > 0 ? '+' : undefined} />
@@ -381,8 +414,8 @@ export default function MarketLensPage() {
               )}
             </div>
           ) : (
-            filteredListings.map((listing: MarketListingItem) => (
-              <div key={listing.id} className="relative">
+            filteredListings.map((listing: MarketListingItem, index: number) => (
+              <motion.div key={listing.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="relative">
                 {purchasingId === listing.id && (
                   <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40 rounded-xl backdrop-blur-sm">
                     <div className="w-6 h-6 border-2 border-neon-purple border-t-transparent rounded-full animate-spin" />
@@ -392,7 +425,7 @@ export default function MarketLensPage() {
                   listing={listing}
                   onPurchase={() => handlePurchase(listing)}
                 />
-              </div>
+              </motion.div>
             ))
           )}
         </div>

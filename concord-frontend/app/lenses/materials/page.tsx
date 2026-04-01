@@ -3,8 +3,9 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
-import { useState } from 'react';
-import { Box, Layers, Plus, Trash2, Search, ChevronDown, Thermometer, Zap, Shield } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { motion } from 'framer-motion';
+import { Box, Layers, Plus, Trash2, Search, ChevronDown, Thermometer, Zap, Shield, FlaskConical, Microscope } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -104,6 +105,16 @@ export default function MaterialsLensPage() {
       <UniversalActions domain="materials" artifactId={undefined} compact />
       <DTUExportButton domain="materials" data={{}} compact />
 
+      {/* Stats Row */}
+      {(() => { const cats = [...new Set(materials.map(m => m.category).filter(Boolean))]; const withTests = materials.filter(m => m.tensileStrength > 0 || m.density > 0 || m.meltingPoint > 0).length; const propTypes = ['density', 'tensileStrength', 'thermalConductivity', 'meltingPoint', 'youngsModulus'].filter(p => materials.some(m => (m as unknown as Record<string, number>)[p] > 0)).length; return (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="panel p-3"><Box className="w-5 h-5 text-zinc-300 mb-2" /><p className="text-2xl font-bold">{materials.length}</p><p className="text-sm text-gray-400">Catalog Size</p></div>
+          <div className="panel p-3"><FlaskConical className="w-5 h-5 text-blue-400 mb-2" /><p className="text-2xl font-bold">{withTests}</p><p className="text-sm text-gray-400">Test Count</p></div>
+          <div className="panel p-3"><Microscope className="w-5 h-5 text-green-400 mb-2" /><p className="text-2xl font-bold">{propTypes}</p><p className="text-sm text-gray-400">Property Types</p></div>
+          <div className="panel p-3"><Layers className="w-5 h-5 text-purple-400 mb-2" /><p className="text-2xl font-bold">{cats.length}</p><p className="text-sm text-gray-400">Categories</p></div>
+        </div>
+      ); })()}
+
       {/* Tabs */}
       <div className="flex gap-2 border-b border-white/10 pb-2">
         {(['library', 'compare', 'properties'] as const).map(tab => (
@@ -147,8 +158,8 @@ export default function MaterialsLensPage() {
             {filtered.length === 0 ? (
               <p className="text-gray-500 text-sm text-center py-4">No materials found.</p>
             ) : (
-              filtered.map(mat => (
-                <div key={mat.id} className="panel p-4 flex items-center justify-between">
+              filtered.map((mat, index) => (
+                <motion.div key={mat.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="panel p-4 flex items-center justify-between">
                   <div>
                     <div className="flex items-center gap-2">
                       <Box className="w-4 h-4 text-zinc-300" />
@@ -162,7 +173,7 @@ export default function MaterialsLensPage() {
                     </div>
                   </div>
                   <button onClick={() => remove(mat.id)} className="text-gray-500 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
-                </div>
+                </motion.div>
               ))
             )}
           </div>

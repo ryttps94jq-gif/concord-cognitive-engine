@@ -1,5 +1,6 @@
 'use client';
 
+import { motion } from 'framer-motion';
 import { useState, useMemo, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
@@ -1126,6 +1127,24 @@ export default function HealthcareLensPage() {
       </header>
 
 
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Patients', value: items.filter(i => (i.data as unknown as HealthcareArtifact).type === 'patient').length || items.length, icon: Users },
+          { label: 'Appointments', value: items.filter(i => (i.data as unknown as HealthcareArtifact).type === 'appointment').length, icon: Calendar },
+          { label: 'Vitals Tracked', value: items.filter(i => (i.data as unknown as HealthcareArtifact).type === 'vitals').length, icon: Activity },
+          { label: 'Active', value: items.filter(i => i.meta?.status === 'active').length, icon: Heart },
+        ].map((stat) => (
+          <div key={stat.label} className={ds.panel + ' flex items-center gap-3 p-3'}>
+            <stat.icon className="w-5 h-5 text-blue-400 shrink-0" />
+            <div>
+              <p className="text-xs text-gray-400">{stat.label}</p>
+              <p className="text-lg font-bold text-white">{stat.value}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* AI Actions */}
       <UniversalActions domain="healthcare" artifactId={items[0]?.id} compact />
       <RealtimeDataPanel domain="healthcare" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
@@ -1379,8 +1398,8 @@ export default function HealthcareLensPage() {
               {/* ---- Patients Tab ---- */}
               {activeTab === 'Patients' && patientViewMode === 'timeline' && (
                 <div className="space-y-0">
-                  {filtered.map(item => (
-                    <div key={item.id} className="mb-4">
+                  {filtered.map((item, index) => (
+                    <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="mb-4">
                       <div
                         className={cn(ds.panelHover, 'mb-2')}
                         onClick={() => openDetailDrawer(item)}
@@ -1413,7 +1432,7 @@ export default function HealthcareLensPage() {
                           </p>
                         )}
                       </div>
-                    </div>
+                    </motion.div>
                   ))}
                 </div>
               )}

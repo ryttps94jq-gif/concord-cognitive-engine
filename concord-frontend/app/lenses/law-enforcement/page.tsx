@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -12,7 +13,7 @@ import {
   Shield, Plus, Search, Trash2, BarChart3,
   Layers, ChevronDown, MapPin, Users,
   Siren, FileText, Scale, BadgeCheck,
-  Eye, AlertTriangle, Clock, Target,
+  Eye, AlertTriangle, Clock, Target, Fingerprint, Gavel,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -177,6 +178,30 @@ export default function LawEnforcementLensPage() {
         </button>
       </div>
 
+      {/* Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="p-3 bg-zinc-900 rounded-lg border border-zinc-800">
+          <div className="flex items-center gap-2 mb-1"><Fingerprint className="w-4 h-4 text-blue-400" /></div>
+          <p className="text-2xl font-bold text-blue-400">{stats.openCases}</p>
+          <p className="text-xs text-gray-400">Active Cases</p>
+        </div>
+        <div className="p-3 bg-zinc-900 rounded-lg border border-zinc-800">
+          <div className="flex items-center gap-2 mb-1"><BadgeCheck className="w-4 h-4 text-green-400" /></div>
+          <p className="text-2xl font-bold text-green-400">{stats.onDuty}</p>
+          <p className="text-xs text-gray-400">Officers Assigned</p>
+        </div>
+        <div className="p-3 bg-zinc-900 rounded-lg border border-zinc-800">
+          <div className="flex items-center gap-2 mb-1"><Siren className="w-4 h-4 text-red-400" /></div>
+          <p className="text-2xl font-bold text-red-400">{stats.activeIncidents}</p>
+          <p className="text-xs text-gray-400">Active Incidents</p>
+        </div>
+        <div className="p-3 bg-zinc-900 rounded-lg border border-zinc-800">
+          <div className="flex items-center gap-2 mb-1"><Gavel className="w-4 h-4 text-yellow-400" /></div>
+          <p className="text-2xl font-bold text-yellow-400">{cases.filter(c => (c.data as CaseData).priority === 'critical' || (c.data as CaseData).priority === 'high').length}</p>
+          <p className="text-xs text-gray-400">High Priority</p>
+        </div>
+      </div>
+
       {activeMode === 'Dashboard' && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
@@ -194,8 +219,8 @@ export default function LawEnforcementLensPage() {
       )}
 
       <div className="space-y-2">
-        {items.map(item => (
-          <div key={item.id} className="p-4 bg-zinc-900 rounded-lg border border-zinc-800 hover:border-zinc-700 transition-colors">
+        {items.map((item, index) => (
+          <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="p-4 bg-zinc-900 rounded-lg border border-zinc-800 hover:border-zinc-700 transition-colors">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <h3 className="text-sm font-semibold text-white">{item.title}</h3>
@@ -217,7 +242,7 @@ export default function LawEnforcementLensPage() {
             {!!(item.data as Record<string, unknown>).description && (
               <p className="text-xs text-gray-500 mt-2">{String((item.data as Record<string, unknown>).description)}</p>
             )}
-          </div>
+          </motion.div>
         ))}
         {items.length === 0 && (
           <div className="text-center py-12 text-gray-500">

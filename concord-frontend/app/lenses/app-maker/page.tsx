@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Boxes, Plus, CheckCircle, ArrowUp, Layers, ChevronDown, Rocket, Layout, ShoppingCart, Briefcase, UserCircle } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Boxes, Plus, CheckCircle, ArrowUp, Layers, ChevronDown, Rocket, Layout, ShoppingCart, Briefcase, UserCircle, Star, TrendingUp } from 'lucide-react';
 import { apiHelpers } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -147,6 +148,31 @@ export default function AppMakerLens() {
         Compose apps from existing primitives. Artifact + Execution + Governance + Custom UI.
       </p>
 
+      {/* Stats Row */}
+      <div className="grid grid-cols-3 gap-4">
+        <div className="panel p-3 flex items-center gap-3">
+          <Boxes className="w-5 h-5 text-neon-cyan" />
+          <div>
+            <p className="text-lg font-bold">{apps.length}</p>
+            <p className="text-xs text-gray-400">Total Apps</p>
+          </div>
+        </div>
+        <div className="panel p-3 flex items-center gap-3">
+          <Star className="w-5 h-5 text-yellow-400" />
+          <div>
+            <p className="text-lg font-bold">{apps.filter(a => a.status === 'published' || a.status === 'marketplace' || a.status === 'global').length}</p>
+            <p className="text-xs text-gray-400">Published</p>
+          </div>
+        </div>
+        <div className="panel p-3 flex items-center gap-3">
+          <TrendingUp className="w-5 h-5 text-green-400" />
+          <div>
+            <p className="text-lg font-bold">{apps.length > 0 ? (apps.filter(a => a.version !== '0.0.1').length / apps.length * 100).toFixed(0) + '%' : '0%'}</p>
+            <p className="text-xs text-gray-400">Avg Maturity</p>
+          </div>
+        </div>
+      </div>
+
       {/* Create App */}
       <div className="panel p-4 flex items-center gap-3">
         <input
@@ -176,8 +202,8 @@ export default function AppMakerLens() {
           <p className="text-sm text-gray-500">No apps yet. Create your first one above.</p>
         ) : (
           <div className="space-y-3">
-            {apps.map((app) => (
-              <div key={app.id} className="bg-lattice-deep rounded p-3 flex items-center justify-between">
+            {apps.map((app, index) => (
+              <motion.div key={app.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="bg-lattice-deep rounded p-3 flex items-center justify-between">
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-sm">{app.name}</span>
@@ -204,7 +230,7 @@ export default function AppMakerLens() {
                     <ArrowUp className="w-3 h-3" />
                   </button>
                 </div>
-              </div>
+              </motion.div>
             ))}
           </div>
         )}

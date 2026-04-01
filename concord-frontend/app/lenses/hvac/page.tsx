@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -11,7 +12,7 @@ import {
   Thermometer, Wrench, ClipboardList, DollarSign, Camera, Users,
   Plus, Search, X, Trash2, BarChart3, CheckCircle2,
   AlertTriangle, FileText, Shield, Award, Calculator,
-  Layers, ChevronDown, Receipt,
+  Layers, ChevronDown, Receipt, Fan, Gauge,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -174,9 +175,9 @@ export default function HVACLensPage() {
       </div>
       {isLoading ? <div className="flex items-center justify-center py-12"><div className="w-6 h-6 border-2 border-sky-400 border-t-transparent rounded-full animate-spin" /></div>
       : filtered.length === 0 ? <div className={cn(ds.panel, 'text-center py-12')}><Thermometer className="w-12 h-12 text-gray-600 mx-auto mb-3" /><p className={ds.textMuted}>No {activeArtifactType} items yet</p><button onClick={openCreate} className={cn(ds.btnPrimary, 'mt-3')}><Plus className="w-4 h-4" /> Create First</button></div>
-      : filtered.map(item => {
+      : filtered.map((item, index) => {
         const d = item.data as unknown as TradeArtifact; const sc = STATUS_CONFIG[d.status] || STATUS_CONFIG.pending;
-        return (<div key={item.id} className={ds.panelHover} onClick={() => openEdit(item)}><div className="flex items-center justify-between"><div className="flex items-center gap-3"><Thermometer className="w-5 h-5 text-neon-cyan" /><div><p className="text-white font-medium">{d.name || item.title}</p><p className={ds.textMuted}>{d.client || ''} {d.address ? `- ${d.address}` : ''}</p></div></div><div className="flex items-center gap-2">{(d.totalCost || d.amount) && <span className="text-xs text-green-400">${(d.totalCost || d.amount || 0).toLocaleString()}</span>}<span className={`text-xs px-2 py-0.5 rounded-full bg-${sc.color}/20 text-${sc.color}`}>{sc.label}</span><button onClick={e => { e.stopPropagation(); remove(item.id); }} className={ds.btnGhost}><Trash2 className="w-4 h-4 text-red-400" /></button></div></div></div>);
+        return (<motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className={ds.panelHover} onClick={() => openEdit(item)}><div className="flex items-center justify-between"><div className="flex items-center gap-3"><Thermometer className="w-5 h-5 text-neon-cyan" /><div><p className="text-white font-medium">{d.name || item.title}</p><p className={ds.textMuted}>{d.client || ''} {d.address ? `- ${d.address}` : ''}</p></div></div><div className="flex items-center gap-2">{(d.totalCost || d.amount) && <span className="text-xs text-green-400">${(d.totalCost || d.amount || 0).toLocaleString()}</span>}<span className={`text-xs px-2 py-0.5 rounded-full bg-${sc.color}/20 text-${sc.color}`}>{sc.label}</span><button onClick={e => { e.stopPropagation(); remove(item.id); }} className={ds.btnGhost}><Trash2 className="w-4 h-4 text-red-400" /></button></div></div></motion.div>);
       })}
     </div>
   );
@@ -191,6 +192,32 @@ export default function HVACLensPage() {
         <div className="flex items-center gap-2"><DTUExportButton domain="hvac" data={{}} compact /><button onClick={() => setShowDashboard(!showDashboard)} className={cn(showDashboard ? ds.btnPrimary : ds.btnSecondary)}><BarChart3 className="w-4 h-4" /> Dashboard</button></div>
       </header>
       <RealtimeDataPanel domain="hvac" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
+
+      {/* Stats Row */}
+      {(() => {
+        const allItems = items.map(i => i.data as unknown as TradeArtifact);
+        const systemCount = allItems.length;
+        const maintenanceDue = allItems.filter(j => j.status === 'scheduled' || j.status === 'pending').length;
+        const completedCount = allItems.filter(j => j.status === 'completed' || j.status === 'paid').length;
+        const efficiencyAvg = systemCount > 0 ? ((completedCount / systemCount) * 100).toFixed(0) : '0';
+        return (
+          <div className="grid grid-cols-3 gap-4">
+            <div className="p-3 bg-lattice-elevated rounded-lg border border-lattice-border flex items-center gap-3">
+              <Fan className="w-5 h-5 text-cyan-400" />
+              <div><p className="text-lg font-bold text-white">{systemCount}</p><p className="text-xs text-gray-400">Systems</p></div>
+            </div>
+            <div className="p-3 bg-lattice-elevated rounded-lg border border-lattice-border flex items-center gap-3">
+              <Wrench className="w-5 h-5 text-yellow-400" />
+              <div><p className="text-lg font-bold text-white">{maintenanceDue}</p><p className="text-xs text-gray-400">Maintenance Due</p></div>
+            </div>
+            <div className="p-3 bg-lattice-elevated rounded-lg border border-lattice-border flex items-center gap-3">
+              <Gauge className="w-5 h-5 text-green-400" />
+              <div><p className="text-lg font-bold text-white">{efficiencyAvg}%</p><p className="text-xs text-gray-400">Efficiency Avg</p></div>
+            </div>
+          </div>
+        );
+      })()}
+
       <UniversalActions domain="hvac" artifactId={items[0]?.id} compact />
       <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 overflow-x-auto">{MODE_TABS.map(tab => (<button key={tab.id} onClick={() => { setActiveTab(tab.id); setShowDashboard(false); }} className={cn('flex items-center gap-2 px-4 py-2 rounded-lg transition-colors whitespace-nowrap', activeTab === tab.id && !showDashboard ? 'bg-neon-blue/20 text-neon-blue' : 'text-gray-400 hover:text-white hover:bg-lattice-elevated')}><tab.icon className="w-4 h-4" />{tab.label}</button>))}</nav>
       {showDashboard ? renderDashboard() : renderLibrary()}

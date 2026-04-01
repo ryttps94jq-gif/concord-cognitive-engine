@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
-import { Clock, Target, TrendingUp, Calendar, Milestone, Rocket, Loader2, Layers, ChevronDown, Database, Server, HardDrive, Cloud, RefreshCw } from 'lucide-react';
+import { Clock, Target, TrendingUp, Calendar, Milestone, Rocket, Loader2, Layers, ChevronDown, Database, Server, HardDrive, Cloud, RefreshCw, Archive, GitMerge } from 'lucide-react';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
@@ -87,6 +88,31 @@ export default function LegacyLensPage() {
 
       {/* AI Actions */}
       <UniversalActions domain="legacy" artifactId={milestoneItems[0]?.id} compact />
+
+      {/* Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="lens-card">
+          <Archive className="w-5 h-5 text-neon-purple mb-2" />
+          <p className="text-2xl font-bold">{milestoneItems.length}</p>
+          <p className="text-sm text-gray-400">Legacy Items</p>
+        </div>
+        <div className="lens-card">
+          <GitMerge className="w-5 h-5 text-neon-cyan mb-2" />
+          <p className="text-2xl font-bold">58%</p>
+          <p className="text-sm text-gray-400">Migration Status</p>
+        </div>
+        <div className="lens-card">
+          <RefreshCw className="w-5 h-5 text-neon-green mb-2" />
+          <p className="text-2xl font-bold">{milestones.filter(m => m.confidence > 0.7).length}/{milestones.length || 1}</p>
+          <p className="text-sm text-gray-400">Compatibility Score</p>
+        </div>
+        <div className="lens-card">
+          <TrendingUp className="w-5 h-5 text-yellow-400 mb-2" />
+          <p className="text-2xl font-bold">{milestones.length > 0 ? (milestones.reduce((s, m) => s + m.confidence, 0) / milestones.length * 100).toFixed(0) : 0}%</p>
+          <p className="text-sm text-gray-400">Avg Confidence</p>
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="lens-card">
           <Clock className="w-5 h-5 text-neon-purple mb-2" />
@@ -119,8 +145,8 @@ export default function LegacyLensPage() {
         <div className="relative">
           <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-lattice-border" />
           <div className="space-y-6">
-            {milestones.map((milestone) => (
-              <div key={milestone.year} className="relative flex gap-4 pl-10">
+            {milestones.map((milestone, index) => (
+              <motion.div key={milestone.year} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="relative flex gap-4 pl-10">
                 <div
                   className={`absolute left-2.5 w-3 h-3 rounded-full border-2 ${
                     milestone.status === 'completed'
@@ -162,7 +188,7 @@ export default function LegacyLensPage() {
                     </span>
                   </div>
                 </div>
-              </div>
+              </motion.div>
             ))}
           </div>
         </div>

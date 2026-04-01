@@ -8,8 +8,9 @@ import {
   Loader2, Activity, BarChart3, AlertTriangle, RefreshCw,
   Thermometer, Cloud, Zap, Fish, Bug, Mountain, Globe,
   ArrowUpRight, ArrowDownRight, Eye, Shield, Waves, Sprout,
-  ChevronDown, ChevronRight, Search, X,
+  ChevronDown, ChevronRight, Search, X, Recycle, CheckCircle2,
 } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -964,6 +965,38 @@ export default function EcoLensPage() {
 
       {/* AI Actions */}
       <UniversalActions domain="eco" artifactId={metricItems[0]?.id} compact />
+
+      {/* Quick Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Recycle className="w-5 h-5 text-neon-green" />
+          <div>
+            <p className="text-lg font-bold">{totalImpactArea.toLocaleString()}</p>
+            <p className="text-xs text-gray-500">Carbon Offset (ha)</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Leaf className="w-5 h-5 text-neon-cyan" />
+          <div>
+            <p className="text-lg font-bold">{avgBiodiversity.toFixed(2)}</p>
+            <p className="text-xs text-gray-500">Green Score</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 2 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <CheckCircle2 className="w-5 h-5 text-neon-blue" />
+          <div>
+            <p className="text-lg font-bold">{SIMULATED_IMPACTS.filter(i => i.mitigationStatus === 'completed' || i.mitigationStatus === 'in_progress').length}</p>
+            <p className="text-xs text-gray-500">Eco Actions Done</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 3 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <AlertTriangle className="w-5 h-5 text-red-400" />
+          <div>
+            <p className="text-lg font-bold">{criticalCount}</p>
+            <p className="text-xs text-gray-500">At Risk Species</p>
+          </div>
+        </motion.div>
+      </div>
 
       {/* Tab Navigation */}
       <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 overflow-x-auto">

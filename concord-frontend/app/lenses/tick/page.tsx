@@ -19,7 +19,10 @@ import {
   Timer,
   Layers,
   ChevronDown,
+  Eye,
+  Gauge,
 } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -525,6 +528,38 @@ export default function TickLensPage() {
 
       <RealtimeDataPanel domain="tick" data={realtimeData} isLive={rtIsLive} lastUpdated={lastUpdated} insights={insights} compact />
 
+      {/* Quick Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Zap className="w-5 h-5 text-neon-cyan" />
+          <div>
+            <p className="text-lg font-bold">{stats.totalTicks}</p>
+            <p className="text-xs text-gray-500">Ticks Processed</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Gauge className="w-5 h-5 text-neon-green" />
+          <div>
+            <p className="text-lg font-bold">{formatMs(stats.avgInterval)}</p>
+            <p className="text-xs text-gray-500">Avg Interval</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 2 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Eye className="w-5 h-5 text-neon-purple" />
+          <div>
+            <p className="text-lg font-bold">{Object.keys(stats.organBreakdown).length}</p>
+            <p className="text-xs text-gray-500">Active Watchers</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 3 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Heart className="w-5 h-5 text-neon-pink" />
+          <div>
+            <p className="text-lg font-bold">{healthStatus.score}%</p>
+            <p className="text-xs text-gray-500">Health Score</p>
+          </div>
+        </motion.div>
+      </div>
+
       {/* Tabs */}
       <div className="flex gap-2">
         {([
@@ -627,9 +662,12 @@ export default function TickLensPage() {
               Tick Event Log
             </h2>
             <div className="space-y-2 max-h-80 overflow-auto">
-              {tickHistory.slice(0, 20).map((tick) => (
-                <div
+              {tickHistory.slice(0, 20).map((tick, index) => (
+                <motion.div
                   key={tick.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05 }}
                   className="flex items-center justify-between p-3 bg-lattice-deep rounded-lg"
                 >
                   <div className="flex items-center gap-3">
@@ -649,7 +687,7 @@ export default function TickLensPage() {
                       {new Date(tick.timestamp).toLocaleTimeString()}
                     </p>
                   </div>
-                </div>
+                </motion.div>
               ))}
             </div>
           </div>

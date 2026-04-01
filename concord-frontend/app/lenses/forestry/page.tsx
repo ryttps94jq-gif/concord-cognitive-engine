@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { motion } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
@@ -13,7 +14,7 @@ import {
   TreePine, Plus, Search, Trash2, BarChart3,
   Layers, ChevronDown, MapPin, Users,
   Leaf, Flame, Droplets, Bug,
-  Eye, AlertTriangle, Mountain, Ruler, Map,
+  Eye, AlertTriangle, Mountain, Ruler, Map, Sprout, HeartPulse,
 } from 'lucide-react';
 
 const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });
@@ -171,6 +172,22 @@ export default function ForestryLensPage() {
         ))}
       </div>
 
+      {/* Stats Row */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="p-3 bg-zinc-900 rounded-lg border border-zinc-800 flex items-center gap-3">
+          <TreePine className="w-5 h-5 text-green-500" />
+          <div><p className="text-lg font-bold text-white">{stands.length}</p><p className="text-xs text-gray-400">Plot Count</p></div>
+        </div>
+        <div className="p-3 bg-zinc-900 rounded-lg border border-zinc-800 flex items-center gap-3">
+          <Sprout className="w-5 h-5 text-lime-400" />
+          <div><p className="text-lg font-bold text-white">{new Set(stands.flatMap(s => (s.data as StandData).species || [])).size}</p><p className="text-xs text-gray-400">Species Count</p></div>
+        </div>
+        <div className="p-3 bg-zinc-900 rounded-lg border border-zinc-800 flex items-center gap-3">
+          <HeartPulse className="w-5 h-5 text-emerald-400" />
+          <div><p className="text-lg font-bold text-white">{stands.length > 0 ? ((stats.matureStands / stands.length) * 100).toFixed(0) : 0}%</p><p className="text-xs text-gray-400">Avg Health Score</p></div>
+        </div>
+      </div>
+
       <div className="flex items-center gap-2">
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
@@ -200,8 +217,8 @@ export default function ForestryLensPage() {
       )}
 
       <div className="space-y-2">
-        {items.map(item => (
-          <div key={item.id} className="p-4 bg-zinc-900 rounded-lg border border-zinc-800 hover:border-zinc-700 transition-colors">
+        {items.map((item, index) => (
+          <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="p-4 bg-zinc-900 rounded-lg border border-zinc-800 hover:border-zinc-700 transition-colors">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <h3 className="text-sm font-semibold text-white">{item.title}</h3>
@@ -215,7 +232,7 @@ export default function ForestryLensPage() {
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
             </div>
-          </div>
+          </motion.div>
         ))}
         {items.length === 0 && (
           <div className="text-center py-12 text-gray-500">

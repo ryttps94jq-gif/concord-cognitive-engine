@@ -1,5 +1,6 @@
 'use client';
 
+import { motion } from 'framer-motion';
 import { useState, useMemo, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -679,11 +680,11 @@ export default function CouncilLensPage() {
         )}
 
         <div className="space-y-3">
-          {filteredProposals.map(p => {
+          {filteredProposals.map((p, index) => {
             const sc = STATUS_CONFIG[p.status];
             const voteCount = Object.keys(p.votes).length;
             return (
-              <div key={p.id} onClick={() => setSelectedProposalId(p.id)} className={cn(ds.panelHover, 'cursor-pointer')}>
+              <motion.div key={p.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} onClick={() => setSelectedProposalId(p.id)} className={cn(ds.panelHover, 'cursor-pointer')}>
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -710,7 +711,7 @@ export default function CouncilLensPage() {
                   </div>
                   <ChevronRight className="w-5 h-5 text-gray-600 flex-shrink-0 mt-1" />
                 </div>
-              </div>
+              </motion.div>
             );
           })}
         </div>
@@ -1370,6 +1371,24 @@ export default function CouncilLensPage() {
           </div>
         </div>
       </header>
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+        {[
+          { label: 'Proposals', value: proposals.length, icon: FileText },
+          { label: 'Active Votes', value: proposals.filter(p => p.status === 'voting').length, icon: Vote },
+          { label: 'Participation', value: `${stakeholders.length > 0 ? Math.round((stakeholders.filter(s => s.votingPower > 0).length / stakeholders.length) * 100) : 0}%`, icon: Users },
+          { label: 'Committees', value: committees.length, icon: Layers },
+        ].map((stat) => (
+          <div key={stat.label} className={ds.panel + ' flex items-center gap-3 p-3'}>
+            <stat.icon className="w-5 h-5 text-neon-purple shrink-0" />
+            <div>
+              <p className="text-xs text-gray-400">{stat.label}</p>
+              <p className="text-lg font-bold text-white">{stat.value}</p>
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* Dashboard Stats */}
       <div className={ds.grid4}>

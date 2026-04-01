@@ -5,7 +5,8 @@ import { useState, useCallback } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
-import { Shield, Check, X, AlertTriangle, Lock, Eye, Zap, Loader2, Layers, ChevronDown, Gauge, Scale, ShieldOff, Activity, Ban } from 'lucide-react';
+import { Shield, Check, X, AlertTriangle, Lock, Eye, Zap, Loader2, Layers, ChevronDown, Gauge, Scale, ShieldOff, Activity, Ban, CheckCircle2, BarChart3 } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -154,6 +155,38 @@ export default function InvariantLensPage() {
       </header>
 
 
+      {/* Quick Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Shield className="w-5 h-5 text-neon-green" />
+          <div>
+            <p className="text-lg font-bold">{invariants.length}</p>
+            <p className="text-xs text-gray-500">Rules Total</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <CheckCircle2 className="w-5 h-5 text-neon-cyan" />
+          <div>
+            <p className="text-lg font-bold">{enforcedCount}</p>
+            <p className="text-xs text-gray-500">Passing</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 2 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <AlertTriangle className="w-5 h-5 text-yellow-500" />
+          <div>
+            <p className="text-lg font-bold">{invariants.filter(i => i.status === 'violated').length}</p>
+            <p className="text-xs text-gray-500">Violations</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 3 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <BarChart3 className="w-5 h-5 text-neon-purple" />
+          <div>
+            <p className="text-lg font-bold">{invariants.length > 0 ? `${((invariants.filter(i => i.status === 'violated').length / invariants.length) * 100).toFixed(1)}%` : '0%'}</p>
+            <p className="text-xs text-gray-500">Violation Rate</p>
+          </div>
+        </motion.div>
+      </div>
+
       {/* AI Actions */}
       <UniversalActions domain="invariant" artifactId={invariantItems[0]?.id} compact />
       {/* Action Tester */}
@@ -209,9 +242,12 @@ export default function InvariantLensPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {invariants
               .filter((inv) => inv.category === category)
-              .map((inv) => (
-                <div
+              .map((inv, index) => (
+                <motion.div
                   key={inv.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05 }}
                   className="lens-card flex items-start gap-3"
                 >
                   <span
@@ -240,7 +276,7 @@ export default function InvariantLensPage() {
                     </div>
                     <p className="text-sm text-gray-400 mt-1">{inv.description}</p>
                   </div>
-                </div>
+                </motion.div>
               ))}
           </div>
         </div>

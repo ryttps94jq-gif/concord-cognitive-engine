@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
+import { motion } from 'framer-motion';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { ds } from '@/lib/design-system';
@@ -28,6 +29,8 @@ import {
   Phone,
   Mail,
   DollarSign,
+  Activity,
+  TrendingUp,
   Star,
   Bell,
   Heart,
@@ -772,6 +775,39 @@ export default function ServicesLensPage() {
 
       {/* AI Actions */}
       <UniversalActions domain="services" artifactId={appointments[0]?.id} compact />
+
+      {/* Quick Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 * 0.05 }} className={ds.panel + ' flex items-center gap-3'}>
+          <Scissors className="w-5 h-5 text-pink-400" />
+          <div>
+            <p className="text-lg font-bold text-white">{items.length}</p>
+            <p className="text-xs text-gray-500">Services</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1 * 0.05 }} className={ds.panel + ' flex items-center gap-3'}>
+          <Activity className="w-5 h-5 text-green-400" />
+          <div>
+            <p className="text-lg font-bold text-white">{appointments.filter(a => a.meta.status !== 'cancelled' && a.meta.status !== 'no_show').length}</p>
+            <p className="text-xs text-gray-500">Healthy</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 2 * 0.05 }} className={ds.panel + ' flex items-center gap-3'}>
+          <TrendingUp className="w-5 h-5 text-blue-400" />
+          <div>
+            <p className="text-lg font-bold text-white">{dashboardStats.noShowRate > 0 ? `${(100 - dashboardStats.noShowRate).toFixed(0)}%` : '100%'}</p>
+            <p className="text-xs text-gray-500">Avg Uptime</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 3 * 0.05 }} className={ds.panel + ' flex items-center gap-3'}>
+          <BarChart3 className="w-5 h-5 text-purple-400" />
+          <div>
+            <p className="text-lg font-bold text-white">{appointments.length + staff.length}</p>
+            <p className="text-xs text-gray-500">Endpoints</p>
+          </div>
+        </motion.div>
+      </div>
+
       {/* Tabs */}
       <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 overflow-x-auto">
         {MODE_TABS.map(tab => {

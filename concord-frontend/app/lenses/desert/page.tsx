@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { motion } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
@@ -13,7 +14,7 @@ import {
   Sun, Plus, Search, Trash2, BarChart3,
   Layers, ChevronDown, MapPin, Users,
   Thermometer, Wind, Droplets, Mountain,
-  Eye, AlertTriangle, Navigation, Compass, Map,
+  Eye, AlertTriangle, Navigation, Compass, Map, Binoculars, Cactus,
 } from 'lucide-react';
 
 const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });
@@ -162,6 +163,22 @@ export default function DesertLensPage() {
         ))}
       </div>
 
+      {/* Stats Row */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="p-3 bg-zinc-900 rounded-lg border border-zinc-800 flex items-center gap-3">
+          <Compass className="w-5 h-5 text-amber-400" />
+          <div><p className="text-lg font-bold text-white">{expeditions.length}</p><p className="text-xs text-gray-400">Expeditions</p></div>
+        </div>
+        <div className="p-3 bg-zinc-900 rounded-lg border border-zinc-800 flex items-center gap-3">
+          <Binoculars className="w-5 h-5 text-green-400" />
+          <div><p className="text-lg font-bold text-white">{resources.length}</p><p className="text-xs text-gray-400">Species Cataloged</p></div>
+        </div>
+        <div className="p-3 bg-zinc-900 rounded-lg border border-zinc-800 flex items-center gap-3">
+          <Thermometer className="w-5 h-5 text-red-400" />
+          <div><p className="text-lg font-bold text-white">{expeditions.length > 0 ? (expeditions.reduce((s, e) => s + ((e.data as ExpeditionData).temperatureHigh || 0), 0) / expeditions.length).toFixed(0) : '--'}&deg;</p><p className="text-xs text-gray-400">Avg Temperature</p></div>
+        </div>
+      </div>
+
       <div className="flex items-center gap-2">
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
@@ -191,8 +208,8 @@ export default function DesertLensPage() {
       )}
 
       <div className="space-y-2">
-        {items.map(item => (
-          <div key={item.id} className="p-4 bg-zinc-900 rounded-lg border border-zinc-800 hover:border-zinc-700 transition-colors">
+        {items.map((item, index) => (
+          <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="p-4 bg-zinc-900 rounded-lg border border-zinc-800 hover:border-zinc-700 transition-colors">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <h3 className="text-sm font-semibold text-white">{item.title}</h3>
@@ -206,7 +223,7 @@ export default function DesertLensPage() {
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
             </div>
-          </div>
+          </motion.div>
         ))}
         {items.length === 0 && (
           <div className="text-center py-12 text-gray-500">
