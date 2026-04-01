@@ -109,7 +109,7 @@ export default function ConsultingLensPage() {
     const totalRevenue = all.reduce((s, e) => s + (e.totalFee || 0), 0);
     const totalHours = all.reduce((s, e) => s + (e.billedHours || 0), 0);
     return (
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div data-lens-theme="consulting" className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className={ds.panel}><DollarSign className="w-5 h-5 text-green-400 mb-2" /><p className={ds.textMuted}>Total Revenue</p><p className="text-xl font-bold text-white">${totalRevenue.toLocaleString()}</p></div>
         <div className={ds.panel}><Clock className="w-5 h-5 text-blue-400 mb-2" /><p className={ds.textMuted}>Billed Hours</p><p className="text-xl font-bold text-white">{totalHours.toLocaleString()}</p></div>
         <div className={ds.panel}><Briefcase className="w-5 h-5 text-purple-400 mb-2" /><p className={ds.textMuted}>Active Engagements</p><p className="text-xl font-bold text-white">{all.filter(e => e.status === 'active').length}</p></div>

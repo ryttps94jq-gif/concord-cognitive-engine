@@ -484,7 +484,7 @@ export default function RealEstateLensPage() {
 
   const renderStarRating = (level: number) => {
     return (
-      <div className="flex items-center gap-0.5">
+      <div data-lens-theme="realestate" className="flex items-center gap-0.5">
         {[1, 2, 3, 4, 5].map(s => (
           <Star key={s} className={cn('w-3 h-3', s <= level ? 'text-amber-400 fill-amber-400' : 'text-gray-600')} />
         ))}

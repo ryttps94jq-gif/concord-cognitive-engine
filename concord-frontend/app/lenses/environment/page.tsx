@@ -628,7 +628,7 @@ export default function EnvironmentLensPage() {
     switch (currentType) {
       case 'Site':
         return (
-          <div className="space-y-4">
+          <div data-lens-theme="environment" className="space-y-4">
             <div>
               <label className={ds.label}>Site Name</label>
               <input className={ds.input} value={(formData.name as string) || ''} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="e.g. Cedar Creek Wetland" />

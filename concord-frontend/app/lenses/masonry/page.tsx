@@ -115,7 +115,7 @@ export default function MasonryLensPage() {
     const all = items.map(i => i.data as unknown as TradeArtifact);
     const totalRevenue = all.reduce((s, j) => s + (j.totalCost || j.amount || 0), 0);
     return (
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div data-lens-theme="masonry" className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className={ds.panel}><Wrench className="w-5 h-5 text-blue-400 mb-2" /><p className={ds.textMuted}>Active Jobs</p><p className="text-xl font-bold text-white">{all.filter(j => j.status === 'in_progress' || j.status === 'scheduled').length}</p></div>
         <div className={ds.panel}><DollarSign className="w-5 h-5 text-green-400 mb-2" /><p className={ds.textMuted}>Revenue</p><p className="text-xl font-bold text-white">${totalRevenue.toLocaleString()}</p></div>
         <div className={ds.panel}><CheckCircle2 className="w-5 h-5 text-emerald-400 mb-2" /><p className={ds.textMuted}>Completed</p><p className="text-xl font-bold text-white">{all.filter(j => j.status === 'completed' || j.status === 'paid').length}</p></div>

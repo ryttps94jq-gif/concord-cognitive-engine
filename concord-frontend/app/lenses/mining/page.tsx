@@ -122,7 +122,7 @@ export default function MiningLensPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full p-8">
+      <div data-lens-theme="mining" className="flex items-center justify-center h-full p-8">
         <div className="text-center space-y-3">
           <div className="w-8 h-8 border-2 border-yellow-600 border-t-transparent rounded-full animate-spin mx-auto" />
           <p className="text-sm text-gray-400">Loading mining operations...</p>

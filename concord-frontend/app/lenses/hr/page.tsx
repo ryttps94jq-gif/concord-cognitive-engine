@@ -179,7 +179,7 @@ export default function HRLensPage() {
     const employees = items.map(i => i.data as unknown as HRArtifact);
     const totalSalary = employees.reduce((s, e) => s + (e.salary || 0), 0);
     return (
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div data-lens-theme="hr" className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className={ds.panel}><Users className="w-5 h-5 text-blue-400 mb-2" /><p className={ds.textMuted}>Total Headcount</p><p className="text-xl font-bold text-white">{items.length}</p></div>
         <div className={ds.panel}><DollarSign className="w-5 h-5 text-green-400 mb-2" /><p className={ds.textMuted}>Payroll (Annual)</p><p className="text-xl font-bold text-white">${totalSalary.toLocaleString()}</p></div>
         <div className={ds.panel}><UserPlus className="w-5 h-5 text-cyan-400 mb-2" /><p className={ds.textMuted}>Open Positions</p><p className="text-xl font-bold text-white">{employees.filter(e => e.status === 'open').length}</p></div>

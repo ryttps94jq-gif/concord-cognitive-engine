@@ -61,7 +61,7 @@ export default function ChemLensPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full p-8">
+      <div data-lens-theme="chem" className="flex items-center justify-center h-full p-8">
         <div className="text-center space-y-3">
           <div className="w-8 h-8 border-2 border-neon-purple border-t-transparent rounded-full animate-spin mx-auto" />
           <p className="text-sm text-gray-400">Loading...</p>

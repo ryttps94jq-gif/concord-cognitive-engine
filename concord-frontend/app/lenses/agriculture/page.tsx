@@ -378,7 +378,7 @@ export default function AgricultureLensPage() {
           {filtered.map(item => {
             const d = item.data as unknown as AgricultureArtifact;
             return (
-              <div key={item.id} className={ds.panelHover} onClick={() => openEdit(item)}>
+              <div key={item.id} data-lens-theme="agriculture" className={ds.panelHover} onClick={() => openEdit(item)}>
                 <div className="flex items-start justify-between mb-2">
                   <h3 className={ds.heading3}>{item.title}</h3>
                   {renderStatusBadge(d.status)}
@@ -650,7 +650,7 @@ export default function AgricultureLensPage() {
         <div className="space-y-2">
           {items.length === 0 ? (
             <div className="text-center py-8">
-              <p className="text-gray-500">No items yet</p>
+              <p className="text-gray-500">No crops or fields tracked yet. Add your first planting to get started.</p>
               <p className="text-sm text-gray-400 mt-1">Create your first farm item to get started</p>
             </div>
           ) : (

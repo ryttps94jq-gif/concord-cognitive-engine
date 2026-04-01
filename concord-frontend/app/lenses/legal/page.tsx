@@ -753,7 +753,7 @@ export default function LegalLensPage() {
   const StatCard = ({ icon: Icon, value, label, sub, color = 'text-neon-blue' }: {
     icon: React.ElementType; value: string | number; label: string; sub?: string; color?: string;
   }) => (
-    <div className={ds.panel}>
+    <div data-lens-theme="legal" className={ds.panel}>
       <Icon className={cn('w-5 h-5 mb-2', color)} />
       <p className="text-2xl font-bold">{value}</p>
       <p className={ds.textMuted}>{label}</p>

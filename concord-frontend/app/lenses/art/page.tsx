@@ -383,22 +383,22 @@ export default function ArtLensPage() {
       {/* Featured Section */}
       <section>
         <h2 className="text-lg font-bold mb-4">Featured Artwork</h2>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div className="columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4">
           {(artAssets as ArtAsset[]).length > 0 ? (artAssets as ArtAsset[]).map((art: ArtAsset) => (
             <motion.div
               key={art.id}
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="group relative rounded-xl overflow-hidden bg-white/5 border border-white/10 hover:border-neon-pink/30 transition-colors cursor-pointer"
+              className="group relative rounded-xl overflow-hidden bg-neutral-900/50 border border-neutral-800/30 hover:border-rose-400/30 transition-all duration-300 cursor-pointer break-inside-avoid mb-4 hover:shadow-xl hover:shadow-rose-900/10"
             >
-              <div className="aspect-square bg-gradient-to-br from-purple-600/30 to-pink-600/30 flex items-center justify-center">
-                <ImageIcon className="w-16 h-16 opacity-30" />
+              <div className="aspect-[3/4] bg-gradient-to-br from-rose-900/20 to-neutral-900/40 flex items-center justify-center">
+                <ImageIcon className="w-16 h-16 opacity-20 text-rose-300" />
               </div>
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                <div className="absolute bottom-0 left-0 right-0 p-3">
-                  <p className="font-medium text-sm truncate">{art.title}</p>
-                  <div className="flex items-center gap-3 mt-1 text-xs text-gray-300">
-                    <span className="flex items-center gap-1"><Heart className="w-3 h-3" />{art.likes}</span>
+              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                <div className="absolute bottom-0 left-0 right-0 p-4">
+                  <p className="font-medium text-sm truncate text-rose-50">{art.title}</p>
+                  <div className="flex items-center gap-3 mt-1.5 text-xs text-rose-200/70">
+                    <span className="flex items-center gap-1"><Heart className="w-3 h-3 text-rose-400" />{art.likes}</span>
                     <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{art.plays}</span>
                   </div>
                 </div>

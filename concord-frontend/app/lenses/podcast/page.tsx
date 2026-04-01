@@ -203,7 +203,7 @@ export default function PodcastLensPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-lattice-void text-white">
+    <div data-lens-theme="podcast" className="min-h-screen bg-lattice-void text-white">
       {/* Header */}
       <header className="border-b border-white/10 bg-lattice-surface/50 backdrop-blur-xl sticky top-0 z-30">
         <div className="max-w-6xl mx-auto px-6 py-4">

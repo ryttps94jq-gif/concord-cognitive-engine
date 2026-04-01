@@ -125,7 +125,7 @@ export default function ConstructionLensPage() {
     const all = items.map(i => i.data as unknown as ConstructionArtifact);
     const totalContract = all.reduce((s, j) => s + (j.contractValue || 0), 0);
     return (
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div data-lens-theme="construction" className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className={ds.panel}><Building2 className="w-5 h-5 text-blue-400 mb-2" /><p className={ds.textMuted}>Active Jobs</p><p className="text-xl font-bold text-white">{all.filter(j => j.status === 'in_progress').length}</p></div>
         <div className={ds.panel}><DollarSign className="w-5 h-5 text-green-400 mb-2" /><p className={ds.textMuted}>Contract Value</p><p className="text-xl font-bold text-white">${totalContract.toLocaleString()}</p></div>
         <div className={ds.panel}><ClipboardList className="w-5 h-5 text-yellow-400 mb-2" /><p className={ds.textMuted}>Pending Inspections</p><p className="text-xl font-bold text-white">{all.filter(j => j.status === 'inspection').length}</p></div>

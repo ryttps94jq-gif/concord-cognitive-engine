@@ -107,7 +107,7 @@ export default function TravelLensPage() {
 
   if (isError) {
     return (
-      <div className="flex items-center justify-center h-full p-8">
+      <div data-lens-theme="travel" className="flex items-center justify-center h-full p-8">
         <ErrorState error={error?.message} onRetry={refetch} />
       </div>
     );

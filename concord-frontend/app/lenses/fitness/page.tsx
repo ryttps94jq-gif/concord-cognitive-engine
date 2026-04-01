@@ -276,7 +276,7 @@ function calc1RMBrzycki(weight: number, reps: number): number {
 function ProgressBar({ value, max, color = 'neon-green' }: { value: number; max: number; color?: string }) {
   const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
   return (
-    <div className="w-full bg-lattice-elevated rounded-full h-2.5 overflow-hidden">
+    <div data-lens-theme="fitness" className="w-full bg-lattice-elevated rounded-full h-2.5 overflow-hidden">
       <div className={cn(`h-full rounded-full bg-${color} transition-all duration-500`)} style={{ width: `${pct}%` }} />
     </div>
   );

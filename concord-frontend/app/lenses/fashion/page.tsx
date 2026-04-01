@@ -84,7 +84,7 @@ export default function FashionLensPage() {
   if (isError) return <div className="flex items-center justify-center h-full p-8"><ErrorState error={error?.message} onRetry={refetch} /></div>;
 
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="fashion" className="p-6 space-y-6">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Shirt className="w-6 h-6 text-neon-purple" />
@@ -142,7 +142,7 @@ export default function FashionLensPage() {
         {isLoading ? (
           <div className="col-span-full panel p-6 text-center text-gray-400">Loading wardrobe...</div>
         ) : garments.length === 0 ? (
-          <div className="col-span-full panel p-6 text-center text-gray-400">No items yet. Add your first piece.</div>
+          <div className="col-span-full panel p-6 text-center text-gray-400">No collections or designs yet. Create your first fashion piece. Add your first piece.</div>
         ) : garments.map(g => (
           <div key={g.id} className="panel p-4">
             <div className="flex items-center justify-between mb-2">

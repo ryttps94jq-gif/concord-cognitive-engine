@@ -146,7 +146,7 @@ function BOMTreeNode({ node, depth = 0 }: { node: BOMNode; depth?: number }) {
   const rollupCost = calcBOMCost(node);
 
   return (
-    <div>
+    <div data-lens-theme="manufacturing">
       <div
         className={cn(
           'flex items-center gap-2 py-1.5 px-2 rounded hover:bg-lattice-elevated/50 cursor-pointer',

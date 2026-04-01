@@ -120,7 +120,7 @@ function fuelColor(pct: number): string {
 function ProgressBar({ value, max = 100, color }: { value: number; max?: number; color?: string }) {
   const pct = Math.min(100, Math.round((value / max) * 100));
   return (
-    <div className="w-full h-2 bg-lattice-elevated rounded-full overflow-hidden">
+    <div data-lens-theme="logistics" className="w-full h-2 bg-lattice-elevated rounded-full overflow-hidden">
       <div
         className={cn('h-full rounded-full transition-all', color || progressColor(pct))}
         style={{ width: `${pct}%` }}

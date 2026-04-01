@@ -374,7 +374,7 @@ export default function SecurityLensPage() {
       case 'Incident':
         return (
           <>
-            <div className={ds.grid2}>
+            <div data-lens-theme="security" className={ds.grid2}>
               <div>
                 <label className={ds.label}>Severity</label>
                 <select className={ds.select} value={(formData.severity as string) || 'P3'} onChange={e => setFormData({ ...formData, severity: e.target.value })}>
