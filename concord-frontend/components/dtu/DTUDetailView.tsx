@@ -240,6 +240,55 @@ export function DTUDetailView({ dtuId, onClose, onNavigate }: DTUDetailViewProps
                     </div>
                   </div>
 
+                  {/* Artifact preview — based on primaryType */}
+                  {primaryType && (
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-400 mb-2 flex items-center gap-2">
+                        {primaryTypeIcon[primaryType] ? (() => {
+                          const Icon = primaryTypeIcon[primaryType];
+                          return <Icon className="w-4 h-4" />;
+                        })() : <FileType className="w-4 h-4" />}
+                        Artifact Preview
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-neon-purple/10 text-neon-purple uppercase">
+                          {primaryType.replace(/_/g, ' ')}
+                        </span>
+                      </h3>
+                      {artifactRef ? (
+                        <ArtifactRenderer
+                          dtuId={artifactRef}
+                          artifact={{
+                            type: primaryType === 'play_audio' ? 'audio/mpeg'
+                              : primaryType === 'display_image' ? 'image/png'
+                              : primaryType === 'play_video' ? 'video/mp4'
+                              : primaryType === 'render_code' ? 'text/plain'
+                              : primaryType === 'render_document' ? 'text/markdown'
+                              : 'application/octet-stream',
+                            filename: dtu.title || dtu.id,
+                            sizeBytes: (dtu.meta?.artifactSize as number) || 0,
+                            multipart: false,
+                          }}
+                          mode="inline"
+                        />
+                      ) : (
+                        <div className="bg-lattice-deep p-4 rounded-lg text-center">
+                          <p className="text-gray-500 text-sm">
+                            This DTU has type "{primaryType.replace(/_/g, ' ')}" but no artifact is attached.
+                          </p>
+                        </div>
+                      )}
+                      {artifactRef && (
+                        <a
+                          href={`/api/media/${artifactRef}/download`}
+                          download
+                          className="inline-flex items-center gap-1.5 mt-2 px-3 py-1.5 rounded-md text-xs font-medium bg-zinc-700 hover:bg-zinc-600 text-zinc-200 transition-colors"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          Download artifact
+                        </a>
+                      )}
+                    </div>
+                  )}
+
                   {/* Tags */}
                   {dtu.tags && dtu.tags.length > 0 && (
                     <div>
@@ -395,6 +444,8 @@ export function DTUDetailView({ dtuId, onClose, onNavigate }: DTUDetailViewProps
                         ['ID', dtu.id],
                         ['Tier', dtu.tier],
                         ['Source', dtu.source],
+                        ['Primary Type', primaryType],
+                        ['Artifact', artifactRef],
                         ['Domain', dtu.domain],
                         ['Owner', dtu.ownerId],
                         ['Global', dtu.isGlobal ? 'Yes' : 'No'],

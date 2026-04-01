@@ -1597,6 +1597,17 @@ export default function LogisticsLensPage() {
         </div>
       </section>
 
+      {/* ==================== MAP TAB ==================== */}
+      {mode === 'map' && (
+        <div className={ds.panel}>
+          <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2"><Map className="w-4 h-4 text-neon-cyan" /> Route Visualization</h3>
+          <MapView
+            markers={items.filter(i => { const d = i.data as Record<string, unknown>; return d.lat && d.lng; }).map(i => { const d = i.data as Record<string, unknown>; return { lat: d.lat as number, lng: d.lng as number, label: i.title, popup: `${d.status || ''} ${d.origin ? '- ' + d.origin + ' to ' + (d.destination || '') : ''}`.trim() }; })}
+            className="h-[500px]"
+          />
+        </div>
+      )}
+
       {/* Lens Features */}
       <div className="border-t border-white/10">
         <button
