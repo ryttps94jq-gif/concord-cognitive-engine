@@ -520,8 +520,11 @@ export default function registerSystemRoutes(app, {
     } else if (scopeFilter === "local") {
       dtus = dtus.filter(d => d.scope !== "global" && (!userId || !d.ownerId || d.ownerId === userId));
     } else if (userId) {
-      // Default view: user's own local DTUs + all global DTUs
+      // Default view: user's own local/personal DTUs + all global DTUs
       dtus = dtus.filter(d => d.scope === "global" || !d.ownerId || d.ownerId === userId);
+    } else {
+      // Anonymous: only global DTUs
+      dtus = dtus.filter(d => !d.scope || d.scope === "global");
     }
 
     if (tier) dtus = dtus.filter(d => d.tier === tier);

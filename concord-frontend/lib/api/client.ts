@@ -160,9 +160,14 @@ api.interceptors.response.use(
         if (requestUrl.includes('/api/auth/me') || requestUrl.includes('/api/auth/csrf-token')) {
           return Promise.reject(error);
         }
+        // Don't redirect on background GET fetches — a stale query or
+        // transient 401 shouldn't force navigation away from the page.
+        // Only redirect on user-initiated mutations or explicit nav.
+        const isBackgroundFetch = error.config?.method?.toUpperCase() === 'GET';
+        if (isBackgroundFetch) {
+          return Promise.reject(error);
+        }
         // Don't redirect on public pages that don't require auth.
-        // These pages may trigger incidental API calls (e.g. via shared
-        // components) but should never force a login redirect.
         const path = window.location.pathname;
         const isPublicPage =
           path.startsWith('/legal/') ||

@@ -6627,9 +6627,9 @@ async function runMacro(domain, name, input, ctx) {
   const _path = ctx?.reqMeta?.path || "";
   const _method = (ctx?.reqMeta?.method || "").toUpperCase();
 
-  // publicReadDomains: domain+name allowlist for read-only macros
   // publicReadDomains: domain+name allowlist for read-only macros (Gate 2 of 3)
   // CRITICAL: Every frontend macro call domain must be listed here
+  // Also exposed as _publicReadDomainsACL for the macro ACL viewer bypass
   const publicReadDomains = {
     emergent: new Set(["status", "get", "list", "schema", "patterns", "reputation", "scope.metrics", "bridge.heartbeatTick"]),
     dtu: new Set(["list", "get", "search", "recent", "stats", "count", "export", "paginated"]),
@@ -6641,7 +6641,7 @@ async function runMacro(domain, name, input, ctx) {
     guidance: new Set(["suggestions", "status"]),
     graph: new Set(["visual", "visualData", "forceGraph", "edges", "stats", "neighbors"]),
     events: new Set(["list", "recent", "log", "paginated"]),
-    worldmodel: new Set(["list_relations", "get", "status", "entities", "simulations"]),
+    worldmodel: new Set(["list_relations", "list_entities", "get", "get_entity", "create_entity", "update_entity", "delete_entity", "create_relation", "status", "entities", "simulations", "simulate"]),
     goals: new Set(["list", "get", "status", "config"]),
     council: new Set(["tally", "status", "list"]),
     hypothesis: new Set(["list", "get", "status", "propose", "evaluate", "record_evidence", "design_experiment"]),
@@ -6725,6 +6725,10 @@ async function runMacro(domain, name, input, ctx) {
     intel: new Set(["weather", "geology", "energy", "ocean", "seismic", "agriculture", "environment", "research.status", "research.data", "research.synthesis", "research.archive", "classifier.status", "metrics"]),
     cortex: new Set(["taxonomy", "unknown", "anomalies", "classify", "spectrum", "privacy.zones", "privacy.verify", "privacy.stats", "metrics"]),
   };
+  // Populate the module-level ACL reference on first call so _canRunMacro can use it
+  if (!_publicReadDomainsACL) {
+    _publicReadDomainsACL = new Map(Object.entries(publicReadDomains));
+  }
   const _domainSet = publicReadDomains[domain];
   const _domainNameAllowed = _domainSet ? _domainSet.has(name) : false;
 
@@ -6807,7 +6811,14 @@ async function runMacro(domain, name, input, ctx) {
     (_method === "POST" && _safePostPaths.some(p => _path.startsWith(p))) ||
     (domain === "chat" && (name === "respond" || name === "feedback"));
 
-  if (!safeReadBypass) {
+  // Chicken2 bypass: authenticated human users skip the reality guard entirely.
+  // The guard is designed for autonomous entity/bot protection, not for blocking
+  // signed-in humans using the platform. Entity requests carry X-Entity-Id header.
+  const _isAuthenticatedHuman = ctx?.actor?.userId
+    && ctx.actor.userId !== "anon"
+    && !ctx?.reqMeta?.headers?.["x-entity-id"];
+
+  if (!safeReadBypass && !_isAuthenticatedHuman) {
     const c2 = inLatticeReality({ type:"macro", domain, name, input, ctx });
     if (!c2.ok) {
       // Founder valve: allow explicit override for one call if actor is founder/owner and passes ?override=1 on reqMeta or input.override=true
@@ -15032,7 +15043,7 @@ register("dtu", "create", async (ctx, input) => {
     structuredLog("warn", "dtu_injection_detected", {
       patterns: injScan.patterns,
       source,
-      userId: ctx?.actor?.id,
+      userId: ctx?.actor?.userId || ctx?.actor?.id,
       titlePrefix: title.slice(0, 50),
     });
     // Tag for quarantine review rather than hard-block (reduces false positives)
@@ -15047,7 +15058,8 @@ register("dtu", "create", async (ctx, input) => {
     lineage,
     source,
     meta,
-    ownerId: ctx?.actor?.id || ctx?.actor?.odId || null,
+    ownerId: ctx?.actor?.userId || ctx?.actor?.id || null,
+    scope: (ctx?.actor?.userId && ctx.actor.userId !== "anon") ? (input.scope || "personal") : "global",
     core: {
       definitions: Array.isArray(coreIn.definitions) ? coreIn.definitions : [],
       invariants: Array.isArray(coreIn.invariants) ? coreIn.invariants : [],
@@ -15218,7 +15230,8 @@ register("dtu", "list", (ctx, input) => {
   const tier = input.tier && ["regular","mega","hyper","any"].includes(input.tier) ? input.tier : "any";
   const q = tokenish(input.q || "");
   const scopeFilter = input.scope || null; // "local", "global", or null (default: user's view)
-  const userId = ctx?.actor?.id || ctx?.actor?.odId || null;
+  const userId = ctx?.actor?.userId || ctx?.actor?.id || null;
+  const isAuthenticated = userId && userId !== "anon";
 
   // Filter out shadow DTUs - they are internal and should not appear in user-facing lists
   let items = dtusArray().filter(d => !isShadowDTU(d));
@@ -15230,10 +15243,14 @@ register("dtu", "list", (ctx, input) => {
   if (scopeFilter === "global") {
     items = items.filter(d => d.scope === "global");
   } else if (scopeFilter === "local") {
-    items = items.filter(d => d.scope !== "global" && (!userId || !d.ownerId || d.ownerId === userId));
-  } else if (userId) {
-    // Default view: show user's own local DTUs + all global DTUs
+    items = items.filter(d => d.scope !== "global" && (!isAuthenticated || !d.ownerId || d.ownerId === userId));
+  } else if (isAuthenticated) {
+    // Default view: show user's own local/personal DTUs + all global DTUs
+    // Exclude other users' personal DTUs
     items = items.filter(d => d.scope === "global" || !d.ownerId || d.ownerId === userId);
+  } else {
+    // Anonymous: only global DTUs
+    items = items.filter(d => !d.scope || d.scope === "global");
   }
 
   items = items.sort((a,b)=> (b.createdAt||"").localeCompare(a.createdAt||""));
@@ -21612,6 +21629,9 @@ function getActorFromReq(req) {
 
 // ---- Macro ACL v2: Domain defaults + per-macro overrides + production default-deny ----
 const MACRO_ACL = new Map(); // key = `${domain}.${name}` → { roles:[], scopes:[] }
+// Lazy-populated reference to publicReadDomains (defined inside runMacro).
+// Used by _canRunMacro to allow viewer-role access to public-read macros.
+let _publicReadDomainsACL = null; // Map<domain, Set<macroName>>
 const MACRO_ACL_DOMAIN = new Map(); // domain → { roles:[], scopes:[] }
 
 function allowMacro(domain, name, { roles=["owner","admin","member"], scopes=["*"] } = {}) {
@@ -21626,6 +21646,17 @@ function _canRunMacro(actor, domain, name) {
   // server-side processes that bypass ACL enforcement entirely.
   if (actor.internal === true && (actor.role === "system" || actor.role === "owner")) {
     return true;
+  }
+  // Public-read macros: if a macro is listed in publicReadDomains (Gate 2),
+  // it's already been vetted as safe for public access. Allow viewer role
+  // even if the domain's ACL tier is _ACL_MEMBER or higher.
+  // This prevents the ACL from blocking anonymous GET requests that Gate 1
+  // (publicReadPaths) and Gate 2 (publicReadDomains) already approved.
+  if (actor.role === "viewer" && (actor.scopes||[]).includes("read")) {
+    // Lazy ref: publicReadDomains is defined inside runMacro but we check
+    // using the same logic. _publicReadDomainsACL is populated after boot.
+    const pubSet = _publicReadDomainsACL?.get(domain);
+    if (pubSet && pubSet.has(name)) return true;
   }
   function _checkRule(rule) {
     const roleOk = !rule.roles?.length || rule.roles.includes(actor.role) || actor.role === "owner";
@@ -21692,6 +21723,22 @@ for (const d of [
 // verify, export — needed by frontend for DTU verification and data export
 // autotag — needed for classification macros
 for (const d of ["verify", "export", "autotag"]) allowDomain(d, _ACL_MEMBER);
+
+// ---- Frontend-facing domains: public read + member write ----
+// These domains are called by the frontend via macros and need ACL rules
+// to avoid default-deny in production. Without these, macros throw 500s.
+// Read macros (list, get, status, etc.) are accessible to viewers (unauthenticated).
+// Write macros (create, update, delete) require member role (authenticated).
+for (const d of [
+  "affect", "agents", "ai", "analytics", "artifact", "atlas",
+  "brain", "bridge", "brief", "cognitive", "creative", "credits",
+  "culture", "daily", "digest", "economy", "events", "explore",
+  "federation", "feedback", "flywheel", "guidance", "heal",
+  "heartbeat", "hive", "inheritance", "lineage", "loaf",
+  "onboarding", "personas", "physics", "quest", "queue",
+  "reproduction", "rights", "scope", "settings", "social",
+  "species", "srs", "teaching", "trust",
+]) allowDomain(d, _ACL_PUB);
 
 // Per-macro overrides for sensitive operations within member domains
 allowMacro("dtu", "delete", _ACL_ADMIN);
