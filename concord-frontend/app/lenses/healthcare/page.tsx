@@ -968,19 +968,19 @@ export default function HealthcareLensPage() {
   };
 
   return (
-    <div className={ds.pageContainer}>
+    <div data-lens-theme="healthcare" className="p-6 space-y-6 bg-gradient-to-b from-blue-950/20 to-transparent">
       {/* ============================================================ */}
       {/* Compliance Banner                                            */}
       {/* ============================================================ */}
-      <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3 flex items-start gap-3">
-        <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
+      <div className="bg-blue-500/10 border border-blue-400/20 rounded-xl px-4 py-3 flex items-start gap-3 shadow-sm">
+        <AlertTriangle className="w-5 h-5 text-blue-400 mt-0.5 shrink-0" />
         <div className="flex-1">
-          <p className="text-sm text-amber-200">
+          <p className="text-sm text-blue-200">
             Not medical advice. This tool assists with record organization only. It is not a certified EHR and should not be used for clinical decision-making. Always consult a qualified healthcare provider. Consult applicable regulations (HIPAA, etc.) for your jurisdiction.
           </p>
           <div className="flex items-center gap-3 mt-1">
-            <span className="flex items-center gap-1 text-xs text-amber-400/70"><ShieldCheck className="w-3 h-3" />HIPAA Aware</span>
-            <span className="flex items-center gap-1 text-xs text-amber-400/70"><BadgeCheck className="w-3 h-3" />Audit Trail</span>
+            <span className="flex items-center gap-1 text-xs text-blue-400/70"><ShieldCheck className="w-3 h-3" />HIPAA Aware</span>
+            <span className="flex items-center gap-1 text-xs text-blue-400/70"><BadgeCheck className="w-3 h-3" />Audit Trail</span>
           </div>
         </div>
       </div>

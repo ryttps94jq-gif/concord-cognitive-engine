@@ -730,7 +730,7 @@ export default function ArtLensPage() {
     );
   }
   return (
-    <div className="h-[calc(100vh-4rem)] flex flex-col bg-gradient-to-b from-pink-900/10 to-black">
+    <div data-lens-theme="art" className="h-[calc(100vh-4rem)] flex flex-col bg-gradient-to-b from-rose-950/10 via-neutral-950 to-black">
       {renderNav()}
       <div className="flex-1 overflow-hidden flex">
         <div className="flex-1 overflow-hidden">

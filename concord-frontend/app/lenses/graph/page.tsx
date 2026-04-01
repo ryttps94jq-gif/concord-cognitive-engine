@@ -1055,9 +1055,9 @@ export default function GraphLensPage() {
     );
   }
   return (
-    <div className="h-full flex flex-col bg-lattice-bg">
+    <div data-lens-theme="graph" className="h-full flex flex-col bg-[#0a0e14]">
       {/* Real-time Enhancement Toolbar */}
-      <div className="flex items-center gap-2 px-4 py-1 border-b border-lattice-border/30 flex-wrap">
+      <div className="flex items-center gap-2 px-4 py-1 border-b border-cyan-900/20 bg-[#0a0e14]/80 backdrop-blur-sm flex-wrap">
         <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} compact />
         <DTUExportButton domain="graph" data={realtimeData || {}} compact />
         <RealtimeDataPanel domain="graph" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={realtimeInsights} compact />

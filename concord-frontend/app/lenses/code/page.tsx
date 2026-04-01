@@ -1044,11 +1044,11 @@ export default function CodeLensPage() {
               initial={{ width: 0 }}
               animate={{ width: 240 }}
               exit={{ width: 0 }}
-              className="border-r border-lattice-border bg-lattice-surface/30 overflow-hidden"
+              className="border-r border-green-900/30 bg-[#0d1117] overflow-hidden"
             >
               <div className="w-60 h-full flex flex-col">
-                <div className="p-2 border-b border-lattice-border flex items-center justify-between">
-                  <span className="text-xs font-semibold text-gray-400 uppercase">Templates</span>
+                <div className="p-2 border-b border-green-900/30 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-green-500 uppercase font-mono tracking-wider">Explorer</span>
                   <div className="flex items-center gap-1">
                     <button onClick={handleNewTab} className="p-1 rounded hover:bg-lattice-elevated text-gray-400 hover:text-white transition-colors" title="New script">
                       <Plus className="w-4 h-4" />

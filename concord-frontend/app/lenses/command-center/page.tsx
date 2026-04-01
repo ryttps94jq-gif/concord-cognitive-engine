@@ -1783,12 +1783,15 @@ export default function CommandCenterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-lattice-void text-white">
+    <div data-lens-theme="dashboard" className="min-h-screen bg-[#070b10] text-white">
       {/* Header */}
-      <div className="sticky top-0 z-50 bg-lattice-deep/95 backdrop-blur border-b border-lattice-border px-4 py-3">
+      <div className="sticky top-0 z-50 bg-[#0a0f18]/95 backdrop-blur-md border-b border-cyan-900/20 px-4 py-3">
         <div className="flex items-center gap-2">
-          <Shield className="w-5 h-5 text-neon-cyan" />
-          <h1 className="text-base font-bold">Command Center</h1>
+          <div className="relative">
+            <Shield className="w-5 h-5 text-cyan-400" />
+            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-cyan-400 rounded-full animate-pulse" />
+          </div>
+          <h1 className="text-base font-bold tracking-tight text-cyan-50">Command Center</h1>
         </div>
 
       {/* Real-time Enhancement Toolbar */}

@@ -1064,14 +1064,16 @@ export default function EducationLensPage() {
   /* ================================================================== */
 
   return (
-    <div className={ds.pageContainer}>
+    <div data-lens-theme="education" className="p-6 space-y-6 bg-gradient-to-b from-amber-950/10 to-transparent">
       {/* Header */}
       <header className={ds.sectionHeader}>
         <div className="flex items-center gap-3">
-          <GraduationCap className="w-7 h-7 text-neon-blue" />
+          <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-400/20 flex items-center justify-center">
+            <GraduationCap className="w-6 h-6 text-amber-400" />
+          </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className={ds.heading1}>Education</h1>
+              <h1 className="text-2xl font-bold text-amber-50">Education</h1>
               <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} />
             </div>
             <p className={ds.textMuted}>Student management, courses, assignments, and academic tracking</p>

@@ -1181,13 +1181,15 @@ export default function FinanceLensPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="finance" className="p-6 space-y-6 bg-[#0c0f14] font-mono">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <span className="text-3xl">💰</span>
+          <div className="w-10 h-10 rounded bg-emerald-900/40 border border-emerald-700/30 flex items-center justify-center">
+            <TrendingUp className="w-5 h-5 text-emerald-400" />
+          </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold">Finance Lens</h1>
+              <h1 className="text-xl font-bold font-mono tracking-tight text-emerald-100">Finance Lens</h1>
               <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} />
             </div>
             <p className="text-sm text-gray-400">Portfolio tracking & trading dashboard</p>
