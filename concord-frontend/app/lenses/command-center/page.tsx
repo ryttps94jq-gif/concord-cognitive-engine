@@ -1806,8 +1806,8 @@ export default function CommandCenterPage() {
       </div>
       </div>
 
-      {/* Tab Bar — horizontal scroll on mobile */}
-      <div className="sticky top-[52px] z-40 bg-lattice-deep border-b border-lattice-border overflow-x-auto">
+      {/* Tab Bar -- horizontal scroll on mobile */}
+      <div className="sticky top-[52px] z-40 bg-[#0a0f18]/95 backdrop-blur-md border-b border-cyan-900/15 overflow-x-auto">
         <div className="flex min-w-max px-2">
           {TABS.map(tab => {
             const Icon = tab.icon;
@@ -1818,8 +1818,8 @@ export default function CommandCenterPage() {
                 onClick={() => setActiveTab(tab.id)}
                 className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium whitespace-nowrap transition-colors border-b-2 ${
                   isActive
-                    ? 'text-neon-cyan border-neon-cyan'
-                    : 'text-gray-500 border-transparent hover:text-gray-300'
+                    ? 'text-cyan-400 border-cyan-400'
+                    : 'text-gray-600 border-transparent hover:text-cyan-300/70'
                 }`}
               >
                 <Icon className="w-3.5 h-3.5" />
@@ -1831,7 +1831,7 @@ export default function CommandCenterPage() {
       </div>
 
       {/* Panel Content */}
-      <div className="p-4 max-w-2xl mx-auto">
+      <div className="p-4 max-w-2xl mx-auto space-y-4">
         {renderPanel()}
 
       {/* Real-time Data Panel */}
