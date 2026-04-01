@@ -225,12 +225,12 @@ export default function DefenseLensPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <h3 className="text-sm font-semibold text-white">{item.title}</h3>
-                {(item.data as Record<string, unknown>).status && (
+                {!!(item.data as Record<string, unknown>).status && (
                   <span className={cn('text-xs px-2 py-0.5 rounded-full', STATUS_COLORS[String((item.data as Record<string, unknown>).status)] || 'text-gray-400 bg-gray-400/10')}>
                     {String((item.data as Record<string, unknown>).status)}
                   </span>
                 )}
-                {(item.data as Record<string, unknown>).classification && (
+                {!!(item.data as Record<string, unknown>).classification && (
                   <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 flex items-center gap-1">
                     <Lock className="w-3 h-3" />{String((item.data as Record<string, unknown>).classification)}
                   </span>
@@ -242,10 +242,10 @@ export default function DefenseLensPage() {
                 </button>
               </div>
             </div>
-            {(item.data as Record<string, unknown>).objective && (
+            {!!(item.data as Record<string, unknown>).objective && (
               <p className="text-xs text-gray-500 mt-2">{String((item.data as Record<string, unknown>).objective)}</p>
             )}
-            {(item.data as Record<string, unknown>).summary && (
+            {!!(item.data as Record<string, unknown>).summary && (
               <p className="text-xs text-gray-500 mt-2">{String((item.data as Record<string, unknown>).summary)}</p>
             )}
           </div>

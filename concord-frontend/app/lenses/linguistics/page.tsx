@@ -111,7 +111,7 @@ export default function LinguisticsLensPage() {
   const { items: corpora } = useLensData<LinguisticsArtifact>('linguistics', 'Corpus', { seed: [] });
   const { items: translations } = useLensData<LinguisticsArtifact>('linguistics', 'Translation', { seed: [] });
 
-  const runArtifact = useRunArtifact();
+  const runArtifact = useRunArtifact('linguistics');
 
   // Analyze text through the lens/run endpoint
   const handleAnalyze = useCallback(async () => {

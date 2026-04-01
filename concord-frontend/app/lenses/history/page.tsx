@@ -104,7 +104,7 @@ export default function HistoryLensPage() {
   const { items: figures } = useLensData<HistoryArtifact>('history', 'Figure', { seed: [] });
   const { items: sources } = useLensData<HistoryArtifact>('history', 'Source', { seed: [] });
 
-  const runArtifact = useRunArtifact();
+  const runArtifact = useRunArtifact('history');
 
   // Filtering
   const filtered = useMemo(() => {

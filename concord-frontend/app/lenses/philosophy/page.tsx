@@ -103,7 +103,7 @@ export default function PhilosophyLensPage() {
   const { items: traditions } = useLensData<PhilosophyArtifact>('philosophy', 'Tradition', { seed: [] });
   const { items: dialogues } = useLensData<PhilosophyArtifact>('philosophy', 'Dialogue', { seed: [] });
 
-  const runArtifact = useRunArtifact();
+  const runArtifact = useRunArtifact('philosophy');
 
   // Filtering
   const filtered = useMemo(() => {

@@ -233,7 +233,7 @@ export default function EmergencyServicesLensPage() {
         )}
       </div>
 
-      <UniversalActions domain="emergency-services" items={items} />
+      <UniversalActions domain="emergency-services" artifactId={items[0]?.id} />
       <RealtimeDataPanel data={insights} />
 
       <div className="border-t border-white/10">

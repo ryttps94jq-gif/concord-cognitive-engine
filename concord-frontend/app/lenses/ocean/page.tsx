@@ -189,7 +189,7 @@ export default function OceanLensPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <h3 className="text-sm font-semibold text-white">{item.title}</h3>
-                {(item.data as Record<string, unknown>).status && (
+                {!!(item.data as Record<string, unknown>).status && (
                   <span className={cn('text-xs px-2 py-0.5 rounded-full', STATUS_COLORS[String((item.data as Record<string, unknown>).status)] || 'text-gray-400 bg-gray-400/10')}>
                     {String((item.data as Record<string, unknown>).status)}
                   </span>
