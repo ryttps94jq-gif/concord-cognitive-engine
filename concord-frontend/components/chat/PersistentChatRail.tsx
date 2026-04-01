@@ -726,9 +726,10 @@ export function PersistentChatRail({
 
   return (
     <div
+      data-lens-theme="chat"
       className={cn(
         'fixed right-0 top-14 lg:top-16 bottom-0 z-30 flex flex-col',
-        'bg-lattice-deep border-l border-lattice-border',
+        'bg-lattice-deep border-l border-blue-500/10',
         'transition-all duration-300',
         isExpanded ? 'w-[600px]' : 'w-[380px]'
       )}
@@ -903,17 +904,17 @@ export function PersistentChatRail({
                   className={cn(
                     'max-w-[85%] rounded-xl px-3.5 py-2.5 text-sm leading-relaxed',
                     msg.role === 'user'
-                      ? 'bg-neon-blue/20 text-zinc-100 border border-neon-blue/20'
-                      : 'bg-zinc-800/80 text-zinc-200 border border-zinc-700/50'
+                      ? 'bg-blue-600/25 text-zinc-100 border border-blue-500/25'
+                      : 'bg-gradient-to-br from-zinc-800/90 to-zinc-800/60 text-zinc-200 border border-zinc-700/40 shadow-sm shadow-blue-500/5'
                   )}
                 >
                   <div className="whitespace-pre-wrap break-words">{msg.content}</div>
 
-                  {/* Web Sources */}
+                  {/* Web Sources — styled panel */}
                   {msg.sources && msg.sources.length > 0 && (
-                    <div className="mt-2 pt-2 border-t border-zinc-700/50 space-y-1">
+                    <div className="mt-2 pt-2 border-t border-blue-500/10 space-y-1">
                       {msg.sources.map((s, si) => (
-                        <div key={si} className="flex items-center gap-1 text-[10px] text-zinc-500">
+                        <div key={si} className="flex items-center gap-1 text-[10px] text-blue-400/60 hover:text-blue-400/80 transition-colors">
                           <ExternalLink className="w-2.5 h-2.5" />
                           <span>{s.source}: {s.title}</span>
                         </div>
@@ -1020,12 +1021,17 @@ export function PersistentChatRail({
           );
         })}
 
-        {/* Status indicators */}
+        {/* Status indicators — typing animation */}
         {chatStatus === 'thinking' && (
           <div className="space-y-1">
-            <div className="flex items-center gap-2 text-sm text-zinc-400 px-2 py-1">
+            <div className="flex items-center gap-2 text-sm text-blue-400/80 px-2 py-1">
               <Brain className="w-4 h-4 animate-pulse" />
-              Thinking...
+              <span>Thinking</span>
+              <span className="flex gap-0.5">
+                <span className="w-1 h-1 rounded-full bg-blue-400/60 animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="w-1 h-1 rounded-full bg-blue-400/60 animate-bounce" style={{ animationDelay: '150ms' }} />
+                <span className="w-1 h-1 rounded-full bg-blue-400/60 animate-bounce" style={{ animationDelay: '300ms' }} />
+              </span>
             </div>
             {lastDtuCount > 0 && (
               <div className="flex items-center gap-2 text-[10px] text-zinc-500 px-2">

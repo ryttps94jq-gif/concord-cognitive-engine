@@ -419,7 +419,7 @@ export default function ForumLensPage() {
     const post = posts.find(p => p.id === postId);
     const isLocked = post?.locked;
     return (
-      <div key={comment.id} className={cn('border-l-2 pl-3 mt-3', depth === 0 ? 'border-lattice-border' : depth === 1 ? 'border-gray-700' : 'border-gray-800')}>
+      <div key={comment.id} className={cn('border-l-2 pl-3 mt-3', depth === 0 ? 'border-orange-500/20' : depth === 1 ? 'border-amber-700/20' : 'border-gray-800')}>
         <div className="flex items-start gap-2">
           <div className="flex flex-col items-center gap-0.5 mt-1">
             <button onClick={() => handleCommentVote(comment.id, 1)} className={cn('text-gray-500 hover:text-orange-400 transition-colors', comment.userVote === 1 && 'text-orange-500')}><ArrowBigUp className="w-4 h-4" /></button>
@@ -461,13 +461,13 @@ export default function ForumLensPage() {
   // ----- Post card -----
   function renderPostCard(post: Post) {
     return (
-      <motion.article key={post.id} layout className={cn('bg-lattice-surface border rounded-lg hover:border-gray-600 transition-colors lens-card', post.pinned ? 'border-neon-cyan/40' : 'border-lattice-border')}>
+      <motion.article key={post.id} layout className={cn('bg-lattice-surface border rounded-lg hover:border-orange-500/30 transition-colors lens-card', post.pinned ? 'border-orange-400/40' : 'border-lattice-border')}>
         <div className="flex">
-          {/* Vote column */}
+          {/* Vote column — orange/warm accent */}
           <div className="flex flex-col items-center p-2 bg-lattice-bg/50 rounded-l-lg min-w-[48px]">
-            <button onClick={() => handleVote(post.id, 1)} className={cn('p-1 rounded hover:bg-lattice-surface transition-colors', post.userVote === 1 ? 'text-orange-500' : 'text-gray-400 hover:text-orange-500')}><ArrowBigUp className="w-6 h-6" /></button>
+            <button onClick={() => handleVote(post.id, 1)} className={cn('p-1 rounded hover:bg-orange-500/10 transition-colors', post.userVote === 1 ? 'text-orange-500' : 'text-gray-400 hover:text-orange-500')}><ArrowBigUp className="w-6 h-6" /></button>
             <span className={cn('text-sm font-bold py-0.5', post.userVote === 1 ? 'text-orange-500' : post.userVote === -1 ? 'text-blue-500' : 'text-white')}>{formatScore(post.score)}</span>
-            <button onClick={() => handleVote(post.id, -1)} className={cn('p-1 rounded hover:bg-lattice-surface transition-colors', post.userVote === -1 ? 'text-blue-500' : 'text-gray-400 hover:text-blue-500')}><ArrowBigDown className="w-6 h-6" /></button>
+            <button onClick={() => handleVote(post.id, -1)} className={cn('p-1 rounded hover:bg-blue-500/10 transition-colors', post.userVote === -1 ? 'text-blue-500' : 'text-gray-400 hover:text-blue-500')}><ArrowBigDown className="w-6 h-6" /></button>
           </div>
           {/* Content */}
           <div className="flex-1 p-3 min-w-0">
@@ -485,7 +485,7 @@ export default function ForumLensPage() {
             {post.content && <p className="text-sm text-gray-400 mb-2 line-clamp-2">{post.content}</p>}
             {post.tags.length > 0 && (
               <div className="flex gap-1.5 mb-2 flex-wrap">
-                {post.tags.slice(0, 4).map(t => <span key={t} className="px-2 py-0.5 bg-lattice-bg border border-lattice-border rounded text-[10px] text-gray-400"><Hash className="w-2.5 h-2.5 inline mr-0.5" />{t}</span>)}
+                {post.tags.slice(0, 4).map(t => <span key={t} className="px-2 py-0.5 bg-orange-500/10 border border-orange-500/20 rounded-full text-[10px] text-orange-300 font-medium"><Hash className="w-2.5 h-2.5 inline mr-0.5" />{t}</span>)}
               </div>
             )}
             <div className="flex items-center gap-1 text-gray-400 flex-wrap">
