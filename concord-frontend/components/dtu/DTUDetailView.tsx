@@ -38,6 +38,65 @@ const tierConfig = {
   shadow: { icon: Ghost, color: 'text-gray-400', label: 'Shadow DTU', bg: 'bg-gray-500/10' },
 };
 
+// ── DTU Creation Path Labels (Feature 11: All 15 DTU Creation Paths) ────────
+const DTU_SOURCE_LABELS: Record<string, string> = {
+  user: '1. User Create',
+  sovereign: '1. User Create',
+  media: '2. Artifact Upload',
+  'autogen.pipeline': '3. Autogen Pipeline',
+  autogen: '3. Autogen Pipeline',
+  dream: '4. Dream Capture',
+  teaching: '5. Teaching Session',
+  entity_autonomy: '6. Entity Autonomy',
+  emergent: '6. Entity Autonomy',
+  evolution: '7. Evolution Synth',
+  hlr: '8. HLR Reasoning',
+  hypothesis: '9. Hypothesis Engine',
+  creative: '10. Creative Generation',
+  'research-jobs': '11. Research Jobs',
+  feedback: '12. Feedback Submission',
+  evolution_proposal: '13. Evolution Proposal',
+  death_memorial: '14. Death Memorial',
+  repair_cortex: '15. Repair Cortex Log',
+  event_bridge: 'Event Bridge',
+  sleep_consolidation: 'Sleep Consolidation',
+  breakthrough_cluster: 'Breakthrough Cluster',
+  federation: 'Federation',
+  seed: 'Seed Data',
+  invoice: 'Invoice Generation',
+  tax_summary: 'Tax Summary',
+  forge: 'Inline Forge',
+};
+
+const DTU_SOURCE_STYLES: Record<string, { bg: string }> = {
+  user: { bg: 'bg-neon-cyan/10 text-neon-cyan' },
+  sovereign: { bg: 'bg-neon-cyan/10 text-neon-cyan' },
+  media: { bg: 'bg-blue-500/10 text-blue-400' },
+  'autogen.pipeline': { bg: 'bg-green-500/10 text-green-400' },
+  autogen: { bg: 'bg-green-500/10 text-green-400' },
+  dream: { bg: 'bg-purple-500/10 text-purple-400' },
+  teaching: { bg: 'bg-yellow-500/10 text-yellow-400' },
+  entity_autonomy: { bg: 'bg-neon-purple/10 text-neon-purple' },
+  emergent: { bg: 'bg-neon-purple/10 text-neon-purple' },
+  evolution: { bg: 'bg-pink-500/10 text-pink-400' },
+  hlr: { bg: 'bg-orange-500/10 text-orange-400' },
+  hypothesis: { bg: 'bg-amber-500/10 text-amber-400' },
+  creative: { bg: 'bg-rose-500/10 text-rose-400' },
+  'research-jobs': { bg: 'bg-indigo-500/10 text-indigo-400' },
+  feedback: { bg: 'bg-teal-500/10 text-teal-400' },
+  evolution_proposal: { bg: 'bg-fuchsia-500/10 text-fuchsia-400' },
+  death_memorial: { bg: 'bg-gray-500/10 text-gray-400' },
+  repair_cortex: { bg: 'bg-red-500/10 text-red-400' },
+  event_bridge: { bg: 'bg-sky-500/10 text-sky-400' },
+  sleep_consolidation: { bg: 'bg-violet-500/10 text-violet-400' },
+  breakthrough_cluster: { bg: 'bg-lime-500/10 text-lime-400' },
+  invoice: { bg: 'bg-emerald-500/10 text-emerald-400' },
+  tax_summary: { bg: 'bg-emerald-500/10 text-emerald-400' },
+  forge: { bg: 'bg-neon-pink/10 text-neon-pink' },
+  seed: { bg: 'bg-gray-500/10 text-gray-500' },
+  federation: { bg: 'bg-cyan-500/10 text-cyan-400' },
+};
+
 export function DTUDetailView({ dtuId, onClose, onNavigate }: DTUDetailViewProps) {
   const [activeTab, setActiveTab] = useState<'content' | 'lineage' | 'metadata'>('content');
 
@@ -86,6 +145,31 @@ export function DTUDetailView({ dtuId, onClose, onNavigate }: DTUDetailViewProps
   const citationDtus = lineageData?.citations || [];
   const citedByDtus = lineageData?.citedBy || [];
   const royaltyCascade = lineageData?.royaltyCascade || [];
+
+  // Fetch royalty cascade earnings for this DTU
+  const { data: cascadeData } = useQuery({
+    queryKey: ['dtu-royalty-cascade', dtuId],
+    queryFn: async () => {
+      const res = await apiHelpers.economy.royaltyCascade(dtuId);
+      return res.data as {
+        ok: boolean;
+        totalEarned: number;
+        totalTransactions: number;
+        ancestors: Array<{
+          creatorId: string;
+          contentId: string;
+          generation: number;
+          rate: number;
+          ratePercent: string;
+          totalEarned: number;
+        }>;
+        descendantCount: number;
+      };
+    },
+    enabled: Boolean(dtuId),
+    retry: false,
+    staleTime: 60_000,
+  });
 
   const handleCopyId = () => {
     navigator.clipboard.writeText(dtuId);
@@ -318,6 +402,16 @@ export function DTUDetailView({ dtuId, onClose, onNavigate }: DTUDetailViewProps
                     </div>
                   )}
 
+                  {/* Created via: source path badge */}
+                  {dtu.source && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-500">Created via:</span>
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${DTU_SOURCE_STYLES[dtu.source]?.bg || 'bg-gray-500/10 text-gray-400'}`}>
+                        {DTU_SOURCE_LABELS[dtu.source] || dtu.source}
+                      </span>
+                    </div>
+                  )}
+
                   {/* Metrics row */}
                   <div className="flex items-center gap-4 text-sm text-gray-400 flex-wrap">
                     <span className="flex items-center gap-1">
@@ -326,9 +420,6 @@ export function DTUDetailView({ dtuId, onClose, onNavigate }: DTUDetailViewProps
                     </span>
                     {dtu.ownerId && (
                       <span className="text-gray-500">Creator: {dtu.ownerId}</span>
-                    )}
-                    {dtu.source && (
-                      <span className="text-gray-500">Source: {dtu.source}</span>
                     )}
                     {dtu.resonance !== undefined && (
                       <span>Resonance: {(dtu.resonance * 100).toFixed(1)}%</span>
@@ -521,6 +612,7 @@ export function DTUDetailView({ dtuId, onClose, onNavigate }: DTUDetailViewProps
                         ['ID', dtu.id],
                         ['Tier', dtu.tier],
                         ['Source', dtu.source],
+                        ['Created Via', dtu.source ? (DTU_SOURCE_LABELS[dtu.source] || dtu.source) : undefined],
                         ['Primary Type', primaryType],
                         ['Artifact', artifactRef],
                         ['Domain', dtu.domain],

@@ -10,13 +10,14 @@ import {
   AlertTriangle, Moon, FileText, Pause, Play,
   Save, Trash2, XCircle, Clock, ArrowUp,
   Zap, Send, MapPin, Focus, ShieldAlert, ChevronDown,
-  Lightbulb, GitBranch,
+  Lightbulb, GitBranch, Globe,
 } from 'lucide-react';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import FoundationCard from '@/components/chat/FoundationCard';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -579,10 +580,23 @@ function ForgettingPanel() {
   const qc = useQueryClient();
   const runMutation = useMutation({ mutationFn: () => apiHelpers.forgetting.run(), onSuccess: () => qc.invalidateQueries({ queryKey: ['cc-forgetting'] }), onError: (err) => console.error('Forgetting cycle failed:', err instanceof Error ? err.message : err) });
   const { data: candidates } = useQuery({ queryKey: ['cc-forgetting-candidates'], queryFn: () => apiHelpers.forgetting.candidates().then(r => r.data), refetchInterval: 60000 });
+  const { data: historyData } = useQuery({ queryKey: ['cc-forgetting-history'], queryFn: () => apiHelpers.forgetting.history(5).then(r => r.data).catch(() => ({ tombstones: [] })), refetchInterval: 60000 });
+  const recentTombstones = (historyData?.tombstones || []) as Array<{ id: string; title?: string; tier?: string; forgottenAt?: string }>;
 
   return (
     <div className="space-y-4">
       <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Forgetting Engine</h3>
+
+      {/* Cycle indicator */}
+      {status && status.lifetimeForgotten > 0 && (
+        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 flex items-center gap-2">
+          <Trash2 className="w-4 h-4 text-red-400 flex-shrink-0" />
+          <span className="text-xs text-red-300">
+            {status.lifetimeForgotten} DTUs archived (low salience, threshold: {status.threshold})
+          </span>
+        </div>
+      )}
+
       {status && (
         <>
           <div className="grid grid-cols-3 gap-3">
@@ -604,6 +618,21 @@ function ForgettingPanel() {
           <Trash2 className="w-4 h-4" /> {runMutation.isPending ? 'Running...' : 'Run Forgetting Cycle'}
         </button>
       </div>
+
+      {/* Recent tombstones */}
+      {recentTombstones.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-xs text-gray-500">Recently archived</p>
+          {recentTombstones.map(t => (
+            <div key={t.id} className="flex items-center gap-2 bg-lattice-surface rounded p-2 text-xs border border-lattice-border">
+              <Trash2 className="w-3 h-3 text-red-400 flex-shrink-0" />
+              <span className="text-gray-300 truncate flex-1">{t.title || t.id}</span>
+              {t.tier && <span className="text-gray-500 text-[10px]">{t.tier}</span>}
+              {t.forgottenAt && <span className="text-gray-600 text-[10px]">{new Date(t.forgottenAt).toLocaleTimeString()}</span>}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -929,6 +958,101 @@ function MetaDerivationPanel() {
   );
 }
 
+function FoundationPanel() {
+  const { data: statusData } = useQuery({
+    queryKey: ['foundation-status'],
+    queryFn: () => apiHelpers.foundation.status().then(r => r.data),
+    refetchInterval: 15000,
+  });
+  const { data: senseData } = useQuery({
+    queryKey: ['foundation-sense'],
+    queryFn: () => apiHelpers.foundation.senseReadings(20).then(r => r.data),
+    refetchInterval: 10000,
+  });
+  const { data: energyData } = useQuery({
+    queryKey: ['foundation-energy'],
+    queryFn: () => apiHelpers.foundation.energyMap().then(r => r.data),
+    refetchInterval: 15000,
+  });
+  const { data: spectrumData } = useQuery({
+    queryKey: ['foundation-spectrum'],
+    queryFn: () => apiHelpers.foundation.spectrumAvailable(20).then(r => r.data),
+    refetchInterval: 15000,
+  });
+  const { data: protocolData } = useQuery({
+    queryKey: ['foundation-protocol'],
+    queryFn: () => apiHelpers.foundation.protocolStats().then(r => r.data),
+    refetchInterval: 30000,
+  });
+  const { data: emergencyData } = useQuery({
+    queryKey: ['foundation-emergency'],
+    queryFn: () => apiHelpers.foundation.emergencyStatus().then(r => r.data),
+    refetchInterval: 10000,
+  });
+
+  const [section, setSection] = useState<'status' | 'sense' | 'energy' | 'emergency' | 'protocol'>('status');
+
+  const sections = [
+    { id: 'status' as const, label: 'Status' },
+    { id: 'sense' as const, label: 'Sensors' },
+    { id: 'energy' as const, label: 'Energy' },
+    { id: 'emergency' as const, label: 'Emergency' },
+    { id: 'protocol' as const, label: 'Protocol' },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+        <Globe className="w-4 h-4 text-violet-400" /> Foundation Layer
+      </h3>
+
+      {/* Section tabs */}
+      <div className="flex gap-1 bg-zinc-900 rounded-lg p-1">
+        {sections.map(s => (
+          <button
+            key={s.id}
+            onClick={() => setSection(s.id)}
+            className={`flex-1 py-1.5 px-2 rounded-md text-xs font-medium transition-colors ${
+              section === s.id ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'
+            }`}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Section content */}
+      {section === 'status' && statusData && (
+        <FoundationCard type="status" status={statusData} />
+      )}
+      {section === 'sense' && (
+        <FoundationCard type="sense" readings={senseData?.readings || []} />
+      )}
+      {section === 'energy' && (
+        <FoundationCard type="energy" energyReadings={energyData?.readings || []} />
+      )}
+      {section === 'emergency' && (
+        <FoundationCard type="emergency" alerts={emergencyData?.alerts || []} />
+      )}
+      {section === 'protocol' && protocolData && (
+        <FoundationCard type="protocol" protocolMetrics={protocolData} />
+      )}
+
+      {/* Spectrum availability summary */}
+      {spectrumData?.channels && (
+        <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-3">
+          <p className="text-xs font-semibold text-zinc-400 mb-2">Spectrum Availability</p>
+          <div className="text-xs text-zinc-500">
+            {Array.isArray(spectrumData.channels)
+              ? `${spectrumData.channels.length} channels available`
+              : 'Checking spectrum...'}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Tab Navigation ──────────────────────────────────────────────────────────
 
 const TABS = [
@@ -948,6 +1072,7 @@ const TABS = [
   { id: 'dream', label: 'Dream', icon: Moon },
   { id: 'breakthrough', label: 'Breakthrough', icon: Lightbulb },
   { id: 'metaDerivation', label: 'Meta-Derivation', icon: GitBranch },
+  { id: 'foundation', label: 'Foundation', icon: Globe },
   { id: 'logs', label: 'Logs', icon: FileText },
 ] as const;
 
@@ -996,6 +1121,7 @@ export default function CommandCenterPage() {
       case 'dream': return <DreamPanel />;
       case 'breakthrough': return <BreakthroughPanel />;
       case 'metaDerivation': return <MetaDerivationPanel />;
+      case 'foundation': return <FoundationPanel />;
       case 'logs': return <LogsPanel />;
     }
   };

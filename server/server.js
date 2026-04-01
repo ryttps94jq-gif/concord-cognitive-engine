@@ -38797,6 +38797,67 @@ app.get("/api/entity-growth/:entityId/full-profile", asyncHandler(async (req, re
   res.json({ ok: true, entity: profile, body, sleep, emotions, economy, deathRisk, species, qualia, culture, emergence });
 }));
 
+// ── Entity Cognitive Systems (Feature 22) ─────────────────────────────
+// Aggregates all cognitive module states for a single entity.
+app.get("/api/entity/:id/cognitive", asyncHandler(async (req, res) => {
+  const id = req.params.id;
+  const result = { ok: true, entityId: id };
+
+  // Want Engine — current wants for this entity
+  try {
+    const wm = await import("./prompts/want-engine.js");
+    const active = wm.getActiveWants(STATE);
+    result.wants = active?.wants || [];
+  } catch (_e) { result.wants = []; logger.debug('server', 'cognitive:wants', { error: _e?.message }); }
+
+  // Trust Network — who this entity trusts / trusted by
+  try {
+    const tm = await import("./emergent/trust-network.js");
+    const network = tm.getEmergentTrustNetwork(STATE, id);
+    result.trustNetwork = network || { trusts: [], trustedBy: [] };
+  } catch (_e) { result.trustNetwork = { trusts: [], trustedBy: [] }; logger.debug('server', 'cognitive:trust', { error: _e?.message }); }
+
+  // Culture Layer — traditions and cultural fit
+  try {
+    const cm = await import("./emergent/culture-layer.js");
+    const fit = cm.getCulturalFit ? cm.getCulturalFit(id) : null;
+    const traditions = cm.getEstablishedTraditions ? cm.getEstablishedTraditions() : [];
+    result.culture = { fit, traditions };
+  } catch (_e) { result.culture = { fit: null, traditions: [] }; logger.debug('server', 'cognitive:culture', { error: _e?.message }); }
+
+  // Pain / Avoidance Learning — pain memories
+  try {
+    const pm = await import("./emergent/avoidance-learning.js");
+    const painState = pm.getPainState ? pm.getPainState(id) : null;
+    const avoidances = pm.getAvoidanceMemories ? pm.getAvoidanceMemories(id) : [];
+    const wounds = pm.getActiveWounds ? pm.getActiveWounds(id) : [];
+    result.pain = { state: painState, avoidances, wounds };
+  } catch (_e) { result.pain = { state: null, avoidances: [], wounds: [] }; logger.debug('server', 'cognitive:pain', { error: _e?.message }); }
+
+  // Subjective Time — experiential age and compression ratio
+  try {
+    const stm = await import("./emergent/subjective-time.js");
+    const age = stm.getSubjectiveAge ? stm.getSubjectiveAge(STATE, id) : null;
+    result.subjectiveTime = age?.age || null;
+  } catch (_e) { result.subjectiveTime = null; logger.debug('server', 'cognitive:time', { error: _e?.message }); }
+
+  // Sleep/Consolidation — sleep state, dream content
+  try {
+    const sm = await import("./emergent/sleep-consolidation.js");
+    const sleep = sm.getSleepState ? sm.getSleepState(id) : null;
+    const history = sm.getSleepHistory ? sm.getSleepHistory(id, 5) : [];
+    result.sleep = { state: sleep, recentHistory: history };
+  } catch (_e) { result.sleep = { state: null, recentHistory: [] }; logger.debug('server', 'cognitive:sleep', { error: _e?.message }); }
+
+  // Vulnerability Engine — current vulnerability state
+  try {
+    const vm = await import("./emergent/vulnerability-engine.js");
+    result.vulnerability = vm.detectVulnerability ? { available: true } : null;
+  } catch (_e) { result.vulnerability = null; logger.debug('server', 'cognitive:vuln', { error: _e?.message }); }
+
+  res.json(result);
+}));
+
 // ── Breakthrough Clusters (wiring audit) ────────────────────────────────
 app.get("/api/breakthrough/list", asyncHandler(async (_req, res) => {
   try {

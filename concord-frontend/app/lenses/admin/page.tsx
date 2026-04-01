@@ -28,6 +28,8 @@ import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
+import { NervousSystem } from '@/components/nervous/NervousSystem';
+import { Download, Globe } from 'lucide-react';
 
 interface DashboardData {
   ok: boolean;
@@ -565,6 +567,35 @@ export default function AdminDashboardPage() {
           compact
         />
       )}
+      </div>
+
+      {/* Nervous System — live brain/circuit/event/trace/integrity monitoring */}
+      <NervousSystem />
+
+      {/* Browser Extension */}
+      <div className="panel p-6">
+        <h2 className="font-semibold mb-3 flex items-center gap-2">
+          <Globe className="w-5 h-5 text-neon-cyan" />
+          Browser Extension
+        </h2>
+        <p className="text-sm text-gray-400 mb-3">
+          Install the Concord Lens browser extension to get structural truth overlays on any website.
+          The extension injects a content script that connects to your local Concord instance.
+        </p>
+        <div className="flex items-center gap-3">
+          <a
+            href="/extension"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-4 py-2 bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30 rounded-lg hover:bg-neon-cyan/20 transition-colors text-sm"
+          >
+            <Download className="w-4 h-4" />
+            Install Concord Browser Extension
+          </a>
+          <span className="text-xs text-gray-500">
+            v0.1.0 — Chrome / Firefox (Manifest V3)
+          </span>
+        </div>
       </div>
 
       {/* Lens Features */}

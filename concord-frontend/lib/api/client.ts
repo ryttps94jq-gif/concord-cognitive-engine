@@ -1939,15 +1939,48 @@ export const apiHelpers = {
     status: () => api.get('/api/culture/status'),
   },
 
+  /** Foundation — Sovereignty modules */
+  foundation: {
+    status: () => api.get('/api/foundation/status'),
+    senseReadings: (limit = 50) => api.get('/api/foundation/sense/readings', { params: { limit } }),
+    sensePatterns: () => api.get('/api/foundation/sense/patterns'),
+    energyMap: () => api.get('/api/foundation/energy/map'),
+    energyGrid: () => api.get('/api/foundation/energy/grid'),
+    spectrumMap: () => api.get('/api/foundation/spectrum/map'),
+    spectrumAvailable: (limit = 50) => api.get('/api/foundation/spectrum/available', { params: { limit } }),
+    emergencyStatus: () => api.get('/api/foundation/emergency/status'),
+    neuralReadiness: () => api.get('/api/foundation/neural/readiness'),
+    protocolStats: () => api.get('/api/foundation/protocol/stats'),
+  },
+
+  /** Atlas Tomography — Spatial mapping and signals */
+  atlasTomography: {
+    tile: (lat: number, lng: number) => api.get('/api/atlas/tile', { params: { lat, lng } }),
+    coverage: () => api.get('/api/atlas/coverage'),
+    material: (lat: number, lng: number) => api.get('/api/atlas/material', { params: { lat, lng } }),
+    volume: (bounds: { lat_min: number; lat_max: number; lng_min: number; lng_max: number }, tier = 'PUBLIC') =>
+      api.get('/api/atlas/volume', { params: { ...bounds, tier } }),
+    subsurface: (bounds: { lat_min: number; lat_max: number; lng_min: number; lng_max: number }) =>
+      api.get('/api/atlas/subsurface', { params: bounds }),
+    change: (params?: Record<string, unknown>) => api.get('/api/atlas/change', { params }),
+    live: () => api.get('/api/atlas/live'),
+    signalsTaxonomy: (category = 'all', limit = 50) =>
+      api.get('/api/atlas/signals/taxonomy', { params: { category, limit } }),
+    signalsUnknown: (limit = 50) => api.get('/api/atlas/signals/unknown', { params: { limit } }),
+    signalsAnomalies: (limit = 50) => api.get('/api/atlas/signals/anomalies', { params: { limit } }),
+    signalsSpectrum: () => api.get('/api/atlas/signals/spectrum'),
+  },
+
   /** Qualia — Sensory / Body / Presence */
   qualia: {
     state: (entityId: string) => api.get(`/api/qualia/state/${entityId}`),
     summary: (entityId: string) => api.get(`/api/qualia/summary/${entityId}`),
     all: () => api.get('/api/qualia/all'),
-    sensory: () => api.get('/api/qualia/foundation/sensory'),
-    presence: () => api.get('/api/qualia/foundation/presence'),
-    embodiment: () => api.get('/api/qualia/foundation/embodiment'),
-    planetary: () => api.get('/api/qualia/foundation/planetary'),
+    channels: (entityId: string) => api.get(`/api/qualia/senses/channels/${entityId}`),
+    presence: (entityId: string) => api.get(`/api/qualia/presence/${entityId}`),
+    embodiment: (entityId: string) => api.get(`/api/qualia/embodiment/${entityId}`),
+    planetary: (entityId: string) => api.get(`/api/qualia/planetary/${entityId}`),
+    senses: (entityId: string) => api.get(`/api/qualia/senses/${entityId}`),
   },
 
   // ═══════════════════════════════════════════════════════════════

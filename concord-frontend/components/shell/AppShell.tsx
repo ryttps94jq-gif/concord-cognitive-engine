@@ -14,6 +14,7 @@ import { FirstWinWizard } from '@/components/guidance/FirstWinWizard';
 import { LensErrorBoundary } from '@/components/common/LensErrorBoundary';
 import { InstallPrompt } from '@/components/pwa/InstallPrompt';
 import { OfflineFallback } from '@/components/pwa/OfflineFallback';
+import { ConnectionStatus } from '@/components/common/ConnectionStatus';
 import { QuickCapture, useQuickCapture } from '@/components/capture/QuickCapture';
 import { NowPlayingBar } from '@/components/music/NowPlayingBar';
 
