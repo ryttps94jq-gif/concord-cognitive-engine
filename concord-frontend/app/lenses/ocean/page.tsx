@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -12,15 +13,17 @@ import {
   Waves, Plus, Search, Trash2, BarChart3,
   Layers, ChevronDown, MapPin, Users,
   Anchor, Ship, Fish, Thermometer, Droplets,
-  Eye, AlertTriangle, Navigation,
+  Eye, AlertTriangle, Navigation, Map,
 } from 'lucide-react';
+
+const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 
-type ModeTab = 'Dashboard' | 'Vessels' | 'Research' | 'Marine' | 'Ports' | 'Weather' | 'Conservation';
+type ModeTab = 'Dashboard' | 'Vessels' | 'Research' | 'Marine' | 'Ports' | 'Weather' | 'Conservation' | 'Map';
 
 interface VesselData {
   name: string;
@@ -34,6 +37,8 @@ interface VesselData {
   crew: number;
   cargo: string;
   imo: string;
+  lat?: number;
+  lng?: number;
 }
 
 interface ResearchData {
@@ -67,12 +72,13 @@ const MODE_TABS: { key: ModeTab; label: string; icon: typeof Waves }[] = [
   { key: 'Ports', label: 'Ports', icon: Anchor },
   { key: 'Weather', label: 'Sea Weather', icon: Droplets },
   { key: 'Conservation', label: 'Conservation', icon: Waves },
+  { key: 'Map', label: 'Map', icon: Map },
 ];
 
 function getTypeForTab(tab: ModeTab): string {
   const map: Record<ModeTab, string> = {
     Dashboard: 'Vessel', Vessels: 'Vessel', Research: 'Research',
-    Marine: 'Marine', Ports: 'Port', Weather: 'SeaWeather', Conservation: 'Conservation',
+    Marine: 'Marine', Ports: 'Port', Weather: 'SeaWeather', Conservation: 'Conservation', Map: 'Vessel',
   };
   return map[tab];
 }
@@ -208,6 +214,18 @@ export default function OceanLensPage() {
           </div>
         )}
       </div>
+
+      {activeMode === 'Map' && (
+        <div className="p-4 bg-zinc-900 rounded-lg border border-zinc-800">
+          <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2"><Map className="w-4 h-4 text-cyan-400" /> Marine Areas</h3>
+          <MapView
+            markers={vessels.filter(v => (v.data as VesselData).lat && (v.data as VesselData).lng).map(v => { const d = v.data as VesselData; return { lat: d.lat!, lng: d.lng!, label: v.title || d.name, popup: `${d.type} - ${d.status} (${d.destination || ''})` }; })}
+            className="h-[500px]"
+            center={[0, -30]}
+            zoom={3}
+          />
+        </div>
+      )}
 
       <UniversalActions domain="ocean" artifactId={items[0]?.id} />
       <RealtimeDataPanel data={insights} />

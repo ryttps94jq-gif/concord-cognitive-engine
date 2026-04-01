@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -12,15 +13,17 @@ import {
   Siren, Plus, Search, Trash2, BarChart3,
   Layers, ChevronDown, MapPin, Users,
   Flame, Phone, Heart, Truck,
-  Eye, AlertTriangle, Clock, Radio,
+  Eye, AlertTriangle, Clock, Radio, Map,
 } from 'lucide-react';
+
+const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 
-type ModeTab = 'Dashboard' | 'Calls' | 'Units' | 'Fire' | 'EMS' | 'Dispatch' | 'Resources';
+type ModeTab = 'Dashboard' | 'Calls' | 'Units' | 'Fire' | 'EMS' | 'Dispatch' | 'Resources' | 'Map';
 
 interface CallData {
   callNumber: string;
@@ -36,6 +39,8 @@ interface CallData {
   narrative: string;
   unitsAssigned: string[];
   patients: number;
+  lat?: number;
+  lng?: number;
 }
 
 interface UnitData {
@@ -77,12 +82,13 @@ const MODE_TABS: { key: ModeTab; label: string; icon: typeof Siren }[] = [
   { key: 'EMS', label: 'EMS', icon: Heart },
   { key: 'Dispatch', label: 'Dispatch', icon: Radio },
   { key: 'Resources', label: 'Resources', icon: MapPin },
+  { key: 'Map', label: 'Map', icon: Map },
 ];
 
 function getTypeForTab(tab: ModeTab): string {
   const map: Record<ModeTab, string> = {
     Dashboard: 'Call', Calls: 'Call', Units: 'Unit',
-    Fire: 'FireIncident', EMS: 'EMSCall', Dispatch: 'Dispatch', Resources: 'Resource',
+    Fire: 'FireIncident', EMS: 'EMSCall', Dispatch: 'Dispatch', Resources: 'Resource', Map: 'Call',
   };
   return map[tab];
 }
@@ -232,6 +238,16 @@ export default function EmergencyServicesLensPage() {
           </div>
         )}
       </div>
+
+      {activeMode === 'Map' && (
+        <div className="p-4 bg-zinc-900 rounded-lg border border-zinc-800">
+          <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2"><Map className="w-4 h-4 text-red-400" /> Dispatch Locations</h3>
+          <MapView
+            markers={calls.filter(c => (c.data as CallData).lat && (c.data as CallData).lng).map(c => { const d = c.data as CallData; return { lat: d.lat!, lng: d.lng!, label: c.title || d.callNumber, popup: `${d.type} - ${d.status} (${d.priority})` }; })}
+            className="h-[500px]"
+          />
+        </div>
+      )}
 
       <UniversalActions domain="emergency-services" artifactId={items[0]?.id} />
       <RealtimeDataPanel data={insights} />

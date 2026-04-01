@@ -268,7 +268,7 @@ export default function DailyLensPage() {
     return (new Date().getTime() - new Date(e.date).getTime()) / 86400000 <= 7;
   }).length;
 
-  // -- Daily digest (mock) --------------------------------------------------
+  // -- Daily digest ----------------------------------------------------------
   const dailyDigest = useMemo(() => {
     const tot = sessions.reduce((s, x) => s + x.duration, 0);
     const genres = [...new Set(sessions.map((s) => s.genre))].join(', ');

@@ -632,7 +632,7 @@ export default function SimLensPage() {
     }
     return getEmptyResults();
   }, [selectedRun]);
-  const mockResultsForDisplay = runResults;
+  const fallbackResults = runResults;
 
   // ── Loading state ──────────────────────────────────────────────────────────
   if (isLoading) {
@@ -880,7 +880,7 @@ export default function SimLensPage() {
           {activeTab === 'results' && (
             <ResultsTab
               run={selectedRun}
-              mockResults={mockResultsForDisplay}
+              fallbackResults={fallbackResults}
               onExport={() => {
                 if (selectedRun) handleExportResults(selectedRun);
               }}
@@ -891,7 +891,7 @@ export default function SimLensPage() {
               scenarios={scenarios}
               runs={runs}
               comparisonIds={comparisonIds}
-              mockResults={mockResultsForDisplay}
+              fallbackResults={fallbackResults}
             />
           )}
           {activeTab === 'models' && (
@@ -1635,14 +1635,14 @@ function RunsTab({
 // ─── RESULTS TAB ─────────────────────────────────────────────────────────────
 
 function ResultsTab({
-  run, mockResults, onExport,
+  run, fallbackResults, onExport,
 }: {
   run: SimRun | null;
-  mockResults: SimResults;
+  fallbackResults: SimResults;
   onExport: () => void;
 }) {
-  // Use run.results if available, otherwise show mock for demonstration
-  const results = run?.results || mockResults;
+  // Use run.results if available, otherwise show empty fallback
+  const results = run?.results || fallbackResults;
 
   return (
     <div className="space-y-4">
@@ -1811,19 +1811,19 @@ function ResultsTab({
 // ─── COMPARISON TAB ──────────────────────────────────────────────────────────
 
 function ComparisonTab({
-  scenarios, runs, comparisonIds, mockResults,
+  scenarios, runs, comparisonIds, fallbackResults,
 }: {
   scenarios: Scenario[];
   runs: SimRun[];
   comparisonIds: string[];
-  mockResults: SimResults;
+  fallbackResults: SimResults;
 }) {
   const comparedRuns = runs.filter(r => comparisonIds.includes(r.id));
   const comparedScenarios = scenarios.filter(s => comparisonIds.includes(s.id));
 
   // If comparing runs
   if (comparedRuns.length >= 2) {
-    const results = comparedRuns.map(r => r.results || mockResults);
+    const results = comparedRuns.map(r => r.results || fallbackResults);
     return (
       <div className="space-y-4">
         <div className={ds.panel}>

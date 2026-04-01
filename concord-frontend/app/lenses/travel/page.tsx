@@ -1,13 +1,16 @@
 'use client';
 
 import { useState, useMemo, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   Compass, MapPin, Plane, Hotel, Calendar, Plus, Search, X,
-  Edit2, Trash2, DollarSign, Clock, Star, Globe, Layers, ChevronDown,
+  Edit2, Trash2, DollarSign, Clock, Star, Globe, Layers, ChevronDown, Map,
 } from 'lucide-react';
+
+const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -20,7 +23,7 @@ import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 // Types
 // ---------------------------------------------------------------------------
 
-type ModeTab = 'trips' | 'itineraries' | 'bookings' | 'packing';
+type ModeTab = 'trips' | 'itineraries' | 'bookings' | 'packing' | 'map';
 
 interface TripData {
   name: string;
@@ -33,6 +36,8 @@ interface TripData {
   notes: string;
   travelers: string[];
   activities: string[];
+  lat?: number;
+  lng?: number;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -53,7 +58,7 @@ export default function TravelLensPage() {
   const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [showFeatures, setShowFeatures] = useState(false);
-  const [newTrip, setNewTrip] = useState({ name: '', destination: '', startDate: '', endDate: '', budget: 0 });
+  const [newTrip, setNewTrip] = useState({ name: '', destination: '', startDate: '', endDate: '', budget: 0, lat: '', lng: '' });
 
   const {
     items, isLoading, isError, error, refetch,
@@ -92,9 +97,11 @@ export default function TravelLensPage() {
         notes: '',
         travelers: [],
         activities: [],
+        lat: newTrip.lat ? Number(newTrip.lat) : undefined,
+        lng: newTrip.lng ? Number(newTrip.lng) : undefined,
       },
     });
-    setNewTrip({ name: '', destination: '', startDate: '', endDate: '', budget: 0 });
+    setNewTrip({ name: '', destination: '', startDate: '', endDate: '', budget: 0, lat: '', lng: '' });
     setShowCreate(false);
   }, [newTrip, create]);
 
@@ -134,6 +141,8 @@ export default function TravelLensPage() {
             <input type="date" value={newTrip.startDate} onChange={e => setNewTrip(p => ({ ...p, startDate: e.target.value }))} className="input-lattice" />
             <input type="date" value={newTrip.endDate} onChange={e => setNewTrip(p => ({ ...p, endDate: e.target.value }))} className="input-lattice" />
             <input type="number" value={newTrip.budget || ''} onChange={e => setNewTrip(p => ({ ...p, budget: Number(e.target.value) }))} placeholder="Budget..." className="input-lattice" />
+            <input type="number" step="any" value={newTrip.lat} onChange={e => setNewTrip(p => ({ ...p, lat: e.target.value }))} placeholder="Latitude (optional)" className="input-lattice" />
+            <input type="number" step="any" value={newTrip.lng} onChange={e => setNewTrip(p => ({ ...p, lng: e.target.value }))} placeholder="Longitude (optional)" className="input-lattice" />
           </div>
           <button onClick={handleCreate} disabled={createMut.isPending || !newTrip.name.trim()} className="btn-neon green w-full">
             {createMut.isPending ? 'Creating...' : 'Create Trip'}
@@ -182,6 +191,17 @@ export default function TravelLensPage() {
           ))
         )}
       </div>
+
+      {/* Map View */}
+      {trips.some(t => t.lat && t.lng) && (
+        <div className="panel p-4 space-y-2">
+          <h3 className="font-semibold flex items-center gap-2"><Map className="w-4 h-4 text-neon-cyan" /> Trip Destinations</h3>
+          <MapView
+            markers={trips.filter(t => t.lat && t.lng).map(t => ({ lat: t.lat!, lng: t.lng!, label: t.name, popup: `${t.destination || ''} ${t.status || ''}`.trim() }))}
+            className="h-[400px]"
+          />
+        </div>
+      )}
 
       <RealtimeDataPanel domain="travel" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
 

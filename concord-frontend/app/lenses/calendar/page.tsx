@@ -804,7 +804,7 @@ export default function CalendarLensPage() {
                         setShowEventModal(true);
                       }}
                     >
-                      {/* Artwork placeholder */}
+                      {/* Artwork gradient */}
                       <div
                         className="w-full h-20 rounded-md mb-2 flex items-center justify-center"
                         style={{

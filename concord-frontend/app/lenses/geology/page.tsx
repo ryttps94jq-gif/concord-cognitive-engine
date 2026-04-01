@@ -1,10 +1,13 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useState } from 'react';
-import { Mountain, MapPin, Plus, Trash2, Search, Layers, ChevronDown, Droplets, Gem } from 'lucide-react';
+import { Mountain, MapPin, Plus, Trash2, Search, Layers, ChevronDown, Droplets, Gem, Map } from 'lucide-react';
+
+const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -32,6 +35,8 @@ interface FieldSite {
   description: string;
   samples: number;
   lastVisited: string;
+  lat?: number;
+  lng?: number;
 }
 
 const ROCK_COLORS: Record<RockType, string> = {
@@ -43,7 +48,7 @@ const ROCK_COLORS: Record<RockType, string> = {
 export default function GeologyLensPage() {
   useLensNav('geology');
 
-  const [activeTab, setActiveTab] = useState<'samples' | 'sites' | 'stratigraphy'>('samples');
+  const [activeTab, setActiveTab] = useState<'samples' | 'sites' | 'stratigraphy' | 'map'>('samples');
   const [showFeatures, setShowFeatures] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const { latestData: realtimeData, isLive, lastUpdated, insights } = useRealtimeLens('geology');
@@ -56,7 +61,7 @@ export default function GeologyLensPage() {
   const sites = siteItems.map(i => ({ id: i.id, title: i.title, ...(i.data || {}) })) as unknown as (FieldSite & { id: string; title: string })[];
 
   const [newSample, setNewSample] = useState({ name: '', rockType: 'igneous' as RockType, location: '' });
-  const [newSite, setNewSite] = useState({ name: '', location: '', description: '' });
+  const [newSite, setNewSite] = useState({ name: '', location: '', description: '', lat: '', lng: '' });
 
   const addSample = () => {
     if (!newSample.name.trim()) return;
@@ -71,9 +76,9 @@ export default function GeologyLensPage() {
     if (!newSite.name.trim()) return;
     createSite({
       title: newSite.name,
-      data: { name: newSite.name, location: newSite.location, description: newSite.description, samples: 0, lastVisited: new Date().toISOString() },
+      data: { name: newSite.name, location: newSite.location, description: newSite.description, samples: 0, lastVisited: new Date().toISOString(), lat: newSite.lat ? Number(newSite.lat) : undefined, lng: newSite.lng ? Number(newSite.lng) : undefined },
     });
-    setNewSite({ name: '', location: '', description: '' });
+    setNewSite({ name: '', location: '', description: '', lat: '', lng: '' });
   };
 
   if (isLoading) {
@@ -116,7 +121,7 @@ export default function GeologyLensPage() {
 
       {/* Tabs */}
       <div className="flex gap-2 border-b border-white/10 pb-2">
-        {(['samples', 'sites', 'stratigraphy'] as const).map(tab => (
+        {(['samples', 'sites', 'stratigraphy', 'map'] as const).map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
             className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${activeTab === tab ? 'bg-orange-400/20 text-orange-400 border-b-2 border-orange-400' : 'text-gray-400 hover:text-white'}`}
           >
@@ -180,6 +185,8 @@ export default function GeologyLensPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-2">
               <input value={newSite.name} onChange={e => setNewSite({ ...newSite, name: e.target.value })} placeholder="Site name" className="bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm" />
               <input value={newSite.location} onChange={e => setNewSite({ ...newSite, location: e.target.value })} placeholder="Location" className="bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm" />
+              <input type="number" step="any" value={newSite.lat} onChange={e => setNewSite({ ...newSite, lat: e.target.value })} placeholder="Latitude" className="bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm" />
+              <input type="number" step="any" value={newSite.lng} onChange={e => setNewSite({ ...newSite, lng: e.target.value })} placeholder="Longitude" className="bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm" />
               <button onClick={addSite} className="px-4 py-2 bg-orange-400/20 text-orange-400 rounded-lg text-sm hover:bg-orange-400/30">
                 <Plus className="w-4 h-4 inline mr-1" /> Add Site
               </button>
@@ -199,6 +206,21 @@ export default function GeologyLensPage() {
                 <p className="text-xs text-gray-400 mt-1">{site.location}</p>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'map' && (
+        <div className="space-y-4">
+          <div className="panel p-4">
+            <h3 className="font-semibold mb-3 flex items-center gap-2"><Map className="w-4 h-4 text-orange-400" /> Field Sites Map</h3>
+            <MapView
+              markers={[
+                ...sites.filter(s => s.lat && s.lng).map(s => ({ lat: s.lat!, lng: s.lng!, label: s.name || s.title, popup: s.location || '' })),
+                ...samples.filter(s => s.coordinates?.lat && s.coordinates?.lng).map(s => ({ lat: s.coordinates!.lat, lng: s.coordinates!.lng, label: s.name || s.title, popup: `${s.rockType || ''} - ${s.location || ''}` })),
+              ]}
+              className="h-[500px]"
+            />
           </div>
         </div>
       )}

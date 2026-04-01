@@ -1235,8 +1235,8 @@ export default function ManufacturingLensPage() {
     const oshaRecordables = safetyItems.filter(s => s.data.oshaRecordable === true).length;
     const nearMisses = safetyItems.filter(s => (s.data.incidentType as string) === 'near_miss').length;
     const openItems = safetyItems.filter(s => s.meta.status !== 'closed').length;
-    const totalHours = 50000; // YTD employee hours placeholder
-    const oshaRate = totalHours > 0 ? ((oshaRecordables * 200000) / totalHours).toFixed(2) : '0.00';
+    const totalHours = safetyItems.reduce((s, item) => s + ((item.data.employeeHours as number) || 0), 0);
+    const oshaRate = totalHours > 0 ? ((oshaRecordables * 200000) / totalHours).toFixed(2) : '--';
 
     return (
       <div className="space-y-4">

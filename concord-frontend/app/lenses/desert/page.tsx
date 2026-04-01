@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -12,15 +13,17 @@ import {
   Sun, Plus, Search, Trash2, BarChart3,
   Layers, ChevronDown, MapPin, Users,
   Thermometer, Wind, Droplets, Mountain,
-  Eye, AlertTriangle, Navigation, Compass,
+  Eye, AlertTriangle, Navigation, Compass, Map,
 } from 'lucide-react';
+
+const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 
-type ModeTab = 'Dashboard' | 'Expeditions' | 'Climate' | 'Resources' | 'Wildlife' | 'Infrastructure' | 'Hazards';
+type ModeTab = 'Dashboard' | 'Expeditions' | 'Climate' | 'Resources' | 'Wildlife' | 'Infrastructure' | 'Hazards' | 'Map';
 
 interface ExpeditionData {
   name: string;
@@ -34,6 +37,8 @@ interface ExpeditionData {
   waterSupplyDays: number;
   temperatureHigh: number;
   temperatureLow: number;
+  lat?: number;
+  lng?: number;
 }
 
 interface ClimateData {

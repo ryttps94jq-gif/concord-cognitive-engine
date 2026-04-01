@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -14,13 +15,15 @@ import {
   TreePine, Landmark, Route, Home, Ruler,
   Eye, AlertTriangle, Map,
 } from 'lucide-react';
+
+const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 
-type ModeTab = 'Dashboard' | 'Projects' | 'Zoning' | 'Infrastructure' | 'Transit' | 'GreenSpace' | 'Permits';
+type ModeTab = 'Dashboard' | 'Projects' | 'Zoning' | 'Infrastructure' | 'Transit' | 'GreenSpace' | 'Permits' | 'Map';
 
 interface ProjectData {
   name: string;
@@ -35,6 +38,8 @@ interface ProjectData {
   environmentalImpact: 'low' | 'moderate' | 'significant';
   publicHearingDate: string;
   description: string;
+  lat?: number;
+  lng?: number;
 }
 
 interface ZoningData {
@@ -70,12 +75,13 @@ const MODE_TABS: { key: ModeTab; label: string; icon: typeof Building2 }[] = [
   { key: 'Transit', label: 'Transit', icon: Landmark },
   { key: 'GreenSpace', label: 'Green Space', icon: TreePine },
   { key: 'Permits', label: 'Permits', icon: Ruler },
+  { key: 'Map', label: 'Map', icon: MapPin },
 ];
 
 function getTypeForTab(tab: ModeTab): string {
   const map: Record<ModeTab, string> = {
     Dashboard: 'Project', Projects: 'Project', Zoning: 'Zone',
-    Infrastructure: 'Infra', Transit: 'Transit', GreenSpace: 'GreenSpace', Permits: 'Permit',
+    Infrastructure: 'Infra', Transit: 'Transit', GreenSpace: 'GreenSpace', Permits: 'Permit', Map: 'Project',
   };
   return map[tab];
 }
@@ -212,6 +218,16 @@ export default function UrbanPlanningLensPage() {
           </div>
         )}
       </div>
+
+      {activeMode === 'Map' && (
+        <div className="p-4 bg-zinc-900 rounded-lg border border-zinc-800">
+          <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2"><MapPin className="w-4 h-4 text-emerald-400" /> Zoning & Project Map</h3>
+          <MapView
+            markers={projects.filter(p => (p.data as ProjectData).lat && (p.data as ProjectData).lng).map(p => { const d = p.data as ProjectData; return { lat: d.lat!, lng: d.lng!, label: p.title, popup: `${d.type || ''} - ${d.status || ''}` }; })}
+            className="h-[500px]"
+          />
+        </div>
+      )}
 
       <UniversalActions domain="urban-planning" artifactId={items[0]?.id} />
       <RealtimeDataPanel data={insights} />

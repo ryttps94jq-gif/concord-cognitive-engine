@@ -608,7 +608,7 @@ export default function ExperienceLensPage() {
                     whileHover={{ y: -4, transition: { duration: 0.2 } }}
                     className="lens-card group cursor-pointer overflow-hidden"
                   >
-                    {/* Cover art placeholder */}
+                    {/* Cover art gradient */}
                     <div className={`relative h-36 rounded-lg mb-3 bg-gradient-to-br ${item.coverGradient} flex items-center justify-center overflow-hidden`}>
                       <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors" />
                       {item.type === 'track' || item.type === 'collaboration' ? (
