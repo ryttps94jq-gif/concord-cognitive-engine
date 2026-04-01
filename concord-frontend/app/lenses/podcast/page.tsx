@@ -85,6 +85,7 @@ export default function PodcastLensPage() {
   const [formSeasonNum, setFormSeasonNum] = useState(1);
   const [formCoverArt, setFormCoverArt] = useState<string | null>(null);
   const [formMediaId, setFormMediaId] = useState<string | null>(null);
+  const [formDuration, setFormDuration] = useState(0);
 
   const { playTrack, nowPlaying } = useMusicStore();
 
@@ -156,7 +157,7 @@ export default function PodcastLensPage() {
       coverArtUrl: formCoverArt,
       mediaId: formMediaId,
       audioUrl: formMediaId ? `/api/media/${formMediaId}/stream` : null,
-      duration: 0,
+      duration: formDuration,
       publishedAt: new Date().toISOString(),
       status: 'draft',
       playCount: 0,
@@ -190,9 +191,14 @@ export default function PodcastLensPage() {
   // ---- Upload handler ----
   const handleAudioUpload = useCallback((_data: unknown, _file: File) => {
     const uploadData = _data as Record<string, unknown>;
-    if (uploadData?.mediaId) {
-      setFormMediaId(uploadData.mediaId as string);
+    const mediaDTU = uploadData?.mediaDTU as Record<string, unknown> | undefined;
+    const mediaId = (mediaDTU?.id || uploadData?.mediaId || uploadData?.id) as string | undefined;
+    if (mediaId) {
+      setFormMediaId(mediaId);
     }
+    // Extract duration from media response or file
+    const dur = (mediaDTU?.duration || uploadData?.duration) as number | undefined;
+    if (dur) setFormDuration(dur);
   }, []);
 
   // ---- Tabs ----

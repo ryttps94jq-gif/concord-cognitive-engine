@@ -183,7 +183,7 @@ export default function SupplyChainLensPage() {
       {renderEditor()}
       <div className="border-t border-white/10">
         <button onClick={() => setShowFeatures(!showFeatures)} className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"><span className="flex items-center gap-2"><Layers className="w-4 h-4" />Lens Features & Capabilities</span><ChevronDown className={`w-4 h-4 transition-transform ${showFeatures ? 'rotate-180' : ''}`} /></button>
-        {showFeatures && <div className="px-4 pb-4"><LensFeaturePanel lensId="logistics" /></div>}
+        {showFeatures && <div className="px-4 pb-4"><LensFeaturePanel lensId="supplychain" /></div>}
       </div>
     </div>
   );
