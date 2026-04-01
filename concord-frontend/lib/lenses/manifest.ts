@@ -888,6 +888,15 @@ export const LENS_MANIFESTS: LensManifest[] = [
     actions: ['matchMentor', 'progressReport', 'goalSetting', 'sessionPrep', 'feedbackSummary', 'skillGapAnalysis'],
     category: 'social',
   },
+  {
+    domain: 'podcast',
+    label: 'Podcast',
+    artifacts: ['episode', 'subscriber', 'analytics', 'feed'],
+    macros: { list: 'lens.podcast.list', get: 'lens.podcast.get', create: 'lens.podcast.create', update: 'lens.podcast.update', delete: 'lens.podcast.delete', run: 'lens.podcast.run', export: 'lens.podcast.export' },
+    exports: ['json', 'rss', 'mp3'],
+    actions: ['publish', 'schedule', 'generateRSS', 'analyzeListeners', 'transcribe', 'distributeFeed'],
+    category: 'creative',
+  },
 ];
 
 // ---- Lookup helpers ----

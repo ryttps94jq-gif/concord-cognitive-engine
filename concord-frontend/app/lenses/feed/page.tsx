@@ -47,8 +47,11 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
+import { ProvenanceBadge } from '@/components/dtu/ProvenanceBadge';
 import { StoriesBar } from '@/components/social/StoriesBar';
 import { SuggestedFollows } from '@/components/social/SuggestedFollows';
+import { SocialCommerceTag } from '@/components/social/SocialCommerceTag';
+import { ShoppingBag, Tag } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -110,6 +113,10 @@ interface FeedPost {
   collab?: CollabAttachment;
   tags?: string[];
   dtuId?: string;
+  dtuSource?: string;
+  dtuMeta?: Record<string, unknown>;
+  taggedProducts?: { listingId: string; title: string; price: number; imageUrl?: string; sellerId?: string }[];
+  linkedDTUs?: { dtuId: string; title: string; type?: string }[];
 }
 
 interface TrendingTopic {
@@ -334,6 +341,42 @@ export default function FeedLensPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const composeRef = useRef<HTMLTextAreaElement>(null);
 
+  // Product tagging state for compose
+  const [showProductPicker, setShowProductPicker] = useState(false);
+  const [productSearch, setProductSearch] = useState('');
+  const [taggedProducts, setTaggedProducts] = useState<{ listingId: string; title: string; price: number; imageUrl?: string; sellerId?: string }[]>([]);
+  const [purchaseLoading, setPurchaseLoading] = useState<string | null>(null);
+  const [purchaseSuccess, setPurchaseSuccess] = useState<string | null>(null);
+
+  // Fetch marketplace listings for product tagging
+  const { data: marketplaceListings } = useQuery({
+    queryKey: ['marketplace-listings-picker', productSearch],
+    queryFn: async () => {
+      const res = await api.get('/api/marketplace-lens-registry/search', { params: { q: productSearch || 'all' } }).catch(() => null);
+      return res?.data?.results || [];
+    },
+    enabled: showProductPicker,
+  });
+
+  const handleInlinePurchase = async (product: { listingId: string; title: string; price: number; sellerId?: string }) => {
+    setPurchaseLoading(product.listingId);
+    setPurchaseSuccess(null);
+    try {
+      await api.post('/api/economy/transfer', {
+        to: product.sellerId || 'platform',
+        amount: product.price,
+        type: 'SOCIAL_COMMERCE',
+        metadata: { listingId: product.listingId, title: product.title },
+      });
+      setPurchaseSuccess(product.listingId);
+      setTimeout(() => setPurchaseSuccess(null), 3000);
+    } catch (err) {
+      console.error('Inline purchase failed:', err);
+    } finally {
+      setPurchaseLoading(null);
+    }
+  };
+
   const { isError: isError, error: error, refetch: refetch, items: postLensItems, create: createLensPost } = useLensData<Record<string, unknown>>('feed', 'post', {
     seed: INITIAL_POSTS.map(p => ({ title: p.content?.slice(0, 80) || p.id, data: p as unknown as Record<string, unknown> })),
   });
@@ -359,6 +402,8 @@ export default function FeedLensPage() {
             reposts: (p.shareCount as number) || 0, shares: (p.shareCount as number) || 0, views: (p.viewCount as number) || 0,
             liked: false, reposted: false, bookmarked: false,
             tags: (p.tags as string[]) || [], dtuId: (p.id as string),
+            taggedProducts: (p.taggedProducts as FeedPost['taggedProducts']) || [],
+            linkedDTUs: (p.linkedDTUs as FeedPost['linkedDTUs']) || [],
           }));
         }
         // Fallback: DTUs as posts
@@ -371,6 +416,8 @@ export default function FeedLensPage() {
             createdAt: (dtu.createdAt as string) || new Date().toISOString(),
             likes: 0, comments: 0, reposts: 0, shares: 0, views: 0,
             liked: false, reposted: false, bookmarked: false, dtuId: dtu.id as string,
+            dtuSource: dtu.source as string | undefined,
+            dtuMeta: dtu.meta as Record<string, unknown> | undefined,
           }));
         }
         return postLensItems.length > 0
@@ -410,10 +457,14 @@ export default function FeedLensPage() {
   });
 
   const postMutation = useMutation({
-    mutationFn: (content: string) => api.post('/api/social/post', { content, mediaType: 'text', tags: [] }),
+    mutationFn: (content: string) => api.post('/api/social/post', {
+      content, mediaType: 'text', tags: [],
+      taggedProducts: taggedProducts.length > 0 ? taggedProducts : undefined,
+    }),
     onSuccess: (_data, content) => {
       queryClient.invalidateQueries({ queryKey: ['feed-posts'] });
-      createLensPost({ title: content.slice(0, 80), data: { content, type: 'text', createdAt: new Date().toISOString(), likes: 0, comments: 0, reposts: 0, shares: 0, views: 0, liked: false, reposted: false, bookmarked: false } });
+      createLensPost({ title: content.slice(0, 80), data: { content, type: 'text', taggedProducts, createdAt: new Date().toISOString(), likes: 0, comments: 0, reposts: 0, shares: 0, views: 0, liked: false, reposted: false, bookmarked: false } });
+      setTaggedProducts([]);
       setNewPost('');
     },
     onError: (err) => {
@@ -646,6 +697,12 @@ export default function FeedLensPage() {
                   <button onClick={() => handleComposeHint('Poll')} className="p-2 rounded-full hover:bg-neon-cyan/10 transition-colors" title="Add poll">
                     <BarChart3 className="w-5 h-5" />
                   </button>
+                  <button onClick={() => setShowProductPicker(!showProductPicker)} className={cn("p-2 rounded-full hover:bg-neon-green/10 transition-colors", showProductPicker && "bg-neon-green/10 text-neon-green")} title="Tag Product">
+                    <ShoppingBag className="w-5 h-5" />
+                  </button>
+                  <button onClick={() => handleComposeHint('Link DTU')} className="p-2 rounded-full hover:bg-neon-purple/10 transition-colors text-neon-purple" title="Link DTU">
+                    <Tag className="w-5 h-5" />
+                  </button>
                   <VisionAnalyzeButton
                     domain="feed"
                     prompt="Describe this image for use as alt text in a social media post. Be concise but descriptive. Also suggest relevant hashtags."
@@ -662,6 +719,70 @@ export default function FeedLensPage() {
                   {postMutation.isPending ? 'Posting...' : 'Post'}
                 </button>
               </div>
+
+              {/* Tagged Products Display */}
+              {taggedProducts.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {taggedProducts.map(p => (
+                    <span key={p.listingId} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-neon-green/10 text-neon-green text-xs font-medium border border-neon-green/20">
+                      <ShoppingBag className="w-3 h-3" />
+                      {p.title} ({p.price} CC)
+                      <button onClick={() => setTaggedProducts(prev => prev.filter(tp => tp.listingId !== p.listingId))} className="ml-0.5 hover:text-red-400">
+                        <span className="text-xs">x</span>
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Product Picker */}
+              {showProductPicker && (
+                <div className="mt-2 p-3 rounded-xl bg-lattice-deep border border-neon-green/20">
+                  <div className="flex items-center gap-2 mb-2">
+                    <ShoppingBag className="w-4 h-4 text-neon-green" />
+                    <span className="text-sm font-medium text-neon-green">Tag Product</span>
+                  </div>
+                  <input
+                    type="text"
+                    value={productSearch}
+                    onChange={(e) => setProductSearch(e.target.value)}
+                    placeholder="Search marketplace listings..."
+                    className="w-full px-3 py-2 bg-lattice-surface border border-lattice-border rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-neon-green mb-2"
+                  />
+                  <div className="max-h-40 overflow-y-auto space-y-1">
+                    {(marketplaceListings as { id: string; name: string; lensNumber?: number; uniqueValue?: string }[] || []).slice(0, 8).map((item: { id: string; name: string; lensNumber?: number; uniqueValue?: string }) => {
+                      const alreadyTagged = taggedProducts.some(t => t.listingId === item.id);
+                      return (
+                        <button
+                          key={item.id}
+                          disabled={alreadyTagged}
+                          onClick={() => {
+                            setTaggedProducts(prev => [...prev, { listingId: item.id, title: item.name, price: 10, sellerId: 'platform' }]);
+                          }}
+                          className={cn(
+                            "w-full flex items-center justify-between p-2 rounded-lg text-left text-sm transition-colors",
+                            alreadyTagged ? "opacity-50 cursor-not-allowed bg-lattice-surface" : "hover:bg-lattice-surface"
+                          )}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-white font-medium truncate">{item.name}</p>
+                            {item.uniqueValue && <p className="text-xs text-gray-500 truncate">{item.uniqueValue}</p>}
+                          </div>
+                          {alreadyTagged ? (
+                            <span className="text-xs text-neon-green ml-2">Tagged</span>
+                          ) : (
+                            <span className="text-xs text-gray-400 ml-2">+ Tag</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                    {(marketplaceListings || []).length === 0 && (
+                      <p className="text-xs text-gray-500 text-center py-2">Type to search marketplace listings</p>
+                    )}
+                  </div>
+                  <button onClick={() => setShowProductPicker(false)} className="mt-2 text-xs text-gray-400 hover:text-white">Close picker</button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -720,6 +841,9 @@ export default function FeedLensPage() {
                         <span className="text-gray-500 hover:underline cursor-pointer flex-shrink-0">
                           {formatTime(post.createdAt)}
                         </span>
+                        {post.dtuSource && (
+                          <ProvenanceBadge source={post.dtuSource} model={post.dtuMeta?.model as string} authority={post.dtuMeta?.authority as string} />
+                        )}
                         <button
                           onClick={() => useUIStore.getState().addToast({ type: 'info', message: `Post ${post.id} options` })}
                           className="ml-auto p-1 text-gray-600 hover:text-neon-cyan hover:bg-neon-cyan/10 rounded-full transition-colors flex-shrink-0"
@@ -759,6 +883,44 @@ export default function FeedLensPage() {
 
                       {post.type === 'collab' && post.collab && (
                         <CollabCard collab={post.collab} />
+                      )}
+
+                      {/* Inline Social Commerce: Tagged Products */}
+                      {post.taggedProducts && post.taggedProducts.length > 0 && (
+                        <div className="mt-3 space-y-2">
+                          <div className="flex items-center gap-1.5 text-xs text-neon-green/70">
+                            <ShoppingBag className="w-3 h-3" />
+                            <span>Tagged Products</span>
+                          </div>
+                          {post.taggedProducts.map((product) => (
+                            <SocialCommerceTag
+                              key={product.listingId}
+                              listing={{
+                                listingId: product.listingId,
+                                title: product.title,
+                                imageUrl: product.imageUrl,
+                                price: product.price,
+                                currency: 'CC',
+                              }}
+                              onBuy={(listingId) => {
+                                const p = post.taggedProducts?.find(tp => tp.listingId === listingId);
+                                if (p) handleInlinePurchase(p);
+                              }}
+                              onNavigateToListing={(listingId) => {
+                                window.open(`/lenses/marketplace?listing=${listingId}`, '_blank');
+                              }}
+                              className={cn(
+                                purchaseLoading === product.listingId && 'opacity-60 pointer-events-none',
+                                purchaseSuccess === product.listingId && 'border-green-500/50 bg-green-500/5'
+                              )}
+                            />
+                          ))}
+                          {purchaseSuccess && post.taggedProducts.some(p => p.listingId === purchaseSuccess) && (
+                            <p className="text-xs text-green-400 flex items-center gap-1">
+                              <span>Purchase complete!</span>
+                            </p>
+                          )}
+                        </div>
                       )}
 
                       {/* Engagement Bar */}
@@ -893,6 +1055,9 @@ export default function FeedLensPage() {
           </button>
         </div>
 
+        {/* Rising Creators */}
+        <RisingCreatorsSidebar />
+
         {/* Who to Follow — wired to real discovery data */}
         <div className="bg-lattice-surface rounded-xl border border-lattice-border overflow-hidden p-4">
           <SuggestedFollows currentUserId="current-user" />
@@ -960,6 +1125,55 @@ export default function FeedLensPage() {
         />
       )}
       </div>
+    </div>
+  );
+}
+
+function RisingCreatorsSidebar() {
+  const { data: creatorsData } = useQuery({
+    queryKey: ['trending-creators'],
+    queryFn: async () => {
+      const res = await api.get('/api/social/trending/creators', { params: { limit: 5, days: 7 } }).catch(() => null);
+      return (res?.data?.creators || []) as Array<{
+        userId: string;
+        displayName: string;
+        followerCount: number;
+        followerGrowth: number;
+        postCount: number;
+        score: number;
+      }>;
+    },
+    staleTime: 60000,
+    retry: false,
+  });
+
+  if (!creatorsData || creatorsData.length === 0) return null;
+
+  return (
+    <div className="bg-lattice-surface rounded-xl border border-lattice-border overflow-hidden">
+      <div className="flex items-center gap-2 p-4 pb-2">
+        <TrendingUp className="w-4 h-4 text-neon-purple" />
+        <h2 className="text-base font-bold text-white">Rising Creators</h2>
+      </div>
+      {creatorsData.slice(0, 5).map((creator) => (
+        <div
+          key={creator.userId}
+          className="px-4 py-2.5 hover:bg-lattice-deep transition-colors flex items-center gap-3"
+        >
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-neon-purple to-neon-cyan flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
+            {creator.displayName?.charAt(0)?.toUpperCase() || '?'}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-white truncate">{creator.displayName}</p>
+            <div className="flex items-center gap-2 text-[11px] text-gray-500">
+              <span><Users className="w-3 h-3 inline" /> {creator.followerCount}</span>
+              {creator.followerGrowth > 0 && (
+                <span className="text-green-400">+{creator.followerGrowth}</span>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

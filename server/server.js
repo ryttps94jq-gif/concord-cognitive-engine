@@ -4259,6 +4259,10 @@ function authMiddleware(req, res, next) {
     // Core data
     "/api/dtus", "/api/dtu", "/api/lenses", "/api/lens", "/api/emergent", "/api/knowledge",
     "/api/search", "/api/species", "/api/events", "/api/schema",
+    // Podcast RSS feeds (public distribution)
+    "/api/podcast",
+    // Newsletter public view
+    "/api/newsletter",
     // Settings, metrics & context
     "/api/settings", "/api/growth", "/api/metrics", "/api/context",
     // System
@@ -6784,6 +6788,8 @@ async function runMacro(domain, name, input, ctx) {
     // Gate consistency: paths from Gate 1 that were missing in Gate 3
     "/api/macros", "/api/automations", "/api/webhooks-metrics",
     "/api/notion", "/api/undo", "/api/reseed", "/api/context",
+    // Podcast RSS feeds & newsletter public view
+    "/api/podcast", "/api/newsletter",
   ];
   // Safe POST paths: chat and brain endpoints that must bypass Chicken2 for unauthenticated users
   const _safePostPaths = ["/api/chat", "/api/brain/conscious", "/api/repair", "/api/creative/registry"];
@@ -34113,6 +34119,58 @@ app.get("/api/public/feed.xml", (req, res) => {
   res.type("application/rss+xml").send(generatePublicFeed());
 });
 
+// ---- Podcast RSS Feed (public, no auth required — bypassed via publicReadPaths) ----
+app.get("/api/podcast/:creatorId/feed.xml", (req, res) => {
+  const { creatorId } = req.params;
+  const episodes = [];
+  for (const [_id, dtu] of STATE.dtus) {
+    if (dtu.domain === "podcast" && (dtu.author === creatorId || creatorId === "default")) {
+      episodes.push(dtu);
+    }
+  }
+  episodes.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+
+  const baseUrl = `${req.protocol}://${req.get("host")}`;
+  const items = episodes.map(ep => {
+    const data = ep.data || {};
+    const mediaId = data.mediaId || ep.mediaId;
+    const enclosure = mediaId
+      ? `<enclosure url="${baseUrl}/api/media/${mediaId}/stream" length="${data.fileSize || 0}" type="audio/mpeg" />`
+      : "";
+    return `
+    <item>
+      <title>${escapeXml(ep.title || data.title || "Untitled")}</title>
+      <description>${escapeXml(data.description || (ep.content || "").slice(0, 500))}</description>
+      <pubDate>${new Date(data.publishedAt || ep.createdAt).toUTCString()}</pubDate>
+      <guid isPermaLink="false">${ep.id}</guid>
+      ${enclosure}
+      <itunes:author>${escapeXml(ep.author || creatorId)}</itunes:author>
+      <itunes:summary>${escapeXml(data.description || (ep.content || "").slice(0, 500))}</itunes:summary>
+      <itunes:episode>${data.episodeNumber || 1}</itunes:episode>
+      <itunes:season>${data.seasonNumber || 1}</itunes:season>
+      <itunes:duration>${data.duration || 0}</itunes:duration>
+    </item>`;
+  }).join("\n");
+
+  const rss = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>${escapeXml(creatorId)}'s Podcast</title>
+    <description>Podcast feed powered by Concord Cognitive Engine</description>
+    <link>${baseUrl}</link>
+    <language>en-us</language>
+    <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
+    <atom:link href="${baseUrl}/api/podcast/${creatorId}/feed.xml" rel="self" type="application/rss+xml" />
+    <itunes:author>${escapeXml(creatorId)}</itunes:author>
+    <itunes:summary>Podcast feed powered by Concord Cognitive Engine</itunes:summary>
+    <itunes:explicit>false</itunes:explicit>
+    ${items}
+  </channel>
+</rss>`;
+
+  res.type("application/rss+xml").send(rss);
+});
+
 // ---- Wave 7: Debate/Steelman Endpoints ----
 app.post("/api/dtus/:id/debate", asyncHandler(async (req, res) => {
   const result = await debateThought(req.params.id, req.body);
@@ -36897,6 +36955,29 @@ app.post("/api/social/unfollow", (req, res) => {
   try { res.json(unfollowUser(STATE, req.body?.followerId || req.user?.id, req.body?.followedId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
+// ---- Newsletter subscription (stores emailOptIn preference in subscriber lens data) ----
+// NOTE: Full email integration requires SMTP service (SendGrid/Mailgun/Postmark).
+// Currently generates shareable link at /newsletter/{postId}.
+app.post("/api/social/newsletter-subscribe", (req, res) => {
+  try {
+    const { creatorId, emailOptIn } = req.body || {};
+    const subscriberId = req.body?.subscriberId || req.user?.id || "anon";
+    if (!creatorId) return res.status(400).json({ ok: false, error: "creatorId required" });
+
+    // Store subscriber preference as a podcast subscriber DTU
+    if (!STATE.newsletterSubscribers) STATE.newsletterSubscribers = new Map();
+    const key = `${subscriberId}:${creatorId}`;
+    STATE.newsletterSubscribers.set(key, {
+      subscriberId,
+      creatorId,
+      emailOptIn: !!emailOptIn,
+      updatedAt: new Date().toISOString(),
+    });
+
+    res.json({ ok: true, emailOptIn: !!emailOptIn, subscriberId, creatorId });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 app.get("/api/social/followers/:userId", (req, res) => {
   try { res.json(getFollowers(STATE, req.params.userId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
@@ -37157,6 +37238,77 @@ app.get("/api/social/scheduled", (req, res) => {
 
 app.delete("/api/social/scheduled/:postId", (req, res) => {
   try { res.json(cancelScheduledPost(STATE, { userId: req.body?.userId || req.user?.id, postId: req.params.postId })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- IRL Event Ticketing ----
+
+// POST /api/events/:eventId/rsvp — handle RSVP / ticket purchase
+app.post("/api/events/:eventId/rsvp", async (req, res) => {
+  try {
+    const ctx = makeCtx(req);
+    const userId = req.body?.userId || req.user?.id || "anon";
+    const eventId = req.params.eventId;
+
+    // Fetch the event via lens CRUD
+    const event = await runMacro("lens", "get", { id: eventId, domain: "events" }, ctx);
+    if (!event || !event.ok) return res.status(404).json({ ok: false, error: "event_not_found" });
+
+    const data = event.data || {};
+    const attendees = Array.isArray(data.attendees) ? data.attendees : [];
+    const capacity = Number(data.capacity || 0);
+    const ticketPrice = Number(data.ticketPrice || 0);
+
+    // Check capacity
+    if (capacity > 0 && attendees.length >= capacity) {
+      return res.status(400).json({ ok: false, error: "event_full" });
+    }
+
+    // Check duplicate RSVP
+    if (attendees.includes(userId)) {
+      return res.status(400).json({ ok: false, error: "already_rsvp" });
+    }
+
+    // Handle paid ticket via economy transfer
+    if (ticketPrice > 0) {
+      const transferResult = executeTransfer(db, {
+        from: userId,
+        to: data.creatorId || "platform",
+        amount: ticketPrice,
+        type: "EVENT_TICKET",
+        metadata: { eventId, eventTitle: event.title },
+      });
+      if (!transferResult.ok) {
+        return res.status(400).json({ ok: false, error: "payment_failed", detail: transferResult.error });
+      }
+    }
+
+    // Add user to attendees
+    const updatedAttendees = [...attendees, userId];
+    await runMacro("lens", "update", {
+      id: eventId,
+      data: { ...data, attendees: updatedAttendees, registered: (Number(data.registered || 0)) + 1 },
+      meta: event.meta,
+    }, ctx);
+
+    res.json({ ok: true, eventId, userId, ticketPrice, attendeeCount: updatedAttendees.length });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// GET /api/events/:eventId/attendees — returns attendee list
+app.get("/api/events/:eventId/attendees", async (req, res) => {
+  try {
+    const ctx = makeCtx(req);
+    const event = await runMacro("lens", "get", { id: req.params.eventId, domain: "events" }, ctx);
+    if (!event || !event.ok) return res.status(404).json({ ok: false, error: "event_not_found" });
+
+    const data = event.data || {};
+    const attendees = Array.isArray(data.attendees) ? data.attendees : [];
+    res.json({ ok: true, eventId: req.params.eventId, attendees, count: attendees.length });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
 });
 
 // ---- Collaboration ----

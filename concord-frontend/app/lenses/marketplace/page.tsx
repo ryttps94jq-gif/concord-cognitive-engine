@@ -52,6 +52,7 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { ProvenanceBadge } from '@/components/dtu/ProvenanceBadge';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -1239,7 +1240,10 @@ export default function MarketplaceLensPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {marketArtifacts.slice(0, 6).map((dtu: DTU) => (
                   <div key={dtu.id} className="p-3 rounded-lg bg-lattice-surface border border-lattice-border space-y-2">
-                    <p className="text-sm font-medium truncate">{dtu.title || dtu.human?.summary || 'Untitled'}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium truncate flex-1">{dtu.title || dtu.human?.summary || 'Untitled'}</p>
+                      <ProvenanceBadge source={dtu.source} model={dtu.meta?.model as string} authority={dtu.meta?.authority as string} />
+                    </div>
                     <ArtifactRenderer dtuId={dtu.id} artifact={dtu.artifact!} mode="thumbnail" />
                     <FeedbackWidget targetType="dtu" targetId={dtu.id} />
                   </div>

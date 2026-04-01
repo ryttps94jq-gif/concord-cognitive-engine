@@ -264,6 +264,13 @@ export default function createMediaRouter({ STATE }) {
       const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
       const chunkSize = end - start + 1;
 
+      // Set proper Content-Range headers for podcast/media player compatibility
+      res.set({
+        "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+        "Accept-Ranges": "bytes",
+        "Content-Length": chunkSize,
+        "Content-Type": mediaDTU.mimeType || "audio/mpeg",
+      });
       res.status(206).json({
         ok: true,
         streaming: true,
@@ -275,6 +282,8 @@ export default function createMediaRouter({ STATE }) {
         note: "In production, this returns actual binary data with Content-Range headers",
       });
     } else {
+      // Advertise range request support for podcast players
+      res.set({ "Accept-Ranges": "bytes" });
       res.json({
         ok: true,
         streaming: true,

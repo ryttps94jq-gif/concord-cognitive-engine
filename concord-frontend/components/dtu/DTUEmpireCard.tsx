@@ -2,6 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { Clock, GitBranch, Zap, Crown, Ghost, ExternalLink } from 'lucide-react';
+import { ProvenanceBadge } from './ProvenanceBadge';
 
 interface DTU {
   id: string;
@@ -15,6 +16,7 @@ interface DTU {
   scope?: string;
   source?: string;
   classification?: string;
+  meta?: Record<string, unknown>;
 }
 
 interface DTUEmpireCardProps {
@@ -123,6 +125,7 @@ function DTUEmpireCardInner({
           <span className={`text-xs px-1.5 py-0.5 rounded ${scopeDisplay.color} ${scopeDisplay.textColor}`}>
             {scopeDisplay.label}
           </span>
+          <ProvenanceBadge source={dtu.source} model={dtu.meta?.model as string} authority={dtu.meta?.authority as string} />
         </div>
         <button className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-white">
           <ExternalLink className="w-4 h-4" />

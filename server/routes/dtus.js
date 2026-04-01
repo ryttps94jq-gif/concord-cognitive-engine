@@ -3,6 +3,12 @@
  * Registered directly on app (mixed prefixes)
  */
 import { asyncHandler } from "../lib/async-handler.js";
+import {
+  encodeDTU, decodeDTU, verifyDTU, determinePrimaryType,
+} from "../economy/dtu-format.js";
+import { DTU_FORMAT_CONSTANTS } from "../lib/dtu-format-constants.js";
+import { randomUUID } from "crypto";
+
 export default function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuForClient, dtusArray, _withAck, _saveStateDebounced, validate }) {
 
   // CRETI-first DTU view (no raw JSON by default)
@@ -169,4 +175,168 @@ export default function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuFo
     if (!dtu) return res.status(404).json({ ok: false, error: "Definition not found" });
     return res.json({ ok: true, definition: dtu });
   });
+
+  // ── .dtu File Format Export ─────────────────────────────────────────
+  // GET /api/dtus/:id/export.dtu — Package DTU into binary .dtu format
+  app.get("/api/dtus/:id/export.dtu", asyncHandler(async (req, res) => {
+    const id = req.params.id;
+    const dtu = STATE.dtus.get(id);
+    if (!dtu) return res.status(404).json({ ok: false, error: "DTU not found" });
+
+    // Determine format type from tier
+    const C = DTU_FORMAT_CONSTANTS;
+    const formatType = dtu.tier === "hyper" ? C.TYPE_HYPER
+      : dtu.tier === "mega" ? C.TYPE_MEGA
+      : C.TYPE_DTU;
+
+    // Build layers from DTU data
+    const humanLayer = {
+      title: dtu.title || dtu.human?.title || "",
+      summary: dtu.summary || dtu.human?.summary || "",
+      content: dtu.content || dtu.human?.content || "",
+      tags: dtu.tags || [],
+    };
+
+    const coreLayer = dtu.core || {
+      id: dtu.id,
+      tier: dtu.tier,
+      domain: dtu.domain,
+      source: dtu.source,
+      resonance: dtu.resonance,
+      coherence: dtu.coherence,
+      stability: dtu.stability,
+      parents: dtu.parents || [],
+      children: dtu.children || [],
+    };
+
+    const machineLayer = dtu.machine || {
+      embedding: dtu.embedding ? "[redacted]" : null,
+      integrityStatus: dtu.meta?.integrityStatus,
+      contentHash: dtu.meta?.contentHash,
+    };
+
+    // Resolve artifact data if present
+    let artifactData = null;
+    let artifactMimeType = null;
+    if (dtu.artifactRef || dtu.meta?.artifactId) {
+      const mediaId = dtu.artifactRef || dtu.meta?.artifactId;
+      const mediaDtu = STATE.dtus.get(mediaId) || (STATE._media && STATE._media.items?.get(mediaId));
+      if (mediaDtu) {
+        artifactMimeType = mediaDtu.mimeType || mediaDtu.meta?.mimeType || "";
+      }
+    }
+
+    const result = encodeDTU({
+      id: dtu.id,
+      creatorId: dtu.ownerId || dtu.creatorId,
+      createdAt: dtu.timestamp || dtu.createdAt,
+      lineage: { parents: dtu.parents || [], children: dtu.children || [] },
+      humanLayer,
+      coreLayer,
+      machineLayer,
+      artifactData,
+      artifactMimeType,
+      artifactType: dtu.meta?.artifactType || null,
+      contentType: dtu.primaryType || dtu.meta?.primaryType || null,
+      formatType,
+    });
+
+    if (!result.ok) {
+      return res.status(500).json({ ok: false, error: "encode_failed", detail: result.error });
+    }
+
+    // Determine file extension based on tier
+    const ext = dtu.tier === "hyper" ? ".hyper.dtu"
+      : dtu.tier === "mega" ? ".mega.dtu"
+      : ".dtu";
+    const filename = `${(dtu.title || dtu.id).replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 60)}${ext}`;
+
+    res.set({
+      "Content-Type": "application/vnd.concord.dtu",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Length": result.buffer.length,
+      "X-DTU-Content-Hash": result.contentHash,
+      "X-DTU-Signature": result.signature,
+    });
+    res.send(result.buffer);
+  }));
+
+  // ── .dtu File Format Import ─────────────────────────────────────────
+  // POST /api/dtus/import — Accept .dtu file upload, parse, create DTU
+  app.post("/api/dtus/import", asyncHandler(async (req, res) => {
+    // Accept raw binary body or base64 JSON
+    let buffer;
+    if (Buffer.isBuffer(req.body)) {
+      buffer = req.body;
+    } else if (req.body?.dtuBase64) {
+      buffer = Buffer.from(req.body.dtuBase64, "base64");
+    } else if (req.headers["content-type"]?.includes("octet-stream")) {
+      // Collect raw body
+      const chunks = [];
+      for await (const chunk of req) chunks.push(chunk);
+      buffer = Buffer.concat(chunks);
+    } else {
+      return res.status(400).json({ ok: false, error: "missing_dtu_data", hint: "Send binary body or { dtuBase64: '...' }" });
+    }
+
+    // Verify the file
+    const verification = verifyDTU(buffer);
+    if (!verification.ok || verification.tampered) {
+      return res.status(400).json({ ok: false, error: "verification_failed", detail: verification });
+    }
+
+    // Decode the file
+    const decoded = decodeDTU(buffer);
+    if (!decoded.ok) {
+      return res.status(400).json({ ok: false, error: "decode_failed", detail: decoded.error });
+    }
+
+    const { metadata, humanLayer, coreLayer, machineLayer, header } = decoded;
+
+    // Create DTU via the macro system, preserving lineage
+    const ctx = makeCtx(req);
+    const createPayload = {
+      title: humanLayer?.title || humanLayer?.summary || "Imported DTU",
+      content: humanLayer?.content || humanLayer?.summary || "",
+      summary: humanLayer?.summary || "",
+      tags: [...(humanLayer?.tags || []), "reimport"],
+      source: "dtu-import",
+      parents: metadata?.lineage?.parents || [],
+      meta: {
+        reimport: true,
+        originalId: metadata?.id,
+        originalCreator: metadata?.creatorId,
+        originalCreatedAt: metadata?.createdAt,
+        importedAt: new Date().toISOString(),
+        contentHash: verification.contentHash,
+        primaryType: header.primaryTypeName,
+        formatType: header.formatTypeName,
+      },
+    };
+
+    try {
+      const out = await runMacro("dtu", "create", createPayload, ctx);
+      return res.status(201).json({
+        ok: true,
+        dtuId: out.dtu?.id || out.id,
+        metadata: {
+          title: humanLayer?.title,
+          originalId: metadata?.id,
+          primaryType: header.primaryTypeName,
+          formatType: header.formatTypeName,
+          verified: !verification.tampered,
+        },
+        header: {
+          version: header.version,
+          formatType: header.formatTypeName,
+          primaryType: header.primaryTypeName,
+          artifactPresent: header.artifactPresent,
+          layers: header.layers,
+        },
+      });
+    } catch (e) {
+      const msg = String(e?.message || e);
+      return res.status(500).json({ ok: false, error: "import_create_failed", detail: msg });
+    }
+  }));
 }

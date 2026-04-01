@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -12,15 +13,17 @@ import {
   TreePine, Plus, Search, Trash2, BarChart3,
   Layers, ChevronDown, MapPin, Users,
   Leaf, Flame, Droplets, Bug,
-  Eye, AlertTriangle, Mountain, Ruler,
+  Eye, AlertTriangle, Mountain, Ruler, Map,
 } from 'lucide-react';
+
+const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 
-type ModeTab = 'Dashboard' | 'Stands' | 'Harvest' | 'Fire' | 'Wildlife' | 'Replanting' | 'Inventory';
+type ModeTab = 'Dashboard' | 'Stands' | 'Harvest' | 'Fire' | 'Wildlife' | 'Replanting' | 'Inventory' | 'Map';
 
 interface StandData {
   name: string;
@@ -35,6 +38,8 @@ interface StandData {
   elevation: number;
   terrain: string;
   lastInventory: string;
+  lat?: number;
+  lng?: number;
 }
 
 interface HarvestData {
@@ -74,12 +79,13 @@ const MODE_TABS: { key: ModeTab; label: string; icon: typeof TreePine }[] = [
   { key: 'Wildlife', label: 'Wildlife', icon: Bug },
   { key: 'Replanting', label: 'Replanting', icon: Leaf },
   { key: 'Inventory', label: 'Inventory', icon: Mountain },
+  { key: 'Map', label: 'Map', icon: Map },
 ];
 
 function getTypeForTab(tab: ModeTab): string {
   const map: Record<ModeTab, string> = {
     Dashboard: 'Stand', Stands: 'Stand', Harvest: 'Harvest',
-    Fire: 'Fire', Wildlife: 'Wildlife', Replanting: 'Replanting', Inventory: 'Inventory',
+    Fire: 'Fire', Wildlife: 'Wildlife', Replanting: 'Replanting', Inventory: 'Inventory', Map: 'Stand',
   };
   return map[tab];
 }
@@ -218,6 +224,19 @@ export default function ForestryLensPage() {
           </div>
         )}
       </div>
+
+      {activeMode === 'Map' && (
+        <div className="p-4 bg-zinc-900 rounded-lg border border-zinc-800">
+          <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2"><Map className="w-4 h-4 text-green-500" /> Forest Areas</h3>
+          <MapView
+            markers={[
+              ...stands.filter(s => (s.data as StandData).lat && (s.data as StandData).lng).map(s => { const d = s.data as StandData; return { lat: d.lat!, lng: d.lng!, label: s.title || d.name, popup: `${d.species?.join(', ') || ''} - ${d.status} (${d.area} acres)` }; }),
+              ...fires.filter(f => (f.data as Record<string, unknown>).lat && (f.data as Record<string, unknown>).lng).map(f => { const d = f.data as Record<string, unknown>; return { lat: d.lat as number, lng: d.lng as number, label: f.title || (d.name as string), popup: `Fire - ${d.status}` }; }),
+            ]}
+            className="h-[500px]"
+          />
+        </div>
+      )}
 
       <UniversalActions domain="forestry" artifactId={items[0]?.id} />
       <RealtimeDataPanel data={insights} />

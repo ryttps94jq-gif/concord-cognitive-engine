@@ -12,7 +12,7 @@ import {
   CalendarDays, MapPin, Plus, Search, Filter, X, Edit2, Trash2,
   Ticket, Star, DollarSign, Users, Clock, CheckCircle2, AlertTriangle,
   Building2, Utensils, Speaker, Palette, Camera, Shield, Music,
-  BarChart3, FileText, Play,
+  BarChart3, FileText, Play, MessageCircle,
   ListChecks, PieChart, ArrowUpRight,
   ArrowDownRight, Crown, Gift, ClipboardList, Sparkles,
   Phone, Mail, PartyPopper, Briefcase, Heart,
@@ -339,6 +339,18 @@ export default function EventsLensPage() {
       await update(editing, { title: formTitle, data, meta: { status: formStatus } });
     } else {
       await create({ title: formTitle, data, meta: { status: formStatus } });
+      // Announce new event via social post
+      if (mode === 'events' || mode === 'dashboard') {
+        try {
+          const { api: apiClient } = await import('@/lib/api/client');
+          const price = Number(data.ticketPrice || 0);
+          await apiClient.post('/api/social/post', {
+            content: `New event: "${formTitle}"${data.date ? ` on ${String(data.date)}` : ''}${data.location || data.venue ? ` at ${String(data.location || data.venue)}` : ''}. ${price > 0 ? `Tickets: ${price} CC` : 'Free admission!'}`,
+            mediaType: 'text',
+            tags: ['event', 'new-event', String(data.eventType || 'social')],
+          });
+        } catch { /* social announcement optional */ }
+      }
     }
     resetForm();
   };
@@ -649,6 +661,16 @@ export default function EventsLensPage() {
                   {Boolean(d.description) && <p className="text-xs text-gray-500 line-clamp-2">{String(d.description)}</p>}
                 </div>
                 <ProgressBar value={Number(d.registered || 0)} max={Number(d.capacity || 1)} color="neon-pink" />
+                {/* Ticket price indicator */}
+                <div className="flex items-center gap-2 mt-2">
+                  <Ticket className="w-3.5 h-3.5 text-neon-green" />
+                  <span className="text-xs text-neon-green font-medium">
+                    {Number(d.ticketPrice || 0) === 0 ? 'Free' : `${Number(d.ticketPrice)} CC`}
+                  </span>
+                  {Boolean(d.location) && (
+                    <><MapPin className="w-3 h-3 text-gray-500 ml-1" /><span className="text-xs text-gray-500 truncate">{String(d.location)}</span></>
+                  )}
+                </div>
                 <div className="flex items-center justify-between pt-2 mt-2 border-t border-lattice-border">
                   <span className={ds.textMuted}>{fmtCurrency(Number(d.revenue || 0))} revenue</span>
                   <div className="flex items-center gap-1">
@@ -719,6 +741,115 @@ export default function EventsLensPage() {
             <p className={cn(ds.textMuted, 'mb-2')}>Registration vs Capacity</p>
             <ProgressBar value={Number(d.registered || 0)} max={Number(d.capacity || 1)} color="neon-pink" />
           </div>
+
+          {/* IRL Ticketing Section */}
+          <div className="mt-4 pt-4 border-t border-lattice-border">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Ticket className="w-5 h-5 text-neon-green" />
+                <span className="font-semibold text-sm">
+                  {Number(d.ticketPrice || 0) === 0 ? 'Free Event' : `${Number(d.ticketPrice)} CC per ticket`}
+                </span>
+              </div>
+              {(() => {
+                const attendees = parseJsonSafe<string[]>(d.attendees, []);
+                const cap = Number(d.capacity || 0);
+                const isFull = cap > 0 && attendees.length >= cap;
+                const alreadyRSVP = attendees.includes('current-user');
+                return (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleRSVP(item); }}
+                    disabled={!!rsvpLoading || isFull || alreadyRSVP}
+                    className={cn(
+                      'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all',
+                      alreadyRSVP ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
+                      isFull ? 'bg-red-500/15 text-red-400 border border-red-500/30 cursor-not-allowed' :
+                      'bg-neon-green/15 text-neon-green border border-neon-green/30 hover:bg-neon-green/25'
+                    )}
+                  >
+                    {rsvpLoading === item.id ? (
+                      <><div className="w-4 h-4 border-2 border-neon-green border-t-transparent rounded-full animate-spin" /> Processing...</>
+                    ) : alreadyRSVP ? (
+                      <><CheckCircle2 className="w-4 h-4" /> You&apos;re Going!</>
+                    ) : isFull ? (
+                      'Sold Out'
+                    ) : Number(d.ticketPrice || 0) === 0 ? (
+                      <><Users className="w-4 h-4" /> RSVP (Free)</>
+                    ) : (
+                      <><Ticket className="w-4 h-4" /> Get Ticket ({Number(d.ticketPrice)} CC)</>
+                    )}
+                  </button>
+                );
+              })()}
+            </div>
+            {rsvpSuccess === item.id && (
+              <div className="flex items-center gap-2 p-3 mb-3 rounded-lg bg-green-500/10 border border-green-500/20 text-green-400 text-sm">
+                <CheckCircle2 className="w-4 h-4" /> Ticket confirmed! A calendar event has been created and your RSVP was posted.
+              </div>
+            )}
+            {/* Attendee count & list */}
+            {(() => {
+              const attendees = parseJsonSafe<string[]>(d.attendees, []);
+              return attendees.length > 0 ? (
+                <div>
+                  <p className={cn(ds.textMuted, 'mb-2')}>{attendees.length} attendee{attendees.length !== 1 ? 's' : ''}</p>
+                  <div className="flex flex-wrap gap-1">
+                    {attendees.slice(0, 20).map((a, i) => (
+                      <span key={i} className="text-xs px-2 py-1 rounded-full bg-lattice-elevated text-gray-300">{a}</span>
+                    ))}
+                    {attendees.length > 20 && <span className="text-xs text-gray-500">+{attendees.length - 20} more</span>}
+                  </div>
+                </div>
+              ) : (
+                <p className={ds.textMuted}>No attendees yet. Be the first to RSVP!</p>
+              );
+            })()}
+          </div>
+
+          {/* Creator stats */}
+          {(() => {
+            const attendees = parseJsonSafe<string[]>(d.attendees, []);
+            const ticketPrice = Number(d.ticketPrice || 0);
+            const ticketRevenue = attendees.length * ticketPrice;
+            return ticketPrice > 0 && attendees.length > 0 ? (
+              <div className="mt-3 pt-3 border-t border-lattice-border">
+                <div className="flex items-center gap-2 mb-2">
+                  <Crown className="w-4 h-4 text-amber-400" />
+                  <span className="text-sm font-medium text-amber-400">Creator Dashboard</span>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="p-2 bg-lattice-elevated rounded-lg text-center">
+                    <p className="text-xs text-gray-500">Tickets Sold</p>
+                    <p className="text-lg font-bold text-neon-cyan">{attendees.length}</p>
+                  </div>
+                  <div className="p-2 bg-lattice-elevated rounded-lg text-center">
+                    <p className="text-xs text-gray-500">Revenue</p>
+                    <p className="text-lg font-bold text-neon-green">{ticketRevenue} CC</p>
+                  </div>
+                  <div className="p-2 bg-lattice-elevated rounded-lg text-center">
+                    <p className="text-xs text-gray-500">Remaining</p>
+                    <p className="text-lg font-bold">{Math.max(0, Number(d.capacity || 0) - attendees.length)}</p>
+                  </div>
+                </div>
+              </div>
+            ) : null;
+          })()}
+
+          {/* Discussion link */}
+          {d.description && (
+            <div className="mt-3 pt-3 border-t border-lattice-border">
+              <button
+                onClick={() => {
+                  if (typeof window !== 'undefined') {
+                    window.open(`/lenses/feed?search=${encodeURIComponent(item.title)}`, '_blank');
+                  }
+                }}
+                className={cn(ds.btnGhost, 'text-neon-cyan text-sm')}
+              >
+                <MessageCircle className="w-4 h-4" /> View Discussion Thread
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Related tickets */}

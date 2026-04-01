@@ -425,7 +425,7 @@ export function getSocialMetrics(STATE) {
 
 // ── Posts ────────────────────────────────────────────────────────────────
 
-export function createPost(STATE, { userId, content, title, mediaType, mediaUrl, tags, mentionedUsers, pollOptions, isStory, expiresAt }) {
+export function createPost(STATE, { userId, content, title, mediaType, mediaUrl, tags, mentionedUsers, pollOptions, isStory, expiresAt, taggedProducts, linkedDTUs }) {
   const social = getSocialState(STATE);
   if (!userId) return { ok: false, error: "userId required" };
   if (!content && !mediaUrl) return { ok: false, error: "content or mediaUrl required" };
@@ -441,6 +441,8 @@ export function createPost(STATE, { userId, content, title, mediaType, mediaUrl,
     mediaUrl: mediaUrl || null,
     tags: tags || [],
     mentionedUsers: mentionedUsers || [],
+    taggedProducts: taggedProducts || [],  // Array of { listingId, title, price, imageUrl, sellerId }
+    linkedDTUs: linkedDTUs || [],          // Array of { dtuId, title, type }
     reactions: new Map(),  // type → Set<userId>
     comments: [],
     shares: [],
@@ -487,6 +489,8 @@ function serializePost(post) {
     mediaUrl: post.mediaUrl,
     tags: post.tags,
     mentionedUsers: post.mentionedUsers,
+    taggedProducts: post.taggedProducts || [],
+    linkedDTUs: post.linkedDTUs || [],
     reactions,
     commentCount: post.comments.length,
     shareCount: post.shares.length,

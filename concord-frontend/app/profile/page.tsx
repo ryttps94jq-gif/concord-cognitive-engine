@@ -398,6 +398,15 @@ export default function ProfilePage() {
         {activeTab === 'analytics' && profile && (
           <div className="space-y-6">
             {personality && <CognitiveCard personality={personality} />}
+            <div className="flex justify-end">
+              <a
+                href="/lenses/analytics"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-neon-cyan/10 text-neon-cyan text-sm font-medium hover:bg-neon-cyan/20 transition-colors"
+              >
+                <BarChart2 className="w-4 h-4" />
+                Full Analytics Dashboard
+              </a>
+            </div>
             <CreatorAnalytics userId={profile.userId} />
           </div>
         )}

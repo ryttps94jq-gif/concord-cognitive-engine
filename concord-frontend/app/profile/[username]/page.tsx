@@ -15,7 +15,7 @@ import {
   Eye, Quote, Heart, Video, FileText,
   Image as ImageIcon, Music, Pin, Loader2,
   Calendar, Link2, Share2, Check, Copy,
-  MoreHorizontal, ExternalLink,
+  MoreHorizontal, ExternalLink, Mail,
 } from 'lucide-react';
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -112,6 +112,7 @@ export default function PublicProfilePage() {
   const [activeTab, setActiveTab] = useState<TabId>('posts');
   const [linkCopied, setLinkCopied] = useState(false);
   const [showOptions, setShowOptions] = useState(false);
+  const [newsletterOptIn, setNewsletterOptIn] = useState(false);
 
   // ── Profile data ──────────────────────────────────────────────────────
 
@@ -314,6 +315,28 @@ export default function PublicProfilePage() {
                   </>
                 )}
               </button>
+              {/* Newsletter subscription toggle */}
+              {profile.isCreator && (
+                <label className="flex items-center gap-2 mt-2 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={newsletterOptIn}
+                    onChange={() => {
+                      const next = !newsletterOptIn;
+                      setNewsletterOptIn(next);
+                      api.post('/api/social/newsletter-subscribe', {
+                        creatorId: profile.userId,
+                        emailOptIn: next,
+                      }).catch(() => setNewsletterOptIn(!next));
+                    }}
+                    className="w-4 h-4 rounded border-gray-600 bg-white/5 text-neon-cyan focus:ring-neon-cyan/50 accent-neon-cyan"
+                  />
+                  <Mail className="w-3.5 h-3.5 text-gray-500 group-hover:text-gray-300 transition-colors" />
+                  <span className="text-xs text-gray-400 group-hover:text-gray-300 transition-colors">
+                    Get email updates
+                  </span>
+                </label>
+              )}
             </div>
           </div>
 

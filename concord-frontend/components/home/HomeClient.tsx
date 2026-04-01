@@ -59,6 +59,7 @@ import { SwarmIntelligence } from '@/components/swarm/SwarmIntelligence';
 import { TimeCrystals } from '@/components/temporal/TimeCrystals';
 import { NervousSystem } from '@/components/nervous/NervousSystem';
 import { UniversalImport } from '@/components/import/UniversalImport';
+import { TrendingDomains } from '@/components/social/TrendingDomains';
 
 const ENTERED_KEY = 'concord_entered';
 
@@ -381,6 +382,11 @@ function DashboardPage() {
       {/* Morning Brief */}
       <LensErrorBoundary name="Morning Brief">
         <MorningBrief />
+      </LensErrorBoundary>
+
+      {/* Trending in [Domain] */}
+      <LensErrorBoundary name="Trending Domains">
+        <TrendingDomains />
       </LensErrorBoundary>
 
       {/* Live Feed + Emergent Council + Governance — each wrapped independently */}

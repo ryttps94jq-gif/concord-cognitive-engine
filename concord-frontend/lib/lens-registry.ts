@@ -141,7 +141,7 @@ export const CORE_LENSES: CoreLensConfig[] = [
     tagline: 'Create anything',
     path: '/lenses/studio',
     color: 'neon-pink',
-    absorbedLensIds: ['music', 'art', 'fractal', 'game', 'sim', 'ar'],
+    absorbedLensIds: ['music', 'art', 'fractal', 'game', 'sim', 'ar', 'podcast'],
   },
 ];
 
@@ -210,6 +210,7 @@ export const LENS_REGISTRY: LensEntry[] = [
   { id: 'game', name: 'Game', icon: Gamepad2, description: 'Game development', category: 'creative', showInSidebar: false, showInCommandPalette: true, path: '/lenses/game', order: 53, keywords: ['gaming', 'development'], coreLens: 'studio', tabLabel: 'Game' },
   { id: 'sim', name: 'Sim', icon: Boxes, description: 'Simulation sandbox', category: 'creative', showInSidebar: false, showInCommandPalette: true, path: '/lenses/sim', order: 54, keywords: ['simulation', 'sandbox', 'worldmodel'], coreLens: 'studio', tabLabel: 'Simulation' },
   { id: 'ar', name: 'AR', icon: Glasses, description: 'Augmented reality', category: 'creative', showInSidebar: false, showInCommandPalette: true, path: '/lenses/ar', order: 55, keywords: ['augmented reality', 'webxr', '3d'], coreLens: 'studio', tabLabel: 'AR' },
+  { id: 'podcast', name: 'Podcast', icon: Headphones, description: 'Podcast creation and distribution', category: 'creative', showInSidebar: false, showInCommandPalette: true, path: '/lenses/podcast', order: 56, keywords: ['podcast', 'audio', 'episode', 'rss', 'show'], coreLens: 'studio', tabLabel: 'Podcast' },
 
   // ── Extensions: Platform & System ───────────────────────────────
   { id: 'resonance', name: 'Resonance', icon: Activity, description: 'System health dashboard', category: 'core', showInSidebar: false, showInCommandPalette: true, path: '/lenses/resonance', order: 100, keywords: ['health', 'metrics', 'status'] },
@@ -423,7 +424,7 @@ const SOVEREIGN_LENS_SET = new Set<string>(SOVEREIGN_LENSES);
  */
 export const SIDEBAR_CATEGORIES: Record<string, string[]> = {
   Knowledge: ['research', 'hypothesis', 'reasoning', 'metacognition', 'graph', 'education', 'science', 'grounding', 'commonsense', 'inference', 'metalearning', 'reflection', 'meta'],
-  Creative: ['art', 'music', 'creative', 'studio', 'whiteboard', 'game', 'sim', 'voice'],
+  Creative: ['art', 'music', 'creative', 'studio', 'whiteboard', 'game', 'sim', 'voice', 'podcast'],
   Lifestyle: ['food', 'fitness', 'healthcare', 'realestate', 'travel', 'daily', 'calendar', 'household', 'insurance', 'fashion', 'cooking', 'home-improvement', 'parenting', 'pets', 'sports', 'diy'],
   Professional: ['finance', 'legal', 'law', 'code', 'database', 'accounting', 'billing', 'logistics', 'manufacturing', 'retail'],
   Social: ['feed', 'forum', 'marketplace', 'collab', 'vote', 'global', 'alliance', 'debate', 'mentorship'],

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { ds } from '@/lib/design-system';
@@ -12,8 +13,10 @@ import {
   BarChart3, Wrench, Clock, CheckCircle2, AlertTriangle, Star,
   Phone, FileText, ChevronRight, ChevronDown, Percent,
   PiggyBank, Receipt, Hash, LandPlot, Hammer,
-  CircleDot, Minus, Bell, Layers,
+  CircleDot, Minus, Bell, Layers, Map,
 } from 'lucide-react';
+
+const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { ErrorState } from '@/components/common/EmptyState';
 import { cn } from '@/lib/utils';
@@ -27,7 +30,7 @@ import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-type ModeTab = 'Dashboard' | 'Listings' | 'Transactions' | 'CMA' | 'Rentals' | 'Investing' | 'Showings';
+type ModeTab = 'Dashboard' | 'Listings' | 'Transactions' | 'CMA' | 'Rentals' | 'Investing' | 'Showings' | 'Map';
 type ArtifactType = 'Listing' | 'Transaction' | 'CMA' | 'RentalUnit' | 'Deal' | 'Showing';
 
 type ListingStatus = 'coming_soon' | 'active' | 'pending' | 'contingent' | 'sold' | 'withdrawn' | 'expired';
@@ -52,6 +55,8 @@ interface RealEstateArtifact {
   description: string;
   address?: string;
   price?: number;
+  lat?: number;
+  lng?: number;
   agent?: string;
   client?: string;
   clientPhone?: string;
@@ -124,6 +129,7 @@ const MODE_TABS: { id: ModeTab; icon: React.ElementType; defaultType?: ArtifactT
   { id: 'Rentals', icon: KeyRound, defaultType: 'RentalUnit' },
   { id: 'Investing', icon: TrendingUp, defaultType: 'Deal' },
   { id: 'Showings', icon: Eye, defaultType: 'Showing' },
+  { id: 'Map', icon: Map },
 ];
 
 const STATUSES_BY_TYPE: Record<ArtifactType, string[]> = {
@@ -1857,6 +1863,17 @@ export default function RealEstateLensPage() {
             </div>
           </div>
         </>
+      )}
+
+      {/* ==================== MAP TAB ==================== */}
+      {activeTab === 'Map' && (
+        <div className={ds.panel}>
+          <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2"><Map className="w-4 h-4 text-neon-cyan" /> Property Locations</h3>
+          <MapView
+            markers={items.filter(i => { const d = i.data as RealEstateArtifact; return d.lat && d.lng; }).map(i => { const d = i.data as RealEstateArtifact; return { lat: d.lat!, lng: d.lng!, label: i.title, popup: `${d.address || ''} ${d.price ? '- $' + d.price.toLocaleString() : ''}`.trim() }; })}
+            className="h-[500px]"
+          />
+        </div>
       )}
 
       {/* Lens Features */}

@@ -24,6 +24,7 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { ProvenanceBadge } from '@/components/dtu/ProvenanceBadge';
 
 // --- Types ---
 
@@ -1470,7 +1471,10 @@ export default function GraphLensPage() {
                   {selectedNode.tier === 'sample' && <AudioWaveform className="w-3.5 h-3.5 text-green-400" />}
                   {selectedNode.tier === 'release' && <Disc className="w-3.5 h-3.5 text-pink-400" />}
                 </div>
-                <h3 className="font-semibold text-white text-lg">{selectedNode.label}</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-white text-lg">{selectedNode.label}</h3>
+                  <ProvenanceBadge source={selectedNode.originalSource} />
+                </div>
                 {selectedNode.content && <p className="text-sm text-gray-400 mt-2 line-clamp-4">{selectedNode.content}</p>}
               </div>
 

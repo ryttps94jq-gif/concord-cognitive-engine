@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { X, Clock, GitBranch, Tag, FileText, Zap, Crown, Ghost } from 'lucide-react';
+import { ProvenanceBadge } from './ProvenanceBadge';
 
 interface DTU {
   id: string;
@@ -14,6 +15,8 @@ interface DTU {
   children?: string[];
   tags?: string[];
   metadata?: Record<string, unknown>;
+  source?: string;
+  meta?: Record<string, unknown>;
 }
 
 interface DTUDetailModalProps {
@@ -53,7 +56,10 @@ export function DTUDetailModal({ dtu, isOpen, onClose, onNavigate }: DTUDetailMo
           <div className="flex items-center gap-3">
             <TierIcon className={`w-5 h-5 ${config.color}`} />
             <div>
-              <h2 className="font-semibold">{config.label}</h2>
+              <h2 className="font-semibold flex items-center gap-2">
+                {config.label}
+                <ProvenanceBadge source={dtu.source} model={dtu.meta?.model as string} authority={dtu.meta?.authority as string} />
+              </h2>
               <p className="text-xs text-gray-500 font-mono">{dtu.id}</p>
             </div>
           </div>

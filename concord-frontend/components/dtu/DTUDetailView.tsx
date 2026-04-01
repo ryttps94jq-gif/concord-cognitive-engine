@@ -16,6 +16,7 @@ import { useQuery } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import type { DTU } from '@/lib/api/generated-types';
 import { DTUIntegrityBadge } from './DTUIntegrityBadge';
+import { ProvenanceBadge } from './ProvenanceBadge';
 import {
   X, Clock, GitBranch, Tag, FileText, Zap, Crown, Ghost,
   Copy, ExternalLink, ChevronRight,
@@ -99,8 +100,9 @@ export function DTUDetailView({ dtuId, onClose, onNavigate }: DTUDetailViewProps
                 <TierIcon className={`w-5 h-5 ${config.color}`} />
               </div>
               <div className="min-w-0">
-                <h2 className="font-semibold truncate">
+                <h2 className="font-semibold truncate flex items-center gap-2">
                   {dtu?.title || dtu?.summary || config.label}
+                  {dtu && <ProvenanceBadge source={dtu.source} model={dtu.meta?.model as string} authority={dtu.meta?.authority as string} />}
                 </h2>
                 <div className="flex items-center gap-2 text-xs text-gray-500">
                   <span className="font-mono truncate">{dtuId.slice(0, 20)}...</span>

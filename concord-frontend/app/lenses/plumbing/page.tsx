@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -11,8 +12,10 @@ import {
   Droplets, Wrench, ClipboardList, DollarSign, Camera, Users,
   Plus, Search, X, Trash2, BarChart3, CheckCircle2,
   AlertTriangle, MapPin, FileText, Shield, Award,
-  Layers, ChevronDown, Calculator, Phone, Receipt,
+  Layers, ChevronDown, Calculator, Phone, Receipt, Map,
 } from 'lucide-react';
+
+const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -20,13 +23,14 @@ import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 
-type ModeTab = 'jobs' | 'estimates' | 'codes' | 'materials' | 'clients' | 'invoices' | 'inspections' | 'certs';
+type ModeTab = 'jobs' | 'estimates' | 'codes' | 'materials' | 'clients' | 'invoices' | 'inspections' | 'certs' | 'map';
 type ArtifactType = 'Job' | 'Estimate' | 'CodeRef' | 'Material' | 'Client' | 'Invoice' | 'Inspection' | 'Certification';
 type Status = 'scheduled' | 'in_progress' | 'completed' | 'invoiced' | 'paid' | 'pending' | 'failed' | 'active';
 
 interface TradeArtifact {
   name: string; type: ArtifactType; status: Status; description: string; notes: string;
   client?: string; address?: string; phone?: string; email?: string;
+  lat?: number; lng?: number;
   scheduledDate?: string; completedDate?: string;
   laborHours?: number; laborRate?: number; materialCost?: number; totalCost?: number;
   codeReference?: string; codeSection?: string; jurisdiction?: string;
@@ -46,6 +50,7 @@ const MODE_TABS: { id: ModeTab; label: string; icon: typeof Droplets; artifactTy
   { id: 'invoices', label: 'Invoices', icon: Receipt, artifactType: 'Invoice' },
   { id: 'inspections', label: 'Inspections', icon: ClipboardList, artifactType: 'Inspection' },
   { id: 'certs', label: 'Certs', icon: Award, artifactType: 'Certification' },
+  { id: 'map', label: 'Map', icon: Map, artifactType: 'Job' },
 ];
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
@@ -200,7 +205,15 @@ export default function PlumbingLensPage() {
       <RealtimeDataPanel domain="plumbing" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <UniversalActions domain="plumbing" artifactId={items[0]?.id} compact />
       <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 overflow-x-auto">{MODE_TABS.map(tab => (<button key={tab.id} onClick={() => { setActiveTab(tab.id); setShowDashboard(false); }} className={cn('flex items-center gap-2 px-4 py-2 rounded-lg transition-colors whitespace-nowrap', activeTab === tab.id && !showDashboard ? 'bg-neon-blue/20 text-neon-blue' : 'text-gray-400 hover:text-white hover:bg-lattice-elevated')}><tab.icon className="w-4 h-4" />{tab.label}</button>))}</nav>
-      {showDashboard ? renderDashboard() : renderLibrary()}
+      {activeTab === 'map' ? (
+        <div className={cn(ds.panel, 'p-4')}>
+          <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2"><Map className="w-4 h-4 text-neon-cyan" /> Job Site Locations</h3>
+          <MapView
+            markers={items.filter(i => { const d = i.data as unknown as TradeArtifact; return d.lat && d.lng; }).map(i => { const d = i.data as unknown as TradeArtifact; return { lat: d.lat!, lng: d.lng!, label: d.name || i.title, popup: `${d.address || ''} - ${d.client || ''}` }; })}
+            className="h-[500px]"
+          />
+        </div>
+      ) : showDashboard ? renderDashboard() : renderLibrary()}
       {renderEditor()}
       <div className="border-t border-white/10">
         <button onClick={() => setShowFeatures(!showFeatures)} className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"><span className="flex items-center gap-2"><Layers className="w-4 h-4" />Lens Features & Capabilities</span><ChevronDown className={`w-4 h-4 transition-transform ${showFeatures ? 'rotate-180' : ''}`} /></button>
