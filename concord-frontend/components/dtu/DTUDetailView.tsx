@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { ArtifactRenderer } from '@/components/artifact/ArtifactRenderer';
 import { DTUImportZone } from '@/components/lens/DTUImportZone';
+import { TierBadge, TierBadgeDetail, TierPromotionTimeline } from './TierBadge';
 
 interface DTUDetailViewProps {
   dtuId: string;
@@ -151,9 +152,7 @@ export function DTUDetailView({ dtuId, onClose, onNavigate }: DTUDetailViewProps
                   <button onClick={handleCopyId} className="hover:text-white" title="Copy ID">
                     <Copy className="w-3 h-3" />
                   </button>
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] uppercase font-medium ${config.bg} ${config.color}`}>
-                    {dtu?.tier || 'regular'}
-                  </span>
+                  <TierBadge tier={dtu?.tier || 'regular'} showRegular size="sm" />
                   {dtu?.domain && (
                     <span className="text-gray-600">{dtu.domain}</span>
                   )}

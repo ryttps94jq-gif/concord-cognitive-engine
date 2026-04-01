@@ -134,7 +134,7 @@ export default function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuFo
     }
   }));
 
-  // GET /api/dtus/:id/lineage — return parent/child lineage chains for a DTU
+  // GET /api/dtus/:id/lineage — return full lineage tree with forks, citations, and royalty info
   app.get("/api/dtus/:id/lineage", (req, res) => {
     const id = req.params.id;
     const dtu = STATE.dtus.get(id);
@@ -142,19 +142,131 @@ export default function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuFo
 
     const parentIds = dtu.lineage?.parents || dtu.parents || [];
     const childIds = dtu.lineage?.children || dtu.children || [];
+    const citationIds = dtu.meta?.citations || dtu.citations || [];
+    const relatedIds = dtu.relatedIds || [];
 
+    // Resolve a list of IDs into enriched objects with royalty info
     const resolve = (ids) => (Array.isArray(ids) ? ids : []).map(pid => {
       const p = STATE.dtus.get(pid);
       return p
-        ? { id: pid, title: p.title || p.human?.summary || pid, summary: p.human?.summary, tier: p.tier }
+        ? {
+            id: pid,
+            title: p.title || p.human?.summary || pid,
+            summary: p.human?.summary || p.summary,
+            tier: p.tier || 'regular',
+            type: p.type || p.meta?.type || 'original',
+            ownerId: p.ownerId || p.creatorId,
+            domain: p.domain,
+            timestamp: p.timestamp || p.createdAt,
+          }
         : { id: pid, title: pid };
+    });
+
+    // Separate children into forks and regular children
+    const allChildren = resolve(childIds);
+    const forks = allChildren.filter(c => c.type === 'fork' || c.type === 'derivative');
+    const regularChildren = allChildren.filter(c => c.type !== 'fork' && c.type !== 'derivative');
+
+    // Find DTUs that cite this one (reverse citation lookup)
+    const citedBy = [];
+    for (const [otherId, otherDtu] of STATE.dtus) {
+      if (otherId === id) continue;
+      const otherCitations = otherDtu.meta?.citations || otherDtu.citations || [];
+      const otherParents = otherDtu.lineage?.parents || otherDtu.parents || [];
+      if ((Array.isArray(otherCitations) && otherCitations.includes(id)) ||
+          (Array.isArray(otherParents) && otherParents.includes(id))) {
+        const resolved = STATE.dtus.get(otherId);
+        citedBy.push({
+          id: otherId,
+          title: resolved?.title || resolved?.human?.summary || otherId,
+          summary: resolved?.human?.summary || resolved?.summary,
+          tier: resolved?.tier || 'regular',
+          ownerId: resolved?.ownerId || resolved?.creatorId,
+        });
+      }
+      if (citedBy.length >= 50) break; // cap for performance
+    }
+
+    // Build royalty cascade preview — shows how royalties would flow from this DTU
+    const royaltyCascade = [];
+    const INITIAL_RATE = 0.21;
+    const ROYALTY_FLOOR = 0.0005;
+    const ancestors = resolve(parentIds);
+    ancestors.forEach((ancestor, i) => {
+      const rate = Math.max(INITIAL_RATE / Math.pow(2, i + 1), ROYALTY_FLOOR);
+      royaltyCascade.push({
+        id: ancestor.id,
+        title: ancestor.title,
+        ownerId: ancestor.ownerId,
+        generation: i + 1,
+        royaltyRate: rate,
+        royaltyPercent: (rate * 100).toFixed(2) + '%',
+      });
     });
 
     return res.json({
       ok: true,
       dtuId: id,
-      parents: resolve(parentIds),
-      children: resolve(childIds),
+      current: {
+        id,
+        title: dtu.title || dtu.human?.summary || id,
+        tier: dtu.tier || 'regular',
+        type: dtu.type || dtu.meta?.type || 'original',
+        ownerId: dtu.ownerId || dtu.creatorId,
+        domain: dtu.domain,
+      },
+      parents: ancestors,
+      children: regularChildren,
+      forks,
+      citations: resolve(citationIds),
+      citedBy,
+      relatedIds: relatedIds.slice(0, 20),
+      royaltyCascade,
+    });
+  });
+
+  // GET /api/dtus/stats — return DTU tier counts and compression ratio
+  app.get("/api/dtus/stats", (req, res) => {
+    let totalCount = 0;
+    let shadowCount = 0;
+    let regularCount = 0;
+    let megaCount = 0;
+    let hyperCount = 0;
+    let archivedCount = 0;
+
+    for (const d of STATE.dtus.values()) {
+      totalCount++;
+      const tier = (d.tier || 'regular').toString().toLowerCase();
+      const status = (d.status || d.meta?.status || 'active').toString().toLowerCase();
+      const isShadow = tier === 'shadow' || (Array.isArray(d.tags) && d.tags.includes('shadow'));
+
+      if (status === 'archived' || status === 'merged' || status === 'inactive') {
+        archivedCount++;
+      } else if (isShadow) {
+        shadowCount++;
+      } else if (tier === 'mega') {
+        megaCount++;
+      } else if (tier === 'hyper') {
+        hyperCount++;
+      } else {
+        regularCount++;
+      }
+    }
+
+    const activeInMemory = totalCount - archivedCount;
+    const compressionRatio = activeInMemory > 0
+      ? Math.round((totalCount / activeInMemory) * 100) / 100
+      : 1;
+
+    return res.json({
+      ok: true,
+      totalCount,
+      shadowCount,
+      regularCount,
+      megaCount,
+      hyperCount,
+      archivedCount,
+      compressionRatio,
     });
   });
 

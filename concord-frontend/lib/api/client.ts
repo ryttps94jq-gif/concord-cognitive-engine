@@ -291,6 +291,12 @@ export const apiHelpers = {
     children: (id: string) => api.get(`/api/dtus/${id}/children`),
     myDtus: (params?: { limit?: number; offset?: number }) =>
       api.get('/api/dtus/mine', { params }),
+
+    // .dtu file format export/import
+    exportDtu: (id: string) =>
+      api.get(`/api/dtus/${id}/export.dtu`, { responseType: 'blob' }),
+    importDtu: (data: ArrayBuffer) =>
+      api.post('/api/dtus/import', data, { headers: { 'Content-Type': 'application/octet-stream' } }),
   },
 
   // Ingest operations
