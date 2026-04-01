@@ -3,7 +3,7 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
-import { apiHelpers } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -448,6 +448,13 @@ export default function MarketplaceLensPage() {
   const [listingSubmitting, setListingSubmitting] = useState(false);
   const [listingError, setListingError] = useState<string | null>(null);
 
+  // Knowledge Pack builder state
+  const [showPackBuilder, setShowPackBuilder] = useState(false);
+  const [packForm, setPackForm] = useState({ name: '', description: '', price: '' });
+  const [packSelectedDTUs, setPackSelectedDTUs] = useState<string[]>([]);
+  const [packSubmitting, setPackSubmitting] = useState(false);
+  const [packError, setPackError] = useState<string | null>(null);
+
   const { isLoading, isError: isError, error: error, refetch: refetch } = useLensData('marketplace', 'listing', {
     noSeed: true,
   });
@@ -609,6 +616,33 @@ export default function MarketplaceLensPage() {
       setListingSubmitting(false);
     }
   }, [newListingForm, listingSubmitting, queryClient]);
+
+  // Create Knowledge Pack — bundles selected DTUs into a marketplace listing
+  const handleCreatePack = useCallback(async () => {
+    if (!packForm.name.trim() || packSelectedDTUs.length === 0 || packSubmitting) return;
+    setPackSubmitting(true);
+    setPackError(null);
+    try {
+      const resp = await api.post('/api/marketplace/pack', {
+        name: packForm.name.trim(),
+        description: packForm.description.trim(),
+        dtu_ids: packSelectedDTUs,
+        price: Number(packForm.price) || 10,
+      });
+      if (resp.data.ok) {
+        setShowPackBuilder(false);
+        setPackForm({ name: '', description: '', price: '' });
+        setPackSelectedDTUs([]);
+        queryClient.invalidateQueries({ queryKey: ['marketplace-packs'] });
+      } else {
+        setPackError(resp.data.error || 'Failed to create pack');
+      }
+    } catch (err) {
+      setPackError(err instanceof Error ? err.message : 'Failed to create pack');
+    } finally {
+      setPackSubmitting(false);
+    }
+  }, [packForm, packSelectedDTUs, packSubmitting, queryClient]);
 
   // Checkout — settles each cart item through the economy ledger
   const handleCheckout = useCallback(async () => {
@@ -907,9 +941,14 @@ export default function MarketplaceLensPage() {
           {/* Actions */}
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">Your Listings</h2>
-            <button onClick={() => setShowNewListing(true)} className="btn-neon purple flex items-center gap-2 text-sm">
-              <Plus className="w-4 h-4" /> New Listing
-            </button>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setShowPackBuilder(true)} className="btn-neon flex items-center gap-2 text-sm">
+                <Package className="w-4 h-4" /> Create Pack
+              </button>
+              <button onClick={() => setShowNewListing(true)} className="btn-neon purple flex items-center gap-2 text-sm">
+                <Plus className="w-4 h-4" /> New Listing
+              </button>
+            </div>
           </div>
 
           {/* Existing listings from API */}
@@ -995,6 +1034,94 @@ export default function MarketplaceLensPage() {
                       className={cn('btn-neon purple text-sm', (!newListingForm.title.trim() || listingSubmitting) && 'opacity-50 cursor-not-allowed')}>
                       {listingSubmitting ? 'Publishing...' : 'Publish Listing'}
                     </button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Knowledge Pack Builder Modal */}
+          <AnimatePresence>
+            {showPackBuilder && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+                onClick={() => setShowPackBuilder(false)}>
+                <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+                  className="bg-lattice-bg border border-lattice-border rounded-xl w-full max-w-lg p-6 space-y-4 max-h-[80vh] overflow-y-auto"
+                  onClick={e => e.stopPropagation()}>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-bold flex items-center gap-2">
+                      <Package className="w-5 h-5 text-neon-cyan" />
+                      Create Knowledge Pack
+                    </h3>
+                    <button onClick={() => setShowPackBuilder(false)} className="text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
+                  </div>
+                  <p className="text-xs text-gray-400">Bundle DTUs into a collection and list it on the marketplace.</p>
+                  <div className="space-y-3">
+                    <input placeholder="Pack Name" value={packForm.name}
+                      onChange={e => setPackForm(f => ({ ...f, name: e.target.value }))}
+                      className="w-full px-3 py-2 bg-lattice-surface border border-lattice-border rounded-lg text-sm focus:border-neon-cyan outline-none" />
+                    <textarea placeholder="Description" rows={2} value={packForm.description}
+                      onChange={e => setPackForm(f => ({ ...f, description: e.target.value }))}
+                      className="w-full px-3 py-2 bg-lattice-surface border border-lattice-border rounded-lg text-sm focus:border-neon-cyan outline-none resize-none" />
+                    <div>
+                      <label className="text-xs text-gray-400 mb-1 block">Price (CC)</label>
+                      <input type="number" placeholder="10" value={packForm.price}
+                        onChange={e => setPackForm(f => ({ ...f, price: e.target.value }))}
+                        className="w-full px-3 py-2 bg-lattice-surface border border-lattice-border rounded-lg text-sm focus:border-neon-cyan outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-400 mb-2 block">
+                        Select DTUs ({packSelectedDTUs.length} selected)
+                      </label>
+                      <div className="max-h-48 overflow-y-auto border border-lattice-border rounded-lg divide-y divide-lattice-border">
+                        {marketDTUs.length === 0 && (
+                          <p className="text-xs text-gray-500 p-3 text-center">No DTUs available. Ingest content first.</p>
+                        )}
+                        {marketDTUs.map((dtu: DTU) => {
+                          const isSelected = packSelectedDTUs.includes(dtu.id);
+                          return (
+                            <button key={dtu.id}
+                              onClick={() => {
+                                setPackSelectedDTUs(prev =>
+                                  isSelected ? prev.filter(id => id !== dtu.id) : [...prev, dtu.id]
+                                );
+                              }}
+                              className={cn(
+                                'w-full flex items-center gap-3 px-3 py-2 text-left text-sm hover:bg-lattice-elevated transition-colors',
+                                isSelected && 'bg-neon-cyan/5'
+                              )}>
+                              <span className={cn(
+                                'w-4 h-4 rounded border flex items-center justify-center shrink-0',
+                                isSelected ? 'bg-neon-cyan border-neon-cyan' : 'border-gray-600'
+                              )}>
+                                {isSelected && <Check className="w-3 h-3 text-white" />}
+                              </span>
+                              <span className="truncate flex-1 text-gray-300">{dtu.title || dtu.id.slice(0, 12)}</span>
+                              {dtu.tier && dtu.tier !== 'regular' && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-neon-purple/20 text-neon-purple">{dtu.tier}</span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                  {packError && (
+                    <p className="text-xs text-red-400 bg-red-400/10 rounded-lg px-3 py-2">{packError}</p>
+                  )}
+                  <div className="flex items-center justify-between pt-2">
+                    <span className="text-xs text-gray-500">
+                      {packSelectedDTUs.length} DTU{packSelectedDTUs.length !== 1 ? 's' : ''} in pack
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => { setShowPackBuilder(false); setPackError(null); }} className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">Cancel</button>
+                      <button onClick={handleCreatePack}
+                        disabled={!packForm.name.trim() || packSelectedDTUs.length === 0 || packSubmitting}
+                        className={cn('btn-neon text-sm', (!packForm.name.trim() || packSelectedDTUs.length === 0 || packSubmitting) && 'opacity-50 cursor-not-allowed')}>
+                        {packSubmitting ? 'Creating...' : `Create Pack (${packSelectedDTUs.length} DTUs)`}
+                      </button>
+                    </div>
                   </div>
                 </motion.div>
               </motion.div>

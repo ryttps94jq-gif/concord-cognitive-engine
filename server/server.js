@@ -4266,7 +4266,7 @@ function authMiddleware(req, res, next) {
     // Settings, metrics & context
     "/api/settings", "/api/growth", "/api/metrics", "/api/context",
     // System
-    "/api/brain", "/api/system", "/api/cognitive", "/api/status",
+    "/api/brain", "/api/system", "/api/cognitive", "/api/status", "/api/loaf",
     "/api/backpressure", "/api/embeddings", "/api/pwa",
     // Governance & lattice
     "/api/lattice", "/api/guidance", "/api/graph", "/api/scope",
@@ -6670,6 +6670,7 @@ async function runMacro(domain, name, input, ctx) {
     queue: new Set(["list", "status"]),
     cache: new Set(["status"]),
     cognitive: new Set(["status"]),
+    loaf: new Set(["status"]),
     brain: new Set(["status", "health"]),
     species: new Set(["registry", "census", "all", "get"]),
     onboarding: new Set(["hints", "progress"]),
@@ -6736,7 +6737,7 @@ async function runMacro(domain, name, input, ctx) {
     "/api/reasoning", "/api/reflection", "/api/temporal", "/api/inference",
     "/api/collab", "/api/social", "/api/economy", "/api/marketplace", "/api/credits",
     "/api/hive", "/api/heal", "/api/grounding", "/api/commonsense", "/api/explanation",
-    "/api/ingest", "/api/jobs", "/api/queue", "/api/cache", "/api/cognitive",
+    "/api/ingest", "/api/jobs", "/api/queue", "/api/cache", "/api/cognitive", "/api/loaf",
     "/api/onboarding", "/api/srs", "/api/skill", "/api/schema", "/api/daily",
     "/api/digest", "/api/entity-growth", "/api/entity-exploration",
     "/api/artifacts", "/api/notifications", "/api/reminders", "/api/webhooks",
@@ -38391,6 +38392,32 @@ app.get("/api/model-optimizer/stats", asyncHandler(async (_req, res) => {
 // Affect system state
 app.get("/api/affect/system", asyncHandler(async (_req, res) => {
   res.json({ ok: true, ...getSystemAffectState() });
+}));
+
+// ── LOAF Aggregated Status ─────────────────────────────────────────────────
+app.get("/api/loaf/status", asyncHandler(async (req, res) => {
+  const ctx = makeCtx(req);
+  const results = {};
+
+  // LOAF meta-status
+  try { results.meta = await runMacro("loaf", "status", {}, ctx); } catch (_e) { results.meta = { ok: false }; }
+
+  // Hypothesis market
+  try { results.hypothesisMarket = await runMacro("loaf.hypothesis", "status", {}, ctx); } catch (_e) { results.hypothesisMarket = { ok: false }; }
+
+  // Truth lifecycle
+  try { results.truthLifecycle = await runMacro("loaf.truth", "status", {}, ctx); } catch (_e) { results.truthLifecycle = { ok: false }; }
+
+  // Action safety
+  try { results.actionSafety = await runMacro("loaf.action_safety", "status", {}, ctx); } catch (_e) { results.actionSafety = { ok: false }; }
+
+  // Collective action / coordination health
+  try { results.collectiveAction = await runMacro("loaf", "coordination_health", {}, ctx); } catch (_e) { results.collectiveAction = { ok: false }; }
+
+  // Knowledge survival — at-risk items
+  try { results.knowledgeSurvival = await runMacro("loaf", "identify_at_risk", {}, ctx); } catch (_e) { results.knowledgeSurvival = { ok: false }; }
+
+  res.json({ ok: true, ...results });
 }));
 
 // Economics — current period

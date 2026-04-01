@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
-import { CommandPalette } from './CommandPalette';
+import { CommandPalette } from '@/components/common/CommandPalette';
 import { useUIStore } from '@/store/ui';
 import { Toasts } from '@/components/common/Toasts';
 import { OperatorErrorBanner } from '@/components/common/OperatorErrorBanner';

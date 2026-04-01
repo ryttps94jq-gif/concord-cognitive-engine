@@ -4,6 +4,7 @@ import React, { useMemo } from 'react';
 import { Clock, GitBranch, Zap, Crown, Ghost, ExternalLink } from 'lucide-react';
 import { ProvenanceBadge } from './ProvenanceBadge';
 import { TierBadge } from './TierBadge';
+import { ScopeBadge } from '@/components/platform/ScopeControls';
 
 interface DTU {
   id: string;
@@ -123,9 +124,7 @@ function DTUEmpireCardInner({
             <TierIcon className={`w-4 h-4 ${config.color}`} />
           </div>
           <TierBadge tier={dtu.tier} showRegular size="sm" />
-          <span className={`text-xs px-1.5 py-0.5 rounded ${scopeDisplay.color} ${scopeDisplay.textColor}`}>
-            {scopeDisplay.label}
-          </span>
+          <ScopeBadge scope={dtu.scope || getDtuScopeDisplay(dtu).label.toLowerCase()} />
           <ProvenanceBadge source={dtu.source} model={dtu.meta?.model as string} authority={dtu.meta?.authority as string} />
         </div>
         <button className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-white">

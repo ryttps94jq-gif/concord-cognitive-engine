@@ -294,6 +294,15 @@ export default function TradesLensPage() {
   const [photoLocation, setPhotoLocation] = useState('');
   const [photoNotes, setPhotoNotes] = useState('');
 
+  // ----- Invoice Generator state -----
+  const [invLineItems, setInvLineItems] = useState<Array<{ description: string; quantity: number; unitPrice: number }>>([{ description: '', quantity: 1, unitPrice: 0 }]);
+  const [invTaxRate, setInvTaxRate] = useState(0);
+  const [invDueDate, setInvDueDate] = useState('');
+  const [invPayerName, setInvPayerName] = useState('');
+  const [invNotes, setInvNotes] = useState('');
+  const [invCreating, setInvCreating] = useState(false);
+  const [invResult, setInvResult] = useState<Record<string, unknown> | null>(null);
+
   // ----- Data hooks -----
   const activeArtifactType = MODE_TABS.find(t => t.id === activeTab)?.artifactType || 'Job';
 
@@ -2034,6 +2043,7 @@ export default function TradesLensPage() {
     { id: 'profitLoss', label: 'P&L', icon: PieChart, forTabs: ['jobs'] },
     { id: 'materialsTracker', label: 'Materials', icon: Package, forTabs: ['jobs', 'materials'] },
     { id: 'photos', label: 'Photos', icon: Camera, forTabs: ['jobs'] },
+    { id: 'invoiceGenerator', label: 'Invoice', icon: Receipt, forTabs: ['jobs', 'clients'] },
   ];
 
   const visibleSubViews = SUB_VIEW_TABS.filter(sv => !sv.forTabs || sv.forTabs.includes(activeTab));
@@ -2047,6 +2057,7 @@ export default function TradesLensPage() {
       case 'profitLoss': return renderProfitLoss();
       case 'materialsTracker': return renderMaterialsTracker();
       case 'photos': return renderPhotoDocumentation();
+      case 'invoiceGenerator': return renderInvoiceGenerator();
       default: return renderLibrary();
     }
   };

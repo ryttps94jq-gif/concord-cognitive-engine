@@ -29,6 +29,7 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { NervousSystem } from '@/components/nervous/NervousSystem';
+import { MonitoringPanel } from '@/components/admin/MonitoringPanel';
 import { Download, Globe, DollarSign, PieChart, BarChart3 } from 'lucide-react';
 
 interface DashboardData {
@@ -236,6 +237,28 @@ export default function AdminDashboardPage() {
     queryKey: ['admin-logs'],
     queryFn: () => apiHelpers.eventsLog.list({ limit: 20 }).then((r) => r.data),
     refetchInterval: autoRefresh ? 10000 : false,
+  });
+
+  // Treasury dashboard data (admin only)
+  const { data: treasuryData } = useQuery({
+    queryKey: ['admin-treasury'],
+    queryFn: () => apiHelpers.economy.adminTreasury().then((r) => r.data as {
+      ok: boolean;
+      totalBalance: number;
+      reserve80: number;
+      operating10: number;
+      payroll10: number;
+      platformBalance: number;
+      revenueHistory: Array<{ date: string; totalFees: number; reserves: number; operating: number; payroll: number; txCount: number }>;
+      feeCollectionRate: number;
+      recentFees: number;
+      priorFees: number;
+      totalDistributed: number;
+      distributionCount: number;
+    }),
+    enabled: showTreasury,
+    retry: false,
+    refetchInterval: showTreasury && autoRefresh ? 30000 : false,
   });
 
   const handleRefresh = () => {
@@ -570,6 +593,9 @@ export default function AdminDashboardPage() {
       )}
       </div>
 
+      {/* System Monitoring — request rate, latency, error rate, circuit breakers */}
+      <MonitoringPanel />
+
       {/* Nervous System — live brain/circuit/event/trace/integrity monitoring */}
       <NervousSystem />
 
@@ -599,6 +625,25 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
+      {/* Treasury Dashboard (Admin Only) */}
+      <div className="border-t border-white/10">
+        <button
+          onClick={() => setShowTreasury(!showTreasury)}
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+        >
+          <span className="flex items-center gap-2">
+            <DollarSign className="w-4 h-4" />
+            Treasury Dashboard
+          </span>
+          <ChevronDown className={`w-4 h-4 transition-transform ${showTreasury ? 'rotate-180' : ''}`} />
+        </button>
+        {showTreasury && (
+          <div className="px-4 pb-4">
+            <TreasuryDashboard data={treasuryData} />
+          </div>
+        )}
+      </div>
+
       {/* Lens Features */}
       <div className="border-t border-white/10">
         <button
@@ -617,6 +662,173 @@ export default function AdminDashboardPage() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── Treasury Dashboard Component ────────────────────────────────────────────
+
+interface TreasuryData {
+  ok: boolean;
+  totalBalance: number;
+  reserve80: number;
+  operating10: number;
+  payroll10: number;
+  platformBalance: number;
+  revenueHistory: Array<{ date: string; totalFees: number; reserves: number; operating: number; payroll: number; txCount: number }>;
+  feeCollectionRate: number;
+  recentFees: number;
+  priorFees: number;
+  totalDistributed: number;
+  distributionCount: number;
+}
+
+function TreasuryDashboard({ data }: { data?: TreasuryData }) {
+  if (!data || !data.ok) {
+    return (
+      <div className="text-center py-8">
+        <DollarSign className="w-8 h-8 mx-auto text-gray-600 mb-2" />
+        <p className="text-gray-500 text-sm">Loading treasury data...</p>
+      </div>
+    );
+  }
+
+  const totalSplit = data.reserve80 + data.operating10 + data.payroll10;
+  const reservePct = totalSplit > 0 ? (data.reserve80 / totalSplit) * 100 : 80;
+  const operatingPct = totalSplit > 0 ? (data.operating10 / totalSplit) * 100 : 10;
+  const payrollPct = totalSplit > 0 ? (data.payroll10 / totalSplit) * 100 : 10;
+
+  // Revenue chart: max value for scaling
+  const maxFee = Math.max(...data.revenueHistory.map(d => d.totalFees), 1);
+
+  return (
+    <div className="space-y-6">
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="dashboard-card">
+          <div className="flex items-start justify-between">
+            <div className="p-2 rounded-lg border text-neon-green bg-neon-green/10 border-neon-green/30">
+              <DollarSign className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="mt-4">
+            <p className="dashboard-stat">${data.totalBalance.toLocaleString()}</p>
+            <p className="dashboard-label">Total Treasury</p>
+          </div>
+        </div>
+
+        <div className="dashboard-card">
+          <div className="flex items-start justify-between">
+            <div className="p-2 rounded-lg border text-neon-blue bg-neon-blue/10 border-neon-blue/30">
+              <PieChart className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="mt-4">
+            <p className="dashboard-stat">${data.totalDistributed.toLocaleString()}</p>
+            <p className="dashboard-label">Total Distributed</p>
+            <p className="text-xs text-gray-500 mt-1">{data.distributionCount} distributions</p>
+          </div>
+        </div>
+
+        <div className="dashboard-card">
+          <div className="flex items-start justify-between">
+            <div className="p-2 rounded-lg border text-neon-purple bg-neon-purple/10 border-neon-purple/30">
+              <BarChart3 className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="mt-4">
+            <p className="dashboard-stat">${data.recentFees.toLocaleString()}</p>
+            <p className="dashboard-label">Fees (30d)</p>
+            <p className={`text-xs mt-1 ${data.feeCollectionRate >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+              {data.feeCollectionRate >= 0 ? '+' : ''}{data.feeCollectionRate}% vs prior 30d
+            </p>
+          </div>
+        </div>
+
+        <div className="dashboard-card">
+          <div className="flex items-start justify-between">
+            <div className="p-2 rounded-lg border text-neon-cyan bg-neon-cyan/10 border-neon-cyan/30">
+              <DollarSign className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="mt-4">
+            <p className="dashboard-stat">${data.platformBalance.toLocaleString()}</p>
+            <p className="dashboard-label">Platform Balance</p>
+          </div>
+        </div>
+      </div>
+
+      {/* 80/10/10 Split Bars */}
+      <div className="panel p-6">
+        <h3 className="font-semibold mb-4 flex items-center gap-2">
+          <PieChart className="w-5 h-5 text-neon-green" />
+          Fee Split (80/10/10)
+        </h3>
+        <div className="space-y-4">
+          <div>
+            <div className="flex justify-between text-sm mb-1">
+              <span className="text-gray-400">Reserves (80%)</span>
+              <span className="text-white font-mono">${data.reserve80.toLocaleString()} ({reservePct.toFixed(1)}%)</span>
+            </div>
+            <div className="progress-bar">
+              <div className="progress-fill bg-neon-green" style={{ width: `${reservePct}%` }} />
+            </div>
+          </div>
+          <div>
+            <div className="flex justify-between text-sm mb-1">
+              <span className="text-gray-400">Operating (10%)</span>
+              <span className="text-white font-mono">${data.operating10.toLocaleString()} ({operatingPct.toFixed(1)}%)</span>
+            </div>
+            <div className="progress-bar">
+              <div className="progress-fill bg-neon-blue" style={{ width: `${operatingPct}%` }} />
+            </div>
+          </div>
+          <div>
+            <div className="flex justify-between text-sm mb-1">
+              <span className="text-gray-400">Payroll (10%)</span>
+              <span className="text-white font-mono">${data.payroll10.toLocaleString()} ({payrollPct.toFixed(1)}%)</span>
+            </div>
+            <div className="progress-bar">
+              <div className="progress-fill bg-neon-purple" style={{ width: `${payrollPct}%` }} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Revenue Over Time (CSS bar chart -- Recharts can be wired in when available) */}
+      {data.revenueHistory.length > 0 && (
+        <div className="panel p-6">
+          <h3 className="font-semibold mb-4 flex items-center gap-2">
+            <TrendingUp className="w-5 h-5 text-neon-cyan" />
+            Revenue Over Time
+          </h3>
+          <div className="flex items-end gap-1 h-40">
+            {data.revenueHistory.slice(-30).map((day, i) => {
+              const height = (day.totalFees / maxFee) * 100;
+              return (
+                <div
+                  key={day.date || i}
+                  className="flex-1 flex flex-col items-center gap-1 group relative"
+                >
+                  <div
+                    className="w-full bg-neon-cyan/60 rounded-t hover:bg-neon-cyan transition-colors"
+                    style={{ height: `${Math.max(height, 2)}%` }}
+                  />
+                  <div className="absolute bottom-full mb-2 hidden group-hover:block z-10 bg-lattice-surface border border-lattice-border rounded-lg p-2 text-xs whitespace-nowrap shadow-lg">
+                    <p className="text-white font-medium">{day.date}</p>
+                    <p className="text-neon-cyan">${day.totalFees.toFixed(2)}</p>
+                    <p className="text-gray-400">{day.txCount} tx</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex justify-between text-xs text-gray-500 mt-2">
+            <span>{data.revenueHistory[Math.max(0, data.revenueHistory.length - 30)]?.date || ''}</span>
+            <span>{data.revenueHistory[data.revenueHistory.length - 1]?.date || ''}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
