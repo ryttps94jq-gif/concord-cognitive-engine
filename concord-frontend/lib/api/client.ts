@@ -1419,6 +1419,86 @@ export const apiHelpers = {
       api.post('/api/social/cite', { citedDtuId, citingDtuId }),
     getCitedBy: (dtuId: string) => api.get(`/api/social/cited-by/${dtuId}`),
     metrics: () => api.get('/api/social/metrics'),
+    // Posts
+    createPost: (data: Record<string, unknown>) => api.post('/api/social/post', data),
+    getPost: (postId: string) => api.get(`/api/social/post/${postId}`),
+    deletePost: (postId: string) => api.delete(`/api/social/post/${postId}`),
+    getUserPosts: (userId: string, params?: Record<string, unknown>) =>
+      api.get(`/api/social/posts/${userId}`, { params }),
+    // Reactions, Comments, Shares
+    react: (data: { postId: string; type?: string }) => api.post('/api/social/react', data),
+    getReactions: (postId: string) => api.get(`/api/social/reactions/${postId}`),
+    comment: (data: { postId: string; content: string; parentCommentId?: string }) =>
+      api.post('/api/social/comment', data),
+    deleteComment: (postId: string, commentId: string) =>
+      api.delete(`/api/social/comment/${postId}/${commentId}`),
+    getComments: (postId: string, params?: Record<string, unknown>) =>
+      api.get(`/api/social/comments/${postId}`, { params }),
+    share: (data: { postId: string; commentary?: string }) => api.post('/api/social/share', data),
+    getShares: (postId: string) => api.get(`/api/social/shares/${postId}`),
+    // Bookmarks
+    bookmark: (data: { postId: string }) => api.post('/api/social/bookmark', data),
+    getBookmarks: (params?: Record<string, unknown>) => api.get('/api/social/bookmarks', { params }),
+    // Feeds
+    getForYouFeed: (params?: Record<string, unknown>) => api.get('/api/social/feed/foryou', { params }),
+    getFollowingFeed: (params?: Record<string, unknown>) => api.get('/api/social/feed/following', { params }),
+    getExploreFeed: (params?: Record<string, unknown>) => api.get('/api/social/feed/explore', { params }),
+    // DMs
+    sendDM: (data: { toUserId: string; content: string; mediaUrl?: string }) =>
+      api.post('/api/social/dm', data),
+    getConversations: () => api.get('/api/social/dm/conversations'),
+    getMessages: (conversationId: string, params?: Record<string, unknown>) =>
+      api.get(`/api/social/dm/${conversationId}`, { params }),
+    markDMRead: (conversationId: string) => api.post(`/api/social/dm/${conversationId}/read`),
+    // Notifications
+    getNotifications: (params?: Record<string, unknown>) =>
+      api.get('/api/social/notifications', { params }),
+    markNotificationRead: (id: string) => api.post(`/api/social/notifications/${id}/read`),
+    markAllNotificationsRead: () => api.post('/api/social/notifications/read-all'),
+    getUnreadCount: () => api.get('/api/social/notifications/count'),
+    deleteNotification: (id: string) => api.delete(`/api/social/notifications/${id}`),
+    // Stories
+    getStories: (params?: Record<string, unknown>) => api.get('/api/social/stories', { params }),
+    viewStory: (storyId: string) => api.post(`/api/social/stories/${storyId}/view`),
+    // Polls
+    votePoll: (data: { postId: string; optionIndex: number }) => api.post('/api/social/poll/vote', data),
+    getPollResults: (postId: string) => api.get(`/api/social/poll/${postId}`),
+    // Topics
+    getTrendingTopics: (params?: Record<string, unknown>) =>
+      api.get('/api/social/topics/trending', { params }),
+    getPostsByTopic: (topic: string, params?: Record<string, unknown>) =>
+      api.get(`/api/social/topics/${topic}`, { params }),
+    // Groups
+    createGroup: (data: Record<string, unknown>) => api.post('/api/social/group', data),
+    joinGroup: (groupId: string) => api.post(`/api/social/group/${groupId}/join`),
+    leaveGroup: (groupId: string) => api.post(`/api/social/group/${groupId}/leave`),
+    getGroupFeed: (groupId: string, params?: Record<string, unknown>) =>
+      api.get(`/api/social/group/${groupId}/feed`, { params }),
+    postToGroup: (groupId: string, data: Record<string, unknown>) =>
+      api.post(`/api/social/group/${groupId}/post`, data),
+    listGroups: (params?: Record<string, unknown>) => api.get('/api/social/groups', { params }),
+    getGroupMembers: (groupId: string) => api.get(`/api/social/group/${groupId}/members`),
+    // Analytics
+    getCreatorAnalytics: () => api.get('/api/social/analytics/creator'),
+    getPostAnalytics: (postId: string) => api.get(`/api/social/analytics/post/${postId}`),
+    // Streak
+    getStreak: () => api.get('/api/social/streak'),
+    // Commerce
+    tagListing: (data: { postId: string; listingId: string }) =>
+      api.post('/api/social/commerce/tag', data),
+    getPostSales: (postId: string) => api.get(`/api/social/commerce/post/${postId}/sales`),
+    getPostEarnings: (postId: string) => api.get(`/api/social/commerce/post/${postId}/earnings`),
+    // Pin
+    pin: (data: { postId: string }) => api.post('/api/social/pin', data),
+    unpin: (postId: string) => api.delete(`/api/social/pin/${postId}`),
+    getPinnedPosts: (userId: string) => api.get(`/api/social/pins/${userId}`),
+    // Watch time
+    recordWatchTime: (data: { postId: string; durationMs: number }) =>
+      api.post('/api/social/watchtime', data),
+    // Scheduling
+    schedulePost: (data: Record<string, unknown>) => api.post('/api/social/schedule', data),
+    getScheduledPosts: () => api.get('/api/social/scheduled'),
+    cancelScheduledPost: (postId: string) => api.delete(`/api/social/scheduled/${postId}`),
   },
 
   collab: {

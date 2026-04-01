@@ -32609,6 +32609,11 @@ function initChatSocketHandlers(io) {
           lensRecommendation,
           sources: result?.meta?.sources || [],
           dtuId: result?.meta?.dtuId || null,
+          dtuCount: result?.dtuCount ?? 0,
+          dtuIds: (result?.relevant || []).map(d => d.id || d).slice(0, 20),
+          brain: result?.llmUsed ? "conscious" : "local",
+          route: result?.route || null,
+          forge: result?.forge || null,
         });
 
         ack?.({ ok: true });

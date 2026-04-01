@@ -511,7 +511,7 @@ export function NotificationCenter({
 
   const clearAllMutation = useMutation({
     mutationFn: async () => {
-      await api.delete('/api/social/notifications', { data: { userId } });
+      await api.post('/api/social/notifications/read-all', { userId });
     },
     onMutate: async () => {
       queryClient.setQueryData(['notifications', userId], []);
