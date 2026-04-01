@@ -908,7 +908,7 @@ export default function CodeLensPage() {
 
         <div className="flex items-center gap-2">
           {/* Script Type Selector */}
-          <div className="flex items-center gap-1 bg-lattice-deep rounded-lg p-1">
+          <div className="flex items-center gap-1 bg-[#0d1117] rounded-lg p-1 border border-green-900/20">
             {SCRIPT_TYPES.map((stype) => {
               const Icon = stype.icon;
               return (
@@ -917,8 +917,8 @@ export default function CodeLensPage() {
                   onClick={() => setActiveScriptType(stype.id)}
                   className={`p-2 rounded-md transition-colors ${
                     activeScriptType === stype.id
-                      ? 'bg-lattice-elevated ' + stype.color
-                      : 'text-gray-500 hover:text-gray-300'
+                      ? 'bg-green-900/30 ' + stype.color
+                      : 'text-gray-600 hover:text-gray-400'
                   }`}
                   title={`${stype.name}: ${stype.description}`}
                 >
