@@ -412,17 +412,17 @@ export default function FinanceLensPage() {
     <div className="space-y-6">
       {/* Portfolio Summary */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="lens-card">
+        <div className="lens-card bg-[#111820] border-emerald-900/20 font-mono">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-gray-400">Total Balance</span>
+            <span className="text-sm text-emerald-500/70">Total Balance</span>
             <button onClick={() => setShowBalances(!showBalances)} className="text-gray-400 hover:text-white">
               {showBalances ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
             </button>
           </div>
-          <p className="text-3xl font-bold">
+          <p className="text-3xl font-bold font-mono tracking-tight">
             {showBalances ? formatCurrency(totalValue) : '••••••'}
           </p>
-          <div className={cn('flex items-center gap-1 mt-1 text-sm', totalPnlPercent >= 0 ? 'text-green-400' : 'text-red-400')}>
+          <div className={cn('flex items-center gap-1 mt-1 text-sm font-mono', totalPnlPercent >= 0 ? 'text-green-400' : 'text-red-500')}>
             {totalPnlPercent >= 0 ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
             <span>{showBalances ? formatCurrency(totalPnl) : '••••'}</span>
             <span>({formatPercent(totalPnlPercent)})</span>
@@ -1212,7 +1212,7 @@ export default function FinanceLensPage() {
       <RealtimeDataPanel domain="finance" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
 
       {/* Navigation */}
-      <nav className="flex items-center gap-2 border-b border-lattice-border pb-4">
+      <nav className="flex items-center gap-1 border-b border-emerald-900/20 pb-4">
         {([
           { id: 'overview', label: 'Overview', icon: PieChart },
           { id: 'trade', label: 'Trade', icon: Activity },
@@ -1224,10 +1224,10 @@ export default function FinanceLensPage() {
             key={item.id}
             onClick={() => setViewMode(item.id)}
             className={cn(
-              'flex items-center gap-2 px-4 py-2 rounded-lg transition-colors',
+              'flex items-center gap-2 px-4 py-2 rounded-md transition-colors font-mono text-sm',
               viewMode === item.id
-                ? 'bg-neon-cyan/20 text-neon-cyan'
-                : 'text-gray-400 hover:text-white hover:bg-lattice-elevated'
+                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
+                : 'text-gray-500 hover:text-emerald-300 hover:bg-emerald-900/10 border border-transparent'
             )}
           >
             <item.icon className="w-4 h-4" />

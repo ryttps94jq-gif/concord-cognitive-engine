@@ -1046,25 +1046,25 @@ export default function HealthcareLensPage() {
       {/* ============================================================ */}
       <div className="space-y-4">
         <div className={ds.grid4}>
-          <div className={ds.panel}>
-            <Activity className="w-5 h-5 text-neon-green mb-2" />
-            <p className="text-2xl font-bold">{stats.active}</p>
-            <p className={ds.textMuted}>Active</p>
+          <div className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 rounded-xl border border-blue-400/15 p-4 shadow-sm">
+            <Activity className="w-5 h-5 text-blue-400 mb-2" />
+            <p className="text-2xl font-bold text-white">{stats.active}</p>
+            <p className="text-sm text-blue-300/60">Active</p>
           </div>
-          <div className={ds.panel}>
-            <Calendar className="w-5 h-5 text-neon-blue mb-2" />
-            <p className="text-2xl font-bold">{stats.scheduled}</p>
-            <p className={ds.textMuted}>Scheduled</p>
+          <div className="bg-gradient-to-br from-blue-500/10 to-cyan-600/5 rounded-xl border border-blue-400/15 p-4 shadow-sm">
+            <Calendar className="w-5 h-5 text-cyan-400 mb-2" />
+            <p className="text-2xl font-bold text-white">{stats.scheduled}</p>
+            <p className="text-sm text-blue-300/60">Scheduled</p>
           </div>
-          <div className={ds.panel}>
-            <CheckCircle className="w-5 h-5 text-neon-cyan mb-2" />
-            <p className="text-2xl font-bold">{stats.completed}</p>
-            <p className={ds.textMuted}>Completed</p>
+          <div className="bg-gradient-to-br from-emerald-500/10 to-blue-600/5 rounded-xl border border-blue-400/15 p-4 shadow-sm">
+            <CheckCircle className="w-5 h-5 text-emerald-400 mb-2" />
+            <p className="text-2xl font-bold text-white">{stats.completed}</p>
+            <p className="text-sm text-blue-300/60">Completed</p>
           </div>
-          <div className={ds.panel}>
+          <div className="bg-gradient-to-br from-red-500/10 to-blue-600/5 rounded-xl border border-red-400/15 p-4 shadow-sm">
             <AlertTriangle className="w-5 h-5 text-red-400 mb-2" />
-            <p className="text-2xl font-bold">{stats.urgent}</p>
-            <p className={ds.textMuted}>High Priority</p>
+            <p className="text-2xl font-bold text-white">{stats.urgent}</p>
+            <p className="text-sm text-blue-300/60">High Priority</p>
           </div>
         </div>
 
