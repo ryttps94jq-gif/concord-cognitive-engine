@@ -4354,6 +4354,8 @@ function authMiddleware(req, res, next) {
     "/api/foundation",
     // Foundation Atlas signal tomography
     "/api/atlas",
+    // Frontend route scan: missing prefixes (cdn info, health, organism, connective-tissue)
+    "/api/cdn", "/api/health", "/api/organism", "/api/connective-tissue",
   ];
   if (req.method === "GET" && !_isSovereignRoute && publicReadPaths.some(p => req.path.startsWith(p))) return next();
   // Gate 1 POST bypass: allow /api/repair POST without auth (frontend error fallback path)
@@ -6792,6 +6794,8 @@ async function runMacro(domain, name, input, ctx) {
     "/api/notion", "/api/undo", "/api/reseed", "/api/context",
     // Podcast RSS feeds & newsletter public view
     "/api/podcast", "/api/newsletter",
+    // Frontend route scan: missing prefixes (cdn info, health, organism, connective-tissue)
+    "/api/cdn", "/api/health", "/api/organism", "/api/connective-tissue",
   ];
   // Safe POST paths: chat and brain endpoints that must bypass Chicken2 for unauthenticated users
   const _safePostPaths = ["/api/chat", "/api/brain/conscious", "/api/repair", "/api/creative/registry"];
@@ -22674,6 +22678,7 @@ app.use("/api/lens-features", createLensFeatureRouter(db, LENS_FEATURES));
 // ===== CONNECTIVE TISSUE (economy wiring, DTU pipeline, CRETI, compression, fork, preview, search, emergent/bot auth) =====
 import createConnectiveTissueRouter from "./routes/connective-tissue.js";
 app.use("/api/ct", createConnectiveTissueRouter(db));
+app.use("/api/connective-tissue", createConnectiveTissueRouter(db));
 
 // ===== MOBILE EXTERNAL PAYMENT (iOS External Purchase Link) =====
 import mobileCheckoutRouter from "./routes/mobile-checkout.js";
