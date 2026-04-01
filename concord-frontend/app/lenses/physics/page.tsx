@@ -20,9 +20,11 @@ import {
   Move,
   Target,
   Magnet,
-  Layers
+  Layers,
+  Save
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
+import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
@@ -239,7 +241,7 @@ const PRESETS: Preset[] = [
 export default function PhysicsLensPage() {
   useLensNav('physics');
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('physics');
-  const isError = false; const error = null as Error | null; const refetch = () => {};
+  const { items: savedSims, create: saveSim, remove: removeSim, isError, error, refetch } = useLensData<Record<string, unknown>>('physics', 'simulation', { noSeed: true });
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>(0);

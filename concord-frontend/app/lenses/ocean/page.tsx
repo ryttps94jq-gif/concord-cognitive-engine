@@ -1,0 +1,225 @@
+'use client';
+
+import { useState, useMemo } from 'react';
+import { useLensNav } from '@/hooks/useLensNav';
+import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
+import { ds } from '@/lib/design-system';
+import { cn } from '@/lib/utils';
+import { UniversalActions } from '@/components/lens/UniversalActions';
+import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import {
+  Waves, Plus, Search, Trash2, BarChart3,
+  Layers, ChevronDown, MapPin, Users,
+  Anchor, Ship, Fish, Thermometer, Droplets,
+  Eye, AlertTriangle, Navigation,
+} from 'lucide-react';
+import { ErrorState } from '@/components/common/EmptyState';
+import { useRealtimeLens } from '@/hooks/useRealtimeLens';
+import { LiveIndicator } from '@/components/lens/LiveIndicator';
+import { DTUExportButton } from '@/components/lens/DTUExportButton';
+import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
+
+type ModeTab = 'Dashboard' | 'Vessels' | 'Research' | 'Marine' | 'Ports' | 'Weather' | 'Conservation';
+
+interface VesselData {
+  name: string;
+  type: 'cargo' | 'tanker' | 'research' | 'fishing' | 'military' | 'passenger' | 'submarine';
+  status: 'at_sea' | 'docked' | 'maintenance' | 'anchored';
+  flag: string;
+  position: string;
+  heading: number;
+  speed: number;
+  destination: string;
+  crew: number;
+  cargo: string;
+  imo: string;
+}
+
+interface ResearchData {
+  expedition: string;
+  status: 'planning' | 'active' | 'completed' | 'published';
+  depth: number;
+  region: string;
+  objective: string;
+  findings: string;
+  specimens: number;
+  chief: string;
+}
+
+interface MarineData {
+  species: string;
+  conservationStatus: 'LC' | 'NT' | 'VU' | 'EN' | 'CR' | 'EW' | 'EX';
+  population: string;
+  habitat: string;
+  threats: string[];
+  protectedArea: string;
+  lastSurvey: string;
+}
+
+type ArtifactDataUnion = VesselData | ResearchData | MarineData | Record<string, unknown>;
+
+const MODE_TABS: { key: ModeTab; label: string; icon: typeof Waves }[] = [
+  { key: 'Dashboard', label: 'Dashboard', icon: BarChart3 },
+  { key: 'Vessels', label: 'Vessels', icon: Ship },
+  { key: 'Research', label: 'Research', icon: Eye },
+  { key: 'Marine', label: 'Marine Life', icon: Fish },
+  { key: 'Ports', label: 'Ports', icon: Anchor },
+  { key: 'Weather', label: 'Sea Weather', icon: Droplets },
+  { key: 'Conservation', label: 'Conservation', icon: Waves },
+];
+
+function getTypeForTab(tab: ModeTab): string {
+  const map: Record<ModeTab, string> = {
+    Dashboard: 'Vessel', Vessels: 'Vessel', Research: 'Research',
+    Marine: 'Marine', Ports: 'Port', Weather: 'SeaWeather', Conservation: 'Conservation',
+  };
+  return map[tab];
+}
+
+const STATUS_COLORS: Record<string, string> = {
+  at_sea: 'text-cyan-400 bg-cyan-400/10', docked: 'text-green-400 bg-green-400/10',
+  maintenance: 'text-orange-400 bg-orange-400/10', anchored: 'text-yellow-400 bg-yellow-400/10',
+  planning: 'text-blue-400 bg-blue-400/10', active: 'text-green-400 bg-green-400/10',
+  completed: 'text-gray-400 bg-gray-400/10', published: 'text-purple-400 bg-purple-400/10',
+  LC: 'text-green-400 bg-green-400/10', NT: 'text-yellow-400 bg-yellow-400/10',
+  VU: 'text-orange-400 bg-orange-400/10', EN: 'text-red-400 bg-red-400/10',
+  CR: 'text-red-500 bg-red-500/10', EW: 'text-gray-400 bg-gray-400/10', EX: 'text-gray-500 bg-gray-500/10',
+};
+
+export default function OceanLensPage() {
+  useLensNav('ocean');
+  const { latestData: realtimeData, isLive, lastUpdated, insights } = useRealtimeLens('ocean');
+
+  const [activeMode, setActiveMode] = useState<ModeTab>('Dashboard');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showFeatures, setShowFeatures] = useState(false);
+
+  const currentType = getTypeForTab(activeMode);
+  const { items, isLoading, isError, error, refetch, create, remove } =
+    useLensData<ArtifactDataUnion>('ocean', currentType, { search: searchQuery || undefined });
+
+  const { items: vessels } = useLensData<VesselData>('ocean', 'Vessel', { seed: [] });
+  const { items: research } = useLensData<ResearchData>('ocean', 'Research', { seed: [] });
+  const { items: marine } = useLensData<MarineData>('ocean', 'Marine', { seed: [] });
+
+  const runAction = useRunArtifact('ocean');
+
+  const stats = useMemo(() => ({
+    atSea: vessels.filter(v => (v.data as VesselData).status === 'at_sea').length,
+    totalVessels: vessels.length,
+    activeResearch: research.filter(r => (r.data as ResearchData).status === 'active').length,
+    endangeredSpecies: marine.filter(m => ['EN', 'CR'].includes((m.data as MarineData).conservationStatus)).length,
+  }), [vessels, research, marine]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading ocean systems...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return <div className="flex items-center justify-center h-full p-8"><ErrorState error={error?.message} onRetry={refetch} /></div>;
+  }
+
+  return (
+    <div className={cn(ds.page, 'space-y-4')}>
+      <header className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+            <Waves className="w-5 h-5 text-cyan-400" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-white">Ocean Operations</h1>
+            <p className="text-sm text-gray-400">Maritime vessels, research, marine conservation & ports</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} compact />
+          <DTUExportButton domain="ocean" data={realtimeData || {}} compact />
+        </div>
+      </header>
+
+      <div className="flex gap-1 bg-zinc-900 rounded-lg p-1 overflow-x-auto">
+        {MODE_TABS.map(({ key, label, icon: Icon }) => (
+          <button key={key} onClick={() => setActiveMode(key)}
+            className={cn('flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-colors',
+              activeMode === key ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300')}>
+            <Icon className="w-4 h-4" /> {label}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex items-center gap-2">
+        <div className="flex-1 relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+          <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+            placeholder={`Search ${currentType.toLowerCase()}s...`}
+            className="w-full pl-9 pr-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-sm text-white placeholder-gray-500" />
+        </div>
+        <button onClick={() => create({ title: `New ${currentType}`, data: {} })} className="flex items-center gap-2 px-3 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm">
+          <Plus className="w-4 h-4" /> New {currentType}
+        </button>
+      </div>
+
+      {activeMode === 'Dashboard' && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            { label: 'Vessels at Sea', value: stats.atSea, total: stats.totalVessels, color: 'cyan' },
+            { label: 'Active Research', value: stats.activeResearch, total: research.length, color: 'blue' },
+            { label: 'Endangered Species', value: stats.endangeredSpecies, total: marine.length, color: 'red' },
+          ].map(s => (
+            <div key={s.label} className="p-3 bg-zinc-900 rounded-lg border border-zinc-800">
+              <p className={`text-2xl font-bold text-${s.color}-400`}>{s.value}</p>
+              <p className="text-xs text-gray-400">{s.label}</p>
+              <p className="text-xs text-gray-600">of {s.total} total</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {items.map(item => (
+          <div key={item.id} className="p-4 bg-zinc-900 rounded-lg border border-zinc-800 hover:border-zinc-700 transition-colors">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <h3 className="text-sm font-semibold text-white">{item.title}</h3>
+                {(item.data as Record<string, unknown>).status && (
+                  <span className={cn('text-xs px-2 py-0.5 rounded-full', STATUS_COLORS[String((item.data as Record<string, unknown>).status)] || 'text-gray-400 bg-gray-400/10')}>
+                    {String((item.data as Record<string, unknown>).status)}
+                  </span>
+                )}
+              </div>
+              <button onClick={() => remove(item.id)} className="p-1.5 hover:bg-zinc-800 rounded text-gray-500 hover:text-red-400">
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        ))}
+        {items.length === 0 && (
+          <div className="text-center py-12 text-gray-500">
+            <Waves className="w-10 h-10 mx-auto mb-3 opacity-30" />
+            <p>No {currentType.toLowerCase()}s found</p>
+          </div>
+        )}
+      </div>
+
+      <UniversalActions domain="ocean" items={items} />
+      <RealtimeDataPanel data={insights} />
+
+      <div className="border-t border-white/10">
+        <button onClick={() => setShowFeatures(!showFeatures)}
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors">
+          <span className="flex items-center gap-2"><Layers className="w-4 h-4" /> Lens Features</span>
+          <ChevronDown className={cn('w-4 h-4 transition-transform', showFeatures && 'rotate-180')} />
+        </button>
+        {showFeatures && <div className="px-4 pb-4"><LensFeaturePanel lensId="ocean" /></div>}
+      </div>
+    </div>
+  );
+}

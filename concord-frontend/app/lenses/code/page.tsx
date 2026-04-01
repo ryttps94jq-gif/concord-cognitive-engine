@@ -26,6 +26,7 @@ import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
+import { CodeEngineStatus } from '@/components/admin/CodeEngineStatus';
 
 interface FileNode {
   id: string;

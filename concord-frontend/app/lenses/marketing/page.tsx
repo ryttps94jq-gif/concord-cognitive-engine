@@ -184,14 +184,14 @@ export default function MarketingLensPage() {
       keyword: formKeyword, contentType: formContentType,
     };
     if (editingItem) {
-      await update({ id: editingItem.id, title: formName, data, meta: { tags: [], status: formStatus, visibility: 'private' } });
+      await update(editingItem.id, { title: formName, data, meta: { tags: [], status: formStatus, visibility: 'private' } });
     } else {
       await create({ title: formName, data, meta: { tags: [], status: formStatus, visibility: 'private' } });
     }
     setEditorOpen(false);
   };
 
-  if (isError) return <ErrorState error={error} onRetry={refetch} />;
+  if (isError) return <ErrorState error={error?.message} onRetry={refetch} />;
 
   /* ------------------------------------------------------------------ */
   /*  Dashboard                                                          */

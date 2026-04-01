@@ -4,7 +4,7 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useMutation } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useState } from 'react';
-import { Atom, Beaker, FlaskConical, Sparkles, Zap, Layers, ChevronDown } from 'lucide-react';
+import { Atom, Beaker, FlaskConical, Sparkles, Zap, Layers, ChevronDown, AlertTriangle } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -79,6 +79,13 @@ export default function ChemLensPage() {
   }
   return (
     <div className="p-6 space-y-6">
+      {/* Safety Disclaimer */}
+      <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3 flex items-start gap-3">
+        <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
+        <p className="text-sm text-amber-200">
+          For educational and research modeling only. Do not use simulated results for actual chemical handling. Always follow laboratory safety protocols and consult qualified chemists.
+        </p>
+      </div>
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-2xl">⚗️</span>

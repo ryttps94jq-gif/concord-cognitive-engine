@@ -14,7 +14,7 @@ import {
   ChevronRight, DollarSign, Calculator,
   MapPin, Phone, Mail,
   Brain, Layers, ArrowUpRight, ArrowDownRight, Minus,
-  ClipboardList, UserPlus, Eye, FileText, ChevronDown,
+  ClipboardList, UserPlus, Eye, FileText, ChevronDown, AlertTriangle,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -686,6 +686,13 @@ export default function FitnessLensPage() {
 
   return (
     <div className={ds.pageContainer}>
+      {/* Fitness Disclaimer */}
+      <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3 flex items-start gap-3">
+        <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
+        <p className="text-sm text-amber-200">
+          Not medical advice. Consult a physician before starting any exercise program. This tool is for fitness tracking and programming, not clinical guidance.
+        </p>
+      </div>
       {/* ========== Header ========== */}
       <header className={ds.sectionHeader}>
         <div className="flex items-center gap-3">

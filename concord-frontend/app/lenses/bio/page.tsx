@@ -3,8 +3,10 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
+import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useState } from 'react';
-import { Dna, Activity, Heart, Brain, Microscope, Layers, ChevronDown } from 'lucide-react';
+import { Dna, Activity, Heart, Brain, Microscope, Layers, ChevronDown, AlertTriangle } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -30,7 +32,10 @@ export default function BioLensPage() {
   const [showFeatures, setShowFeatures] = useState(false);
   const { latestData: realtimeData, isLive, lastUpdated, insights } = useRealtimeLens('bio');
 
-  const { data: bioData, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
+  const { items: bioItems, isLoading, isError: isError, error: error, refetch: refetch, create, update, remove } = useLensData<Record<string, unknown>>('bio', 'system', { seed: [] });
+  const runAction = useRunArtifact('bio');
+
+  const { data: bioData } = useQuery({
     queryKey: ['bio-systems'],
     queryFn: () => apiHelpers.lens.list('bio', { type: 'system' }).then((r) => r.data),
   });
@@ -68,6 +73,13 @@ export default function BioLensPage() {
   }
   return (
     <div className="p-6 space-y-6">
+      {/* Disclaimer */}
+      <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3 flex items-start gap-3">
+        <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
+        <p className="text-sm text-amber-200">
+          Not medical advice. This lens provides biological modeling tools for educational and research purposes only. Consult qualified professionals for health decisions.
+        </p>
+      </div>
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-2xl">🧬</span>

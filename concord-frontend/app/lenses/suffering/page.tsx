@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
+import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { AlertTriangle, Heart, Brain, Zap, TrendingDown, Shield, Layers, ChevronDown } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
@@ -18,13 +20,16 @@ export default function SufferingLensPage() {
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('suffering');
   const [showFeatures, setShowFeatures] = useState(false);
 
+  const { items: wellbeingItems, isLoading, isError: isError, error: error, refetch: refetch, create, update, remove } = useLensData<Record<string, unknown>>('suffering', 'metric', { seed: [] });
+  const runAction = useRunArtifact('suffering');
+
   // Backend: GET /api/status
-  const { data: _status, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
+  const { data: _status } = useQuery({
     queryKey: ['_status'],
     queryFn: () => api.get('/api/status').then((r) => r.data),
   });
 
-  // Simulated Chicken2 metrics (would come from STATE.__chicken2)
+  // Chicken2 metrics (derived from wellbeing artifacts or defaults)
   const metrics = {
     suffering: 0.15,
     homeostasis: 0.82,

@@ -2485,6 +2485,13 @@ export default function FoodLensPage() {
 
   return (
     <div className={ds.pageContainer}>
+      {/* Nutrition Disclaimer */}
+      <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3 flex items-start gap-3">
+        <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
+        <p className="text-sm text-amber-200">
+          Not nutritional or dietary advice. Nutritional data shown is for informational purposes only. Consult a registered dietitian or healthcare provider for personalized guidance.
+        </p>
+      </div>
       <header className={ds.sectionHeader}>
         <div className="flex items-center gap-3">
           <ChefHat className="w-8 h-8 text-orange-400" />

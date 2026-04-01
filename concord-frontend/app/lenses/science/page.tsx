@@ -41,6 +41,7 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { CodeEngineStatus } from '@/components/admin/CodeEngineStatus';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */

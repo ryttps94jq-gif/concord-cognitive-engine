@@ -95,6 +95,7 @@ import { detectForge, runForgePipeline, saveForgedDTU, deleteForgedDTU, saveAndL
 import { initializeShield, scanContent as shieldScanContent, scanHashAgainstLattice, runAnalysisPipeline as shieldAnalyze, classifyWithYARA, runProphet as shieldProphet, runSurgeon as shieldSurgeon, runGuardian as shieldGuardian, propagateThreatToLattice, shieldHeartbeatTick, computeSecurityScore, detectShieldIntent, performSweep, processUserReport, getThreatFeed, getFirewallRules, getPredictions, getShieldMetrics, queueScan as shieldQueueScan, createThreatDTU, THREAT_SUBTYPES, SCAN_MODES } from "./lib/concord-shield.js";
 import registerShieldRoutes from "./routes/shield.js";
 import registerCodeEngineRoutes from "./routes/code-engine.js";
+import { submitReport as moderationSubmitReport, getModerationQueue, resolveReport as moderationResolveReport, scanContent as moderationScanContent, getModerationMetrics, REPORT_CATEGORIES, MODERATION_ACTIONS } from "./lib/content-moderation.js";
 import { initializeMesh, detectChannels as meshDetectChannels, getChannelStatus as meshGetChannelStatus, getNodeId as meshGetNodeId, sendDTU as meshSendDTU, receiveDTU as meshReceiveDTU, initiateTransfer as meshInitiateTransfer, getTransferStatus as meshGetTransferStatus, registerPeer as meshRegisterPeer, getPeers as meshGetPeers, getTopology as meshGetTopology, getMeshMetrics, getTransmissionStats as meshGetTransmissionStats, getPendingQueue as meshGetPendingQueue, configureRelay as meshConfigureRelay, detectMeshIntent, meshHeartbeatTick, planOfflineSync as meshPlanOfflineSync, TRANSPORT_LAYERS, TRANSPORT_LIST, RELAY_PRIORITIES } from "./lib/concord-mesh.js";
 import registerMeshRoutes from "./routes/mesh.js";
 // ── Foundation Sovereignty Modules ────────────────────────────────────────────
@@ -25706,6 +25707,49 @@ register("graph", "forceGraph", (ctx, input) => {
 app.post("/api/graph/query", asyncHandler(async (req, res) => res.json(await runMacro("graph", "query", req.body, makeCtx(req)))));
 app.get("/api/graph/visual", asyncHandler(async (req, res) => res.json(await runMacro("graph", "visualData", { tier: req.query.tier, limit: req.query.limit, includeEdges: req.query.includeEdges !== "false" }, makeCtx(req)))));
 app.get("/api/graph/force", asyncHandler(async (req, res) => res.json(await runMacro("graph", "forceGraph", { centerNode: req.query.centerNode, depth: req.query.depth, maxNodes: req.query.maxNodes }, makeCtx(req)))));
+
+// ── Knowledge & Research Lens REST Routes (Lenses 1-11) ──────────────────────
+// Bridge REST endpoints to macro registrations for hypothesis, metacognition,
+// reasoning, and inference domains. Frontend apiHelpers expect these REST routes.
+
+// --- Hypothesis REST routes ---
+app.get("/api/hypothesis", asyncHandler(async (req, res) => res.json(await runMacro("hypothesis", "list", { state: req.query.state }, makeCtx(req)))));
+app.get("/api/hypothesis/status", asyncHandler(async (req, res) => res.json(await runMacro("hypothesis", "status", {}, makeCtx(req)))));
+app.get("/api/hypothesis/:id", asyncHandler(async (req, res) => res.json(await runMacro("hypothesis", "get", { hypothesisId: req.params.id }, makeCtx(req)))));
+app.post("/api/hypothesis", asyncHandler(async (req, res) => res.json(await runMacro("hypothesis", "propose", req.body, makeCtx(req)))));
+app.post("/api/hypothesis/:id/evaluate", asyncHandler(async (req, res) => res.json(await runMacro("hypothesis", "evaluate", { hypothesisId: req.params.id }, makeCtx(req)))));
+app.post("/api/hypothesis/:id/evidence", asyncHandler(async (req, res) => res.json(await runMacro("hypothesis", "record_evidence", { hypothesisId: req.params.id, ...req.body }, makeCtx(req)))));
+app.post("/api/hypothesis/:id/experiment", asyncHandler(async (req, res) => res.json(await runMacro("hypothesis", "design_experiment", { hypothesisId: req.params.id, ...req.body }, makeCtx(req)))));
+
+// --- Reasoning REST routes ---
+app.get("/api/reasoning/status", asyncHandler(async (req, res) => res.json(await runMacro("reasoning", "status", {}, makeCtx(req)))));
+app.get("/api/reasoning/chains", asyncHandler(async (req, res) => res.json(await runMacro("reasoning", "list_chains", {}, makeCtx(req)))));
+app.post("/api/reasoning/chains", asyncHandler(async (req, res) => res.json(await runMacro("reasoning", "create_chain", req.body, makeCtx(req)))));
+app.post("/api/reasoning/chains/:chainId/steps", asyncHandler(async (req, res) => res.json(await runMacro("reasoning", "add_step", { chainId: req.params.chainId, ...req.body }, makeCtx(req)))));
+app.post("/api/reasoning/chains/:chainId/conclude", asyncHandler(async (req, res) => res.json(await runMacro("reasoning", "conclude", { chainId: req.params.chainId, ...req.body }, makeCtx(req)))));
+app.get("/api/reasoning/chains/:chainId/trace", asyncHandler(async (req, res) => res.json(await runMacro("reasoning", "get_trace", { chainId: req.params.chainId }, makeCtx(req)))));
+app.post("/api/reasoning/steps/:stepId/validate", asyncHandler(async (req, res) => res.json(await runMacro("reasoning", "validate_step", { stepId: req.params.stepId }, makeCtx(req)))));
+
+// --- Metacognition REST routes ---
+app.get("/api/metacognition/status", asyncHandler(async (req, res) => res.json(await runMacro("metacognition", "status", {}, makeCtx(req)))));
+app.get("/api/metacognition/blindspots", asyncHandler(async (req, res) => res.json(await runMacro("metacognition", "blind_spots", {}, makeCtx(req)))));
+app.get("/api/metacognition/calibration", asyncHandler(async (req, res) => res.json(await runMacro("metacognition", "calibration", {}, makeCtx(req)))));
+app.get("/api/metacognition/introspection-status", asyncHandler(async (req, res) => res.json(await runMacro("metacognition", "introspection_status", {}, makeCtx(req)))));
+app.post("/api/metacognition/predict", asyncHandler(async (req, res) => res.json(await runMacro("metacognition", "predict", req.body, makeCtx(req)))));
+app.post("/api/metacognition/predictions/:id/resolve", asyncHandler(async (req, res) => res.json(await runMacro("metacognition", "resolve_prediction", { predictionId: req.params.id, ...req.body }, makeCtx(req)))));
+app.post("/api/metacognition/assess", asyncHandler(async (req, res) => res.json(await runMacro("metacognition", "assess", req.body, makeCtx(req)))));
+app.post("/api/metacognition/introspect", asyncHandler(async (req, res) => res.json(await runMacro("metacognition", "introspect", req.body, makeCtx(req)))));
+app.post("/api/metacognition/strategy", asyncHandler(async (req, res) => res.json(await runMacro("metacognition", "select_strategy", req.body, makeCtx(req)))));
+
+// --- Inference REST routes ---
+app.get("/api/inference/status", asyncHandler(async (req, res) => res.json(await runMacro("inference", "status", {}, makeCtx(req)))));
+app.post("/api/inference/facts", asyncHandler(async (req, res) => res.json(await runMacro("inference", "add_fact", req.body, makeCtx(req)))));
+app.post("/api/inference/rules", asyncHandler(async (req, res) => res.json(await runMacro("inference", "add_rule", req.body, makeCtx(req)))));
+app.post("/api/inference/query", asyncHandler(async (req, res) => res.json(await runMacro("inference", "query", req.body, makeCtx(req)))));
+app.post("/api/inference/syllogism", asyncHandler(async (req, res) => res.json(await runMacro("inference", "syllogism", req.body, makeCtx(req)))));
+app.post("/api/inference/forward-chain", asyncHandler(async (req, res) => res.json(await runMacro("inference", "forward_chain", req.body, makeCtx(req)))));
+
+structuredLog("info", "module_loaded", { module: "Knowledge & Research Lens REST Routes" });
 
 structuredLog("info", "module_loaded", { module: "Wave 2: Graph Queries" });
 

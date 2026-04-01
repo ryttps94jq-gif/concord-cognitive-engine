@@ -62,6 +62,7 @@ import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { DTUDetailView } from '@/components/dtu/DTUDetailView';
+import { SharedSessionChat } from '@/components/social/SharedSessionChat';
 
 // ──────────────────────────────────────────────
 // Types
