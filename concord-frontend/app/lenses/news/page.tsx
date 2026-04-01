@@ -79,7 +79,7 @@ export default function NewsLensPage() {
     { id: 'community', name: 'Community', icon: Eye },
   ];
 
-  const articles: NewsArticle[] = useMemo(() => news?.articles || [], [news]);
+  const articles: NewsArticle[] = useMemo(() => news?.artifacts || news?.articles || news?.items || [], [news]);
 
   // Extract unique sources for filtering
   const sources = useMemo(() => {

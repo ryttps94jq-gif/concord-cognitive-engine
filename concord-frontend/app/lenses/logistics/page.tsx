@@ -197,12 +197,13 @@ export default function LogisticsLensPage() {
     return list;
   }, [items, search, statusFilter]);
 
-  // Cross-tab aggregations for dashboard
-  const allVehicles = useMemo(() => SEED.Vehicle, []);
-  const allDrivers = useMemo(() => SEED.Driver, []);
-  const allShipments = useMemo(() => SEED.Shipment, []);
-  const allWarehouse = useMemo(() => SEED.WarehouseItem, []);
-  const allCompliance = useMemo(() => SEED.ComplianceLog, []);
+  // Cross-tab aggregations for dashboard — use real items when current type matches, otherwise empty
+  // This ensures dashboard metrics reflect actual backend data instead of empty seed arrays
+  const allVehicles = useMemo(() => currentType === 'Vehicle' ? items.map(i => ({ title: i.title, data: i.data as Record<string, unknown>, meta: (i.meta || {}) as Record<string, unknown> })) : [], [items, currentType]);
+  const allDrivers = useMemo(() => currentType === 'Driver' ? items.map(i => ({ title: i.title, data: i.data as Record<string, unknown>, meta: (i.meta || {}) as Record<string, unknown> })) : [], [items, currentType]);
+  const allShipments = useMemo(() => currentType === 'Shipment' ? items.map(i => ({ title: i.title, data: i.data as Record<string, unknown>, meta: (i.meta || {}) as Record<string, unknown> })) : [], [items, currentType]);
+  const allWarehouse = useMemo(() => currentType === 'WarehouseItem' ? items.map(i => ({ title: i.title, data: i.data as Record<string, unknown>, meta: (i.meta || {}) as Record<string, unknown> })) : [], [items, currentType]);
+  const allCompliance = useMemo(() => currentType === 'ComplianceLog' ? items.map(i => ({ title: i.title, data: i.data as Record<string, unknown>, meta: (i.meta || {}) as Record<string, unknown> })) : [], [items, currentType]);
 
   const dashMetrics = useMemo(() => {
     const activeVehicles = allVehicles.filter(v => v.meta.status === 'active').length;

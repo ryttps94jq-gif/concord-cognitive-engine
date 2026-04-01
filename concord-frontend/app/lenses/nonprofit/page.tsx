@@ -281,6 +281,7 @@ export default function NonprofitLensPage() {
   };
 
   const handleGiftSave = async () => {
+    if (!giftDonor.trim() || !giftAmount.trim() || Number(giftAmount) <= 0) return;
     await create({
       title: `${giftDonor} - ${fmtCurrency(Number(giftAmount))}`,
       data: {

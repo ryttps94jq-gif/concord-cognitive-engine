@@ -286,6 +286,30 @@ export default function MarketingLensPage() {
             {activeArtifactType === 'SEOAudit' && (
               <div><label className={ds.label}>Target Keyword</label><input className={ds.input} value={formKeyword} onChange={e => setFormKeyword(e.target.value)} /></div>
             )}
+            {activeArtifactType === 'Analytic' && (
+              <>
+                <div><label className={ds.label}>Target Keyword / Metric</label><input className={ds.input} value={formKeyword} onChange={e => setFormKeyword(e.target.value)} placeholder="CTR, ROAS, Conversion Rate..." /></div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><label className={ds.label}>Start Date</label><input type="date" className={ds.input} value={formStartDate} onChange={e => setFormStartDate(e.target.value)} /></div>
+                  <div><label className={ds.label}>End Date</label><input type="date" className={ds.input} value={formEndDate} onChange={e => setFormEndDate(e.target.value)} /></div>
+                </div>
+                <div><label className={ds.label}>Channel</label>
+                  <select className={ds.select} value={formChannel} onChange={e => setFormChannel(e.target.value)}>
+                    {CHANNELS.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+              </>
+            )}
+            {activeArtifactType === 'Audience' && (
+              <>
+                <div><label className={ds.label}>Audience Segment</label><input className={ds.input} value={formTargetAudience} onChange={e => setFormTargetAudience(e.target.value)} placeholder="Young professionals, Parents 25-40..." /></div>
+                <div><label className={ds.label}>Channel</label>
+                  <select className={ds.select} value={formChannel} onChange={e => setFormChannel(e.target.value)}>
+                    {CHANNELS.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+              </>
+            )}
             <div><label className={ds.label}>Notes</label><textarea className={ds.textarea} rows={2} value={formNotes} onChange={e => setFormNotes(e.target.value)} /></div>
           </div>
           <div className="flex justify-end gap-2 mt-4">

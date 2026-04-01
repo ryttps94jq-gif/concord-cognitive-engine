@@ -585,6 +585,43 @@ export default function InsuranceLensPage() {
             <div><label className={ds.label}>Details</label><textarea className={ds.textarea} rows={2} value={(formData.details as string) || ''} onChange={e => setFormData({ ...formData, details: e.target.value })} /></div>
           </>
         );
+      case 'Document':
+        return (
+          <>
+            <div className={ds.grid2}>
+              <div>
+                <label className={ds.label}>Document Type</label>
+                <select className={ds.select} value={(formData.documentType as string) || 'policy_doc'} onChange={e => setFormData({ ...formData, documentType: e.target.value })}>
+                  <option value="policy_doc">Policy Document</option>
+                  <option value="endorsement">Endorsement</option>
+                  <option value="declaration">Declaration Page</option>
+                  <option value="certificate">Certificate of Insurance</option>
+                  <option value="claim_form">Claim Form</option>
+                  <option value="proof_of_loss">Proof of Loss</option>
+                  <option value="correspondence">Correspondence</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div><label className={ds.label}>Policy Reference</label><input className={ds.input} value={(formData.policyRef as string) || ''} onChange={e => setFormData({ ...formData, policyRef: e.target.value })} placeholder="POL-0001" /></div>
+            </div>
+            <div>
+              <label className={ds.label}>Category</label>
+              <select className={ds.select} value={(formData.category as string) || 'general'} onChange={e => setFormData({ ...formData, category: e.target.value })}>
+                <option value="general">General</option>
+                <option value="underwriting">Underwriting</option>
+                <option value="claims">Claims</option>
+                <option value="compliance">Compliance</option>
+                <option value="billing">Billing</option>
+              </select>
+            </div>
+            <div className={ds.grid2}>
+              <div><label className={ds.label}>Upload Date</label><input type="date" className={ds.input} value={(formData.uploadDate as string) || new Date().toISOString().split('T')[0]} onChange={e => setFormData({ ...formData, uploadDate: e.target.value })} /></div>
+              <div><label className={ds.label}>Expiry Date</label><input type="date" className={ds.input} value={(formData.expiryDate as string) || ''} onChange={e => setFormData({ ...formData, expiryDate: e.target.value })} /></div>
+            </div>
+            <div><label className={ds.label}>File Name</label><input className={ds.input} value={(formData.fileName as string) || ''} onChange={e => setFormData({ ...formData, fileName: e.target.value })} placeholder="document.pdf" /></div>
+            <div><label className={ds.label}>Notes</label><textarea className={ds.textarea} rows={3} value={(formData.notes as string) || ''} onChange={e => setFormData({ ...formData, notes: e.target.value })} placeholder="Additional notes about this document..." /></div>
+          </>
+        );
       default:
         return null;
     }
