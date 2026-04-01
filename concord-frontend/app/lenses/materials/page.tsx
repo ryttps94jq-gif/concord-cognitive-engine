@@ -184,7 +184,7 @@ export default function MaterialsLensPage() {
                   {['density', 'tensileStrength', 'thermalConductivity', 'meltingPoint', 'youngsModulus'].map(prop => (
                     <tr key={prop} className="border-b border-white/5">
                       <td className="py-2 px-3 text-gray-400">{prop.replace(/([A-Z])/g, ' $1').trim()}</td>
-                      {materials.slice(0, 4).map(m => <td key={m.id} className="py-2 px-3 font-mono">{(m as Record<string, unknown>)[prop] as number || '-'}</td>)}
+                      {materials.slice(0, 4).map(m => <td key={m.id} className="py-2 px-3 font-mono">{(m as unknown as Record<string, unknown>)[prop] as number || '-'}</td>)}
                     </tr>
                   ))}
                 </tbody>

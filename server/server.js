@@ -27113,6 +27113,23 @@ function registerLensAction(domain, action, handler) {
   LENS_ACTIONS.set(`${domain}.${action}`, handler);
 }
 
+// Domain-level lens run (no artifact ID required — used by Research, Linguistics, etc.)
+// POST /api/lens/run { domain, action, input }
+app.post("/api/lens/run", async (req, res) => {
+  try {
+    const { domain, action, input = {} } = req.body;
+    if (!domain || !action) return res.status(400).json({ ok: false, error: "domain and action required" });
+    const handler = LENS_ACTIONS.get(`${domain}.${action}`);
+    if (!handler) return res.json({ ok: false, error: `no handler for ${domain}.${action}` });
+    const ctx = makeCtx(req);
+    const result = await handler(ctx, { domain, type: "virtual", data: input, meta: {} }, input);
+    res.json({ ok: true, result });
+  } catch (e) {
+    const msg = String(e?.message || e);
+    res.status(500).json({ ok: false, error: msg });
+  }
+});
+
 // Pipeline introspection endpoint (must be before wildcard :domain routes)
 app.get("/api/lens/pipelines", (req, res) => {
   const pipelines = [];

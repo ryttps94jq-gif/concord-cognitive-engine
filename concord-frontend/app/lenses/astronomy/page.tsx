@@ -4,7 +4,7 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useState } from 'react';
-import { Star, Moon, Sun, Telescope, Plus, Trash2, Search, Layers, ChevronDown, Globe, Target } from 'lucide-react';
+import { Star, Moon, Sun, Orbit as Telescope, Plus, Trash2, Search, Layers, ChevronDown, Globe, Target } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';

@@ -11,7 +11,7 @@ import {
   Layers, Wrench, ClipboardList, DollarSign, Camera, Users,
   Plus, Search, X, Trash2, BarChart3, CheckCircle2,
   AlertTriangle, FileText, Shield, Award, Calculator,
-  Layers, ChevronDown, Receipt,
+  ChevronDown, Receipt,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';

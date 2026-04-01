@@ -42,7 +42,7 @@ export interface LensManifest {
   actions: string[];
   /** Category for grouping in UI */
   category: 'knowledge' | 'creative' | 'system' | 'social' | 'productivity' | 'finance'
-          | 'healthcare' | 'trades' | 'operations' | 'agriculture' | 'government' | 'services';
+          | 'healthcare' | 'trades' | 'operations' | 'agriculture' | 'government' | 'services' | 'lifestyle';
 }
 
 // ---- Lens Manifests ----

@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import {
-  Mountain as Pickaxe, Plus, Search, Trash2, BarChart3,
+  Hammer as Pickaxe, Plus, Search, Trash2, BarChart3,
   Layers, ChevronDown, MapPin, Users,
   Mountain, Gem, HardHat, Gauge, Truck,
   Eye, AlertTriangle, Shield,

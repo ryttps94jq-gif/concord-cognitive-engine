@@ -47,7 +47,7 @@ export default function DebateLensPage() {
   const [selectedDebate, setSelectedDebate] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showFeatures, setShowFeatures] = useState(false);
-  const [newDebate, setNewDebate] = useState({ topic: '', description: '', format: 'open' as DebateData['format'], timeLimit: 30 });
+  const [newDebate, setNewDebate] = useState<{ topic: string; description: string; format: DebateData['format']; timeLimit: number }>({ topic: '', description: '', format: 'open', timeLimit: 30 });
   const [newArgument, setNewArgument] = useState('');
   const [argumentSide, setArgumentSide] = useState<'pro' | 'con'>('pro');
 
