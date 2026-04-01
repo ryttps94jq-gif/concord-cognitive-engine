@@ -716,15 +716,15 @@ export default function ForumLensPage() {
     );
   }
   return (
-    <div className="min-h-full bg-lattice-bg">
+    <div className="lens-forum min-h-full bg-lattice-bg" data-lens-theme="forum">
       {/* Header */}
-      <header className="sticky top-0 z-30 bg-lattice-surface/95 backdrop-blur border-b border-lattice-border">
+      <header className="sticky top-0 z-30 bg-lattice-surface/95 backdrop-blur border-b border-orange-500/10">
         <div className="max-w-6xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3 flex-shrink-0">
               <span className="text-2xl">{'\uD83D\uDD25'}</span>
               <div>
-                <h1 className="text-xl font-bold text-white">Forum Lens</h1>
+                <h1 className="text-xl font-bold bg-gradient-to-r from-orange-400 to-amber-400 bg-clip-text text-transparent">Forum Lens</h1>
                 <p className="text-xs text-gray-400">DTUs as discussion threads</p>
               </div>
             </div>

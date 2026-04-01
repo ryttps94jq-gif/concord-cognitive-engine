@@ -2265,8 +2265,8 @@ export default function TradesLensPage() {
               className={cn(
                 'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors whitespace-nowrap',
                 subView === sv.id
-                  ? 'bg-lattice-elevated text-white'
-                  : 'text-gray-500 hover:text-gray-300 hover:bg-lattice-elevated/50'
+                  ? 'bg-slate-700/40 text-teal-300 border border-slate-600/50'
+                  : 'text-slate-500 hover:text-slate-300 hover:bg-slate-700/30'
               )}
             >
               <sv.icon className="w-3.5 h-3.5" />
