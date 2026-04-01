@@ -990,10 +990,12 @@ export default function HealthcareLensPage() {
       {/* ============================================================ */}
       <header className={ds.sectionHeader}>
         <div className="flex items-center gap-3">
-          <Heart className="w-7 h-7 text-red-400" />
+          <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-400/20 flex items-center justify-center">
+            <Heart className="w-5 h-5 text-blue-400" />
+          </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className={ds.heading1}>Healthcare</h1>
+              <h1 className="text-2xl font-bold text-blue-50">Healthcare</h1>
               <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} />
             </div>
             <p className={ds.textMuted}>Clinical record organization and care coordination</p>
@@ -1026,12 +1028,12 @@ export default function HealthcareLensPage() {
       {/* ============================================================ */}
       {/* Mode Tabs                                                    */}
       {/* ============================================================ */}
-      <nav className="flex items-center gap-1 border-b border-lattice-border pb-3 overflow-x-auto">
+      <nav className="flex items-center gap-1 border-b border-blue-900/20 pb-3 overflow-x-auto">
         {MODE_TABS.map(tab => (
           <button
             key={tab.id}
             onClick={() => { setActiveTab(tab.id); setFilterStatus('all'); setFilterType('all'); }}
-            className={cn(ds.btnGhost, 'whitespace-nowrap', activeTab === tab.id && 'bg-neon-blue/20 text-neon-blue')}
+            className={cn(ds.btnGhost, 'whitespace-nowrap rounded-lg', activeTab === tab.id && 'bg-blue-500/15 text-blue-400 border-blue-400/20')}
           >
             <tab.icon className="w-4 h-4" />
             {tab.id}

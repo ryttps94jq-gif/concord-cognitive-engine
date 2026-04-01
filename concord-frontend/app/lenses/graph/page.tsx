@@ -1188,17 +1188,17 @@ export default function GraphLensPage() {
             <button onClick={() => setZoom(z => Math.min(z * 1.2, 8))} className="p-2.5 hover:bg-cyan-900/20 transition-colors block w-full">
               <ZoomIn className="w-5 h-5 text-cyan-300 mx-auto" />
             </button>
-            <div className="px-2 py-1 text-xs text-center text-gray-400 border-y border-lattice-border">{Math.round(zoom * 100)}%</div>
-            <button onClick={() => setZoom(z => Math.max(z / 1.2, 0.1))} className="p-2 hover:bg-lattice-bg transition-colors block w-full">
-              <ZoomOut className="w-5 h-5 text-white mx-auto" />
+            <div className="px-2 py-1 text-xs text-center text-cyan-400/70 border-y border-cyan-900/20 font-mono">{Math.round(zoom * 100)}%</div>
+            <button onClick={() => setZoom(z => Math.max(z / 1.2, 0.1))} className="p-2.5 hover:bg-cyan-900/20 transition-colors block w-full">
+              <ZoomOut className="w-5 h-5 text-cyan-300 mx-auto" />
             </button>
           </div>
 
-          <button onClick={resetView} className="p-2 bg-lattice-surface/90 backdrop-blur border border-lattice-border rounded-lg hover:bg-lattice-bg" title="Reset View">
-            <RotateCcw className="w-5 h-5 text-white" />
+          <button onClick={resetView} className="p-2.5 bg-[#0d1117]/90 backdrop-blur-md border border-cyan-900/20 rounded-xl hover:bg-cyan-900/20 shadow-lg shadow-cyan-900/10" title="Reset View">
+            <RotateCcw className="w-5 h-5 text-cyan-300" />
           </button>
-          <button onClick={() => setShowLabels(!showLabels)} className="p-2 bg-lattice-surface/90 backdrop-blur border border-lattice-border rounded-lg hover:bg-lattice-bg" title="Toggle Labels">
-            {showLabels ? <Eye className="w-5 h-5 text-neon-cyan" /> : <EyeOff className="w-5 h-5 text-gray-400" />}
+          <button onClick={() => setShowLabels(!showLabels)} className="p-2.5 bg-[#0d1117]/90 backdrop-blur-md border border-cyan-900/20 rounded-xl hover:bg-cyan-900/20 shadow-lg shadow-cyan-900/10" title="Toggle Labels">
+            {showLabels ? <Eye className="w-5 h-5 text-cyan-400" /> : <EyeOff className="w-5 h-5 text-gray-500" />}
           </button>
           <button onClick={() => setIsSimulating(!isSimulating)} className={cn('p-2 backdrop-blur border border-lattice-border rounded-lg', isSimulating ? 'bg-neon-green/20 text-neon-green' : 'bg-lattice-surface/90 text-gray-400')} title="Toggle Simulation">
             {isSimulating ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
