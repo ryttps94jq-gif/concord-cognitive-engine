@@ -876,14 +876,14 @@ export default function CodeLensPage() {
   }
 
   return (
-    <div className={`flex flex-col ${isFullscreen ? 'fixed inset-0 z-50 bg-lattice-deep' : 'h-full'}`}>
+    <div data-lens-theme="code" className={`flex flex-col font-mono ${isFullscreen ? 'fixed inset-0 z-50 bg-[#0d1117]' : 'h-full bg-[#0d1117]'}`}>
       {/* Header */}
-      <header className="flex items-center justify-between px-4 py-2 border-b border-lattice-border bg-lattice-surface/50">
+      <header className="flex items-center justify-between px-4 py-2 border-b border-green-900/40 bg-[#161b22]">
         <div className="flex items-center gap-3">
-          <span className="text-2xl">🎹</span>
+          <Terminal className="w-6 h-6 text-green-400" />
           <div>
-            <h1 className="text-lg font-bold">Script Studio</h1>
-            <p className="text-xs text-gray-400">MIDI scripting, automation & macros</p>
+            <h1 className="text-lg font-bold text-green-300 font-mono tracking-tight">Script Studio</h1>
+            <p className="text-xs text-green-600 font-mono">MIDI scripting, automation & macros</p>
           </div>
 
       {/* Real-time Enhancement Toolbar */}
@@ -931,12 +931,12 @@ export default function CodeLensPage() {
           <button
             onClick={() => runScriptMutation.mutate()}
             disabled={runScriptMutation.isPending}
-            className="btn-neon flex items-center gap-2"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-600 hover:bg-green-500 text-white font-mono text-sm font-bold shadow-lg shadow-green-900/50 transition-all hover:shadow-green-800/60"
           >
             {runScriptMutation.isPending ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
-              <Play className="w-4 h-4" />
+              <Play className="w-4 h-4 fill-current" />
             )}
             Run Script
           </button>
