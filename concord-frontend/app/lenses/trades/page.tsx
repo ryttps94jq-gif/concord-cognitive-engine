@@ -2245,8 +2245,8 @@ export default function TradesLensPage() {
             className={cn(
               'flex items-center gap-2 px-4 py-2 rounded-lg transition-colors whitespace-nowrap',
               activeTab === tab.id && !showDashboard
-                ? 'bg-neon-blue/20 text-neon-blue'
-                : 'text-gray-400 hover:text-white hover:bg-lattice-elevated'
+                ? 'bg-teal-500/15 text-teal-400 border border-teal-500/30'
+                : 'text-slate-400 hover:text-white hover:bg-slate-700/30'
             )}
           >
             <tab.icon className="w-4 h-4" />
