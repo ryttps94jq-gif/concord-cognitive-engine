@@ -127,7 +127,7 @@ export default function PhotographyPage() {
             <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} />
           </div>
           <div className="flex items-center gap-2">
-            <DTUExportButton lens="photography" />
+            <DTUExportButton domain="photography" data={{}} compact />
             <button onClick={() => setShowFeatures(!showFeatures)} className="px-3 py-1.5 text-xs bg-white/5 border border-white/10 rounded-lg hover:bg-white/10">Features</button>
             <button onClick={() => setShowUpload(true)} className="px-3 py-1.5 text-xs bg-sky-500/20 border border-sky-500/30 rounded-lg hover:bg-sky-500/30 flex items-center gap-1">
               <Upload className="w-3 h-3" /> Upload
@@ -135,7 +135,7 @@ export default function PhotographyPage() {
           </div>
         </div>
 
-        {showFeatures && <LensFeaturePanel lens="photography" onClose={() => setShowFeatures(false)} />}
+        {showFeatures && <LensFeaturePanel lensId="photography" />}
         <RealtimeDataPanel data={realtimeData} insights={realtimeInsights} />
 
         {/* Tabs */}

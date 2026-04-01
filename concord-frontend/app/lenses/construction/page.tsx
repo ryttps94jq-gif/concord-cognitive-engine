@@ -109,12 +109,12 @@ export default function ConstructionLensPage() {
 
   const handleSave = async () => {
     const data: Record<string, unknown> = { name: formName, type: activeArtifactType, status: formStatus, description: formDescription, notes: formNotes, client: formClient, address: formAddress, startDate: formStartDate, endDate: formEndDate, contractValue: formContractValue ? parseFloat(formContractValue) : undefined, projectType: formProjectType, laborCost: formLaborCost ? parseFloat(formLaborCost) : undefined, materialCost: formMaterialCost ? parseFloat(formMaterialCost) : undefined, trade: formTrade, inspectionType: formInspectionType, foreman: formForeman, crewSize: formCrewSize ? parseInt(formCrewSize) : undefined };
-    if (editingItem) await update({ id: editingItem.id, title: formName, data, meta: { tags: [], status: formStatus, visibility: 'private' } });
+    if (editingItem) await update(editingItem.id, { title: formName, data, meta: { tags: [], status: formStatus, visibility: 'private' } });
     else await create({ title: formName, data, meta: { tags: [], status: formStatus, visibility: 'private' } });
     setEditorOpen(false);
   };
 
-  if (isError) return <ErrorState error={error} onRetry={refetch} />;
+  if (isError) return <ErrorState error={error?.message} onRetry={refetch} />;
 
   const renderDashboard = () => {
     const all = items.map(i => i.data as unknown as ConstructionArtifact);

@@ -174,77 +174,78 @@ export default function MusicLensPage() {
   const allGenres = useMemo(() => Object.keys(genreGroups).sort(), [genreGroups]);
 
   // ---- Upload handler ----
-  const handleUpload = useCallback((data: unknown, _file: File) => {
+  const handleUpload = useCallback(async (data: unknown, _file: File) => {
     const uploadData = data as Record<string, unknown>;
+    const trackTitle = (uploadData?.title as string) || _file.name.replace(/\.[^.]+$/, '');
     setUploadProgress({ stage: 'uploading', progress: 0, audioAnalysis: null, error: null });
-    // Simulate upload stages
-    const stages: UploadProgress['stage'][] = ['uploading', 'analyzing', 'processing', 'complete'];
-    let i = 0;
-    const interval = setInterval(() => {
-      i++;
-      if (i < stages.length) {
-        setUploadProgress({
-          stage: stages[i],
-          progress: (i / (stages.length - 1)) * 100,
-          audioAnalysis: i >= 2 ? {
-            bpm: 128, key: 'Am', loudnessLUFS: -14, spectralCentroid: 2200,
-            onsetDensity: 4.2, waveformPeaks: [], chromaprintHash: 'abc123',
-            duration: 240, sampleRate: 44100, bitDepth: 24, channels: 2,
-          } : null,
-          error: null,
-        });
-      } else {
-        clearInterval(interval);
-        // Persist the new track so it appears in the list without refresh
-        const trackTitle = (uploadData?.title as string) || _file.name.replace(/\.[^.]+$/, '');
-        const newId = `t-upload-${Date.now()}`;
-        const newTrack: Partial<MusicTrack> = {
-          id: newId,
-          title: trackTitle,
-          artistId: 'user-1',
-          artistName: 'You',
-          albumId: null,
-          albumTitle: null,
-          coverArtUrl: null,
-          audioUrl: '', // No real audio file yet
-          previewUrl: null,
-          duration: 240,
-          trackNumber: null,
-          genre: (uploadData?.genre as string) || 'electronic',
-          subGenre: (uploadData?.subGenre as string) || null,
-          tags: (uploadData?.tags as string[]) || [],
-          bpm: 128,
-          key: 'Am',
-          loudnessLUFS: -14,
-          spectralCentroid: 2200,
-          onsetDensity: 4.2,
-          waveformPeaks: Array.from({ length: 200 }, () => Math.random() * 0.8),
-          tiers: (uploadData?.tiers as MusicTrack['tiers']) || [
-            { tier: 'listen', enabled: true, price: 0, currency: 'USD', maxLicenses: null, licensesIssued: 0 },
-            { tier: 'create', enabled: true, price: 9.99, currency: 'USD', maxLicenses: null, licensesIssued: 0 },
-            { tier: 'commercial', enabled: true, price: 99.99, currency: 'USD', maxLicenses: null, licensesIssued: 0 },
-          ],
-          playCount: 0,
-          purchaseCount: 0,
-          remixCount: 0,
-          parentTrackId: (uploadData?.parentTrackId as string) || null,
-          parentArtistId: null,
-          parentTitle: null,
-          lineageDepth: (uploadData?.parentTrackId) ? 1 : 0,
-          stems: [],
-          releaseDate: new Date().toISOString(),
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          isExplicit: (uploadData?.isExplicit as boolean) || false,
-          lyrics: null,
-          credits: [],
-          chromaprintHash: null,
-        };
-        createTrackItem({ title: trackTitle, data: newTrack as unknown as Record<string, unknown> })
-          .catch(err => console.error('Failed to persist uploaded track:', err instanceof Error ? err.message : err));
-        setTimeout(() => { setUploadProgress(null); setView('home'); }, 2000);
-      }
-    }, 1500);
+
+    try {
+      // Upload via media API
+      setUploadProgress({ stage: 'uploading', progress: 30, audioAnalysis: null, error: null });
+      const { api: apiClient } = await import('@/lib/api/client');
+      const mediaResp = await apiClient.post('/api/media/upload', {
+        title: trackTitle,
+        mediaType: 'audio',
+        mimeType: _file.type || 'audio/mpeg',
+        fileSize: _file.size,
+        originalFilename: _file.name,
+        duration: (uploadData?.duration as number) || 240,
+        tags: (uploadData?.tags as string[]) || [],
+      });
+
+      setUploadProgress({ stage: 'analyzing', progress: 60, audioAnalysis: null, error: null });
+      const mediaId = mediaResp.data?.id || mediaResp.data?.media?.id;
+
+      setUploadProgress({
+        stage: 'processing', progress: 80,
+        audioAnalysis: {
+          bpm: 128, key: 'Am', loudnessLUFS: -14, spectralCentroid: 2200,
+          onsetDensity: 4.2, waveformPeaks: [], chromaprintHash: mediaId || 'abc123',
+          duration: 240, sampleRate: 44100, bitDepth: 24, channels: 2,
+        },
+        error: null,
+      });
+
+      // Persist the new track via lens data
+      const newTrack: Partial<MusicTrack> = {
+        id: mediaId || `t-upload-${Date.now()}`,
+        title: trackTitle,
+        artistId: 'user-1',
+        artistName: 'You',
+        albumId: null, albumTitle: null, coverArtUrl: null,
+        audioUrl: mediaId ? `/api/media/${mediaId}/stream` : '',
+        previewUrl: null, duration: 240, trackNumber: null,
+        genre: (uploadData?.genre as string) || 'electronic',
+        subGenre: (uploadData?.subGenre as string) || null,
+        tags: (uploadData?.tags as string[]) || [],
+        bpm: 128, key: 'Am', loudnessLUFS: -14, spectralCentroid: 2200,
+        onsetDensity: 4.2,
+        waveformPeaks: Array.from({ length: 200 }, () => Math.random() * 0.8),
+        tiers: (uploadData?.tiers as MusicTrack['tiers']) || [
+          { tier: 'listen', enabled: true, price: 0, currency: 'USD', maxLicenses: null, licensesIssued: 0 },
+          { tier: 'create', enabled: true, price: 9.99, currency: 'USD', maxLicenses: null, licensesIssued: 0 },
+          { tier: 'commercial', enabled: true, price: 99.99, currency: 'USD', maxLicenses: null, licensesIssued: 0 },
+        ],
+        playCount: 0, purchaseCount: 0, remixCount: 0,
+        parentTrackId: (uploadData?.parentTrackId as string) || null,
+        parentArtistId: null, parentTitle: null,
+        lineageDepth: (uploadData?.parentTrackId) ? 1 : 0,
+        stems: [],
+        releaseDate: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        isExplicit: (uploadData?.isExplicit as boolean) || false,
+        lyrics: null, credits: [], chromaprintHash: null,
+      };
+      await createTrackItem({ title: trackTitle, data: newTrack as unknown as Record<string, unknown> });
+
+      setUploadProgress({ stage: 'complete', progress: 100, audioAnalysis: null, error: null });
+      setTimeout(() => { setUploadProgress(null); setView('home'); }, 2000);
+    } catch (err) {
+      console.error('Upload failed:', err instanceof Error ? err.message : err);
+      setUploadProgress({ stage: 'uploading', progress: 0, audioAnalysis: null, error: err instanceof Error ? err.message : 'Upload failed' });
+      setTimeout(() => setUploadProgress(null), 3000);
+    }
   }, [createTrackItem]);
 
   // ---- Selected entities ----

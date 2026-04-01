@@ -114,7 +114,7 @@ export default function AnimationPage() {
             <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} />
           </div>
           <div className="flex items-center gap-2">
-            <DTUExportButton lens="animation" />
+            <DTUExportButton domain="animation" data={{}} compact />
             <button onClick={() => setShowFeatures(!showFeatures)} className="px-3 py-1.5 text-xs bg-white/5 border border-white/10 rounded-lg hover:bg-white/10">Features</button>
             <button onClick={() => setShowCreateModal(true)} className="px-3 py-1.5 text-xs bg-orange-500/20 border border-orange-500/30 rounded-lg hover:bg-orange-500/30 flex items-center gap-1">
               <Plus className="w-3 h-3" /> New Project
@@ -122,7 +122,7 @@ export default function AnimationPage() {
           </div>
         </div>
 
-        {showFeatures && <LensFeaturePanel lens="animation" onClose={() => setShowFeatures(false)} />}
+        {showFeatures && <LensFeaturePanel lensId="animation" />}
         <RealtimeDataPanel data={realtimeData} insights={realtimeInsights} />
 
         {/* Tabs */}

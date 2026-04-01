@@ -8,10 +8,10 @@ import { ds } from '@/lib/design-system';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
-  Droplets, Wrench, ClipboardList, DollarSign, Camera, Users,
+  Flame, Wrench, ClipboardList, DollarSign, Camera, Users,
   Plus, Search, X, Trash2, BarChart3, CheckCircle2,
-  AlertTriangle, MapPin, FileText, Shield, Award,
-  Layers, ChevronDown, Calculator, Phone, Receipt,
+  AlertTriangle, FileText, Shield, Award, Calculator,
+  Layers, ChevronDown, Receipt,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -34,14 +34,13 @@ interface TradeArtifact {
   invoiceNumber?: string; dueDate?: string; paidDate?: string; amount?: number;
   inspector?: string; result?: string; deficiencies?: string;
   certType?: string; certNumber?: string; expiryDate?: string; issuedBy?: string;
-  photos?: number; safetyNotes?: string;
 }
 
-const MODE_TABS: { id: ModeTab; label: string; icon: typeof Droplets; artifactType: ArtifactType }[] = [
+const MODE_TABS: { id: ModeTab; label: string; icon: typeof Flame; artifactType: ArtifactType }[] = [
   { id: 'jobs', label: 'Jobs', icon: Wrench, artifactType: 'Job' },
   { id: 'estimates', label: 'Estimates', icon: Calculator, artifactType: 'Estimate' },
   { id: 'codes', label: 'Codes', icon: FileText, artifactType: 'CodeRef' },
-  { id: 'materials', label: 'Materials', icon: Droplets, artifactType: 'Material' },
+  { id: 'materials', label: 'Materials', icon: Flame, artifactType: 'Material' },
   { id: 'clients', label: 'CRM', icon: Users, artifactType: 'Client' },
   { id: 'invoices', label: 'Invoices', icon: Receipt, artifactType: 'Invoice' },
   { id: 'inspections', label: 'Inspections', icon: ClipboardList, artifactType: 'Inspection' },
@@ -55,12 +54,12 @@ const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   failed: { label: 'Failed', color: 'red-400' }, active: { label: 'Active', color: 'green-400' },
 };
 
-const PLUMBING_MATERIALS = ['PVC Pipe', 'Copper Pipe', 'PEX Tubing', 'Cast Iron Pipe', 'Fittings', 'Valves', 'Fixtures', 'Water Heater', 'Sump Pump', 'Drain Assembly', 'Backflow Preventer', 'Expansion Tank'];
-const PLUMBING_CERTS = ['Master Plumber', 'Journeyman Plumber', 'Apprentice Plumber', 'Backflow Certification', 'Medical Gas Certification', 'Green Plumber'];
+const TRADE_MATERIALS = ['Mild Steel','Stainless Steel','Aluminum','ER70S-6 Wire','E7018 Rod','E6010 Rod','6011 Rod','Flux Core Wire','TIG Tungsten','Argon Gas','CO2 Gas','75/25 Mix Gas'];
+const TRADE_CERTS = ['AWS CWI','AWS CWE','ASME Section IX','API 1104','D1.1 Structural','6G Pipe Certification'];
 
-export default function PlumbingLensPage() {
-  useLensNav('plumbing');
-  const { latestData: realtimeData, isLive, lastUpdated, insights } = useRealtimeLens('plumbing');
+export default function WeldingLensPage() {
+  useLensNav('welding');
+  const { latestData: realtimeData, isLive, lastUpdated, insights } = useRealtimeLens('welding');
 
   const [activeTab, setActiveTab] = useState<ModeTab>('jobs');
   const [searchQuery, setSearchQuery] = useState('');
@@ -81,14 +80,14 @@ export default function PlumbingLensPage() {
   const [formLaborHours, setFormLaborHours] = useState('');
   const [formLaborRate, setFormLaborRate] = useState('');
   const [formMaterialCost, setFormMaterialCost] = useState('');
-  const [formMaterial, setFormMaterial] = useState('PVC Pipe');
+  const [formMaterial, setFormMaterial] = useState(TRADE_MATERIALS[0] || '');
   const [formQuantity, setFormQuantity] = useState('');
-  const [formCertType, setFormCertType] = useState('Master Plumber');
+  const [formCertType, setFormCertType] = useState(TRADE_CERTS[0] || '');
   const [formAmount, setFormAmount] = useState('');
 
   const activeArtifactType = MODE_TABS.find(t => t.id === activeTab)?.artifactType || 'Job';
-  const { items, isLoading, isError, error, refetch, create, update, remove } = useLensData<TradeArtifact>('plumbing', activeArtifactType, { seed: [] });
-  const runAction = useRunArtifact('plumbing');
+  const { items, isLoading, isError, error, refetch, create, update, remove } = useLensData<TradeArtifact>('welding', activeArtifactType, { seed: [] });
+  const runAction = useRunArtifact('welding');
 
   const filtered = useMemo(() => {
     let result = items;
@@ -97,8 +96,8 @@ export default function PlumbingLensPage() {
     return result;
   }, [items, searchQuery, filterStatus]);
 
-  const openCreate = () => { setEditingItem(null); setFormName(''); setFormDescription(''); setFormStatus('scheduled'); setFormNotes(''); setFormClient(''); setFormAddress(''); setFormPhone(''); setFormScheduledDate(''); setFormLaborHours(''); setFormLaborRate(''); setFormMaterialCost(''); setFormMaterial('PVC Pipe'); setFormQuantity(''); setFormCertType('Master Plumber'); setFormAmount(''); setEditorOpen(true); };
-  const openEdit = (item: LensItem<TradeArtifact>) => { const d = item.data as unknown as TradeArtifact; setEditingItem(item); setFormName(d.name || ''); setFormDescription(d.description || ''); setFormStatus(d.status || 'scheduled'); setFormNotes(d.notes || ''); setFormClient(d.client || ''); setFormAddress(d.address || ''); setFormPhone(d.phone || ''); setFormScheduledDate(d.scheduledDate || ''); setFormLaborHours(d.laborHours?.toString() || ''); setFormLaborRate(d.laborRate?.toString() || ''); setFormMaterialCost(d.materialCost?.toString() || ''); setFormMaterial(d.material || 'PVC Pipe'); setFormQuantity(d.quantity?.toString() || ''); setFormCertType(d.certType || 'Master Plumber'); setFormAmount(d.amount?.toString() || ''); setEditorOpen(true); };
+  const openCreate = () => { setEditingItem(null); setFormName(''); setFormDescription(''); setFormStatus('scheduled'); setFormNotes(''); setFormClient(''); setFormAddress(''); setFormPhone(''); setFormScheduledDate(''); setFormLaborHours(''); setFormLaborRate(''); setFormMaterialCost(''); setFormMaterial(TRADE_MATERIALS[0] || ''); setFormQuantity(''); setFormCertType(TRADE_CERTS[0] || ''); setFormAmount(''); setEditorOpen(true); };
+  const openEdit = (item: LensItem<TradeArtifact>) => { const d = item.data as unknown as TradeArtifact; setEditingItem(item); setFormName(d.name || ''); setFormDescription(d.description || ''); setFormStatus(d.status || 'scheduled'); setFormNotes(d.notes || ''); setFormClient(d.client || ''); setFormAddress(d.address || ''); setFormPhone(d.phone || ''); setFormScheduledDate(d.scheduledDate || ''); setFormLaborHours(d.laborHours?.toString() || ''); setFormLaborRate(d.laborRate?.toString() || ''); setFormMaterialCost(d.materialCost?.toString() || ''); setFormMaterial(d.material || TRADE_MATERIALS[0] || ''); setFormQuantity(d.quantity?.toString() || ''); setFormCertType(d.certType || TRADE_CERTS[0] || ''); setFormAmount(d.amount?.toString() || ''); setEditorOpen(true); };
 
   const handleSave = async () => {
     const laborH = formLaborHours ? parseFloat(formLaborHours) : undefined;
@@ -146,24 +145,18 @@ export default function PlumbingLensPage() {
               <>
                 <div><label className={ds.label}>Scheduled Date</label><input type="date" className={ds.input} value={formScheduledDate} onChange={e => setFormScheduledDate(e.target.value)} /></div>
                 <div className="grid grid-cols-3 gap-3">
-                  <div><label className={ds.label}>Labor Hours</label><input type="number" className={ds.input} value={formLaborHours} onChange={e => setFormLaborHours(e.target.value)} /></div>
-                  <div><label className={ds.label}>Labor Rate</label><input type="number" className={ds.input} value={formLaborRate} onChange={e => setFormLaborRate(e.target.value)} /></div>
-                  <div><label className={ds.label}>Material Cost</label><input type="number" className={ds.input} value={formMaterialCost} onChange={e => setFormMaterialCost(e.target.value)} /></div>
+                  <div><label className={ds.label}>Labor Hrs</label><input type="number" className={ds.input} value={formLaborHours} onChange={e => setFormLaborHours(e.target.value)} /></div>
+                  <div><label className={ds.label}>Rate</label><input type="number" className={ds.input} value={formLaborRate} onChange={e => setFormLaborRate(e.target.value)} /></div>
+                  <div><label className={ds.label}>Material $</label><input type="number" className={ds.input} value={formMaterialCost} onChange={e => setFormMaterialCost(e.target.value)} /></div>
                 </div>
               </>
             )}
             {activeArtifactType === 'Material' && (
-              <>
-                <div><label className={ds.label}>Material</label><select className={ds.select} value={formMaterial} onChange={e => setFormMaterial(e.target.value)}>{PLUMBING_MATERIALS.map(m => <option key={m} value={m}>{m}</option>)}</select></div>
-                <div><label className={ds.label}>Quantity</label><input type="number" className={ds.input} value={formQuantity} onChange={e => setFormQuantity(e.target.value)} /></div>
-              </>
+              <><div><label className={ds.label}>Material</label><select className={ds.select} value={formMaterial} onChange={e => setFormMaterial(e.target.value)}>{TRADE_MATERIALS.map(m => <option key={m} value={m}>{m}</option>)}</select></div>
+              <div><label className={ds.label}>Quantity</label><input type="number" className={ds.input} value={formQuantity} onChange={e => setFormQuantity(e.target.value)} /></div></>
             )}
-            {activeArtifactType === 'Invoice' && (
-              <div><label className={ds.label}>Amount</label><input type="number" className={ds.input} value={formAmount} onChange={e => setFormAmount(e.target.value)} /></div>
-            )}
-            {activeArtifactType === 'Certification' && (
-              <div><label className={ds.label}>Certification Type</label><select className={ds.select} value={formCertType} onChange={e => setFormCertType(e.target.value)}>{PLUMBING_CERTS.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-            )}
+            {activeArtifactType === 'Invoice' && (<div><label className={ds.label}>Amount</label><input type="number" className={ds.input} value={formAmount} onChange={e => setFormAmount(e.target.value)} /></div>)}
+            {activeArtifactType === 'Certification' && (<div><label className={ds.label}>Certification</label><select className={ds.select} value={formCertType} onChange={e => setFormCertType(e.target.value)}>{TRADE_CERTS.map(c => <option key={c} value={c}>{c}</option>)}</select></div>)}
             <div><label className={ds.label}>Notes</label><textarea className={ds.textarea} rows={2} value={formNotes} onChange={e => setFormNotes(e.target.value)} /></div>
           </div>
           <div className="flex justify-end gap-2 mt-4"><button onClick={() => setEditorOpen(false)} className={ds.btnSecondary}>Cancel</button><button onClick={handleSave} className={ds.btnPrimary} disabled={!formName.trim()}>Save</button></div>
@@ -180,10 +173,10 @@ export default function PlumbingLensPage() {
         <button onClick={openCreate} className={ds.btnPrimary}><Plus className="w-4 h-4" /> New</button>
       </div>
       {isLoading ? <div className="flex items-center justify-center py-12"><div className="w-6 h-6 border-2 border-neon-blue border-t-transparent rounded-full animate-spin" /></div>
-      : filtered.length === 0 ? <div className={cn(ds.panel, 'text-center py-12')}><Droplets className="w-12 h-12 text-gray-600 mx-auto mb-3" /><p className={ds.textMuted}>No {activeArtifactType} items yet</p><button onClick={openCreate} className={cn(ds.btnPrimary, 'mt-3')}><Plus className="w-4 h-4" /> Create First</button></div>
+      : filtered.length === 0 ? <div className={cn(ds.panel, 'text-center py-12')}><Flame className="w-12 h-12 text-gray-600 mx-auto mb-3" /><p className={ds.textMuted}>No {activeArtifactType} items yet</p><button onClick={openCreate} className={cn(ds.btnPrimary, 'mt-3')}><Plus className="w-4 h-4" /> Create First</button></div>
       : filtered.map(item => {
         const d = item.data as unknown as TradeArtifact; const sc = STATUS_CONFIG[d.status] || STATUS_CONFIG.pending;
-        return (<div key={item.id} className={ds.panelHover} onClick={() => openEdit(item)}><div className="flex items-center justify-between"><div className="flex items-center gap-3"><Droplets className="w-5 h-5 text-neon-cyan" /><div><p className="text-white font-medium">{d.name || item.title}</p><p className={ds.textMuted}>{d.client || ''} {d.address ? `- ${d.address}` : ''}</p></div></div><div className="flex items-center gap-2">{(d.totalCost || d.amount) && <span className="text-xs text-green-400">${(d.totalCost || d.amount || 0).toLocaleString()}</span>}<span className={`text-xs px-2 py-0.5 rounded-full bg-${sc.color}/20 text-${sc.color}`}>{sc.label}</span><button onClick={e => { e.stopPropagation(); remove(item.id); }} className={ds.btnGhost}><Trash2 className="w-4 h-4 text-red-400" /></button></div></div></div>);
+        return (<div key={item.id} className={ds.panelHover} onClick={() => openEdit(item)}><div className="flex items-center justify-between"><div className="flex items-center gap-3"><Flame className="w-5 h-5 text-neon-cyan" /><div><p className="text-white font-medium">{d.name || item.title}</p><p className={ds.textMuted}>{d.client || ''} {d.address ? `- ${d.address}` : ''}</p></div></div><div className="flex items-center gap-2">{(d.totalCost || d.amount) && <span className="text-xs text-green-400">${(d.totalCost || d.amount || 0).toLocaleString()}</span>}<span className={`text-xs px-2 py-0.5 rounded-full bg-${sc.color}/20 text-${sc.color}`}>{sc.label}</span><button onClick={e => { e.stopPropagation(); remove(item.id); }} className={ds.btnGhost}><Trash2 className="w-4 h-4 text-red-400" /></button></div></div></div>);
       })}
     </div>
   );
@@ -192,13 +185,13 @@ export default function PlumbingLensPage() {
     <div className="space-y-6 p-6">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center"><Droplets className="w-5 h-5 text-white" /></div>
-          <div><div className="flex items-center gap-2"><h1 className={ds.heading1}>Plumbing</h1><LiveIndicator isLive={isLive} lastUpdated={lastUpdated} /></div><p className={ds.textMuted}>Jobs, estimates, codes, materials, CRM, invoicing, inspections, and certifications</p></div>
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center"><Flame className="w-5 h-5 text-white" /></div>
+          <div><div className="flex items-center gap-2"><h1 className={ds.heading1}>Welding</h1><LiveIndicator isLive={isLive} lastUpdated={lastUpdated} /></div><p className={ds.textMuted}>Jobs, estimates, codes, materials, CRM, invoicing, inspections, and certifications</p></div>
         </div>
-        <div className="flex items-center gap-2"><DTUExportButton domain="plumbing" data={{}} compact /><button onClick={() => setShowDashboard(!showDashboard)} className={cn(showDashboard ? ds.btnPrimary : ds.btnSecondary)}><BarChart3 className="w-4 h-4" /> Dashboard</button></div>
+        <div className="flex items-center gap-2"><DTUExportButton domain="welding" data={{}} compact /><button onClick={() => setShowDashboard(!showDashboard)} className={cn(showDashboard ? ds.btnPrimary : ds.btnSecondary)}><BarChart3 className="w-4 h-4" /> Dashboard</button></div>
       </header>
-      <RealtimeDataPanel domain="plumbing" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
-      <UniversalActions domain="plumbing" artifactId={items[0]?.id} compact />
+      <RealtimeDataPanel domain="welding" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
+      <UniversalActions domain="welding" artifactId={items[0]?.id} compact />
       <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 overflow-x-auto">{MODE_TABS.map(tab => (<button key={tab.id} onClick={() => { setActiveTab(tab.id); setShowDashboard(false); }} className={cn('flex items-center gap-2 px-4 py-2 rounded-lg transition-colors whitespace-nowrap', activeTab === tab.id && !showDashboard ? 'bg-neon-blue/20 text-neon-blue' : 'text-gray-400 hover:text-white hover:bg-lattice-elevated')}><tab.icon className="w-4 h-4" />{tab.label}</button>))}</nav>
       {showDashboard ? renderDashboard() : renderLibrary()}
       {renderEditor()}

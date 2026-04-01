@@ -4308,6 +4308,8 @@ function authMiddleware(req, res, next) {
     "/api/rbac", "/api/compliance",
     // Studio & artistry
     "/api/studio", "/api/artistry",
+    // Film, Media & Game (Creative lenses 12-22)
+    "/api/film-studio", "/api/media", "/api/game",
     // Misc
     "/api/heal", "/api/cache", "/api/redis", "/api/efficiency",
     "/api/model-optimizer", "/api/lens-items", "/api/mobile",
@@ -6636,16 +6638,16 @@ async function runMacro(domain, name, input, ctx) {
     worldmodel: new Set(["list_relations", "get", "status", "entities", "simulations"]),
     goals: new Set(["list", "get", "status", "config"]),
     council: new Set(["tally", "status", "list"]),
-    hypothesis: new Set(["list", "get", "status"]),
+    hypothesis: new Set(["list", "get", "status", "propose", "evaluate", "record_evidence", "design_experiment"]),
     analytics: new Set(["dashboard", "growth", "density", "citations", "marketplace", "personal"]),
     atlas: new Set(["status", "get", "list", "scope", "config", "thresholds", "autogen", "chat", "contradictions", "score-explain", "submission", "search", "antigaming", "rights", "write-guard", "scope-metrics", "local-hints", "tile", "volume", "material", "subsurface", "change", "coverage", "live", "metrics"]),
     agents: new Set(["list", "get", "status"]),
     personas: new Set(["list", "get"]),
     affect: new Set(["state", "events", "health", "system", "policy"]),
     attention: new Set(["status", "get"]),
-    metacognition: new Set(["status", "predictions"]),
+    metacognition: new Set(["status", "predictions", "blind_spots", "calibration", "introspection_status", "predict", "resolve_prediction", "assess", "introspect", "select_strategy"]),
     metalearning: new Set(["strategies", "status"]),
-    reasoning: new Set(["chains", "steps", "status"]),
+    reasoning: new Set(["chains", "steps", "status", "list_chains", "create_chain", "add_step", "conclude", "get_trace", "validate_step"]),
     reflection: new Set(["status", "list"]),
     temporal: new Set(["status", "get"]),
     inference: new Set(["status"]),
@@ -6744,6 +6746,8 @@ async function runMacro(domain, name, input, ctx) {
     "/api/autogen", "/api/dream", "/api/evolution", "/api/synthesize",
     "/api/utility", "/api/swarm", "/api/forge", "/api/ask",
     "/api/intelligence", "/api/stripe",
+    // Film, Media & Game (Creative lenses 12-22)
+    "/api/film-studio", "/api/media", "/api/game",
     // Extended paths (three-gate audit)
     "/api/ai", "/api/federation", "/api/quests", "/api/physics",
     "/api/admin", "/api/heartbeat", "/api/entity-economy",
@@ -25890,7 +25894,9 @@ const DOMAIN_KEYWORDS = {
   psychology: ["behavior", "cognition", "emotion", "perception", "memory", "learning", "motivation", "personality", "mental"],
   economics: ["market", "price", "supply", "demand", "trade", "value", "currency", "investment", "capital", "growth"],
   physics: ["quantum", "particle", "wave", "energy", "mass", "force", "field", "spacetime", "relativity", "momentum"],
-  biology: ["cell", "gene", "organism", "evolution", "species", "protein", "dna", "ecosystem", "life", "organism"]
+  biology: ["cell", "gene", "organism", "evolution", "species", "protein", "dna", "ecosystem", "life", "organism"],
+  history: ["history", "historical", "century", "era", "dynasty", "empire", "war", "revolution", "civilization", "ancient", "medieval", "modern"],
+  linguistics: ["language", "grammar", "syntax", "morphology", "phonology", "semantics", "pragmatics", "dialect", "etymology", "lexicon", "linguistic"]
 };
 
 register("autotag", "analyze", (ctx, input) => {
@@ -29152,11 +29158,11 @@ const ALL_LENS_DOMAINS = [
   "database","debug","docs","eco","education","entity","environment",
   "ethics","events","experience","export","feed","finance","fitness",
   "food","fork","forum","fractal","game","global","goals","government",
-  "graph","grounding","healthcare","household","hypothesis","import",
+  "graph","grounding","healthcare","history","household","hypothesis","import",
   "inference","ingest","insurance","integrations","invariant","lab",
-  "law","legacy","legal","lock","logistics","manufacturing","market",
+  "law","legacy","legal","linguistics","lock","logistics","manufacturing","market",
   "marketplace","math","meta","metacognition","metalearning","ml",
-  "music","neuro","news","nonprofit","offline","organ","paper","physics",
+  "music","neuro","news","nonprofit","offline","organ","paper","philosophy","physics",
   "platform","quantum","questmarket","queue","realestate","reasoning",
   "reflection","repos","research","resonance","retail","schema","science",
   "security","services","sim","srs","studio","suffering","temporal",
@@ -29605,6 +29611,27 @@ const DOMAIN_ACTION_MANIFEST = {
     { action: "find-gaps", brain: "U", desc: "Compare course content against learner's existing DTUs" },
     { action: "teach", brain: "C", desc: "Answer questions about course material using Socratic method" },
     { action: "validate-progress", brain: "R", desc: "Validate skill mastery against assessment criteria" },
+  ],
+  philosophy: [
+    { action: "analyze-argument", brain: "U", desc: "Decompose philosophical argument into premises, warrants, and conclusion" },
+    { action: "compare-traditions", brain: "U", desc: "Compare how different philosophical traditions approach a question" },
+    { action: "socratic-dialogue", brain: "C", desc: "Interactive Socratic dialogue to examine beliefs and assumptions" },
+    { action: "find-counterargument", brain: "U", desc: "Generate strongest counterarguments to a philosophical position" },
+    { action: "trace-lineage", brain: "S", desc: "Trace intellectual lineage of an idea across thinkers and eras" },
+  ],
+  history: [
+    { action: "analyze-causation", brain: "U", desc: "Analyze causes and consequences of historical events" },
+    { action: "compare-periods", brain: "U", desc: "Draw parallels and contrasts between historical periods" },
+    { action: "evaluate-source", brain: "U", desc: "Assess reliability and bias of historical sources" },
+    { action: "build-timeline", brain: "U", desc: "Construct chronological timeline from event artifacts" },
+    { action: "counterfactual", brain: "C", desc: "Explore counterfactual historical scenarios" },
+  ],
+  linguistics: [
+    { action: "parse-morphology", brain: "U", desc: "Decompose word into morphemes with glosses" },
+    { action: "analyze-syntax", brain: "U", desc: "Generate constituency or dependency parse of a sentence" },
+    { action: "compare-languages", brain: "U", desc: "Compare grammatical features across languages" },
+    { action: "etymological-trace", brain: "U", desc: "Trace etymology and semantic shifts of a word" },
+    { action: "detect-register", brain: "U", desc: "Analyze text for register, formality, and sociolinguistic markers" },
   ],
   ethics: [
     { action: "analyze-frameworks", brain: "U", desc: "Evaluate dilemma through utilitarian, deontological, virtue, care ethics" },
@@ -30081,6 +30108,9 @@ function detectLensRecommendation(prompt, response, currentLens) {
     retail: /\b(product catalog|inventory|pos|customer|storefront)\b/i,
     nonprofit: /\b(donor|grant|fundraising|volunteer|impact report)\b/i,
     government: /\b(policy|regulation|public service|legislation|civic)\b/i,
+    philosophy: /\b(philosophical|ethics|epistemology|metaphysics|ontology|dialectic|existential|virtue ethics|moral philosophy)\b/i,
+    history: /\b(historical|century|era|dynasty|empire|civilization|medieval|ancient history|revolution)\b/i,
+    linguistics: /\b(linguistic|grammar|syntax|morphology|phonology|semantics|etymology|dialect|lexicon)\b/i,
   };
 
   for (const [domain, pattern] of Object.entries(LENS_SIGNALS)) {
@@ -53834,6 +53864,15 @@ const LENS_DOMAIN_KEYWORDS = {
 
   // Healthcare (distinct from health — clinical systems)
   healthcare: ["hospital", "patient", "treatment", "prescription", "surgery", "nurse", "clinic", "pharmacy"],
+
+  // Philosophy
+  philosophy: ["philosophy", "philosophical", "ethics", "epistemology", "metaphysics", "ontology", "phenomenology", "existential", "dialectic", "virtue"],
+
+  // History
+  history: ["history", "historical", "century", "era", "dynasty", "empire", "war", "revolution", "civilization", "medieval", "ancient"],
+
+  // Linguistics
+  linguistics: ["language", "grammar", "syntax", "morphology", "phonology", "semantics", "pragmatics", "dialect", "etymology", "lexicon"],
 };
 
 /**

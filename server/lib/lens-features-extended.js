@@ -893,4 +893,161 @@ export const EXTENDED_FEATURES = {
     botAccess: true,
     usbIntegration: false,
   },
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // SPECIALIZED DOMAINS (113+)
+  // ═════════════════════════════════════════════════════════════════════════
+
+  defense: {
+    lensId: "defense",
+    lensNumber: 101,
+    category: "SPECIALIZED",
+    features: [
+      f("ops_planning", "Operations Planning", "Mission planning with DTU-backed intelligence feeds", "planning", ["dtu"]),
+      f("asset_tracking", "Asset Tracking", "Real-time military asset readiness and deployment status", "infrastructure", []),
+      f("intel_fusion", "Intelligence Fusion", "Multi-source intelligence aggregation and analysis", "analysis", ["dtu"]),
+      f("personnel_readiness", "Personnel Readiness", "Unit readiness tracking with certification management", "management", []),
+      f("secure_comms", "Secure Communications", "Encrypted DTU-based messaging for classified operations", "safety", ["concord_shield"]),
+    ],
+    featureCount: 5, economicIntegrations: ["concord_coin"], emergentAccess: false, botAccess: true, usbIntegration: false,
+  },
+
+  space: {
+    lensId: "space",
+    lensNumber: 103,
+    category: "SPECIALIZED",
+    features: [
+      f("mission_control", "Mission Control", "Real-time mission tracking with telemetry dashboards", "infrastructure", []),
+      f("orbital_mechanics", "Orbital Mechanics", "Orbit calculation and debris tracking tools", "analysis", []),
+      f("satellite_ops", "Satellite Operations", "Satellite fleet management and health monitoring", "management", []),
+      f("launch_ops", "Launch Operations", "Launch window calculation and pre-launch checklists", "planning", []),
+      f("crew_management", "Crew Management", "Astronaut scheduling, training and health tracking", "management", []),
+    ],
+    featureCount: 5, economicIntegrations: ["concord_coin"], emergentAccess: true, botAccess: true, usbIntegration: false,
+  },
+
+  ocean: {
+    lensId: "ocean",
+    lensNumber: 104,
+    category: "SPECIALIZED",
+    features: [
+      f("vessel_tracking", "Vessel Tracking", "Real-time maritime vessel position and status monitoring", "infrastructure", []),
+      f("marine_research", "Marine Research", "Oceanographic research expedition management", "research", ["dtu"]),
+      f("conservation_tracking", "Conservation Tracking", "Endangered species monitoring and habitat protection", "analysis", []),
+      f("port_management", "Port Management", "Port operations, berth scheduling and cargo tracking", "management", []),
+      f("sea_weather", "Sea Weather", "Marine weather forecasting and storm tracking", "safety", []),
+    ],
+    featureCount: 5, economicIntegrations: ["concord_coin"], emergentAccess: true, botAccess: true, usbIntegration: false,
+  },
+
+  desert: {
+    lensId: "desert",
+    lensNumber: 105,
+    category: "SPECIALIZED",
+    features: [
+      f("expedition_planning", "Expedition Planning", "Desert expedition logistics with water supply tracking", "planning", []),
+      f("climate_monitoring", "Climate Monitoring", "Real-time desert climate and sandstorm risk monitoring", "analysis", []),
+      f("resource_survey", "Resource Survey", "Water, mineral and archaeological resource tracking", "research", ["dtu"]),
+      f("hazard_alerts", "Hazard Alerts", "Sandstorm, heat and flash flood early warning system", "safety", []),
+    ],
+    featureCount: 4, economicIntegrations: ["concord_coin"], emergentAccess: true, botAccess: true, usbIntegration: false,
+  },
+
+  "urban-planning": {
+    lensId: "urban-planning",
+    lensNumber: 106,
+    category: "SPECIALIZED",
+    features: [
+      f("zoning_management", "Zoning Management", "Zoning map management with variance tracking", "management", []),
+      f("project_tracking", "Development Project Tracking", "Track development projects from proposal through completion", "planning", []),
+      f("infra_assessment", "Infrastructure Assessment", "Monitor infrastructure condition and maintenance scheduling", "analysis", []),
+      f("transit_planning", "Transit Planning", "Public transit route optimization and ridership analysis", "planning", []),
+      f("green_space", "Green Space Management", "Park and green space planning with environmental metrics", "management", []),
+    ],
+    featureCount: 5, economicIntegrations: ["concord_coin"], emergentAccess: true, botAccess: true, usbIntegration: false,
+  },
+
+  telecommunications: {
+    lensId: "telecommunications",
+    lensNumber: 108,
+    category: "SPECIALIZED",
+    features: [
+      f("network_monitoring", "Network Monitoring", "Real-time network health and performance monitoring", "infrastructure", []),
+      f("tower_management", "Tower Management", "Cell tower inventory, maintenance and capacity planning", "management", []),
+      f("spectrum_management", "Spectrum Management", "Frequency allocation, licensing and interference tracking", "management", []),
+      f("outage_tracking", "Outage Tracking", "Service outage detection, tracking and resolution management", "safety", []),
+      f("fiber_mapping", "Fiber Mapping", "Fiber optic network topology and capacity planning", "infrastructure", []),
+    ],
+    featureCount: 5, economicIntegrations: ["concord_coin"], emergentAccess: true, botAccess: true, usbIntegration: false,
+  },
+
+  mining: {
+    lensId: "mining",
+    lensNumber: 109,
+    category: "SPECIALIZED",
+    features: [
+      f("site_management", "Mine Site Management", "Active mine site operations and production tracking", "management", []),
+      f("safety_compliance", "Safety Compliance", "MSHA compliance tracking and incident management", "safety", []),
+      f("geology_analysis", "Geology Analysis", "Core sample analysis and reserve estimation tools", "analysis", ["dtu"]),
+      f("equipment_tracking", "Equipment Tracking", "Heavy equipment fleet management and maintenance scheduling", "infrastructure", []),
+      f("environmental_compliance", "Environmental Compliance", "Environmental impact monitoring and reclamation tracking", "safety", []),
+    ],
+    featureCount: 5, economicIntegrations: ["concord_coin"], emergentAccess: true, botAccess: true, usbIntegration: false,
+  },
+
+  forestry: {
+    lensId: "forestry",
+    lensNumber: 110,
+    category: "SPECIALIZED",
+    features: [
+      f("stand_inventory", "Stand Inventory", "Timber stand mapping with volume and species tracking", "management", []),
+      f("harvest_planning", "Harvest Planning", "Harvest block planning with environmental constraints", "planning", []),
+      f("fire_management", "Fire Management", "Wildfire detection, tracking and prescribed burn management", "safety", []),
+      f("replanting_tracker", "Replanting Tracker", "Reforestation tracking with survival rate monitoring", "management", []),
+      f("wildlife_habitat", "Wildlife Habitat", "Wildlife corridor mapping and habitat protection zones", "analysis", []),
+    ],
+    featureCount: 5, economicIntegrations: ["concord_coin"], emergentAccess: true, botAccess: true, usbIntegration: false,
+  },
+
+  veterinary: {
+    lensId: "veterinary",
+    lensNumber: 111,
+    category: "SPECIALIZED",
+    features: [
+      f("patient_records", "Patient Records", "Complete animal medical records with species-specific templates", "management", ["dtu"]),
+      f("appointment_scheduling", "Appointment Scheduling", "Clinic scheduling with procedure time estimation", "management", []),
+      f("pharmacy_management", "Pharmacy Management", "Veterinary pharmacy inventory and prescription tracking", "management", []),
+      f("lab_integration", "Lab Integration", "In-house and reference lab result tracking", "infrastructure", []),
+      f("boarding_management", "Boarding Management", "Pet boarding scheduling and care tracking", "management", []),
+    ],
+    featureCount: 5, economicIntegrations: ["concord_coin"], emergentAccess: true, botAccess: true, usbIntegration: false,
+  },
+
+  "law-enforcement": {
+    lensId: "law-enforcement",
+    lensNumber: 112,
+    category: "SPECIALIZED",
+    features: [
+      f("case_management", "Case Management", "Criminal and civil case tracking with evidence chain of custody", "management", ["concord_shield"]),
+      f("incident_dispatch", "Incident Dispatch", "Real-time incident tracking and officer dispatch", "infrastructure", []),
+      f("evidence_tracking", "Evidence Tracking", "Digital evidence management with tamper-proof DTU storage", "safety", ["dtu", "concord_shield"]),
+      f("patrol_management", "Patrol Management", "Beat assignment, route optimization and activity logging", "management", []),
+      f("warrant_tracking", "Warrant Tracking", "Active warrant management and service tracking", "management", []),
+    ],
+    featureCount: 5, economicIntegrations: ["concord_coin"], emergentAccess: false, botAccess: true, usbIntegration: false,
+  },
+
+  "emergency-services": {
+    lensId: "emergency-services",
+    lensNumber: 113,
+    category: "SPECIALIZED",
+    features: [
+      f("cad_dispatch", "CAD Dispatch", "Computer-aided dispatch with priority-based unit assignment", "infrastructure", []),
+      f("unit_tracking", "Unit Tracking", "Real-time apparatus and crew status management", "management", []),
+      f("incident_command", "Incident Command", "ICS-based incident command structure management", "safety", []),
+      f("mutual_aid", "Mutual Aid", "Inter-agency resource sharing and automatic aid tracking", "collaboration", []),
+      f("ems_protocols", "EMS Protocols", "Medical protocol reference with patient care reporting", "safety", ["dtu"]),
+    ],
+    featureCount: 5, economicIntegrations: ["concord_coin"], emergentAccess: true, botAccess: true, usbIntegration: false,
+  },
 };

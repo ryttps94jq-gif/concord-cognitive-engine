@@ -99,12 +99,12 @@ export default function ProjectsLensPage() {
 
   const handleSave = async () => {
     const data: Record<string, unknown> = { name: formName, type: activeArtifactType, status: formStatus, description: formDescription, notes: formNotes, priority: formPriority, assignee: formAssignee, startDate: formStartDate, endDate: formEndDate, budget: formBudget ? parseFloat(formBudget) : undefined, estimatedHours: formEstimatedHours ? parseFloat(formEstimatedHours) : undefined, methodology: formMethodology, client: formClient };
-    if (editingItem) await update({ id: editingItem.id, title: formName, data, meta: { tags: [], status: formStatus, visibility: 'private' } });
+    if (editingItem) await update(editingItem.id, { title: formName, data, meta: { tags: [], status: formStatus, visibility: 'private' } });
     else await create({ title: formName, data, meta: { tags: [], status: formStatus, visibility: 'private' } });
     setEditorOpen(false);
   };
 
-  if (isError) return <ErrorState error={error} onRetry={refetch} />;
+  if (isError) return <ErrorState error={error?.message} onRetry={refetch} />;
 
   const renderDashboard = () => {
     const all = items.map(i => i.data as unknown as ProjectArtifact);

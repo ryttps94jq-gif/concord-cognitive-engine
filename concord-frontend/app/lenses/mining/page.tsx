@@ -130,7 +130,7 @@ export default function MiningLensPage() {
   }
 
   return (
-    <div className={cn(ds.page, 'space-y-4')}>
+    <div className={cn(ds.pageContainer, 'space-y-4')}>
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-yellow-600/20 flex items-center justify-center">
@@ -210,7 +210,7 @@ export default function MiningLensPage() {
         )}
       </div>
 
-      <UniversalActions domain="mining" items={items} />
+      <UniversalActions domain="mining" artifactId={items[0]?.id} />
       <RealtimeDataPanel data={insights} />
 
       <div className="border-t border-white/10">

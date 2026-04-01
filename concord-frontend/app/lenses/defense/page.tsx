@@ -166,7 +166,7 @@ export default function DefenseLensPage() {
   }
 
   return (
-    <div className={cn(ds.page, 'space-y-4')}>
+    <div className={cn(ds.pageContainer, 'space-y-4')}>
       {/* Header */}
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -260,7 +260,7 @@ export default function DefenseLensPage() {
       </div>
 
       {/* Universal Actions */}
-      <UniversalActions domain="defense" items={items} />
+      <UniversalActions domain="defense" artifactId={items[0]?.id} />
 
       <RealtimeDataPanel data={insights} />
 

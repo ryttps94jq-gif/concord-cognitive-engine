@@ -778,6 +778,116 @@ export const LENS_MANIFESTS: LensManifest[] = [
     actions: ['coverageGap', 'premiumHistory', 'claimStatus', 'riskScore', 'renewalForecast', 'benefitComparison', 'fraudIndicator', 'lossRunReport'],
     category: 'finance',
   },
+
+  // === TRAVEL (Lens 61) ===
+  {
+    domain: 'travel',
+    label: 'Travel',
+    artifacts: ['trip', 'itinerary', 'booking', 'packing_list'],
+    macros: { list: 'lens.travel.list', get: 'lens.travel.get', create: 'lens.travel.create', update: 'lens.travel.update', delete: 'lens.travel.delete', run: 'lens.travel.run', export: 'lens.travel.export' },
+    exports: ['json', 'csv', 'pdf', 'ical'],
+    actions: ['planItinerary', 'budgetEstimate', 'packingChecklist', 'flightSearch', 'hotelCompare', 'travelAdvisory'],
+    category: 'lifestyle',
+  },
+
+  // === FASHION (Lens 62) ===
+  {
+    domain: 'fashion',
+    label: 'Fashion',
+    artifacts: ['garment', 'outfit', 'wardrobe', 'wishlist'],
+    macros: { list: 'lens.fashion.list', get: 'lens.fashion.get', create: 'lens.fashion.create', update: 'lens.fashion.update', delete: 'lens.fashion.delete', run: 'lens.fashion.run', export: 'lens.fashion.export' },
+    exports: ['json', 'csv', 'pdf'],
+    actions: ['outfitSuggest', 'seasonalRotation', 'donateList', 'styleAnalysis', 'wardrobeValue', 'colorPalette'],
+    category: 'lifestyle',
+  },
+
+  // === COOKING (Lens 63) ===
+  {
+    domain: 'cooking',
+    label: 'Cooking',
+    artifacts: ['recipe', 'mealplan', 'ingredient', 'technique'],
+    macros: { list: 'lens.cooking.list', get: 'lens.cooking.get', create: 'lens.cooking.create', update: 'lens.cooking.update', delete: 'lens.cooking.delete', run: 'lens.cooking.run', export: 'lens.cooking.export' },
+    exports: ['json', 'csv', 'pdf'],
+    actions: ['scaleRecipe', 'mealPlan', 'shoppingList', 'nutritionCalc', 'substitutions', 'pairings'],
+    category: 'lifestyle',
+  },
+
+  // === HOME IMPROVEMENT (Lens 64) ===
+  {
+    domain: 'home-improvement',
+    label: 'Home Improvement',
+    artifacts: ['project', 'material', 'contractor', 'inspection'],
+    macros: { list: 'lens.home-improvement.list', get: 'lens.home-improvement.get', create: 'lens.home-improvement.create', update: 'lens.home-improvement.update', delete: 'lens.home-improvement.delete', run: 'lens.home-improvement.run', export: 'lens.home-improvement.export' },
+    exports: ['json', 'csv', 'pdf'],
+    actions: ['costEstimate', 'permitCheck', 'contractorCompare', 'timeline', 'materialsCalc', 'beforeAfter'],
+    category: 'lifestyle',
+  },
+
+  // === PARENTING (Lens 65) ===
+  {
+    domain: 'parenting',
+    label: 'Parenting',
+    artifacts: ['milestone', 'schedule', 'health_record', 'activity'],
+    macros: { list: 'lens.parenting.list', get: 'lens.parenting.get', create: 'lens.parenting.create', update: 'lens.parenting.update', delete: 'lens.parenting.delete', run: 'lens.parenting.run', export: 'lens.parenting.export' },
+    exports: ['json', 'csv', 'pdf'],
+    actions: ['milestoneTracker', 'growthChart', 'vaccineSchedule', 'sleepAnalysis', 'developmentTips', 'schoolReadiness'],
+    category: 'lifestyle',
+  },
+
+  // === PETS (Lens 66) ===
+  {
+    domain: 'pets',
+    label: 'Pets',
+    artifacts: ['pet', 'vet_record', 'feeding_schedule', 'medication'],
+    macros: { list: 'lens.pets.list', get: 'lens.pets.get', create: 'lens.pets.create', update: 'lens.pets.update', delete: 'lens.pets.delete', run: 'lens.pets.run', export: 'lens.pets.export' },
+    exports: ['json', 'csv', 'pdf'],
+    actions: ['vetReminder', 'feedingPlan', 'medicationTracker', 'weightTrend', 'groomingSchedule', 'emergencyInfo'],
+    category: 'lifestyle',
+  },
+
+  // === SPORTS (Lens 67) ===
+  {
+    domain: 'sports',
+    label: 'Sports',
+    artifacts: ['game', 'team', 'player', 'training_session'],
+    macros: { list: 'lens.sports.list', get: 'lens.sports.get', create: 'lens.sports.create', update: 'lens.sports.update', delete: 'lens.sports.delete', run: 'lens.sports.run', export: 'lens.sports.export' },
+    exports: ['json', 'csv', 'pdf'],
+    actions: ['seasonStats', 'playerCompare', 'trainingPlan', 'matchPreview', 'standingsCalc', 'injuryTracker'],
+    category: 'lifestyle',
+  },
+
+  // === DIY (Lens 68) ===
+  {
+    domain: 'diy',
+    label: 'DIY',
+    artifacts: ['project', 'material', 'tool', 'technique'],
+    macros: { list: 'lens.diy.list', get: 'lens.diy.get', create: 'lens.diy.create', update: 'lens.diy.update', delete: 'lens.diy.delete', run: 'lens.diy.run', export: 'lens.diy.export' },
+    exports: ['json', 'csv', 'pdf'],
+    actions: ['materialsList', 'costEstimate', 'stepByStep', 'toolSuggestion', 'difficultyAssess', 'timeEstimate'],
+    category: 'lifestyle',
+  },
+
+  // === DEBATE (Lens 76) ===
+  {
+    domain: 'debate',
+    label: 'Debate',
+    artifacts: ['debate', 'argument', 'rebuttal', 'verdict'],
+    macros: { list: 'lens.debate.list', get: 'lens.debate.get', create: 'lens.debate.create', update: 'lens.debate.update', delete: 'lens.debate.delete', run: 'lens.debate.run', export: 'lens.debate.export' },
+    exports: ['json', 'csv', 'pdf'],
+    actions: ['factCheck', 'counterArgument', 'logicAnalysis', 'biasDetect', 'summarize', 'moderateDebate'],
+    category: 'social',
+  },
+
+  // === MENTORSHIP (Lens 77) ===
+  {
+    domain: 'mentorship',
+    label: 'Mentorship',
+    artifacts: ['relation', 'session_note', 'goal', 'feedback'],
+    macros: { list: 'lens.mentorship.list', get: 'lens.mentorship.get', create: 'lens.mentorship.create', update: 'lens.mentorship.update', delete: 'lens.mentorship.delete', run: 'lens.mentorship.run', export: 'lens.mentorship.export' },
+    exports: ['json', 'csv', 'pdf'],
+    actions: ['matchMentor', 'progressReport', 'goalSetting', 'sessionPrep', 'feedbackSummary', 'skillGapAnalysis'],
+    category: 'social',
+  },
 ];
 
 // ---- Lookup helpers ----

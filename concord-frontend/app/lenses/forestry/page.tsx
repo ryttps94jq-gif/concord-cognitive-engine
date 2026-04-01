@@ -9,10 +9,10 @@ import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import {
-  Sun, Plus, Search, Trash2, BarChart3,
+  TreePine, Plus, Search, Trash2, BarChart3,
   Layers, ChevronDown, MapPin, Users,
-  Thermometer, Wind, Droplets, Mountain,
-  Eye, AlertTriangle, Navigation, Compass,
+  Leaf, Flame, Droplets, Bug,
+  Eye, AlertTriangle, Mountain, Ruler,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -20,77 +20,86 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 
-type ModeTab = 'Dashboard' | 'Expeditions' | 'Climate' | 'Resources' | 'Wildlife' | 'Infrastructure' | 'Hazards';
+type ModeTab = 'Dashboard' | 'Stands' | 'Harvest' | 'Fire' | 'Wildlife' | 'Replanting' | 'Inventory';
 
-interface ExpeditionData {
+interface StandData {
   name: string;
-  status: 'planning' | 'active' | 'completed' | 'aborted';
-  region: string;
-  terrain: 'sand' | 'rocky' | 'salt_flat' | 'oasis' | 'canyon' | 'plateau';
+  species: string[];
+  age: number;
+  area: number;
+  density: number;
+  status: 'mature' | 'growing' | 'harvested' | 'replanted' | 'protected';
+  siteIndex: number;
+  volume: number;
+  basal: number;
+  elevation: number;
+  terrain: string;
+  lastInventory: string;
+}
+
+interface HarvestData {
+  block: string;
+  method: 'clearcut' | 'selective' | 'shelterwood' | 'seed_tree' | 'salvage';
+  status: 'planned' | 'active' | 'completed' | 'suspended';
+  volume: number;
+  area: number;
   startDate: string;
   endDate: string;
-  teamSize: number;
-  objective: string;
-  waterSupplyDays: number;
-  temperatureHigh: number;
-  temperatureLow: number;
+  crew: string;
+  equipment: string[];
+  species: string[];
+  destination: string;
 }
 
-interface ClimateData {
-  station: string;
-  region: string;
-  temperature: number;
-  humidity: number;
-  windSpeed: number;
-  windDirection: string;
-  sandstormRisk: 'low' | 'moderate' | 'high' | 'extreme';
-  uvIndex: number;
-  precipitation: number;
-  lastUpdated: string;
-}
-
-interface ResourceData {
-  type: 'water' | 'solar' | 'mineral' | 'geothermal' | 'archaeological';
+interface FireData {
   name: string;
+  status: 'detected' | 'contained' | 'controlled' | 'extinguished' | 'monitoring';
+  type: 'wildfire' | 'prescribed' | 'spot';
+  cause: string;
+  areaAffected: number;
+  containment: number;
+  risk: 'low' | 'moderate' | 'high' | 'extreme';
   location: string;
-  status: 'surveyed' | 'active' | 'depleted' | 'protected';
-  capacity: string;
-  extraction: string;
-  sustainability: 'sustainable' | 'at_risk' | 'critical';
+  detectedAt: string;
+  resources: string[];
 }
 
-type ArtifactDataUnion = ExpeditionData | ClimateData | ResourceData | Record<string, unknown>;
+type ArtifactDataUnion = StandData | HarvestData | FireData | Record<string, unknown>;
 
-const MODE_TABS: { key: ModeTab; label: string; icon: typeof Sun }[] = [
+const MODE_TABS: { key: ModeTab; label: string; icon: typeof TreePine }[] = [
   { key: 'Dashboard', label: 'Dashboard', icon: BarChart3 },
-  { key: 'Expeditions', label: 'Expeditions', icon: Compass },
-  { key: 'Climate', label: 'Climate', icon: Thermometer },
-  { key: 'Resources', label: 'Resources', icon: Droplets },
-  { key: 'Wildlife', label: 'Wildlife', icon: Eye },
-  { key: 'Infrastructure', label: 'Infrastructure', icon: Mountain },
-  { key: 'Hazards', label: 'Hazards', icon: AlertTriangle },
+  { key: 'Stands', label: 'Stands', icon: TreePine },
+  { key: 'Harvest', label: 'Harvest', icon: Ruler },
+  { key: 'Fire', label: 'Fire Mgmt', icon: Flame },
+  { key: 'Wildlife', label: 'Wildlife', icon: Bug },
+  { key: 'Replanting', label: 'Replanting', icon: Leaf },
+  { key: 'Inventory', label: 'Inventory', icon: Mountain },
 ];
 
 function getTypeForTab(tab: ModeTab): string {
   const map: Record<ModeTab, string> = {
-    Dashboard: 'Expedition', Expeditions: 'Expedition', Climate: 'Climate',
-    Resources: 'Resource', Wildlife: 'Wildlife', Infrastructure: 'Infrastructure', Hazards: 'Hazard',
+    Dashboard: 'Stand', Stands: 'Stand', Harvest: 'Harvest',
+    Fire: 'Fire', Wildlife: 'Wildlife', Replanting: 'Replanting', Inventory: 'Inventory',
   };
   return map[tab];
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  planning: 'text-blue-400 bg-blue-400/10', active: 'text-green-400 bg-green-400/10',
-  completed: 'text-gray-400 bg-gray-400/10', aborted: 'text-red-400 bg-red-400/10',
-  surveyed: 'text-blue-400 bg-blue-400/10', depleted: 'text-red-400 bg-red-400/10',
-  protected: 'text-green-400 bg-green-400/10',
+  mature: 'text-green-400 bg-green-400/10', growing: 'text-lime-400 bg-lime-400/10',
+  harvested: 'text-yellow-400 bg-yellow-400/10', replanted: 'text-blue-400 bg-blue-400/10',
+  protected: 'text-purple-400 bg-purple-400/10', planned: 'text-blue-400 bg-blue-400/10',
+  active: 'text-green-400 bg-green-400/10', completed: 'text-gray-400 bg-gray-400/10',
+  suspended: 'text-orange-400 bg-orange-400/10',
+  detected: 'text-red-500 bg-red-500/10', contained: 'text-orange-400 bg-orange-400/10',
+  controlled: 'text-yellow-400 bg-yellow-400/10', extinguished: 'text-gray-400 bg-gray-400/10',
+  monitoring: 'text-blue-400 bg-blue-400/10',
   low: 'text-green-400 bg-green-400/10', moderate: 'text-yellow-400 bg-yellow-400/10',
   high: 'text-orange-400 bg-orange-400/10', extreme: 'text-red-400 bg-red-400/10',
 };
 
-export default function DesertLensPage() {
-  useLensNav('desert');
-  const { latestData: realtimeData, isLive, lastUpdated, insights } = useRealtimeLens('desert');
+export default function ForestryLensPage() {
+  useLensNav('forestry');
+  const { latestData: realtimeData, isLive, lastUpdated, insights } = useRealtimeLens('forestry');
 
   const [activeMode, setActiveMode] = useState<ModeTab>('Dashboard');
   const [searchQuery, setSearchQuery] = useState('');
@@ -98,27 +107,27 @@ export default function DesertLensPage() {
 
   const currentType = getTypeForTab(activeMode);
   const { items, isLoading, isError, error, refetch, create, remove } =
-    useLensData<ArtifactDataUnion>('desert', currentType, { search: searchQuery || undefined });
+    useLensData<ArtifactDataUnion>('forestry', currentType, { search: searchQuery || undefined });
 
-  const { items: expeditions } = useLensData<ExpeditionData>('desert', 'Expedition', { seed: [] });
-  const { items: climate } = useLensData<ClimateData>('desert', 'Climate', { seed: [] });
-  const { items: resources } = useLensData<ResourceData>('desert', 'Resource', { seed: [] });
+  const { items: stands } = useLensData<StandData>('forestry', 'Stand', { seed: [] });
+  const { items: fires } = useLensData<FireData>('forestry', 'Fire', { seed: [] });
+  const { items: harvests } = useLensData<HarvestData>('forestry', 'Harvest', { seed: [] });
 
-  const runAction = useRunArtifact('desert');
+  const runAction = useRunArtifact('forestry');
 
   const stats = useMemo(() => ({
-    activeExpeditions: expeditions.filter(e => (e.data as ExpeditionData).status === 'active').length,
-    totalExpeditions: expeditions.length,
-    highHazardStations: climate.filter(c => ['high', 'extreme'].includes((c.data as ClimateData).sandstormRisk)).length,
-    activeResources: resources.filter(r => (r.data as ResourceData).status === 'active').length,
-  }), [expeditions, climate, resources]);
+    totalStands: stands.length,
+    matureStands: stands.filter(s => (s.data as StandData).status === 'mature').length,
+    activeFires: fires.filter(f => ['detected', 'contained'].includes((f.data as FireData).status)).length,
+    activeHarvests: harvests.filter(h => (h.data as HarvestData).status === 'active').length,
+  }), [stands, fires, harvests]);
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full p-8">
         <div className="text-center space-y-3">
-          <div className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-sm text-gray-400">Loading desert operations...</p>
+          <div className="w-8 h-8 border-2 border-green-600 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading forestry data...</p>
         </div>
       </div>
     );
@@ -132,17 +141,17 @@ export default function DesertLensPage() {
     <div className={cn(ds.pageContainer, 'space-y-4')}>
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
-            <Sun className="w-5 h-5 text-amber-400" />
+          <div className="w-10 h-10 rounded-lg bg-green-600/20 flex items-center justify-center">
+            <TreePine className="w-5 h-5 text-green-500" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-white">Desert Operations</h1>
-            <p className="text-sm text-gray-400">Expeditions, climate monitoring, resources & hazards</p>
+            <h1 className="text-xl font-bold text-white">Forestry Management</h1>
+            <p className="text-sm text-gray-400">Timber stands, harvest planning, fire management & wildlife</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} compact />
-          <DTUExportButton domain="desert" data={realtimeData || {}} compact />
+          <DTUExportButton domain="forestry" data={realtimeData || {}} compact />
         </div>
       </header>
 
@@ -163,7 +172,7 @@ export default function DesertLensPage() {
             placeholder={`Search ${currentType.toLowerCase()}s...`}
             className="w-full pl-9 pr-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-sm text-white placeholder-gray-500" />
         </div>
-        <button onClick={() => create({ title: `New ${currentType}`, data: {} })} className="flex items-center gap-2 px-3 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-sm">
+        <button onClick={() => create({ title: `New ${currentType}`, data: {} })} className="flex items-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg text-sm">
           <Plus className="w-4 h-4" /> New {currentType}
         </button>
       </div>
@@ -171,9 +180,9 @@ export default function DesertLensPage() {
       {activeMode === 'Dashboard' && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
-            { label: 'Active Expeditions', value: stats.activeExpeditions, total: stats.totalExpeditions, color: 'green' },
-            { label: 'High Hazard Zones', value: stats.highHazardStations, total: climate.length, color: 'red' },
-            { label: 'Active Resources', value: stats.activeResources, total: resources.length, color: 'amber' },
+            { label: 'Mature Stands', value: stats.matureStands, total: stats.totalStands, color: 'green' },
+            { label: 'Active Fires', value: stats.activeFires, total: fires.length, color: 'red' },
+            { label: 'Active Harvests', value: stats.activeHarvests, total: harvests.length, color: 'yellow' },
           ].map(s => (
             <div key={s.label} className="p-3 bg-zinc-900 rounded-lg border border-zinc-800">
               <p className={`text-2xl font-bold text-${s.color}-400`}>{s.value}</p>
@@ -204,13 +213,13 @@ export default function DesertLensPage() {
         ))}
         {items.length === 0 && (
           <div className="text-center py-12 text-gray-500">
-            <Sun className="w-10 h-10 mx-auto mb-3 opacity-30" />
-            <p>No {currentType.toLowerCase()}s found</p>
+            <TreePine className="w-10 h-10 mx-auto mb-3 opacity-30" />
+            <p>No {currentType.toLowerCase()} records found</p>
           </div>
         )}
       </div>
 
-      <UniversalActions domain="desert" artifactId={items[0]?.id} />
+      <UniversalActions domain="forestry" artifactId={items[0]?.id} />
       <RealtimeDataPanel data={insights} />
 
       <div className="border-t border-white/10">
@@ -219,7 +228,7 @@ export default function DesertLensPage() {
           <span className="flex items-center gap-2"><Layers className="w-4 h-4" /> Lens Features</span>
           <ChevronDown className={cn('w-4 h-4 transition-transform', showFeatures && 'rotate-180')} />
         </button>
-        {showFeatures && <div className="px-4 pb-4"><LensFeaturePanel lensId="desert" /></div>}
+        {showFeatures && <div className="px-4 pb-4"><LensFeaturePanel lensId="forestry" /></div>}
       </div>
     </div>
   );
