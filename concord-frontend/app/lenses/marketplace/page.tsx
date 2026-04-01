@@ -861,7 +861,7 @@ export default function MarketplaceLensPage() {
             {CATEGORIES.map(c => (
               <button key={c.id} onClick={() => setCategory(c.id)}
                 className={cn('px-3 py-1.5 rounded-full text-sm font-medium flex items-center gap-1.5 transition-colors border',
-                  category === c.id ? 'bg-neon-purple/20 border-neon-purple/50 text-neon-purple' : 'bg-lattice-surface border-lattice-border text-gray-400 hover:text-white hover:border-gray-500')}>
+                  category === c.id ? 'bg-amber-500/20 border-amber-500/50 text-amber-400' : 'bg-lattice-surface border-lattice-border text-gray-400 hover:text-white hover:border-amber-500/30')}>
                 <c.icon className="w-3.5 h-3.5" /> {c.name}
               </button>
             ))}

@@ -2193,14 +2193,14 @@ export default function TradesLensPage() {
   }
 
   return (
-    <div className={ds.pageContainer}>
+    <div className={cn(ds.pageContainer, 'lens-trades')} data-lens-theme="trades">
       {/* Header */}
       <header className={ds.sectionHeader}>
         <div className="flex items-center gap-3">
-          <HardHat className="w-8 h-8 text-yellow-400" />
+          <HardHat className="w-8 h-8 text-teal-400" />
           <div>
             <div className="flex items-center gap-2">
-              <h1 className={ds.heading1}>Trades & Construction</h1>
+              <h1 className={cn(ds.heading1, 'text-slate-100')}>Trades & Construction</h1>
               <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} />
             </div>
             <p className={ds.textMuted}>Manage jobs, estimates, materials, permits, equipment, and clients</p>

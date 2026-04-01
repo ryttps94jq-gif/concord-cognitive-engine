@@ -767,8 +767,8 @@ export default function StudioLensPage() {
   // ---- Render: No project ----
   if (!project) {
     return (
-      <div className="h-full flex flex-col bg-gradient-to-b from-cyan-900/10 to-black">
-        <div className="flex items-center justify-between border-b border-white/10 px-6 py-3">
+      <div className="h-full flex flex-col bg-gradient-to-b from-violet-950/20 via-black to-black" data-lens-theme="studio">
+        <div className="flex items-center justify-between border-b border-violet-500/10 px-6 py-3">
           <div className="flex items-center gap-2">
             <Headphones className="w-6 h-6 text-neon-cyan" />
             <h1 className="text-xl font-bold">Studio</h1>
@@ -874,7 +874,7 @@ export default function StudioLensPage() {
 
   // ---- Render: Active project ----
   return (
-    <div className="h-full flex flex-col bg-gradient-to-b from-cyan-900/10 to-black">
+    <div className="lens-studio h-full flex flex-col bg-gradient-to-b from-violet-950/20 via-black to-black" data-lens-theme="studio">
       {/* Transport Bar */}
       <TransportBar
         transportState={transportState}

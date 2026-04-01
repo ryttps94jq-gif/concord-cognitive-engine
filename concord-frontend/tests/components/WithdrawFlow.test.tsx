@@ -210,7 +210,7 @@ describe('WithdrawFlow', () => {
     });
 
     await waitFor(() => {
-      expect(mockedApi.post).toHaveBeenCalledWith('/api/billing/withdraw', {
+      expect(mockedApi.post).toHaveBeenCalledWith('/api/economy/withdraw', {
         amount: 100,
       });
     });
