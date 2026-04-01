@@ -479,7 +479,7 @@ function TierBreakdown({ dtus }: { dtus: DTUSummary[] }) {
   const total = dtus.length || 1;
 
   return (
-    <div className="space-y-3">
+    <div data-lens-theme="analytics" className="space-y-3">
       {Object.entries(tierCounts).map(([tier, count]) => {
         const pct = (count / total) * 100;
         return (

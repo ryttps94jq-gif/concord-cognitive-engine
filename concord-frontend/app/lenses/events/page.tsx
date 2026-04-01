@@ -1572,7 +1572,7 @@ export default function EventsLensPage() {
   // Main return
   // ---------------------------------------------------------------------------
   return (
-    <div className={ds.pageContainer}>
+    <div data-lens-theme="events" className={ds.pageContainer}>
       {/* Header */}
       <header className={ds.sectionHeader}>
         <div className="flex items-center gap-3">

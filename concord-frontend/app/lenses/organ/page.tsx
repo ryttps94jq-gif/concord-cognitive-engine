@@ -526,7 +526,7 @@ function MetricBar({ label, value, color }: { label: string; value: number; colo
 
 function GaugeBar({ value, color }: { value: number; color: string }) {
   return (
-    <div className="h-1 bg-lattice-deep rounded-full overflow-hidden mt-2">
+    <div data-lens-theme="organ" className="h-1 bg-lattice-deep rounded-full overflow-hidden mt-2">
       <div className={`h-full ${color} transition-all`} style={{ width: `${value * 100}%` }} />
     </div>
   );

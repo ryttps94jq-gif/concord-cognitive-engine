@@ -241,7 +241,7 @@ function RealityExplorerSection() {
   }> | undefined;
 
   return (
-    <div className="panel p-4 space-y-4">
+    <div data-lens-theme="lab" className="panel p-4 space-y-4">
       <h2 className="font-semibold flex items-center gap-2">
         <Search className="w-4 h-4 text-neon-cyan" />
         Adjacent Reality Explorer

@@ -357,7 +357,7 @@ export default function VoiceLensPage() {
     );
   }
   return (
-    <div className="h-[calc(100vh-4rem)] flex flex-col bg-gradient-to-b from-purple-900/10 to-black">
+    <div data-lens-theme="voice" className="h-[calc(100vh-4rem)] flex flex-col bg-gradient-to-b from-purple-900/10 to-black">
       {/* Header */}
       <header className="flex items-center justify-between px-6 py-3 border-b border-lattice-border bg-black/40">
         <div className="flex items-center gap-3">

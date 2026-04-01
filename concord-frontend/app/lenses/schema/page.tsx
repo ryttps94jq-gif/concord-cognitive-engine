@@ -232,7 +232,7 @@ function CreateSchemaModal({ onClose, onCreate, creating }: { onClose: () => voi
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div data-lens-theme="schema" className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-lattice-bg border border-lattice-border rounded-lg p-6 w-full max-w-lg space-y-4 max-h-[80vh] overflow-y-auto">
         <h2 className="text-lg font-bold">Create Schema</h2>
         <input

@@ -257,7 +257,7 @@ export default function TimelineLensPage() {
     );
   }
   return (
-    <div className="min-h-full bg-[#18191a]">
+    <div data-lens-theme="timeline" className="min-h-full bg-[#18191a]">
       <div className="max-w-7xl mx-auto px-4 pt-4">
         <div className="bg-[#242526] rounded-lg p-3 flex items-center justify-between text-sm">
           <span className="text-gray-300">Timeline defaults to 30 posts for speed.</span>

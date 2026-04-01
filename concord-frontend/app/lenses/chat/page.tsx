@@ -1281,7 +1281,7 @@ export default function ChatLensPage() {
   // ──────────────────────────────────────────────
 
   return (
-    <div className="h-full flex flex-col bg-lattice-bg">
+    <div data-lens-theme="chat" className="h-full flex flex-col bg-lattice-bg">
       {/* Real-time Enhancement Toolbar */}
       <div className="flex items-center gap-2 px-4 py-1 border-b border-lattice-border/30 flex-wrap">
         <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} compact />

@@ -279,7 +279,7 @@ export default function DefenseLensPage() {
 
 function StatCard({ label, value, total, color }: { label: string; value: number; total: number; color: string }) {
   return (
-    <div className="p-3 bg-zinc-900 rounded-lg border border-zinc-800">
+    <div data-lens-theme="defense" className="p-3 bg-zinc-900 rounded-lg border border-zinc-800">
       <p className={`text-2xl font-bold text-${color}-400`}>{value}</p>
       <p className="text-xs text-gray-400">{label}</p>
       <p className="text-xs text-gray-600">of {total} total</p>

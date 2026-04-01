@@ -967,7 +967,7 @@ function MacroExplorerPanel() {
   }
 
   return (
-    <div className="px-4 pb-4 space-y-4">
+    <div data-lens-theme="admin" className="px-4 pb-4 space-y-4">
       {/* Header with stats */}
       <div className="flex items-center justify-between">
         <p className="text-xs text-gray-400">{totalMacros} macros across {domainCount} domains</p>

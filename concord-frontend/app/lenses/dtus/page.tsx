@@ -104,7 +104,7 @@ export default function DTUBrowserPage() {
   }, [queryClient, refetch]);
 
   return (
-    <div className="min-h-screen bg-lattice-void text-white">
+    <div data-lens-theme="dtus" className="min-h-screen bg-lattice-void text-white">
       {/* Header */}
       <header className="sticky top-0 z-30 bg-lattice-surface/80 backdrop-blur border-b border-lattice-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">

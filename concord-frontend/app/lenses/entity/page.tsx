@@ -717,7 +717,7 @@ function CognitiveEntityPanel({ entityId, entityName, onClose }: { entityId: str
   });
 
   return (
-    <div className="panel p-4 space-y-4 border-2 border-neon-cyan mt-4">
+    <div data-lens-theme="entity" className="panel p-4 space-y-4 border-2 border-neon-cyan mt-4">
       <div className="flex items-center justify-between">
         <h3 className="font-semibold flex items-center gap-2">
           <Cpu className="w-4 h-4 text-neon-cyan" />

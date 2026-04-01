@@ -147,7 +147,7 @@ export default function PhilosophyLensPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="philosophy" className="p-6 space-y-6">
       <header className="flex items-center gap-3">
         <BookOpen className="w-6 h-6 text-neon-purple" />
         <div>

@@ -186,7 +186,7 @@ export default function LinguisticsLensPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="linguistics" className="p-6 space-y-6">
       <header className="flex items-center gap-3">
         <Languages className="w-6 h-6 text-pink-400" />
         <div>

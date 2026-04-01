@@ -50,7 +50,7 @@ export default function FractalLensPage() {
     );
   }
   return (
-    <div className="p-6 space-y-6 h-full flex flex-col">
+    <div data-lens-theme="fractal" className="p-6 space-y-6 h-full flex flex-col">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-2xl">🌀</span>

@@ -1126,7 +1126,7 @@ export default function CalendarLensPage() {
     );
   }
   return (
-    <div className="h-[calc(100vh-4rem)] flex flex-col">
+    <div data-lens-theme="calendar" className="h-[calc(100vh-4rem)] flex flex-col">
       {/* Header */}
       <header className="flex items-center justify-between px-4 py-3 border-b border-lattice-border">
         <div className="flex items-center gap-4">

@@ -459,7 +459,7 @@ function FormatCard({ icon: Icon, color, label, type, desc, size, mime }: {
   mime: string;
 }) {
   return (
-    <div className={`bg-black/40 border border-white/10 rounded-lg p-4 hover:border-${color}/30 transition-all group`}>
+    <div data-lens-theme="export" className={`bg-black/40 border border-white/10 rounded-lg p-4 hover:border-${color}/30 transition-all group`}>
       <div className="flex items-center gap-3 mb-3">
         <div className={`p-3 bg-${color}/10 rounded-lg group-hover:bg-${color}/20 transition-colors`}>
           <Icon className={`w-6 h-6 text-${color}`} />

@@ -496,7 +496,7 @@ function StatCard({
   trend?: '+' | '-';
 }) {
   return (
-    <div className="lens-card">
+    <div data-lens-theme="market" className="lens-card">
       <div className="flex items-center justify-between">
         <span className="text-neon-green">{icon}</span>
         <div className="flex items-center gap-1">

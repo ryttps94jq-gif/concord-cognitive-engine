@@ -297,7 +297,7 @@ export default function ImportLens() {
     );
   }
   return (
-    <div className="lens-container">
+    <div data-lens-theme="import" className="lens-container">
       <div className="lens-header">
         <div className="flex items-center gap-3">
           <Upload className="w-8 h-8 text-neon-blue" />

@@ -314,7 +314,7 @@ export default function DailyLensPage() {
     );
   }
   return (
-    <div className="h-[calc(100vh-4rem)] flex bg-lattice-deep text-white overflow-hidden">
+    <div data-lens-theme="daily" className="h-[calc(100vh-4rem)] flex bg-lattice-deep text-white overflow-hidden">
       {/* =================== LEFT SIDEBAR =================== */}
       <aside className="w-72 border-r border-lattice-border bg-lattice-surface/40 flex flex-col shrink-0">
         {/* Mini calendar */}

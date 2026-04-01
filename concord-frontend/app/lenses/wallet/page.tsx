@@ -300,7 +300,7 @@ function WalletPageInner() {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className={cn(ds.pageContainer, 'max-w-6xl mx-auto')} ref={scrollRef}>
+    <div data-lens-theme="wallet" className={cn(ds.pageContainer, 'max-w-6xl mx-auto')} ref={scrollRef}>
       {/* Page Header */}
       <div className={ds.sectionHeader}>
         <div className="flex items-center gap-3">

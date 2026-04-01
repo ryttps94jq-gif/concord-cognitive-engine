@@ -428,7 +428,7 @@ export default function ExperienceLensPage() {
     );
   }
   return (
-    <div className="p-6 space-y-6 max-w-6xl mx-auto">
+    <div data-lens-theme="experience" className="p-6 space-y-6 max-w-6xl mx-auto">
       {/* ========== Header ========== */}
       <motion.header
         className="flex items-center justify-between"

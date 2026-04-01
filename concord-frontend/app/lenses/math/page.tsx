@@ -330,7 +330,7 @@ export default function MathLensPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="math" className="p-6 space-y-6">
       <header className="flex items-center gap-3">
         <Calculator className="w-7 h-7 text-neon-blue" />
         <div>

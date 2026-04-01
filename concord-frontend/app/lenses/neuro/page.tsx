@@ -77,7 +77,7 @@ export default function NeuroLensPage() {
     );
   }
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="neuro" className="p-6 space-y-6">
       <header className="flex items-center gap-3">
         <span className="text-2xl">🧠</span>
         <div>

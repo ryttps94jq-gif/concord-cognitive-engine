@@ -127,7 +127,7 @@ export default function AppMakerLens() {
   };
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6">
+    <div data-lens-theme="app-maker" className="p-6 max-w-4xl mx-auto space-y-6">
       <div className="flex items-center gap-3">
         <Boxes className="w-6 h-6 text-neon-cyan" />
         <h1 className="text-xl font-bold">App Maker</h1>

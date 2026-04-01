@@ -168,7 +168,7 @@ export default function SupplyChainLensPage() {
   );
 
   return (
-    <div className="space-y-6 p-6">
+    <div data-lens-theme="supplychain" className="space-y-6 p-6">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-500 to-cyan-600 flex items-center justify-center"><Truck className="w-5 h-5 text-white" /></div>

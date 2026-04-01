@@ -1541,7 +1541,7 @@ function CitationDetailFields({ item, citationStyle }: { item: LensItem; citatio
   const formatted = formatCitation({ ...d, title: item.title }, citationStyle);
   return (
     <>
-      <div>
+      <div data-lens-theme="paper">
         <span className={ds.label}>Formatted Citation ({citationStyle?.toUpperCase()})</span>
         <p className="text-sm text-gray-300 italic mt-1">{formatted}</p>
       </div>

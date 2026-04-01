@@ -64,7 +64,7 @@ export default function GlobalLensPage() {
   }
 
   return (
-    <div className="p-6 space-y-5">
+    <div data-lens-theme="global" className="p-6 space-y-5">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs uppercase text-gray-400 tracking-wider">Truth Lens</p>

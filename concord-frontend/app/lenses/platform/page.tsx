@@ -281,7 +281,7 @@ export default function PlatformPage() {
   const { events, connected } = usePlatformEvents();
 
   return (
-    <div className="min-h-screen bg-lattice-void text-gray-200">
+    <div data-lens-theme="platform" className="min-h-screen bg-lattice-void text-gray-200">
       {/* Top Bar */}
       <div className="border-b border-lattice-border bg-lattice-deep/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 py-3">

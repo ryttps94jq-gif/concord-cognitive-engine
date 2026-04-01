@@ -1351,7 +1351,7 @@ export default function CouncilLensPage() {
 
   // ===== MAIN RENDER =====
   return (
-    <div className={ds.pageContainer}>
+    <div data-lens-theme="council" className={ds.pageContainer}>
       {/* Header */}
       <header>
         <div className="flex items-center justify-between">

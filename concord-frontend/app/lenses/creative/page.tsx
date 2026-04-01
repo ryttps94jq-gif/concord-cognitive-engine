@@ -1370,7 +1370,7 @@ export default function CreativeLensPage() {
   // Main Render
   // ---------------------------------------------------------------------------
   return (
-    <div className={ds.pageContainer}>
+    <div data-lens-theme="creative" className={ds.pageContainer}>
       {/* Header */}
       <header className={ds.sectionHeader}>
         <div className="flex items-center gap-3">

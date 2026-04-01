@@ -298,7 +298,7 @@ export default function CollabLensPage() {
     );
   }
   return (
-    <div className="p-6 space-y-5 max-w-[1440px] mx-auto">
+    <div data-lens-theme="collab" className="p-6 space-y-5 max-w-[1440px] mx-auto">
       {/* Header */}
       <header className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-3">

@@ -145,7 +145,7 @@ export default function PoetryPage() {
   ];
 
   return (
-    <div className="min-h-screen">
+    <div data-lens-theme="poetry" className="min-h-screen">
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">

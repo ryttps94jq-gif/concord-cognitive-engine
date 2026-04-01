@@ -285,7 +285,7 @@ function MetricCard({
   };
 
   return (
-    <div className="lens-card">
+    <div data-lens-theme="suffering" className="lens-card">
       <div className="flex items-center justify-between mb-3">
         <span className={colors[color]}>{icon}</span>
         <span className={`text-xl font-bold ${colors[color]}`}>

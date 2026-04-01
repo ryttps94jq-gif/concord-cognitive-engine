@@ -91,7 +91,7 @@ export default function DIYLensPage() {
   if (isError) return <div className="flex items-center justify-center h-full p-8"><ErrorState error={error?.message} onRetry={refetch} /></div>;
 
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="diy" className="p-6 space-y-6">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Wrench className="w-6 h-6 text-orange-400" />

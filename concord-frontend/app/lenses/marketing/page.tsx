@@ -354,7 +354,7 @@ export default function MarketingLensPage() {
   /* ------------------------------------------------------------------ */
 
   return (
-    <div className="space-y-6 p-6">
+    <div data-lens-theme="marketing" className="space-y-6 p-6">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center">

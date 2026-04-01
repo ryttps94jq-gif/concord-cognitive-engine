@@ -297,7 +297,7 @@ export default function SRSLensPage() {
     );
   }
   return (
-    <div className="min-h-full bg-lattice-bg">
+    <div data-lens-theme="srs" className="min-h-full bg-lattice-bg">
       {/* Header */}
       <header className="sticky top-0 z-10 bg-lattice-surface border-b border-lattice-border">
         <div className="max-w-6xl mx-auto px-4 py-3">

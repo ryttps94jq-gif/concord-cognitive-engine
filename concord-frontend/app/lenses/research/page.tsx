@@ -177,7 +177,7 @@ export default function ResearchLensPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="research" className="p-6 space-y-6">
       <header className="flex items-center gap-3">
         <BookOpen className="w-6 h-6 text-neon-cyan" />
         <div>

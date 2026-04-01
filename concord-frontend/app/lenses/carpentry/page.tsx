@@ -182,7 +182,7 @@ export default function CarpentryLensPage() {
   );
 
   return (
-    <div className="space-y-6 p-6">
+    <div data-lens-theme="carpentry" className="space-y-6 p-6">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-600 to-yellow-700 flex items-center justify-center"><Hammer className="w-5 h-5 text-white" /></div>

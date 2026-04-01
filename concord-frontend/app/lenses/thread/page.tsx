@@ -293,7 +293,7 @@ export default function ThreadLensPage() {
     );
   }
   return (
-    <div className="h-[calc(100vh-4rem)] flex flex-col">
+    <div data-lens-theme="thread" className="h-[calc(100vh-4rem)] flex flex-col">
       <header className="flex items-center justify-between p-4 border-b border-lattice-border">
         <div className="flex items-center gap-3">
           <span className="text-2xl">🧵</span>

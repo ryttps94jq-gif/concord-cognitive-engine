@@ -157,7 +157,7 @@ export default function MetaLensPage() {
     );
   }
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="meta" className="p-6 space-y-6">
       <header className="flex items-center gap-3">
         <span className="text-2xl">&#x1F528;</span>
         <div>

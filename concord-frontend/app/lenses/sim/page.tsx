@@ -2001,7 +2001,7 @@ function ModelsTab({
   const categories = Array.from(new Set(templates.map(t => t.category)));
 
   return (
-    <div className="space-y-6">
+    <div data-lens-theme="sim" className="space-y-6">
       {categories.map(category => (
         <div key={category}>
           <h3 className={cn(ds.heading3, 'mb-3 flex items-center gap-2')}>

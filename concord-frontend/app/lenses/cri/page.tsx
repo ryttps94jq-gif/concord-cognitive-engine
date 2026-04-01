@@ -135,7 +135,7 @@ export default function CRILensPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="cri" className="p-6 space-y-6">
       <header className="flex items-center gap-3">
         <BarChart3 className="w-6 h-6 text-neon-cyan" />
         <div>

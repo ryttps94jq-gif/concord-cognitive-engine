@@ -809,7 +809,7 @@ function ResultsDashboard({
   }, [proposals]);
 
   return (
-    <div className="space-y-6">
+    <div data-lens-theme="vote" className="space-y-6">
       {/* Overview Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="lens-card">
