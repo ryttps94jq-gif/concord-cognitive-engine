@@ -59,6 +59,7 @@ export function DTUDetailModal({ dtu, isOpen, onClose, onNavigate }: DTUDetailMo
             <div>
               <h2 className="font-semibold flex items-center gap-2">
                 {config.label}
+                <TierBadge tier={dtu.tier} size="sm" />
                 <ProvenanceBadge source={dtu.source} model={dtu.meta?.model as string} authority={dtu.meta?.authority as string} />
               </h2>
               <p className="text-xs text-gray-500 font-mono">{dtu.id}</p>
@@ -133,6 +134,26 @@ export function DTUDetailModal({ dtu, isOpen, onClose, onNavigate }: DTUDetailMo
                   <span>Resonance: {(dtu.resonance * 100).toFixed(1)}%</span>
                 )}
               </div>
+
+              {/* Tier consolidation details */}
+              {(dtu.tier === 'mega' || dtu.tier === 'hyper' || dtu.metadata?.consolidated) && (
+                <div className="pt-2 border-t border-lattice-border">
+                  <TierBadgeDetail
+                    tier={dtu.tier}
+                    showRegular
+                    sourceCount={dtu.metadata?.sourceCount as number | undefined}
+                    sourceDtus={(dtu.children || []).map((id: string) => ({ id }))}
+                    megaCount={dtu.metadata?.megaCount as number | undefined}
+                    totalDtuCount={dtu.metadata?.totalDtuCount as number | undefined}
+                    consolidatedInto={
+                      dtu.metadata?.consolidatedInto
+                        ? { id: dtu.metadata.consolidatedInto as string, title: dtu.metadata.consolidatedIntoTitle as string | undefined }
+                        : null
+                    }
+                    onNavigateToParent={onNavigate}
+                  />
+                </div>
+              )}
             </div>
           )}
 

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -30,7 +31,10 @@ import {
   Layers,
   Sprout,
   ChevronDown,
+  Map,
 } from 'lucide-react';
+
+const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -43,7 +47,7 @@ import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 // Types
 // ---------------------------------------------------------------------------
 
-type ModeTab = 'fields' | 'crops' | 'livestock' | 'equipment' | 'water' | 'harvest' | 'certifications';
+type ModeTab = 'fields' | 'crops' | 'livestock' | 'equipment' | 'water' | 'harvest' | 'certifications' | 'map';
 type ArtifactType = 'Field' | 'Crop' | 'Animal' | 'FarmEquipment' | 'WaterSystem' | 'Harvest' | 'Certification';
 type Status = 'planned' | 'planted' | 'growing' | 'ready' | 'harvested' | 'stored' | 'sold';
 
@@ -57,6 +61,8 @@ interface AgricultureArtifact {
   acreage?: number;
   soilType?: string;
   location?: string;
+  lat?: number;
+  lng?: number;
   currentCrop?: string;
   lastTested?: string;
   phLevel?: number;
@@ -128,6 +134,7 @@ const MODE_TABS: { id: ModeTab; label: string; icon: typeof Wheat; artifactType:
   { id: 'water', label: 'Water', icon: Droplets, artifactType: 'WaterSystem' },
   { id: 'harvest', label: 'Harvest', icon: Wheat, artifactType: 'Harvest' },
   { id: 'certifications', label: 'Certifications', icon: ShieldCheck, artifactType: 'Certification' },
+  { id: 'map', label: 'Map', icon: Map, artifactType: 'Field' },
 ];
 
 const STATUS_CONFIG: Record<Status, { label: string; color: string }> = {
@@ -733,7 +740,15 @@ export default function AgricultureLensPage() {
         ))}
       </nav>
 
-      {showDashboard ? renderDashboard() : renderLibrary()}
+      {activeTab === 'map' ? (
+        <div className={ds.panel}>
+          <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2"><Map className="w-4 h-4 text-neon-blue" /> Field Mapping</h3>
+          <MapView
+            markers={items.filter(i => { const d = i.data as unknown as AgricultureArtifact; return d.lat && d.lng; }).map(i => { const d = i.data as unknown as AgricultureArtifact; return { lat: d.lat!, lng: d.lng!, label: d.name || i.title, popup: `${d.location || ''} ${d.acreage ? d.acreage + ' acres' : ''}`.trim() }; })}
+            className="h-[500px]"
+          />
+        </div>
+      ) : showDashboard ? renderDashboard() : renderLibrary()}
 
       {actionResult && (
         <div className={ds.panel}>

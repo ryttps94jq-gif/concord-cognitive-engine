@@ -3,6 +3,7 @@
 import React, { useMemo } from 'react';
 import { Clock, GitBranch, Zap, Crown, Ghost, ExternalLink } from 'lucide-react';
 import { ProvenanceBadge } from './ProvenanceBadge';
+import { TierBadge } from './TierBadge';
 
 interface DTU {
   id: string;
@@ -121,7 +122,7 @@ function DTUEmpireCardInner({
           <div className={`p-1.5 rounded ${config.bg}`}>
             <TierIcon className={`w-4 h-4 ${config.color}`} />
           </div>
-          <span className={`dtu-badge ${dtu.tier}`}>{config.label}</span>
+          <TierBadge tier={dtu.tier} showRegular size="sm" />
           <span className={`text-xs px-1.5 py-0.5 rounded ${scopeDisplay.color} ${scopeDisplay.textColor}`}>
             {scopeDisplay.label}
           </span>

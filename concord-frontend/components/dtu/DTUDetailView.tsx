@@ -52,15 +52,22 @@ export function DTUDetailView({ dtuId, onClose, onNavigate }: DTUDetailViewProps
     staleTime: 30_000,
   });
 
-  // Fetch lineage
+  // Fetch lineage (enhanced: includes forks, citations, citedBy, royaltyCascade)
   const { data: lineageData } = useQuery({
     queryKey: ['dtu-lineage', dtuId],
     queryFn: async () => {
       const res = await apiHelpers.dtus.lineage(dtuId);
       return res.data as {
         ok: boolean;
-        parents?: Array<{ id: string; title?: string; summary?: string; tier?: string }>;
-        children?: Array<{ id: string; title?: string; summary?: string; tier?: string }>;
+        current?: { id: string; title?: string; tier?: string; type?: string; ownerId?: string; domain?: string };
+        parents?: Array<{ id: string; title?: string; summary?: string; tier?: string; ownerId?: string }>;
+        children?: Array<{ id: string; title?: string; summary?: string; tier?: string; ownerId?: string }>;
+        forks?: Array<{ id: string; title?: string; summary?: string; tier?: string; ownerId?: string }>;
+        citations?: Array<{ id: string; title?: string; summary?: string; tier?: string }>;
+        citedBy?: Array<{ id: string; title?: string; summary?: string; tier?: string; ownerId?: string }>;
+        relatedIds?: string[];
+        royaltyCascade?: Array<{ id: string; title?: string; ownerId?: string; generation: number; royaltyRate: number; royaltyPercent: string }>;
+        // Backward compat
         ancestors?: Array<{ id: string; title?: string; summary?: string; tier?: string }>;
         descendants?: Array<{ id: string; title?: string; summary?: string; tier?: string }>;
       };
@@ -75,6 +82,10 @@ export function DTUDetailView({ dtuId, onClose, onNavigate }: DTUDetailViewProps
 
   const parentDtus = lineageData?.parents || lineageData?.ancestors || [];
   const childDtus = lineageData?.children || lineageData?.descendants || [];
+  const forkDtus = lineageData?.forks || [];
+  const citationDtus = lineageData?.citations || [];
+  const citedByDtus = lineageData?.citedBy || [];
+  const royaltyCascade = lineageData?.royaltyCascade || [];
 
   const handleCopyId = () => {
     navigator.clipboard.writeText(dtuId);
@@ -372,77 +383,118 @@ export function DTUDetailView({ dtuId, onClose, onNavigate }: DTUDetailViewProps
               )}
 
               {activeTab === 'lineage' && (
-                <div className="space-y-4">
-                  {/* Parent DTUs */}
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-400 mb-2">
-                      Parent DTUs ({dtu.parents?.length || parentDtus.length || 0})
-                    </h3>
-                    {(parentDtus.length > 0 || (dtu.parents && dtu.parents.length > 0)) ? (
-                      <div className="space-y-2">
-                        {(parentDtus.length > 0 ? parentDtus : (dtu.parents || []).map(id => ({ id, title: undefined, summary: undefined, tier: undefined }))).map((parent) => (
-                          <button
-                            key={typeof parent === 'string' ? parent : parent.id}
-                            onClick={() => onNavigate?.(typeof parent === 'string' ? parent : parent.id)}
-                            className="w-full text-left p-3 rounded-lg border border-lattice-border hover:border-neon-cyan/50 transition-colors flex items-center gap-2"
-                          >
-                            <GitBranch className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                            <div className="min-w-0 flex-1">
-                              <span className="text-sm text-gray-200 truncate block">
-                                {(typeof parent !== 'string' && (parent.title || parent.summary)) || (typeof parent === 'string' ? parent : parent.id).slice(0, 24)}
-                              </span>
-                              {typeof parent !== 'string' && parent.tier && (
-                                <span className="text-[10px] text-gray-500 uppercase">{parent.tier}</span>
-                              )}
-                            </div>
-                            <ChevronRight className="w-4 h-4 text-gray-600 flex-shrink-0" />
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-gray-500 text-sm">No parent DTUs (this is a root thought)</p>
-                    )}
+                <div className="space-y-5">
+                  {/* ── Lineage Tree Layout ── */}
+
+                  {/* Parents (ancestors above) */}
+                  <LineageSection
+                    title="Parents"
+                    icon={<GitBranch className="w-4 h-4 text-neon-blue" />}
+                    items={parentDtus.length > 0 ? parentDtus : (dtu.parents || []).map((id: string) => ({ id }))}
+                    emptyText="No parent DTUs (this is a root thought)"
+                    onNavigate={onNavigate}
+                    color="border-neon-blue/30"
+                  />
+
+                  {/* Current DTU indicator */}
+                  <div className="flex items-center gap-3 p-3 rounded-lg bg-neon-cyan/5 border border-neon-cyan/30">
+                    <div className={`p-1.5 rounded ${config.bg}`}>
+                      <TierIcon className={`w-4 h-4 ${config.color}`} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-sm font-medium text-white truncate block">
+                        {dtu.title || dtu.summary || 'Current DTU'}
+                      </span>
+                      <span className="text-[10px] text-neon-cyan uppercase">Current</span>
+                    </div>
                   </div>
 
-                  {/* Child DTUs */}
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-400 mb-2">
-                      Children / Citations ({dtu.children?.length || childDtus.length || 0})
-                    </h3>
-                    {(childDtus.length > 0 || (dtu.children && dtu.children.length > 0)) ? (
-                      <div className="space-y-2">
-                        {(childDtus.length > 0 ? childDtus : (dtu.children || []).map(id => ({ id, title: undefined, summary: undefined, tier: undefined }))).map((child) => (
-                          <button
-                            key={typeof child === 'string' ? child : child.id}
-                            onClick={() => onNavigate?.(typeof child === 'string' ? child : child.id)}
-                            className="w-full text-left p-3 rounded-lg border border-lattice-border hover:border-neon-cyan/50 transition-colors flex items-center gap-2"
-                          >
-                            <GitBranch className="w-4 h-4 text-gray-400 rotate-180 flex-shrink-0" />
-                            <div className="min-w-0 flex-1">
-                              <span className="text-sm text-gray-200 truncate block">
-                                {(typeof child !== 'string' && (child.title || child.summary)) || (typeof child === 'string' ? child : child.id).slice(0, 24)}
-                              </span>
-                              {typeof child !== 'string' && child.tier && (
-                                <span className="text-[10px] text-gray-500 uppercase">{child.tier}</span>
-                              )}
-                            </div>
-                            <ChevronRight className="w-4 h-4 text-gray-600 flex-shrink-0" />
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-gray-500 text-sm">No children DTUs yet</p>
-                    )}
-                  </div>
+                  {/* Children (below current) */}
+                  <LineageSection
+                    title="Children"
+                    icon={<GitBranch className="w-4 h-4 text-neon-green rotate-180" />}
+                    items={childDtus.length > 0 ? childDtus : (dtu.children || []).map((id: string) => ({ id }))}
+                    emptyText="No children DTUs yet"
+                    onNavigate={onNavigate}
+                    color="border-neon-green/30"
+                  />
 
-                  {/* Related IDs */}
-                  {dtu.relatedIds && dtu.relatedIds.length > 0 && (
+                  {/* Fork Tree (derivatives) */}
+                  {forkDtus.length > 0 && (
+                    <LineageSection
+                      title="Forks / Derivatives"
+                      icon={<GitBranch className="w-4 h-4 text-neon-purple" />}
+                      items={forkDtus}
+                      emptyText=""
+                      onNavigate={onNavigate}
+                      color="border-neon-purple/30"
+                    />
+                  )}
+
+                  {/* Citations (DTUs this one cites) */}
+                  {citationDtus.length > 0 && (
+                    <LineageSection
+                      title="Cites"
+                      icon={<FileText className="w-4 h-4 text-amber-400" />}
+                      items={citationDtus}
+                      emptyText=""
+                      onNavigate={onNavigate}
+                      color="border-amber-400/30"
+                    />
+                  )}
+
+                  {/* Cited By (DTUs that cite this one) */}
+                  {citedByDtus.length > 0 && (
+                    <LineageSection
+                      title="Cited By"
+                      icon={<FileText className="w-4 h-4 text-amber-300" />}
+                      items={citedByDtus}
+                      emptyText=""
+                      onNavigate={onNavigate}
+                      color="border-amber-300/30"
+                    />
+                  )}
+
+                  {/* Royalty Cascade */}
+                  {royaltyCascade.length > 0 && (
                     <div>
-                      <h3 className="text-sm font-medium text-gray-400 mb-2">
-                        Related ({dtu.relatedIds.length})
+                      <h3 className="text-sm font-medium text-gray-400 mb-2 flex items-center gap-2">
+                        <Zap className="w-4 h-4 text-neon-pink" />
+                        Royalty Cascade
                       </h3>
                       <div className="space-y-1">
-                        {dtu.relatedIds.slice(0, 10).map((relId) => (
+                        {royaltyCascade.map((entry) => (
+                          <div
+                            key={entry.id}
+                            className="flex items-center justify-between p-2 rounded-lg border border-neon-pink/20 bg-neon-pink/5 text-xs"
+                          >
+                            <button
+                              onClick={() => onNavigate?.(entry.id)}
+                              className="text-gray-200 hover:text-neon-cyan truncate max-w-[180px]"
+                            >
+                              {entry.title || entry.id.slice(0, 20)}
+                            </button>
+                            <div className="flex items-center gap-2 text-gray-400 flex-shrink-0">
+                              <span>Gen {entry.generation}</span>
+                              <span className="text-neon-pink font-mono font-medium">{entry.royaltyPercent}</span>
+                              {entry.ownerId && (
+                                <span className="text-gray-500 truncate max-w-[80px]">{entry.ownerId}</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Related IDs */}
+                  {((lineageData?.relatedIds || dtu.relatedIds || []) as string[]).length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-400 mb-2">
+                        Related ({(lineageData?.relatedIds || dtu.relatedIds || []).length})
+                      </h3>
+                      <div className="space-y-1">
+                        {((lineageData?.relatedIds || dtu.relatedIds || []) as string[]).slice(0, 10).map((relId: string) => (
                           <button
                             key={relId}
                             onClick={() => onNavigate?.(relId)}
@@ -502,6 +554,73 @@ export function DTUDetailView({ dtuId, onClose, onNavigate }: DTUDetailViewProps
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Lineage Section sub-component ────────────────────────────────────────────
+
+interface LineageNode {
+  id: string;
+  title?: string;
+  summary?: string;
+  tier?: string;
+  ownerId?: string;
+}
+
+function LineageSection({
+  title,
+  icon,
+  items,
+  emptyText,
+  onNavigate,
+  color,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  items: Array<LineageNode | string>;
+  emptyText: string;
+  onNavigate?: (id: string) => void;
+  color: string;
+}) {
+  const resolved = items.map((item) =>
+    typeof item === 'string' ? { id: item } as LineageNode : item
+  );
+
+  return (
+    <div>
+      <h3 className="text-sm font-medium text-gray-400 mb-2 flex items-center gap-2">
+        {icon}
+        {title} ({resolved.length})
+      </h3>
+      {resolved.length > 0 ? (
+        <div className="space-y-1.5">
+          {resolved.map((node) => (
+            <button
+              key={node.id}
+              onClick={() => onNavigate?.(node.id)}
+              className={`w-full text-left p-2.5 rounded-lg border ${color} hover:border-neon-cyan/50 bg-lattice-deep/30 transition-colors flex items-center gap-2`}
+            >
+              <div className="min-w-0 flex-1">
+                <span className="text-sm text-gray-200 truncate block">
+                  {node.title || node.summary || node.id.slice(0, 24)}
+                </span>
+                <div className="flex items-center gap-2 mt-0.5">
+                  {node.tier && (
+                    <span className="text-[10px] text-gray-500 uppercase">{node.tier}</span>
+                  )}
+                  {node.ownerId && (
+                    <span className="text-[10px] text-gray-600 truncate max-w-[120px]">{node.ownerId}</span>
+                  )}
+                </div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-gray-600 flex-shrink-0" />
+            </button>
+          ))}
+        </div>
+      ) : emptyText ? (
+        <p className="text-gray-500 text-sm">{emptyText}</p>
+      ) : null}
     </div>
   );
 }

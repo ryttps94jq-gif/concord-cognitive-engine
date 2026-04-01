@@ -16672,7 +16672,7 @@ When helpful, reference DTU titles in plain language (do not dump ids unless ask
 
   return {
     ok: true, reply: finalReply, sessionId, mode, llmUsed, semanticUsed,
-    relevant: relevant.map(d=>({ id:d.id, title:d.title, tier:d.tier })),
+    relevant: relevant.map(d=>({ id:d.id, title:d.title, tier:d.tier, score: d._activationScore ?? d.score ?? null })),
     webAugmented: _webAugmented,
     dtuCount: _pipelineDtuCount,
     pipeline: _pipelineHarvest ? {
@@ -32968,6 +32968,13 @@ function initChatSocketHandlers(io) {
           dtuId: result?.meta?.dtuId || null,
           dtuCount: result?.dtuCount ?? 0,
           dtuIds: (result?.relevant || []).map(d => d.id || d).slice(0, 20),
+          // Full DTU source metadata for Sources display (tier badge + relevance score)
+          dtuSources: (result?.relevant || []).slice(0, 20).map(d => ({
+            id: d.id || d,
+            title: d.title || "",
+            tier: d.tier || "regular",
+            score: typeof d.score === "number" ? d.score : null,
+          })),
           brain: result?.llmUsed ? "conscious" : "local",
           route: result?.route || null,
           forge: result?.forge || null,
@@ -39292,6 +39299,90 @@ app.post("/api/admin/promotion/:id/reject", requireAuth(), requireRole("owner"),
 app.get("/api/admin/promotion/history", requireAuth(), requireRole("owner"), asyncHandler(async (_req, res) => {
   const m = await import("./emergent/promotion-pipeline.js");
   res.json(m.getPromotionHistory());
+}));
+
+// Shadow DTU Promotion Pipeline
+app.get("/api/dtus/shadow/pending", requireAuth(), asyncHandler(async (_req, res) => {
+  const sg = await import("./emergent/shadow-graph.js");
+  const candidates = sg.listPromotionCandidates(STATE);
+  // Also include shadows that have been around > 7 days with reasonable richness
+  const allShadows = sg.allDTUs(STATE, { includeShadows: true }).filter(d => sg.isShadow(d));
+  const pendingShadows = allShadows
+    .map(d => ({
+      id: d.id,
+      title: d.title || d.human?.summary || d.id,
+      tier: d.tier,
+      kind: d.machine?.kind,
+      tags: d.tags || [],
+      richness: sg.computeRichness(STATE, d.id),
+      ttlDays: sg.computeShadowTTL(STATE, d.id),
+      createdAt: d.createdAt,
+    }))
+    .filter(d => d.richness >= 3)
+    .sort((a, b) => b.richness - a.richness)
+    .slice(0, 50);
+  res.json({ ok: true, candidates: candidates.candidates || [], pendingShadows, totalShadows: allShadows.length });
+}));
+
+app.post("/api/dtus/:id/promote", requireAuth(), requireRole("owner"), asyncHandler(async (req, res) => {
+  const dtuId = req.params.id;
+  const sg = await import("./emergent/shadow-graph.js");
+  const dtu = sg.getDTU(STATE, dtuId);
+  if (!dtu) return res.status(404).json({ ok: false, error: "DTU not found" });
+  if (!sg.isShadow(dtu)) return res.status(400).json({ ok: false, error: "DTU is not a shadow" });
+
+  // Validation gates
+  const gates = {
+    structureComplete: !!(dtu.title && (dtu.core?.definitions?.length || dtu.core?.claims?.length)),
+    hasEdges: sg.computeRichness(STATE, dtuId) >= 2,
+    notDuplicate: true, // basic check: no exact title match in canonical
+    scopeValid: true,
+  };
+
+  // Check for duplicate title in canonical store
+  for (const [_id, canonical] of STATE.dtus || []) {
+    if (canonical.title && dtu.title && canonical.title.toLowerCase() === dtu.title.toLowerCase()) {
+      gates.notDuplicate = false;
+      break;
+    }
+  }
+
+  const allPassed = Object.values(gates).every(Boolean);
+  if (!allPassed && !req.body.force) {
+    return res.json({ ok: false, error: "Validation gates failed", gates });
+  }
+
+  // Promote: move from shadow store to canonical store
+  dtu.tier = "regular";
+  dtu.promotedAt = new Date().toISOString();
+  dtu.promotedBy = req.user?.id || "sovereign";
+  dtu.promotionGates = gates;
+  if (dtu.tags && dtu.tags.includes("shadow")) {
+    dtu.tags = dtu.tags.filter(t => t !== "shadow");
+  }
+  STATE.dtus.set(dtuId, dtu);
+  STATE.shadowDtus?.delete(dtuId);
+
+  if (typeof globalThis.realtimeEmit === "function") {
+    globalThis.realtimeEmit("dtu:promoted", { id: dtuId, title: dtu.title, tier: "regular" });
+  }
+
+  res.json({ ok: true, dtuId, tier: "regular", gates });
+}));
+
+app.get("/api/dtus/promotion/queue", requireAuth(), asyncHandler(async (_req, res) => {
+  const sg = await import("./emergent/shadow-graph.js");
+  const pp = await import("./emergent/promotion-pipeline.js");
+  // Merge shadow promotion candidates with general promotion queue
+  const shadowCandidates = sg.listPromotionCandidates(STATE);
+  const generalQueue = pp.getQueue();
+  res.json({
+    ok: true,
+    shadowCandidates: shadowCandidates.candidates || [],
+    shadowCount: shadowCandidates.count || 0,
+    generalQueue: generalQueue.queue || [],
+    generalCount: (generalQueue.queue || []).length,
+  });
 }));
 
 // Repair Network

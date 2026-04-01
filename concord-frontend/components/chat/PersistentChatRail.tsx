@@ -104,6 +104,13 @@ interface ForgeEnvelope {
   offerForge?: boolean;
 }
 
+interface DTUSource {
+  id: string;
+  title: string;
+  tier: string;
+  score: number | null;
+}
+
 interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -116,6 +123,7 @@ interface ChatMessage {
   // DTU context pipeline metadata
   dtuCount?: number;
   dtuIds?: string[];
+  dtuSources?: DTUSource[];
   brain?: string;
   // Chat router metadata (lens attribution, action type)
   route?: RouteMeta | null;
@@ -144,6 +152,56 @@ interface PersistentChatRailProps {
 }
 
 type ChatStatus = 'idle' | 'thinking' | 'searching' | 'responding';
+
+// ── DTU Sources Section (expandable context sources below assistant messages) ──
+
+const TIER_BADGE_STYLES: Record<string, string> = {
+  hyper: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
+  mega: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
+  regular: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+  shadow: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
+  archive: 'bg-zinc-600/20 text-zinc-500 border-zinc-600/30',
+};
+
+function DTUSourcesSection({ sources }: { sources: DTUSource[] }) {
+  const [expanded, setExpanded] = useState(false);
+  if (sources.length === 0) return null;
+
+  return (
+    <div className="mt-2 pt-2 border-t border-zinc-700/50">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-1.5 text-[10px] text-zinc-400 hover:text-zinc-300 transition-colors w-full"
+      >
+        <Database className="w-2.5 h-2.5" />
+        <span>{sources.length} DTU source{sources.length !== 1 ? 's' : ''} used</span>
+        <ChevronRight className={`w-2.5 h-2.5 ml-auto transition-transform ${expanded ? 'rotate-90' : ''}`} />
+      </button>
+      {expanded && (
+        <div className="mt-1.5 space-y-1 max-h-40 overflow-y-auto">
+          {sources.map((src) => {
+            const tierStyle = TIER_BADGE_STYLES[src.tier] || TIER_BADGE_STYLES.regular;
+            return (
+              <div
+                key={src.id}
+                className="flex items-center gap-1.5 text-[10px] px-1.5 py-1 rounded bg-zinc-800/50 hover:bg-zinc-700/50 cursor-pointer transition-colors"
+                title={`DTU: ${src.id}`}
+              >
+                <span className={`px-1 py-0.5 rounded border text-[9px] font-medium uppercase ${tierStyle}`}>
+                  {src.tier}
+                </span>
+                <span className="text-zinc-300 truncate flex-1">{src.title || src.id}</span>
+                {src.score != null && (
+                  <span className="text-zinc-500 font-mono shrink-0">{(src.score * 100).toFixed(0)}%</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Component ──────────────────────────────────────────────────
 
@@ -334,6 +392,7 @@ export function PersistentChatRail({
         sources?: { title: string; url: string; source: string }[];
         dtuCount?: number;
         dtuIds?: string[];
+        dtuSources?: DTUSource[];
         brain?: string;
         route?: RouteMeta | null;
         forge?: ForgeEnvelope | null;
@@ -349,6 +408,7 @@ export function PersistentChatRail({
           sources: d.sources || [],
           dtuCount: d.dtuCount ?? 0,
           dtuIds: d.dtuIds || [],
+          dtuSources: d.dtuSources || [],
           brain: d.brain || undefined,
           route: d.route || null,
           forge: d.forge || null,
@@ -806,7 +866,7 @@ export function PersistentChatRail({
                 >
                   <div className="whitespace-pre-wrap break-words">{msg.content}</div>
 
-                  {/* Sources */}
+                  {/* Web Sources */}
                   {msg.sources && msg.sources.length > 0 && (
                     <div className="mt-2 pt-2 border-t border-zinc-700/50 space-y-1">
                       {msg.sources.map((s, si) => (
@@ -816,6 +876,11 @@ export function PersistentChatRail({
                         </div>
                       ))}
                     </div>
+                  )}
+
+                  {/* DTU Sources — expandable section showing which DTUs were used as context */}
+                  {msg.role === 'assistant' && msg.dtuSources && msg.dtuSources.length > 0 && (
+                    <DTUSourcesSection sources={msg.dtuSources} />
                   )}
 
                   {/* Lens recommendation chip */}

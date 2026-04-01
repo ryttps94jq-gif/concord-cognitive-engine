@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { subscribe, connectSocket } from '@/lib/realtime/socket';
 import { Zap, Sparkles, Star, Ghost, Tag } from 'lucide-react';
+import { TierBadge } from '@/components/dtu/TierBadge';
 
 interface DTUEvent {
   id: string;
@@ -151,7 +152,7 @@ export function LiveDTUFeed({ limit = 10, onDtuClick }: { limit?: number; onDtuC
                     {dtu.title || dtu.summary || dtu.id.slice(0, 12)}
                   </p>
                   <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                    <span className={`text-[10px] ${tierConf.color}`}>{tierConf.label}</span>
+                    <TierBadge tier={dtu.tier || 'regular'} size="sm" showRegular />
                     {dtu.type && (
                       <span className={`text-[10px] px-1 py-px rounded ${TYPE_COLORS[dtu.type] || 'bg-gray-500/20 text-gray-400'}`}>
                         {dtu.type}

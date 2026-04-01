@@ -1932,6 +1932,11 @@ export const apiHelpers = {
       api.post('/api/marketplace/purchaseWithRoyalties', { dtuId }),
     royalties: (userId?: string) =>
       api.get(userId ? `/api/marketplace/royalties/${userId}` : '/api/marketplace/royalties'),
+    megaComponents: (id: string) => api.get(`/api/marketplace/mega/${id}/components`),
+    deltaPrice: (id: string, userId: string) =>
+      api.get(`/api/marketplace/${id}/delta-price`, { params: { userId } }),
+    purchase: (id: string, data: { buyerId: string; requestId?: string }) =>
+      api.post(`/api/marketplace/${id}/purchase`, data),
   },
 
   /** Cognitive dreams */

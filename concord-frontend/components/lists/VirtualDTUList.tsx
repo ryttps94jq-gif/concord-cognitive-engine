@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatRelativeTime } from '@/lib/utils';
+import { TierBadge } from '@/components/dtu/TierBadge';
 
 interface DTU {
   id: string;
@@ -164,16 +165,7 @@ export function VirtualDTUList({
               )}>
                 {dtu.title}
               </span>
-              {dtu.tier !== 'regular' && (
-                <span className={cn(
-                  'text-[10px] px-1.5 py-0.5 rounded uppercase font-medium',
-                  dtu.tier === 'mega' ? 'bg-neon-cyan/20 text-neon-cyan' :
-                  dtu.tier === 'hyper' ? 'bg-neon-purple/20 text-neon-purple' :
-                  'bg-gray-500/20 text-gray-400'
-                )}>
-                  {dtu.tier}
-                </span>
-              )}
+              <TierBadge tier={dtu.tier} size="sm" />
               {dtu.isFavorite && (
                 <Star className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400" />
               )}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -47,7 +48,10 @@ import {
   Minus,
   Zap,
   Layers,
+  Map,
 } from 'lucide-react';
+
+const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -59,7 +63,7 @@ import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-type ModeTab = 'Sites' | 'Species' | 'Sampling' | 'Trails' | 'Waste' | 'Compliance' | 'Carbon' | 'Resources' | 'Goals';
+type ModeTab = 'Sites' | 'Species' | 'Sampling' | 'Trails' | 'Waste' | 'Compliance' | 'Carbon' | 'Resources' | 'Goals' | 'Map';
 
 type ArtifactType = 'Site' | 'Species' | 'EnvironmentalSample' | 'TrailAsset' | 'WasteStream' | 'ComplianceRecord' | 'CarbonEntry' | 'ResourceMetric' | 'SustainabilityGoal';
 type Status = 'active' | 'monitoring' | 'critical' | 'remediation' | 'closed' | 'seasonal';
@@ -233,6 +237,7 @@ const MODE_TABS: { id: ModeTab; icon: typeof TreePine; artifactType: ArtifactTyp
   { id: 'Carbon', icon: Globe, artifactType: 'CarbonEntry', label: 'Carbon Tracker' },
   { id: 'Resources', icon: Droplets, artifactType: 'ResourceMetric', label: 'Resources' },
   { id: 'Goals', icon: Leaf, artifactType: 'SustainabilityGoal', label: 'Goals' },
+  { id: 'Map', icon: Map, artifactType: 'Site', label: 'Map' },
 ];
 
 const ALL_STATUSES: Status[] = ['active', 'monitoring', 'critical', 'remediation', 'closed', 'seasonal'];
@@ -2385,6 +2390,17 @@ export default function EnvironmentLensPage() {
 
       {/* Real-time Data Panel */}
       <RealtimeDataPanel domain="environment" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
+        </div>
+      )}
+
+      {/* ==================== MAP TAB ==================== */}
+      {mode === 'Map' && (
+        <div className={cn(ds.panel, 'p-4')}>
+          <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2"><Map className="w-4 h-4 text-green-400" /> Monitoring Site Locations</h3>
+          <MapView
+            markers={siteItems.filter(i => { const d = i.data as unknown as Site; return d.lat && d.lon; }).map(i => { const d = i.data as unknown as Site; return { lat: d.lat, lng: d.lon, label: d.name || i.title, popup: `${d.siteType || ''} - ${d.regulatoryStatus || ''} (${d.areaAcres || 0} acres)` }; })}
+            className="h-[500px]"
+          />
         </div>
       )}
 

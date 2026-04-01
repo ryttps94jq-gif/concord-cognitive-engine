@@ -41,6 +41,7 @@ import { CORE_LENSES } from '@/lib/lens-registry';
 import {
   Activity, Zap, Compass, TrendingUp, Heart, Globe,
   MessageSquare, Layout, Share2, Code, Music,
+  Crown, Ghost, Archive, Layers,
 } from 'lucide-react';
 import { use70Lock } from '@/hooks/use70Lock';
 import { MorningBrief } from '@/components/brief/MorningBrief';
@@ -198,6 +199,15 @@ function DashboardPage() {
     queryKey: ['guidance-suggestions'],
     queryFn: () => api.get('/api/guidance/suggestions').then((r) => r.data).catch(() => null),
     retry: false,
+  });
+
+  // DTU tier stats (Feature 10)
+  const { data: dtuStats, isLoading: dtuStatsLoading } = useQuery({
+    queryKey: ['dtu-tier-stats'],
+    queryFn: () => apiHelpers.dtus.stats().then((r) => r.data).catch(() => null),
+    refetchInterval: 30_000,
+    retry: 1,
+    staleTime: 15_000,
   });
 
   // Fetch graph force-directed data for the Resonance Universe
@@ -378,6 +388,63 @@ function DashboardPage() {
           locked={lockPercentage >= 70}
         />
       </div>
+
+      {/* DTU Tier Stats (Feature 10) */}
+      {dtuStats && (
+        <div className="rounded-xl border border-lattice-border bg-lattice-surface/50 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold flex items-center gap-2">
+              <Layers className="w-4 h-4 text-neon-cyan" />
+              DTU Tier Breakdown
+            </h2>
+            <span className="text-[10px] text-gray-600">Auto-refreshes every 30s</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-7 gap-2">
+            <TierStatCard
+              label="Total"
+              value={dtuStatsLoading ? '...' : dtuStats.totalCount ?? 0}
+              icon={<Layers className="w-4 h-4" />}
+              color="cyan"
+            />
+            <TierStatCard
+              label="Shadow"
+              value={dtuStatsLoading ? '...' : dtuStats.shadowCount ?? 0}
+              icon={<Ghost className="w-4 h-4" />}
+              color="gray"
+            />
+            <TierStatCard
+              label="Regular"
+              value={dtuStatsLoading ? '...' : dtuStats.regularCount ?? 0}
+              icon={<Zap className="w-4 h-4" />}
+              color="blue"
+            />
+            <TierStatCard
+              label="MEGA"
+              value={dtuStatsLoading ? '...' : dtuStats.megaCount ?? 0}
+              icon={<Crown className="w-4 h-4" />}
+              color="purple"
+            />
+            <TierStatCard
+              label="HYPER"
+              value={dtuStatsLoading ? '...' : dtuStats.hyperCount ?? 0}
+              icon={<Zap className="w-4 h-4" />}
+              color="pink"
+            />
+            <TierStatCard
+              label="Archived"
+              value={dtuStatsLoading ? '...' : dtuStats.archivedCount ?? 0}
+              icon={<Archive className="w-4 h-4" />}
+              color="gray"
+            />
+            <TierStatCard
+              label="Compression"
+              value={dtuStatsLoading ? '...' : `${dtuStats.compressionRatio ?? 1}x`}
+              icon={<Activity className="w-4 h-4" />}
+              color="green"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Morning Brief */}
       <LensErrorBoundary name="Morning Brief">
@@ -672,6 +739,33 @@ function QueueCard({ label, value, color, loading }: { label: string; value: num
     <div className="rounded-lg border border-lattice-border bg-lattice-surface/30 p-3">
       <p className="text-xs text-gray-500">{label}</p>
       <p className={`text-lg font-bold font-mono ${colorClasses[color]}`}>{loading ? <span className="animate-pulse">...</span> : value}</p>
+    </div>
+  );
+}
+
+function TierStatCard({
+  label, value, icon, color,
+}: {
+  label: string; value: string | number; icon?: React.ReactNode;
+  color: 'blue' | 'purple' | 'pink' | 'green' | 'cyan' | 'gray';
+}) {
+  const colorMap = {
+    blue: 'text-neon-blue border-neon-blue/15',
+    purple: 'text-neon-purple border-neon-purple/15',
+    pink: 'text-neon-pink border-neon-pink/15',
+    green: 'text-neon-green border-neon-green/15',
+    cyan: 'text-neon-cyan border-neon-cyan/15',
+    gray: 'text-gray-400 border-gray-600/15',
+  };
+  return (
+    <div className={`rounded-lg border p-2.5 bg-lattice-deep/30 ${colorMap[color]}`}>
+      <div className="flex items-center gap-2">
+        <span className="opacity-60">{icon}</span>
+        <div>
+          <p className="text-[10px] text-gray-500 uppercase">{label}</p>
+          <p className="text-base font-bold font-mono">{value}</p>
+        </div>
+      </div>
     </div>
   );
 }
