@@ -41143,8 +41143,19 @@ function calculateAttention(dtu, activeDomain = null) {
   const hoursSince = (now - lastTouched) / 3600000;
   const recency = Math.exp(-hoursSince / 12); // 12-hour half-life
 
-  // Urgency: placeholder (would need calendar/goal integration)
-  const urgency = (dtu.meta?.urgent || dtu.meta?.deadline) ? 1.5 : 1.0;
+  // Urgency: based on deadline proximity and explicit urgency flags
+  let urgency = 1.0;
+  if (dtu.meta?.urgent) urgency = 1.5;
+  if (dtu.meta?.deadline) {
+    const deadlineMs = new Date(dtu.meta.deadline).getTime();
+    if (!isNaN(deadlineMs)) {
+      const hoursUntil = (deadlineMs - now) / 3600000;
+      if (hoursUntil <= 0) urgency = Math.max(urgency, 2.0);       // overdue
+      else if (hoursUntil <= 4) urgency = Math.max(urgency, 1.8);  // imminent
+      else if (hoursUntil <= 24) urgency = Math.max(urgency, 1.5); // today
+      else if (hoursUntil <= 72) urgency = Math.max(urgency, 1.2); // soon
+    }
+  }
 
   // Novelty: inverse of familiarity. New DTUs are novel. Frequently accessed ones less so.
   const accessCount = dtu.meta?.accessCount || 0;
