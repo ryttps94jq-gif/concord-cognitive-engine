@@ -85,7 +85,7 @@ export function SharedSessionChat({ sessionId, currentUserId, onEnd }: SharedSes
           setMessages(loaded);
         }
       }
-    }).catch(() => {});
+    }).catch(err => console.error('[SharedSession] Failed to load messages:', err));
   }, [sessionId]);
 
   // WebSocket event listeners

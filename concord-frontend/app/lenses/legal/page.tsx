@@ -968,11 +968,11 @@ export default function LegalLensPage() {
 
   const renderCaseCards = () => (
     <div className={ds.grid3}>
-      {filtered.map(item => {
+      {filtered.map((item, index) => {
         const d = item.data as unknown as CaseData;
         const color = STATUS_COLORS[d.status] || 'gray-400';
         return (
-          <div key={item.id} className={ds.panelHover} onClick={() => openDetail(item)}>
+          <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className={ds.panelHover} onClick={() => openDetail(item)}>
             <div className="flex items-start justify-between mb-2">
               <h3 className={cn(ds.heading3, 'text-base truncate flex-1')}>{item.title}</h3>
               <StatusBadge status={d.status} />
@@ -1014,7 +1014,7 @@ export default function LegalLensPage() {
                 <DeadlineTag date={d.dueDate} />
               </div>
             )}
-          </div>
+          </motion.div>
         );
       })}
     </div>
@@ -2146,6 +2146,30 @@ export default function LegalLensPage() {
         </button>
       </header>
 
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {(() => {
+          const cases = items.filter(i => (i.data as Record<string, unknown>).caseNumber);
+          const timeEntries = items.filter(i => (i.data as Record<string, unknown>).hours);
+          const totalHours = timeEntries.reduce((s, i) => s + Number((i.data as Record<string, unknown>).hours || 0), 0);
+          const clients = new Set(items.map(i => (i.data as Record<string, unknown>).client).filter(Boolean));
+          return [
+            { label: 'Cases', value: cases.length || items.length, icon: Briefcase },
+            { label: 'Billable Hours', value: totalHours.toFixed(1), icon: Timer },
+            { label: 'Client Count', value: clients.size, icon: Users },
+            { label: 'Active', value: items.filter(i => i.meta?.status === 'active').length, icon: Scale },
+          ].map((stat) => (
+            <div key={stat.label} className={ds.panel + ' flex items-center gap-3 p-3'}>
+              <stat.icon className="w-5 h-5 text-amber-400 shrink-0" />
+              <div>
+                <p className="text-xs text-gray-400">{stat.label}</p>
+                <p className="text-lg font-bold text-white">{stat.value}</p>
+              </div>
+            </div>
+          ));
+        })()}
+      </div>
 
       {/* AI Actions */}
       <UniversalActions domain="legal" artifactId={items[0]?.id} compact />

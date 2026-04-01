@@ -45,7 +45,7 @@ function WaveformDisplay({ dtuId }: { dtuId: string }) {
     fetch(`/api/artifact/${dtuId}/thumbnail`)
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setPeaks(data); })
-      .catch(() => {});
+      .catch(err => console.error('[ArtifactRenderer] Failed to load waveform:', err));
   }, [dtuId]);
 
   if (!peaks.length) return <div className="h-12 bg-zinc-900 rounded animate-pulse" />;
@@ -237,7 +237,7 @@ function CSVTablePreview({ dtuId, filename, downloadUrl }: { dtuId: string; file
         );
         setRows(parsed.slice(0, 100));
       })
-      .catch(() => {});
+      .catch(err => console.error('[ArtifactRenderer] Failed to load CSV data:', err));
   }, [dtuId]);
 
   if (!rows.length) return <div className="h-32 bg-zinc-900 rounded animate-pulse" />;

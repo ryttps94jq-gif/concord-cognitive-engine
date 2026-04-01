@@ -3870,9 +3870,9 @@ const _TOKEN_BLACKLIST = {
         // Track JTI in per-user set so revokeAllForUser can find them
         if (userId) {
           const userSetKey = REDIS_CONFIG.prefix + "user-tokens:" + userId;
-          redisClient.sAdd(userSetKey, jti).catch(() => {});
+          redisClient.sAdd(userSetKey, jti).catch(e => logger.debug?.('server', 'async op failed (non-blocking)', { error: e?.message }));
           // Set TTL on the user set to auto-clean (use longest reasonable token lifetime)
-          redisClient.expire(userSetKey, Math.ceil(ttlMs / 1000) + 3600).catch(() => {});
+          redisClient.expire(userSetKey, Math.ceil(ttlMs / 1000) + 3600).catch(e => logger.debug?.('server', 'async op failed (non-blocking)', { error: e?.message }));
         }
       }
     }
@@ -3930,10 +3930,10 @@ const _TOKEN_BLACKLIST = {
                 const entry = JSON.parse(raw);
                 entry.revokedAt = now;
                 const ttlSec = Math.max(1, Math.ceil((entry.expiresAt - now) / 1000));
-                redisClient.setEx(redisKey, ttlSec, JSON.stringify(entry)).catch(() => {});
+                redisClient.setEx(redisKey, ttlSec, JSON.stringify(entry)).catch(e => logger.debug?.('server', 'async op failed (non-blocking)', { error: e?.message }));
               } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
             }
-          }).catch(() => {});
+          }).catch(e => logger.debug?.('server', 'async op failed (non-blocking)', { error: e?.message }));
           // Also ensure it's in our in-memory Map
           if (!this.revoked.has(jti)) {
             this.revoked.set(jti, { revokedAt: now, expiresAt: now + 7 * 86400000, userId });
@@ -9695,12 +9695,12 @@ function upsertDTU(dtu, { broadcast = true, federate = false } = {}) {
       createdAt: dtu.createdAt,
       updatedAt: dtu.updatedAt,
       hash: dtu.hash
-    }).catch(() => {});
+    }).catch(e => logger.debug?.('server', 'async op failed (non-blocking)', { error: e?.message }));
   }
 
   // ── Incremental embedding index: index on create/update, not full rebuild ──
   if (EMBEDDINGS.enabled) {
-    indexDTUEmbedding(dtu).catch(() => {}); // best-effort, async
+    indexDTUEmbedding(dtu).catch(e => logger.debug?.('server', 'async op failed (non-blocking)', { error: e?.message })); // best-effort, async
   }
 
   return dtu;
@@ -11133,7 +11133,7 @@ async function initThreeBrains() {
             brain.enabled = true;
             _refreshLlmReady();
             structuredLog("info", "brain_model_pulled", { brain: name, model: brain.model });
-          }).catch(() => {});
+          }).catch(e => logger.debug?.('server', 'async op failed (non-blocking)', { error: e?.message }));
           brain.enabled = false; // Not ready until pull completes
         } else {
           brain.enabled = true;
@@ -12382,7 +12382,7 @@ async function consciousChat(userMessage, lens = null, options = {}) {
     }
 
     // Cache warming: associate similar queries with this response
-    warmRelatedQueries(userMessage, result.content, dtusArray).catch(() => {});
+    warmRelatedQueries(userMessage, result.content, dtusArray).catch(e => logger.debug?.('server', 'async op failed (non-blocking)', { error: e?.message }));
 
     return {
       ...result,
@@ -12775,7 +12775,7 @@ async function entityProduceLensArtifact(entity, lens) {
   // Quality gate: async spot-check, then apply shadow vault for entity production
   const artifactId = createResult.artifact?.id;
   if (artifactId) {
-    setImmediate(() => runEntityQualityGate(artifactId, entityId, lens).catch(() => {}));
+    setImmediate(() => runEntityQualityGate(artifactId, entityId, lens).catch(e => logger.debug?.('server', 'entity quality gate failed', { error: e?.message })));
   }
 
   // Record production experience (higher quality weight than exploration)
@@ -14999,7 +14999,7 @@ async function pipelineCommitDTU(ctx, dtu, opts={}) {
     // ===== END AUTO WORLD MODEL UPDATE =====
 
     // ===== SEMANTIC EMBEDDING (async, never blocks) =====
-    embedDTU(dtu).catch(() => {});
+    embedDTU(dtu).catch(e => logger.debug?.('server', 'async op failed (non-blocking)', { error: e?.message }));
 
     // Keep high-tier sparse & maintain metrics periodically
     try { enforceTierBudgets(); } catch (e) { observe(e, "tier_budget_enforcement_post_dtu"); }
@@ -15201,7 +15201,7 @@ register("dtu", "create", async (ctx, input) => {
   ctx.log("dtu.create", `Created DTU: ${title}`, { id: dtu.id, tier, tags, source, score: gate.score });
 
   // Async embedding generation (NEVER blocks DTU creation — Rule #1)
-  embedDTU(dtu).catch(() => {});
+  embedDTU(dtu).catch(e => logger.debug?.('server', 'async op failed (non-blocking)', { error: e?.message }));
 
   return { ok: true, dtu };
 }, { description: "Create a DTU (regular/mega/hyper) with structured core; UI receives human projection." });
@@ -15702,7 +15702,7 @@ sess.messages.push({ role: "user", content: prompt, ts: nowISO() });
   // Trigger conversation summary compression if due (async, never blocks)
   try {
     if (isSummaryDue(STATE.sessions, sessionId)) {
-      compressConversation(STATE, sessionId, { structuredLog: ctx.log }).catch(() => {});
+      compressConversation(STATE, sessionId, { structuredLog: ctx.log }).catch(e => logger.debug?.('server', 'async op failed (non-blocking)', { error: e?.message }));
     }
   } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   // ===== END DTU ENRICHMENT =====
@@ -20895,7 +20895,7 @@ register("lattice", "birth_protocol", async (ctx, input={}) => {
   _c2log("c2.birth.accept", "Birth accepted and DTU committed", { id, title:dtu.title });
 
   // Async embedding for birth DTU (never blocks)
-  embedDTU(dtu).catch(() => {});
+  embedDTU(dtu).catch(e => logger.debug?.('server', 'async op failed (non-blocking)', { error: e?.message }));
 
   // ── Entity Lifecycle Completion ──────────────────────────────────────────
   // If this birth came from reproduction or entity emergence, instantiate the
@@ -22345,7 +22345,7 @@ app.use((err, req, res, _next) => {
       file: extractFileFromStack?.(String(err?.stack || "")) || null,
       line: extractLineFromStack?.(String(err?.stack || "")) || null,
       meta: { method: req.method, path: req.path },
-    }).catch(() => {});
+    }).catch(e => logger.debug?.('server', 'async op failed (non-blocking)', { error: e?.message }));
   }
 });
 
@@ -23004,7 +23004,7 @@ function startHeartbeat() {
                   candidateDtuIds: candidates.candidates.map(c => c.id),
                   instruction: "Synthesize these global DTUs. Output must meet global validation. All claims require provenance.",
                 },
-              }, ctx).catch(() => {});
+              }, ctx).catch(e => logger.debug?.('server', 'async op failed (non-blocking)', { error: e?.message }));
             }
           } catch (err) { console.error("[system] Global synthesis error:", err); }
         }
@@ -23012,7 +23012,7 @@ function startHeartbeat() {
         // Every 6th global tick: run global meta-derivation
         if (tickResult.tickNumber % 6 === 0) {
           try {
-            await runMacro("emergent", "meta.triggerCycle", { scope: "global" }, ctx).catch(() => {});
+            await runMacro("emergent", "meta.triggerCycle", { scope: "global" }, ctx).catch(e => logger.debug?.('server', 'async op failed (non-blocking)', { error: e?.message }));
           } catch (err) { console.error("[system] Global meta-derivation error:", err); }
         }
       }
@@ -23074,7 +23074,7 @@ function startWeeklyCouncil() {
   weeklyTimer = setInterval(async () => {
     if (STATE.settings.weeklyDebateEnabled === false) return;
     const ctx = makeInternalCtx("system");
-    await runMacro("council","weeklyDebateTick",{ topic: STATE.settings.weeklyDebateTopic || "Concord Weekly Synthesis" }, ctx).catch(()=>{});
+    await runMacro("council","weeklyDebateTick",{ topic: STATE.settings.weeklyDebateTopic || "Concord Weekly Synthesis" }, ctx).catch(e => logger.debug?.('server', 'weekly debate tick failed', { error: e?.message }));
   }, weekMs);
   log("council.weekly", "Weekly Council scheduler started", { everyMs: weekMs });
 }
@@ -24072,10 +24072,10 @@ function _startGovernorHeartbeat() {
     const s = STATE.settings || {};
     const ms = clamp(Number(s.heartbeatMs ?? 10000), 1000, 10*60*1000);
     if (s.heartbeatEnabled === false) return { ok:false, reason:"heartbeat_disabled" };
-    __governorTimer = setInterval(() => { governorTick("interval").catch(()=>{}); }, ms);
+    __governorTimer = setInterval(() => { governorTick("interval").catch(e => logger.debug?.('server', 'governor interval tick failed', { error: e?.message })); }, ms);
     structuredLog("info", "governor_heartbeat_active", { intervalSec: (ms/1000).toFixed(2) });
     // fire once on boot (after a short delay so macros/STATE are warmed)
-    setTimeout(() => { governorTick("boot").catch(()=>{}); }, 2000);
+    setTimeout(() => { governorTick("boot").catch(e => logger.debug?.('server', 'governor boot tick failed', { error: e?.message })); }, 2000);
     return { ok:true, intervalMs: ms };
   } catch (e) {
     console.warn("[Governor] failed to start:", String(e?.message||e));
@@ -27147,7 +27147,7 @@ function _runLensPipelines(ctx, sourceDomain, event, sourceArtifact, actionResul
         if (targetArt) {
           const handler = LENS_ACTIONS.get(`${targetDomain}.${output.action}`);
           if (handler) {
-            handler(ctx, targetArt, output.params || {}).catch(() => {});
+            handler(ctx, targetArt, output.params || {}).catch(e => logger.debug?.('server', 'async op failed (non-blocking)', { error: e?.message }));
             emitted.push({ type: "action", targetDomain, action: output.action, artifactId: output.artifactId });
           }
         }
@@ -32923,7 +32923,7 @@ function newCapabilitiesHeartbeat() {
 
   // Predictive pre-generation
   if (_capabilityTickCount % 200 === 0) {
-    predictivePreGeneration().catch(() => {});
+    predictivePreGeneration().catch(e => logger.debug?.('server', 'async op failed (non-blocking)', { error: e?.message }));
   }
 
   // Expert promotion suggestions
@@ -32945,7 +32945,7 @@ function newCapabilitiesHeartbeat() {
   if (_capabilityTickCount % 300 === 0) {
     for (const entity of STATE.entities.values()) {
       if (entity.type === "personal_agent" && entity.proactiveActions) {
-        agentTick(entity.id).catch(() => {});
+        agentTick(entity.id).catch(e => logger.debug?.('server', 'async op failed (non-blocking)', { error: e?.message }));
       }
     }
   }

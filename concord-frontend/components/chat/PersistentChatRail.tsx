@@ -846,7 +846,7 @@ export function PersistentChatRail({
             }}
             onRespond={(id) => {
               // Report response to backend
-              fetch(`/api/initiative/${id}/respond`, { method: 'POST' }).catch(() => {});
+              fetch(`/api/initiative/${id}/respond`, { method: 'POST' }).catch(err => console.error('[Initiative] Failed to respond:', err));
               setServerInitiatives(prev => prev.filter(i => i.id !== id));
             }}
             maxVisible={2}

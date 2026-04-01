@@ -1644,12 +1644,13 @@ export default function TradesLensPage() {
         </div>
       ) : (
         <div className={ds.grid3}>
-          {filtered.map(item => {
+          {filtered.map((item, index) => {
             const d = item.data as unknown as TradesArtifact;
             const isSelected = selectedJobId === item.id;
             return (
-              <div
+              <motion.div
                 key={item.id}
+                initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }}
                 className={cn(ds.panelHover, isSelected && 'border-neon-cyan ring-1 ring-neon-cyan/30')}
                 onClick={() => openEdit(item)}
               >
@@ -1705,7 +1706,7 @@ export default function TradesLensPage() {
                     </span>
                   )}
                 </div>
-              </div>
+              </motion.div>
             );
           })}
         </div>
@@ -2234,6 +2235,30 @@ export default function TradesLensPage() {
 
 
       <RealtimeDataPanel domain="trades" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {(() => {
+          const allData = items.map(i => i.data as unknown as TradesArtifact);
+          const completed = allData.filter(d => d.status === 'completed' || d.status === 'paid').length;
+          const certs = new Set(allData.map(d => d.trade).filter(Boolean)).size;
+          const completionRate = allData.length > 0 ? Math.round((completed / allData.length) * 100) : 0;
+          return [
+            { label: 'Jobs', value: items.length, icon: Hammer },
+            { label: 'Certifications', value: certs, icon: ShieldCheck },
+            { label: 'Completion Rate', value: `${completionRate}%`, icon: ClipboardCheck },
+            { label: 'Active', value: allData.filter(d => d.status === 'in_progress').length, icon: HardHat },
+          ].map((stat) => (
+            <div key={stat.label} className={ds.panel + ' flex items-center gap-3 p-3'}>
+              <stat.icon className="w-5 h-5 text-teal-400 shrink-0" />
+              <div>
+                <p className="text-xs text-gray-400">{stat.label}</p>
+                <p className="text-lg font-bold text-white">{stat.value}</p>
+              </div>
+            </div>
+          ));
+        })()}
+      </div>
 
       {/* AI Actions */}
       <UniversalActions domain="trades" artifactId={items[0]?.id} compact />

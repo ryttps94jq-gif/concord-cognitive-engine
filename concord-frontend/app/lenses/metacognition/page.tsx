@@ -370,6 +370,24 @@ export default function MetacognitionLensPage() {
       </div>
       </header>
 
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+        {[
+          { label: 'Reflections', value: introspectionHistory.length, icon: BookOpen },
+          { label: 'Patterns', value: patterns.length, icon: Activity },
+          { label: 'Meta-Score', value: cal.accuracy != null ? `${(Number(cal.accuracy) * 100).toFixed(0)}%` : '--', icon: Gauge },
+          { label: 'Blind Spots', value: spots.length, icon: AlertTriangle },
+        ].map((stat) => (
+          <div key={stat.label} className="panel flex items-center gap-3 p-3">
+            <stat.icon className="w-5 h-5 text-neon-purple shrink-0" />
+            <div>
+              <p className="text-xs text-gray-400">{stat.label}</p>
+              <p className="text-lg font-bold text-white">{stat.value}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* AI Actions */}
       <UniversalActions domain="metacognition" artifactId={bridge.selectedId} compact />
 
@@ -541,8 +559,9 @@ export default function MetacognitionLensPage() {
                   {spots.map((spot: Record<string, unknown>, i: number) => {
                     const badge = severityBadge(spot.severity);
                     return (
-                      <div
+                      <motion.div
                         key={i}
+                        initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
                         className={`p-3 rounded-lg border-l-4 ${severityColor(spot.severity)}`}
                       >
                         <div className="flex items-start justify-between gap-2">
@@ -567,7 +586,7 @@ export default function MetacognitionLensPage() {
                             Detected: {formatTimestamp(spot.detected_at)}
                           </p>
                         )}
-                      </div>
+                      </motion.div>
                     );
                   })}
                 </div>

@@ -727,6 +727,29 @@ export default function SimLensPage() {
         </div>
       </header>
 
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {(() => {
+          const completedRuns = runs.filter(r => r.status === 'completed');
+          const avgRuntime = completedRuns.length > 0 ? (completedRuns.reduce((s, r) => s + (r.duration || 0), 0) / completedRuns.length / 1000).toFixed(1) : '0';
+          const successRate = runs.length > 0 ? Math.round((completedRuns.length / runs.length) * 100) : 0;
+          return [
+            { label: 'Simulations', value: scenarios.length, icon: FlaskConical },
+            { label: 'Avg Runtime', value: `${avgRuntime}s`, icon: Clock },
+            { label: 'Success Rate', value: `${successRate}%`, icon: CheckCircle2 },
+            { label: 'Total Runs', value: runs.length, icon: Activity },
+          ].map((stat) => (
+            <div key={stat.label} className={ds.panel + ' flex items-center gap-3 p-3'}>
+              <stat.icon className="w-5 h-5 text-purple-400 shrink-0" />
+              <div>
+                <p className="text-xs text-gray-400">{stat.label}</p>
+                <p className="text-lg font-bold text-white">{stat.value}</p>
+              </div>
+            </div>
+          ));
+        })()}
+      </div>
+
       {/* ── Dashboard Stats (4 cards) ────────────────────────────────────── */}
       <div className={ds.grid4}>
         <div className={ds.panel}>
@@ -1287,9 +1310,10 @@ function ScenariosTab({
         </div>
       )}
 
-      {scenarios.map(scenario => (
-        <div
+      {scenarios.map((scenario, index) => (
+        <motion.div
           key={scenario.id}
+          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }}
           onClick={() => onSelect(scenario.id)}
           className={cn(
             ds.panelHover,
@@ -1335,7 +1359,7 @@ function ScenariosTab({
               </button>
             </div>
           </div>
-        </div>
+        </motion.div>
       ))}
 
       {/* Backend simulations (legacy) */}

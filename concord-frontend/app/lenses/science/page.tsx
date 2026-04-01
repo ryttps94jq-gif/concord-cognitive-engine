@@ -28,7 +28,6 @@ import {
   ShieldCheck,
   Activity,
   PieChart,
-  Beaker,
   FileText,
   Target,
   Hash,

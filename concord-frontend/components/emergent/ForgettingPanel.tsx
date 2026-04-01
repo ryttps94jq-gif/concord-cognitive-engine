@@ -32,7 +32,7 @@ export function ForgettingPanel() {
   useEffect(() => {
     apiHelpers.forgetting.status().then((resp) => {
       setStatus(resp.data);
-    }).catch(() => {});
+    }).catch(err => console.error('[Forgetting] Failed to load status:', err));
   }, []);
 
   const loadHistory = async () => {

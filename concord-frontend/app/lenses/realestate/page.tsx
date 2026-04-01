@@ -567,6 +567,29 @@ export default function RealEstateLensPage() {
       </header>
 
 
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {(() => {
+          const listings = items.filter(i => (i.data as Record<string, unknown>).price);
+          const avgPrice = listings.length > 0 ? Math.round(listings.reduce((s, i) => s + Number((i.data as Record<string, unknown>).price || 0), 0) / listings.length) : 0;
+          const pending = items.filter(i => i.meta?.status === 'pending' || (i.data as Record<string, unknown>).status === 'pending').length;
+          return [
+            { label: 'Listings', value: items.length, icon: Building2 },
+            { label: 'Avg Price', value: `$${(avgPrice / 1000).toFixed(0)}K`, icon: DollarSign },
+            { label: 'Pending Offers', value: pending, icon: KeyRound },
+            { label: 'Active', value: items.filter(i => (i.data as Record<string, unknown>).status === 'active').length, icon: TrendingUp },
+          ].map((stat) => (
+            <div key={stat.label} className={ds.panel + ' flex items-center gap-3 p-3'}>
+              <stat.icon className="w-5 h-5 text-neon-cyan shrink-0" />
+              <div>
+                <p className="text-xs text-gray-400">{stat.label}</p>
+                <p className="text-lg font-bold text-white">{stat.value}</p>
+              </div>
+            </div>
+          ));
+        })()}
+      </div>
+
       {/* AI Actions */}
       <UniversalActions domain="realestate" artifactId={items[0]?.id} compact />
       <RealtimeDataPanel domain="realestate" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
@@ -864,11 +887,11 @@ export default function RealEstateLensPage() {
               </div>
             ) : (
               <div className={ds.grid3}>
-                {filtered.map(item => {
+                {filtered.map((item, index) => {
                   const d = item.data as unknown as RealEstateArtifact;
                   const color = STATUS_COLORS[d.status] || 'gray-400';
                   return (
-                    <div key={item.id} className={ds.panelHover} onClick={() => openEditEditor(item)}>
+                    <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className={ds.panelHover} onClick={() => openEditEditor(item)}>
                       <div className="flex items-start justify-between mb-2">
                         <h3 className={cn(ds.heading3, 'text-base truncate flex-1')}>{item.title}</h3>
                         <span className={ds.badge(color)}>{d.status.replace(/_/g, ' ')}</span>
@@ -915,7 +938,7 @@ export default function RealEstateLensPage() {
                           </p>
                         </div>
                       )}
-                    </div>
+                    </motion.div>
                   );
                 })}
               </div>

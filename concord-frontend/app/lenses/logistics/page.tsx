@@ -374,14 +374,14 @@ export default function LogisticsLensPage() {
 
       {/* Vehicle Cards */}
       <div className={ds.grid2}>
-        {filtered.map(item => {
+        {filtered.map((item, index) => {
           const d = item.data as Record<string, unknown>;
           const status = item.meta?.status || 'active';
           const fuelPct = Number(d.fuelLevel) || 0;
           const utilPct = Number(d.utilizationRate) || 0;
           const maintDays = d.nextMaintenance ? daysUntil(String(d.nextMaintenance)) : null;
           return (
-            <div key={item.id} className={cn(ds.panelHover, 'space-y-3')} onClick={() => setDetailId(item.id)}>
+            <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className={cn(ds.panelHover, 'space-y-3')} onClick={() => setDetailId(item.id)}>
               <div className="flex items-start justify-between">
                 <div>
                   <h3 className={ds.heading3}>{item.title}</h3>
@@ -443,7 +443,7 @@ export default function LogisticsLensPage() {
                   <button onClick={e => { e.stopPropagation(); remove(item.id); }} className={cn(ds.btnGhost, 'hover:text-red-400')}><Trash2 className="w-3.5 h-3.5" /></button>
                 </div>
               </div>
-            </div>
+            </motion.div>
           );
         })}
       </div>
@@ -1341,6 +1341,24 @@ export default function LogisticsLensPage() {
         </button>
       </header>
 
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Shipments', value: allShipments.length, icon: Package },
+          { label: 'On-Time Rate', value: `${Math.round(dashMetrics.onTimeRate)}%`, icon: CheckCircle },
+          { label: 'Warehouses', value: allWarehouse.length, icon: Warehouse },
+          { label: 'Active Fleet', value: dashMetrics.activeVehicles, icon: Truck },
+        ].map((stat) => (
+          <div key={stat.label} className={ds.panel + ' flex items-center gap-3 p-3'}>
+            <stat.icon className="w-5 h-5 text-neon-cyan shrink-0" />
+            <div>
+              <p className="text-xs text-gray-400">{stat.label}</p>
+              <p className="text-lg font-bold text-white">{stat.value}</p>
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* AI Actions */}
       <UniversalActions domain="logistics" artifactId={items[0]?.id} compact />

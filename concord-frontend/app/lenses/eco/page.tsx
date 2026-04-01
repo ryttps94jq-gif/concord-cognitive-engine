@@ -267,36 +267,23 @@ export default function EcoLensPage() {
     <div className="space-y-6">
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-        <div className="lens-card">
-          <Fish className="w-5 h-5 text-neon-cyan mb-2" />
-          <p className="text-2xl font-bold">{totalSpecies}</p>
-          <p className="text-sm text-gray-400">Tracked Species</p>
-        </div>
-        <div className="lens-card">
-          <AlertTriangle className="w-5 h-5 text-red-400 mb-2" />
-          <p className="text-2xl font-bold text-red-400">{criticalCount}</p>
-          <p className="text-sm text-gray-400">At Risk</p>
-        </div>
-        <div className="lens-card">
-          <TrendingUp className="w-5 h-5 text-neon-green mb-2" />
-          <p className="text-2xl font-bold text-neon-green">{growingCount}</p>
-          <p className="text-sm text-gray-400">Growing</p>
-        </div>
-        <div className="lens-card">
-          <Leaf className="w-5 h-5 text-neon-blue mb-2" />
-          <p className="text-2xl font-bold">{avgBiodiversity.toFixed(2)}</p>
-          <p className="text-sm text-gray-400">Avg Shannon Index</p>
-        </div>
-        <div className="lens-card">
-          <Mountain className="w-5 h-5 text-neon-orange mb-2" />
-          <p className="text-2xl font-bold">{totalImpactArea.toLocaleString()}</p>
-          <p className="text-sm text-gray-400">Impacted Hectares</p>
-        </div>
-        <div className="lens-card">
-          <Shield className="w-5 h-5 text-neon-purple mb-2" />
-          <p className="text-2xl font-bold text-neon-orange">{criticalImpacts}</p>
-          <p className="text-sm text-gray-400">High/Critical Impacts</p>
-        </div>
+        {[
+          { icon: Fish, color: 'text-neon-cyan', value: totalSpecies, label: 'Tracked Species', valueColor: '' },
+          { icon: AlertTriangle, color: 'text-red-400', value: criticalCount, label: 'At Risk', valueColor: 'text-red-400' },
+          { icon: TrendingUp, color: 'text-neon-green', value: growingCount, label: 'Growing', valueColor: 'text-neon-green' },
+          { icon: Leaf, color: 'text-neon-blue', value: avgBiodiversity.toFixed(2), label: 'Avg Shannon Index', valueColor: '' },
+          { icon: Mountain, color: 'text-neon-orange', value: totalImpactArea.toLocaleString(), label: 'Impacted Hectares', valueColor: '' },
+          { icon: Shield, color: 'text-neon-purple', value: criticalImpacts, label: 'High/Critical Impacts', valueColor: 'text-neon-orange' },
+        ].map((card, index) => {
+          const CardIcon = card.icon;
+          return (
+            <motion.div key={card.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="lens-card">
+              <CardIcon className={`w-5 h-5 ${card.color} mb-2`} />
+              <p className={`text-2xl font-bold ${card.valueColor}`}>{card.value}</p>
+              <p className="text-sm text-gray-400">{card.label}</p>
+            </motion.div>
+          );
+        })}
       </div>
 
       {/* Ecosystem Metrics from Backend */}

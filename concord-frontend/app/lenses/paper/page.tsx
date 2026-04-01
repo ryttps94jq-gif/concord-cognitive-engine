@@ -513,6 +513,24 @@ export default function PaperLensPage() {
         </div>
       </header>
 
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Papers', value: stats.papers, icon: FileText },
+          { label: 'Citations', value: allBibliography.length, icon: Link2 },
+          { label: 'Hypotheses', value: stats.hypotheses, icon: Lightbulb },
+          { label: 'Experiments', value: stats.experiments, icon: Beaker },
+        ].map((stat) => (
+          <div key={stat.label} className={ds.panel + ' flex items-center gap-3 p-3'}>
+            <stat.icon className="w-5 h-5 text-neon-purple shrink-0" />
+            <div>
+              <p className="text-xs text-gray-400">{stat.label}</p>
+              <p className="text-lg font-bold text-white">{stat.value}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* ---- Dashboard Stats ---- */}
       <div className={ds.grid4}>
         <StatCard icon={FileText} label="Total Papers" value={stats.papers} color="neon-purple" />
@@ -955,12 +973,13 @@ function PapersGrid({ items, onEdit, onSelect, onValidate, validationResults, is
 }) {
   return (
     <div className={ds.grid3}>
-      {items.map(item => {
+      {items.map((item, index) => {
         const d = getData<PaperData>(item);
         const vr = validationResults[item.id];
         return (
-          <div
+          <motion.div
             key={item.id}
+            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }}
             className={cn(ds.panelHover, 'space-y-3')}
             onClick={() => onSelect(item)}
           >
@@ -996,7 +1015,7 @@ function PapersGrid({ items, onEdit, onSelect, onValidate, validationResults, is
                 </button>
               </div>
             </div>
-          </div>
+          </motion.div>
         );
       })}
     </div>
