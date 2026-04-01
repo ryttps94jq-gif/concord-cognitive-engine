@@ -569,11 +569,11 @@ export default function FeedLensPage() {
     );
   }
   return (
-    <div className="min-h-full bg-lattice-bg flex">
+    <div className="lens-feed min-h-full bg-lattice-bg flex" data-lens-theme="feed">
       {/* ── Left Sidebar ──────────────────────────────────────────────────── */}
-      <aside className="w-20 xl:w-64 border-r border-lattice-border p-2 xl:p-4 flex flex-col items-center xl:items-start sticky top-0 h-screen overflow-y-auto">
+      <aside className="w-20 xl:w-64 border-r border-lattice-border/50 p-2 xl:p-4 flex flex-col items-center xl:items-start sticky top-0 h-screen overflow-y-auto bg-gradient-to-b from-lattice-surface to-lattice-bg">
         <div className="flex items-center gap-2 mb-8 p-3">
-          <Disc3 className="w-8 h-8 text-neon-cyan" />
+          <Disc3 className="w-8 h-8 text-blue-400" />
           <span className="hidden xl:inline text-lg font-bold text-white tracking-tight">Concord</span>
         </div>
 
@@ -945,10 +945,10 @@ export default function FeedLensPage() {
                           }}
                           className="flex items-center gap-1.5 group"
                         >
-                          <div className="p-1.5 rounded-full group-hover:bg-blue-500/10 group-hover:text-blue-400 transition-colors">
+                          <div className="p-1.5 rounded-full group-hover:bg-blue-500/15 group-hover:text-blue-400 group-hover:scale-110 transition-all duration-200">
                             <MessageCircle className="w-4 h-4" />
                           </div>
-                          <span className="text-xs group-hover:text-blue-400">{formatNumber(post.comments)}</span>
+                          <span className="text-xs group-hover:text-blue-400 transition-colors">{formatNumber(post.comments)}</span>
                         </button>
 
                         <button
@@ -958,10 +958,10 @@ export default function FeedLensPage() {
                             post.reposted && 'text-neon-green'
                           )}
                         >
-                          <div className="p-1.5 rounded-full group-hover:bg-neon-green/10 group-hover:text-neon-green transition-colors">
+                          <div className="p-1.5 rounded-full group-hover:bg-neon-green/15 group-hover:text-neon-green group-hover:scale-110 transition-all duration-200">
                             <Repeat2 className="w-4 h-4" />
                           </div>
-                          <span className="text-xs group-hover:text-neon-green">{formatNumber(post.reposts)}</span>
+                          <span className="text-xs group-hover:text-neon-green transition-colors">{formatNumber(post.reposts)}</span>
                         </button>
 
                         <button
@@ -971,29 +971,29 @@ export default function FeedLensPage() {
                             post.liked && 'text-neon-pink'
                           )}
                         >
-                          <div className="p-1.5 rounded-full group-hover:bg-neon-pink/10 group-hover:text-neon-pink transition-colors">
+                          <div className="p-1.5 rounded-full group-hover:bg-gradient-to-r group-hover:from-pink-500/15 group-hover:to-rose-500/15 group-hover:text-neon-pink group-hover:scale-110 transition-all duration-200">
                             <Heart className={cn('w-4 h-4', post.liked && 'fill-current')} />
                           </div>
-                          <span className="text-xs group-hover:text-neon-pink">{formatNumber(post.likes)}</span>
+                          <span className="text-xs group-hover:text-neon-pink transition-colors">{formatNumber(post.likes)}</span>
                         </button>
 
                         <div className="flex items-center gap-1.5 group" title="Views">
-                          <div className="p-1.5 rounded-full group-hover:bg-neon-cyan/10 group-hover:text-neon-cyan transition-colors">
+                          <div className="p-1.5 rounded-full group-hover:bg-neon-cyan/15 group-hover:text-neon-cyan group-hover:scale-110 transition-all duration-200">
                             <Eye className="w-4 h-4" />
                           </div>
-                          <span className="text-xs group-hover:text-neon-cyan">{formatNumber(post.views)}</span>
+                          <span className="text-xs group-hover:text-neon-cyan transition-colors">{formatNumber(post.views)}</span>
                         </div>
 
                         <div className="flex items-center gap-0.5">
                           <button
                             onClick={() => bookmarkMutation.mutate(post.id)}
-                            className="p-1.5 rounded-full hover:bg-neon-cyan/10 hover:text-neon-cyan transition-colors"
+                            className="p-1.5 rounded-full hover:bg-neon-cyan/15 hover:text-neon-cyan hover:scale-110 transition-all duration-200"
                           >
                             <Bookmark className={cn('w-4 h-4', post.bookmarked && 'fill-current text-neon-cyan')} />
                           </button>
                           <button
                             onClick={() => shareMutation.mutate(post.id)}
-                            className="p-1.5 rounded-full hover:bg-neon-cyan/10 hover:text-neon-cyan transition-colors"
+                            className="p-1.5 rounded-full hover:bg-neon-cyan/15 hover:text-neon-cyan hover:scale-110 transition-all duration-200"
                           >
                             <Share className="w-4 h-4" />
                           </button>

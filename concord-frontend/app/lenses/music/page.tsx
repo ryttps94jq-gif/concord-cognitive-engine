@@ -255,9 +255,9 @@ export default function MusicLensPage() {
 
   // ---- Render ----
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="lens-music flex flex-col h-full overflow-hidden" data-lens-theme="music">
       {/* Top Navigation */}
-      <header className="flex items-center justify-between px-6 py-3 border-b border-white/5 flex-shrink-0">
+      <header className="flex items-center justify-between px-6 py-3 border-b border-purple-500/10 bg-gradient-to-r from-purple-950/20 via-transparent to-indigo-950/20 flex-shrink-0">
         <div className="flex items-center gap-1">
           {[
             { id: 'home' as MusicLensView, icon: Home, label: 'Home' },
@@ -270,7 +270,7 @@ export default function MusicLensPage() {
               onClick={() => setView(nav.id)}
               className={cn(
                 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors',
-                view === nav.id ? 'bg-white/10 text-white' : 'text-gray-400 hover:text-white hover:bg-white/5',
+                view === nav.id ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' : 'text-gray-400 hover:text-purple-300 hover:bg-purple-500/10',
               )}
             >
               <nav.icon className="w-4 h-4" />
@@ -824,13 +824,13 @@ export default function MusicLensPage() {
         </AnimatePresence>
       </main>
 
-      {/* Now Playing Bar */}
+      {/* Now Playing Bar — purple/indigo accent */}
       {nowPlaying.track && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 bg-lattice-surface/95 backdrop-blur border-t border-white/5 px-6 py-3">
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-gradient-to-r from-purple-950/90 via-lattice-surface/95 to-indigo-950/90 backdrop-blur-xl border-t border-purple-500/20 px-6 py-3 shadow-[0_-4px_24px_rgba(139,92,246,0.15)]">
           <div className="flex items-center justify-between max-w-screen-xl mx-auto">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="w-10 h-10 rounded bg-white/5 flex items-center justify-center flex-shrink-0">
-                <Music className="w-5 h-5 text-neon-cyan" />
+              <div className="w-12 h-12 rounded-lg bg-purple-500/20 border border-purple-500/30 flex items-center justify-center flex-shrink-0 shadow-lg shadow-purple-500/10">
+                <Music className="w-5 h-5 text-purple-400" />
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-medium truncate">{nowPlaying.track.title}</p>
@@ -850,7 +850,7 @@ export default function MusicLensPage() {
                   if (nowPlaying.playbackState === 'playing') player.pause();
                   else player.play();
                 }}
-                className="p-2 rounded-full bg-white text-black hover:brightness-90 transition"
+                className="p-2 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 text-white hover:brightness-110 transition shadow-lg shadow-purple-500/25"
               >
                 {nowPlaying.playbackState === 'playing' ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
               </button>
