@@ -29,7 +29,7 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { NervousSystem } from '@/components/nervous/NervousSystem';
-import { Download, Globe } from 'lucide-react';
+import { Download, Globe, DollarSign, PieChart, BarChart3 } from 'lucide-react';
 
 interface DashboardData {
   ok: boolean;

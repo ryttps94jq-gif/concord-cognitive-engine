@@ -4,7 +4,7 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useState } from 'react';
-import { Users, Plus, Terminal, GitFork, Activity, Play, Brain, X } from 'lucide-react';
+import { Users, Plus, Terminal, GitFork, Activity, Play, Brain, X, Cpu } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -36,6 +36,7 @@ export default function EntityLensPage() {
   const [terminalCommand, setTerminalCommand] = useState('');
   const [terminalOutput, setTerminalOutput] = useState<string[]>([]);
   const [qualiaEntity, setQualiaEntity] = useState<string | null>(null);
+  const [cognitiveEntity, setCognitiveEntity] = useState<string | null>(null);
 
   // Fetch entities from worldmodel backend
   const { data: entitiesData, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
@@ -321,6 +322,13 @@ export default function EntityLensPage() {
                     Qualia
                   </button>
                   <button
+                    onClick={() => setCognitiveEntity(entity.id)}
+                    className="btn-neon text-xs flex-1"
+                  >
+                    <Cpu className="w-3 h-3 mr-1 inline" />
+                    Cognitive
+                  </button>
+                  <button
                     onClick={() => forkEntity.mutate(entity.id)}
                     disabled={forkEntity.isPending}
                     className="btn-neon text-xs flex-1"
@@ -340,6 +348,15 @@ export default function EntityLensPage() {
           entityId={qualiaEntity}
           entityName={entities.find(e => e.id === qualiaEntity)?.name || qualiaEntity}
           onClose={() => setQualiaEntity(null)}
+        />
+      )}
+
+      {/* Cognitive Systems Detail Panel (Feature 22) */}
+      {cognitiveEntity && (
+        <CognitiveEntityPanel
+          entityId={cognitiveEntity}
+          entityName={entities.find(e => e.id === cognitiveEntity)?.name || cognitiveEntity}
+          onClose={() => setCognitiveEntity(null)}
         />
       )}
 
