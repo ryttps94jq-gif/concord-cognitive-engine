@@ -661,10 +661,10 @@ export default function FeedLensPage() {
           </div>
         </header>
 
-        {/* Stories Bar */}
+        {/* Stories Bar — prominent with gradient border */}
         <StoriesBar
           currentUserId="current-user"
-          className="border-b border-lattice-border"
+          className="border-b border-lattice-border bg-gradient-to-r from-blue-500/5 via-transparent to-pink-500/5 py-1"
         />
 
         {/* Compose Box */}

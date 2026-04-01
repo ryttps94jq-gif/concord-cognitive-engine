@@ -749,12 +749,12 @@ export default function MarketplaceLensPage() {
     );
   }
   return (
-    <div className="space-y-6 pb-24">
+    <div className="lens-marketplace space-y-6 pb-24" data-lens-theme="marketplace">
       {/* ---- Header ---- */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Store className="w-6 h-6 text-neon-purple" />
-          <h1 className="text-2xl font-bold">Creative Marketplace</h1>
+          <Store className="w-6 h-6 text-amber-400" />
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent">Creative Marketplace</h1>
         </div>
 
       {/* Real-time Enhancement Toolbar */}
