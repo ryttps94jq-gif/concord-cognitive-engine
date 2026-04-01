@@ -41,6 +41,8 @@ import {
 import { distributeFee, getFeeSplitBalances, getFeeDistributions } from "./fee-split.js";
 import { runTreasuryReconciliation, getReconciliationHistory } from "./treasury-reconciliation.js";
 import { getSystemBalanceSummary } from "./balances.js";
+import { getDescendants } from "./royalty-cascade.js";
+import { getTreasuryEvents } from "./coin-service.js";
 
 /**
  * Register all economy + Stripe routes on the Express app.

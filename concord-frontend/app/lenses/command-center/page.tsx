@@ -89,8 +89,10 @@ function VitalsPanel() {
   const { data: queue } = useQuery({ queryKey: ['cc-queue'], queryFn: () => apiHelpers.backpressure.status().then(r => r.data), refetchInterval: 15000 });
   const { data: breakers } = useQuery({ queryKey: ['cc-breakers'], queryFn: () => apiHelpers.status.get().then(r => r.data), refetchInterval: 15000 });
   const { data: traces } = useQuery({ queryKey: ['cc-traces'], queryFn: () => apiHelpers.perf.metrics().then(r => r.data), refetchInterval: 15000 });
+  const { data: shadowData } = useQuery({ queryKey: ['cc-shadow-pending'], queryFn: () => api.get('/api/dtus/shadow/pending').then(r => r.data).catch(() => null), refetchInterval: 60000 });
 
   const h = health as SystemHealth | undefined;
+  const shadowCandidateCount = (shadowData?.candidates?.length || 0) + (shadowData?.pendingShadows?.length || 0);
 
   return (
     <div className="space-y-4">
@@ -103,6 +105,14 @@ function VitalsPanel() {
         <Stat label="p50 Latency" value={traces?.p50 ? `${traces.p50}ms` : '—'} />
         <Stat label="p99 Latency" value={traces?.p99 ? `${traces.p99}ms` : '—'} />
       </div>
+      {/* Shadow DTU pending review indicator */}
+      {shadowCandidateCount > 0 && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-purple-500/10 border border-purple-500/20 text-xs text-purple-300">
+          <ArrowUp className="w-3.5 h-3.5" />
+          <span className="font-medium">{shadowCandidateCount} shadow DTU{shadowCandidateCount !== 1 ? 's' : ''} pending review</span>
+          <span className="text-purple-500 ml-auto">See Promotions tab</span>
+        </div>
+      )}
       {breakers?.breakers && (
         <div className="bg-lattice-deep rounded-lg p-3 space-y-2 border border-lattice-border">
           <p className="text-xs font-semibold text-gray-400 uppercase">Circuit Breakers</p>
