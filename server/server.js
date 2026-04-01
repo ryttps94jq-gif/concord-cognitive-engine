@@ -25581,6 +25581,258 @@ app.get("/api/marketplace/royalties", asyncHandler(async (req, res) => res.json(
 structuredLog("info", "module_loaded", { module: "Wave 1.5: Dual Global System, Creative Pipeline, Royalty Cascade" });
 
 // ============================================================================
+// CONSOLIDATION ECONOMICS — MEGA/HYPER marketplace + delta pricing + royalty cascade
+// ============================================================================
+
+// GET /api/marketplace/mega/:id/components — list component DTUs in a MEGA consolidation
+app.get("/api/marketplace/mega/:id/components", (req, res) => {
+  const id = req.params.id;
+  const mega = STATE.dtus.get(id);
+  if (!mega) return res.status(404).json({ ok: false, error: "DTU not found" });
+  if ((mega.tier || "").toLowerCase() !== "mega" && (mega.tier || "").toLowerCase() !== "hyper") {
+    return res.status(400).json({ ok: false, error: "DTU is not a MEGA or HYPER consolidation" });
+  }
+
+  const componentIds = mega.lineage?.children || mega.children || mega.meta?.components || [];
+  const components = (Array.isArray(componentIds) ? componentIds : []).map(cid => {
+    const comp = STATE.dtus.get(cid);
+    if (!comp) return { id: cid, title: cid, found: false };
+    return {
+      id: cid,
+      title: comp.title || comp.human?.summary || cid,
+      summary: comp.human?.summary || comp.summary,
+      tier: comp.tier || "regular",
+      ownerId: comp.ownerId || comp.creatorId,
+      domain: comp.domain,
+      price: comp.meta?.price || comp.price || 0,
+      found: true,
+    };
+  });
+
+  const totalComponentValue = components.reduce((sum, c) => sum + (c.price || 0), 0);
+  const megaPrice = mega.meta?.price || mega.price || totalComponentValue * 0.8;
+  const savings = totalComponentValue > 0
+    ? Math.round((1 - megaPrice / totalComponentValue) * 100)
+    : 0;
+
+  const domainSummary = {};
+  for (const c of components) {
+    if (c.domain) domainSummary[c.domain] = (domainSummary[c.domain] || 0) + 1;
+  }
+
+  return res.json({
+    ok: true,
+    megaId: id,
+    tier: mega.tier,
+    title: mega.title || mega.human?.summary,
+    componentCount: components.length,
+    components,
+    totalComponentValue: Math.round(totalComponentValue * 100) / 100,
+    megaPrice: Math.round(megaPrice * 100) / 100,
+    savings: `${savings}%`,
+    domainSummary,
+  });
+});
+
+// GET /api/marketplace/:id/delta-price?userId=X — compute delta price for user who owns some components
+app.get("/api/marketplace/:id/delta-price", (req, res) => {
+  const id = req.params.id;
+  const userId = req.query.userId;
+  if (!userId) return res.status(400).json({ ok: false, error: "userId query parameter required" });
+
+  const mega = STATE.dtus.get(id);
+  if (!mega) return res.status(404).json({ ok: false, error: "DTU not found" });
+
+  const componentIds = mega.lineage?.children || mega.children || mega.meta?.components || [];
+  const components = Array.isArray(componentIds) ? componentIds : [];
+
+  // Check which components the user already owns
+  const ownedComponents = [];
+  const unownedComponents = [];
+  let ownedValue = 0;
+
+  for (const cid of components) {
+    const comp = STATE.dtus.get(cid);
+    if (!comp) { unownedComponents.push(cid); continue; }
+    const compOwner = comp.ownerId || comp.creatorId;
+    const price = comp.meta?.price || comp.price || 0;
+    if (compOwner === userId || (Array.isArray(comp.meta?.licensees) && comp.meta.licensees.includes(userId))) {
+      ownedComponents.push({ id: cid, price });
+      ownedValue += price;
+    } else {
+      unownedComponents.push(cid);
+    }
+  }
+
+  const megaPrice = mega.meta?.price || mega.price || 0;
+  const FLOOR_PRICE = Math.max(megaPrice * 0.1, 1); // 10% floor
+  const deltaPrice = Math.max(megaPrice - ownedValue, FLOOR_PRICE);
+
+  return res.json({
+    ok: true,
+    megaId: id,
+    userId,
+    megaPrice: Math.round(megaPrice * 100) / 100,
+    ownedComponentCount: ownedComponents.length,
+    totalComponentCount: components.length,
+    ownedValue: Math.round(ownedValue * 100) / 100,
+    deltaPrice: Math.round(deltaPrice * 100) / 100,
+    floorPrice: Math.round(FLOOR_PRICE * 100) / 100,
+    unownedComponentIds: unownedComponents,
+  });
+});
+
+// POST /api/marketplace/:id/purchase — purchase with delta pricing + royalty cascade
+app.post("/api/marketplace/:id/purchase", asyncHandler(async (req, res) => {
+  const id = req.params.id;
+  const { buyerId, requestId } = req.body || {};
+  if (!buyerId) return res.status(400).json({ ok: false, error: "buyerId required" });
+
+  const dtu = STATE.dtus.get(id);
+  if (!dtu) return res.status(404).json({ ok: false, error: "DTU not found" });
+
+  const tier = (dtu.tier || "regular").toLowerCase();
+  const basePrice = dtu.meta?.price || dtu.price || 0;
+  let finalPrice = basePrice;
+  let deltaApplied = false;
+  const ownedComponents = [];
+
+  // For MEGA/HYPER: compute delta pricing
+  if (tier === "mega" || tier === "hyper") {
+    const componentIds = dtu.lineage?.children || dtu.children || dtu.meta?.components || [];
+    const components = Array.isArray(componentIds) ? componentIds : [];
+    let ownedValue = 0;
+
+    for (const cid of components) {
+      const comp = STATE.dtus.get(cid);
+      if (!comp) continue;
+      const compOwner = comp.ownerId || comp.creatorId;
+      if (compOwner === buyerId || (Array.isArray(comp.meta?.licensees) && comp.meta.licensees.includes(buyerId))) {
+        ownedValue += comp.meta?.price || comp.price || 0;
+        ownedComponents.push(cid);
+      }
+    }
+
+    if (ownedValue > 0) {
+      const FLOOR_PRICE = Math.max(basePrice * 0.1, 1);
+      finalPrice = Math.max(basePrice - ownedValue, FLOOR_PRICE);
+      deltaApplied = true;
+    }
+  }
+
+  // Build royalty cascade for all ancestors/component creators
+  const royaltyPayouts = [];
+  const INITIAL_RATE = 0.21;
+  const ROYALTY_FLOOR = 0.0005;
+
+  const parentIds = dtu.lineage?.parents || dtu.parents || [];
+  const componentIds = dtu.lineage?.children || dtu.children || dtu.meta?.components || [];
+  const allLineageIds = [...(Array.isArray(parentIds) ? parentIds : []), ...(Array.isArray(componentIds) ? componentIds : [])];
+
+  const seenCreators = new Set();
+  allLineageIds.forEach((lid, i) => {
+    const linked = STATE.dtus.get(lid);
+    if (!linked) return;
+    const creatorId = linked.ownerId || linked.creatorId;
+    if (!creatorId || creatorId === buyerId || seenCreators.has(creatorId)) return;
+    seenCreators.add(creatorId);
+
+    const generation = i + 1;
+    const rate = Math.max(INITIAL_RATE / Math.pow(2, generation), ROYALTY_FLOOR);
+    const amount = Math.round(finalPrice * rate * 100) / 100;
+    if (amount >= 0.01) {
+      royaltyPayouts.push({
+        recipientId: creatorId,
+        contentId: lid,
+        generation,
+        rate,
+        amount,
+      });
+    }
+  });
+
+  const totalRoyalties = Math.round(royaltyPayouts.reduce((s, p) => s + p.amount, 0) * 100) / 100;
+
+  // Record the purchase in the DTU metadata (licensees list)
+  if (!dtu.meta) dtu.meta = {};
+  if (!Array.isArray(dtu.meta.licensees)) dtu.meta.licensees = [];
+  if (!dtu.meta.licensees.includes(buyerId)) {
+    dtu.meta.licensees.push(buyerId);
+  }
+
+  return res.json({
+    ok: true,
+    dtuId: id,
+    buyerId,
+    tier,
+    basePrice: Math.round(basePrice * 100) / 100,
+    finalPrice: Math.round(finalPrice * 100) / 100,
+    deltaApplied,
+    ownedComponentCount: ownedComponents.length,
+    royaltyPayouts,
+    totalRoyalties,
+    netToSeller: Math.round((finalPrice - totalRoyalties) * 100) / 100,
+    purchasedAt: new Date().toISOString(),
+    requestId,
+  });
+}));
+
+// GET /api/marketplace/dtu_browse — browse DTUs in marketplace context with tier-aware info
+app.get("/api/marketplace/dtu_browse", (req, res) => {
+  const { tier, domain, limit: rawLimit, offset: rawOffset, sort } = req.query;
+  const limit = Math.min(parseInt(rawLimit) || 50, 200);
+  const offset = parseInt(rawOffset) || 0;
+
+  let results = dtusArray().filter(d => {
+    const status = (d.status || d.meta?.status || "active").toString().toLowerCase();
+    if (status === "archived" || status === "inactive") return false;
+    if (tier && (d.tier || "regular").toLowerCase() !== tier.toLowerCase()) return false;
+    if (domain && d.domain !== domain) return false;
+    return true;
+  });
+
+  // Sort
+  if (sort === "price") {
+    results.sort((a, b) => ((b.meta?.price || b.price || 0) - (a.meta?.price || a.price || 0)));
+  } else {
+    results.sort((a, b) => (b.updatedAt || b.createdAt || "").localeCompare(a.updatedAt || a.createdAt || ""));
+  }
+
+  const total = results.length;
+  results = results.slice(offset, offset + limit);
+
+  const listings = results.map(d => {
+    const componentIds = d.lineage?.children || d.children || d.meta?.components || [];
+    const components = Array.isArray(componentIds) ? componentIds : [];
+    const domainSummary = {};
+
+    if ((d.tier || "").toLowerCase() === "mega" || (d.tier || "").toLowerCase() === "hyper") {
+      for (const cid of components) {
+        const comp = STATE.dtus.get(cid);
+        if (comp?.domain) domainSummary[comp.domain] = (domainSummary[comp.domain] || 0) + 1;
+      }
+    }
+
+    return {
+      id: d.id,
+      title: d.title || d.human?.summary || d.id,
+      summary: d.human?.summary || d.summary,
+      tier: d.tier || "regular",
+      domain: d.domain,
+      price: d.meta?.price || d.price || 0,
+      ownerId: d.ownerId || d.creatorId,
+      componentCount: components.length,
+      domainSummary,
+      timestamp: d.timestamp || d.createdAt,
+    };
+  });
+
+  return res.json({ ok: true, listings, total, limit, offset });
+});
+
+structuredLog("info", "module_loaded", { module: "Consolidation Economics: MEGA/HYPER marketplace + delta pricing" });
+
+// ============================================================================
 // WAVE 2: GRAPH-BASED RELATIONAL QUERIES (Surpassing Logseq)
 // ============================================================================
 const GRAPH_INDEX = { nodes: new Map(), edges: new Map(), dirty: true };

@@ -288,6 +288,7 @@ export const apiHelpers = {
     delete: (id: string) => api.delete(`/api/dtus/${id}`),
     search: (query: string) => api.get('/api/dtus/search', { params: { q: query } }),
     lineage: (id: string) => api.get(`/api/dtus/${id}/lineage`),
+    stats: () => api.get('/api/dtus/stats'),
     children: (id: string) => api.get(`/api/dtus/${id}/children`),
     myDtus: (params?: { limit?: number; offset?: number }) =>
       api.get('/api/dtus/mine', { params }),

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { X, Clock, GitBranch, Tag, FileText, Zap, Crown, Ghost } from 'lucide-react';
 import { ProvenanceBadge } from './ProvenanceBadge';
+import { TierBadge, TierBadgeDetail } from './TierBadge';
 
 interface DTU {
   id: string;

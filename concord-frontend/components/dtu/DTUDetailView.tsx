@@ -341,6 +341,33 @@ export function DTUDetailView({ dtuId, onClose, onNavigate }: DTUDetailViewProps
                     status={dtu.meta?.integrityStatus as 'verified' | 'unverified' | 'tampered' || 'unverified'}
                     contentHash={dtu.meta?.contentHash as string}
                   />
+
+                  {/* Tier consolidation details */}
+                  {(dtu.tier === 'mega' || dtu.tier === 'hyper' || dtu.meta?.consolidated) && (
+                    <div className="pt-2 border-t border-lattice-border">
+                      <TierBadgeDetail
+                        tier={dtu.tier}
+                        showRegular
+                        sourceCount={dtu.meta?.sourceCount as number | undefined}
+                        sourceDtus={(dtu.meta?.sourceDtus as Array<{ id: string; title?: string }>) || (dtu.parents || []).map((id: string) => ({ id }))}
+                        megaCount={dtu.meta?.megaCount as number | undefined}
+                        totalDtuCount={dtu.meta?.totalDtuCount as number | undefined}
+                        consolidatedInto={
+                          dtu.meta?.consolidatedInto
+                            ? { id: dtu.meta.consolidatedInto as string, title: dtu.meta.consolidatedIntoTitle as string | undefined }
+                            : null
+                        }
+                        onNavigateToParent={onNavigate}
+                      />
+                    </div>
+                  )}
+
+                  {/* Tier promotion timeline */}
+                  {Array.isArray(dtu.meta?.tierHistory) && (dtu.meta.tierHistory as Array<{ tier: string; at: string }>).length > 0 && (
+                    <TierPromotionTimeline
+                      history={dtu.meta.tierHistory as Array<{ tier: 'regular' | 'mega' | 'hyper' | 'shadow'; at: string; reason?: string }>}
+                    />
+                  )}
                 </div>
               )}
 
