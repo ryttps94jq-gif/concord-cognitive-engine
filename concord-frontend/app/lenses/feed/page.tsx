@@ -4,7 +4,7 @@ import { useState, useCallback, useMemo, useRef } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
-import { apiHelpers } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Heart,
@@ -346,54 +346,46 @@ export default function FeedLensPage() {
     seed: INITIAL_POSTS.map(p => ({ title: p.content?.slice(0, 80) || p.id, data: p as unknown as Record<string, unknown> })),
   });
 
-  // Fetch real DTU data from backend
+  // Fetch feed from social API with DTU fallback
   const { data: feedPosts, isLoading, isError: isError2, error: error2, refetch: refetch2,} = useQuery<FeedPost[]>({
     queryKey: ['feed-posts', activeTab],
     queryFn: async () => {
       try {
-        const [dtuRes] = await Promise.allSettled([
-          apiHelpers.dtus.paginated({ limit: 50 }),
-          apiHelpers.artistry.distribution.feed('current'),
-        ]);
-
-        const serverPosts: FeedPost[] = [];
-        if (dtuRes.status === 'fulfilled' && dtuRes.value?.data?.dtus?.length) {
-          dtuRes.value.data.dtus.forEach((dtu: Record<string, unknown>) => {
-            serverPosts.push({
-              id: dtu.id as string,
-              type: 'text',
-              author: {
-                id: (dtu.authorId as string) || 'user',
-                name: (dtu.authorName as string) || 'Concord User',
-                handle: (dtu.authorHandle as string) || 'user',
-                gradient: pickGrad(serverPosts.length),
-                verified: (dtu.verified as boolean) || false,
-              },
-              content: (dtu.content as string)?.slice(0, 400) || (dtu.title as string) || '',
-              createdAt: (dtu.createdAt as string) || new Date().toISOString(),
-              likes: (dtu.likes as number) || 0,
-              comments: (dtu.comments as number) || 0,
-              reposts: (dtu.reposts as number) || 0,
-              shares: (dtu.shares as number) || 0,
-              views: (dtu.views as number) || 0,
-              liked: false, reposted: false, bookmarked: false,
-              dtuId: dtu.id as string,
-            });
-          });
+        const endpoint = activeTab === 'following' ? '/api/social/feed/following'
+          : activeTab === 'trending' ? '/api/social/feed/explore'
+          : '/api/social/feed/foryou';
+        const socialRes = await api.get(endpoint, { params: { limit: 50, offset: 0 } }).catch(() => null);
+        const socialPosts = socialRes?.data?.posts || socialRes?.data || [];
+        if (Array.isArray(socialPosts) && socialPosts.length > 0) {
+          return socialPosts.map((p: Record<string, unknown>, i: number) => ({
+            id: (p.id as string) || `sp-${i}`,
+            type: ((p.mediaType as string) || 'text') as PostType,
+            author: { id: (p.userId as string) || 'user', name: (p.displayName as string) || 'User', handle: (p.userId as string) || 'user', gradient: pickGrad(i), verified: false },
+            content: (p.content as string) || (p.title as string) || '',
+            createdAt: (p.createdAt as string) || new Date().toISOString(),
+            likes: (p.reactionCount as number) || 0, comments: (p.commentCount as number) || 0,
+            reposts: (p.shareCount as number) || 0, shares: (p.shareCount as number) || 0, views: (p.viewCount as number) || 0,
+            liked: false, reposted: false, bookmarked: false,
+            tags: (p.tags as string[]) || [], dtuId: (p.id as string),
+          }));
         }
-
-
-        if (serverPosts.length > 0) return serverPosts;
-        // Fall back to persisted lens items (which include seeded data)
-        if (postLensItems.length > 0) {
-          return postLensItems.map(li => ({ id: li.id, ...(li.data as Record<string, unknown>) } as unknown as FeedPost));
+        // Fallback: DTUs as posts
+        const dtuRes = await apiHelpers.dtus.paginated({ limit: 50 }).catch(() => ({ data: { dtus: [] } }));
+        if (dtuRes?.data?.dtus?.length) {
+          return dtuRes.data.dtus.map((dtu: Record<string, unknown>, i: number) => ({
+            id: dtu.id as string, type: 'text' as PostType,
+            author: { id: (dtu.authorId as string) || 'user', name: (dtu.authorName as string) || 'User', handle: (dtu.authorHandle as string) || 'user', gradient: pickGrad(i), verified: false },
+            content: (dtu.content as string)?.slice(0, 400) || (dtu.title as string) || '',
+            createdAt: (dtu.createdAt as string) || new Date().toISOString(),
+            likes: 0, comments: 0, reposts: 0, shares: 0, views: 0,
+            liked: false, reposted: false, bookmarked: false, dtuId: dtu.id as string,
+          }));
         }
-        return [];
+        return postLensItems.length > 0
+          ? postLensItems.map(li => ({ id: li.id, ...(li.data as Record<string, unknown>) } as unknown as FeedPost)) : [];
       } catch {
-        if (postLensItems.length > 0) {
-          return postLensItems.map(li => ({ id: li.id, ...(li.data as Record<string, unknown>) } as unknown as FeedPost));
-        }
-        return [];
+        return postLensItems.length > 0
+          ? postLensItems.map(li => ({ id: li.id, ...(li.data as Record<string, unknown>) } as unknown as FeedPost)) : [];
       }
     },
   });
@@ -402,19 +394,23 @@ export default function FeedLensPage() {
     queryKey: ['trending-topics'],
     queryFn: async () => {
       try {
-        const r = await apiHelpers.dtus.list();
-        const allTags = new Set<string>();
-        (r.data?.dtus || []).forEach((d: Record<string, unknown>) => ((d.tags as string[]) || []).forEach(t => allTags.add(t)));
-        const tagArr = Array.from(allTags);
-        if (tagArr.length) {
-          return tagArr.slice(0, 5).map((tag: string, i: number) => ({
+        const r = await api.get('/api/social/topics/trending', { params: { limit: 10 } }).catch(() => null);
+        const topics = r?.data?.topics || r?.data || [];
+        if (Array.isArray(topics) && topics.length > 0) {
+          return topics.map((t: Record<string, unknown>, i: number) => ({
             id: `t-${i}`,
-            tag: `#${tag}`,
-            category: ['Music', 'Production', 'Community', 'Tech', 'Visual'][i % 5],
-            posts: 0,
+            tag: `#${(t.tag as string) || (t.topic as string) || ''}`,
+            category: (t.category as string) || ['Music', 'Production', 'Community', 'Tech', 'Visual'][i % 5],
+            posts: (t.count as number) || (t.posts as number) || 0,
           }));
         }
-        return [];
+        // Fallback: derive from DTU tags
+        const dtuR = await apiHelpers.dtus.list().catch(() => ({ data: { dtus: [] } }));
+        const allTags = new Set<string>();
+        (dtuR.data?.dtus || []).forEach((d: Record<string, unknown>) => ((d.tags as string[]) || []).forEach(t => allTags.add(t)));
+        return Array.from(allTags).slice(0, 5).map((tag, i) => ({
+          id: `t-${i}`, tag: `#${tag}`, category: ['Music', 'Production', 'Community', 'Tech', 'Visual'][i % 5], posts: 0,
+        }));
       } catch {
         return [];
       }
@@ -422,10 +418,9 @@ export default function FeedLensPage() {
   });
 
   const postMutation = useMutation({
-    mutationFn: (content: string) => apiHelpers.dtus.create({ content, tags: ['post'] }),
+    mutationFn: (content: string) => api.post('/api/social/post', { content, mediaType: 'text', tags: [] }),
     onSuccess: (_data, content) => {
       queryClient.invalidateQueries({ queryKey: ['feed-posts'] });
-      // Also persist to lens data for fallback consistency
       createLensPost({ title: content.slice(0, 80), data: { content, type: 'text', createdAt: new Date().toISOString(), likes: 0, comments: 0, reposts: 0, shares: 0, views: 0, liked: false, reposted: false, bookmarked: false } });
       setNewPost('');
     },
@@ -435,15 +430,12 @@ export default function FeedLensPage() {
   });
 
   const likeMutation = useMutation({
-    mutationFn: (postId: string) => apiHelpers.dtus.update(postId, { liked: true }),
+    mutationFn: (postId: string) => api.post('/api/social/react', { postId, type: 'like' }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['feed-posts'] }),
-    onError: (err) => {
-      console.error('Failed to like post:', err instanceof Error ? err.message : err);
-    },
   });
 
   const repostMutation = useMutation({
-    mutationFn: (postId: string) => apiHelpers.dtus.update(postId, { reposted: true }),
+    mutationFn: (postId: string) => api.post('/api/social/share', { postId }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['feed-posts'] });
       useUIStore.getState().addToast({ type: 'success', message: 'Reposted!' });
@@ -451,7 +443,7 @@ export default function FeedLensPage() {
   });
 
   const bookmarkMutation = useMutation({
-    mutationFn: (postId: string) => apiHelpers.dtus.update(postId, { bookmarked: true }),
+    mutationFn: (postId: string) => api.post('/api/social/bookmark', { postId }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['feed-posts'] }),
   });
 

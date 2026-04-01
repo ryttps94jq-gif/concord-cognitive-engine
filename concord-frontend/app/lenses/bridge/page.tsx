@@ -14,6 +14,7 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { DTUDetailView } from '@/components/dtu/DTUDetailView';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -98,6 +99,7 @@ export default function BridgeLens() {
   const [emergents, setEmergents] = useState<EmergentRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedDebate, setExpandedDebate] = useState<string | null>(null);
+  const [selectedDtuId, setSelectedDtuId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -168,9 +170,9 @@ export default function BridgeLens() {
         </div>
       ) : (
         <>
-          {tab === 'activity' && <ActivityTab log={log} />}
+          {tab === 'activity' && <ActivityTab log={log} onDtuClick={setSelectedDtuId} />}
           {tab === 'organisms' && <OrganismsTab organisms={organisms} onRefresh={refresh} />}
-          {tab === 'debates' && <DebatesTab debates={debates} expanded={expandedDebate} setExpanded={setExpandedDebate} />}
+          {tab === 'debates' && <DebatesTab debates={debates} expanded={expandedDebate} setExpanded={setExpandedDebate} onDtuClick={setSelectedDtuId} />}
           {tab === 'lifecycle' && <LifecycleTab births={births} />}
           {tab === 'emergents' && <EmergentsTab emergents={emergents} />}
         </>
@@ -196,6 +198,15 @@ export default function BridgeLens() {
           </div>
         )}
       </div>
+
+      {/* DTU Detail View modal */}
+      {selectedDtuId && (
+        <DTUDetailView
+          dtuId={selectedDtuId}
+          onClose={() => setSelectedDtuId(null)}
+          onNavigate={(id) => setSelectedDtuId(id)}
+        />
+      )}
     </div>
   );
 }
@@ -204,7 +215,7 @@ export default function BridgeLens() {
 /*  Sub-components                                                     */
 /* ------------------------------------------------------------------ */
 
-function ActivityTab({ log }: { log: BridgeLogEntry[] }) {
+function ActivityTab({ log, onDtuClick }: { log: BridgeLogEntry[]; onDtuClick?: (id: string) => void }) {
   if (log.length === 0) return <EmptyCard icon={<Activity />} message="No bridge activity yet" hint="Submit a DTU for validation or query an organism to see activity here." />;
 
   return (
@@ -217,7 +228,7 @@ function ActivityTab({ log }: { log: BridgeLogEntry[] }) {
               <span className="text-sm font-medium text-zinc-200">{formatAction(entry.action)}</span>
               <span className="text-xs text-zinc-600">{new Date(entry.at).toLocaleString()}</span>
             </div>
-            {entry.dtuId && <span className="text-xs text-zinc-500">DTU: {String(entry.dtuId).slice(0, 12)}...</span>}
+            {entry.dtuId && <button onClick={() => onDtuClick?.(String(entry.dtuId))} className="text-xs text-neon-cyan hover:underline cursor-pointer">DTU: {String(entry.dtuId).slice(0, 12)}...</button>}
             {entry.swarmName && <span className="text-xs text-purple-400 ml-2">{String(entry.swarmName)}</span>}
           </div>
         </div>
@@ -257,7 +268,7 @@ function OrganismsTab({ organisms, onRefresh: _onRefresh }: { organisms: Organis
   );
 }
 
-function DebatesTab({ debates, expanded, setExpanded }: { debates: Debate[]; expanded: string | null; setExpanded: (id: string | null) => void }) {
+function DebatesTab({ debates, expanded, setExpanded, onDtuClick }: { debates: Debate[]; expanded: string | null; setExpanded: (id: string | null) => void; onDtuClick?: (id: string) => void }) {
   if (debates.length === 0) return <EmptyCard icon={<MessageSquare />} message="No debates yet" hint="Debates occur when emergent agents challenge organism DTU outputs." />;
 
   return (
@@ -271,7 +282,7 @@ function DebatesTab({ debates, expanded, setExpanded }: { debates: Debate[]; exp
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium capitalize">{debate.challengerRole}</span>
                 <span className="text-zinc-600">challenged</span>
-                <span className="text-xs text-zinc-500">{debate.dtuId.slice(0, 12)}...</span>
+                <button onClick={(e) => { e.stopPropagation(); onDtuClick?.(debate.dtuId); }} className="text-xs text-neon-cyan hover:underline cursor-pointer">{debate.dtuId.slice(0, 12)}...</button>
               </div>
               <div className="text-xs text-zinc-500 mt-0.5">{debate.challenge.slice(0, 100)}</div>
             </div>
