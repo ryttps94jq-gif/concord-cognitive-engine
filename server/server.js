@@ -8133,6 +8133,8 @@ register("worldmodel", "list_entities", (ctx, input = {}) => {
       type: e.type,
       salience: e.state.salience,
       confidence: e.state.confidence,
+      status: e.state.confidence > 0.7 ? "active" : e.state.confidence > 0.3 ? "idle" : "suspended",
+      workspace: e.workspace || e.scope || "default",
       relationCount: e.relationCount,
       createdAt: e.createdAt
     }));
