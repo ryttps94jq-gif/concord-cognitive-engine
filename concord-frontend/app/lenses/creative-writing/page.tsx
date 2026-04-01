@@ -4,6 +4,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useLensDTUs } from '@/hooks/useLensDTUs';
+import { useUIStore } from '@/store/ui';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   BookOpen, Plus, Search, FileText, Edit2, Trash2,
@@ -198,7 +199,7 @@ export default function CreativeWritingPage() {
                       </div>
                       <div className="flex gap-1">
                         <button onClick={e => { e.stopPropagation(); openWork(work); }} className="p-1 hover:bg-white/10 rounded"><Edit2 className="w-3.5 h-3.5" /></button>
-                        <button onClick={e => { e.stopPropagation(); removeWork(work.id).catch(() => {}); refetch(); }} className="p-1 hover:bg-white/10 rounded text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
+                        <button onClick={e => { e.stopPropagation(); removeWork(work.id).then(() => { refetch(); useUIStore.getState().addToast({ type: 'success', message: 'Work deleted' }); }).catch(() => useUIStore.getState().addToast({ type: 'error', message: 'Failed to delete' })); }} className="p-1 hover:bg-white/10 rounded text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div>
                     </div>
                     {work.content && <p className="text-xs text-gray-600 mt-2 line-clamp-2">{work.content.slice(0, 200)}</p>}

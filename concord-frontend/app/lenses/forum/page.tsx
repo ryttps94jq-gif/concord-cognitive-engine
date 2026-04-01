@@ -353,7 +353,11 @@ export default function ForumLensPage() {
       const updated = prev.map(p => p.id === postId ? { ...p, saved: !p.saved } : p);
       const post = updated.find(p => p.id === postId);
       if (post) {
-        updateForumPost(postId, { data: post as unknown as Record<string, unknown> });
+        updateForumPost(postId, { data: post as unknown as Record<string, unknown> })
+          .catch(() => {
+            // Rollback on failure
+            setPosts(prev2 => prev2.map(p => p.id === postId ? { ...p, saved: !p.saved } : p));
+          });
       }
       return updated;
     });
@@ -362,7 +366,13 @@ export default function ForumLensPage() {
   const handleGiveAward = useCallback((awardEmoji: string) => {
     if (!showAwardModal) return;
     if (showAwardModal.type === 'post') {
-      setPosts(prev => prev.map(p => p.id === showAwardModal.id ? { ...p, awards: [...p.awards, awardEmoji], score: p.score + 10 } : p));
+      setPosts(prev => {
+        const updated = prev.map(p => p.id === showAwardModal.id ? { ...p, awards: [...p.awards, awardEmoji], score: p.score + 10 } : p);
+        // Persist award to backend
+        const post = updated.find(p => p.id === showAwardModal.id);
+        if (post) updateForumPost(showAwardModal.id, { data: post as unknown as Record<string, unknown> });
+        return updated;
+      });
     } else {
       function addAward(comments: Comment[]): Comment[] {
         return comments.map(c => {
@@ -370,10 +380,16 @@ export default function ForumLensPage() {
           return { ...c, replies: addAward(c.replies) };
         });
       }
-      setPosts(prev => prev.map(p => ({ ...p, comments: addAward(p.comments) })));
+      setPosts(prev => {
+        const updated = prev.map(p => ({ ...p, comments: addAward(p.comments) }));
+        // Persist the post containing the awarded comment
+        const postWithAward = updated.find(p => JSON.stringify(p.comments).includes(showAwardModal!.id));
+        if (postWithAward) updateForumPost(postWithAward.id, { data: postWithAward as unknown as Record<string, unknown> });
+        return updated;
+      });
     }
     setShowAwardModal(null);
-  }, [showAwardModal]);
+  }, [showAwardModal, updateForumPost]);
 
   const handleModAction = useCallback((postId: string, action: 'pin' | 'lock' | 'remove') => {
     setPosts(prev => prev.map(p => {

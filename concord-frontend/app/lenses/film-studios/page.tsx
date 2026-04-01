@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, apiHelpers } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useLensDTUs } from '@/hooks/useLensDTUs';
+import { useUIStore } from '@/store/ui';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Film, Plus, Search, Play, Users, Star, Clock, Eye,
@@ -60,7 +61,7 @@ export default function FilmStudiosPage() {
   // Discover films
   const { data: discoveredFilms, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['film-studio', 'discover', searchQuery],
-    queryFn: () => apiHelpers.filmStudio.discover({ q: searchQuery || undefined }).then(r => r.data?.films || []).catch(() => []),
+    queryFn: () => apiHelpers.filmStudio.discover({ q: searchQuery || undefined }).then(r => r.data?.films || r.data?.items || r.data || []).catch(() => []),
     initialData: [],
   });
 
@@ -218,7 +219,11 @@ export default function FilmStudiosPage() {
             <Monitor className="w-12 h-12 mx-auto mb-3 opacity-30" />
             <p className="text-sm mb-2">Watch Parties</p>
             <p className="text-xs text-gray-600">Create synchronized viewing sessions for your films. Invite collaborators and audiences.</p>
-            <button onClick={() => apiHelpers.filmStudio.watchParty.create({ title: 'New Watch Party' }).catch(() => {})} className="mt-4 px-4 py-2 text-xs bg-neon-purple/20 rounded-lg hover:bg-neon-purple/30">Start Watch Party</button>
+            <button onClick={() => {
+              apiHelpers.filmStudio.watchParty.create({ title: 'New Watch Party' })
+                .then(() => useUIStore.getState().addToast({ type: 'success', message: 'Watch party created!' }))
+                .catch(() => useUIStore.getState().addToast({ type: 'error', message: 'Failed to create watch party' }));
+            }} className="mt-4 px-4 py-2 text-xs bg-neon-purple/20 rounded-lg hover:bg-neon-purple/30">Start Watch Party</button>
           </div>
         )}
 

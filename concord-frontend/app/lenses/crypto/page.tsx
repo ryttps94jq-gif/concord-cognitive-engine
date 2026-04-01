@@ -173,12 +173,13 @@ export default function CryptoLensPage() {
           balance: selectedChainData.balance + 10,
         } as unknown as Partial<ChainData>,
       });
+      refetch(); refetch2();
     } catch {
-      // Will reflect actual state on next refetch
+      refetch(); // Reconcile with actual backend state
     } finally {
       setTransacting(false);
     }
-  }, [selectedChainData, chainItems, createTransaction, updateChain]);
+  }, [selectedChainData, chainItems, createTransaction, updateChain, refetch, refetch2]);
 
   const handleSpend = useCallback(async () => {
     if (!selectedChainData || selectedChainData.balance < 5) return;
@@ -202,12 +203,13 @@ export default function CryptoLensPage() {
           balance: selectedChainData.balance - 5,
         } as unknown as Partial<ChainData>,
       });
+      refetch(); refetch2();
     } catch {
-      // Errors handled silently
+      refetch(); // Reconcile with actual backend state
     } finally {
       setTransacting(false);
     }
-  }, [selectedChainData, chainItems, createTransaction, updateChain]);
+  }, [selectedChainData, chainItems, createTransaction, updateChain, refetch, refetch2]);
 
   const handleSend = useCallback(async () => {
     if (!selectedChainData || !sendAmount || !sendTo) return;

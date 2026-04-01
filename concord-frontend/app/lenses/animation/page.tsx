@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiHelpers } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useLensDTUs } from '@/hooks/useLensDTUs';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -67,13 +67,22 @@ export default function AnimationPage() {
   const [newWidth, setNewWidth] = useState('1920');
   const [newHeight, setNewHeight] = useState('1080');
 
-  // Upload asset via media API
+  // Upload asset via media API — with actual file data
+  const assetFileRef = useRef<HTMLInputElement>(null);
   const uploadAssetMutation = useMutation({
-    mutationFn: (data: Record<string, unknown>) => apiHelpers.media.upload({
-      title: data.title,
-      mediaType: 'image',
-      tags: ['animation', 'frame', ...(data.tags as string[] || [])],
-    }),
+    mutationFn: async (file: File) => {
+      const arrayBuffer = await file.arrayBuffer();
+      const base64Data = btoa(new Uint8Array(arrayBuffer).reduce((d, byte) => d + String.fromCharCode(byte), ''));
+      return api.post('/api/media/upload', {
+        title: file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' '),
+        mediaType: 'image',
+        mimeType: file.type || 'image/png',
+        fileSize: file.size,
+        originalFilename: file.name,
+        tags: ['animation', 'frame'],
+        data: base64Data,
+      });
+    },
     onSuccess: () => refetch(),
   });
 
@@ -199,8 +208,9 @@ export default function AnimationPage() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">Animation Assets</h2>
-              <button onClick={() => uploadAssetMutation.mutate({ title: 'New Frame', tags: ['frame'] })} className="px-3 py-1.5 text-xs bg-orange-500/20 rounded-lg hover:bg-orange-500/30 flex items-center gap-1">
-                <Upload className="w-3 h-3" /> Upload Asset
+              <input ref={assetFileRef} type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) uploadAssetMutation.mutate(f); }} />
+              <button onClick={() => assetFileRef.current?.click()} disabled={uploadAssetMutation.isPending} className="px-3 py-1.5 text-xs bg-orange-500/20 rounded-lg hover:bg-orange-500/30 flex items-center gap-1 disabled:opacity-50">
+                <Upload className="w-3 h-3" /> {uploadAssetMutation.isPending ? 'Uploading...' : 'Upload Asset'}
               </button>
             </div>
             <div className="text-center py-12 text-gray-500 text-sm">
