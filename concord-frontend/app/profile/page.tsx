@@ -139,7 +139,7 @@ export default function ProfilePage() {
 
   const updateProfile = useMutation({
     mutationFn: async (data: { displayName: string; bio: string }) => {
-      return api.put('/api/social/profile', data);
+      return api.post('/api/social/profile', data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['my-social-profile'] });

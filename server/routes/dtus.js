@@ -128,6 +128,30 @@ export default function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuFo
     }
   }));
 
+  // GET /api/dtus/:id/lineage — return parent/child lineage chains for a DTU
+  app.get("/api/dtus/:id/lineage", (req, res) => {
+    const id = req.params.id;
+    const dtu = STATE.dtus.get(id);
+    if (!dtu) return res.status(404).json({ ok: false, error: "DTU not found" });
+
+    const parentIds = dtu.lineage?.parents || dtu.parents || [];
+    const childIds = dtu.lineage?.children || dtu.children || [];
+
+    const resolve = (ids) => (Array.isArray(ids) ? ids : []).map(pid => {
+      const p = STATE.dtus.get(pid);
+      return p
+        ? { id: pid, title: p.title || p.human?.summary || pid, summary: p.human?.summary, tier: p.tier }
+        : { id: pid, title: pid };
+    });
+
+    return res.json({
+      ok: true,
+      dtuId: id,
+      parents: resolve(parentIds),
+      children: resolve(childIds),
+    });
+  });
+
   app.get("/api/definitions", (req, res) => {
     const dtus = dtusArray().filter(d =>
       (d.tags || []).includes("definition") ||

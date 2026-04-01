@@ -1804,6 +1804,45 @@ export const apiHelpers = {
     history: () => api.get('/api/admin/promotion/history'),
   },
 
+  /** Breakthrough Clusters */
+  breakthrough: {
+    list: () => api.get('/api/breakthrough/list'),
+    status: (clusterId: string) => api.get(`/api/breakthrough/status/${clusterId}`),
+    metrics: () => api.get('/api/breakthrough/metrics'),
+    dtus: (clusterId: string) => api.get(`/api/breakthrough/dtus/${clusterId}`),
+    init: (clusterId: string) => api.post(`/api/breakthrough/init/${clusterId}`, {}),
+    research: (clusterId: string) => api.post(`/api/breakthrough/research/${clusterId}`, {}),
+  },
+
+  /** Entity Emergence Detection */
+  entityEmergence: {
+    status: () => api.get('/api/entity-emergence/status'),
+    scan: () => api.get('/api/entity-emergence/scan'),
+  },
+
+  /** Meta-Derivation Engine */
+  metaDerivation: {
+    status: () => api.get('/api/meta-derivation/status'),
+    invariants: () => api.get('/api/meta-derivation/invariants'),
+    convergences: () => api.get('/api/meta-derivation/convergences'),
+  },
+
+  /** Culture Layer */
+  culture: {
+    status: () => api.get('/api/culture/status'),
+  },
+
+  /** Qualia — Sensory / Body / Presence */
+  qualia: {
+    state: (entityId: string) => api.get(`/api/qualia/state/${entityId}`),
+    summary: (entityId: string) => api.get(`/api/qualia/summary/${entityId}`),
+    all: () => api.get('/api/qualia/all'),
+    sensory: () => api.get('/api/qualia/foundation/sensory'),
+    presence: () => api.get('/api/qualia/foundation/presence'),
+    embodiment: () => api.get('/api/qualia/foundation/embodiment'),
+    planetary: () => api.get('/api/qualia/foundation/planetary'),
+  },
+
   // ═══════════════════════════════════════════════════════════════
   // MEGA SPEC: New API helpers for cross-domain features
   // ═══════════════════════════════════════════════════════════════

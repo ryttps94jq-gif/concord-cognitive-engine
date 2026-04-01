@@ -129,8 +129,8 @@ describe('UserProfile', () => {
       if (url.includes('/api/social/profile/')) {
         return Promise.resolve({ data: { profile: mockProfile } });
       }
-      if (url.includes('/api/social/feed/') || url.includes('/api/media/author/')) {
-        return Promise.resolve({ data: { feed: [], media: [] } });
+      if (url.includes('/api/social/posts/') || url.includes('/api/social/feed/') || url.includes('/api/media/author/')) {
+        return Promise.resolve({ data: { posts: [], feed: [], media: [] } });
       }
       return Promise.resolve({ data: {} });
     });

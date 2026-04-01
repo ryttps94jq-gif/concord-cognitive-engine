@@ -42,6 +42,7 @@ import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
+import { DTUDetailView } from '@/components/dtu/DTUDetailView';
 
 /* ---------- types ---------- */
 type BoardMode = 'canvas' | 'moodboard' | 'arrangement';
@@ -151,6 +152,7 @@ export default function WhiteboardLensPage() {
   const [tool, setTool] = useState<Tool>('select');
   const [elements, setElements] = useState<Element[]>([]);
   const [selectedElement, setSelectedElement] = useState<Element | null>(null);
+  const [viewingDtuId, setViewingDtuId] = useState<string | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentElement, setCurrentElement] = useState<Element | null>(null);
   const [undoStack, setUndoStack] = useState<Element[][]>([]);
@@ -370,6 +372,18 @@ export default function WhiteboardLensPage() {
       setElements(prev => [...prev, n]);
     }
     setCurrentElement(null);
+  };
+
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    const { x, y } = getCanvasCoords(e);
+    const clicked = [...elements].reverse().find(el => {
+      const w = el.width || 100;
+      const h = el.height || 50;
+      return x >= el.x && x <= el.x + w && y >= el.y && y <= el.y + h;
+    });
+    if (clicked?.type === 'dtu' && clicked.dtuId) {
+      setViewingDtuId(clicked.dtuId);
+    }
   };
 
   const handleWheel = (e: React.WheelEvent) => {
@@ -920,7 +934,7 @@ export default function WhiteboardLensPage() {
                 <canvas ref={canvasRef} className="w-full h-full cursor-crosshair"
                   style={{ width: dimensions.width, height: dimensions.height }}
                   onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp}
-                  onMouseLeave={handleMouseUp} onWheel={handleWheel} />
+                  onMouseLeave={handleMouseUp} onWheel={handleWheel} onDoubleClick={handleDoubleClick} />
 
                 {/* Audio play overlay buttons (canvas-space) */}
                 {elements.filter(el => el.type === 'audio').map(el => (
@@ -1336,6 +1350,15 @@ export default function WhiteboardLensPage() {
           lastUpdated={lastUpdated}
           insights={realtimeInsights}
           compact
+        />
+      )}
+
+      {/* DTU Detail View modal (opened by double-clicking a DTU element on canvas) */}
+      {viewingDtuId && (
+        <DTUDetailView
+          dtuId={viewingDtuId}
+          onClose={() => setViewingDtuId(null)}
+          onNavigate={(id) => setViewingDtuId(id)}
         />
       )}
     </div>

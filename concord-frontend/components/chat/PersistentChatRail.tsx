@@ -66,8 +66,43 @@ import { useCrossLensMemory } from './useCrossLensMemory';
 import { ContextOverlay } from './ContextOverlay';
 import { InitiativeList } from './InitiativeChip';
 import type { Initiative } from './InitiativeChip';
+import ChatRouteOverlay from './ChatRouteOverlay';
+import ForgeCard from './ForgeCard';
 
 // ── Types ──────────────────────────────────────────────────────
+
+interface RouteMeta {
+  actionType: string;
+  lenses: { lensId: string; score: number }[];
+  primaryLens: string | null;
+  isMultiLens: boolean;
+  confidence: number;
+  attribution: string[];
+  message: string | null;
+}
+
+interface ForgeEnvelope {
+  dtu: { id: string; title: string; artifact?: { content?: string }; tags?: string[] };
+  presentation: {
+    title: string;
+    format: string;
+    primaryType: number;
+    preview: string;
+    sourceLenses: string[];
+    cretiScore: number;
+    substrateCitationCount: number;
+    formatAmbiguous: boolean;
+    alternatives?: string[];
+  };
+  actions: {
+    save: { available: boolean; description: string };
+    delete: { available: boolean; description: string };
+    saveAndList: { available: boolean; description: string };
+    iterate: { available: boolean; description: string };
+  };
+  isMultiArtifact?: boolean;
+  offerForge?: boolean;
+}
 
 interface ChatMessage {
   id: string;
@@ -82,6 +117,10 @@ interface ChatMessage {
   dtuCount?: number;
   dtuIds?: string[];
   brain?: string;
+  // Chat router metadata (lens attribution, action type)
+  route?: RouteMeta | null;
+  // Inline forge artifact (when CREATE action produces deliverable)
+  forge?: ForgeEnvelope | null;
 }
 
 interface LensRecommendation {
@@ -296,6 +335,8 @@ export function PersistentChatRail({
         dtuCount?: number;
         dtuIds?: string[];
         brain?: string;
+        route?: RouteMeta | null;
+        forge?: ForgeEnvelope | null;
       };
       if (d.sessionId === sessionId) {
         const msg: ChatMessage = {
@@ -309,6 +350,8 @@ export function PersistentChatRail({
           dtuCount: d.dtuCount ?? 0,
           dtuIds: d.dtuIds || [],
           brain: d.brain || undefined,
+          route: d.route || null,
+          forge: d.forge || null,
         };
         setMessages(prev => [...prev, msg]);
         setStreamingText('');
@@ -406,6 +449,8 @@ export function PersistentChatRail({
           timestamp: new Date().toISOString(),
           lensRecommendation: data?.lensRecommendation || null,
           dtuCount: data?.dtuCount ?? 0,
+          route: data?.route || null,
+          forge: data?.forge || null,
         };
         setMessages(prev => [...prev, assistantMsg]);
         if (data?.dtuCount != null) setLastDtuCount(data.dtuCount);
@@ -736,6 +781,14 @@ export function PersistentChatRail({
                 </div>
               )}
 
+              {/* Route overlay (shows lens attribution above assistant messages) */}
+              {msg.role === 'assistant' && msg.route && (
+                <ChatRouteOverlay
+                  route={msg.route}
+                  requiresConfirmation={false}
+                />
+              )}
+
               {/* Message */}
               <div
                 className={cn(
@@ -814,6 +867,47 @@ export function PersistentChatRail({
                   )}
                 </div>
               </div>
+
+              {/* Inline forge card (when CREATE action produces deliverable artifact) */}
+              {msg.role === 'assistant' && msg.forge && msg.forge.presentation && (
+                <div className="mt-2 max-w-[85%]">
+                  <ForgeCard
+                    dtu={msg.forge.dtu}
+                    presentation={msg.forge.presentation}
+                    actions={msg.forge.actions}
+                    isMultiArtifact={msg.forge.isMultiArtifact}
+                    offerForge={msg.forge.offerForge}
+                    onSave={async (forgeDtu) => {
+                      try {
+                        await api.post('/api/chat/forge/save', { dtu: forgeDtu });
+                      } catch {}
+                    }}
+                    onDelete={async (dtuId) => {
+                      try {
+                        await api.post('/api/chat/forge/delete', { dtuId });
+                      } catch {}
+                    }}
+                    onList={async (forgeDtu) => {
+                      try {
+                        await api.post('/api/chat/forge/list', { dtu: forgeDtu });
+                      } catch {}
+                    }}
+                    onIterate={async (forgeDtu, instruction) => {
+                      try {
+                        const iterRes = await api.post('/api/chat/forge/iterate', {
+                          dtu: forgeDtu,
+                          instruction,
+                          sessionId,
+                        });
+                        // If iteration returns new content, send as follow-up message
+                        if (iterRes.data?.ok) {
+                          sendMessage(`Iterate on the forged artifact: ${instruction}`);
+                        }
+                      } catch {}
+                    }}
+                  />
+                </div>
+              )}
             </Fragment>
           );
         })}

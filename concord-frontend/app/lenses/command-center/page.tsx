@@ -10,6 +10,7 @@ import {
   AlertTriangle, Moon, FileText, Pause, Play,
   Save, Trash2, XCircle, Clock, ArrowUp,
   Zap, Send, MapPin, Focus, ShieldAlert, ChevronDown,
+  Lightbulb, GitBranch,
 } from 'lucide-react';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -625,6 +626,184 @@ function PromotionPanel() {
   );
 }
 
+// ── Breakthrough Clusters Panel (wiring audit) ─────────────────────────────
+
+function BreakthroughPanel() {
+  const { data, isLoading } = useQuery({
+    queryKey: ['breakthrough-list'],
+    queryFn: () => apiHelpers.breakthrough.list().then(r => r.data),
+    refetchInterval: 30000,
+    retry: false,
+  });
+
+  const { data: metricsData } = useQuery({
+    queryKey: ['breakthrough-metrics'],
+    queryFn: () => apiHelpers.breakthrough.metrics().then(r => r.data),
+    refetchInterval: 30000,
+    retry: false,
+  });
+
+  const queryClient = useQueryClient();
+  const initMutation = useMutation({
+    mutationFn: (clusterId: string) => apiHelpers.breakthrough.init(clusterId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['breakthrough-list'] }),
+  });
+  const researchMutation = useMutation({
+    mutationFn: (clusterId: string) => apiHelpers.breakthrough.research(clusterId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['breakthrough-list'] }),
+  });
+
+  const clusters = data?.clusters || [];
+
+  return (
+    <div className="space-y-4">
+      {/* Metrics summary */}
+      {metricsData && (
+        <div className="grid grid-cols-3 gap-3">
+          <Stat label="Total Clusters" value={metricsData.totalClusters || 0} />
+          <Stat label="Total DTUs" value={metricsData.totalDTUs || 0} />
+          <Stat label="Research Jobs" value={metricsData.totalResearchJobs || 0} />
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="h-24 bg-lattice-deep animate-pulse rounded-lg" />
+      ) : clusters.length === 0 ? (
+        <div className="text-center py-8">
+          <Lightbulb className="w-8 h-8 mx-auto mb-2 text-gray-600" />
+          <p className="text-sm text-gray-500">No breakthrough clusters initialized</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {clusters.map((c: { id: string; name: string; domain: string; initialized: boolean; dtuCount: number; researchCount: number }) => (
+            <div key={c.id} className="bg-lattice-surface border border-lattice-border rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <h4 className="text-sm font-semibold text-white">{c.name}</h4>
+                  <span className="text-[10px] text-gray-500">{c.domain}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`text-[10px] px-2 py-0.5 rounded ${c.initialized ? 'bg-green-500/20 text-green-400' : 'bg-gray-700 text-gray-400'}`}>
+                    {c.initialized ? 'Active' : 'Dormant'}
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-4 text-xs text-gray-400 mb-2">
+                <span>{c.dtuCount || 0} DTUs</span>
+                <span>{c.researchCount || 0} research jobs</span>
+              </div>
+              <div className="flex gap-2">
+                {!c.initialized && (
+                  <button onClick={() => initMutation.mutate(c.id)} disabled={initMutation.isPending}
+                    className="text-xs px-3 py-1.5 rounded bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/30 disabled:opacity-50">
+                    Initialize
+                  </button>
+                )}
+                {c.initialized && (
+                  <button onClick={() => researchMutation.mutate(c.id)} disabled={researchMutation.isPending}
+                    className="text-xs px-3 py-1.5 rounded bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-500/30 disabled:opacity-50">
+                    Trigger Research
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Meta-Derivation Panel (wiring audit) ────────────────────────────────────
+
+function MetaDerivationPanel() {
+  const { data, isLoading } = useQuery({
+    queryKey: ['meta-derivation-status'],
+    queryFn: () => apiHelpers.metaDerivation.status().then(r => r.data),
+    refetchInterval: 30000,
+    retry: false,
+  });
+
+  const { data: invariantsData } = useQuery({
+    queryKey: ['meta-derivation-invariants'],
+    queryFn: () => apiHelpers.metaDerivation.invariants().then(r => r.data),
+    retry: false,
+  });
+
+  const { data: convergencesData } = useQuery({
+    queryKey: ['meta-derivation-convergences'],
+    queryFn: () => apiHelpers.metaDerivation.convergences().then(r => r.data),
+    retry: false,
+  });
+
+  if (isLoading) return <div className="h-24 bg-lattice-deep animate-pulse rounded-lg" />;
+
+  const metrics = data?.metrics || {};
+  const invariants = invariantsData?.invariants || [];
+  const convergences = convergencesData?.convergences || [];
+
+  return (
+    <div className="space-y-4">
+      {/* Summary stats */}
+      <div className="grid grid-cols-4 gap-3">
+        <Stat label="Meta-Invariants" value={data?.invariantCount || 0} />
+        <Stat label="Convergences" value={data?.convergenceCount || 0} />
+        <Stat label="Pending Predictions" value={data?.pendingPredictions || 0} />
+        <Stat label="Cycles Run" value={metrics.cyclesRun || 0} />
+      </div>
+
+      {/* Invariants */}
+      {invariants.length > 0 && (
+        <div>
+          <h4 className="text-xs uppercase text-gray-500 mb-2">Discovered Meta-Invariants</h4>
+          <div className="space-y-2 max-h-64 overflow-y-auto">
+            {invariants.slice(0, 20).map((inv: { id: string; statement: string; confidence: number; domains: string[] }, i: number) => (
+              <div key={inv.id || i} className="bg-lattice-surface border border-lattice-border rounded p-3">
+                <p className="text-xs text-white">{inv.statement || JSON.stringify(inv).slice(0, 200)}</p>
+                {inv.confidence != null && (
+                  <span className="text-[10px] text-gray-500">Confidence: {(inv.confidence * 100).toFixed(0)}%</span>
+                )}
+                {inv.domains?.length > 0 && (
+                  <div className="flex gap-1 mt-1">
+                    {inv.domains.map((d: string) => (
+                      <span key={d} className="text-[9px] px-1.5 py-0.5 rounded bg-lattice-deep text-neon-cyan">{d}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Convergences */}
+      {convergences.length > 0 && (
+        <div>
+          <h4 className="text-xs uppercase text-gray-500 mb-2">Dream-Lattice Convergences</h4>
+          <div className="space-y-2 max-h-48 overflow-y-auto">
+            {convergences.slice(0, 10).map((c: { id: string; similarity: number; description: string }, i: number) => (
+              <div key={c.id || i} className="bg-lattice-surface border border-purple-500/30 rounded p-3">
+                <p className="text-xs text-purple-300">{c.description || JSON.stringify(c).slice(0, 200)}</p>
+                {c.similarity != null && (
+                  <span className="text-[10px] text-gray-500">Similarity: {(c.similarity * 100).toFixed(0)}%</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {invariants.length === 0 && convergences.length === 0 && (
+        <div className="text-center py-8">
+          <GitBranch className="w-8 h-8 mx-auto mb-2 text-gray-600" />
+          <p className="text-sm text-gray-500">No meta-derivations yet</p>
+          <p className="text-xs text-gray-600 mt-1">Meta-derivation runs every 200th tick when sufficient invariants exist</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Tab Navigation ──────────────────────────────────────────────────────────
 
 const TABS = [
@@ -642,6 +821,8 @@ const TABS = [
   { id: 'config', label: 'Config', icon: Settings },
   { id: 'emergency', label: 'Emergency', icon: AlertTriangle },
   { id: 'dream', label: 'Dream', icon: Moon },
+  { id: 'breakthrough', label: 'Breakthrough', icon: Lightbulb },
+  { id: 'metaDerivation', label: 'Meta-Derivation', icon: GitBranch },
   { id: 'logs', label: 'Logs', icon: FileText },
 ] as const;
 
@@ -688,6 +869,8 @@ export default function CommandCenterPage() {
       case 'config': return <ConfigPanel />;
       case 'emergency': return <EmergencyPanel />;
       case 'dream': return <DreamPanel />;
+      case 'breakthrough': return <BreakthroughPanel />;
+      case 'metaDerivation': return <MetaDerivationPanel />;
       case 'logs': return <LogsPanel />;
     }
   };

@@ -1095,9 +1095,15 @@ export default function MarketplaceLensPage() {
                               <span className="text-neon-green font-mono">{formatPrice(ci.price)}</span>
                             </div>
                           ))}
-                          <div className="border-t border-lattice-border pt-2 flex items-center justify-between font-bold text-white">
-                            <span>Total</span>
-                            <span className="text-neon-green">{formatPrice(cartTotal)}</span>
+                          <div className="border-t border-lattice-border pt-2 space-y-1">
+                            <div className="flex items-center justify-between text-gray-400 text-xs">
+                              <span>Platform fee ({(marketplaceFeeRate * 100).toFixed(0)}%)</span>
+                              <span>{formatPrice(Math.round(cartTotal * marketplaceFeeRate * 100) / 100)}</span>
+                            </div>
+                            <div className="flex items-center justify-between font-bold text-white">
+                              <span>Total</span>
+                              <span className="text-neon-green">{formatPrice(cartTotal)}</span>
+                            </div>
                           </div>
                         </div>
                         {checkoutError && (

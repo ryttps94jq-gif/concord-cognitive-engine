@@ -10,13 +10,14 @@
 import { useState } from 'react';
 import {
   Coins, Gift, Search, GitFork, Award, Upload,
-  X, Sparkles, Target,
+  X, Sparkles, Target, ExternalLink,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   useTip, useCreateDTU, usePostBounty, useForkDTU,
   useMeritCredit, useDTUSearch,
 } from '@/hooks/useConnectiveTissue';
+import { DTUDetailView } from '@/components/dtu/DTUDetailView';
 
 interface ConnectiveTissueBarProps {
   lensId: string;
@@ -28,6 +29,7 @@ export function ConnectiveTissueBar({ lensId, userId, className }: ConnectiveTis
   const [activePanel, setActivePanel] = useState<string | null>(null);
   const [tipAmount, setTipAmount] = useState('1');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedDtuId, setSelectedDtuId] = useState<string | null>(null);
 
   const tipMutation = useTip();
   const createDTUMutation = useCreateDTU();
@@ -176,10 +178,17 @@ export function ConnectiveTissueBar({ lensId, userId, className }: ConnectiveTis
           {searchData?.data?.results && searchData.data.results.length > 0 ? (
             <div className="mt-2 space-y-1 max-h-40 overflow-y-auto">
               {searchData.data.results.map((r: { id: string; title?: string; score?: number }) => (
-                <div key={r.id} className="text-xs text-gray-300 flex justify-between p-1 rounded bg-white/5">
-                  <span className="truncate">{r.title || r.id}</span>
-                  {r.score !== undefined && <span className="text-gray-500 ml-2">{r.score.toFixed(2)}</span>}
-                </div>
+                <button
+                  key={r.id}
+                  onClick={() => setSelectedDtuId(r.id)}
+                  className="w-full text-xs text-gray-300 flex items-center justify-between p-1.5 rounded bg-white/5 hover:bg-white/10 transition-colors cursor-pointer"
+                >
+                  <span className="truncate text-neon-cyan">{r.title || r.id}</span>
+                  <span className="flex items-center gap-1 flex-shrink-0 ml-2">
+                    {r.score !== undefined && <span className="text-gray-500">{r.score.toFixed(2)}</span>}
+                    <ExternalLink className="w-3 h-3 text-gray-500" />
+                  </span>
+                </button>
               ))}
             </div>
           ) : (
@@ -206,6 +215,15 @@ export function ConnectiveTissueBar({ lensId, userId, className }: ConnectiveTis
             {forkMutation.isPending ? 'Forking...' : 'Fork Selected DTU'}
           </button>
         </Panel>
+      )}
+
+      {/* DTU Detail View modal */}
+      {selectedDtuId && (
+        <DTUDetailView
+          dtuId={selectedDtuId}
+          onClose={() => setSelectedDtuId(null)}
+          onNavigate={(id) => setSelectedDtuId(id)}
+        />
       )}
     </div>
   );

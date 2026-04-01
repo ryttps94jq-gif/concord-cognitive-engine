@@ -36756,6 +36756,14 @@ app.post("/api/social/profile", (req, res) => {
   try { res.json(upsertProfile(STATE, req.body?.userId || req.user?.id, req.body || {})); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
+app.get("/api/social/profile", (req, res) => {
+  try {
+    const userId = req.query.userId || req.user?.id;
+    if (!userId) return res.status(400).json({ ok: false, error: "userId required" });
+    res.json(getProfile(STATE, userId));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 app.get("/api/social/profile/:userId", (req, res) => {
   try { res.json(getProfile(STATE, req.params.userId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
@@ -38120,7 +38128,104 @@ app.get("/api/entity-growth/:entityId/full-profile", asyncHandler(async (req, re
   try { const m = await import("./emergent/entity-economy.js"); economy = m.getAccount ? m.getAccount(id) : null; } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   try { const m = await import("./emergent/death-protocol.js"); deathRisk = m.checkDeathConditions ? await m.checkDeathConditions(id) : null; } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   try { species = classifyEntity(profile); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
-  res.json({ ok: true, entity: profile, body, sleep, emotions, economy, deathRisk, species });
+  // Qualia state for this entity (wiring audit)
+  let qualia = null;
+  try { const qe = globalThis.qualiaEngine; if (qe) { qualia = qe.getQualiaSummary(id) || null; } } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+  // Culture layer: entity's cultural fit score (wiring audit)
+  let culture = null;
+  try { const cm = await import("./emergent/culture-layer.js"); culture = cm.getCulturalFit ? cm.getCulturalFit(id) : null; } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+  // Entity emergence: check if this emergent has crossed the entity threshold (wiring audit)
+  let emergence = null;
+  try { const em = await import("./emergent/entity-emergence.js"); emergence = em.detectEntityEmergence ? em.detectEntityEmergence(STATE, id) : null; } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+  res.json({ ok: true, entity: profile, body, sleep, emotions, economy, deathRisk, species, qualia, culture, emergence });
+}));
+
+// ── Breakthrough Clusters (wiring audit) ────────────────────────────────
+app.get("/api/breakthrough/list", asyncHandler(async (_req, res) => {
+  try {
+    const m = await import("./emergent/breakthrough-clusters.js");
+    res.json({ ok: true, clusters: m.listClusters() });
+  } catch (e) { res.json({ ok: false, error: String(e?.message || e), clusters: [] }); }
+}));
+
+app.get("/api/breakthrough/status/:clusterId", asyncHandler(async (req, res) => {
+  try {
+    const m = await import("./emergent/breakthrough-clusters.js");
+    const status = m.getClusterStatus(req.params.clusterId);
+    res.json({ ok: true, ...status });
+  } catch (e) { res.json({ ok: false, error: String(e?.message || e) }); }
+}));
+
+app.get("/api/breakthrough/metrics", asyncHandler(async (_req, res) => {
+  try {
+    const m = await import("./emergent/breakthrough-clusters.js");
+    res.json({ ok: true, ...m.getBreakthroughMetrics() });
+  } catch (e) { res.json({ ok: false, error: String(e?.message || e) }); }
+}));
+
+app.get("/api/breakthrough/dtus/:clusterId", asyncHandler(async (req, res) => {
+  try {
+    const m = await import("./emergent/breakthrough-clusters.js");
+    res.json({ ok: true, ...m.getClusterDTUs(req.params.clusterId) });
+  } catch (e) { res.json({ ok: false, error: String(e?.message || e) }); }
+}));
+
+app.post("/api/breakthrough/init/:clusterId", requireAuth(), requireRole("owner"), asyncHandler(async (req, res) => {
+  try {
+    const m = await import("./emergent/breakthrough-clusters.js");
+    res.json({ ok: true, ...m.initCluster(req.params.clusterId) });
+  } catch (e) { res.json({ ok: false, error: String(e?.message || e) }); }
+}));
+
+app.post("/api/breakthrough/research/:clusterId", requireAuth(), requireRole("owner"), asyncHandler(async (req, res) => {
+  try {
+    const m = await import("./emergent/breakthrough-clusters.js");
+    res.json(await m.triggerClusterResearch(req.params.clusterId));
+  } catch (e) { res.json({ ok: false, error: String(e?.message || e) }); }
+}));
+
+// ── Entity Emergence Status (wiring audit) ──────────────────────────────
+app.get("/api/entity-emergence/status", asyncHandler(async (_req, res) => {
+  try {
+    const m = await import("./emergent/entity-emergence.js");
+    const emerged = m.getEmergedEntities(STATE);
+    const metrics = m.getEntityEmergenceMetrics(STATE);
+    res.json({ ok: true, entities: emerged, metrics });
+  } catch (e) { res.json({ ok: false, error: String(e?.message || e), entities: [], metrics: {} }); }
+}));
+
+app.get("/api/entity-emergence/scan", asyncHandler(async (_req, res) => {
+  try {
+    const m = await import("./emergent/entity-emergence.js");
+    const results = m.scanForEmergence(STATE);
+    res.json({ ok: true, ...results });
+  } catch (e) { res.json({ ok: false, error: String(e?.message || e) }); }
+}));
+
+// ── Meta-Derivation Status (wiring audit) ───────────────────────────────
+app.get("/api/meta-derivation/status", asyncHandler(async (_req, res) => {
+  try {
+    const m = await import("./emergent/meta-derivation.js");
+    const metrics = m.getMetaDerivationMetrics(STATE);
+    const invariants = m.getMetaInvariants(STATE);
+    const convergences = m.getConvergences(STATE);
+    const predictions = m.getPendingPredictions(STATE);
+    res.json({ ok: true, metrics, invariantCount: invariants.length, convergenceCount: convergences.length, pendingPredictions: predictions.length });
+  } catch (e) { res.json({ ok: false, error: String(e?.message || e), metrics: {}, invariantCount: 0, convergenceCount: 0, pendingPredictions: 0 }); }
+}));
+
+app.get("/api/meta-derivation/invariants", asyncHandler(async (_req, res) => {
+  try {
+    const m = await import("./emergent/meta-derivation.js");
+    res.json({ ok: true, invariants: m.getMetaInvariants(STATE) });
+  } catch (e) { res.json({ ok: false, error: String(e?.message || e), invariants: [] }); }
+}));
+
+app.get("/api/meta-derivation/convergences", asyncHandler(async (_req, res) => {
+  try {
+    const m = await import("./emergent/meta-derivation.js");
+    res.json({ ok: true, convergences: m.getConvergences(STATE) });
+  } catch (e) { res.json({ ok: false, error: String(e?.message || e), convergences: [] }); }
 }));
 
 // ── Culture Status (Phase 3.3) ──────────────────────────────────────────
