@@ -20,8 +20,8 @@ export default function registerSystemRoutes(app, {
   PORT,
   NODE_ENV,
   LLM_READY,
-  OPENAI_MODEL_FAST,
-  OPENAI_MODEL_SMART,
+  OLLAMA_MODEL_FAST,
+  OLLAMA_MODEL_SMART,
   SEED_INFO,
   STATE_DISK,
   USE_SQLITE_STATE,
@@ -228,7 +228,7 @@ export default function registerSystemRoutes(app, {
     if (isAuthed) {
       Object.assign(base, {
         port: PORT,
-        openaiModel: { fast: OPENAI_MODEL_FAST, smart: OPENAI_MODEL_SMART },
+        ollamaModel: { fast: OLLAMA_MODEL_FAST, smart: OLLAMA_MODEL_SMART },
         macroDomains: listDomains(),
         crawlQueue: STATE.crawlQueue.length,
         settings: STATE.settings,

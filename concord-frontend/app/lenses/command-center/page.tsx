@@ -26,7 +26,7 @@ interface SystemHealth {
   ok: boolean;
   system?: { version: string; uptime: { seconds: number; formatted: string }; memory: { heapUsed: string; heapTotal: string; rss: string } };
   dtus?: { total: number; regular: number; mega: number; hyper: number; shadow: number };
-  llm?: { openaiReady: boolean; ollamaEnabled: boolean };
+  llm?: { ollamaReady: boolean; ollamaEnabled: boolean };
   [key: string]: unknown;
 }
 

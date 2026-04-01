@@ -57,7 +57,7 @@ interface DashboardData {
     healthy: number;
   };
   llm: {
-    openaiReady: boolean;
+    ollamaReady: boolean;
     ollamaEnabled: boolean;
     defaultOn: boolean;
   };
@@ -278,7 +278,7 @@ export default function AdminDashboardPage() {
   };
 
   const systemHealth =
-    dashboard?.llm.openaiReady || dashboard?.llm.ollamaEnabled
+    dashboard?.llm.ollamaReady || dashboard?.llm.ollamaEnabled
       ? 'healthy'
       : 'warning';
   const organHealth =
@@ -566,10 +566,10 @@ export default function AdminDashboardPage() {
           </h2>
           <div className="space-y-2">
             <div className="flex justify-between items-center text-sm">
-              <span className="text-gray-400">OpenAI</span>
+              <span className="text-gray-400">Ollama</span>
               <span
                 className={`status-dot ${
-                  dashboard?.llm.openaiReady ? 'success' : 'error'
+                  dashboard?.llm.ollamaReady ? 'success' : 'error'
                 }`}
               />
             </div>
