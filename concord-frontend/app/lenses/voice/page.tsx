@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
-import { apiHelpers } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
 import { VoiceRecorder } from '@/components/voice/VoiceRecorder';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -155,6 +155,13 @@ export default function VoiceLensPage() {
   const [levelL, setLevelL] = useState(0);
   const [levelR, setLevelR] = useState(0);
 
+  // Real recording refs
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const takeBlobsRef = useRef<Map<string, Blob>>(new Map());
+  const playbackAudioRef = useRef<HTMLAudioElement | null>(null);
+
   const activeTake = takes.find((t) => t.id === activeTakeId) || null;
 
   // Session timer
@@ -211,40 +218,110 @@ export default function VoiceLensPage() {
     return `${h % 12 || 12}:${m.toString().padStart(2, '0')} ${ampm}`;
   };
 
-  // Transport handlers
-  const handleRecord = useCallback(() => {
-    setStatus('recording');
-    setRecordingTime(0);
+  // Transport handlers — wired to real MediaRecorder
+  const handleRecord = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      recordedChunksRef.current = [];
+      const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) recordedChunksRef.current.push(e.data);
+      };
+      recorder.start(100);
+      mediaRecorderRef.current = recorder;
+      setStatus('recording');
+      setRecordingTime(0);
+    } catch (err) {
+      console.error('[Voice] Mic access failed:', err);
+      useUIStore.getState().addToast({ type: 'error', message: 'Microphone access denied' });
+    }
   }, []);
 
   const handleStop = useCallback(() => {
-    if (status === 'recording') {
+    if (status === 'recording' && mediaRecorderRef.current) {
       setStatus('processing');
-      const newTake: Take = {
-        id: `take-${Date.now()}`,
-        number: takes.length + 1,
-        name: `Take ${takes.length + 1}`,
-        duration: recordingTime,
-        timestamp: new Date(),
-        starred: false,
-        isBest: false,
-        waveformHeights: generateWaveform(16),
-        transcript: null,
-      };
-      setTimeout(() => {
+      const recorder = mediaRecorderRef.current;
+      const takeId = `take-${Date.now()}`;
+      const takeNum = takes.length + 1;
+      const duration = recordingTime;
+
+      recorder.onstop = () => {
+        const blob = new Blob(recordedChunksRef.current, { type: 'audio/webm' });
+        takeBlobsRef.current.set(takeId, blob);
+
+        // Upload to backend
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+          const base64 = (reader.result as string).split(',')[1];
+          try {
+            await api.post('/api/media/upload', {
+              title: `Take ${takeNum}`,
+              mediaType: 'audio',
+              mimeType: 'audio/webm',
+              fileSize: blob.size,
+              originalFilename: `voice-take-${takeNum}-${Date.now()}.webm`,
+              tags: ['voice', 'recording'],
+              privacy: 'private',
+              duration,
+              data: base64,
+            });
+          } catch (err) {
+            console.error('[Voice] Upload failed:', err);
+          }
+        };
+        reader.readAsDataURL(blob);
+
+        const newTake: Take = {
+          id: takeId,
+          number: takeNum,
+          name: `Take ${takeNum}`,
+          duration,
+          timestamp: new Date(),
+          starred: false,
+          isBest: false,
+          waveformHeights: generateWaveform(16),
+          transcript: null,
+        };
         setTakes((prev) => [...prev, newTake]);
-        setActiveTakeId(newTake.id);
+        setActiveTakeId(takeId);
         setStatus('ready');
-      }, 1200);
+      };
+      recorder.stop();
+
+      // Stop mic stream
+      mediaStreamRef.current?.getTracks().forEach(t => t.stop());
+      mediaStreamRef.current = null;
+      mediaRecorderRef.current = null;
     } else {
+      // Stop playback
+      if (playbackAudioRef.current) {
+        playbackAudioRef.current.pause();
+        playbackAudioRef.current = null;
+      }
       setIsPlaying(false);
     }
   }, [status, recordingTime, takes.length]);
 
   const handlePlayPause = useCallback(() => {
     if (status === 'recording') return;
-    setIsPlaying((p) => !p);
-  }, [status]);
+    if (!activeTakeId) return;
+    if (isPlaying) {
+      playbackAudioRef.current?.pause();
+      playbackAudioRef.current = null;
+      setIsPlaying(false);
+    } else {
+      const blob = takeBlobsRef.current.get(activeTakeId);
+      if (blob) {
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        audio.onended = () => { setIsPlaying(false); playbackAudioRef.current = null; };
+        audio.play();
+        playbackAudioRef.current = audio;
+        setIsPlaying(true);
+      }
+    }
+  }, [status, activeTakeId, isPlaying]);
 
   // Take actions
   const toggleStar = (id: string) =>

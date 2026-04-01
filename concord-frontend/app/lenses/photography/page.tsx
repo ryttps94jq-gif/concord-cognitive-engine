@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, apiHelpers } from '@/lib/api/client';
@@ -63,20 +63,39 @@ export default function PhotographyPage() {
   const [uploadDesc, setUploadDesc] = useState('');
   const [uploadTags, setUploadTags] = useState('');
   const [uploadCamera, setUploadCamera] = useState('');
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadPreview, setUploadPreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileSelect = useCallback((file: File) => {
+    if (!file.type.startsWith('image/')) return;
+    setUploadFile(file);
+    setUploadPreview(URL.createObjectURL(file));
+    if (!uploadTitle) setUploadTitle(file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' '));
+  }, [uploadTitle]);
 
   // Upload via media API
   const uploadMutation = useMutation({
     mutationFn: async (data: Record<string, unknown>) => {
-      const mediaResp = await apiHelpers.media.upload({
+      let base64Data: string | undefined;
+      if (uploadFile) {
+        const arrayBuffer = await uploadFile.arrayBuffer();
+        base64Data = btoa(new Uint8Array(arrayBuffer).reduce((d, byte) => d + String.fromCharCode(byte), ''));
+      }
+      const mediaResp = await api.post('/api/media/upload', {
         title: data.title,
         mediaType: 'image',
+        mimeType: uploadFile?.type || 'image/jpeg',
+        fileSize: uploadFile?.size || 0,
+        originalFilename: uploadFile?.name,
         tags: data.tags,
         description: data.description,
+        ...(base64Data ? { data: base64Data } : {}),
       });
       // Also store as lens artifact
       await createPhoto({
         title: data.title as string,
-        data: { ...data, mediaId: mediaResp.data?.id, createdAt: new Date().toISOString(), likes: 0, views: 0 },
+        data: { ...data, mediaId: mediaResp.data?.mediaDTU?.id || mediaResp.data?.id, createdAt: new Date().toISOString(), likes: 0, views: 0 },
       });
       return mediaResp.data;
     },
@@ -86,6 +105,9 @@ export default function PhotographyPage() {
       setUploadTitle('');
       setUploadDesc('');
       setUploadTags('');
+      setUploadFile(null);
+      if (uploadPreview) URL.revokeObjectURL(uploadPreview);
+      setUploadPreview(null);
       refetch();
     },
   });
@@ -197,9 +219,19 @@ export default function PhotographyPage() {
         {tab === 'upload' && (
           <div className="max-w-md mx-auto bg-white/5 border border-white/10 rounded-lg p-6 space-y-4">
             <h2 className="text-lg font-semibold flex items-center gap-2"><Upload className="w-5 h-5 text-sky-400" /> Upload Photo</h2>
-            <div className="border-2 border-dashed border-white/10 rounded-lg p-8 text-center">
-              <Camera className="w-8 h-8 mx-auto mb-2 text-gray-500" />
-              <p className="text-xs text-gray-500">Drag & drop or click to upload</p>
+            <div
+              className="border-2 border-dashed border-white/10 rounded-lg p-8 text-center cursor-pointer hover:border-sky-500/30 transition-colors"
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
+              onDrop={e => { e.preventDefault(); e.stopPropagation(); const f = e.dataTransfer.files[0]; if (f) handleFileSelect(f); }}
+            >
+              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFileSelect(f); }} />
+              {uploadPreview ? (
+                <img src={uploadPreview} alt="Preview" className="max-h-48 mx-auto rounded-lg mb-2" />
+              ) : (
+                <Camera className="w-8 h-8 mx-auto mb-2 text-gray-500" />
+              )}
+              <p className="text-xs text-gray-500">{uploadFile ? uploadFile.name : 'Drag & drop or click to upload'}</p>
             </div>
             <input value={uploadTitle} onChange={e => setUploadTitle(e.target.value)} placeholder="Photo title" className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm" />
             <textarea value={uploadDesc} onChange={e => setUploadDesc(e.target.value)} placeholder="Description" rows={2} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm resize-none" />

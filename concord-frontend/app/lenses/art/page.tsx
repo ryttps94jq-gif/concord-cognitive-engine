@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, apiHelpers } from '@/lib/api/client';
@@ -116,6 +116,162 @@ export default function ArtLensPage() {
   const [artTypeFilter, setArtTypeFilter] = useState<string | null>(null);
   const [myArtView, setMyArtView] = useState<'grid' | 'list'>('grid');
 
+  // Drawing state
+  const isDrawingRef = useRef(false);
+  const lastPosRef = useRef<{ x: number; y: number } | null>(null);
+  const undoStackRef = useRef<ImageData[]>([]);
+  const redoStackRef = useRef<ImageData[]>([]);
+  const [brushOpacity, setBrushOpacity] = useState(100);
+
+  // Initialize canvas with white background
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    undoStackRef.current = [ctx.getImageData(0, 0, canvas.width, canvas.height)];
+  }, []);
+
+  const saveToUndoStack = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    undoStackRef.current.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
+    if (undoStackRef.current.length > 50) undoStackRef.current.shift();
+    redoStackRef.current = [];
+  }, []);
+
+  const getCanvasPos = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: (e.clientX - rect.left) * (canvas.width / rect.width),
+      y: (e.clientY - rect.top) * (canvas.height / rect.height),
+    };
+  }, []);
+
+  const drawLine = useCallback((ctx: CanvasRenderingContext2D, from: { x: number; y: number }, to: { x: number; y: number }) => {
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(to.x, to.y);
+    ctx.stroke();
+  }, []);
+
+  const handleCanvasMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const pos = getCanvasPos(e);
+    isDrawingRef.current = true;
+    lastPosRef.current = pos;
+    saveToUndoStack();
+
+    if (canvasTool === 'fill') {
+      ctx.fillStyle = brushColor;
+      ctx.globalAlpha = brushOpacity / 100;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.globalAlpha = 1;
+      isDrawingRef.current = false;
+      return;
+    }
+
+    if (canvasTool === 'eyedropper') {
+      const pixel = ctx.getImageData(pos.x, pos.y, 1, 1).data;
+      const hex = '#' + [pixel[0], pixel[1], pixel[2]].map(v => v.toString(16).padStart(2, '0')).join('');
+      setBrushColor(hex);
+      isDrawingRef.current = false;
+      return;
+    }
+
+    if (canvasTool === 'text') {
+      const text = prompt('Enter text:');
+      if (text) {
+        ctx.fillStyle = brushColor;
+        ctx.globalAlpha = brushOpacity / 100;
+        ctx.font = `${brushSize * 3}px sans-serif`;
+        ctx.fillText(text, pos.x, pos.y);
+        ctx.globalAlpha = 1;
+      }
+      isDrawingRef.current = false;
+      return;
+    }
+
+    // Set up drawing context
+    ctx.lineWidth = brushSize;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.globalAlpha = brushOpacity / 100;
+
+    if (canvasTool === 'eraser') {
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.strokeStyle = 'rgba(0,0,0,1)';
+    } else {
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.strokeStyle = brushColor;
+    }
+
+    // Draw a dot at click position
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, brushSize / 2, 0, Math.PI * 2);
+    ctx.fillStyle = canvasTool === 'eraser' ? 'rgba(0,0,0,1)' : brushColor;
+    ctx.fill();
+  }, [canvasTool, brushColor, brushSize, brushOpacity, getCanvasPos, saveToUndoStack]);
+
+  const handleCanvasMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDrawingRef.current || !lastPosRef.current) return;
+    if (canvasTool === 'move' || canvasTool === 'eyedropper' || canvasTool === 'fill' || canvasTool === 'text') return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const pos = getCanvasPos(e);
+
+    if (canvasTool === 'shape-rect' || canvasTool === 'shape-circle') {
+      // Shapes preview on move — restore last saved state and draw shape
+      const lastState = undoStackRef.current[undoStackRef.current.length - 1];
+      if (lastState) ctx.putImageData(lastState, 0, 0);
+      ctx.strokeStyle = brushColor;
+      ctx.lineWidth = brushSize;
+      ctx.globalAlpha = brushOpacity / 100;
+      ctx.globalCompositeOperation = 'source-over';
+      const start = lastPosRef.current;
+      if (canvasTool === 'shape-rect') {
+        ctx.strokeRect(start.x, start.y, pos.x - start.x, pos.y - start.y);
+      } else {
+        const rx = Math.abs(pos.x - start.x) / 2;
+        const ry = Math.abs(pos.y - start.y) / 2;
+        const cx = (start.x + pos.x) / 2;
+        const cy = (start.y + pos.y) / 2;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      return;
+    }
+
+    drawLine(ctx, lastPosRef.current, pos);
+    lastPosRef.current = pos;
+  }, [canvasTool, brushColor, brushSize, brushOpacity, getCanvasPos, drawLine]);
+
+  const handleCanvasMouseUp = useCallback(() => {
+    if (isDrawingRef.current) {
+      const canvas = canvasRef.current;
+      const ctx = canvas?.getContext('2d');
+      if (ctx) {
+        ctx.globalAlpha = 1;
+        ctx.globalCompositeOperation = 'source-over';
+      }
+    }
+    isDrawingRef.current = false;
+    lastPosRef.current = null;
+  }, []);
+
   // AI generation state
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiGenerating, setAiGenerating] = useState(false);
@@ -211,23 +367,50 @@ export default function ArtLensPage() {
   });
 
   const handleCanvasUndo = useCallback(() => {
-    const ctx = canvasRef.current?.getContext('2d');
-    if (ctx) { ctx.clearRect(0, 0, canvasRef.current!.width, canvasRef.current!.height); }
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    if (undoStackRef.current.length <= 1) return;
+    const current = undoStackRef.current.pop()!;
+    redoStackRef.current.push(current);
+    const prev = undoStackRef.current[undoStackRef.current.length - 1];
+    if (prev) ctx.putImageData(prev, 0, 0);
   }, []);
 
   const handleCanvasRedo = useCallback(() => {
-    useUIStore.getState().addToast({ type: 'info', message: 'Redo: no actions to redo' });
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    if (redoStackRef.current.length === 0) return;
+    const next = redoStackRef.current.pop()!;
+    undoStackRef.current.push(next);
+    ctx.putImageData(next, 0, 0);
   }, []);
 
-  const handleCanvasSave = useCallback(() => {
-    uploadMutation.mutate({
-      type: 'artwork',
-      title: canvasTitle || 'Untitled',
-      description: '',
-      tags: [],
-      metadata: { source: 'canvas' },
-    });
-  }, [canvasTitle, uploadMutation]);
+  const handleCanvasSave = useCallback(async () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    // Upload as media with actual image data
+    try {
+      const dataUrl = canvas.toDataURL('image/png');
+      const base64Data = dataUrl.split(',')[1];
+      await api.post('/api/media/upload', {
+        title: canvasTitle || 'Untitled',
+        mediaType: 'image',
+        mimeType: 'image/png',
+        fileSize: Math.ceil(base64Data.length * 0.75),
+        originalFilename: `${canvasTitle.replace(/\s+/g, '-').toLowerCase()}.png`,
+        tags: ['art', 'canvas'],
+        data: base64Data,
+      });
+      useUIStore.getState().addToast({ type: 'success', message: 'Artwork saved!' });
+    } catch (err) {
+      console.error('Save failed:', err);
+      useUIStore.getState().addToast({ type: 'error', message: 'Failed to save artwork' });
+    }
+  }, [canvasTitle]);
 
   const handleAiGenerate = useCallback(async () => {
     if (!aiPrompt.trim()) return;
@@ -512,6 +695,10 @@ export default function ArtLensPage() {
               height={768}
               className="bg-white/10 border border-white/20 rounded shadow-2xl cursor-crosshair"
               style={{ width: `${1024 * canvasZoom / 100}px`, height: `${768 * canvasZoom / 100}px` }}
+              onMouseDown={handleCanvasMouseDown}
+              onMouseMove={handleCanvasMouseMove}
+              onMouseUp={handleCanvasMouseUp}
+              onMouseLeave={handleCanvasMouseUp}
             />
           </div>
         </main>
@@ -526,8 +713,8 @@ export default function ArtLensPage() {
                 <input type="range" min="1" max="100" value={brushSize} onChange={e => setBrushSize(Number(e.target.value))} className="w-full accent-neon-pink" />
               </div>
               <div>
-                <label className="text-xs text-gray-400 mb-1 block">Opacity</label>
-                <input type="range" min="0" max="100" defaultValue={100} className="w-full accent-neon-pink" />
+                <label className="text-xs text-gray-400 mb-1 block">Opacity: {brushOpacity}%</label>
+                <input type="range" min="1" max="100" value={brushOpacity} onChange={e => setBrushOpacity(Number(e.target.value))} className="w-full accent-neon-pink" />
               </div>
             </div>
           </div>
