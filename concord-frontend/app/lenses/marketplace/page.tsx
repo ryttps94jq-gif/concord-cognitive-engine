@@ -331,7 +331,7 @@ function ItemCard({
   }
 
   return (
-    <motion.div layout className="panel p-0 overflow-hidden hover:border-neon-purple/40 transition-colors cursor-pointer group">
+    <motion.div layout className="panel p-0 overflow-hidden hover:border-amber-500/40 hover:shadow-lg hover:shadow-amber-500/5 transition-all duration-200 cursor-pointer group">
       {/* Thumbnail */}
       <div className="relative h-36 bg-lattice-deep flex items-center justify-center">
         {audio ? (
