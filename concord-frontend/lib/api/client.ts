@@ -160,9 +160,14 @@ api.interceptors.response.use(
         if (requestUrl.includes('/api/auth/me') || requestUrl.includes('/api/auth/csrf-token')) {
           return Promise.reject(error);
         }
+        // Don't redirect on background GET fetches — a stale query or
+        // transient 401 shouldn't force navigation away from the page.
+        // Only redirect on user-initiated mutations or explicit nav.
+        const isBackgroundFetch = error.config?.method?.toUpperCase() === 'GET';
+        if (isBackgroundFetch) {
+          return Promise.reject(error);
+        }
         // Don't redirect on public pages that don't require auth.
-        // These pages may trigger incidental API calls (e.g. via shared
-        // components) but should never force a login redirect.
         const path = window.location.pathname;
         const isPublicPage =
           path.startsWith('/legal/') ||
@@ -283,6 +288,21 @@ export const apiHelpers = {
 
     update: (id: string, patch: Record<string, unknown>) =>
       api.patch(`/api/dtus/${id}`, patch),
+
+    get: (id: string) => api.get(`/api/dtus/${id}`),
+    delete: (id: string) => api.delete(`/api/dtus/${id}`),
+    search: (query: string) => api.get('/api/dtus/search', { params: { q: query } }),
+    lineage: (id: string) => api.get(`/api/dtus/${id}/lineage`),
+    stats: () => api.get('/api/dtus/stats'),
+    children: (id: string) => api.get(`/api/dtus/${id}/children`),
+    myDtus: (params?: { limit?: number; offset?: number }) =>
+      api.get('/api/dtus/mine', { params }),
+
+    // .dtu file format export/import
+    exportDtu: (id: string) =>
+      api.get(`/api/dtus/${id}/export.dtu`, { responseType: 'blob' }),
+    importDtu: (data: ArrayBuffer) =>
+      api.post('/api/dtus/import', data, { headers: { 'Content-Type': 'application/octet-stream' } }),
   },
 
   // Ingest operations
@@ -338,6 +358,11 @@ export const apiHelpers = {
   // Cognitive status (combined)
   cognitive: {
     status: () => api.get('/api/cognitive/status'),
+  },
+
+  // LOAF system status (aggregated)
+  loaf: {
+    status: () => api.get('/api/loaf/status'),
   },
 
   // Dream mode (synthesis + capture pipeline)
@@ -614,6 +639,28 @@ export const apiHelpers = {
       api.post('/api/stripe/connect/onboard', { user_id: userId }),
     connectStatus: (userId?: string) =>
       api.get('/api/stripe/connect/status', { params: { user_id: userId } }),
+
+    // Merit Credit Score
+    meritScore: (userId: string) =>
+      api.get(`/api/economy/merit-score/${userId}`),
+
+    // Royalty Cascade Visualization
+    royaltyCascade: (dtuId: string) =>
+      api.get(`/api/economy/royalty-cascade/${dtuId}`),
+    creatorRoyalties: (creatorId: string, params?: { limit?: number; offset?: number }) =>
+      api.get(`/api/economy/royalties/creator/${creatorId}`, { params }),
+
+    // Admin Treasury Dashboard
+    adminTreasury: () =>
+      api.get('/api/admin/treasury'),
+
+    // Invoice DTU creation
+    createInvoice: (data: { lineItems: Array<{ description: string; quantity: number; unitPrice: number }>; taxRate?: number; dueDate?: string; payerName?: string; payeeName?: string; notes?: string; currency?: string }) =>
+      api.post('/api/economy/invoice', data),
+
+    // Tax summary DTU generation
+    createTaxSummary: (data?: { year?: number }) =>
+      api.post('/api/economy/tax-summary', data || {}),
   },
 
   // Macros
@@ -646,10 +693,37 @@ export const apiHelpers = {
   // Graph Queries
   graph: {
     query: (dsl: string) => api.post('/api/graph/query', { dsl }),
-    visual: (params?: { tier?: string; limit?: number }) =>
+    visual: (params?: { tier?: string; limit?: number; includeShadow?: boolean }) =>
       api.get('/api/graph/visual', { params }),
     force: (params?: { centerNode?: string; depth?: number; maxNodes?: number }) =>
       api.get('/api/graph/force', { params }),
+  },
+
+  // Feature 44: Prediction Markets (wired to LOAF hypothesis market)
+  predictions: {
+    list: (params?: { state?: string; domain?: string }) =>
+      api.get('/api/predictions', { params }),
+    create: (data: { claim: string; evidence?: Array<{ text: string; confidence?: number }>; domain?: string }) =>
+      api.post('/api/predictions', data),
+    resolve: (id: string) =>
+      api.post(`/api/predictions/${id}/resolve`, {}),
+    leaderboard: (params?: { limit?: number }) =>
+      api.get('/api/predictions/leaderboard', { params }),
+  },
+
+  // Feature 45: Plugin Manager
+  plugins: {
+    list: () => api.get('/api/plugins'),
+    get: (pluginId: string) => api.get(`/api/plugins/${pluginId}`),
+    metrics: () => api.get('/api/plugins/metrics'),
+    remove: (pluginId: string) => api.delete(`/api/plugins/${pluginId}`),
+  },
+
+  // Feature 46: Macro Explorer
+  adminMacros: {
+    all: () => api.get('/api/admin/macros'),
+    domains: () => api.get('/api/macros/domains'),
+    byDomain: (domain: string) => api.get(`/api/macros/${domain}`),
   },
 
   // Schema System
@@ -860,6 +934,8 @@ export const apiHelpers = {
   agents: {
     list: () => api.get('/api/agents'),
     get: (id: string) => api.get(`/api/agents/${id}`),
+    status: () => api.get('/api/agents/status'),
+    spawnResearch: (topic: string) => api.post('/api/agents/spawn-research', { topic }),
     create: (data: { name: string; type?: string; config?: Record<string, unknown> }) =>
       api.post('/api/agents', data),
     enable: (id: string) => api.post(`/api/agents/${id}/enable`, {}),
@@ -1233,6 +1309,57 @@ export const apiHelpers = {
     },
   },
 
+  // ---- Film Studio API ----
+  filmStudio: {
+    constants: () => api.get('/api/film-studio/constants'),
+    create: (data: Record<string, unknown>) => api.post('/api/film-studio/films', data),
+    get: (id: string) => api.get(`/api/film-studio/films/${id}`),
+    update: (id: string, data: Record<string, unknown>) => api.put(`/api/film-studio/films/${id}`, data),
+    preview: (id: string) => api.get(`/api/film-studio/films/${id}/preview`),
+    previewAnalytics: (id: string) => api.get(`/api/film-studio/films/${id}/preview/analytics`),
+    components: (id: string) => api.get(`/api/film-studio/films/${id}/components`),
+    createComponent: (id: string, data: Record<string, unknown>) => api.post(`/api/film-studio/films/${id}/components`, data),
+    crew: (id: string) => api.get(`/api/film-studio/films/${id}/crew`),
+    addCrew: (id: string, data: Record<string, unknown>) => api.post(`/api/film-studio/films/${id}/crew`, data),
+    discover: (params?: Record<string, unknown>) => api.get('/api/film-studio/discover', { params }),
+    remixes: (id: string) => api.get(`/api/film-studio/films/${id}/remixes`),
+    createRemix: (id: string, data: Record<string, unknown>) => api.post(`/api/film-studio/films/${id}/remixes`, data),
+    series: (id: string) => api.get(`/api/film-studio/films/${id}/series`),
+    createSeries: (data: Record<string, unknown>) => api.post('/api/film-studio/series', data),
+    watchParty: {
+      create: (data: Record<string, unknown>) => api.post('/api/film-studio/watch-parties', data),
+      join: (id: string) => api.post(`/api/film-studio/watch-parties/${id}/join`),
+    },
+    analytics: (id: string) => api.get(`/api/film-studio/films/${id}/analytics`),
+    gift: (data: Record<string, unknown>) => api.post('/api/film-studio/gift', data),
+  },
+
+  // ---- Media Upload API ----
+  media: {
+    upload: (data: Record<string, unknown>) => api.post('/api/media/upload', data),
+    uploadUrl: (data: Record<string, unknown>) => api.post('/api/media/upload/url', data),
+    get: (id: string) => api.get(`/api/media/${id}`),
+    stream: (id: string) => api.get(`/api/media/${id}/stream`),
+    thumbnail: (id: string) => api.get(`/api/media/${id}/thumbnail`),
+    transcode: (id: string, data: Record<string, unknown>) => api.post(`/api/media/${id}/transcode`, data),
+    feed: (params?: Record<string, unknown>) => api.get('/api/media/feed', { params }),
+    view: (id: string) => api.post(`/api/media/${id}/view`),
+    like: (id: string) => api.post(`/api/media/${id}/like`),
+    comment: (id: string, data: Record<string, unknown>) => api.post(`/api/media/${id}/comment`, data),
+    comments: (id: string) => api.get(`/api/media/${id}/comments`),
+    delete: (id: string) => api.delete(`/api/media/${id}`),
+  },
+
+  // ---- Game API ----
+  game: {
+    profile: () => api.get('/api/game/profile'),
+    achievements: () => api.get('/api/game/achievements'),
+    challenges: () => api.get('/api/game/challenges'),
+    leaderboard: () => api.get('/api/game/leaderboard'),
+    completeQuest: (questId: string, xpReward?: number) =>
+      api.post(`/api/game/quests/${questId}/complete`, { xpReward: xpReward || 100 }),
+  },
+
   // ---- Generic Lens Artifact API + Manifest ----
   lens: {
     list: (domain: string, params?: { type?: string; search?: string; tags?: string; status?: string; limit?: number; offset?: number }) =>
@@ -1411,6 +1538,86 @@ export const apiHelpers = {
       api.post('/api/social/cite', { citedDtuId, citingDtuId }),
     getCitedBy: (dtuId: string) => api.get(`/api/social/cited-by/${dtuId}`),
     metrics: () => api.get('/api/social/metrics'),
+    // Posts
+    createPost: (data: Record<string, unknown>) => api.post('/api/social/post', data),
+    getPost: (postId: string) => api.get(`/api/social/post/${postId}`),
+    deletePost: (postId: string) => api.delete(`/api/social/post/${postId}`),
+    getUserPosts: (userId: string, params?: Record<string, unknown>) =>
+      api.get(`/api/social/posts/${userId}`, { params }),
+    // Reactions, Comments, Shares
+    react: (data: { postId: string; type?: string }) => api.post('/api/social/react', data),
+    getReactions: (postId: string) => api.get(`/api/social/reactions/${postId}`),
+    comment: (data: { postId: string; content: string; parentCommentId?: string }) =>
+      api.post('/api/social/comment', data),
+    deleteComment: (postId: string, commentId: string) =>
+      api.delete(`/api/social/comment/${postId}/${commentId}`),
+    getComments: (postId: string, params?: Record<string, unknown>) =>
+      api.get(`/api/social/comments/${postId}`, { params }),
+    share: (data: { postId: string; commentary?: string }) => api.post('/api/social/share', data),
+    getShares: (postId: string) => api.get(`/api/social/shares/${postId}`),
+    // Bookmarks
+    bookmark: (data: { postId: string }) => api.post('/api/social/bookmark', data),
+    getBookmarks: (params?: Record<string, unknown>) => api.get('/api/social/bookmarks', { params }),
+    // Feeds
+    getForYouFeed: (params?: Record<string, unknown>) => api.get('/api/social/feed/foryou', { params }),
+    getFollowingFeed: (params?: Record<string, unknown>) => api.get('/api/social/feed/following', { params }),
+    getExploreFeed: (params?: Record<string, unknown>) => api.get('/api/social/feed/explore', { params }),
+    // DMs
+    sendDM: (data: { toUserId: string; content: string; mediaUrl?: string }) =>
+      api.post('/api/social/dm', data),
+    getConversations: () => api.get('/api/social/dm/conversations'),
+    getMessages: (conversationId: string, params?: Record<string, unknown>) =>
+      api.get(`/api/social/dm/${conversationId}`, { params }),
+    markDMRead: (conversationId: string) => api.post(`/api/social/dm/${conversationId}/read`),
+    // Notifications
+    getNotifications: (params?: Record<string, unknown>) =>
+      api.get('/api/social/notifications', { params }),
+    markNotificationRead: (id: string) => api.post(`/api/social/notifications/${id}/read`),
+    markAllNotificationsRead: () => api.post('/api/social/notifications/read-all'),
+    getUnreadCount: () => api.get('/api/social/notifications/count'),
+    deleteNotification: (id: string) => api.delete(`/api/social/notifications/${id}`),
+    // Stories
+    getStories: (params?: Record<string, unknown>) => api.get('/api/social/stories', { params }),
+    viewStory: (storyId: string) => api.post(`/api/social/stories/${storyId}/view`),
+    // Polls
+    votePoll: (data: { postId: string; optionIndex: number }) => api.post('/api/social/poll/vote', data),
+    getPollResults: (postId: string) => api.get(`/api/social/poll/${postId}`),
+    // Topics
+    getTrendingTopics: (params?: Record<string, unknown>) =>
+      api.get('/api/social/topics/trending', { params }),
+    getPostsByTopic: (topic: string, params?: Record<string, unknown>) =>
+      api.get(`/api/social/topics/${topic}`, { params }),
+    // Groups
+    createGroup: (data: Record<string, unknown>) => api.post('/api/social/group', data),
+    joinGroup: (groupId: string) => api.post(`/api/social/group/${groupId}/join`),
+    leaveGroup: (groupId: string) => api.post(`/api/social/group/${groupId}/leave`),
+    getGroupFeed: (groupId: string, params?: Record<string, unknown>) =>
+      api.get(`/api/social/group/${groupId}/feed`, { params }),
+    postToGroup: (groupId: string, data: Record<string, unknown>) =>
+      api.post(`/api/social/group/${groupId}/post`, data),
+    listGroups: (params?: Record<string, unknown>) => api.get('/api/social/groups', { params }),
+    getGroupMembers: (groupId: string) => api.get(`/api/social/group/${groupId}/members`),
+    // Analytics
+    getCreatorAnalytics: () => api.get('/api/social/analytics/creator'),
+    getPostAnalytics: (postId: string) => api.get(`/api/social/analytics/post/${postId}`),
+    // Streak
+    getStreak: () => api.get('/api/social/streak'),
+    // Commerce
+    tagListing: (data: { postId: string; listingId: string }) =>
+      api.post('/api/social/commerce/tag', data),
+    getPostSales: (postId: string) => api.get(`/api/social/commerce/post/${postId}/sales`),
+    getPostEarnings: (postId: string) => api.get(`/api/social/commerce/post/${postId}/earnings`),
+    // Pin
+    pin: (data: { postId: string }) => api.post('/api/social/pin', data),
+    unpin: (postId: string) => api.delete(`/api/social/pin/${postId}`),
+    getPinnedPosts: (userId: string) => api.get(`/api/social/pins/${userId}`),
+    // Watch time
+    recordWatchTime: (data: { postId: string; durationMs: number }) =>
+      api.post('/api/social/watchtime', data),
+    // Scheduling
+    schedulePost: (data: Record<string, unknown>) => api.post('/api/social/schedule', data),
+    getScheduledPosts: () => api.get('/api/social/scheduled'),
+    cancelScheduledPost: (postId: string) => api.delete(`/api/social/scheduled/${postId}`),
   },
 
   collab: {
@@ -1558,6 +1765,28 @@ export const apiHelpers = {
     /** Birth a new entity */
     birth: (species?: string, lineage?: string) =>
       api.post('/api/entity-growth/birth', { species, lineage }),
+
+    /** Get full entity profile with body, emotions, economy, death risk */
+    fullProfile: (entityId: string) => api.get(`/api/entity-growth/${entityId}/full-profile`),
+
+    /** Get entity earnings (Feature 6: Marketplace Participation) */
+    earnings: (entityId: string) => api.get(`/api/entity/${entityId}/earnings`),
+
+    /** Get entity lifecycle events (Feature 8: Lifecycle Display) */
+    lifecycle: (entityId: string) => api.get(`/api/entity/${entityId}/lifecycle`),
+
+    /** Entity creates a social post (Feature 12: Cross-Substrate Social) */
+    createPost: (entityId: string, content: string, tags?: string[]) =>
+      api.post(`/api/entity/${entityId}/post`, { content, tags }),
+  },
+
+  /** Death Registry & Memorials */
+  deaths: {
+    /** List all death records */
+    registry: () => api.get('/api/deaths/registry'),
+
+    /** Get all memorials for deceased entities */
+    memorials: () => api.get('/api/deaths/memorials'),
   },
 
   exploration: {
@@ -1714,6 +1943,84 @@ export const apiHelpers = {
     reject: (id: string, reason: string) =>
       api.post(`/api/admin/promotion/${id}/reject`, { reason }),
     history: () => api.get('/api/admin/promotion/history'),
+    /** Shadow DTU promotion endpoints */
+    shadowPending: () => api.get('/api/dtus/shadow/pending'),
+    promoteShadow: (id: string, force?: boolean) =>
+      api.post(`/api/dtus/${id}/promote`, { force: !!force }),
+    promotionQueue: () => api.get('/api/dtus/promotion/queue'),
+  },
+
+  /** Breakthrough Clusters */
+  breakthrough: {
+    list: () => api.get('/api/breakthrough/list'),
+    status: (clusterId: string) => api.get(`/api/breakthrough/status/${clusterId}`),
+    metrics: () => api.get('/api/breakthrough/metrics'),
+    dtus: (clusterId: string) => api.get(`/api/breakthrough/dtus/${clusterId}`),
+    init: (clusterId: string) => api.post(`/api/breakthrough/init/${clusterId}`, {}),
+    research: (clusterId: string) => api.post(`/api/breakthrough/research/${clusterId}`, {}),
+  },
+
+  /** Entity Emergence Detection */
+  entityEmergence: {
+    status: () => api.get('/api/entity-emergence/status'),
+    scan: () => api.get('/api/entity-emergence/scan'),
+  },
+
+  /** Meta-Derivation Engine */
+  metaDerivation: {
+    status: () => api.get('/api/meta-derivation/status'),
+    invariants: () => api.get('/api/meta-derivation/invariants'),
+    convergences: () => api.get('/api/meta-derivation/convergences'),
+  },
+
+  /** Culture Layer */
+  culture: {
+    status: () => api.get('/api/culture/status'),
+  },
+
+  /** Foundation — Sovereignty modules */
+  foundation: {
+    status: () => api.get('/api/foundation/status'),
+    senseReadings: (limit = 50) => api.get('/api/foundation/sense/readings', { params: { limit } }),
+    sensePatterns: () => api.get('/api/foundation/sense/patterns'),
+    energyMap: () => api.get('/api/foundation/energy/map'),
+    energyGrid: () => api.get('/api/foundation/energy/grid'),
+    spectrumMap: () => api.get('/api/foundation/spectrum/map'),
+    spectrumAvailable: (limit = 50) => api.get('/api/foundation/spectrum/available', { params: { limit } }),
+    emergencyStatus: () => api.get('/api/foundation/emergency/status'),
+    neuralReadiness: () => api.get('/api/foundation/neural/readiness'),
+    protocolStats: () => api.get('/api/foundation/protocol/stats'),
+  },
+
+  /** Atlas Tomography — Spatial mapping and signals */
+  atlasTomography: {
+    tile: (lat: number, lng: number) => api.get('/api/atlas/tile', { params: { lat, lng } }),
+    coverage: () => api.get('/api/atlas/coverage'),
+    material: (lat: number, lng: number) => api.get('/api/atlas/material', { params: { lat, lng } }),
+    volume: (bounds: { lat_min: number; lat_max: number; lng_min: number; lng_max: number }, tier = 'PUBLIC') =>
+      api.get('/api/atlas/volume', { params: { ...bounds, tier } }),
+    subsurface: (bounds: { lat_min: number; lat_max: number; lng_min: number; lng_max: number }) =>
+      api.get('/api/atlas/subsurface', { params: bounds }),
+    change: (params?: Record<string, unknown>) => api.get('/api/atlas/change', { params }),
+    live: () => api.get('/api/atlas/live'),
+    signalsTaxonomy: (category = 'all', limit = 50) =>
+      api.get('/api/atlas/signals/taxonomy', { params: { category, limit } }),
+    signalsUnknown: (limit = 50) => api.get('/api/atlas/signals/unknown', { params: { limit } }),
+    signalsAnomalies: (limit = 50) => api.get('/api/atlas/signals/anomalies', { params: { limit } }),
+    signalsSpectrum: () => api.get('/api/atlas/signals/spectrum'),
+  },
+
+  /** Qualia — Sensory / Body / Presence */
+  qualia: {
+    state: (entityId: string) => api.get(`/api/qualia/state/${entityId}`),
+    summary: (entityId: string) => api.get(`/api/qualia/summary/${entityId}`),
+    all: () => api.get('/api/qualia/all'),
+    registry: () => api.get('/api/qualia/registry'),
+    channels: (entityId: string) => api.get(`/api/qualia/senses/channels/${entityId}`),
+    presence: (entityId: string) => api.get(`/api/qualia/presence/${entityId}`),
+    embodiment: (entityId: string) => api.get(`/api/qualia/embodiment/${entityId}`),
+    planetary: (entityId: string) => api.get(`/api/qualia/planetary/${entityId}`),
+    senses: (entityId: string) => api.get(`/api/qualia/senses/${entityId}`),
   },
 
   // ═══════════════════════════════════════════════════════════════
@@ -1747,6 +2054,11 @@ export const apiHelpers = {
       api.post('/api/marketplace/purchaseWithRoyalties', { dtuId }),
     royalties: (userId?: string) =>
       api.get(userId ? `/api/marketplace/royalties/${userId}` : '/api/marketplace/royalties'),
+    megaComponents: (id: string) => api.get(`/api/marketplace/mega/${id}/components`),
+    deltaPrice: (id: string, userId: string) =>
+      api.get(`/api/marketplace/${id}/delta-price`, { params: { userId } }),
+    purchase: (id: string, data: { buyerId: string; requestId?: string }) =>
+      api.post(`/api/marketplace/${id}/purchase`, data),
   },
 
   /** Cognitive dreams */
@@ -1768,6 +2080,16 @@ export const apiHelpers = {
   marketplaceSubmit: {
     submit: (dtuId: string, price?: number) =>
       api.post('/api/marketplace/submit', { dtuId, price }),
+  },
+
+  /** User bookmarks — persist across sessions */
+  bookmarks: {
+    list: (domain?: string) =>
+      api.get('/api/user/bookmarks', { params: domain ? { domain } : {} }).then(r => r.data),
+    create: (data: { targetId: string; targetType: string; domain: string; metadata?: Record<string, unknown> }) =>
+      api.post('/api/user/bookmarks', data).then(r => r.data),
+    remove: (id: string) =>
+      api.delete(`/api/user/bookmarks/${id}`).then(r => r.data),
   },
 };
 

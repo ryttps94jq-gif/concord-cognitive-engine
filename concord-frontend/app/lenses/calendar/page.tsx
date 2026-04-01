@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useUIStore } from '@/store/ui';
-import { useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, MapPin,
@@ -131,7 +130,6 @@ const DAY_NAMES_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 
 export default function CalendarLensPage() {
   useLensNav('calendar');
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('calendar');
-  const queryClient = useQueryClient();
 
   // State
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -140,7 +138,7 @@ export default function CalendarLensPage() {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [categories, setCategories] = useState<CalendarCategory[]>([]);
 
-  const { isLoading, isError: isError, error: error, refetch: refetch, items: eventItems, create: createEvent } = useLensData<CalendarEvent>('calendar', 'event', {
+  const { isLoading, isError: isError, error: error, refetch: refetch, items: eventItems, create: createEvent, update: updateEvent, remove: removeEvent } = useLensData<CalendarEvent>('calendar', 'event', {
     seed: [],
   });
   const { isError: isError2, error: error2, refetch: refetch2, items: catItems } = useLensData<CalendarCategory>('calendar', 'category', {
@@ -150,6 +148,7 @@ export default function CalendarLensPage() {
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [showEventModal, setShowEventModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
 
@@ -204,9 +203,9 @@ export default function CalendarLensPage() {
     }
   }, [catItems]);
 
-  // Derive project list from event data instead of hardcoded INITIAL_PROJECTS
+  // Derive project list from event data, seeded with INITIAL_PROJECTS defaults
   const projects: string[] = useMemo(() => {
-    const projectSet = new Set<string>();
+    const projectSet = new Set<string>(INITIAL_PROJECTS);
     events.forEach(e => {
       if (e.linkedProject) projectSet.add(e.linkedProject);
     });
@@ -355,7 +354,7 @@ export default function CalendarLensPage() {
     if (!newEvent.title) return;
 
     const event: CalendarEvent = {
-      id: Date.now().toString(),
+      id: editingEventId || Date.now().toString(),
       title: newEvent.title,
       description: newEvent.description,
       startDate: newEvent.startDate || new Date(),
@@ -372,7 +371,22 @@ export default function CalendarLensPage() {
       reminders: newEvent.reminders,
     };
 
-    setEvents([...events, event]);
+    const payload = {
+      title: event.title,
+      data: event as unknown as Record<string, unknown>,
+      meta: { status: 'active', eventType: event.eventType },
+    };
+
+    if (editingEventId) {
+      // Update existing event in local state and backend
+      setEvents(events.map(e => e.id === editingEventId ? event : e));
+      updateEvent(editingEventId, payload);
+    } else {
+      // Create new event in local state and backend
+      setEvents([...events, event]);
+      createEvent(payload);
+    }
+    setEditingEventId(null);
     setShowCreateModal(false);
     setNewEvent({
       title: '',
@@ -410,11 +424,17 @@ export default function CalendarLensPage() {
     };
 
     setEvents([...events, event]);
+    createEvent({
+      title: event.title,
+      data: event as unknown as Record<string, unknown>,
+      meta: { status: 'active', eventType: event.eventType },
+    });
     setShowBookingModal(false);
   };
 
   const handleDeleteEvent = (eventId: string) => {
     setEvents(events.filter((e) => e.id !== eventId));
+    removeEvent(eventId);
     setSelectedEvent(null);
     setShowEventModal(false);
   };
@@ -594,6 +614,7 @@ export default function CalendarLensPage() {
                         const newEnd = new Date(newStart);
                         newEnd.setHours(hour + 1);
                         setNewEvent({ ...newEvent, startDate: newStart, endDate: newEnd });
+                        setEditingEventId(null);
                         setShowCreateModal(true);
                       }}
                     >
@@ -694,6 +715,7 @@ export default function CalendarLensPage() {
                     const newEnd = new Date(newStart);
                     newEnd.setHours(hour + 1);
                     setNewEvent({ ...newEvent, startDate: newStart, endDate: newEnd });
+                    setEditingEventId(null);
                     setShowCreateModal(true);
                   }}
                 >
@@ -782,7 +804,7 @@ export default function CalendarLensPage() {
                         setShowEventModal(true);
                       }}
                     >
-                      {/* Artwork placeholder */}
+                      {/* Artwork gradient */}
                       <div
                         className="w-full h-20 rounded-md mb-2 flex items-center justify-center"
                         style={{
@@ -917,7 +939,7 @@ export default function CalendarLensPage() {
               <Music className="w-16 h-16 mb-4 opacity-30" />
               <p>No upcoming events</p>
               <button
-                onClick={() => setShowCreateModal(true)}
+                onClick={() => { setEditingEventId(null); setShowCreateModal(true); }}
                 className="mt-4 btn-neon"
               >
                 Schedule Something
@@ -1002,7 +1024,7 @@ export default function CalendarLensPage() {
 
             {/* Create button */}
             <button
-              onClick={() => setShowCreateModal(true)}
+              onClick={() => { setEditingEventId(null); setShowCreateModal(true); }}
               className="w-full btn-neon flex items-center justify-center gap-2"
             >
               <Plus className="w-4 h-4" />
@@ -1104,7 +1126,7 @@ export default function CalendarLensPage() {
     );
   }
   return (
-    <div className="h-[calc(100vh-4rem)] flex flex-col">
+    <div data-lens-theme="calendar" className="h-[calc(100vh-4rem)] flex flex-col">
       {/* Header */}
       <header className="flex items-center justify-between px-4 py-3 border-b border-lattice-border">
         <div className="flex items-center gap-4">
@@ -1245,7 +1267,7 @@ export default function CalendarLensPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button onClick={() => { setShowEventModal(false); setShowCreateModal(true); setNewEvent(selectedEvent); }} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400">
+                  <button onClick={() => { setShowEventModal(false); setEditingEventId(selectedEvent.id); setShowCreateModal(true); setNewEvent(selectedEvent); }} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400">
                     <Edit2 className="w-4 h-4" />
                   </button>
                   <button

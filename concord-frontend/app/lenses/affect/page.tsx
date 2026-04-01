@@ -148,7 +148,7 @@ function dimBgColor(value: number): string {
   return 'bg-red-500';
 }
 
-function formatTimestamp(ts: unknown): string {
+function _formatTimestamp(ts: unknown): string {
   if (!ts) return '';
   try {
     const d = new Date(String(ts));
@@ -498,7 +498,7 @@ export default function AffectLensPage() {
   // --- Render ---
 
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="affect" className="p-6 space-y-6">
       {/* Header */}
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">

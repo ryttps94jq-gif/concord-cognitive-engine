@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
-import { api, apiHelpers } from '@/lib/api/client';
+import { apiHelpers } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -24,6 +24,7 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { ProvenanceBadge } from '@/components/dtu/ProvenanceBadge';
 
 // --- Types ---
 
@@ -185,6 +186,7 @@ export default function GraphLensPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterTiers, setFilterTiers] = useState<Set<string>>(new Set(['regular', 'mega', 'hyper', 'shadow']));
   const [showAutogen, setShowAutogen] = useState(false);
+  const [showShadowConnections, setShowShadowConnections] = useState(false);
   const [showIsolated, setShowIsolated] = useState(false);
   const [nodeLimit, setNodeLimit] = useState(100);
   const [showLabels, setShowLabels] = useState(true);
@@ -249,10 +251,10 @@ export default function GraphLensPage() {
     staleTime: 30000,
   });
 
-  // Fetch graph visual data (tier-based)
+  // Fetch graph visual data (tier-based), with optional shadow connections
   const { data: graphVisualData } = useQuery({
-    queryKey: ['graph-visual'],
-    queryFn: () => apiHelpers.graph.visual({ limit: 500 }).then((r) => r.data),
+    queryKey: ['graph-visual', showShadowConnections],
+    queryFn: () => apiHelpers.graph.visual({ limit: 500, includeShadow: showShadowConnections || undefined }).then((r) => r.data),
     retry: 1,
     staleTime: 30000,
   });
@@ -620,6 +622,12 @@ export default function GraphLensPage() {
           ctx.lineWidth = 4;
           ctx.shadowColor = '#22c55e';
           ctx.shadowBlur = 10;
+        } else if ((edge as GraphEdge & { isShadow?: boolean }).isShadow || (edge.type as string) === 'shadow_reference') {
+          // Feature 42: Shadow edges render as dotted/faded lines
+          ctx.strokeStyle = 'rgba(107, 114, 128, 0.35)';
+          ctx.lineWidth = 1;
+          ctx.shadowBlur = 0;
+          ctx.setLineDash([4, 6]);
         } else if (showEdgeTypes && edge.type) {
           ctx.strokeStyle = EDGE_COLORS[edge.type as EdgeType] || 'rgba(100, 100, 150, 0.3)';
           ctx.lineWidth = 1 + edge.weight * 2;
@@ -1047,12 +1055,52 @@ export default function GraphLensPage() {
     );
   }
   return (
-    <div className="h-full flex flex-col bg-lattice-bg">
+    <div data-lens-theme="graph" className="h-full flex flex-col bg-[#0a0e14]">
+      {/* Stat Cards Row */}
+      <div className="flex items-center gap-3 px-4 py-2 border-b border-cyan-900/20 bg-[#0a0e14]/90 backdrop-blur-sm overflow-x-auto">
+        {[
+          { label: 'Nodes', value: stats.nodeCount, color: 'text-cyan-400', bg: 'bg-cyan-400/10' },
+          { label: 'Edges', value: stats.edgeCount, color: 'text-purple-400', bg: 'bg-purple-400/10' },
+          { label: 'Density', value: `${stats.density.toFixed(1)}%`, color: 'text-emerald-400', bg: 'bg-emerald-400/10' },
+          { label: 'Avg Connections', value: stats.avgConnections.toFixed(1), color: 'text-amber-400', bg: 'bg-amber-400/10' },
+        ].map((s, i) => (
+          <motion.div
+            key={s.label}
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.05 }}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${s.bg} border border-white/5 flex-shrink-0`}
+          >
+            <span className={`text-lg font-bold font-mono ${s.color}`}>{s.value}</span>
+            <span className="text-[10px] text-gray-500 uppercase tracking-wider">{s.label}</span>
+          </motion.div>
+        ))}
+        {/* Connection visualization mini-graph */}
+        <div className="flex items-center gap-1 ml-auto flex-shrink-0">
+          <div className="flex items-center gap-0.5">
+            {Object.entries(stats.typeCounts).slice(0, 4).map(([tier, count]) => (
+              count > 0 && (
+                <motion.div
+                  key={tier}
+                  initial={{ width: 0 }}
+                  animate={{ width: Math.max(4, Math.min(count * 2, 32)) }}
+                  className="h-3 rounded-full"
+                  style={{ backgroundColor: NODE_COLORS[tier as NodeType]?.fill || '#6b7280' }}
+                  title={`${NODE_COLORS[tier as NodeType]?.name}: ${count}`}
+                />
+              )
+            ))}
+          </div>
+        </div>
+      </div>
       {/* Real-time Enhancement Toolbar */}
-      <div className="flex items-center gap-2 px-4 py-1 border-b border-lattice-border/30 flex-wrap">
+      <div className="flex items-center gap-2 px-4 py-1 border-b border-cyan-900/20 bg-[#0a0e14]/80 backdrop-blur-sm flex-wrap">
         <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} compact />
         <DTUExportButton domain="graph" data={realtimeData || {}} compact />
         <RealtimeDataPanel domain="graph" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={realtimeInsights} compact />
+        <button onClick={() => refetchDTUs()} disabled={dtusLoading} className="p-1 rounded hover:bg-lattice-surface/50 disabled:opacity-50 transition-colors" title="Refresh DTUs">
+          {dtusLoading ? <Circle className="w-4 h-4 animate-spin text-neon-cyan" /> : <RotateCcw className="w-4 h-4 text-gray-400" />}
+        </button>
         {realtimeAlerts.length > 0 && (
           <span className="text-xs px-2 py-0.5 rounded bg-yellow-500/10 text-yellow-400">
             {realtimeAlerts.length} alert{realtimeAlerts.length !== 1 ? 's' : ''}
@@ -1089,10 +1137,10 @@ export default function GraphLensPage() {
         {/* --- Top-left: Search + Filters --- */}
         <div className="absolute top-4 left-4 space-y-3 max-w-xs">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-600" />
             <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search nodes, tags, genre..."
-              className="pl-10 pr-4 py-2 bg-lattice-surface/90 backdrop-blur border border-lattice-border rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-neon-cyan w-72" />
+              className="pl-10 pr-4 py-2 bg-[#0d1117]/90 backdrop-blur-md border border-cyan-900/30 rounded-lg text-sm text-white placeholder-gray-600 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/20 w-72" />
           </div>
 
           {/* Advanced search row */}
@@ -1139,7 +1187,7 @@ export default function GraphLensPage() {
           </div>
 
           {/* Tier filter chips — only show universal types by default, music types when detected */}
-          <div className="flex flex-wrap gap-1.5 bg-lattice-surface/90 backdrop-blur border border-lattice-border rounded-lg p-2">
+          <div className="flex flex-wrap gap-1.5 bg-[#0d1117]/80 backdrop-blur-md border border-cyan-900/20 rounded-xl p-2">
             {Object.entries(NODE_COLORS)
               .filter(([k]) => hasMusicDomain || !['track', 'artist', 'sample', 'release'].includes(k))
               .map(([tier, colors]) => (
@@ -1172,22 +1220,22 @@ export default function GraphLensPage() {
         </div>
 
         {/* --- Right toolbar --- */}
-        <div className="absolute top-4 right-4 flex flex-col gap-2">
-          <div className="bg-lattice-surface/90 backdrop-blur border border-lattice-border rounded-lg overflow-hidden">
-            <button onClick={() => setZoom(z => Math.min(z * 1.2, 8))} className="p-2 hover:bg-lattice-bg transition-colors block w-full">
-              <ZoomIn className="w-5 h-5 text-white mx-auto" />
+        <div className="absolute bottom-6 right-6 flex flex-col gap-2">
+          <div className="bg-[#0d1117]/90 backdrop-blur-md border border-cyan-900/20 rounded-xl overflow-hidden shadow-lg shadow-cyan-900/10">
+            <button onClick={() => setZoom(z => Math.min(z * 1.2, 8))} className="p-2.5 hover:bg-cyan-900/20 transition-colors block w-full">
+              <ZoomIn className="w-5 h-5 text-cyan-300 mx-auto" />
             </button>
-            <div className="px-2 py-1 text-xs text-center text-gray-400 border-y border-lattice-border">{Math.round(zoom * 100)}%</div>
-            <button onClick={() => setZoom(z => Math.max(z / 1.2, 0.1))} className="p-2 hover:bg-lattice-bg transition-colors block w-full">
-              <ZoomOut className="w-5 h-5 text-white mx-auto" />
+            <div className="px-2 py-1 text-xs text-center text-cyan-400/70 border-y border-cyan-900/20 font-mono">{Math.round(zoom * 100)}%</div>
+            <button onClick={() => setZoom(z => Math.max(z / 1.2, 0.1))} className="p-2.5 hover:bg-cyan-900/20 transition-colors block w-full">
+              <ZoomOut className="w-5 h-5 text-cyan-300 mx-auto" />
             </button>
           </div>
 
-          <button onClick={resetView} className="p-2 bg-lattice-surface/90 backdrop-blur border border-lattice-border rounded-lg hover:bg-lattice-bg" title="Reset View">
-            <RotateCcw className="w-5 h-5 text-white" />
+          <button onClick={resetView} className="p-2.5 bg-[#0d1117]/90 backdrop-blur-md border border-cyan-900/20 rounded-xl hover:bg-cyan-900/20 shadow-lg shadow-cyan-900/10" title="Reset View">
+            <RotateCcw className="w-5 h-5 text-cyan-300" />
           </button>
-          <button onClick={() => setShowLabels(!showLabels)} className="p-2 bg-lattice-surface/90 backdrop-blur border border-lattice-border rounded-lg hover:bg-lattice-bg" title="Toggle Labels">
-            {showLabels ? <Eye className="w-5 h-5 text-neon-cyan" /> : <EyeOff className="w-5 h-5 text-gray-400" />}
+          <button onClick={() => setShowLabels(!showLabels)} className="p-2.5 bg-[#0d1117]/90 backdrop-blur-md border border-cyan-900/20 rounded-xl hover:bg-cyan-900/20 shadow-lg shadow-cyan-900/10" title="Toggle Labels">
+            {showLabels ? <Eye className="w-5 h-5 text-cyan-400" /> : <EyeOff className="w-5 h-5 text-gray-500" />}
           </button>
           <button onClick={() => setIsSimulating(!isSimulating)} className={cn('p-2 backdrop-blur border border-lattice-border rounded-lg', isSimulating ? 'bg-neon-green/20 text-neon-green' : 'bg-lattice-surface/90 text-gray-400')} title="Toggle Simulation">
             {isSimulating ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
@@ -1208,6 +1256,9 @@ export default function GraphLensPage() {
           </button>
           <button onClick={() => setViewMode(viewMode === 'collab_network' ? 'default' : 'collab_network')} className={cn('p-2 backdrop-blur border border-lattice-border rounded-lg', viewMode === 'collab_network' ? 'bg-violet-500/20 text-violet-400' : 'bg-lattice-surface/90 text-gray-400')} title="Collab Network View">
             <Users className="w-5 h-5" />
+          </button>
+          <button onClick={() => setShowShadowConnections(!showShadowConnections)} className={cn('p-2 backdrop-blur border border-lattice-border rounded-lg', showShadowConnections ? 'bg-gray-500/20 text-gray-300' : 'bg-lattice-surface/90 text-gray-400')} title="Show Shadow Connections">
+            <Layers className="w-5 h-5" />
           </button>
 
           <button onClick={() => setShowSettings(!showSettings)} className="p-2 bg-lattice-surface/90 backdrop-blur border border-lattice-border rounded-lg hover:bg-lattice-bg" title="Settings">
@@ -1449,11 +1500,11 @@ export default function GraphLensPage() {
           <motion.aside initial={{ x: 320, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 320, opacity: 0 }}
             role="complementary"
             aria-label={`Details for ${selectedNode.label}`}
-            className="w-80 border-l border-lattice-border bg-lattice-surface p-4 overflow-y-auto">
+            className="w-80 border-l border-cyan-900/20 bg-[#0d1117]/95 backdrop-blur-md p-4 overflow-y-auto shadow-2xl shadow-cyan-900/10">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-bold text-white">Node Details</h2>
-              <button onClick={() => setSelectedNode(null)} className="p-1 hover:bg-lattice-bg rounded">
-                <X className="w-5 h-5 text-gray-400" />
+              <h2 className="font-bold text-cyan-100">Node Details</h2>
+              <button onClick={() => setSelectedNode(null)} className="p-1 hover:bg-cyan-900/20 rounded-lg transition-colors">
+                <X className="w-5 h-5 text-cyan-500/50" />
               </button>
             </div>
             <div className="space-y-4">
@@ -1467,7 +1518,10 @@ export default function GraphLensPage() {
                   {selectedNode.tier === 'sample' && <AudioWaveform className="w-3.5 h-3.5 text-green-400" />}
                   {selectedNode.tier === 'release' && <Disc className="w-3.5 h-3.5 text-pink-400" />}
                 </div>
-                <h3 className="font-semibold text-white text-lg">{selectedNode.label}</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-white text-lg">{selectedNode.label}</h3>
+                  <ProvenanceBadge source={selectedNode.originalSource} />
+                </div>
                 {selectedNode.content && <p className="text-sm text-gray-400 mt-2 line-clamp-4">{selectedNode.content}</p>}
               </div>
 

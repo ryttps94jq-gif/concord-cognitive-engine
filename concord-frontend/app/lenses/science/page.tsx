@@ -28,6 +28,7 @@ import {
   ShieldCheck,
   Activity,
   PieChart,
+  FileText,
   Target,
   Hash,
   Eye,
@@ -35,12 +36,14 @@ import {
   ClipboardList,
   Layers, ChevronDown,
 } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { CodeEngineStatus } from '@/components/admin/CodeEngineStatus';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -874,7 +877,7 @@ export default function ScienceLensPage() {
   }
 
   return (
-    <div className={ds.pageContainer}>
+    <div data-lens-theme="science" className={ds.pageContainer}>
       {/* Header */}
       <header className={ds.sectionHeader}>
         <div className="flex items-center gap-3">
@@ -906,6 +909,39 @@ export default function ScienceLensPage() {
 
       {/* AI Actions */}
       <UniversalActions domain="science" artifactId={experiments[0]?.id} compact />
+
+      {/* Quick Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <FlaskConical className="w-5 h-5 text-neon-purple" />
+          <div>
+            <p className="text-lg font-bold">{experiments.length}</p>
+            <p className="text-xs text-gray-500">Experiments</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <BookOpen className="w-5 h-5 text-neon-green" />
+          <div>
+            <p className="text-lg font-bold">{publications.length}</p>
+            <p className="text-xs text-gray-500">Published</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 2 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <FileText className="w-5 h-5 text-neon-blue" />
+          <div>
+            <p className="text-lg font-bold">{publications.reduce((s, p) => s + ((p.data as Record<string, unknown>)?.citations as number || 0), 0)}</p>
+            <p className="text-xs text-gray-500">Citations</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 3 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <TestTubes className="w-5 h-5 text-neon-cyan" />
+          <div>
+            <p className="text-lg font-bold">{samples.length}</p>
+            <p className="text-xs text-gray-500">Samples</p>
+          </div>
+        </motion.div>
+      </div>
+
       {/* Tabs */}
       <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 overflow-x-auto">
         {MODE_TABS.map(tab => {

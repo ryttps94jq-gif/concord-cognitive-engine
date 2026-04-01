@@ -1,6 +1,8 @@
 'use client';
 
+import { motion } from 'framer-motion';
 import { useState, useMemo, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { ds } from '@/lib/design-system';
@@ -12,8 +14,10 @@ import {
   BarChart3, Wrench, Clock, CheckCircle2, AlertTriangle, Star,
   Phone, FileText, ChevronRight, ChevronDown, Percent,
   PiggyBank, Receipt, Hash, LandPlot, Hammer,
-  CircleDot, Minus, Bell, Layers,
+  CircleDot, Minus, Bell, Layers, Map,
 } from 'lucide-react';
+
+const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { ErrorState } from '@/components/common/EmptyState';
 import { cn } from '@/lib/utils';
@@ -27,7 +31,7 @@ import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-type ModeTab = 'Dashboard' | 'Listings' | 'Transactions' | 'CMA' | 'Rentals' | 'Investing' | 'Showings';
+type ModeTab = 'Dashboard' | 'Listings' | 'Transactions' | 'CMA' | 'Rentals' | 'Investing' | 'Showings' | 'Map';
 type ArtifactType = 'Listing' | 'Transaction' | 'CMA' | 'RentalUnit' | 'Deal' | 'Showing';
 
 type ListingStatus = 'coming_soon' | 'active' | 'pending' | 'contingent' | 'sold' | 'withdrawn' | 'expired';
@@ -52,6 +56,8 @@ interface RealEstateArtifact {
   description: string;
   address?: string;
   price?: number;
+  lat?: number;
+  lng?: number;
   agent?: string;
   client?: string;
   clientPhone?: string;
@@ -124,6 +130,7 @@ const MODE_TABS: { id: ModeTab; icon: React.ElementType; defaultType?: ArtifactT
   { id: 'Rentals', icon: KeyRound, defaultType: 'RentalUnit' },
   { id: 'Investing', icon: TrendingUp, defaultType: 'Deal' },
   { id: 'Showings', icon: Eye, defaultType: 'Showing' },
+  { id: 'Map', icon: Map },
 ];
 
 const STATUSES_BY_TYPE: Record<ArtifactType, string[]> = {
@@ -478,7 +485,7 @@ export default function RealEstateLensPage() {
 
   const renderStarRating = (level: number) => {
     return (
-      <div className="flex items-center gap-0.5">
+      <div data-lens-theme="realestate" className="flex items-center gap-0.5">
         {[1, 2, 3, 4, 5].map(s => (
           <Star key={s} className={cn('w-3 h-3', s <= level ? 'text-amber-400 fill-amber-400' : 'text-gray-600')} />
         ))}
@@ -515,8 +522,8 @@ export default function RealEstateLensPage() {
     return (
       <div className="flex items-center justify-center h-full p-8">
         <div className="text-center space-y-3">
-          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-sm text-gray-400">Loading...</p>
+          <div className="w-8 h-8 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading property listings...</p>
         </div>
       </div>
     );
@@ -559,6 +566,29 @@ export default function RealEstateLensPage() {
         </div>
       </header>
 
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {(() => {
+          const listings = items.filter(i => (i.data as Record<string, unknown>).price);
+          const avgPrice = listings.length > 0 ? Math.round(listings.reduce((s, i) => s + Number((i.data as Record<string, unknown>).price || 0), 0) / listings.length) : 0;
+          const pending = items.filter(i => i.meta?.status === 'pending' || (i.data as Record<string, unknown>).status === 'pending').length;
+          return [
+            { label: 'Listings', value: items.length, icon: Building2 },
+            { label: 'Avg Price', value: `$${(avgPrice / 1000).toFixed(0)}K`, icon: DollarSign },
+            { label: 'Pending Offers', value: pending, icon: KeyRound },
+            { label: 'Active', value: items.filter(i => (i.data as Record<string, unknown>).status === 'active').length, icon: TrendingUp },
+          ].map((stat) => (
+            <div key={stat.label} className={ds.panel + ' flex items-center gap-3 p-3'}>
+              <stat.icon className="w-5 h-5 text-neon-cyan shrink-0" />
+              <div>
+                <p className="text-xs text-gray-400">{stat.label}</p>
+                <p className="text-lg font-bold text-white">{stat.value}</p>
+              </div>
+            </div>
+          ));
+        })()}
+      </div>
 
       {/* AI Actions */}
       <UniversalActions domain="realestate" artifactId={items[0]?.id} compact />
@@ -802,7 +832,7 @@ export default function RealEstateLensPage() {
                 );
               })}
               {items.filter(i => (i.data as unknown as RealEstateArtifact).artifactType === 'Listing').length === 0 && (
-                <p className={cn(ds.textMuted, 'text-center py-4')}>No listings yet</p>
+                <p className={cn(ds.textMuted, 'text-center py-4')}>No properties listed yet. Add your first real estate listing.</p>
               )}
             </div>
             <div className={ds.panel}>
@@ -857,11 +887,11 @@ export default function RealEstateLensPage() {
               </div>
             ) : (
               <div className={ds.grid3}>
-                {filtered.map(item => {
+                {filtered.map((item, index) => {
                   const d = item.data as unknown as RealEstateArtifact;
                   const color = STATUS_COLORS[d.status] || 'gray-400';
                   return (
-                    <div key={item.id} className={ds.panelHover} onClick={() => openEditEditor(item)}>
+                    <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className={ds.panelHover} onClick={() => openEditEditor(item)}>
                       <div className="flex items-start justify-between mb-2">
                         <h3 className={cn(ds.heading3, 'text-base truncate flex-1')}>{item.title}</h3>
                         <span className={ds.badge(color)}>{d.status.replace(/_/g, ' ')}</span>
@@ -908,7 +938,7 @@ export default function RealEstateLensPage() {
                           </p>
                         </div>
                       )}
-                    </div>
+                    </motion.div>
                   );
                 })}
               </div>
@@ -1430,7 +1460,7 @@ export default function RealEstateLensPage() {
                   const d = item.data as unknown as RealEstateArtifact;
                   const color = STATUS_COLORS[d.status] || 'gray-400';
                   return (
-                    <div key={item.id} className={ds.panelHover} onClick={() => openEditEditor(item)}>
+                    <div key={item.id} data-lens-theme="realestate" className={ds.panelHover} onClick={() => openEditEditor(item)}>
                       <div className="flex items-start justify-between mb-2">
                         <h3 className={cn(ds.heading3, 'text-base truncate flex-1')}>{item.title}</h3>
                         <span className={ds.badge(color)}>{d.status.replace(/_/g, ' ')}</span>
@@ -1857,6 +1887,17 @@ export default function RealEstateLensPage() {
             </div>
           </div>
         </>
+      )}
+
+      {/* ==================== MAP TAB ==================== */}
+      {activeTab === 'Map' && (
+        <div className={ds.panel}>
+          <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2"><Map className="w-4 h-4 text-neon-cyan" /> Property Locations</h3>
+          <MapView
+            markers={items.filter(i => { const d = i.data as RealEstateArtifact; return d.lat && d.lng; }).map(i => { const d = i.data as RealEstateArtifact; return { lat: d.lat!, lng: d.lng!, label: i.title, popup: `${d.address || ''} ${d.price ? '- $' + d.price.toLocaleString() : ''}`.trim() }; })}
+            className="h-[500px]"
+          />
+        </div>
       )}
 
       {/* Lens Features */}

@@ -41,6 +41,7 @@ import {
 import { distributeFee, getFeeSplitBalances, getFeeDistributions } from "./fee-split.js";
 import { runTreasuryReconciliation, getReconciliationHistory } from "./treasury-reconciliation.js";
 import { getSystemBalanceSummary } from "./balances.js";
+import { getDescendants } from "./royalty-cascade.js";
 
 /**
  * Register all economy + Stripe routes on the Express app.
@@ -1150,6 +1151,211 @@ export function registerEconomyRoutes(app, db, opts = {}) {
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // MERIT CREDIT SCORE
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  app.get("/api/economy/merit-score/:userId", (req, res) => {
+    try {
+      const userId = req.params.userId;
+      if (!userId) return res.status(400).json({ ok: false, error: "missing_user_id" });
+
+      // Citations: count DTUs that cite this user's content
+      let citations = 0;
+      try {
+        citations = db.prepare(
+          "SELECT COUNT(*) as c FROM royalty_lineage WHERE parent_creator = ?"
+        ).get(userId)?.c || 0;
+      } catch { /* table may not exist */ }
+
+      // Sales: count completed marketplace purchases as seller
+      let sales = 0;
+      try {
+        sales = db.prepare(`
+          SELECT COUNT(*) as c FROM economy_ledger
+          WHERE from_user_id != ? AND to_user_id = ? AND type = 'MARKETPLACE_PURCHASE' AND status = 'complete'
+        `).get(userId, userId)?.c || 0;
+      } catch { /* no ledger yet */ }
+
+      // Royalties: total royalty income
+      let royalties = 0;
+      try {
+        royalties = db.prepare(
+          "SELECT COALESCE(SUM(amount), 0) as total FROM royalty_payouts WHERE recipient_id = ?"
+        ).get(userId)?.total || 0;
+      } catch { /* table may not exist */ }
+
+      // Community activity: posts, comments, follows (approximate from ledger + social tables)
+      let community = 0;
+      try {
+        // Count transfers initiated by user (indicates activity)
+        const transfers = db.prepare(
+          "SELECT COUNT(*) as c FROM economy_ledger WHERE from_user_id = ? AND type IN ('TRANSFER', 'MARKETPLACE_PURCHASE') AND status = 'complete'"
+        ).get(userId)?.c || 0;
+        community = transfers;
+      } catch { /* */ }
+
+      // Score formula: weighted sum, capped at 1000
+      const citationScore = Math.min(citations * 5, 250);
+      const salesScore = Math.min(sales * 3, 250);
+      const royaltyScore = Math.min(Math.floor(royalties * 2), 250);
+      const communityScore = Math.min(community * 2, 250);
+
+      const totalScore = citationScore + salesScore + royaltyScore + communityScore;
+
+      // Level tiers
+      const level =
+        totalScore >= 800 ? "legendary" :
+        totalScore >= 600 ? "master" :
+        totalScore >= 400 ? "expert" :
+        totalScore >= 200 ? "established" :
+        totalScore >= 50  ? "emerging" :
+        "newcomer";
+
+      res.json({
+        ok: true,
+        userId,
+        score: totalScore,
+        breakdown: {
+          citations: { raw: citations, score: citationScore },
+          sales: { raw: sales, score: salesScore },
+          royalties: { raw: Math.round(royalties * 100) / 100, score: royaltyScore },
+          community: { raw: community, score: communityScore },
+        },
+        level,
+      });
+    } catch (err) {
+      log("error", "merit_score_fetch_failed", { error: err.message });
+      res.status(500).json({ ok: false, error: "merit_score_fetch_failed" });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ROYALTY CASCADE LIVE VISUALIZATION
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  app.get("/api/economy/royalty-cascade/:dtuId", (req, res) => {
+    try {
+      const dtuId = req.params.dtuId;
+      if (!dtuId) return res.status(400).json({ ok: false, error: "missing_dtu_id" });
+
+      // Get ancestor chain (who this DTU pays royalties to)
+      const ancestors = getAncestorChain(db, dtuId);
+
+      // Get descendant chain (who pays royalties because of this DTU)
+      const descendants = getDescendants(db, dtuId);
+
+      // Get all royalty payouts for this content
+      const payouts = getContentRoyalties(db, dtuId, { limit: 200 });
+
+      // Calculate totals
+      const totalEarned = payouts.reduce((sum, p) => sum + (p.amount || 0), 0);
+      const totalTransactions = payouts.length;
+
+      // Build cascade chain with generation info
+      const cascadeChain = ancestors.map(a => ({
+        creatorId: a.creatorId,
+        contentId: a.contentId,
+        generation: a.generation,
+        rate: a.rate,
+        ratePercent: `${(a.rate * 100).toFixed(3)}%`,
+        // Sum up what this creator earned from this specific DTU's royalties
+        totalEarned: payouts
+          .filter(p => p.recipient_id === a.creatorId)
+          .reduce((sum, p) => sum + (p.amount || 0), 0),
+      }));
+
+      res.json({
+        ok: true,
+        dtuId,
+        totalEarned: Math.round(totalEarned * 100) / 100,
+        totalTransactions,
+        ancestors: cascadeChain,
+        descendantCount: descendants.length,
+        descendants: descendants.slice(0, 50),
+      });
+    } catch (err) {
+      log("error", "royalty_cascade_fetch_failed", { error: err.message });
+      res.status(500).json({ ok: false, error: "royalty_cascade_fetch_failed" });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ADMIN TREASURY DASHBOARD
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  app.get("/api/admin/treasury", adminOnly, (_req, res) => {
+    try {
+      // Treasury state
+      const treasuryState = getTreasuryState(db);
+      const totalBalance = treasuryState?.total_usd || 0;
+
+      // Fee split balances (80/10/10)
+      const splitBalances = getFeeSplitBalances(db);
+
+      // Fee distributions history for revenue chart
+      const distributions = getFeeDistributions(db, { limit: 90 });
+
+      // Fee collection rate: total fees collected in last 30 days vs prior 30 days
+      let recentFees = 0;
+      let priorFees = 0;
+      try {
+        const now = new Date();
+        const thirtyDaysAgo = new Date(now - 30 * 86400000).toISOString();
+        const sixtyDaysAgo = new Date(now - 60 * 86400000).toISOString();
+
+        recentFees = db.prepare(`
+          SELECT COALESCE(SUM(total_fee), 0) as total FROM fee_distributions
+          WHERE created_at >= ?
+        `).get(thirtyDaysAgo)?.total || 0;
+
+        priorFees = db.prepare(`
+          SELECT COALESCE(SUM(total_fee), 0) as total FROM fee_distributions
+          WHERE created_at >= ? AND created_at < ?
+        `).get(sixtyDaysAgo, thirtyDaysAgo)?.total || 0;
+      } catch { /* table may not exist */ }
+
+      const feeCollectionRate = priorFees > 0
+        ? Math.round(((recentFees - priorFees) / priorFees) * 10000) / 100
+        : 0;
+
+      // Build revenue history (daily aggregates from fee_distributions)
+      let revenueHistory = [];
+      try {
+        revenueHistory = db.prepare(`
+          SELECT DATE(created_at) as date,
+                 SUM(total_fee) as totalFees,
+                 SUM(reserves_amount) as reserves,
+                 SUM(operating_amount) as operating,
+                 SUM(payroll_amount) as payroll,
+                 COUNT(*) as txCount
+          FROM fee_distributions
+          GROUP BY DATE(created_at)
+          ORDER BY date DESC
+          LIMIT 90
+        `).all().reverse();
+      } catch { /* table may not exist */ }
+
+      res.json({
+        ok: true,
+        totalBalance: Math.round(totalBalance * 100) / 100,
+        reserve80: Math.round(splitBalances.reserves * 100) / 100,
+        operating10: Math.round(splitBalances.operating * 100) / 100,
+        payroll10: Math.round(splitBalances.payroll * 100) / 100,
+        platformBalance: Math.round(splitBalances.platform * 100) / 100,
+        revenueHistory,
+        feeCollectionRate,
+        recentFees: Math.round(recentFees * 100) / 100,
+        priorFees: Math.round(priorFees * 100) / 100,
+        totalDistributed: distributions.totalDistributed,
+        distributionCount: distributions.total,
+      });
+    } catch (err) {
+      log("error", "admin_treasury_fetch_failed", { error: err.message });
+      res.status(500).json({ ok: false, error: "admin_treasury_fetch_failed" });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // MARKETPLACE
   // ═══════════════════════════════════════════════════════════════════════════
 
@@ -1301,6 +1507,130 @@ export function registerEconomyRoutes(app, db, opts = {}) {
 
       res.status(500).json({ ok: false, error: "price_update_failed" });
 
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // KNOWLEDGE PACKS (bundled DTU collections)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  app.post("/api/marketplace/pack", (req, res) => {
+    try {
+      const sellerId = req.body.seller_id || req.user?.id;
+      const { name, description, dtu_ids, price } = req.body;
+
+      if (!sellerId) return res.status(400).json({ ok: false, error: "missing_seller_id" });
+      if (!name || !name.trim()) return res.status(400).json({ ok: false, error: "missing_pack_name" });
+      if (!Array.isArray(dtu_ids) || dtu_ids.length === 0) return res.status(400).json({ ok: false, error: "missing_dtu_ids" });
+      if (!price || price <= 0) return res.status(400).json({ ok: false, error: "invalid_price" });
+
+      // Create a marketplace listing with type='pack' containing the DTU IDs
+      const contentData = JSON.stringify({ type: "dtu_pack", dtuIds: dtu_ids, name: name.trim() });
+
+      const result = createListing(db, {
+        sellerId,
+        contentId: `pack_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
+        contentType: "dtu",
+        title: name.trim(),
+        description: description || `Knowledge pack with ${dtu_ids.length} DTUs`,
+        price: Math.round(parseFloat(price) * 100) / 100,
+        contentData,
+        licenseType: "standard",
+        royaltyChain: [],
+      });
+
+      if (!result.ok) return res.status(400).json(result);
+
+      // Store pack metadata alongside the listing
+      try {
+        db.prepare(`
+          INSERT OR REPLACE INTO marketplace_pack_meta (listing_id, dtu_ids_json, dtu_count, created_at)
+          VALUES (?, ?, ?, datetime('now'))
+        `).run(result.listing.id, JSON.stringify(dtu_ids), dtu_ids.length);
+      } catch (_e) {
+        // Table may not exist yet — create it and retry
+        try {
+          db.prepare(`
+            CREATE TABLE IF NOT EXISTS marketplace_pack_meta (
+              listing_id TEXT PRIMARY KEY,
+              dtu_ids_json TEXT NOT NULL,
+              dtu_count INTEGER NOT NULL DEFAULT 0,
+              created_at TEXT NOT NULL
+            )
+          `).run();
+          db.prepare(`
+            INSERT OR REPLACE INTO marketplace_pack_meta (listing_id, dtu_ids_json, dtu_count, created_at)
+            VALUES (?, ?, ?, datetime('now'))
+          `).run(result.listing.id, JSON.stringify(dtu_ids), dtu_ids.length);
+        } catch (_e2) { log("error", "pack_meta_store_failed", { error: _e2?.message }); }
+      }
+
+      const ctx = auditCtx(req);
+      economyAudit(db, {
+        action: "knowledge_pack_created",
+        userId: sellerId,
+        amount: Math.round(parseFloat(price) * 100) / 100,
+        details: {
+          listingId: result.listing?.id,
+          packName: name.trim(),
+          dtuCount: dtu_ids.length,
+          dtuIds: dtu_ids.slice(0, 10), // limit audit size
+        },
+        ...ctx,
+      });
+
+      res.json({
+        ok: true,
+        pack: {
+          listingId: result.listing.id,
+          name: name.trim(),
+          description: description || `Knowledge pack with ${dtu_ids.length} DTUs`,
+          dtuCount: dtu_ids.length,
+          dtuIds: dtu_ids,
+          price: result.listing.price,
+          sellerId,
+          createdAt: result.listing.createdAt,
+        },
+      });
+    } catch (err) {
+      log("error", "knowledge_pack_creation_failed", { error: err.message });
+      res.status(500).json({ ok: false, error: "pack_creation_failed" });
+    }
+  });
+
+  app.get("/api/marketplace/packs", (req, res) => {
+    try {
+      const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+      const offset = parseInt(req.query.offset, 10) || 0;
+
+      // Get pack listings — filter by content_data containing dtu_pack
+      const result = searchListings(db, {
+        status: "active",
+        limit,
+        offset,
+      });
+
+      // Enrich with pack metadata
+      const packs = result.items.map(item => {
+        let packMeta = null;
+        try {
+          packMeta = db.prepare("SELECT * FROM marketplace_pack_meta WHERE listing_id = ?").get(item.id);
+        } catch (_e) { /* table may not exist */ }
+
+        return {
+          ...item,
+          isPack: !!packMeta,
+          packMeta: packMeta ? {
+            dtuCount: packMeta.dtu_count,
+            dtuIds: JSON.parse(packMeta.dtu_ids_json || "[]"),
+          } : null,
+        };
+      }).filter(item => item.isPack);
+
+      res.json({ ok: true, packs, total: packs.length });
+    } catch (err) {
+      log("error", "packs_fetch_failed", { error: err.message });
+      res.status(500).json({ ok: false, error: "packs_fetch_failed" });
     }
   });
 

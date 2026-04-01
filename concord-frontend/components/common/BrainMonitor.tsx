@@ -164,7 +164,7 @@ export function BrainMonitor() {
   if (isLoading || !data) return null;
 
   const modeLabel = data.mode === 'four_brain' ? 'Four-Brain' : data.mode === 'three_brain' ? 'Three-Brain' : data.mode === 'partial' ? 'Partial' : 'Fallback';
-  const modeColor = (data.mode === 'four_brain' || data.mode === 'three_brain') ? 'text-neon-green' : data.mode === 'partial' ? 'text-yellow-400' : 'text-red-400';
+  const modeColor = (data.mode === 'four_brain' || data.mode === 'three_brain') ? 'text-neon-green' : data.mode === 'partial' ? 'text-amber-400' : 'text-red-400';
   const totalBrains = data.brains.repair ? 4 : 3;
 
   if (!expanded) {

@@ -160,6 +160,8 @@ export interface Album {
   description: string | null;
   totalDuration: number;
   trackCount: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 // ============================================================================

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import Image from 'next/image';
 import {
   Play, Pause, SkipBack, SkipForward, Volume2, VolumeX,
   Repeat, Repeat1, Shuffle, ListMusic, ChevronUp, ChevronDown, Heart,
@@ -240,7 +241,7 @@ export function NowPlayingBar() {
             {/* Cover art */}
             <div className="w-12 h-12 rounded-lg bg-white/5 overflow-hidden flex-shrink-0 relative">
               {track.coverArtUrl ? (
-                <img src={track.coverArtUrl} alt="" className="w-full h-full object-cover" />
+                <Image src={track.coverArtUrl} alt={track.title || 'Now playing cover'} fill className="object-cover" unoptimized />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-gray-600">
                   <ListMusic className="w-5 h-5" />

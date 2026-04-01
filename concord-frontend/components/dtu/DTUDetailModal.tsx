@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { X, Clock, GitBranch, Tag, FileText, Zap, Crown, Ghost } from 'lucide-react';
+import { ProvenanceBadge } from './ProvenanceBadge';
+import { TierBadge, TierBadgeDetail } from './TierBadge';
 
 interface DTU {
   id: string;
@@ -14,6 +16,8 @@ interface DTU {
   children?: string[];
   tags?: string[];
   metadata?: Record<string, unknown>;
+  source?: string;
+  meta?: Record<string, unknown>;
 }
 
 interface DTUDetailModalProps {
@@ -53,7 +57,11 @@ export function DTUDetailModal({ dtu, isOpen, onClose, onNavigate }: DTUDetailMo
           <div className="flex items-center gap-3">
             <TierIcon className={`w-5 h-5 ${config.color}`} />
             <div>
-              <h2 className="font-semibold">{config.label}</h2>
+              <h2 className="font-semibold flex items-center gap-2">
+                {config.label}
+                <TierBadge tier={dtu.tier} size="sm" />
+                <ProvenanceBadge source={dtu.source} model={dtu.meta?.model as string} authority={dtu.meta?.authority as string} />
+              </h2>
               <p className="text-xs text-gray-500 font-mono">{dtu.id}</p>
             </div>
           </div>
@@ -126,6 +134,26 @@ export function DTUDetailModal({ dtu, isOpen, onClose, onNavigate }: DTUDetailMo
                   <span>Resonance: {(dtu.resonance * 100).toFixed(1)}%</span>
                 )}
               </div>
+
+              {/* Tier consolidation details */}
+              {(dtu.tier === 'mega' || dtu.tier === 'hyper' || !!dtu.metadata?.consolidated) && (
+                <div className="pt-2 border-t border-lattice-border">
+                  <TierBadgeDetail
+                    tier={dtu.tier}
+                    showRegular
+                    sourceCount={dtu.metadata?.sourceCount as number | undefined}
+                    sourceDtus={(dtu.children || []).map((id: string) => ({ id }))}
+                    megaCount={dtu.metadata?.megaCount as number | undefined}
+                    totalDtuCount={dtu.metadata?.totalDtuCount as number | undefined}
+                    consolidatedInto={
+                      dtu.metadata?.consolidatedInto
+                        ? { id: dtu.metadata.consolidatedInto as string, title: dtu.metadata.consolidatedIntoTitle as string | undefined }
+                        : null
+                    }
+                    onNavigateToParent={onNavigate}
+                  />
+                </div>
+              )}
             </div>
           )}
 

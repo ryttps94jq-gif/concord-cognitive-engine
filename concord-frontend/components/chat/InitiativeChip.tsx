@@ -16,7 +16,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { formatRelativeTime } from '@/lib/utils';
-import { ds } from '@/lib/design-system';
 import {
   X,
   Sparkles,
@@ -26,7 +25,6 @@ import {
   Globe,
   Brain,
   Sun,
-  ChevronRight,
   AlertCircle,
   Eye,
   MessageCircle,
@@ -258,7 +256,7 @@ export function InitiativeChip({
     if (!hasBeenSeen && isVisible) {
       const timer = setTimeout(() => {
         setHasBeenSeen(true);
-        fetch(`/api/initiative/pending`, { method: 'GET' }).catch(() => {});
+        fetch(`/api/initiative/pending`, { method: 'GET' }).catch(err => console.error('[Initiative] Failed to fetch pending:', err));
       }, 2000);
       return () => clearTimeout(timer);
     }
@@ -267,7 +265,7 @@ export function InitiativeChip({
   const handleDismiss = useCallback(() => {
     setIsExiting(true);
     // Report dismissal to backend
-    fetch(`/api/initiative/dismiss/${initiative.id}`, { method: 'POST' }).catch(() => {});
+    fetch(`/api/initiative/dismiss/${initiative.id}`, { method: 'POST' }).catch(err => console.error('[Initiative] Failed to dismiss:', err));
     setTimeout(() => {
       onDismiss(initiative.id);
     }, 300);
@@ -276,7 +274,7 @@ export function InitiativeChip({
   const handleAction = useCallback((action: string) => {
     onAction(initiative.id, action, initiative.metadata as Record<string, unknown>);
     // Report response to backend
-    fetch(`/api/initiative/respond/${initiative.id}`, { method: 'PUT' }).catch(() => {});
+    fetch(`/api/initiative/respond/${initiative.id}`, { method: 'PUT' }).catch(err => console.error('[Initiative] Failed to respond:', err));
     onRespond(initiative.id);
   }, [initiative.id, initiative.metadata, onAction, onRespond]);
 
@@ -468,6 +466,11 @@ function renderMetadata(
             <span className={cn('flex items-center gap-1', config.accentColor)}>
               <Clock className="w-2.5 h-2.5" />
               {daysAgo}d idle
+            </span>
+          )}
+          {dtuTitle && (
+            <span className="text-zinc-400 truncate max-w-[150px]">
+              {dtuTitle}
             </span>
           )}
           {pendingCount !== undefined && pendingCount > 1 && (

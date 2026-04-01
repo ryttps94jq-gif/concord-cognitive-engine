@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -14,7 +15,8 @@ import {
   ChevronRight, DollarSign, Calculator,
   MapPin, Phone, Mail,
   Brain, Layers, ArrowUpRight, ArrowDownRight, Minus,
-  ClipboardList, UserPlus, Eye, FileText, ChevronDown,
+  ClipboardList, UserPlus, Eye, FileText, ChevronDown, AlertTriangle,
+  Flame, Footprints, Clock,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -161,11 +163,11 @@ const MODE_TABS: { id: ModeTab; icon: React.ElementType; defaultType: ArtifactTy
 const ALL_STATUSES: Status[] = ['active', 'paused', 'completed', 'deferred', 'graduated'];
 
 const STATUS_COLORS: Record<Status, string> = {
-  active: 'neon-green',
+  active: 'red-400',
   paused: 'amber-400',
   completed: 'neon-cyan',
   deferred: 'gray-400',
-  graduated: 'neon-purple',
+  graduated: 'red-300',
 };
 
 const EXERCISE_LIBRARY: { name: string; category: ExerciseCategory }[] = [
@@ -206,9 +208,9 @@ const RECRUIT_STAGES: RecruitStage[] = ['prospect', 'contacted', 'visited', 'off
 const RECRUIT_STAGE_COLORS: Record<RecruitStage, string> = {
   prospect: 'gray-400',
   contacted: 'amber-400',
-  visited: 'neon-blue',
-  offered: 'neon-purple',
-  committed: 'neon-green',
+  visited: 'red-500',
+  offered: 'red-300',
+  committed: 'red-400',
 };
 
 const seedItems: { title: string; data: FitnessArtifact }[] = [];
@@ -273,22 +275,209 @@ function calc1RMBrzycki(weight: number, reps: number): number {
 /*  Sub-panel components                                               */
 /* ------------------------------------------------------------------ */
 
-function ProgressBar({ value, max, color = 'neon-green' }: { value: number; max: number; color?: string }) {
+function ProgressBar({ value, max, color = 'red-400' }: { value: number; max: number; color?: string }) {
   const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
   return (
-    <div className="w-full bg-lattice-elevated rounded-full h-2.5 overflow-hidden">
+    <div data-lens-theme="fitness" className="w-full bg-lattice-elevated rounded-full h-2.5 overflow-hidden">
       <div className={cn(`h-full rounded-full bg-${color} transition-all duration-500`)} style={{ width: `${pct}%` }} />
     </div>
   );
 }
 
-function StatCard({ icon: Icon, label, value, sub, color = 'neon-green' }: { icon: React.ElementType; label: string; value: string | number; sub?: string; color?: string }) {
+function StatCard({ icon: Icon, label, value, sub, color = 'red-400' }: { icon: React.ElementType; label: string; value: string | number; sub?: string; color?: string }) {
   return (
     <div className={ds.panel}>
       <Icon className={cn('w-5 h-5 mb-2', `text-${color}`)} />
       <p className="text-2xl font-bold">{value}</p>
       <p className={ds.textMuted}>{label}</p>
       {sub && <p className="text-xs text-gray-500 mt-1">{sub}</p>}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Intensity color helper                                             */
+/* ------------------------------------------------------------------ */
+
+const INTENSITY_COLORS: Record<string, { ring: string; text: string; bg: string; label: string }> = {
+  low:      { ring: '#22c55e', text: 'text-green-400',  bg: 'bg-green-400/10',  label: 'Light'    },
+  moderate: { ring: '#eab308', text: 'text-yellow-400', bg: 'bg-yellow-400/10', label: 'Moderate' },
+  high:     { ring: '#f97316', text: 'text-orange-400', bg: 'bg-orange-400/10', label: 'Intense'  },
+  extreme:  { ring: '#ef4444', text: 'text-red-400',    bg: 'bg-red-400/10',    label: 'Extreme'  },
+};
+
+/* ------------------------------------------------------------------ */
+/*  Workout Streak Counter                                             */
+/* ------------------------------------------------------------------ */
+
+function WorkoutStreakCounter() {
+  const [streak, setStreak] = useState(7);
+  const [bestStreak, setBestStreak] = useState(14);
+  const days = ['M','T','W','T','F','S','S'];
+  const activeDays = [true, true, true, true, false, true, true];
+
+  return (
+    <div className="panel p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold flex items-center gap-2">
+          <Flame className="w-4 h-4 text-orange-400" /> Workout Streak
+        </h3>
+        <span className="text-xs text-gray-500">Best: {bestStreak} days</span>
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="relative w-16 h-16 shrink-0">
+          <svg className="w-full h-full -rotate-90" viewBox="0 0 56 56">
+            <circle cx="28" cy="28" r="24" fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="5" />
+            <circle cx="28" cy="28" r="24" fill="none"
+              stroke="#f97316" strokeWidth="5" strokeLinecap="round"
+              strokeDasharray={`${(streak / bestStreak) * 150.8} 150.8`}
+              style={{ transition: 'stroke-dasharray 0.6s ease' }} />
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-lg font-bold text-orange-400">{streak}</span>
+          </div>
+        </div>
+        <div className="flex-1 space-y-2">
+          <p className="text-sm font-medium text-white">{streak}-day streak</p>
+          <div className="flex gap-1">
+            {days.map((d, i) => (
+              <div key={i} className="flex flex-col items-center gap-1">
+                <div className={cn('w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-colors',
+                  activeDays[i] ? 'bg-orange-500 text-white' : 'bg-white/5 text-gray-500'
+                )}>{d}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Daily Goals Progress Rings                                         */
+/* ------------------------------------------------------------------ */
+
+function DailyGoalsRings() {
+  const goals = [
+    { label: 'Steps',    icon: Footprints, current: 7432,  target: 10000, color: '#22c55e',  unit: 'steps' },
+    { label: 'Calories', icon: Flame,      current: 1840,  target: 2500,  color: '#f97316',  unit: 'kcal'  },
+    { label: 'Minutes',  icon: Clock,      current: 38,    target: 60,    color: '#06b6d4',  unit: 'min'   },
+  ];
+
+  return (
+    <div className="panel p-4">
+      <h3 className="font-semibold mb-4 text-sm">Daily Goals</h3>
+      <div className="grid grid-cols-3 gap-4">
+        {goals.map((g) => {
+          const pct = Math.min(100, (g.current / g.target) * 100);
+          const r = 28;
+          const circ = 2 * Math.PI * r;
+          const dash = (pct / 100) * circ;
+          return (
+            <div key={g.label} className="flex flex-col items-center gap-2">
+              <div className="relative w-16 h-16">
+                <svg className="w-full h-full -rotate-90" viewBox="0 0 64 64">
+                  <circle cx="32" cy="32" r={r} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="5" />
+                  <circle cx="32" cy="32" r={r} fill="none"
+                    stroke={g.color} strokeWidth="5" strokeLinecap="round"
+                    strokeDasharray={`${dash} ${circ}`}
+                    style={{ transition: 'stroke-dasharray 0.6s ease' }} />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <g.icon className="w-4 h-4" style={{ color: g.color }} />
+                </div>
+              </div>
+              <div className="text-center">
+                <p className="text-xs font-semibold" style={{ color: g.color }}>{Math.round(pct)}%</p>
+                <p className="text-xs text-gray-500">{g.label}</p>
+                <p className="text-xs text-gray-600">{g.current.toLocaleString()}/{g.target.toLocaleString()}</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Exercise Set Tracker                                               */
+/* ------------------------------------------------------------------ */
+
+interface SetLog { reps: number; weight: number; done: boolean }
+
+function ExerciseSetTracker() {
+  const [sets, setSets] = useState<SetLog[]>([
+    { reps: 10, weight: 60, done: false },
+    { reps: 10, weight: 60, done: false },
+    { reps: 8,  weight: 65, done: false },
+  ]);
+  const [exerciseName, setExerciseName] = useState('Bench Press');
+  const [intensity, setIntensity] = useState<'low'|'moderate'|'high'|'extreme'>('moderate');
+  const intConf = INTENSITY_COLORS[intensity];
+
+  const toggleSet = (i: number) =>
+    setSets(prev => prev.map((s, idx) => idx === i ? { ...s, done: !s.done } : s));
+  const addSet = () =>
+    setSets(prev => [...prev, { reps: prev[prev.length-1]?.reps || 10, weight: prev[prev.length-1]?.weight || 0, done: false }]);
+  const removeSet = (i: number) =>
+    setSets(prev => prev.filter((_, idx) => idx !== i));
+  const updateSet = (i: number, field: 'reps'|'weight', val: number) =>
+    setSets(prev => prev.map((s, idx) => idx === i ? { ...s, [field]: val } : s));
+
+  const doneSets = sets.filter(s => s.done).length;
+
+  return (
+    <div className="panel p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Dumbbell className="w-4 h-4 text-red-400" />
+          <input value={exerciseName} onChange={e => setExerciseName(e.target.value)}
+            className="bg-transparent border-none focus:outline-none font-semibold text-sm text-white" />
+        </div>
+        <div className="flex items-center gap-2">
+          <select value={intensity} onChange={e => setIntensity(e.target.value as typeof intensity)}
+            className={cn('text-xs px-2 py-0.5 rounded border', intConf.text, intConf.bg, 'border-current/30')}>
+            <option value="low">Light</option>
+            <option value="moderate">Moderate</option>
+            <option value="high">Intense</option>
+            <option value="extreme">Extreme</option>
+          </select>
+        </div>
+      </div>
+      <div className="text-xs text-gray-500 flex items-center gap-2">
+        <span className={cn('px-2 py-0.5 rounded font-medium', intConf.text, intConf.bg)}>{intConf.label}</span>
+        <span>{doneSets}/{sets.length} sets done</span>
+      </div>
+      <div className="space-y-1.5">
+        {sets.map((s, i) => (
+          <motion.div key={i} layout
+            className={cn('flex items-center gap-2 rounded-lg px-3 py-2 transition-colors',
+              s.done ? 'bg-green-500/10 border border-green-500/20' : 'bg-white/4 border border-white/8'
+            )}>
+            <button onClick={() => toggleSet(i)}
+              className={cn('w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors',
+                s.done ? 'bg-green-500 border-green-500' : 'border-gray-500 hover:border-green-400'
+              )}>
+              {s.done && <span className="text-white text-xs">✓</span>}
+            </button>
+            <span className="text-xs text-gray-400 w-8">Set {i+1}</span>
+            <input type="number" value={s.weight} onChange={e => updateSet(i, 'weight', parseFloat(e.target.value)||0)}
+              className="w-14 bg-white/5 border border-white/10 rounded px-2 py-0.5 text-xs text-center" />
+            <span className="text-xs text-gray-500">kg ×</span>
+            <input type="number" value={s.reps} onChange={e => updateSet(i, 'reps', parseInt(e.target.value)||0)}
+              className="w-12 bg-white/5 border border-white/10 rounded px-2 py-0.5 text-xs text-center" />
+            <span className="text-xs text-gray-500">reps</span>
+            <button onClick={() => removeSet(i)} className="ml-auto text-gray-600 hover:text-red-400">
+              <X className="w-3 h-3" />
+            </button>
+          </motion.div>
+        ))}
+      </div>
+      <button onClick={addSet} className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1">
+        <Plus className="w-3 h-3" /> Add Set
+      </button>
     </div>
   );
 }
@@ -303,6 +492,7 @@ export default function FitnessLensPage() {
 
   /* ---------- core state ---------- */
   const [showFeatures, setShowFeatures] = useState(false);
+  const [showDailyPanel, setShowDailyPanel] = useState(false);
   const [activeTab, setActiveTab] = useState<ModeTab>('Clients');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<Status | 'all'>('all');
@@ -642,8 +832,8 @@ export default function FitnessLensPage() {
 
   const intensityColor = (level: string) => {
     switch (level) {
-      case 'low': return 'neon-green';
-      case 'moderate': return 'neon-blue';
+      case 'low': return 'red-400';
+      case 'moderate': return 'red-500';
       case 'high': return 'amber-400';
       case 'extreme': return 'red-400';
       default: return 'gray-400';
@@ -669,8 +859,8 @@ export default function FitnessLensPage() {
     return (
       <div className="flex items-center justify-center h-full p-8">
         <div className="text-center space-y-3">
-          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-sm text-gray-400">Loading...</p>
+          <div className="w-8 h-8 border-2 border-red-400 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading workout data...</p>
         </div>
       </div>
     );
@@ -686,10 +876,17 @@ export default function FitnessLensPage() {
 
   return (
     <div className={ds.pageContainer}>
+      {/* Fitness Disclaimer */}
+      <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3 flex items-start gap-3">
+        <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
+        <p className="text-sm text-amber-200">
+          Not medical advice. Consult a physician before starting any exercise program. This tool is for fitness tracking and programming, not clinical guidance.
+        </p>
+      </div>
       {/* ========== Header ========== */}
       <header className={ds.sectionHeader}>
         <div className="flex items-center gap-3">
-          <Dumbbell className="w-7 h-7 text-neon-green" />
+          <Dumbbell className="w-7 h-7 text-red-400" />
           <div>
             <div className="flex items-center gap-2">
               <h1 className={ds.heading1}>Fitness & Wellness</h1>
@@ -699,13 +896,17 @@ export default function FitnessLensPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => setShowDailyPanel(p => !p)}
+            className={cn(ds.btnSecondary, showDailyPanel && 'bg-orange-500/20 border-orange-500/40 text-orange-400')}>
+            <Flame className="w-4 h-4" /> Daily Tracker
+          </button>
           <button onClick={() => setShowBodyComp(true)} className={ds.btnSecondary}>
             <Calculator className="w-4 h-4" /> Body Comp Tools
           </button>
           <button onClick={openNewEditor} className={ds.btnPrimary}>
             <Plus className="w-4 h-4" /> New Record
           </button>
-          {runAction.isPending && <span className="text-xs text-neon-blue animate-pulse">Running...</span>}
+          {runAction.isPending && <span className="text-xs text-red-500 animate-pulse">Running...</span>}
         </div>
       </header>
 
@@ -720,7 +921,7 @@ export default function FitnessLensPage() {
           <button
             key={tab.id}
             onClick={() => { setActiveTab(tab.id); setFilterStatus('all'); setSelectedClient(null); }}
-            className={cn(ds.btnGhost, 'whitespace-nowrap', activeTab === tab.id && 'bg-neon-green/20 text-neon-green')}
+            className={cn(ds.btnGhost, 'whitespace-nowrap', activeTab === tab.id && 'bg-red-400/20 text-red-400')}
           >
             <tab.icon className="w-4 h-4" />
             {tab.id}
@@ -730,25 +931,43 @@ export default function FitnessLensPage() {
 
       {/* ========== Enhanced Dashboard ========== */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <StatCard icon={Users} label="Active Clients" value={stats.activeClients} sub={`${stats.retentionRate}% retention`} color="neon-green" />
-        <StatCard icon={Activity} label="Sessions / Week" value={stats.sessionsThisWeek} color="neon-blue" />
+        <StatCard icon={Users} label="Active Clients" value={stats.activeClients} sub={`${stats.retentionRate}% retention`} color="red-400" />
+        <StatCard icon={Activity} label="Sessions / Week" value={stats.sessionsThisWeek} color="red-500" />
         <StatCard icon={DollarSign} label="Class Revenue" value={`$${stats.monthlyRevenue}`} color="neon-cyan" />
-        <StatCard icon={ListChecks} label="Programs" value={stats.programs} color="neon-purple" />
+        <StatCard icon={ListChecks} label="Programs" value={stats.programs} color="red-300" />
         <StatCard icon={CalendarDays} label="Active Classes" value={stats.weeklyClasses} color="amber-400" />
         <StatCard icon={Medal} label="Prospects" value={stats.prospects} color="red-400" />
       </div>
+
+      {/* ========== Daily Tracker Panel ========== */}
+      <AnimatePresence>
+        {showDailyPanel && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+              <WorkoutStreakCounter />
+              <DailyGoalsRings />
+              <ExerciseSetTracker />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ========== Domain Actions ========== */}
       <div className={ds.panel}>
         <h3 className={cn(ds.heading3, 'mb-3')}>Quick Actions</h3>
         <div className="flex flex-wrap gap-2">
-          <button onClick={() => handleAction('calculate-progression')} className={cn(ds.btnSmall, 'bg-neon-green/20 text-neon-green border border-neon-green/30')}>
+          <button onClick={() => handleAction('calculate-progression')} className={cn(ds.btnSmall, 'bg-red-400/20 text-red-400 border border-red-400/30')}>
             <TrendingUp className="w-3.5 h-3.5" /> Calculate Progression
           </button>
-          <button onClick={() => handleAction('generate-program')} className={cn(ds.btnSmall, 'bg-neon-blue/20 text-neon-blue border border-neon-blue/30')}>
+          <button onClick={() => handleAction('generate-program')} className={cn(ds.btnSmall, 'bg-red-500/20 text-red-500 border border-red-500/30')}>
             <Brain className="w-3.5 h-3.5" /> Generate Program
           </button>
-          <button onClick={() => handleAction('body-comp-report')} className={cn(ds.btnSmall, 'bg-neon-purple/20 text-neon-purple border border-neon-purple/30')}>
+          <button onClick={() => handleAction('body-comp-report')} className={cn(ds.btnSmall, 'bg-red-300/20 text-red-300 border border-red-300/30')}>
             <FileText className="w-3.5 h-3.5" /> Body Comp Report
           </button>
           <button onClick={() => handleAction('attendance-report')} className={cn(ds.btnSmall, 'bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/30')}>
@@ -764,11 +983,11 @@ export default function FitnessLensPage() {
           <section className={ds.panel}>
             <div className={cn(ds.sectionHeader, 'mb-4')}>
               <div className="flex items-center gap-3">
-                <User className="w-5 h-5 text-neon-green" />
+                <User className="w-5 h-5 text-red-400" />
                 <h2 className={ds.heading2}>{selectedClient.title} - Progress Dashboard</h2>
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={saveClientProgress} className={cn(ds.btnSmall, 'bg-neon-green/20 text-neon-green border border-neon-green/30')}>
+                <button onClick={saveClientProgress} className={cn(ds.btnSmall, 'bg-red-400/20 text-red-400 border border-red-400/30')}>
                   Save Progress
                 </button>
                 <button onClick={() => setSelectedClient(null)} className={ds.btnGhost}><X className="w-4 h-4" /></button>
@@ -779,8 +998,8 @@ export default function FitnessLensPage() {
             <div className={ds.grid4}>
               <div className={ds.panel}>
                 <p className={ds.textMuted}>Compliance Rate</p>
-                <p className="text-2xl font-bold text-neon-green">{cd.complianceRate || 0}%</p>
-                <ProgressBar value={cd.complianceRate || 0} max={100} color="neon-green" />
+                <p className="text-2xl font-bold text-red-400">{cd.complianceRate || 0}%</p>
+                <ProgressBar value={cd.complianceRate || 0} max={100} color="red-400" />
               </div>
               <div className={ds.panel}>
                 <p className={ds.textMuted}>Personal Records</p>
@@ -788,11 +1007,11 @@ export default function FitnessLensPage() {
               </div>
               <div className={ds.panel}>
                 <p className={ds.textMuted}>Progress Photos</p>
-                <p className="text-2xl font-bold text-neon-blue">{clientPhotos.length}</p>
+                <p className="text-2xl font-bold text-red-500">{clientPhotos.length}</p>
               </div>
               <div className={ds.panel}>
                 <p className={ds.textMuted}>Active Goals</p>
-                <p className="text-2xl font-bold text-neon-purple">{clientGoals.length}</p>
+                <p className="text-2xl font-bold text-red-300">{clientGoals.length}</p>
               </div>
             </div>
 
@@ -867,7 +1086,7 @@ export default function FitnessLensPage() {
                             <td className="py-2 px-2"><input type="number" value={m.arms || ''} onChange={e => { const nm = [...clientMetrics]; nm[i] = { ...m, arms: parseFloat(e.target.value) || 0 }; setClientMetrics(nm); }} className={cn(ds.input, 'text-xs w-16 text-right')} /></td>
                             <td className="py-2 px-2"><input type="number" value={m.thighs || ''} onChange={e => { const nm = [...clientMetrics]; nm[i] = { ...m, thighs: parseFloat(e.target.value) || 0 }; setClientMetrics(nm); }} className={cn(ds.input, 'text-xs w-16 text-right')} /></td>
                             <td className="py-2 px-2">
-                              {weightTrend < 0 ? <ArrowDownRight className="w-4 h-4 text-neon-green" /> : weightTrend > 0 ? <ArrowUpRight className="w-4 h-4 text-red-400" /> : <Minus className="w-4 h-4 text-gray-500" />}
+                              {weightTrend < 0 ? <ArrowDownRight className="w-4 h-4 text-red-400" /> : weightTrend > 0 ? <ArrowUpRight className="w-4 h-4 text-red-400" /> : <Minus className="w-4 h-4 text-gray-500" />}
                             </td>
                             <td className="py-2 px-2">
                               <button onClick={() => setClientMetrics(prev => prev.filter((_, idx) => idx !== i))} className={ds.btnGhost}><Trash2 className="w-3 h-3 text-red-400" /></button>
@@ -1032,7 +1251,7 @@ export default function FitnessLensPage() {
                   {/* Workout-specific summary */}
                   {d.artifactType === 'Workout' && d.exercises && d.exercises.length > 0 && (
                     <div className="flex gap-2 mb-2 flex-wrap">
-                      <span className={ds.badge('neon-blue')}>{d.exercises.length} exercises</span>
+                      <span className={ds.badge('red-500')}>{d.exercises.length} exercises</span>
                       <span className={ds.badge('neon-cyan')}>Vol: {calcTotalVolume(d.exercises).toLocaleString()}</span>
                       <span className={ds.badge('amber-400')}>{Math.round(calcEstimatedDuration(d.exercises))} min</span>
                     </div>
@@ -1041,8 +1260,8 @@ export default function FitnessLensPage() {
                   {/* Program-specific summary */}
                   {d.artifactType === 'Program' && d.trainingBlocks && d.trainingBlocks.length > 0 && (
                     <div className="flex gap-2 mb-2 flex-wrap">
-                      <span className={ds.badge('neon-purple')}>{d.trainingBlocks.length} blocks</span>
-                      <span className={ds.badge('neon-green')}>{d.trainingBlocks.reduce((s, b) => s + b.weeks, 0)} weeks</span>
+                      <span className={ds.badge('red-300')}>{d.trainingBlocks.length} blocks</span>
+                      <span className={ds.badge('red-400')}>{d.trainingBlocks.reduce((s, b) => s + b.weeks, 0)} weeks</span>
                     </div>
                   )}
 
@@ -1050,7 +1269,7 @@ export default function FitnessLensPage() {
                   {d.artifactType === 'Class' && d.classSlots && d.classSlots.length > 0 && (
                     <div className="flex gap-2 mb-2 flex-wrap">
                       <span className={ds.badge('neon-cyan')}>{d.classSlots.length} slots</span>
-                      <span className={ds.badge('neon-green')}>${d.classSlots.reduce((s, sl) => s + sl.enrolled * sl.pricePerHead, 0)}/wk</span>
+                      <span className={ds.badge('red-400')}>${d.classSlots.reduce((s, sl) => s + sl.enrolled * sl.pricePerHead, 0)}/wk</span>
                     </div>
                   )}
 
@@ -1064,8 +1283,8 @@ export default function FitnessLensPage() {
                   {/* Team roster count */}
                   {d.artifactType === 'Team' && d.roster && d.roster.length > 0 && (
                     <div className="flex gap-2 mb-2 flex-wrap">
-                      <span className={ds.badge('neon-green')}>{d.roster.length} athletes</span>
-                      <span className={ds.badge('neon-blue')}>{d.roster.filter(r => r.status === 'active').length} active</span>
+                      <span className={ds.badge('red-400')}>{d.roster.length} athletes</span>
+                      <span className={ds.badge('red-500')}>{d.roster.filter(r => r.status === 'active').length} active</span>
                     </div>
                   )}
 
@@ -1200,7 +1419,7 @@ export default function FitnessLensPage() {
                   </div>
                   {bodyFatEst !== null ? (
                     <div className="flex items-center gap-4">
-                      <p className="text-3xl font-bold text-neon-green">{bodyFatEst.toFixed(1)}%</p>
+                      <p className="text-3xl font-bold text-red-400">{bodyFatEst.toFixed(1)}%</p>
                       <p className={ds.textMuted}>Estimated body fat percentage</p>
                     </div>
                   ) : (
@@ -1223,12 +1442,12 @@ export default function FitnessLensPage() {
                     <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                       <div className={ds.panel}>
                         <p className={ds.textMuted}>TDEE</p>
-                        <p className="text-xl font-bold text-neon-blue">{tdee}</p>
+                        <p className="text-xl font-bold text-red-500">{tdee}</p>
                         <p className="text-xs text-gray-500">cal/day</p>
                       </div>
                       <div className={ds.panel}>
                         <p className={ds.textMuted}>Target</p>
-                        <p className="text-xl font-bold text-neon-green">{macros.calories}</p>
+                        <p className="text-xl font-bold text-red-400">{macros.calories}</p>
                         <p className="text-xs text-gray-500">cal/day</p>
                       </div>
                       <div className={ds.panel}>
@@ -1243,7 +1462,7 @@ export default function FitnessLensPage() {
                       </div>
                       <div className={ds.panel}>
                         <p className={ds.textMuted}>Fat</p>
-                        <p className="text-xl font-bold text-neon-purple">{macros.fat}g</p>
+                        <p className="text-xl font-bold text-red-300">{macros.fat}g</p>
                         <p className="text-xs text-gray-500">{macros.fat * 9} cal</p>
                       </div>
                     </div>
@@ -1269,7 +1488,7 @@ export default function FitnessLensPage() {
                     <div className="grid grid-cols-2 gap-3">
                       <div className={ds.panel}>
                         <p className={ds.textMuted}>Epley Formula</p>
-                        <p className="text-2xl font-bold text-neon-green">{oneRMEpley}</p>
+                        <p className="text-2xl font-bold text-red-400">{oneRMEpley}</p>
                         <p className="text-xs text-gray-500">estimated 1RM</p>
                       </div>
                       <div className={ds.panel}>
@@ -1400,11 +1619,11 @@ export default function FitnessLensPage() {
                       <div className="grid grid-cols-3 gap-3">
                         <div className="bg-lattice-elevated rounded-lg p-2 text-center">
                           <p className={ds.textMuted}>Total Volume</p>
-                          <p className="text-lg font-bold text-neon-green">{calcTotalVolume(workoutExercises).toLocaleString()}</p>
+                          <p className="text-lg font-bold text-red-400">{calcTotalVolume(workoutExercises).toLocaleString()}</p>
                         </div>
                         <div className="bg-lattice-elevated rounded-lg p-2 text-center">
                           <p className={ds.textMuted}>Est. Duration</p>
-                          <p className="text-lg font-bold text-neon-blue">{Math.round(calcEstimatedDuration(workoutExercises))} min</p>
+                          <p className="text-lg font-bold text-red-500">{Math.round(calcEstimatedDuration(workoutExercises))} min</p>
                         </div>
                         <div className="bg-lattice-elevated rounded-lg p-2 text-center">
                           <p className={ds.textMuted}>Exercises</p>
@@ -1418,7 +1637,7 @@ export default function FitnessLensPage() {
                       <div className="bg-lattice-elevated rounded-lg p-3 space-y-2">
                         <div className="flex items-center gap-2 mb-2 flex-wrap">
                           {(['All', 'Upper', 'Lower', 'Core', 'Cardio', 'Flexibility'] as const).map(cat => (
-                            <button key={cat} onClick={() => setExerciseFilter(cat)} className={cn(ds.btnSmall, exerciseFilter === cat ? 'bg-neon-green/20 text-neon-green' : 'text-gray-400')}>
+                            <button key={cat} onClick={() => setExerciseFilter(cat)} className={cn(ds.btnSmall, exerciseFilter === cat ? 'bg-red-400/20 text-red-400' : 'text-gray-400')}>
                               {cat}
                             </button>
                           ))}
@@ -1435,12 +1654,12 @@ export default function FitnessLensPage() {
 
                     {/* Exercise list */}
                     {workoutExercises.map((ex, idx) => (
-                      <div key={ex.id} className={cn(ds.panel, ex.isSuperset && 'border-l-2 border-l-neon-purple')}>
+                      <div key={ex.id} className={cn(ds.panel, ex.isSuperset && 'border-l-2 border-l-red-300')}>
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-gray-500 font-mono w-5">{idx + 1}.</span>
                             <span className="font-medium text-sm">{ex.name}</span>
-                            <span className={ds.badge(ex.category === 'Upper' ? 'neon-blue' : ex.category === 'Lower' ? 'neon-green' : ex.category === 'Core' ? 'amber-400' : ex.category === 'Cardio' ? 'red-400' : 'neon-purple')}>
+                            <span className={ds.badge(ex.category === 'Upper' ? 'red-500' : ex.category === 'Lower' ? 'red-400' : ex.category === 'Core' ? 'amber-400' : ex.category === 'Cardio' ? 'red-400' : 'red-300')}>
                               {ex.category}
                             </span>
                           </div>
@@ -1470,7 +1689,7 @@ export default function FitnessLensPage() {
                           <div>
                             <label className={ds.label}>Superset</label>
                             <div className="flex items-center gap-1">
-                              <input type="checkbox" checked={ex.isSuperset} onChange={e => updateExercise(ex.id, 'isSuperset', e.target.checked)} className="accent-neon-purple" />
+                              <input type="checkbox" checked={ex.isSuperset} onChange={e => updateExercise(ex.id, 'isSuperset', e.target.checked)} className="accent-red-300" />
                               {ex.isSuperset && (
                                 <input value={ex.supersetGroup} onChange={e => updateExercise(ex.id, 'supersetGroup', e.target.value)} className={cn(ds.input, 'text-xs w-12')} placeholder="Grp" />
                               )}
@@ -1523,12 +1742,12 @@ export default function FitnessLensPage() {
 
                     {/* Training blocks */}
                     {trainingBlocks.map((block, idx) => {
-                      const phaseColor = block.phase === 'Hypertrophy' ? 'neon-blue' : block.phase === 'Strength' ? 'neon-green' : block.phase === 'Power' ? 'red-400' : 'amber-400';
+                      const phaseColor = block.phase === 'Hypertrophy' ? 'red-500' : block.phase === 'Strength' ? 'red-400' : block.phase === 'Power' ? 'red-400' : 'amber-400';
                       return (
                         <div key={block.id} className={ds.panel}>
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-2">
-                              <Layers className="w-4 h-4 text-neon-purple" />
+                              <Layers className="w-4 h-4 text-red-300" />
                               <span className="text-xs text-gray-500">Block {idx + 1}</span>
                               <span className={ds.badge(phaseColor)}>{block.phase}</span>
                             </div>
@@ -1605,7 +1824,7 @@ export default function FitnessLensPage() {
                       {CLASS_TIMES.map(time => {
                         const slotsForTime = classSlots.filter(s => s.day === classViewDay && s.time === time);
                         return (
-                          <div key={time} className="flex items-start gap-3">
+                          <div key={time} data-lens-theme="fitness" className="flex items-start gap-3">
                             <span className="text-xs text-gray-500 w-16 pt-2 shrink-0">{time}</span>
                             <div className="flex-1">
                               {slotsForTime.length > 0 ? slotsForTime.map(slot => (
@@ -1647,7 +1866,7 @@ export default function FitnessLensPage() {
                                     </div>
                                   </div>
                                   <div className="mt-2 flex gap-3 text-xs text-gray-400">
-                                    <span className="text-neon-green">Revenue: ${slot.enrolled * slot.pricePerHead}</span>
+                                    <span className="text-red-400">Revenue: ${slot.enrolled * slot.pricePerHead}</span>
                                     <span>Fill: {slot.capacity > 0 ? Math.round((slot.enrolled / slot.capacity) * 100) : 0}%</span>
                                     <span>Attend Rate: {slot.enrolled > 0 ? Math.round((slot.attended / slot.enrolled) * 100) : 0}%</span>
                                   </div>
@@ -1667,7 +1886,7 @@ export default function FitnessLensPage() {
                         <div className="flex gap-4 text-xs text-gray-400">
                           <span>Total Slots: {classSlots.length}</span>
                           <span>Total Enrolled: {classSlots.reduce((s, sl) => s + sl.enrolled, 0)}</span>
-                          <span className="text-neon-green">Weekly Revenue: ${classSlots.reduce((s, sl) => s + sl.enrolled * sl.pricePerHead, 0)}</span>
+                          <span className="text-red-400">Weekly Revenue: ${classSlots.reduce((s, sl) => s + sl.enrolled * sl.pricePerHead, 0)}</span>
                           <span>Avg Attendance: {classSlots.length > 0 ? Math.round(classSlots.reduce((s, sl) => s + (sl.enrolled > 0 ? (sl.attended / sl.enrolled) * 100 : 0), 0) / classSlots.length) : 0}%</span>
                         </div>
                       </div>
@@ -1725,7 +1944,7 @@ export default function FitnessLensPage() {
                       {roster.length > 0 && (
                         <div className="mt-2 flex gap-4 text-xs text-gray-400">
                           <span>Total: {roster.length}</span>
-                          <span className="text-neon-green">Active: {roster.filter(r => r.status === 'active').length}</span>
+                          <span className="text-red-400">Active: {roster.filter(r => r.status === 'active').length}</span>
                           <span className="text-red-400">Injured: {roster.filter(r => r.status === 'injured').length}</span>
                           <span className="text-amber-400">Reserve: {roster.filter(r => r.status === 'reserve').length}</span>
                         </div>
@@ -1827,7 +2046,7 @@ export default function FitnessLensPage() {
                     </button>
                   )}
                   {editingItem && (
-                    <button onClick={() => handleAction('calculate-progression', editingItem.id)} className={cn(ds.btnSmall, 'bg-neon-green/20 text-neon-green border border-neon-green/30')}>
+                    <button onClick={() => handleAction('calculate-progression', editingItem.id)} className={cn(ds.btnSmall, 'bg-red-400/20 text-red-400 border border-red-400/30')}>
                       <TrendingUp className="w-3.5 h-3.5" /> Calc Progression
                     </button>
                   )}

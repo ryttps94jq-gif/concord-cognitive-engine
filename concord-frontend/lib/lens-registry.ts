@@ -29,6 +29,7 @@ import {
   HeartHandshake, Building2, Dumbbell, Palette, Factory,
   TreePine, Landmark, Plane, PartyPopper, FlaskRound,
   ShieldCheck, Scissors, Umbrella,
+  Shirt, ChefHat, Baby, PawPrint, Trophy, Hammer, Swords, BadgeCheck,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -140,7 +141,7 @@ export const CORE_LENSES: CoreLensConfig[] = [
     tagline: 'Create anything',
     path: '/lenses/studio',
     color: 'neon-pink',
-    absorbedLensIds: ['music', 'art', 'fractal', 'game', 'sim', 'ar'],
+    absorbedLensIds: ['music', 'art', 'fractal', 'game', 'sim', 'ar', 'podcast'],
   },
 ];
 
@@ -171,6 +172,7 @@ export const LENS_REGISTRY: LensEntry[] = [
   { id: 'graph', name: 'Graph', icon: Share2, description: 'Knowledge graph and entity exploration', category: 'core', showInSidebar: true, showInCommandPalette: true, path: '/lenses/graph', order: 3, keywords: ['network', 'nodes', 'edges', 'knowledge', 'schema'] },
   { id: 'code', name: 'Code', icon: Code, description: 'Editor, debugger, and repository browser', category: 'core', showInSidebar: true, showInCommandPalette: true, path: '/lenses/code', order: 4, keywords: ['editor', 'programming', 'dev', 'debug', 'database'] },
   { id: 'studio', name: 'Studio', icon: Music, description: 'Music, art, game dev, and creative production', category: 'core', showInSidebar: true, showInCommandPalette: true, path: '/lenses/studio', order: 5, keywords: ['production', 'audio', 'mix', 'master', 'art', 'music'] },
+  { id: 'dtus', name: 'DTU Browser', icon: Database, description: 'Browse, search, and manage Discrete Thought Units', category: 'knowledge', showInSidebar: true, showInCommandPalette: true, path: '/lenses/dtus', order: 6, keywords: ['dtu', 'browse', 'search', 'thoughts', 'knowledge', 'units'] },
 
   // ── Absorbed into Chat ──────────────────────────────────────────
   { id: 'thread', name: 'Threads', icon: MessageCircle, description: 'Threaded conversations', category: 'core', showInSidebar: false, showInCommandPalette: true, path: '/lenses/thread', order: 10, keywords: ['conversation', 'discussion'], coreLens: 'chat', tabLabel: 'Threads' },
@@ -208,6 +210,7 @@ export const LENS_REGISTRY: LensEntry[] = [
   { id: 'game', name: 'Game', icon: Gamepad2, description: 'Game development', category: 'creative', showInSidebar: false, showInCommandPalette: true, path: '/lenses/game', order: 53, keywords: ['gaming', 'development'], coreLens: 'studio', tabLabel: 'Game' },
   { id: 'sim', name: 'Sim', icon: Boxes, description: 'Simulation sandbox', category: 'creative', showInSidebar: false, showInCommandPalette: true, path: '/lenses/sim', order: 54, keywords: ['simulation', 'sandbox', 'worldmodel'], coreLens: 'studio', tabLabel: 'Simulation' },
   { id: 'ar', name: 'AR', icon: Glasses, description: 'Augmented reality', category: 'creative', showInSidebar: false, showInCommandPalette: true, path: '/lenses/ar', order: 55, keywords: ['augmented reality', 'webxr', '3d'], coreLens: 'studio', tabLabel: 'AR' },
+  { id: 'podcast', name: 'Podcast', icon: Headphones, description: 'Podcast creation and distribution', category: 'creative', showInSidebar: false, showInCommandPalette: true, path: '/lenses/podcast', order: 56, keywords: ['podcast', 'audio', 'episode', 'rss', 'show'], coreLens: 'studio', tabLabel: 'Podcast' },
 
   // ── Extensions: Platform & System ───────────────────────────────
   { id: 'resonance', name: 'Resonance', icon: Activity, description: 'System health dashboard', category: 'core', showInSidebar: false, showInCommandPalette: true, path: '/lenses/resonance', order: 100, keywords: ['health', 'metrics', 'status'] },
@@ -297,6 +300,20 @@ export const LENS_REGISTRY: LensEntry[] = [
   { id: 'security', name: 'Security', icon: ShieldCheck, description: 'Security operations', category: 'superlens', showInSidebar: false, showInCommandPalette: true, path: '/lenses/security', order: 220, keywords: ['patrol', 'incident', 'surveillance', 'investigation'] },
   { id: 'services', name: 'Services', icon: Scissors, description: 'Personal services', category: 'superlens', showInSidebar: false, showInCommandPalette: true, path: '/lenses/services', order: 221, keywords: ['salon', 'cleaning', 'daycare', 'appointment'] },
   { id: 'insurance', name: 'Insurance', icon: Umbrella, description: 'Insurance & risk management', category: 'superlens', showInSidebar: false, showInCommandPalette: true, path: '/lenses/insurance', order: 222, keywords: ['policy', 'claim', 'premium', 'coverage'] },
+
+  // ── Lifestyle Lenses (61-68) ─────────────────────────────────────
+  { id: 'travel', name: 'Travel', icon: Compass, description: 'Trip planning & travel management', category: 'superlens', showInSidebar: false, showInCommandPalette: true, path: '/lenses/travel', order: 261, keywords: ['trip', 'itinerary', 'flight', 'hotel', 'vacation', 'destination'] },
+  { id: 'fashion', name: 'Fashion', icon: Shirt, description: 'Wardrobe & style management', category: 'superlens', showInSidebar: false, showInCommandPalette: true, path: '/lenses/fashion', order: 262, keywords: ['outfit', 'wardrobe', 'style', 'clothing', 'accessories'] },
+  { id: 'cooking', name: 'Cooking', icon: ChefHat, description: 'Recipes, meal prep & kitchen management', category: 'superlens', showInSidebar: false, showInCommandPalette: true, path: '/lenses/cooking', order: 263, keywords: ['recipe', 'meal', 'ingredient', 'kitchen', 'baking'] },
+  { id: 'home-improvement', name: 'Home Improvement', icon: Hammer, description: 'Home renovation & improvement projects', category: 'superlens', showInSidebar: false, showInCommandPalette: true, path: '/lenses/home-improvement', order: 264, keywords: ['renovation', 'repair', 'project', 'contractor', 'remodel'] },
+  { id: 'parenting', name: 'Parenting', icon: Baby, description: 'Parenting, childcare & family', category: 'superlens', showInSidebar: false, showInCommandPalette: true, path: '/lenses/parenting', order: 265, keywords: ['child', 'baby', 'family', 'milestone', 'school'] },
+  { id: 'pets', name: 'Pets', icon: PawPrint, description: 'Pet care & management', category: 'superlens', showInSidebar: false, showInCommandPalette: true, path: '/lenses/pets', order: 266, keywords: ['pet', 'dog', 'cat', 'vet', 'animal', 'care'] },
+  { id: 'sports', name: 'Sports', icon: Trophy, description: 'Sports tracking & team management', category: 'superlens', showInSidebar: false, showInCommandPalette: true, path: '/lenses/sports', order: 267, keywords: ['team', 'game', 'score', 'fitness', 'league', 'training'] },
+  { id: 'diy', name: 'DIY', icon: Wrench, description: 'DIY projects & crafts', category: 'superlens', showInSidebar: false, showInCommandPalette: true, path: '/lenses/diy', order: 268, keywords: ['project', 'craft', 'build', 'tool', 'maker', 'handmade'] },
+
+  // ── Social & Community Lenses (76-77) ────────────────────────────
+  { id: 'debate', name: 'Debate', icon: Swords, description: 'Structured debates & argumentation', category: 'governance', showInSidebar: false, showInCommandPalette: true, path: '/lenses/debate', order: 276, keywords: ['argument', 'debate', 'pro', 'con', 'discussion', 'position'] },
+  { id: 'mentorship', name: 'Mentorship', icon: BadgeCheck, description: 'Mentorship matching & tracking', category: 'governance', showInSidebar: false, showInCommandPalette: true, path: '/lenses/mentorship', order: 277, keywords: ['mentor', 'mentee', 'coaching', 'guidance', 'learning'] },
 
   // ── New Cognitive System Lenses ──────────────────────────────────
   { id: 'app-maker', name: 'App Maker', icon: Boxes, description: 'Compose apps from existing primitives', category: 'system', showInSidebar: false, showInCommandPalette: true, path: '/lenses/app-maker', order: 231, keywords: ['app', 'maker', 'compose', 'primitives', 'builder'] },
@@ -407,10 +424,10 @@ const SOVEREIGN_LENS_SET = new Set<string>(SOVEREIGN_LENSES);
  */
 export const SIDEBAR_CATEGORIES: Record<string, string[]> = {
   Knowledge: ['research', 'hypothesis', 'reasoning', 'metacognition', 'graph', 'education', 'science', 'grounding', 'commonsense', 'inference', 'metalearning', 'reflection', 'meta'],
-  Creative: ['art', 'music', 'creative', 'studio', 'whiteboard', 'game', 'sim', 'voice'],
-  Lifestyle: ['food', 'fitness', 'healthcare', 'realestate', 'travel', 'daily', 'calendar', 'household', 'insurance'],
+  Creative: ['art', 'music', 'creative', 'studio', 'whiteboard', 'game', 'sim', 'voice', 'podcast'],
+  Lifestyle: ['food', 'fitness', 'healthcare', 'realestate', 'travel', 'daily', 'calendar', 'household', 'insurance', 'fashion', 'cooking', 'home-improvement', 'parenting', 'pets', 'sports', 'diy'],
   Professional: ['finance', 'legal', 'law', 'code', 'database', 'accounting', 'billing', 'logistics', 'manufacturing', 'retail'],
-  Social: ['feed', 'forum', 'marketplace', 'collab', 'vote', 'global', 'alliance'],
+  Social: ['feed', 'forum', 'marketplace', 'collab', 'vote', 'global', 'alliance', 'debate', 'mentorship'],
   System: ['chat', 'entity', 'council', 'organ', 'tick', 'timeline', 'agents', 'queue'],
   Sovereign: ['admin', 'command-center', 'audit', 'lock'],
 };

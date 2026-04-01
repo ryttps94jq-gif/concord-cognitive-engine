@@ -1,16 +1,18 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useState, useMemo, useCallback } from 'react';
 import {
   Newspaper, Clock, Tag, TrendingUp, Bookmark, Share2,
   Search, RefreshCw, ChevronDown, ChevronUp, ExternalLink,
-  Filter, X, Eye, BarChart3, ArrowUpRight, Bell,
+  Filter, X, Eye, BarChart3, ArrowUpRight, Bell, Globe, Rss,
 } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
+import { useBookmarks } from '@/hooks/useBookmarks';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
@@ -44,15 +46,13 @@ const IMPORTANCE_COLORS: Record<string, string> = {
 export default function NewsLensPage() {
   useLensNav('news');
   const { latestData: realtimeData, isLive, lastUpdated, insights } = useRealtimeLens('news');
-  const queryClient = useQueryClient();
-
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchText, setSearchText] = useState('');
   const [sortMode, setSortMode] = useState<SortMode>('newest');
   const [viewMode, setViewMode] = useState<ViewMode>('feed');
   const [expandedArticle, setExpandedArticle] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
-  const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
+  const { bookmarkedIds, toggleBookmark } = useBookmarks('news');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
 
   const { data: news, isLoading, isError, error, refetch } = useQuery({
@@ -80,7 +80,7 @@ export default function NewsLensPage() {
     { id: 'community', name: 'Community', icon: Eye },
   ];
 
-  const articles: NewsArticle[] = useMemo(() => news?.articles || [], [news]);
+  const articles: NewsArticle[] = useMemo(() => news?.artifacts || news?.articles || news?.items || [], [news]);
 
   // Extract unique sources for filtering
   const sources = useMemo(() => {
@@ -128,14 +128,7 @@ export default function NewsLensPage() {
     return list;
   }, [articles, searchText, sourceFilter, sortMode]);
 
-  const toggleBookmark = useCallback((id: string) => {
-    setBookmarkedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
+  // toggleBookmark provided by useBookmarks hook — persists to backend
 
   const handleRefresh = useCallback(() => {
     refetch();
@@ -173,7 +166,7 @@ export default function NewsLensPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="news" className="p-6 space-y-6">
       {/* Header */}
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -283,6 +276,38 @@ export default function NewsLensPage() {
         )}
       </div>
 
+      {/* Quick Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Newspaper className="w-5 h-5 text-neon-blue" />
+          <div>
+            <p className="text-lg font-bold">{articles.length}</p>
+            <p className="text-xs text-gray-500">Articles</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Rss className="w-5 h-5 text-neon-green" />
+          <div>
+            <p className="text-lg font-bold">{sources.length - 1}</p>
+            <p className="text-xs text-gray-500">Sources</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 2 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <TrendingUp className="w-5 h-5 text-neon-pink" />
+          <div>
+            <p className="text-lg font-bold">{articles.filter(a => a.trending).length}</p>
+            <p className="text-xs text-gray-500">Trending Topics</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 3 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Globe className="w-5 h-5 text-neon-purple" />
+          <div>
+            <p className="text-lg font-bold">{news?.stats?.today || 0}</p>
+            <p className="text-xs text-gray-500">Today</p>
+          </div>
+        </motion.div>
+      </div>
+
       {/* Category Tabs */}
       <div className="flex gap-2 overflow-x-auto no-scrollbar">
         {categories.map((category) => {
@@ -348,12 +373,15 @@ export default function NewsLensPage() {
             </div>
           ) : (
             /* Feed / Compact view */
-            filteredArticles.map((article) => {
+            filteredArticles.map((article, index) => {
               const isExpanded = expandedArticle === article.id;
               const isBookmarked = bookmarkedIds.has(article.id);
               return (
-                <article
+                <motion.article
                   key={article.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05 }}
                   className={`lens-card transition-all cursor-pointer ${
                     viewMode === 'compact' ? 'py-3' : ''
                   } ${isExpanded ? 'glow-blue ring-1 ring-neon-blue/20' : 'hover:glow-blue'}`}
@@ -455,7 +483,7 @@ export default function NewsLensPage() {
                       )}
                     </div>
                   </div>
-                </article>
+                </motion.article>
               );
             })
           )}

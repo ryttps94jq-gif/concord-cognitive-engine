@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Trash2, Shield, Play, Clock, Eye } from 'lucide-react';
+import { Trash2, Play, Clock, Eye } from 'lucide-react';
 import { apiHelpers } from '@/lib/api/client';
 
 interface ForgettingStatus {
@@ -32,7 +32,7 @@ export function ForgettingPanel() {
   useEffect(() => {
     apiHelpers.forgetting.status().then((resp) => {
       setStatus(resp.data);
-    }).catch(() => {});
+    }).catch(err => console.error('[Forgetting] Failed to load status:', err));
   }, []);
 
   const loadHistory = async () => {

@@ -796,6 +796,8 @@ export default function BoardLensPage() {
       </AnimatePresence>
       </div>
 
+      <RealtimeDataPanel data={realtimeInsights} />
+
       {/* Lens Features */}
       <div className="border-t border-white/10">
         <button
@@ -842,7 +844,7 @@ function TaskDetailPanel({
   const col = columns.find((c) => c.id === task.status);
 
   return (
-    <div className="p-5 space-y-5 min-h-full">
+    <div data-lens-theme="board" className="p-5 space-y-5 min-h-full">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div className="flex-1 min-w-0">

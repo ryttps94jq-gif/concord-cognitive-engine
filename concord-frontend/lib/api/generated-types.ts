@@ -102,7 +102,7 @@ export interface CreateApiKeyResponse {
 // DTUs (Discrete Thought Units)
 // ============================================================================
 
-export type DTUTier = 'regular' | 'mega' | 'hyper' | 'shadow';
+export type DTUTier = 'regular' | 'mega' | 'hyper' | 'shadow' | 'archive';
 
 export interface DTU {
   id: string;

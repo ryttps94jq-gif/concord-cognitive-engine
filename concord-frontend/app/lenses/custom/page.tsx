@@ -4,7 +4,8 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useMutation } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useState } from 'react';
-import { Wand2, Plus, Code, Eye, Trash2, Copy, Settings, Layers, ChevronDown } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Wand2, Plus, Code, Eye, Trash2, Copy, Settings, Layers, ChevronDown, Palette, Sliders } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -94,7 +95,7 @@ export default function CustomLensPage() {
     );
   }
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="custom" className="p-6 space-y-6">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-2xl">🔧</span>
@@ -128,6 +129,29 @@ export default function CustomLensPage() {
 
       {/* AI Actions */}
       <UniversalActions domain="custom" artifactId={lensItems[0]?.id} compact />
+
+      {/* Stat Cards Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { icon: Palette, color: 'text-neon-purple', value: customLenses?.length || 0, label: 'Custom Lenses' },
+          { icon: Settings, color: 'text-neon-cyan', value: customLenses?.filter((l: CustomLens) => l.isActive).length || 0, label: 'Active' },
+          { icon: Sliders, color: 'text-neon-green', value: templates?.length || 0, label: 'Templates' },
+          { icon: Code, color: 'text-amber-400', value: customLenses?.reduce((s: number, l: CustomLens) => s + (l.config ? Object.keys(l.config).length : 0), 0) || 0, label: 'Config Keys' },
+        ].map((stat, i) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.08 }}
+            className="lens-card"
+          >
+            <stat.icon className={`w-5 h-5 ${stat.color} mb-2`} />
+            <p className="text-2xl font-bold">{stat.value}</p>
+            <p className="text-sm text-gray-400">{stat.label}</p>
+          </motion.div>
+        ))}
+      </div>
+
       {/* Lens Builder Modal */}
       {showBuilder && (
         <div className="panel p-4 space-y-4 border-neon-purple">
@@ -190,12 +214,15 @@ export default function CustomLensPage() {
                 No custom lenses yet. Create your first one!
               </p>
             ) : (
-              customLenses?.map((lens: CustomLens) => (
-                <button
+              customLenses?.map((lens: CustomLens, i: number) => (
+                <motion.button
                   key={lens.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.06 }}
                   onClick={() => setSelectedLens(lens.id)}
-                  className={`w-full text-left lens-card ${
-                    selectedLens === lens.id ? 'border-neon-cyan' : ''
+                  className={`w-full text-left lens-card transition-all ${
+                    selectedLens === lens.id ? 'border-neon-cyan ring-1 ring-neon-cyan' : ''
                   }`}
                 >
                   <div className="flex items-center justify-between">
@@ -213,7 +240,7 @@ export default function CustomLensPage() {
                   <p className="text-xs text-gray-400 mt-1">
                     Created {new Date(lens.createdAt).toLocaleDateString()}
                   </p>
-                </button>
+                </motion.button>
               ))
             )}
           </div>
@@ -248,12 +275,23 @@ export default function CustomLensPage() {
                 </div>
               </div>
 
-              <div className="graph-container flex items-center justify-center">
-                <div className="text-center text-gray-500">
-                  <Eye className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                  <p>Lens preview would render here</p>
+              {/* Customization Preview Card */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="graph-container relative overflow-hidden"
+              >
+                <div className="absolute inset-0 bg-gradient-to-br from-neon-purple/5 to-neon-cyan/5 flex items-center justify-center">
+                  <div className="text-center space-y-3">
+                    <div className="grid grid-cols-3 gap-2 mx-auto max-w-xs">
+                      {[...Array(6)].map((_, i) => (
+                        <div key={i} className={`h-12 rounded-lg animate-pulse ${i % 3 === 0 ? 'bg-neon-purple/20' : i % 3 === 1 ? 'bg-neon-cyan/20' : 'bg-neon-green/20'}`} style={{ animationDelay: `${i * 0.2}s` }} />
+                      ))}
+                    </div>
+                    <p className="text-sm text-gray-400">Live preview of lens layout</p>
+                  </div>
                 </div>
-              </div>
+              </motion.div>
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">

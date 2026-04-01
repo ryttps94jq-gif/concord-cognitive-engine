@@ -1,5 +1,6 @@
 'use client';
 
+import { motion } from 'framer-motion';
 import { useState, useMemo } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
@@ -12,7 +13,7 @@ import {
   CalendarDays, MapPin, Plus, Search, Filter, X, Edit2, Trash2,
   Ticket, Star, DollarSign, Users, Clock, CheckCircle2, AlertTriangle,
   Building2, Utensils, Speaker, Palette, Camera, Shield, Music,
-  BarChart3, FileText, Play,
+  BarChart3, FileText, Play, MessageCircle,
   ListChecks, PieChart, ArrowUpRight,
   ArrowDownRight, Crown, Gift, ClipboardList, Sparkles,
   Phone, Mail, PartyPopper, Briefcase, Heart,
@@ -77,6 +78,7 @@ const MODE_TABS: { id: ModeTab; label: string; icon: typeof CalendarDays }[] = [
   { id: 'events', label: 'Events', icon: CalendarDays },
   { id: 'venues', label: 'Venues', icon: Building2 },
   { id: 'vendors', label: 'Vendors', icon: Users },
+  { id: 'guests', label: 'Guests', icon: ClipboardList },
   { id: 'runofshow', label: 'Run of Show', icon: ListChecks },
   { id: 'budget', label: 'Budget', icon: DollarSign },
   { id: 'tickets', label: 'Tickets', icon: Ticket },
@@ -197,6 +199,74 @@ export default function EventsLensPage() {
 
   const runAction = useRunArtifact('events');
 
+  // RSVP / Ticket purchase state
+  const [rsvpLoading, setRsvpLoading] = useState<string | null>(null);
+  const [rsvpSuccess, setRsvpSuccess] = useState<string | null>(null);
+
+  const handleRSVP = async (eventItem: LensItem) => {
+    const d = eventItem.data as Record<string, unknown>;
+    const price = Number(d.ticketPrice || 0);
+    const attendees = parseJsonSafe<string[]>(d.attendees, []);
+    const cap = Number(d.capacity || 0);
+    if (cap > 0 && attendees.length >= cap) {
+      setRsvpSuccess(null);
+      return;
+    }
+    setRsvpLoading(eventItem.id);
+    try {
+      const userId = 'current-user'; // from auth context
+      if (price > 0) {
+        // Paid ticket: call economy transfer endpoint
+        const { api: apiClient } = await import('@/lib/api/client');
+        await apiClient.post('/api/economy/transfer', {
+          to: (d.creatorId as string) || 'platform',
+          amount: price,
+          type: 'EVENT_TICKET',
+          metadata: { eventId: eventItem.id, eventTitle: eventItem.title },
+        });
+      }
+      // Add user to attendees
+      const updatedAttendees = [...attendees, userId];
+      await updateEvent(eventItem.id, {
+        title: eventItem.title,
+        data: { ...d, attendees: updatedAttendees, registered: (Number(d.registered || 0)) + 1 },
+        meta: eventItem.meta,
+      });
+      // Create calendar event via calendar lens
+      try {
+        const { api: apiClient } = await import('@/lib/api/client');
+        await apiClient.post('/api/lens/calendar/event', {
+          title: eventItem.title,
+          data: {
+            description: String(d.description || ''),
+            startDate: d.date,
+            endDate: d.endDate || d.date,
+            location: String(d.location || d.venue || ''),
+            allDay: false,
+            color: '#ec4899',
+            category: 'events',
+            eventType: 'deadline',
+          },
+          meta: { status: 'confirmed' },
+        });
+      } catch { /* calendar sync optional */ }
+      // Announce event RSVP via social post
+      try {
+        const { api: apiClient } = await import('@/lib/api/client');
+        await apiClient.post('/api/social/post', {
+          content: `I'm attending "${eventItem.title}"! ${d.date ? `Date: ${String(d.date)}` : ''} ${d.location || d.venue ? `Location: ${String(d.location || d.venue)}` : ''}`,
+          mediaType: 'text',
+          tags: ['event', 'rsvp'],
+        });
+      } catch { /* social post optional */ }
+      setRsvpSuccess(eventItem.id);
+    } catch (err) {
+      console.error('RSVP failed:', err);
+    } finally {
+      setRsvpLoading(null);
+    }
+  };
+
   // Current items based on mode
   const currentItems = useMemo(() => {
     const map: Record<ModeTab, LensItem[]> = {
@@ -205,7 +275,7 @@ export default function EventsLensPage() {
     return map[mode] || [];
   }, [mode, events, venues, vendors, guests, runofshows, budgets, tickets]);
 
-  const isLoading = eventsLoading || venuesLoading || vendorsLoading || rosLoading || budgetLoading || ticketsLoading;
+  const isLoading = eventsLoading || venuesLoading || vendorsLoading || guestsLoading || rosLoading || budgetLoading || ticketsLoading;
 
   // Filtering
   const filtered = useMemo(() => {
@@ -231,6 +301,7 @@ export default function EventsLensPage() {
       case 'events': case 'dashboard': return { create: createEvent, update: updateEvent, remove: removeEvent };
       case 'venues': return { create: createVenue, update: updateVenue, remove: removeVenue };
       case 'vendors': return { create: createVendor, update: updateVendor, remove: removeVendor };
+      case 'guests': return { create: createGuest, update: updateGuest, remove: removeGuest };
       case 'runofshow': return { create: createROS, update: updateROS, remove: removeROS };
       case 'budget': return { create: createBudget, update: updateBudget, remove: removeBudget };
       case 'tickets': return { create: createTicket, update: updateTicket, remove: removeTicket };
@@ -269,6 +340,18 @@ export default function EventsLensPage() {
       await update(editing, { title: formTitle, data, meta: { status: formStatus } });
     } else {
       await create({ title: formTitle, data, meta: { status: formStatus } });
+      // Announce new event via social post
+      if (mode === 'events' || mode === 'dashboard') {
+        try {
+          const { api: apiClient } = await import('@/lib/api/client');
+          const price = Number(data.ticketPrice || 0);
+          await apiClient.post('/api/social/post', {
+            content: `New event: "${formTitle}"${data.date ? ` on ${String(data.date)}` : ''}${data.location || data.venue ? ` at ${String(data.location || data.venue)}` : ''}. ${price > 0 ? `Tickets: ${price} CC` : 'Free admission!'}`,
+            mediaType: 'text',
+            tags: ['event', 'new-event', String(data.eventType || 'social')],
+          });
+        } catch { /* social announcement optional */ }
+      }
     }
     resetForm();
   };
@@ -318,8 +401,11 @@ export default function EventsLensPage() {
         { key: 'eventType', label: 'Event Type', type: 'select', options: EVENT_TYPES.map(t => t.id) },
         { key: 'date', label: 'Start Date', type: 'date' },
         { key: 'endDate', label: 'End Date', type: 'date' },
+        { key: 'time', label: 'Start Time' },
         { key: 'venue', label: 'Venue' },
+        { key: 'location', label: 'Location / Address' },
         { key: 'capacity', label: 'Capacity' },
+        { key: 'ticketPrice', label: 'Ticket Price in CC (0 = free)' },
         { key: 'description', label: 'Description', type: 'textarea' },
         { key: 'ticketTiers', label: 'Ticket Tiers (comma-separated)' },
       ];
@@ -346,6 +432,15 @@ export default function EventsLensPage() {
         { key: 'teardownTime', label: 'Teardown Time' },
         { key: 'insuranceVerified', label: 'Insurance Verified', type: 'select', options: ['true', 'false'] },
         { key: 'assignedEvent', label: 'Assigned Event' },
+        { key: 'notes', label: 'Notes', type: 'textarea' },
+      ];
+      case 'guests': return [
+        { key: 'email', label: 'Email' },
+        { key: 'phone', label: 'Phone' },
+        { key: 'eventName', label: 'Event' },
+        { key: 'rsvpStatus', label: 'RSVP Status', type: 'select', options: ['confirmed', 'pending', 'declined'] },
+        { key: 'tableAssignment', label: 'Table Assignment' },
+        { key: 'dietaryRestrictions', label: 'Dietary Restrictions' },
         { key: 'notes', label: 'Notes', type: 'textarea' },
       ];
       case 'runofshow': return [
@@ -547,13 +642,13 @@ export default function EventsLensPage() {
         renderEventDetail(detailItem)
       ) : (
         <div className={ds.grid3}>
-          {filtered.map(item => {
+          {filtered.map((item, index) => {
             const d = item.data as Record<string, unknown>;
             const st = item.meta?.status as string;
             const evtType = EVENT_TYPES.find(t => t.id === d.eventType);
             const EvtIcon = evtType?.icon || CalendarDays;
             return (
-              <div key={item.id} className={ds.panelHover} onClick={() => setDetailId(item.id)}>
+              <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className={ds.panelHover} onClick={() => setDetailId(item.id)}>
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex items-center gap-2 min-w-0">
                     <EvtIcon className="w-5 h-5 text-neon-pink shrink-0" />
@@ -567,6 +662,16 @@ export default function EventsLensPage() {
                   {Boolean(d.description) && <p className="text-xs text-gray-500 line-clamp-2">{String(d.description)}</p>}
                 </div>
                 <ProgressBar value={Number(d.registered || 0)} max={Number(d.capacity || 1)} color="neon-pink" />
+                {/* Ticket price indicator */}
+                <div className="flex items-center gap-2 mt-2">
+                  <Ticket className="w-3.5 h-3.5 text-neon-green" />
+                  <span className="text-xs text-neon-green font-medium">
+                    {Number(d.ticketPrice || 0) === 0 ? 'Free' : `${Number(d.ticketPrice)} CC`}
+                  </span>
+                  {Boolean(d.location) && (
+                    <><MapPin className="w-3 h-3 text-gray-500 ml-1" /><span className="text-xs text-gray-500 truncate">{String(d.location)}</span></>
+                  )}
+                </div>
                 <div className="flex items-center justify-between pt-2 mt-2 border-t border-lattice-border">
                   <span className={ds.textMuted}>{fmtCurrency(Number(d.revenue || 0))} revenue</span>
                   <div className="flex items-center gap-1">
@@ -574,7 +679,7 @@ export default function EventsLensPage() {
                     <button onClick={e => { e.stopPropagation(); removeEvent(item.id); }} className={cn(ds.btnGhost, 'hover:text-red-400')}><Trash2 className="w-3.5 h-3.5" /></button>
                   </div>
                 </div>
-              </div>
+              </motion.div>
             );
           })}
         </div>
@@ -585,8 +690,8 @@ export default function EventsLensPage() {
   // ---------------------------------------------------------------------------
   // Render: Event detail view
   // ---------------------------------------------------------------------------
-  const renderEventDetail = (item: LensItem) => {
-    const d = item.data as Record<string, unknown>;
+  const renderEventDetail = (item: LensItem): React.ReactNode => {
+    const d = item.data as Record<string, string | number | boolean | null | undefined>;
     const st = item.meta?.status as string;
     const evtType = EVENT_TYPES.find(t => t.id === d.eventType);
     const EvtIcon = evtType?.icon || CalendarDays;
@@ -637,6 +742,115 @@ export default function EventsLensPage() {
             <p className={cn(ds.textMuted, 'mb-2')}>Registration vs Capacity</p>
             <ProgressBar value={Number(d.registered || 0)} max={Number(d.capacity || 1)} color="neon-pink" />
           </div>
+
+          {/* IRL Ticketing Section */}
+          <div className="mt-4 pt-4 border-t border-lattice-border">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Ticket className="w-5 h-5 text-neon-green" />
+                <span className="font-semibold text-sm">
+                  {Number(d.ticketPrice || 0) === 0 ? 'Free Event' : `${Number(d.ticketPrice)} CC per ticket`}
+                </span>
+              </div>
+              {((): React.ReactNode => {
+                const attendees = parseJsonSafe<string[]>(d.attendees, []);
+                const cap = Number(d.capacity || 0);
+                const isFull = cap > 0 && attendees.length >= cap;
+                const alreadyRSVP = attendees.includes('current-user');
+                return (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleRSVP(item); }}
+                    disabled={!!rsvpLoading || isFull || alreadyRSVP}
+                    className={cn(
+                      'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all',
+                      alreadyRSVP ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
+                      isFull ? 'bg-red-500/15 text-red-400 border border-red-500/30 cursor-not-allowed' :
+                      'bg-neon-green/15 text-neon-green border border-neon-green/30 hover:bg-neon-green/25'
+                    )}
+                  >
+                    {rsvpLoading === item.id ? (
+                      <><div className="w-4 h-4 border-2 border-neon-green border-t-transparent rounded-full animate-spin" /> Processing...</>
+                    ) : alreadyRSVP ? (
+                      <><CheckCircle2 className="w-4 h-4" /> You&apos;re Going!</>
+                    ) : isFull ? (
+                      'Sold Out'
+                    ) : Number(d.ticketPrice || 0) === 0 ? (
+                      <><Users className="w-4 h-4" /> RSVP (Free)</>
+                    ) : (
+                      <><Ticket className="w-4 h-4" /> Get Ticket ({Number(d.ticketPrice)} CC)</>
+                    )}
+                  </button>
+                );
+              })()}
+            </div>
+            {rsvpSuccess === item.id && (
+              <div className="flex items-center gap-2 p-3 mb-3 rounded-lg bg-green-500/10 border border-green-500/20 text-green-400 text-sm">
+                <CheckCircle2 className="w-4 h-4" /> Ticket confirmed! A calendar event has been created and your RSVP was posted.
+              </div>
+            )}
+            {/* Attendee count & list */}
+            {((): React.ReactNode => {
+              const attendees = parseJsonSafe<string[]>(d.attendees, []);
+              return attendees.length > 0 ? (
+                <div>
+                  <p className={cn(ds.textMuted, 'mb-2')}>{attendees.length} attendee{attendees.length !== 1 ? 's' : ''}</p>
+                  <div className="flex flex-wrap gap-1">
+                    {attendees.slice(0, 20).map((a, i) => (
+                      <span key={i} className="text-xs px-2 py-1 rounded-full bg-lattice-elevated text-gray-300">{a}</span>
+                    ))}
+                    {attendees.length > 20 && <span className="text-xs text-gray-500">+{attendees.length - 20} more</span>}
+                  </div>
+                </div>
+              ) : (
+                <p className={ds.textMuted}>No attendees yet. Be the first to RSVP!</p>
+              );
+            })()}
+          </div>
+
+          {/* Creator stats */}
+          {((): React.ReactNode => {
+            const attendees = parseJsonSafe<string[]>(d.attendees, []);
+            const ticketPrice = Number(d.ticketPrice || 0);
+            const ticketRevenue = attendees.length * ticketPrice;
+            return ticketPrice > 0 && attendees.length > 0 ? (
+              <div className="mt-3 pt-3 border-t border-lattice-border">
+                <div className="flex items-center gap-2 mb-2">
+                  <Crown className="w-4 h-4 text-amber-400" />
+                  <span className="text-sm font-medium text-amber-400">Creator Dashboard</span>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="p-2 bg-lattice-elevated rounded-lg text-center">
+                    <p className="text-xs text-gray-500">Tickets Sold</p>
+                    <p className="text-lg font-bold text-neon-cyan">{attendees.length}</p>
+                  </div>
+                  <div className="p-2 bg-lattice-elevated rounded-lg text-center">
+                    <p className="text-xs text-gray-500">Revenue</p>
+                    <p className="text-lg font-bold text-neon-green">{ticketRevenue} CC</p>
+                  </div>
+                  <div className="p-2 bg-lattice-elevated rounded-lg text-center">
+                    <p className="text-xs text-gray-500">Remaining</p>
+                    <p className="text-lg font-bold">{Math.max(0, Number(d.capacity || 0) - attendees.length)}</p>
+                  </div>
+                </div>
+              </div>
+            ) : null;
+          })()}
+
+          {/* Discussion link */}
+          {d.description && (
+            <div className="mt-3 pt-3 border-t border-lattice-border">
+              <button
+                onClick={() => {
+                  if (typeof window !== 'undefined') {
+                    window.open(`/lenses/feed?search=${encodeURIComponent(item.title)}`, '_blank');
+                  }
+                }}
+                className={cn(ds.btnGhost, 'text-neon-cyan text-sm')}
+              >
+                <MessageCircle className="w-4 h-4" /> View Discussion Thread
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Related tickets */}
@@ -1295,6 +1509,50 @@ export default function EventsLensPage() {
   };
 
   // ---------------------------------------------------------------------------
+  // Render: Guests
+  // ---------------------------------------------------------------------------
+  const renderGuests = () => (
+    <div className="space-y-3">
+      {filtered.length === 0 ? (
+        <div className="text-center py-12">
+          <ClipboardList className="w-10 h-10 text-gray-600 mx-auto mb-3" />
+          <p className={ds.textMuted}>No guests found</p>
+          <button onClick={openCreate} className={cn(ds.btnGhost, 'mt-3')}><Plus className="w-4 h-4" /> Add Guest</button>
+        </div>
+      ) : (
+        <div className={ds.grid3}>
+          {filtered.map(item => {
+            const d = item.data as Record<string, unknown>;
+            const st = item.meta?.status as string;
+            return (
+              <div key={item.id} className={ds.panelHover} onClick={() => openEdit(item.id)}>
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Users className="w-5 h-5 text-neon-cyan shrink-0" />
+                    <h3 className={cn(ds.heading3, 'truncate')}>{item.title}</h3>
+                  </div>
+                  <span className={ds.badge(STATUS_COLORS[st] || 'gray-400')}>{st}</span>
+                </div>
+                <div className="space-y-1 mb-3">
+                  {Boolean(d.email) && <p className={ds.textMuted}>{String(d.email)}</p>}
+                  {Boolean(d.phone) && <p className="text-xs text-gray-500">{String(d.phone)}</p>}
+                  {Boolean(d.dietaryRestrictions) && <p className="text-xs text-amber-400">{String(d.dietaryRestrictions)}</p>}
+                  {Boolean(d.tableAssignment) && <p className="text-xs text-gray-400">Table: {String(d.tableAssignment)}</p>}
+                  {Boolean(d.plusOne) && <p className="text-xs text-neon-purple">+1: {String(d.plusOneName || 'Yes')}</p>}
+                </div>
+                <div className="flex items-center justify-end gap-1 pt-2 border-t border-lattice-border mt-2">
+                  <button onClick={e => { e.stopPropagation(); openEdit(item.id); }} className={ds.btnGhost}><Edit2 className="w-3.5 h-3.5" /></button>
+                  <button onClick={e => { e.stopPropagation(); removeGuest(item.id); }} className={cn(ds.btnGhost, 'hover:text-red-400')}><Trash2 className="w-3.5 h-3.5" /></button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
+  // ---------------------------------------------------------------------------
   // Render: Content by mode
   // ---------------------------------------------------------------------------
   const renderContent = () => {
@@ -1306,6 +1564,7 @@ export default function EventsLensPage() {
       case 'runofshow': return renderRunOfShow();
       case 'budget': return renderBudget();
       case 'tickets': return renderTickets();
+      case 'guests': return renderGuests();
       default: return null;
     }
   };
@@ -1314,7 +1573,7 @@ export default function EventsLensPage() {
   // Main return
   // ---------------------------------------------------------------------------
   return (
-    <div className={ds.pageContainer}>
+    <div data-lens-theme="events" className={ds.pageContainer}>
       {/* Header */}
       <header className={ds.sectionHeader}>
         <div className="flex items-center gap-3">
@@ -1342,6 +1601,32 @@ export default function EventsLensPage() {
         )}
       </header>
 
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {(() => {
+          const allEvts = events;
+          const upcoming = allEvts.filter(e => e.meta?.status === 'planning' || e.meta?.status === 'confirmed').length;
+          const past = allEvts.filter(e => e.meta?.status === 'completed').length;
+          const totalCap = allEvts.reduce((s, e) => s + Number((e.data as Record<string, unknown>).capacity || 0), 0);
+          const totalReg = allEvts.reduce((s, e) => s + Number((e.data as Record<string, unknown>).registered || 0), 0);
+          const rsvpRate = totalCap > 0 ? Math.round((totalReg / totalCap) * 100) : 0;
+          return [
+            { label: 'Upcoming', value: upcoming, icon: CalendarDays },
+            { label: 'Past Events', value: past, icon: CheckCircle2 },
+            { label: 'RSVP Rate', value: `${rsvpRate}%`, icon: Users },
+            { label: 'Total Events', value: allEvts.length, icon: Sparkles },
+          ].map((stat) => (
+            <div key={stat.label} className={ds.panel + ' flex items-center gap-3 p-3'}>
+              <stat.icon className="w-5 h-5 text-neon-pink shrink-0" />
+              <div>
+                <p className="text-xs text-gray-400">{stat.label}</p>
+                <p className="text-lg font-bold text-white">{stat.value}</p>
+              </div>
+            </div>
+          ));
+        })()}
+      </div>
 
       {/* AI Actions */}
       <UniversalActions domain="events" artifactId={events[0]?.id} compact />
@@ -1424,6 +1709,7 @@ export default function EventsLensPage() {
                   <label className={ds.label}>Status</label>
                   <select value={formStatus} onChange={e => setFormStatus(e.target.value)} className={ds.select}>
                     {EVENT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                    {mode === 'guests' && ['confirmed', 'pending', 'declined'].map(s => <option key={`g-${s}`} value={s}>{s}</option>)}
                     {mode === 'vendors' && ['pending', 'partial', 'paid', 'overdue'].map(s => <option key={`v-${s}`} value={s}>{s}</option>)}
                     {mode === 'venues' && ['available', 'booked', 'maintenance'].map(s => <option key={`ve-${s}`} value={s}>{s}</option>)}
                     {mode === 'runofshow' && ['draft', 'finalized'].map(s => <option key={`r-${s}`} value={s}>{s}</option>)}

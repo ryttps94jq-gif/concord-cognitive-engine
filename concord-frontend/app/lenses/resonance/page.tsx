@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, apiHelpers } from '@/lib/api/client';
+import { apiHelpers } from '@/lib/api/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Activity,
@@ -753,7 +753,7 @@ export default function ResonanceBoundaryPage() {
   }
 
   return (
-    <div className="h-[calc(100vh-4rem)] flex flex-col" style={{ background: '#050510' }}>
+    <div data-lens-theme="resonance" className="h-[calc(100vh-4rem)] flex flex-col" style={{ background: '#050510' }}>
       {/* Header */}
       <header className="flex items-center justify-between px-6 py-3 border-b border-white/5"
         style={{ background: 'rgba(5, 5, 16, 0.95)' }}>

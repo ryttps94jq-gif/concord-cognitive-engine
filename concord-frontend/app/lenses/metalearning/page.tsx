@@ -3,13 +3,14 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { motion } from 'framer-motion';
 import { useLensBridge } from '@/lib/hooks/use-lens-bridge';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   GraduationCap, Plus, TrendingUp, Award,
   ArrowRight, BarChart3, Zap, BookOpen, Layers, ChevronDown,
-  Brain, Target, AlertCircle, Lightbulb, CircleDot, Puzzle
+  Brain, Target, AlertCircle, Lightbulb, CircleDot, Puzzle, Sparkles, Waypoints,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -75,7 +76,7 @@ export default function MetalearningLensPage() {
     onError: (err) => console.error('runCurriculum failed:', err instanceof Error ? err.message : err),
   });
 
-  const strategyList: Strategy[] = strategies?.strategies || strategies || [];
+  const strategyList: Strategy[] = useMemo(() => strategies?.strategies || strategies || [], [strategies]);
   const statusInfo = status?.status || status || {};
   const bestStrategy = best?.strategy || best || null;
 
@@ -107,7 +108,7 @@ export default function MetalearningLensPage() {
     );
   }
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="metalearning" className="p-6 space-y-6">
       <header className="flex items-center gap-3">
         <span className="text-2xl">🎓</span>
         <div>
@@ -131,6 +132,30 @@ export default function MetalearningLensPage() {
 
       {/* AI Actions */}
       <UniversalActions domain="metalearning" artifactId={bridge.selectedId} compact />
+
+      {/* Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="lens-card">
+          <Sparkles className="w-5 h-5 text-neon-purple mb-2" />
+          <p className="text-2xl font-bold">{strategyList.length}</p>
+          <p className="text-sm text-gray-400">Strategies</p>
+        </div>
+        <div className="lens-card">
+          <Waypoints className="w-5 h-5 text-neon-cyan mb-2" />
+          <p className="text-2xl font-bold">{strategyList.length > 0 ? (strategyList.reduce((s, st) => s + (st.successRate || 0), 0) / strategyList.length * 100).toFixed(0) : 0}%</p>
+          <p className="text-sm text-gray-400">Transfer Score Avg</p>
+        </div>
+        <div className="lens-card">
+          <Brain className="w-5 h-5 text-neon-green mb-2" />
+          <p className="text-2xl font-bold">{strategyList.reduce((s, st) => s + (st.uses || 0), 0)}</p>
+          <p className="text-sm text-gray-400">Skill Count</p>
+        </div>
+        <div className="lens-card">
+          <TrendingUp className="w-5 h-5 text-yellow-400 mb-2" />
+          <p className="text-2xl font-bold">{statusInfo.adaptations || 0}</p>
+          <p className="text-sm text-gray-400">Adaptations</p>
+        </div>
+      </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="lens-card">
@@ -201,8 +226,8 @@ export default function MetalearningLensPage() {
             <BarChart3 className="w-4 h-4 text-neon-blue" /> Strategies
           </h2>
           <div className="space-y-2 max-h-96 overflow-y-auto">
-            {strategyList.map((s) => (
-              <div key={s.id} className="lens-card">
+            {strategyList.map((s, index) => (
+              <motion.div key={s.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="lens-card">
                 <div className="flex items-center justify-between">
                   <span className="font-medium text-sm">{s.name}</span>
                   <span className="text-xs px-2 py-0.5 rounded bg-lattice-surface text-gray-400">{s.type}</span>
@@ -215,7 +240,7 @@ export default function MetalearningLensPage() {
                     <p className="text-xs text-gray-500 mt-1">{(s.successRate * 100).toFixed(0)}% success</p>
                   </div>
                 )}
-              </div>
+              </motion.div>
             ))}
             {strategyList.length === 0 && (
               <p className="text-center py-4 text-gray-500 text-sm">No strategies yet</p>

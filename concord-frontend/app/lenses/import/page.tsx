@@ -2,7 +2,8 @@
 
 import { useState, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
-import { Upload, FileJson, Database, Check, AlertTriangle, Loader2, FileText, Archive, RefreshCw, Layers, ChevronDown } from 'lucide-react';
+import { Upload, FileJson, Database, Check, AlertTriangle, Loader2, FileText, Archive, RefreshCw, Layers, ChevronDown, Clock, CheckCircle2 } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { apiHelpers } from '@/lib/api/client';
@@ -297,7 +298,7 @@ export default function ImportLens() {
     );
   }
   return (
-    <div className="lens-container">
+    <div data-lens-theme="import" className="lens-container">
       <div className="lens-header">
         <div className="flex items-center gap-3">
           <Upload className="w-8 h-8 text-neon-blue" />
@@ -321,6 +322,38 @@ export default function ImportLens() {
 
       {/* AI Actions */}
       <UniversalActions domain="import" artifactId={importJobItems[0]?.id} compact />
+
+      {/* Quick Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Upload className="w-5 h-5 text-neon-blue" />
+          <div>
+            <p className="text-lg font-bold">{importJobs.length}</p>
+            <p className="text-xs text-gray-500">Total Imports</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Clock className="w-5 h-5 text-neon-yellow" />
+          <div>
+            <p className="text-lg font-bold">{importJobs.filter(j => j.status === 'pending' || j.status === 'importing' || j.status === 'validating').length}</p>
+            <p className="text-xs text-gray-500">Pending</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 2 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <AlertTriangle className="w-5 h-5 text-red-400" />
+          <div>
+            <p className="text-lg font-bold">{importJobs.filter(j => j.status === 'failed').length}</p>
+            <p className="text-xs text-gray-500">Failed</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 3 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <CheckCircle2 className="w-5 h-5 text-neon-green" />
+          <div>
+            <p className="text-lg font-bold">{importJobs.filter(j => j.status === 'completed').length}</p>
+            <p className="text-xs text-gray-500">Completed</p>
+          </div>
+        </motion.div>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Universal Import — Drop any file */}
@@ -533,8 +566,8 @@ export default function ImportLens() {
           </div>
         ) : (
           <div className="space-y-3">
-            {importJobs.map(job => (
-              <div key={job.id} className="p-4 bg-void-800 rounded-lg">
+            {importJobs.map((job, index) => (
+              <motion.div key={job.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="p-4 bg-void-800 rounded-lg">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-3">
                     {getTypeIcon(job.type)}
@@ -594,7 +627,7 @@ export default function ImportLens() {
                   Started: {new Date(job.started_at).toLocaleString()}
                   {job.completed_at && ` | Completed: ${new Date(job.completed_at).toLocaleString()}`}
                 </p>
-              </div>
+              </motion.div>
             ))}
           </div>
         )}

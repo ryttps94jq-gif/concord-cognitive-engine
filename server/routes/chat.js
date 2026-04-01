@@ -248,6 +248,16 @@ export default function registerChatRoutes(app, {
     }
   }));
 
+  // GET /api/chat/tools — list all tools available to the chat system
+  app.get("/api/chat/tools", asyncHandler(async (req, res) => {
+    try {
+      const out = await runMacro("chat", "tools", {}, makeCtx(req));
+      return res.json(out);
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  }));
+
   // POST /api/chat/forge/message — Forge DTU from chat message
   app.post("/api/chat/forge/message", asyncHandler(async (req, res) => {
     try {

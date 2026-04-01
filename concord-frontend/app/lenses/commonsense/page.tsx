@@ -3,14 +3,16 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
+import { useUIStore } from '@/store/ui';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useLensBridge } from '@/lib/hooks/use-lens-bridge';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   Lightbulb, Plus, Search, Database, ArrowRight, Brain,
-  Filter, X, RefreshCw, ChevronDown, ChevronRight,
-  Tag, Copy, BarChart3, Network, Eye, Layers,
+  X, RefreshCw, ChevronDown,
+  Tag, Copy, BarChart3, Network, Eye, Layers, CheckCircle2, Shield,
 } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -82,11 +84,17 @@ export default function CommonsenseLensPage() {
       setObject('');
       setShowAddForm(false);
     },
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
 
   const queryFacts = useMutation({
     mutationFn: () => apiHelpers.commonsense.query({ query: queryText }),
     onSuccess: (res) => setResults(res.data),
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
 
   const rawFacts: Fact[] = useMemo(() => {
@@ -191,7 +199,7 @@ export default function CommonsenseLensPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="commonsense" className="p-6 space-y-6">
       {/* Header */}
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -235,6 +243,38 @@ export default function CommonsenseLensPage() {
 
       {/* AI Actions */}
       <UniversalActions domain="commonsense" artifactId={bridge.selectedId} compact />
+
+      {/* Quick Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Database className="w-5 h-5 text-neon-blue" />
+          <div>
+            <p className="text-lg font-bold">{rawFacts.length}</p>
+            <p className="text-xs text-gray-500">Facts Cataloged</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <CheckCircle2 className="w-5 h-5 text-neon-green" />
+          <div>
+            <p className="text-lg font-bold">{rawFacts.length > 0 ? `${((rawFacts.filter(f => (f.confidence ?? 1) > 0.7).length / rawFacts.length) * 100).toFixed(0)}%` : '0%'}</p>
+            <p className="text-xs text-gray-500">Verification Rate</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 2 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Shield className="w-5 h-5 text-neon-purple" />
+          <div>
+            <p className="text-lg font-bold">{relationStats.length}</p>
+            <p className="text-xs text-gray-500">Categories</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 3 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Brain className="w-5 h-5 text-neon-cyan" />
+          <div>
+            <p className="text-lg font-bold">{topSubjects.length}</p>
+            <p className="text-xs text-gray-500">Unique Subjects</p>
+          </div>
+        </motion.div>
+      </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -403,8 +443,11 @@ export default function CommonsenseLensPage() {
                     const isCopied = copiedId === (f.id || `${f.subject} ${f.relation} ${f.object}`);
                     const isSelected = selectedFact === f;
                     return (
-                      <div
+                      <motion.div
                         key={key}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.05 }}
                         className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
                           isSelected ? 'bg-neon-blue/10 border border-neon-blue/20' : 'hover:bg-lattice-elevated'
                         }`}
@@ -425,7 +468,7 @@ export default function CommonsenseLensPage() {
                         >
                           <Copy className="w-3 h-3" />
                         </button>
-                      </div>
+                      </motion.div>
                     );
                   })}
                 </div>

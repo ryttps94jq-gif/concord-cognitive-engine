@@ -345,7 +345,7 @@ export function createLoRaBridge(bleManager: BLEManager): LoRaBridge {
       });
 
       // Trigger async queue processing
-      processQueue().catch(() => {});
+      processQueue().catch(err => console.error('[lora-bridge] queue processing failed:', err));
       return true;
     },
 

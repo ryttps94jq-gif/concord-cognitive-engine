@@ -1,5 +1,6 @@
 'use client';
 
+import { motion } from 'framer-motion';
 import { useState, useMemo, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
@@ -694,11 +695,11 @@ export default function HouseholdLensPage() {
           </div>
         ) : (
           <div className={ds.grid3}>
-            {filtered.map(item => {
+            {filtered.map((item, index) => {
               const d = item.data as unknown as Chore;
               const isComplete = item.meta.status === 'completed';
               return (
-                <div key={item.id} className={cn(ds.panelHover, isComplete && 'opacity-60')}>
+                <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className={cn(ds.panelHover, isComplete && 'opacity-60')}>
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex items-center gap-2">
                       <button onClick={() => toggleChoreComplete(item)} className={cn(
@@ -729,7 +730,7 @@ export default function HouseholdLensPage() {
                     <button className={cn(ds.btnGhost, ds.btnSmall)} onClick={() => openEdit(item)}><Edit3 className="w-3.5 h-3.5" /></button>
                     <button className={cn(ds.btnDanger, ds.btnSmall)} onClick={() => handleDelete(item.id)}><Trash2 className="w-3.5 h-3.5" /></button>
                   </div>
-                </div>
+                </motion.div>
               );
             })}
           </div>
@@ -1558,7 +1559,7 @@ export default function HouseholdLensPage() {
   }
 
   return (
-    <div className={ds.pageContainer}>
+    <div data-lens-theme="household" className={ds.pageContainer}>
       {/* Header */}
       <header className={ds.sectionHeader}>
         <div className="flex items-center gap-3">
@@ -1573,6 +1574,24 @@ export default function HouseholdLensPage() {
         </div>
       </header>
 
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Rooms', value: maintenanceItems.length, icon: Home },
+          { label: 'Chores Pending', value: choreItems.filter(c => c.meta?.status !== 'completed').length, icon: CheckSquare },
+          { label: 'Bills Due', value: items.filter(i => (i.data as Record<string, unknown>).type === 'BudgetEntry' && i.meta?.status === 'planned').length, icon: CreditCard },
+          { label: 'Family', value: familyItems.length, icon: Users },
+        ].map((stat) => (
+          <div key={stat.label} className={ds.panel + ' flex items-center gap-3 p-3'}>
+            <stat.icon className="w-5 h-5 text-neon-cyan shrink-0" />
+            <div>
+              <p className="text-xs text-gray-400">{stat.label}</p>
+              <p className="text-lg font-bold text-white">{stat.value}</p>
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* AI Actions */}
       <UniversalActions domain="household" artifactId={familyItems[0]?.id} compact />

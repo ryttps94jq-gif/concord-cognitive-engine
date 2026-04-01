@@ -182,6 +182,17 @@ const DOMAIN_TAG_MAP = Object.freeze({
   studio: ["production", "daw", "mix", "master", "recording", "beatmaking"],
   trades: ["construction", "plumbing", "electrical", "contractor", "hvac"],
   vote: ["poll", "election", "ballot", "referendum", "consensus"],
+  defense: ["military", "operations", "intelligence", "personnel", "assets", "tactical"],
+  space: ["orbit", "satellite", "mission", "launch", "telemetry", "rocket"],
+  ocean: ["maritime", "vessel", "marine", "port", "research", "conservation"],
+  desert: ["expedition", "climate", "arid", "sand", "oasis", "resource"],
+  "urban-planning": ["zoning", "infrastructure", "transit", "development", "permit", "density"],
+  telecommunications: ["network", "tower", "spectrum", "fiber", "5G", "bandwidth"],
+  mining: ["extraction", "geology", "ore", "mineral", "safety", "drill"],
+  forestry: ["timber", "stand", "harvest", "fire", "replanting", "conservation"],
+  veterinary: ["animal", "patient", "clinic", "vaccination", "surgery", "species"],
+  "law-enforcement": ["case", "incident", "officer", "evidence", "patrol", "warrant"],
+  "emergency-services": ["dispatch", "fire", "ems", "rescue", "hazmat", "triage"],
 });
 
 // ── Manifest Operations ──────────────────────────────────────────────────

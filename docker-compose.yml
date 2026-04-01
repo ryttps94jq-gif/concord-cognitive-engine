@@ -52,10 +52,7 @@ services:
       - REFRESH_TOKEN_EXPIRES=${REFRESH_TOKEN_EXPIRES:-30d}
       - BCRYPT_ROUNDS=${BCRYPT_ROUNDS:-12}
       - ALLOW_REGISTRATION=${ALLOW_REGISTRATION:-true}
-      # LLM — set OPENAI_API_KEY in .env for AI features
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - OPENAI_MODEL_FAST=${OPENAI_MODEL_FAST:-gpt-4o-mini}
-      - OPENAI_MODEL_SMART=${OPENAI_MODEL_SMART:-gpt-4.1}
+      # LLM — all local via Ollama brains (no cloud API keys needed)
       # Stripe — set these in .env to enable payments
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}

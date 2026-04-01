@@ -81,7 +81,7 @@ function UniversalLensFeatures({ children }: { children: React.ReactNode }) {
           <SmartContextBar domain={slug} domainLabel={label} />
         </div>
         <div className="flex-shrink-0 pr-2">
-          <ExportMenu domain={slug} domainLabel={label} />
+          <ExportMenu domain={slug} />
         </div>
       </div>
 

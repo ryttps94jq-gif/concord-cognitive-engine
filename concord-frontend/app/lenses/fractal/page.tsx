@@ -4,8 +4,9 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useState } from 'react';
+import { motion } from 'framer-motion';
 import { FractalEmpireExplorer } from '@/components/graphs/FractalEmpireExplorer';
-import { Layers, ZoomIn, ZoomOut, RotateCcw, Maximize } from 'lucide-react';
+import { Layers, ZoomIn, ZoomOut, RotateCcw, Maximize, GitBranch, Infinity } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -50,7 +51,7 @@ export default function FractalLensPage() {
     );
   }
   return (
-    <div className="p-6 space-y-6 h-full flex flex-col">
+    <div data-lens-theme="fractal" className="p-6 space-y-6 h-full flex flex-col">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-2xl">🌀</span>
@@ -87,6 +88,22 @@ export default function FractalLensPage() {
           </button>
         </div>
       </header>
+
+      {/* Stats Row */}
+      <div className="grid grid-cols-3 gap-4">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 }} className="panel p-3 flex items-center gap-3">
+          <GitBranch className="w-5 h-5 text-neon-purple" />
+          <div><p className="text-lg font-bold">{fractalData?.nodes?.length || 0}</p><p className="text-xs text-gray-400">Patterns</p></div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Infinity className="w-5 h-5 text-neon-cyan" />
+          <div><p className="text-lg font-bold">{fractalData?.currentDepth || 0}</p><p className="text-xs text-gray-400">Iterations</p></div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="panel p-3 flex items-center gap-3">
+          <Layers className="w-5 h-5 text-neon-green" />
+          <div><p className="text-lg font-bold">{((zoomLevel * 100) / 100).toFixed(1)}</p><p className="text-xs text-gray-400">Complexity Avg</p></div>
+        </motion.div>
+      </div>
 
       <RealtimeDataPanel domain="fractal" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <DTUExportButton domain="fractal" data={{}} compact />

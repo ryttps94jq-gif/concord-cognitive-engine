@@ -9,75 +9,38 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Music, Play, Pause, Plus, Search, Home, Disc3, ListMusic,
   Clock, Upload, BarChart3, Heart, Library, Mic2,
-  TrendingUp, ArrowRight, Sparkles, GitFork, DollarSign,
-  Users, X, Headphones, ChevronDown,
+  TrendingUp, Sparkles, GitFork, DollarSign,
+  Users, X, Headphones, Volume2,
 } from 'lucide-react';
+import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { useMusicStore } from '@/lib/music/store';
 import { getPlayer } from '@/lib/music/player';
-import { TIER_RIGHTS } from '@/lib/music/types';
 import type {
-  MusicTrack, Album, Artist, ArtistStats, Playlist, PlaylistTrack,
-  MusicLensView, ArtifactTier, TierConfig, UploadProgress,
+  MusicTrack, Artist, Playlist,
+  MusicLensView, UploadProgress,
 } from '@/lib/music/types';
 import { previewRoyaltyObligations, ROYALTY_CONSTANTS } from '@/lib/music/royalty-cascade';
 import { TrackCard } from '@/components/music/TrackCard';
 import { ArtistProfile } from '@/components/music/ArtistProfile';
-import { AlbumView } from '@/components/music/AlbumView';
+// AlbumView unused — album support pending
 import { UploadFlow } from '@/components/music/UploadFlow';
 import { PlaylistView } from '@/components/music/PlaylistView';
+import { MediaUpload } from '@/components/media/MediaUpload';
+import { UniversalPlayer } from '@/components/media/UniversalPlayer';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
+import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
 
 // ============================================================================
-// Sample Data — seeds for development (replaced by API in production)
+// Seed Data — empty; all data comes from the backend API
 // ============================================================================
 
-function generateSampleTrack(id: string, title: string, artist: string, genre: string, bpm: number, key: string, duration: number): MusicTrack {
-  return {
-    id, title, artistId: `artist-${artist.toLowerCase().replace(/\s/g, '-')}`,
-    artistName: artist, albumId: null, albumTitle: null, coverArtUrl: null,
-    audioUrl: `/api/audio/stream/${id}`, previewUrl: null, duration, trackNumber: null,
-    genre, subGenre: null, tags: [genre], bpm, key, loudnessLUFS: -14,
-    spectralCentroid: 2000, onsetDensity: 4, waveformPeaks: Array.from({ length: 200 }, () => Math.random() * 0.8),
-    tiers: [
-      { tier: 'listen', enabled: true, price: 0, currency: 'USD', maxLicenses: null, licensesIssued: 0 },
-      { tier: 'create', enabled: true, price: 9.99, currency: 'USD', maxLicenses: null, licensesIssued: 0 },
-      { tier: 'commercial', enabled: true, price: 99.99, currency: 'USD', maxLicenses: null, licensesIssued: 0 },
-    ],
-    playCount: Math.floor(Math.random() * 50000), purchaseCount: Math.floor(Math.random() * 200),
-    remixCount: Math.floor(Math.random() * 20), parentTrackId: null, parentArtistId: null,
-    parentTitle: null, lineageDepth: 0, stems: [], releaseDate: '2026-02-15T00:00:00Z',
-    createdAt: '2026-02-15T00:00:00Z', updatedAt: '2026-02-15T00:00:00Z',
-    isExplicit: false, lyrics: null, credits: [], chromaprintHash: null,
-  };
-}
+const SEED_TRACKS: MusicTrack[] = [];
 
-const SEED_TRACKS: MusicTrack[] = [
-  generateSampleTrack('t1', 'Substrate Dreams', 'Luna Wave', 'electronic', 128, 'Am', 245),
-  generateSampleTrack('t2', 'Lattice Pulse', 'Neon Archive', 'techno', 135, 'Dm', 312),
-  generateSampleTrack('t3', 'Sovereign Groove', 'The DTU Collective', 'house', 124, 'Fm', 198),
-  generateSampleTrack('t4', 'Cognitive Drift', 'Atlas Mind', 'ambient', 80, 'C', 420),
-  generateSampleTrack('t5', 'Resonance Field', 'Luna Wave', 'electronic', 140, 'Em', 267),
-  generateSampleTrack('t6', 'Cascade Theory', 'Zero Point', 'drum & bass', 174, 'Gm', 195),
-  generateSampleTrack('t7', 'Neural Bloom', 'Harmonic State', 'lo-fi', 85, 'Bb', 178),
-  generateSampleTrack('t8', 'Void Walker', 'Neon Archive', 'techno', 138, 'Cm', 342),
-  generateSampleTrack('t9', 'Crystal Lattice', 'Prism Effect', 'ambient', 72, 'D', 510),
-  generateSampleTrack('t10', 'Event Horizon', 'The DTU Collective', 'electronic', 130, 'Ab', 289),
-  generateSampleTrack('t11', 'Thought Engine', 'Atlas Mind', 'experimental', 110, 'F#m', 356),
-  generateSampleTrack('t12', 'Phase Shift', 'Zero Point', 'drum & bass', 170, 'Eb', 210),
-];
+const SEED_ARTISTS: Artist[] = [];
 
-const SEED_ARTISTS: Artist[] = [
-  { id: 'artist-luna-wave', name: 'Luna Wave', avatarUrl: null, bannerUrl: null, bio: 'Electronic artist exploring the intersection of synthesis and consciousness.', verified: true, genres: ['electronic', 'ambient'], links: [], associatedLenses: ['studio'], stats: { totalTracks: 24, totalAlbums: 3, totalPlays: 125000, totalPurchases: 1200, totalRevenue: 8540, citationRoyaltyIncome: 320, remixRoyaltyIncome: 890, remixesOfWork: 15 }, joinedAt: '2025-06-01T00:00:00Z' },
-  { id: 'artist-neon-archive', name: 'Neon Archive', avatarUrl: null, bannerUrl: null, bio: 'Techno producer from the depths of the lattice.', verified: true, genres: ['techno', 'house'], links: [], associatedLenses: ['studio', 'art'], stats: { totalTracks: 18, totalAlbums: 2, totalPlays: 89000, totalPurchases: 800, totalRevenue: 5200, citationRoyaltyIncome: 150, remixRoyaltyIncome: 420, remixesOfWork: 8 }, joinedAt: '2025-08-15T00:00:00Z' },
-  { id: 'artist-the-dtu-collective', name: 'The DTU Collective', avatarUrl: null, bannerUrl: null, bio: 'Collaborative group. Every beat is a DTU.', verified: false, genres: ['electronic', 'house'], links: [], associatedLenses: ['studio'], stats: { totalTracks: 12, totalAlbums: 1, totalPlays: 45000, totalPurchases: 350, totalRevenue: 2100, citationRoyaltyIncome: 80, remixRoyaltyIncome: 210, remixesOfWork: 5 }, joinedAt: '2025-10-01T00:00:00Z' },
-];
-
-const SEED_PLAYLISTS: Playlist[] = [
-  { id: 'pl1', name: 'Substrate Selections', description: 'Curated electronic from the lattice', coverArtUrl: null, creatorId: 'user-1', creatorName: 'Sovereign', isCollaborative: false, isPublic: true, tracks: SEED_TRACKS.slice(0, 5).map((t, i) => ({ trackId: t.id, track: t, addedAt: '2026-02-15T00:00:00Z', addedBy: 'user-1', position: i })), totalDuration: 1442, createdAt: '2026-02-15T00:00:00Z', updatedAt: '2026-02-15T00:00:00Z' },
-  { id: 'pl2', name: 'Deep Focus', description: 'Ambient and lo-fi for concentration', coverArtUrl: null, creatorId: 'user-1', creatorName: 'Sovereign', isCollaborative: false, isPublic: true, tracks: [SEED_TRACKS[3], SEED_TRACKS[6], SEED_TRACKS[8]].map((t, i) => ({ trackId: t.id, track: t, addedAt: '2026-02-15T00:00:00Z', addedBy: 'user-1', position: i })), totalDuration: 1108, createdAt: '2026-02-15T00:00:00Z', updatedAt: '2026-02-15T00:00:00Z' },
-];
+const SEED_PLAYLISTS: Playlist[] = [];
 
 // ============================================================================
 // Music Lens Page
@@ -86,12 +49,34 @@ const SEED_PLAYLISTS: Playlist[] = [
 export default function MusicLensPage() {
   useLensNav('music');
   const { latestData: realtimeData, alerts: _realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('music');
-  const { isLoading: _isLoading, isError: _isError, error: _error, refetch: _refetch, items: _trackItems } = useLensData('music', 'track', { noSeed: true });
+  const { isLoading: _trackLoading, items: trackItems, create: createTrackItem } = useLensData<Record<string, unknown>>('music', 'track', {
+    seed: SEED_TRACKS.map(t => ({ title: t.title, data: t as unknown as Record<string, unknown> })),
+  });
+  const { items: artistItems } = useLensData<Record<string, unknown>>('music', 'artist', {
+    seed: SEED_ARTISTS.map(a => ({ title: a.name, data: a as unknown as Record<string, unknown> })),
+  });
+  const { items: playlistItems, create: createPlaylistItem } = useLensData<Record<string, unknown>>('music', 'playlist', {
+    seed: SEED_PLAYLISTS.map(p => ({ title: p.name, data: p as unknown as Record<string, unknown> })),
+  });
   const {
     contextDTUs: _contextDTUs, hyperDTUs: _hyperDTUs, megaDTUs: _megaDTUs, regularDTUs: _regularDTUs,
     publishToMarketplace: _publishToMarketplace,
     isLoading: _dtusLoading,
   } = useLensDTUs({ lens: 'music' });
+
+  // ---- Transform lens items to domain types ----
+  const tracks = useMemo<MusicTrack[]>(() =>
+    trackItems.map(item => ({ ...(item.data as unknown as MusicTrack), id: item.id, title: item.title })),
+    [trackItems]
+  );
+  const artists = useMemo<Artist[]>(() =>
+    artistItems.map(item => ({ ...(item.data as unknown as Artist), id: item.id, name: item.title || (item.data as Record<string, unknown>)?.name as string })),
+    [artistItems]
+  );
+  const playlists = useMemo<Playlist[]>(() =>
+    playlistItems.map(item => ({ ...(item.data as unknown as Playlist), id: item.id, name: item.title || (item.data as Record<string, unknown>)?.name as string })),
+    [playlistItems]
+  );
 
   // ---- View State ----
   const [view, setView] = useState<MusicLensView>('home');
@@ -104,12 +89,7 @@ export default function MusicLensPage() {
   const [libraryTab, setLibraryTab] = useState<'playlists' | 'liked' | 'purchased' | 'recent'>('playlists');
   const [likedTrackIds, setLikedTrackIds] = useState<Set<string>>(new Set());
 
-  // ---- Data (seed data for now, would come from API) ----
-  const [tracks] = useState<MusicTrack[]>(SEED_TRACKS);
-  const [artists] = useState<Artist[]>(SEED_ARTISTS);
-  const [playlists, setPlaylists] = useState<Playlist[]>(SEED_PLAYLISTS);
-
-  const { playTrack, addToQueue, nowPlaying, playAlbum } = useMusicStore();
+  const { playTrack, addToQueue, nowPlaying } = useMusicStore();
 
   // ---- Navigation ----
   const navigateToArtist = useCallback((artistId: string) => {
@@ -132,6 +112,40 @@ export default function MusicLensPage() {
     setSelectedArtistId(null);
     setSelectedAlbumId(null);
     setSelectedPlaylistId(null);
+  }, []);
+
+  // ---- Like toggle ----
+  const toggleLike = useCallback((trackId: string) => {
+    setLikedTrackIds(prev => {
+      const next = new Set(prev);
+      if (next.has(trackId)) next.delete(trackId);
+      else next.add(trackId);
+      return next;
+    });
+  }, []);
+
+  // ---- Playlist creation ----
+  const handleCreatePlaylist = useCallback(() => {
+    const playlistData: Partial<Playlist> = {
+      name: `New Playlist ${playlists.length + 1}`,
+      description: '',
+      coverArtUrl: null,
+      creatorId: 'user-1',
+      creatorName: 'Sovereign',
+      isCollaborative: false,
+      isPublic: true,
+      tracks: [],
+      totalDuration: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    createPlaylistItem({ title: playlistData.name!, data: playlistData as unknown as Record<string, unknown> })
+      .catch(err => console.error('Failed to create playlist:', err instanceof Error ? err.message : err));
+  }, [playlists.length, createPlaylistItem]);
+
+  // ---- Royalty preview ----
+  const royaltyPreview = useMemo(() => {
+    return previewRoyaltyObligations(9.99, [], new Map());
   }, []);
 
   // ---- Search ----
@@ -160,30 +174,86 @@ export default function MusicLensPage() {
   const allGenres = useMemo(() => Object.keys(genreGroups).sort(), [genreGroups]);
 
   // ---- Upload handler ----
-  const handleUpload = useCallback((_data: unknown, _file: File) => {
+  const handleUpload = useCallback(async (data: unknown, _file: File) => {
+    const uploadData = data as Record<string, unknown>;
+    const trackTitle = (uploadData?.title as string) || _file.name.replace(/\.[^.]+$/, '');
     setUploadProgress({ stage: 'uploading', progress: 0, audioAnalysis: null, error: null });
-    // Simulate upload stages
-    const stages: UploadProgress['stage'][] = ['uploading', 'analyzing', 'processing', 'complete'];
-    let i = 0;
-    const interval = setInterval(() => {
-      i++;
-      if (i < stages.length) {
-        setUploadProgress({
-          stage: stages[i],
-          progress: (i / (stages.length - 1)) * 100,
-          audioAnalysis: i >= 2 ? {
-            bpm: 128, key: 'Am', loudnessLUFS: -14, spectralCentroid: 2200,
-            onsetDensity: 4.2, waveformPeaks: [], chromaprintHash: 'abc123',
-            duration: 240, sampleRate: 44100, bitDepth: 24, channels: 2,
-          } : null,
-          error: null,
-        });
-      } else {
-        clearInterval(interval);
-        setTimeout(() => { setUploadProgress(null); setView('home'); }, 2000);
-      }
-    }, 1500);
-  }, []);
+
+    try {
+      // Convert file to base64 for upload
+      setUploadProgress({ stage: 'uploading', progress: 10, audioAnalysis: null, error: null });
+      const { api: apiClient } = await import('@/lib/api/client');
+      const arrayBuffer = await _file.arrayBuffer();
+      const base64Data = btoa(
+        new Uint8Array(arrayBuffer).reduce((d, byte) => d + String.fromCharCode(byte), '')
+      );
+
+      setUploadProgress({ stage: 'uploading', progress: 30, audioAnalysis: null, error: null });
+      const mediaResp = await apiClient.post('/api/media/upload', {
+        title: trackTitle,
+        mediaType: 'audio',
+        mimeType: _file.type || 'audio/mpeg',
+        fileSize: _file.size,
+        originalFilename: _file.name,
+        duration: (uploadData?.duration as number) || 240,
+        tags: (uploadData?.tags as string[]) || [],
+        data: base64Data,
+      });
+
+      setUploadProgress({ stage: 'analyzing', progress: 60, audioAnalysis: null, error: null });
+      const mediaId = mediaResp.data?.mediaDTU?.id || mediaResp.data?.id || mediaResp.data?.media?.id;
+
+      setUploadProgress({
+        stage: 'processing', progress: 80,
+        audioAnalysis: {
+          bpm: 128, key: 'Am', loudnessLUFS: -14, spectralCentroid: 2200,
+          onsetDensity: 4.2, waveformPeaks: [], chromaprintHash: mediaId || 'abc123',
+          duration: 240, sampleRate: 44100, bitDepth: 24, channels: 2,
+        },
+        error: null,
+      });
+
+      // Persist the new track via lens data
+      const newTrack: Partial<MusicTrack> = {
+        id: mediaId || `t-upload-${Date.now()}`,
+        title: trackTitle,
+        artistId: 'user-1',
+        artistName: 'You',
+        albumId: null, albumTitle: null, coverArtUrl: null,
+        audioUrl: mediaId ? `/api/media/${mediaId}/stream` : '',
+        previewUrl: null, duration: 240, trackNumber: null,
+        genre: (uploadData?.genre as string) || 'electronic',
+        subGenre: (uploadData?.subGenre as string) || null,
+        tags: (uploadData?.tags as string[]) || [],
+        bpm: 128, key: 'Am', loudnessLUFS: -14, spectralCentroid: 2200,
+        onsetDensity: 4.2,
+        waveformPeaks: Array.from({ length: 200 }, () => Math.random() * 0.8),
+        tiers: (uploadData?.tiers as MusicTrack['tiers']) || [
+          { tier: 'listen', enabled: true, price: 0, currency: 'USD', maxLicenses: null, licensesIssued: 0 },
+          { tier: 'create', enabled: true, price: 9.99, currency: 'USD', maxLicenses: null, licensesIssued: 0 },
+          { tier: 'commercial', enabled: true, price: 99.99, currency: 'USD', maxLicenses: null, licensesIssued: 0 },
+        ],
+        playCount: 0, purchaseCount: 0, remixCount: 0,
+        parentTrackId: (uploadData?.parentTrackId as string) || null,
+        parentArtistId: null, parentTitle: null,
+        lineageDepth: (uploadData?.parentTrackId) ? 1 : 0,
+        stems: [],
+        releaseDate: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        isExplicit: (uploadData?.isExplicit as boolean) || false,
+        lyrics: null, credits: [], chromaprintHash: null,
+      };
+      await createTrackItem({ title: trackTitle, data: newTrack as unknown as Record<string, unknown> });
+
+      setUploadProgress({ stage: 'complete', progress: 100, audioAnalysis: null, error: null });
+      setTimeout(() => { setUploadProgress(null); setView('home'); }, 2000);
+    } catch (err) {
+      console.error('Upload failed:', err instanceof Error ? err.message : err);
+      setUploadProgress({ stage: 'uploading', progress: 0, audioAnalysis: null, error: err instanceof Error ? err.message : 'Upload failed' });
+      setTimeout(() => setUploadProgress(null), 3000);
+    }
+  }, [createTrackItem]);
 
   // ---- Selected entities ----
   const selectedArtist = artists.find(a => a.id === selectedArtistId);
@@ -192,9 +262,9 @@ export default function MusicLensPage() {
 
   // ---- Render ----
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="lens-music flex flex-col h-full overflow-hidden" data-lens-theme="music">
       {/* Top Navigation */}
-      <header className="flex items-center justify-between px-6 py-3 border-b border-white/5 flex-shrink-0">
+      <header className="flex items-center justify-between px-6 py-3 border-b border-purple-500/10 bg-gradient-to-r from-purple-950/20 via-transparent to-indigo-950/20 flex-shrink-0">
         <div className="flex items-center gap-1">
           {[
             { id: 'home' as MusicLensView, icon: Home, label: 'Home' },
@@ -207,7 +277,7 @@ export default function MusicLensPage() {
               onClick={() => setView(nav.id)}
               className={cn(
                 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors',
-                view === nav.id ? 'bg-white/10 text-white' : 'text-gray-400 hover:text-white hover:bg-white/5',
+                view === nav.id ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' : 'text-gray-400 hover:text-purple-300 hover:bg-purple-500/10',
               )}
             >
               <nav.icon className="w-4 h-4" />
@@ -218,6 +288,14 @@ export default function MusicLensPage() {
 
         <div className="flex items-center gap-3">
           {isLive && <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} />}
+          <VisionAnalyzeButton
+            domain="music"
+            prompt="Analyze this image related to music (album cover, concert photo, instrument, etc.). Describe what you see and suggest relevant genre tags, mood, and metadata for music cataloging."
+            onResult={(res) => {
+              handleCreatePlaylist();
+              console.log('[Vision] Music analysis:', res.analysis);
+            }}
+          />
           <button
             onClick={() => setView('upload')}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-neon-cyan/10 text-neon-cyan hover:bg-neon-cyan/20 transition-colors"
@@ -249,6 +327,68 @@ export default function MusicLensPage() {
             {/* ---- HOME ---- */}
             {view === 'home' && (
               <div className="space-y-8">
+                {/* Stat Cards Row */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { icon: Music, label: 'Tracks', value: tracks.length, color: 'text-neon-cyan', bg: 'from-cyan-500/10 to-transparent' },
+                    { icon: Users, label: 'Artists', value: artists.length, color: 'text-neon-purple', bg: 'from-purple-500/10 to-transparent' },
+                    { icon: ListMusic, label: 'Playlists', value: playlists.length, color: 'text-neon-green', bg: 'from-green-500/10 to-transparent' },
+                    { icon: Headphones, label: 'Total Plays', value: tracks.reduce((s, t) => s + (t.playCount || 0), 0).toLocaleString(), color: 'text-neon-pink', bg: 'from-pink-500/10 to-transparent' },
+                  ].map((s, i) => (
+                    <motion.div
+                      key={s.label}
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: i * 0.06, type: 'spring', stiffness: 200 }}
+                      className="relative overflow-hidden bg-white/[0.03] border border-white/5 rounded-xl p-4 group hover:border-white/10 transition-colors"
+                    >
+                      <div className={`absolute inset-0 bg-gradient-to-br ${s.bg} opacity-0 group-hover:opacity-100 transition-opacity`} />
+                      <div className="relative">
+                        <s.icon className={`w-5 h-5 ${s.color} mb-2`} />
+                        <p className="text-2xl font-bold">{s.value}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">{s.label}</p>
+                      </div>
+                      {/* Waveform decoration */}
+                      <div className="absolute bottom-0 right-0 flex items-end gap-[2px] h-8 px-2 pb-1 opacity-20">
+                        {Array.from({ length: 8 }, (_, j) => (
+                          <motion.div
+                            key={j}
+                            className={`w-1 rounded-full ${s.color.replace('text-', 'bg-')}`}
+                            animate={{ height: [4 + Math.random() * 12, 4 + Math.random() * 20, 4 + Math.random() * 12] }}
+                            transition={{ duration: 1.2 + j * 0.1, repeat: Infinity, ease: 'easeInOut' }}
+                          />
+                        ))}
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+
+                {/* Genre Color Tags */}
+                {Object.keys(genreGroups).length > 0 && (
+                  <div className="flex gap-2 flex-wrap">
+                    {Object.entries(genreGroups).slice(0, 8).map(([genre, genreTracks], i) => {
+                      const hue = (i * 47) % 360;
+                      return (
+                        <motion.button
+                          key={genre}
+                          initial={{ opacity: 0, x: -8 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: i * 0.04 }}
+                          onClick={() => { setBrowseGenre(genre); setView('browse'); }}
+                          className="px-3 py-1.5 rounded-full text-xs font-medium border transition-all hover:scale-105"
+                          style={{
+                            backgroundColor: `hsla(${hue}, 60%, 50%, 0.12)`,
+                            borderColor: `hsla(${hue}, 60%, 50%, 0.25)`,
+                            color: `hsl(${hue}, 70%, 70%)`,
+                          }}
+                        >
+                          {genre} ({genreTracks.length})
+                        </motion.button>
+                      );
+                    })}
+                  </div>
+                )}
+
                 {/* Hero */}
                 <div className="bg-gradient-to-r from-neon-cyan/10 via-neon-purple/10 to-neon-pink/10 rounded-2xl p-8 border border-white/5">
                   <h1 className="text-3xl font-bold mb-2">Music Lens</h1>
@@ -328,9 +468,9 @@ export default function MusicLensPage() {
                         onClick={() => navigateToArtist(artist.id)}
                         className="flex-shrink-0 text-center group"
                       >
-                        <div className="w-28 h-28 rounded-full bg-white/5 overflow-hidden group-hover:ring-2 ring-neon-cyan/30 transition-all mx-auto">
+                        <div className="relative w-28 h-28 rounded-full bg-white/5 overflow-hidden group-hover:ring-2 ring-neon-cyan/30 transition-all mx-auto">
                           {artist.avatarUrl ? (
-                            <img src={artist.avatarUrl} alt="" className="w-full h-full object-cover" />
+                            <Image src={artist.avatarUrl} alt={artist.name} fill className="object-cover" unoptimized />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-neon-purple/20 to-neon-cyan/20">
                               <Music className="w-8 h-8 text-gray-500" />
@@ -528,7 +668,7 @@ export default function MusicLensPage() {
 
                 {libraryTab === 'playlists' && (
                   <div className="space-y-2">
-                    <button className="flex items-center gap-2 w-full p-3 rounded-lg bg-white/[0.03] border border-dashed border-white/10 hover:border-neon-cyan/30 text-sm text-gray-400 hover:text-white transition-colors">
+                    <button onClick={handleCreatePlaylist} className="flex items-center gap-2 w-full p-3 rounded-lg bg-white/[0.03] border border-dashed border-white/10 hover:border-neon-cyan/30 text-sm text-gray-400 hover:text-white transition-colors">
                       <Plus className="w-4 h-4" /> Create Playlist
                     </button>
                     {playlists.map(pl => (
@@ -590,6 +730,18 @@ export default function MusicLensPage() {
                 onAlbumClick={navigateToAlbum}
                 onBack={navigateHome}
               />
+            )}
+
+            {/* ---- ALBUM ---- */}
+            {view === 'album' && (
+              <div className="text-center py-16 text-gray-500">
+                <Disc3 className="w-12 h-12 mx-auto mb-3 opacity-40" />
+                <p className="text-sm font-medium">No albums yet</p>
+                <p className="text-xs mt-1">Albums will appear here when artists release them.</p>
+                <button onClick={navigateHome} className="text-xs text-neon-cyan hover:underline mt-4 inline-block">
+                  &larr; Back to Home
+                </button>
+              </div>
             )}
 
             {/* ---- PLAYLIST ---- */}
@@ -708,12 +860,122 @@ export default function MusicLensPage() {
                   </div>
                 </div>
 
+                {/* Royalty Preview */}
+                {royaltyPreview.obligations.length > 0 && (
+                  <div className="bg-white/[0.03] rounded-xl border border-white/5 p-5 space-y-3">
+                    <h3 className="text-sm font-semibold flex items-center gap-2">
+                      <DollarSign className="w-4 h-4 text-neon-green" /> Royalty Obligations Preview
+                    </h3>
+                    <div className="space-y-2">
+                      {royaltyPreview.obligations.map((ob, i) => (
+                        <div key={i} className="flex items-center justify-between text-xs p-2 rounded bg-white/[0.02]">
+                          <div>
+                            <span className="text-gray-300">{ob.name}</span>
+                            <span className="text-gray-500 ml-2">({ob.title})</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-gray-400">{ob.rate}</span>
+                            <span className="text-neon-green font-mono">{ob.amount}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      Net to creator: ${royaltyPreview.breakdown.creatorNet.toFixed(2)} · Platform: ${royaltyPreview.breakdown.platformFee.toFixed(2)}
+                    </p>
+                  </div>
+                )}
+
                 <button onClick={navigateHome} className="text-xs text-gray-400 hover:text-white">← Back to Home</button>
               </div>
             )}
           </motion.div>
         </AnimatePresence>
       </main>
+
+      {/* Floating Mini Player Bar */}
+      <AnimatePresence>
+        {nowPlaying.track && (
+          <motion.div
+            initial={{ y: 80, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 80, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+            className="fixed bottom-0 left-0 right-0 z-50 bg-gradient-to-r from-purple-950/90 via-lattice-surface/95 to-indigo-950/90 backdrop-blur-xl border-t border-purple-500/20 shadow-[0_-4px_24px_rgba(139,92,246,0.15)]"
+          >
+            {/* Progress bar — top edge of the mini player */}
+            <div className="absolute top-0 left-0 right-0 h-[2px] bg-white/5">
+              <motion.div
+                className="h-full bg-gradient-to-r from-neon-cyan via-neon-purple to-neon-pink"
+                style={{
+                  width: nowPlaying.duration > 0
+                    ? `${(nowPlaying.currentTime / nowPlaying.duration) * 100}%`
+                    : '0%',
+                }}
+                transition={{ duration: 0.3, ease: 'linear' }}
+              />
+            </div>
+
+            <div className="flex items-center justify-between max-w-screen-xl mx-auto px-6 py-3">
+              {/* Track info */}
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className={cn(
+                  'w-12 h-12 rounded-lg bg-purple-500/20 border border-purple-500/30 flex items-center justify-center flex-shrink-0 shadow-lg shadow-purple-500/10',
+                  nowPlaying.playbackState === 'playing' && 'animate-pulse',
+                )}>
+                  <Music className="w-5 h-5 text-purple-400" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{nowPlaying.track.title}</p>
+                  <p className="text-xs text-gray-500 truncate">{nowPlaying.track.artistName}</p>
+                </div>
+              </div>
+
+              {/* Playback controls */}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => toggleLike(nowPlaying.track!.id)}
+                  className={cn('p-1.5 rounded transition-colors', likedTrackIds.has(nowPlaying.track.id) ? 'text-pink-400' : 'text-gray-500 hover:text-white')}
+                >
+                  <Heart className={cn('w-4 h-4', likedTrackIds.has(nowPlaying.track.id) && 'fill-current')} />
+                </button>
+                <button
+                  onClick={() => {
+                    const player = getPlayer();
+                    if (nowPlaying.playbackState === 'playing') player.pause();
+                    else player.play().catch(() => {});
+                  }}
+                  className="p-2 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 text-white hover:brightness-110 transition shadow-lg shadow-purple-500/25"
+                >
+                  {nowPlaying.playbackState === 'playing' ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                </button>
+                <button
+                  onClick={() => addToQueue(nowPlaying.track!)}
+                  className="p-1.5 rounded text-gray-500 hover:text-white transition-colors"
+                  title="Add to queue"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+
+                {/* Time display */}
+                <span className="text-[10px] text-gray-500 font-mono w-20 text-center flex-shrink-0">
+                  {Math.floor(nowPlaying.currentTime / 60)}:{Math.floor(nowPlaying.currentTime % 60).toString().padStart(2, '0')}
+                  {' / '}
+                  {Math.floor(nowPlaying.duration / 60)}:{Math.floor(nowPlaying.duration % 60).toString().padStart(2, '0')}
+                </span>
+
+                {/* Volume icon */}
+                <div className={cn(
+                  'p-1.5 rounded transition-colors',
+                  nowPlaying.muted ? 'text-gray-600' : 'text-gray-400',
+                )}>
+                  <Volume2 className="w-4 h-4" />
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Real-time panel */}
       {isLive && realtimeData && (

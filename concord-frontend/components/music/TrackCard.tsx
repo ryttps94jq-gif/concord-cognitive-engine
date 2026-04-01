@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import {
   Play, Pause, Plus, Heart, ShoppingCart, MoreHorizontal,
-  Music, Clock, Tag,
+  Music, Clock, Tag, Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useMusicStore } from '@/lib/music/store';
@@ -52,7 +53,29 @@ export function TrackCard({
   const isCurrentTrack = nowPlaying.track?.id === track.id;
   const isPlaying = isCurrentTrack && nowPlaying.playbackState === 'playing';
 
+  const [noAudioWarning, setNoAudioWarning] = useState(false);
+
   const handlePlay = () => {
+    // If the track has no audio URL, show a fallback warning and play a short tone
+    if (!track.audioUrl) {
+      setNoAudioWarning(true);
+      setTimeout(() => setNoAudioWarning(false), 3000);
+      // Play a short Web Audio API tone as fallback
+      try {
+        const ctx = new AudioContext();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = 440;
+        gain.gain.value = 0.15;
+        osc.start();
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+        osc.stop(ctx.currentTime + 0.5);
+        setTimeout(() => ctx.close(), 600);
+      } catch { /* Web Audio not available */ }
+      return;
+    }
     if (isCurrentTrack) {
       const player = getPlayer();
       if (isPlaying) player.pause();
@@ -69,11 +92,14 @@ export function TrackCard({
   // ---- Card Variant ----
   if (variant === 'card') {
     return (
-      <div className="group bg-white/[0.03] rounded-xl border border-white/5 hover:border-white/10 hover:bg-white/[0.05] transition-all overflow-hidden">
+      <div className={cn(
+        'group bg-white/[0.03] rounded-xl border border-white/5 hover:border-white/10 hover:bg-white/[0.05] transition-all overflow-hidden',
+        isPlaying && 'border-l-2 border-l-neon-cyan shadow-[inset_4px_0_12px_-4px_rgba(0,255,255,0.2)] ring-1 ring-neon-cyan/10',
+      )}>
         {/* Cover */}
         <div className="relative aspect-square bg-white/5 overflow-hidden">
           {track.coverArtUrl ? (
-            <img src={track.coverArtUrl} alt="" className="w-full h-full object-cover" />
+            <Image src={track.coverArtUrl} alt={track.title || 'Track cover'} fill className="object-cover" unoptimized />
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-neon-purple/20 to-neon-cyan/20">
               <Music className="w-12 h-12 text-gray-600" />
@@ -120,6 +146,11 @@ export function TrackCard({
                   <Tag className="w-3 h-3" /> {track.genre}
                 </span>
               )}
+              {track.bpm != null && (
+                <span className="inline-flex items-center gap-0.5 px-1.5 py-px rounded-full bg-neon-purple/10 text-neon-purple font-medium">
+                  <Activity className="w-2.5 h-2.5" /> {track.bpm}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-1">
               <button
@@ -133,6 +164,11 @@ export function TrackCard({
               </button>
             </div>
           </div>
+
+          {/* No audio fallback warning */}
+          {noAudioWarning && (
+            <p className="text-[10px] text-amber-400 pt-1">No audio file -- upload one</p>
+          )}
 
           {/* Tier badges */}
           {showTiers && (
@@ -165,15 +201,19 @@ export function TrackCard({
         className={cn(
           'group flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 transition-colors',
           isCurrentTrack && 'bg-white/5',
+          isPlaying && 'border-l-2 border-l-neon-cyan bg-neon-cyan/[0.04] shadow-[inset_4px_0_12px_-4px_rgba(0,255,255,0.15)]',
         )}
       >
         {/* Play button / track number */}
         <button
           onClick={handlePlay}
-          className="w-8 h-8 flex-shrink-0 flex items-center justify-center text-gray-500 group-hover:text-white transition-colors"
+          className="w-8 h-8 flex-shrink-0 flex items-center justify-center text-gray-500 group-hover:text-white transition-colors relative"
         >
           {isPlaying ? (
-            <Pause className="w-4 h-4 text-neon-cyan" />
+            <>
+              <span className="absolute inset-0 rounded-full bg-neon-cyan/20 animate-ping" />
+              <Pause className="w-4 h-4 text-neon-cyan relative z-10" />
+            </>
           ) : (
             <Play className="w-4 h-4" />
           )}
@@ -182,7 +222,7 @@ export function TrackCard({
         {/* Cover thumbnail */}
         <div className="w-10 h-10 rounded bg-white/5 overflow-hidden flex-shrink-0">
           {track.coverArtUrl ? (
-            <img src={track.coverArtUrl} alt="" className="w-full h-full object-cover" />
+            <Image src={track.coverArtUrl} alt={track.title || 'Track cover'} width={40} height={40} className="w-full h-full object-cover" unoptimized />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
               <Music className="w-4 h-4 text-gray-600" />
@@ -209,6 +249,9 @@ export function TrackCard({
               </span>
             )}
           </p>
+          {noAudioWarning && (
+            <p className="text-[10px] text-amber-400">No audio file -- upload one</p>
+          )}
         </div>
 
         {/* Lineage */}
@@ -227,6 +270,13 @@ export function TrackCard({
         <span className="text-xs text-gray-500 w-10 text-right flex-shrink-0 font-mono">
           {formatTime(track.duration)}
         </span>
+
+        {/* BPM badge */}
+        {track.bpm != null && (
+          <span className="flex-shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-neon-purple/10 text-neon-purple text-[10px] font-medium">
+            <Activity className="w-2.5 h-2.5" /> {track.bpm}
+          </span>
+        )}
 
         {/* Actions */}
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
@@ -279,6 +329,7 @@ export function TrackCard({
       className={cn(
         'flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/5 cursor-pointer transition-colors',
         isCurrentTrack && 'bg-white/5',
+        isPlaying && 'border-l-2 border-l-neon-cyan bg-neon-cyan/[0.04]',
       )}
       onClick={handlePlay}
     >

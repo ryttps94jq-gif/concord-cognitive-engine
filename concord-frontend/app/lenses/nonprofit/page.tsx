@@ -1,5 +1,6 @@
 'use client';
 
+import { motion } from 'framer-motion';
 import { useState, useMemo, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
@@ -281,6 +282,7 @@ export default function NonprofitLensPage() {
   };
 
   const handleGiftSave = async () => {
+    if (!giftDonor.trim() || !giftAmount.trim() || Number(giftAmount) <= 0) return;
     await create({
       title: `${giftDonor} - ${fmtCurrency(Number(giftAmount))}`,
       data: {
@@ -1382,7 +1384,7 @@ export default function NonprofitLensPage() {
   // Main Return
   // ---------------------------------------------------------------------------
   return (
-    <div className={ds.pageContainer}>
+    <div data-lens-theme="nonprofit" className={ds.pageContainer}>
       {/* Header */}
       <header className={ds.sectionHeader}>
         <div className="flex items-center gap-3">
@@ -1421,6 +1423,24 @@ export default function NonprofitLensPage() {
         </div>
       </header>
 
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Donors', value: metrics.totalDonors, icon: Heart },
+          { label: 'Fundraising', value: `$${(metrics.totalRaisedYTD / 1000).toFixed(0)}K`, icon: DollarSign },
+          { label: 'Retention', value: `${metrics.retentionRate}%`, icon: Repeat },
+          { label: 'Vol. Hours', value: metrics.totalVolunteerHours, icon: HelpingHand },
+        ].map((stat) => (
+          <div key={stat.label} className={ds.panel + ' flex items-center gap-3 p-3'}>
+            <stat.icon className="w-5 h-5 text-neon-pink shrink-0" />
+            <div>
+              <p className="text-xs text-gray-400">{stat.label}</p>
+              <p className="text-lg font-bold text-white">{stat.value}</p>
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* AI Actions */}
       <UniversalActions domain="nonprofit" artifactId={allDonors[0]?.id} compact />
@@ -1516,7 +1536,11 @@ export default function NonprofitLensPage() {
             </div>
           ) : (
             <div className={mode === 'grants' ? ds.grid2 : ds.grid3}>
-              {filtered.map(item => renderCard(item))}
+              {filtered.map((item, index) => (
+                <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }}>
+                  {renderCard(item)}
+                </motion.div>
+              ))}
             </div>
           )}
 

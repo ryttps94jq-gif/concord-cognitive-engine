@@ -64,8 +64,59 @@ import {
 import { useChatProactive } from './useChatProactive';
 import { useCrossLensMemory } from './useCrossLensMemory';
 import { ContextOverlay } from './ContextOverlay';
+import { InitiativeList } from './InitiativeChip';
+import type { Initiative } from './InitiativeChip';
+import ChatRouteOverlay from './ChatRouteOverlay';
+import ForgeCard from './ForgeCard';
 
 // ── Types ──────────────────────────────────────────────────────
+
+interface RouteMeta {
+  actionType: string;
+  lenses: { lensId: string; score: number }[];
+  primaryLens: string | null;
+  isMultiLens: boolean;
+  confidence: number;
+  attribution: string[];
+  message: string | null;
+}
+
+interface ForgeEnvelope {
+  dtu: { id: string; title: string; artifact?: { content?: string }; tags?: string[] };
+  presentation: {
+    title: string;
+    format: string;
+    primaryType: number;
+    preview: string;
+    sourceLenses: string[];
+    cretiScore: number;
+    substrateCitationCount: number;
+    formatAmbiguous: boolean;
+    alternatives?: string[];
+  };
+  actions: {
+    save: { available: boolean; description: string };
+    delete: { available: boolean; description: string };
+    saveAndList: { available: boolean; description: string };
+    iterate: { available: boolean; description: string };
+  };
+  isMultiArtifact?: boolean;
+  offerForge?: boolean;
+}
+
+interface DTUSource {
+  id: string;
+  title: string;
+  tier: string;
+  score: number | null;
+  sources?: {
+    queryMatch?: boolean;
+    edgeSpread?: boolean;
+    globalWarmth?: boolean;
+    userProfileSeed?: boolean;
+    autogen?: boolean;
+  };
+}
 
 interface ChatMessage {
   id: string;
@@ -79,7 +130,12 @@ interface ChatMessage {
   // DTU context pipeline metadata
   dtuCount?: number;
   dtuIds?: string[];
+  dtuSources?: DTUSource[];
   brain?: string;
+  // Chat router metadata (lens attribution, action type)
+  route?: RouteMeta | null;
+  // Inline forge artifact (when CREATE action produces deliverable)
+  forge?: ForgeEnvelope | null;
 }
 
 interface LensRecommendation {
@@ -104,6 +160,92 @@ interface PersistentChatRailProps {
 
 type ChatStatus = 'idle' | 'thinking' | 'searching' | 'responding';
 
+// ── DTU Sources Section (expandable context sources below assistant messages) ──
+
+const TIER_BADGE_STYLES: Record<string, string> = {
+  hyper: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
+  mega: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
+  regular: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+  shadow: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
+  archive: 'bg-zinc-600/20 text-zinc-500 border-zinc-600/30',
+};
+
+function DTUSourcesSection({ sources }: { sources: DTUSource[] }) {
+  const [expanded, setExpanded] = useState(false);
+  if (sources.length === 0) return null;
+
+  // Tier boost labels for context transparency
+  const TIER_BOOST: Record<string, string> = {
+    hyper: '2.0x boost',
+    mega: '1.5x boost',
+    regular: '',
+    shadow: '0.6x',
+    archive: '0.3x',
+  };
+
+  return (
+    <div className="mt-2 pt-2 border-t border-zinc-700/50">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-1.5 text-[10px] text-zinc-400 hover:text-zinc-300 transition-colors w-full"
+      >
+        <Database className="w-2.5 h-2.5" />
+        <span>{sources.length} DTU source{sources.length !== 1 ? 's' : ''} used</span>
+        <ChevronRight className={`w-2.5 h-2.5 ml-auto transition-transform ${expanded ? 'rotate-90' : ''}`} />
+      </button>
+      {expanded && (
+        <div className="mt-1.5 space-y-1 max-h-52 overflow-y-auto">
+          {sources.map((src) => {
+            const tierStyle = TIER_BADGE_STYLES[src.tier] || TIER_BADGE_STYLES.regular;
+            const boost = TIER_BOOST[src.tier] || '';
+            const s = src.sources;
+            return (
+              <div
+                key={src.id}
+                className="text-[10px] px-1.5 py-1.5 rounded bg-zinc-800/50 hover:bg-zinc-700/50 cursor-pointer transition-colors"
+                title={`DTU: ${src.id}`}
+              >
+                <div className="flex items-center gap-1.5">
+                  <span className={`px-1 py-0.5 rounded border text-[9px] font-medium uppercase ${tierStyle}`}>
+                    {src.tier}
+                  </span>
+                  <span className="text-zinc-300 truncate flex-1">{src.title || src.id}</span>
+                  {src.score != null && (
+                    <span className="text-zinc-500 font-mono shrink-0">{(src.score * 100).toFixed(0)}%</span>
+                  )}
+                </div>
+                {/* Activation sources and tier boost — why this DTU was selected */}
+                {(s || boost) && (
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {boost && (
+                      <span className="px-1 py-0.5 rounded bg-zinc-700/50 text-zinc-500 text-[9px]">{boost}</span>
+                    )}
+                    {s?.queryMatch && (
+                      <span className="px-1 py-0.5 rounded bg-blue-500/10 text-blue-400 text-[9px]">query</span>
+                    )}
+                    {s?.edgeSpread && (
+                      <span className="px-1 py-0.5 rounded bg-purple-500/10 text-purple-400 text-[9px]">spread</span>
+                    )}
+                    {s?.globalWarmth && (
+                      <span className="px-1 py-0.5 rounded bg-amber-500/10 text-amber-400 text-[9px]">global</span>
+                    )}
+                    {s?.userProfileSeed && (
+                      <span className="px-1 py-0.5 rounded bg-green-500/10 text-green-400 text-[9px]">profile</span>
+                    )}
+                    {s?.autogen && (
+                      <span className="px-1 py-0.5 rounded bg-cyan-500/10 text-cyan-400 text-[9px]">autogen</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Component ──────────────────────────────────────────────────
 
 export function PersistentChatRail({
@@ -125,6 +267,7 @@ export function PersistentChatRail({
   const [isExpanded, setIsExpanded] = useState(false);
   const [lastDtuCount, setLastDtuCount] = useState(0);
   const [contextOverlayOpen, setContextOverlayOpen] = useState(false);
+  const [serverInitiatives, setServerInitiatives] = useState<Initiative[]>([]);
 
   // ── Mode state ─────────────────────────────────────────────
 
@@ -147,6 +290,8 @@ export function PersistentChatRail({
     currentLens,
     messageCount: messages.length,
     enabled: !collapsed && chatMode !== 'chat', // disable proactive in pure chat mode
+    onSocket: on,
+    offSocket: off,
   });
 
   // ── DTU event listener for proactive notifications ─────────
@@ -173,6 +318,51 @@ export function PersistentChatRail({
       off('dtu:promoted', handleDTUPromoted);
     };
   }, [on, off, proactive]);
+
+  // ── Server initiative listener (rich initiative chips) ─────
+
+  useEffect(() => {
+    // Convert snake_case trigger types from backend to camelCase for frontend chip styling
+    const snakeToCamel: Record<string, string> = {
+      substrate_discovery: 'substrateDiscovery',
+      citation_alert: 'citationAlert',
+      check_in: 'genuineCheckIn',
+      pending_work: 'pendingWorkReminder',
+      world_event: 'worldEventConnection',
+      reflective_followup: 'reflectiveFollowUp',
+      morning_context: 'morningContext',
+    };
+
+    const handleInitiative = (data: unknown) => {
+      const d = data as Initiative & { deliveredAt?: string };
+      if (!d?.id || !d?.message) return;
+
+      const triggerType = snakeToCamel[d.triggerType] || d.triggerType || 'genuineCheckIn';
+
+      setServerInitiatives(prev => {
+        // Deduplicate by id and cap at 5
+        if (prev.some(i => i.id === d.id)) return prev;
+        const next = [...prev, {
+          id: d.id,
+          triggerType,
+          message: d.message,
+          priority: d.priority || 'normal',
+          score: d.score ?? 0.5,
+          status: d.status || 'delivered',
+          channel: d.channel,
+          metadata: d.metadata,
+          deliveredAt: d.deliveredAt,
+          createdAt: d.createdAt || new Date().toISOString(),
+        } as Initiative];
+        return next.slice(-5);
+      });
+    };
+
+    on('initiative:new', handleInitiative);
+    return () => {
+      off('initiative:new', handleInitiative);
+    };
+  }, [on, off]);
 
   // ── Sovereignty prompt state ───────────────────────────────
 
@@ -245,7 +435,10 @@ export function PersistentChatRail({
         sources?: { title: string; url: string; source: string }[];
         dtuCount?: number;
         dtuIds?: string[];
+        dtuSources?: DTUSource[];
         brain?: string;
+        route?: RouteMeta | null;
+        forge?: ForgeEnvelope | null;
       };
       if (d.sessionId === sessionId) {
         const msg: ChatMessage = {
@@ -258,7 +451,10 @@ export function PersistentChatRail({
           sources: d.sources || [],
           dtuCount: d.dtuCount ?? 0,
           dtuIds: d.dtuIds || [],
+          dtuSources: d.dtuSources || [],
           brain: d.brain || undefined,
+          route: d.route || null,
+          forge: d.forge || null,
         };
         setMessages(prev => [...prev, msg]);
         setStreamingText('');
@@ -356,6 +552,8 @@ export function PersistentChatRail({
           timestamp: new Date().toISOString(),
           lensRecommendation: data?.lensRecommendation || null,
           dtuCount: data?.dtuCount ?? 0,
+          route: data?.route || null,
+          forge: data?.forge || null,
         };
         setMessages(prev => [...prev, assistantMsg]);
         if (data?.dtuCount != null) setLastDtuCount(data.dtuCount);
@@ -528,9 +726,10 @@ export function PersistentChatRail({
 
   return (
     <div
+      data-lens-theme="chat"
       className={cn(
         'fixed right-0 top-14 lg:top-16 bottom-0 z-30 flex flex-col',
-        'bg-lattice-deep border-l border-lattice-border',
+        'bg-lattice-deep border-l border-blue-500/10',
         'transition-all duration-300',
         isExpanded ? 'w-[600px]' : 'w-[380px]'
       )}
@@ -600,7 +799,7 @@ export function PersistentChatRail({
       {/* Mode-specific panel (above messages) */}
       {renderModePanel()}
 
-      {/* Proactive messages */}
+      {/* Proactive messages (client-side suggestions) */}
       {proactive.proactiveMessages.length > 0 && (
         <div className="shrink-0">
           {proactive.proactiveMessages.slice(-2).map(pm => (
@@ -617,6 +816,42 @@ export function PersistentChatRail({
               onDismiss={() => proactive.dismissProactive(pm.id)}
             />
           ))}
+        </div>
+      )}
+
+      {/* Server-pushed initiative chips (rich proactive messages from Concord) */}
+      {serverInitiatives.length > 0 && (
+        <div className="shrink-0">
+          <InitiativeList
+            initiatives={serverInitiatives}
+            onDismiss={(id) => {
+              setServerInitiatives(prev => prev.filter(i => i.id !== id));
+            }}
+            onAction={(id, action, payload) => {
+              const initiative = serverInitiatives.find(i => i.id === id);
+              if (action === 'view_dtu' && payload?.dtuId) {
+                sendMessage(`Show me details about DTU ${payload.dtuId}`);
+              } else if (action === 'explain' || action === 'expand_thought') {
+                sendMessage(initiative?.message || 'Tell me more about this.');
+              } else if (action === 'catch_up' || action === 'morning_brief') {
+                sendMessage('Give me a catch-up summary of my substrate activity.');
+              } else if (action === 'resume_work') {
+                sendMessage('What pending work should I pick up?');
+              } else if (action === 'analyze_event') {
+                sendMessage(initiative?.message || 'Analyze this event for me.');
+              } else if (initiative?.message) {
+                sendMessage(initiative.message);
+              }
+              setServerInitiatives(prev => prev.filter(i => i.id !== id));
+            }}
+            onRespond={(id) => {
+              // Report response to backend
+              fetch(`/api/initiative/${id}/respond`, { method: 'POST' }).catch(err => console.error('[Initiative] Failed to respond:', err));
+              setServerInitiatives(prev => prev.filter(i => i.id !== id));
+            }}
+            maxVisible={2}
+            compact={!isExpanded}
+          />
         </div>
       )}
 
@@ -650,6 +885,14 @@ export function PersistentChatRail({
                 </div>
               )}
 
+              {/* Route overlay (shows lens attribution above assistant messages) */}
+              {msg.role === 'assistant' && msg.route && (
+                <ChatRouteOverlay
+                  route={msg.route}
+                  requiresConfirmation={false}
+                />
+              )}
+
               {/* Message */}
               <div
                 className={cn(
@@ -661,22 +904,27 @@ export function PersistentChatRail({
                   className={cn(
                     'max-w-[85%] rounded-xl px-3.5 py-2.5 text-sm leading-relaxed',
                     msg.role === 'user'
-                      ? 'bg-neon-blue/20 text-zinc-100 border border-neon-blue/20'
-                      : 'bg-zinc-800/80 text-zinc-200 border border-zinc-700/50'
+                      ? 'bg-blue-600/25 text-zinc-100 border border-blue-500/25'
+                      : 'bg-gradient-to-br from-zinc-800/90 to-zinc-800/60 text-zinc-200 border border-zinc-700/40 shadow-sm shadow-blue-500/5'
                   )}
                 >
                   <div className="whitespace-pre-wrap break-words">{msg.content}</div>
 
-                  {/* Sources */}
+                  {/* Web Sources — styled panel */}
                   {msg.sources && msg.sources.length > 0 && (
-                    <div className="mt-2 pt-2 border-t border-zinc-700/50 space-y-1">
+                    <div className="mt-2 pt-2 border-t border-blue-500/10 space-y-1">
                       {msg.sources.map((s, si) => (
-                        <div key={si} className="flex items-center gap-1 text-[10px] text-zinc-500">
+                        <div key={si} className="flex items-center gap-1 text-[10px] text-blue-400/60 hover:text-blue-400/80 transition-colors">
                           <ExternalLink className="w-2.5 h-2.5" />
                           <span>{s.source}: {s.title}</span>
                         </div>
                       ))}
                     </div>
+                  )}
+
+                  {/* DTU Sources — expandable section showing which DTUs were used as context */}
+                  {msg.role === 'assistant' && msg.dtuSources && msg.dtuSources.length > 0 && (
+                    <DTUSourcesSection sources={msg.dtuSources} />
                   )}
 
                   {/* Lens recommendation chip */}
@@ -728,16 +976,62 @@ export function PersistentChatRail({
                   )}
                 </div>
               </div>
+
+              {/* Inline forge card (when CREATE action produces deliverable artifact) */}
+              {msg.role === 'assistant' && msg.forge && msg.forge.presentation && (
+                <div className="mt-2 max-w-[85%]">
+                  <ForgeCard
+                    dtu={msg.forge.dtu}
+                    presentation={msg.forge.presentation}
+                    actions={msg.forge.actions}
+                    isMultiArtifact={msg.forge.isMultiArtifact}
+                    offerForge={msg.forge.offerForge}
+                    onSave={async (forgeDtu) => {
+                      try {
+                        await api.post('/api/chat/forge/save', { dtu: forgeDtu });
+                      } catch {}
+                    }}
+                    onDelete={async (dtuId) => {
+                      try {
+                        await api.post('/api/chat/forge/delete', { dtuId });
+                      } catch {}
+                    }}
+                    onList={async (forgeDtu) => {
+                      try {
+                        await api.post('/api/chat/forge/list', { dtu: forgeDtu });
+                      } catch {}
+                    }}
+                    onIterate={async (forgeDtu, instruction) => {
+                      try {
+                        const iterRes = await api.post('/api/chat/forge/iterate', {
+                          dtu: forgeDtu,
+                          instruction,
+                          sessionId,
+                        });
+                        // If iteration returns new content, send as follow-up message
+                        if (iterRes.data?.ok) {
+                          sendMessage(`Iterate on the forged artifact: ${instruction}`);
+                        }
+                      } catch {}
+                    }}
+                  />
+                </div>
+              )}
             </Fragment>
           );
         })}
 
-        {/* Status indicators */}
+        {/* Status indicators — typing animation */}
         {chatStatus === 'thinking' && (
           <div className="space-y-1">
-            <div className="flex items-center gap-2 text-sm text-zinc-400 px-2 py-1">
+            <div className="flex items-center gap-2 text-sm text-blue-400/80 px-2 py-1">
               <Brain className="w-4 h-4 animate-pulse" />
-              Thinking...
+              <span>Thinking</span>
+              <span className="flex gap-0.5">
+                <span className="w-1 h-1 rounded-full bg-blue-400/60 animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="w-1 h-1 rounded-full bg-blue-400/60 animate-bounce" style={{ animationDelay: '150ms' }} />
+                <span className="w-1 h-1 rounded-full bg-blue-400/60 animate-bounce" style={{ animationDelay: '300ms' }} />
+              </span>
             </div>
             {lastDtuCount > 0 && (
               <div className="flex items-center gap-2 text-[10px] text-zinc-500 px-2">

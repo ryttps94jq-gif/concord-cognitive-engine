@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { ds } from '@/lib/design-system';
@@ -2109,7 +2110,7 @@ export default function AccountingLensPage() {
   }
 
   return (
-    <div className={ds.pageContainer}>
+    <div data-lens-theme="accounting" className={ds.pageContainer}>
       {/* Header */}
       <header className={ds.sectionHeader}>
         <div className="flex items-center gap-3">
@@ -2137,6 +2138,88 @@ export default function AccountingLensPage() {
       <UniversalActions domain="accounting" artifactId={items[0]?.id} compact />
       <RealtimeDataPanel domain="accounting" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <DTUExportButton domain="accounting" data={{}} compact />
+
+      {/* Stat Cards Row */}
+      {(() => {
+        const accounts = accountData.items.map(i => i.data as unknown as Account);
+        const transactions = transactionData.items;
+        const invoices = invoiceData.items.map(i => ({ ...i, d: i.data as unknown as Invoice }));
+        const totalAssets = accounts.filter(a => a.type === 'Asset').reduce((s, a) => s + (a.balance || 0), 0);
+        const totalLiabilities = accounts.filter(a => a.type === 'Liability').reduce((s, a) => s + (a.balance || 0), 0);
+        const totalRevenue = accounts.filter(a => a.type === 'Revenue').reduce((s, a) => s + Math.abs(a.balance || 0), 0);
+        const totalExpenses = accounts.filter(a => a.type === 'Expense').reduce((s, a) => s + Math.abs(a.balance || 0), 0);
+        const netIncome = totalRevenue - totalExpenses;
+        const overdueInvoices = invoices.filter(inv => inv.d.dueDate && new Date(inv.d.dueDate) < new Date() && inv.meta.status !== 'paid').length;
+        return (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {[
+                { icon: Calculator, label: 'Total Assets', value: fmt(totalAssets), color: 'text-green-400' },
+                { icon: Scale, label: 'Total Liabilities', value: fmt(totalLiabilities), color: 'text-red-400' },
+                { icon: TrendingUp, label: 'Net Income', value: fmt(netIncome), color: netIncome >= 0 ? 'text-green-400' : 'text-red-400' },
+                { icon: DollarSign, label: 'Overdue Invoices', value: overdueInvoices, color: overdueInvoices > 0 ? 'text-red-400' : 'text-green-400' },
+              ].map((stat, i) => (
+                <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }} className={ds.panel}>
+                  <stat.icon className={`w-5 h-5 ${stat.color} mb-2`} />
+                  <p className={ds.textMuted}>{stat.label}</p>
+                  <p className="text-xl font-bold text-white">{stat.value}</p>
+                </motion.div>
+              ))}
+            </div>
+
+            {/* P&L Summary Bar */}
+            {(totalRevenue > 0 || totalExpenses > 0) && (
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className={ds.panel}>
+                <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2"><BarChart3 className="w-4 h-4 text-green-400" /> P&L Summary</h3>
+                <div className="space-y-2">
+                  <div>
+                    <div className="flex justify-between text-xs text-gray-400 mb-1"><span>Revenue</span><span className="text-green-400">{fmt(totalRevenue)}</span></div>
+                    <div className="h-3 bg-white/5 rounded-full overflow-hidden"><motion.div initial={{ width: 0 }} animate={{ width: `${Math.min(totalRevenue / Math.max(totalRevenue, totalExpenses) * 100, 100)}%` }} transition={{ duration: 0.8 }} className="h-full bg-green-500 rounded-full" /></div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-xs text-gray-400 mb-1"><span>Expenses</span><span className="text-red-400">{fmt(totalExpenses)}</span></div>
+                    <div className="h-3 bg-white/5 rounded-full overflow-hidden"><motion.div initial={{ width: 0 }} animate={{ width: `${Math.min(totalExpenses / Math.max(totalRevenue, totalExpenses) * 100, 100)}%` }} transition={{ duration: 0.8 }} className="h-full bg-red-500 rounded-full" /></div>
+                  </div>
+                </div>
+                {/* Account Type Badges */}
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {ACCOUNT_CATEGORIES.map(cat => {
+                    const count = accounts.filter(a => a.type === cat).length;
+                    const catColors: Record<string, string> = { Asset: 'bg-blue-500/20 text-blue-400', Liability: 'bg-red-500/20 text-red-400', Equity: 'bg-purple-500/20 text-purple-400', Revenue: 'bg-green-500/20 text-green-400', Expense: 'bg-orange-500/20 text-orange-400' };
+                    return <span key={cat} className={`px-2 py-1 rounded text-xs font-medium ${catColors[cat] || 'bg-gray-500/20 text-gray-400'}`}>{cat}: {count}</span>;
+                  })}
+                </div>
+              </motion.div>
+            )}
+
+            {/* Journal Entry Timeline */}
+            {transactions.length > 0 && (
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className={ds.panel}>
+                <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2"><Clock className="w-4 h-4 text-neon-cyan" /> Recent Journal Entries</h3>
+                <div className="space-y-0">
+                  {transactionData.items.slice(0, 5).map((t, i) => {
+                    const d = t.data as unknown as Transaction;
+                    return (
+                      <div key={t.id} className="flex items-center gap-3 py-2 border-b border-white/5 last:border-0">
+                        <div className="w-2 h-2 rounded-full bg-neon-cyan shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-white truncate">{d.description || t.title}</p>
+                          <p className="text-xs text-gray-500">{d.date || ''} {d.account ? `- ${d.account}` : ''}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          {d.debit > 0 && <span className="text-xs text-green-400">DR {fmt(d.debit)}</span>}
+                          {d.credit > 0 && <span className="text-xs text-red-400 ml-2">CR {fmt(d.credit)}</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            )}
+          </>
+        );
+      })()}
+
       {/* Mode tabs */}
       <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 overflow-x-auto">
         {MODE_TABS.map(tab => {

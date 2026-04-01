@@ -1,13 +1,14 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { apiHelpers } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import { useState } from 'react';
 import {
   Dna, Activity, Brain, Globe, Zap, Heart,
   Eye, Sparkles, Target, ChevronDown, ChevronRight,
   Network, Radio,
 } from 'lucide-react';
+import QualiaSensoryFeed from './QualiaSensoryFeed';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -135,7 +136,9 @@ function EntityGrowthCard({ entity }: { entity: GrowthEntity }) {
       <div className="space-y-1 mb-2">
         <Gauge label="Curiosity" value={entity.curiosity} icon={Sparkles} color="text-yellow-400" />
         <Gauge label="Energy" value={entity.energy} icon={Zap} color="text-neon-green" />
+        <Gauge label="Vitality" value={(entity.curiosity + entity.energy) / 2} icon={Heart} color="text-red-400" />
         <Gauge label="Confidence" value={entity.confidence} icon={Target} color="text-neon-blue" />
+        <Gauge label="Insight" value={entity.insightQuality} icon={Eye} color="text-neon-cyan" />
       </div>
 
       {/* Top organs */}
@@ -196,6 +199,9 @@ function EntityGrowthCard({ entity }: { entity: GrowthEntity }) {
               ))}
             </div>
           </div>
+
+          {/* Qualia Sensory Feed — wired from qualia-bridge */}
+          <EntityQualiaSection entityId={entity.id} />
         </div>
       )}
     </div>
@@ -318,6 +324,30 @@ function ExplorationSection({ metrics }: { metrics: ExplorationMetrics }) {
           Last exploration: {new Date(metrics.lastExplorationAt).toLocaleString()}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Entity Qualia Section (wired from qualia-bridge) ────────────────────────
+
+function EntityQualiaSection({ entityId }: { entityId: string }) {
+  const { data } = useQuery({
+    queryKey: ['qualia-channels', entityId],
+    queryFn: () => api.get(`/api/qualia/senses/channels/${entityId}`).then(r => r.data),
+    retry: false,
+    staleTime: 30000,
+  });
+
+  const channels = data?.channels;
+  if (!channels || Object.keys(channels).length === 0) return null;
+
+  return (
+    <div>
+      <h4 className="text-[10px] uppercase text-gray-500 mb-1">Qualia Sensory Feed</h4>
+      <QualiaSensoryFeed
+        entityId={entityId}
+        channels={channels}
+      />
     </div>
   );
 }

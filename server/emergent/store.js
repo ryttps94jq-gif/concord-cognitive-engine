@@ -100,7 +100,7 @@ export function registerEmergent(state, emergent) {
   try {
     import("./body-instantiation.js").then(mod => {
       if (mod?.instantiateBody) mod.instantiateBody(emergent.id, { generation: 1 });
-    }).catch(() => {});
+    }).catch(e => console.warn('[emergent:store] async op failed:', e?.message));
   } catch (_e) { logger.debug('emergent:store', 'silent catch', { error: _e?.message }); }
 
   // Wire species classification
@@ -116,7 +116,7 @@ export function registerEmergent(state, emergent) {
           }
         }
       }
-    }).catch(() => {});
+    }).catch(e => console.warn('[emergent:store] async op failed:', e?.message));
   } catch (_e) { logger.debug('emergent:store', 'silent catch', { error: _e?.message }); }
 
   // Wire subjective time initialization
@@ -127,7 +127,7 @@ export function registerEmergent(state, emergent) {
         const dummyState = { __emergent: state };
         mod.recordTick(dummyState, emergent.id);
       }
-    }).catch(() => {});
+    }).catch(e => console.warn('[emergent:store] async op failed:', e?.message));
   } catch (_e) { logger.debug('emergent:store', 'silent catch', { error: _e?.message }); }
 
   return emergent;

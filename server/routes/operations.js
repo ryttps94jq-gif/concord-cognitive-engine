@@ -5,6 +5,7 @@
  *         abstraction, queues, auth/keys, orgs, research
  * Registered directly on app (mixed prefixes)
  */
+import fs from "fs";
 import { asyncHandler } from "../lib/async-handler.js";
 import { validateBody, ingestUrlSchema, ingestTextSchema, ingestSchema, ingestSubmitSchema, researchRunSchema, harnessRunSchema, apiKeyCreateSchema } from "../lib/validators/mutation-schemas.js";
 
@@ -596,6 +597,37 @@ export default function registerOperationRoutes(app, {
     return res.json({ ok: true, agents });
   });
 
+  // GET /api/agents/status — Aggregate agent system status with metrics (must be before :id)
+  app.get("/api/agents/status", async (_req, res) => {
+    try {
+      const mod = await import("../emergent/agent-system.js");
+      const list = mod.listAgents();
+      const metrics = mod.getAgentMetrics();
+      const agents = list.agents || [];
+      return res.json({
+        ok: true,
+        agentCount: agents.length,
+        active: agents.filter(a => a.status === "active").length,
+        paused: agents.filter(a => a.status === "paused").length,
+        frozen: metrics.metrics?.globalFrozen || false,
+        agents: agents.map(a => ({
+          agentId: a.agentId,
+          type: a.type,
+          status: a.status,
+          territory: a.territory,
+          runCount: a.runCount,
+          findingsCount: a.findingsCount,
+          repairsCount: a.repairsCount,
+          lastRunAt: a.lastRunAt,
+          createdAt: a.createdAt,
+        })),
+        metrics: metrics.metrics || {},
+      });
+    } catch (e) {
+      return res.json({ ok: false, error: String(e?.message || e) });
+    }
+  });
+
   app.get("/api/agents/:id", (req, res) => {
     const agent = STATE.personas.get(req.params.id);
     if (!agent || !agent.goal) {
@@ -612,6 +644,35 @@ export default function registerOperationRoutes(app, {
   app.post("/api/agents/:id/tick", asyncHandler(async (req, res) => {
     const out = await runMacro("agent", "tick", { id: req.params.id, prompt: req.body.prompt }, makeCtx(req));
     return res.json(out);
+  }));
+
+  // POST /api/agents/spawn-research — Spawn a research agent for a given topic
+  app.post("/api/agents/spawn-research", asyncHandler(async (req, res) => {
+    try {
+      const { topic } = req.body || {};
+      if (!topic) return res.status(400).json({ ok: false, error: "topic required" });
+      const mod = await import("../emergent/agent-system.js");
+      const result = mod.createAgent("synthesis", {
+        territory: "*",
+        metadata: { purpose: "research", topic, createdBy: "user", spawnedAt: new Date().toISOString() },
+      });
+      if (!result.ok) return res.json(result);
+      // Immediately run the agent with DTUs related to the topic
+      const dtus = Array.from(STATE.dtus.values()).filter(d => {
+        const text = `${d.title || ""} ${d.summary || ""} ${(d.tags || []).join(" ")}`.toLowerCase();
+        return text.includes(topic.toLowerCase());
+      }).slice(0, 200);
+      const runResult = mod.runAgent(result.agent.agentId, dtus);
+      return res.json({
+        ok: true,
+        agent: result.agent,
+        findings: runResult.findings || [],
+        findingsCount: runResult.count || 0,
+        topic,
+      });
+    } catch (e) {
+      return res.json({ ok: false, error: String(e?.message || e) });
+    }
   }));
 
   // Reseed
@@ -734,4 +795,95 @@ export default function registerOperationRoutes(app, {
     saveStateDebounced();
     res.json({ ok:true, item, promoted });
   }));
+
+  // ── Organism Pipeline Status (Feature 47) ────────────────────────────────
+  // Unified status view of the proposal-verify-council-commit pipeline,
+  // WAL health, snapshot state, and recent commit history.
+
+  app.get("/api/organism/pipeline/status", (req, res) => {
+    try {
+      const proposals = Array.from(PIPE.proposals.values());
+      const now = Date.now();
+
+      // Categorize proposals by status
+      const pending = proposals.filter(p => p.status === "proposed");
+      const verified = proposals.filter(p => p.status === "verified");
+      const approved = proposals.filter(p => p.status === "approved");
+      const rejected = proposals.filter(p => p.status === "rejected");
+
+      // Recent commits (approved in last 24h)
+      const oneDayAgo = new Date(now - 86400000).toISOString();
+      const recentCommits = approved
+        .filter(p => (p.updatedAt || p.createdAt) >= oneDayAgo)
+        .sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""))
+        .slice(0, 20)
+        .map(p => ({
+          id: p.id,
+          action: p.action,
+          status: p.status,
+          createdAt: p.createdAt,
+          updatedAt: p.updatedAt,
+          dtuTitle: p.payload?.dtu?.title?.slice(0, 80) || null,
+          actor: p.actor,
+        }));
+
+      // WAL file size
+      let walSizeBytes = 0;
+      let walExists = false;
+      try {
+        const stat = fs.statSync(PIPE.walPath);
+        walSizeBytes = stat.size;
+        walExists = true;
+      } catch (_e) { /* WAL may not exist yet */ }
+
+      // Snapshot directory count
+      let snapshotCount = 0;
+      let latestSnapshot = null;
+      try {
+        const entries = fs.readdirSync(PIPE.snapshotsDir).filter(e => e.startsWith("snap_"));
+        snapshotCount = entries.length;
+        if (entries.length > 0) {
+          latestSnapshot = entries.sort().pop();
+        }
+      } catch (_e) { /* snapshots dir may not exist */ }
+
+      res.json({
+        ok: true,
+        pipeline: {
+          enabled: PIPE.enabled,
+          totalProposals: proposals.length,
+          pending: pending.length,
+          verified: verified.length,
+          approved: approved.length,
+          rejected: rejected.length,
+          verificationQueue: pending.length + verified.length,
+          councilPending: verified.length,
+        },
+        wal: {
+          exists: walExists,
+          sizeBytes: walSizeBytes,
+          sizeFormatted: walSizeBytes < 1024 ? `${walSizeBytes}B`
+            : walSizeBytes < 1048576 ? `${(walSizeBytes / 1024).toFixed(1)}KB`
+            : `${(walSizeBytes / 1048576).toFixed(1)}MB`,
+          path: PIPE.walPath,
+        },
+        snapshots: {
+          count: snapshotCount,
+          latest: latestSnapshot,
+          dir: PIPE.snapshotsDir,
+        },
+        recentCommits,
+        health: {
+          pipelineEnabled: PIPE.enabled,
+          walHealthy: walExists || proposals.length === 0,
+          proposalBacklog: pending.length > 50 ? "high" : pending.length > 10 ? "medium" : "low",
+          status: PIPE.enabled
+            ? (pending.length > 50 ? "degraded" : "healthy")
+            : "disabled",
+        },
+      });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
 }

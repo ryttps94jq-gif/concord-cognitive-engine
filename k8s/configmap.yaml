@@ -54,9 +54,9 @@ data:
   REFRESH_TOKEN_EXPIRES: "30d"
   BCRYPT_ROUNDS: "12"
 
-  # ── LLM model selection (non-secret) ─────────────────────────────────
-  OPENAI_MODEL_FAST: "gpt-4o-mini"
-  OPENAI_MODEL_SMART: "gpt-4.1"
+  # ── LLM model selection — all local Ollama (non-secret) ─────────────
+  OLLAMA_MODEL: "qwen2.5:7b-instruct-q4_K_M"
+  BRAIN_CONSCIOUS_MODEL: "qwen2.5:14b-instruct-q4_K_M"
 
   # ── Feature flags ────────────────────────────────────────────────────
   EMBEDDINGS_ENABLED: "true"

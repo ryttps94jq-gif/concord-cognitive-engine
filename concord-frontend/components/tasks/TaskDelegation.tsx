@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
-import { motion, AnimatePresence } from 'framer-motion';
 import {
   ListTodo, Send, Loader2, CheckCircle, XCircle, Clock, Play,
   ChevronDown, ChevronUp,

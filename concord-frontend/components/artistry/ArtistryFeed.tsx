@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react';
 import {
   Music, Image, Video, FileText, Code2, Gamepad2, Box,
-  Clock, Sparkles, SlidersHorizontal, X,
+  Clock, Sparkles, SlidersHorizontal,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ArtistryPost, ArtistryContentType, FeedMode, FeedFilter } from '@/lib/artistry/types';

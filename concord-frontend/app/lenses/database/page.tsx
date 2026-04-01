@@ -263,8 +263,8 @@ export default function DatabaseLensPage() {
   });
 
   // Use live data only — no fake fallbacks
-  const tables: TableInfo[] = liveTables?.tables ?? [];
-  const indexes: IndexInfo[] = liveIndexes?.indexes ?? [];
+  const tables: TableInfo[] = useMemo(() => liveTables?.tables ?? [], [liveTables]);
+  const indexes: IndexInfo[] = useMemo(() => liveIndexes?.indexes ?? [], [liveIndexes]);
 
   // Accumulate perf snapshots for time-series charts
   useEffect(() => {
@@ -400,7 +400,7 @@ export default function DatabaseLensPage() {
     );
   }
   return (
-    <div className="p-6 space-y-6 bg-lattice-bg min-h-screen">
+    <div data-lens-theme="database" className="p-6 space-y-6 bg-lattice-bg min-h-screen">
       {/* Header */}
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -599,6 +599,28 @@ export default function DatabaseLensPage() {
                       </div>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Saved Queries from LensData */}
+              {queryItems.length > 0 && (
+                <div className="panel p-4 space-y-3">
+                  <h2 className="text-sm font-semibold flex items-center gap-2 text-neon-blue">
+                    <FileJson className="w-4 h-4" />
+                    Saved Queries ({queryItems.length})
+                  </h2>
+                  <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                    {queryItems.map(item => (
+                      <button
+                        key={item.id}
+                        onClick={() => { setSql(String((item.data as Record<string, unknown>)?.sql || item.title)); }}
+                        className="w-full text-left bg-lattice-surface border border-lattice-border/50 rounded p-2 hover:bg-lattice-elevated transition-colors"
+                      >
+                        <p className="text-xs font-medium text-white truncate">{item.title}</p>
+                        <p className="text-[11px] text-gray-500 font-mono truncate">{String((item.data as Record<string, unknown>)?.sql || '').slice(0, 60)}</p>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

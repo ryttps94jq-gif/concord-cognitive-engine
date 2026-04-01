@@ -1,8 +1,9 @@
 'use client';
 
+import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, apiHelpers } from '@/lib/api/client';
+import { apiHelpers } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useState, useMemo, useCallback, useRef } from 'react';
@@ -632,7 +633,7 @@ export default function SimLensPage() {
     }
     return getEmptyResults();
   }, [selectedRun]);
-  const mockResultsForDisplay = runResults;
+  const fallbackResults = runResults;
 
   // ── Loading state ──────────────────────────────────────────────────────────
   if (isLoading) {
@@ -725,6 +726,29 @@ export default function SimLensPage() {
           </button>
         </div>
       </header>
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {(() => {
+          const completedRuns = runs.filter(r => r.status === 'completed');
+          const avgRuntime = completedRuns.length > 0 ? (completedRuns.reduce((s, r) => s + (r.duration || 0), 0) / completedRuns.length / 1000).toFixed(1) : '0';
+          const successRate = runs.length > 0 ? Math.round((completedRuns.length / runs.length) * 100) : 0;
+          return [
+            { label: 'Simulations', value: scenarios.length, icon: FlaskConical },
+            { label: 'Avg Runtime', value: `${avgRuntime}s`, icon: Clock },
+            { label: 'Success Rate', value: `${successRate}%`, icon: CheckCircle2 },
+            { label: 'Total Runs', value: runs.length, icon: Activity },
+          ].map((stat) => (
+            <div key={stat.label} className={ds.panel + ' flex items-center gap-3 p-3'}>
+              <stat.icon className="w-5 h-5 text-purple-400 shrink-0" />
+              <div>
+                <p className="text-xs text-gray-400">{stat.label}</p>
+                <p className="text-lg font-bold text-white">{stat.value}</p>
+              </div>
+            </div>
+          ));
+        })()}
+      </div>
 
       {/* ── Dashboard Stats (4 cards) ────────────────────────────────────── */}
       <div className={ds.grid4}>
@@ -880,7 +904,7 @@ export default function SimLensPage() {
           {activeTab === 'results' && (
             <ResultsTab
               run={selectedRun}
-              mockResults={mockResultsForDisplay}
+              fallbackResults={fallbackResults}
               onExport={() => {
                 if (selectedRun) handleExportResults(selectedRun);
               }}
@@ -891,7 +915,7 @@ export default function SimLensPage() {
               scenarios={scenarios}
               runs={runs}
               comparisonIds={comparisonIds}
-              mockResults={mockResultsForDisplay}
+              fallbackResults={fallbackResults}
             />
           )}
           {activeTab === 'models' && (
@@ -1217,6 +1241,8 @@ export default function SimLensPage() {
         </div>
       )}
 
+      <RealtimeDataPanel data={realtimeInsights} />
+
       {/* ── Import Modal ──────────────────────────────────────────────────── */}
       {showImportModal && (
         <div className={ds.modalBackdrop} onClick={() => setShowImportModal(false)}>
@@ -1284,9 +1310,10 @@ function ScenariosTab({
         </div>
       )}
 
-      {scenarios.map(scenario => (
-        <div
+      {scenarios.map((scenario, index) => (
+        <motion.div
           key={scenario.id}
+          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }}
           onClick={() => onSelect(scenario.id)}
           className={cn(
             ds.panelHover,
@@ -1332,7 +1359,7 @@ function ScenariosTab({
               </button>
             </div>
           </div>
-        </div>
+        </motion.div>
       ))}
 
       {/* Backend simulations (legacy) */}
@@ -1633,14 +1660,14 @@ function RunsTab({
 // ─── RESULTS TAB ─────────────────────────────────────────────────────────────
 
 function ResultsTab({
-  run, mockResults, onExport,
+  run, fallbackResults, onExport,
 }: {
   run: SimRun | null;
-  mockResults: SimResults;
+  fallbackResults: SimResults;
   onExport: () => void;
 }) {
-  // Use run.results if available, otherwise show mock for demonstration
-  const results = run?.results || mockResults;
+  // Use run.results if available, otherwise show empty fallback
+  const results = run?.results || fallbackResults;
 
   return (
     <div className="space-y-4">
@@ -1809,19 +1836,19 @@ function ResultsTab({
 // ─── COMPARISON TAB ──────────────────────────────────────────────────────────
 
 function ComparisonTab({
-  scenarios, runs, comparisonIds, mockResults,
+  scenarios, runs, comparisonIds, fallbackResults,
 }: {
   scenarios: Scenario[];
   runs: SimRun[];
   comparisonIds: string[];
-  mockResults: SimResults;
+  fallbackResults: SimResults;
 }) {
   const comparedRuns = runs.filter(r => comparisonIds.includes(r.id));
   const comparedScenarios = scenarios.filter(s => comparisonIds.includes(s.id));
 
   // If comparing runs
   if (comparedRuns.length >= 2) {
-    const results = comparedRuns.map(r => r.results || mockResults);
+    const results = comparedRuns.map(r => r.results || fallbackResults);
     return (
       <div className="space-y-4">
         <div className={ds.panel}>
@@ -1999,7 +2026,7 @@ function ModelsTab({
   const categories = Array.from(new Set(templates.map(t => t.category)));
 
   return (
-    <div className="space-y-6">
+    <div data-lens-theme="sim" className="space-y-6">
       {categories.map(category => (
         <div key={category}>
           <h3 className={cn(ds.heading3, 'mb-3 flex items-center gap-2')}>

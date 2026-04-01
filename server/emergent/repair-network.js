@@ -201,8 +201,8 @@ export function handleRepairNetworkCommand(parts) {
 export function init({ STATE, helpers } = {}) {
   if (!ENABLED) return { ok: true, enabled: false, message: "Repair network disabled" };
 
-  _pushTimer = setInterval(() => { pushFixes().catch(() => {}); }, PUSH_INTERVAL);
-  _pullTimer = setInterval(() => { pullFixes().catch(() => {}); }, PULL_INTERVAL);
+  _pushTimer = setInterval(() => { pushFixes().catch(e => console.warn('[repair-network] async op failed:', e?.message)); }, PUSH_INTERVAL);
+  _pullTimer = setInterval(() => { pullFixes().catch(e => console.warn('[repair-network] async op failed:', e?.message)); }, PULL_INTERVAL);
   if (_pushTimer.unref) _pushTimer.unref();
   if (_pullTimer.unref) _pullTimer.unref();
 

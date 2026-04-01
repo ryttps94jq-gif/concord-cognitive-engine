@@ -1,16 +1,15 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Download, FileJson, FileSpreadsheet, FileText, ChevronDown } from 'lucide-react';
+import { Download, FileJson, FileSpreadsheet, ChevronDown } from 'lucide-react';
 import { apiHelpers } from '@/lib/api/client';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface ExportMenuProps {
   domain: string;
-  domainLabel: string;
 }
 
-export function ExportMenu({ domain, domainLabel }: ExportMenuProps) {
+export function ExportMenu({ domain }: ExportMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [exporting, setExporting] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
-import { Clock, ChevronDown, ChevronUp, User, Bot, Sparkles, Edit3, Eye, Plus } from 'lucide-react';
+import { Clock, ChevronDown, ChevronUp, User, Bot, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface ActivityTimelineProps {
@@ -15,15 +15,6 @@ const sourceIcons: Record<string, typeof User> = {
   autogen: Bot,
   dream: Sparkles,
   synthesis: Sparkles,
-};
-
-const actionLabels: Record<string, string> = {
-  created: 'Created',
-  updated: 'Updated',
-  viewed: 'Viewed',
-  autogen: 'Generated insight',
-  dream: 'Filled knowledge gap',
-  synthesis: 'Synthesized connection',
 };
 
 export function ActivityTimeline({ domain }: ActivityTimelineProps) {

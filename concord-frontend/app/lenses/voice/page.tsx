@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
-import { apiHelpers } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
 import { VoiceRecorder } from '@/components/voice/VoiceRecorder';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -102,7 +102,7 @@ const generateWaveform = (count: number): number[] =>
 
 const INITIAL_TAKES: Take[] = [];
 
-const INITIAL_EFFECTS: EffectNode[] = [
+const DEFAULT_EFFECTS: EffectNode[] = [
   { id: 'noise-gate', name: 'Noise Gate', enabled: false, paramLabel: 'Threshold', paramValue: -40, paramMin: -80, paramMax: 0, paramUnit: 'dB' },
   { id: 'compressor', name: 'Compressor', enabled: false, paramLabel: 'Ratio', paramValue: 4, paramMin: 1, paramMax: 20, paramUnit: ':1' },
   { id: 'eq', name: 'EQ', enabled: false, paramLabel: 'Presence', paramValue: 0, paramMin: -12, paramMax: 12, paramUnit: 'dB' },
@@ -110,7 +110,7 @@ const INITIAL_EFFECTS: EffectNode[] = [
   { id: 'reverb', name: 'Reverb', enabled: false, paramLabel: 'Mix', paramValue: 10, paramMin: 0, paramMax: 100, paramUnit: '%' },
 ];
 
-const INITIAL_INPUTS = [
+const DEFAULT_INPUTS = [
   { id: 'default', label: 'Built-in Microphone' },
 ];
 
@@ -126,7 +126,7 @@ export default function VoiceLensPage() {
   const [isPlaying, setIsPlaying] = useState(false);
 
   // Takes
-  const [takes, setTakes] = useState<Take[]>(INITIAL_TAKES);
+  const [takes, setTakes] = useState<Take[]>([]);
   const { isLoading, isError: isError, error: error, refetch: refetch, items: _takeItems, create: _createTake } = useLensData<Take>('voice', 'take', {
     seed: INITIAL_TAKES.map(t => ({ title: t.name, data: t as unknown as Record<string, unknown> })),
   });
@@ -135,7 +135,7 @@ export default function VoiceLensPage() {
   const [renameValue, setRenameValue] = useState('');
 
   // Processing
-  const [effects, setEffects] = useState<EffectNode[]>(INITIAL_EFFECTS);
+  const [effects, setEffects] = useState<EffectNode[]>(DEFAULT_EFFECTS);
   const [activePreset, setActivePreset] = useState<ProcessingPreset>('raw');
 
   // Transcription
@@ -154,6 +154,13 @@ export default function VoiceLensPage() {
   // Level meters
   const [levelL, setLevelL] = useState(0);
   const [levelR, setLevelR] = useState(0);
+
+  // Real recording refs
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const takeBlobsRef = useRef<Map<string, Blob>>(new Map());
+  const playbackAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const activeTake = takes.find((t) => t.id === activeTakeId) || null;
 
@@ -211,40 +218,110 @@ export default function VoiceLensPage() {
     return `${h % 12 || 12}:${m.toString().padStart(2, '0')} ${ampm}`;
   };
 
-  // Transport handlers
-  const handleRecord = useCallback(() => {
-    setStatus('recording');
-    setRecordingTime(0);
+  // Transport handlers — wired to real MediaRecorder
+  const handleRecord = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      recordedChunksRef.current = [];
+      const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) recordedChunksRef.current.push(e.data);
+      };
+      recorder.start(100);
+      mediaRecorderRef.current = recorder;
+      setStatus('recording');
+      setRecordingTime(0);
+    } catch (err) {
+      console.error('[Voice] Mic access failed:', err);
+      useUIStore.getState().addToast({ type: 'error', message: 'Microphone access denied' });
+    }
   }, []);
 
   const handleStop = useCallback(() => {
-    if (status === 'recording') {
+    if (status === 'recording' && mediaRecorderRef.current) {
       setStatus('processing');
-      const newTake: Take = {
-        id: `take-${Date.now()}`,
-        number: takes.length + 1,
-        name: `Take ${takes.length + 1}`,
-        duration: recordingTime,
-        timestamp: new Date(),
-        starred: false,
-        isBest: false,
-        waveformHeights: generateWaveform(16),
-        transcript: null,
-      };
-      setTimeout(() => {
+      const recorder = mediaRecorderRef.current;
+      const takeId = `take-${Date.now()}`;
+      const takeNum = takes.length + 1;
+      const duration = recordingTime;
+
+      recorder.onstop = () => {
+        const blob = new Blob(recordedChunksRef.current, { type: 'audio/webm' });
+        takeBlobsRef.current.set(takeId, blob);
+
+        // Upload to backend
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+          const base64 = (reader.result as string).split(',')[1];
+          try {
+            await api.post('/api/media/upload', {
+              title: `Take ${takeNum}`,
+              mediaType: 'audio',
+              mimeType: 'audio/webm',
+              fileSize: blob.size,
+              originalFilename: `voice-take-${takeNum}-${Date.now()}.webm`,
+              tags: ['voice', 'recording'],
+              privacy: 'private',
+              duration,
+              data: base64,
+            });
+          } catch (err) {
+            console.error('[Voice] Upload failed:', err);
+          }
+        };
+        reader.readAsDataURL(blob);
+
+        const newTake: Take = {
+          id: takeId,
+          number: takeNum,
+          name: `Take ${takeNum}`,
+          duration,
+          timestamp: new Date(),
+          starred: false,
+          isBest: false,
+          waveformHeights: generateWaveform(16),
+          transcript: null,
+        };
         setTakes((prev) => [...prev, newTake]);
-        setActiveTakeId(newTake.id);
+        setActiveTakeId(takeId);
         setStatus('ready');
-      }, 1200);
+      };
+      recorder.stop();
+
+      // Stop mic stream
+      mediaStreamRef.current?.getTracks().forEach(t => t.stop());
+      mediaStreamRef.current = null;
+      mediaRecorderRef.current = null;
     } else {
+      // Stop playback
+      if (playbackAudioRef.current) {
+        playbackAudioRef.current.pause();
+        playbackAudioRef.current = null;
+      }
       setIsPlaying(false);
     }
   }, [status, recordingTime, takes.length]);
 
   const handlePlayPause = useCallback(() => {
     if (status === 'recording') return;
-    setIsPlaying((p) => !p);
-  }, [status]);
+    if (!activeTakeId) return;
+    if (isPlaying) {
+      playbackAudioRef.current?.pause();
+      playbackAudioRef.current = null;
+      setIsPlaying(false);
+    } else {
+      const blob = takeBlobsRef.current.get(activeTakeId);
+      if (blob) {
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        audio.onended = () => { setIsPlaying(false); playbackAudioRef.current = null; };
+        audio.play().catch(() => { setIsPlaying(false); });
+        playbackAudioRef.current = audio;
+        setIsPlaying(true);
+      }
+    }
+  }, [status, activeTakeId, isPlaying]);
 
   // Take actions
   const toggleStar = (id: string) =>
@@ -357,7 +434,7 @@ export default function VoiceLensPage() {
     );
   }
   return (
-    <div className="h-[calc(100vh-4rem)] flex flex-col bg-gradient-to-b from-purple-900/10 to-black">
+    <div data-lens-theme="voice" className="h-[calc(100vh-4rem)] flex flex-col bg-gradient-to-b from-purple-900/10 to-black">
       {/* Header */}
       <header className="flex items-center justify-between px-6 py-3 border-b border-lattice-border bg-black/40">
         <div className="flex items-center gap-3">
@@ -389,7 +466,7 @@ export default function VoiceLensPage() {
               onChange={(e) => setSelectedInput(e.target.value)}
               className="bg-white/5 border border-lattice-border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-neon-cyan/50"
             >
-              {INITIAL_INPUTS.map((inp) => (
+              {DEFAULT_INPUTS.map((inp) => (
                 <option key={inp.id} value={inp.id} className="bg-lattice-surface">
                   {inp.label}
                 </option>

@@ -3,8 +3,11 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
+import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useState } from 'react';
-import { Dna, Activity, Heart, Brain, Microscope, Layers, ChevronDown } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Dna, Activity, Heart, Brain, Microscope, Layers, ChevronDown, AlertTriangle, Bug } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -28,9 +31,13 @@ export default function BioLensPage() {
 
   const [selectedSystem, setSelectedSystem] = useState('homeostasis');
   const [showFeatures, setShowFeatures] = useState(false);
+  const [activeTab, setActiveTab] = useState<'organisms' | 'experiments' | 'sequences'>('organisms');
   const { latestData: realtimeData, isLive, lastUpdated, insights } = useRealtimeLens('bio');
 
-  const { data: bioData, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
+  const { items: bioItems, isLoading, isError: isError, error: error, refetch: refetch, create, update, remove } = useLensData<Record<string, unknown>>('bio', 'system', { seed: [] });
+  const runAction = useRunArtifact('bio');
+
+  const { data: bioData } = useQuery({
     queryKey: ['bio-systems'],
     queryFn: () => apiHelpers.lens.list('bio', { type: 'system' }).then((r) => r.data),
   });
@@ -67,7 +74,14 @@ export default function BioLensPage() {
     );
   }
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="bio" className="p-6 space-y-6">
+      {/* Disclaimer */}
+      <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3 flex items-start gap-3">
+        <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
+        <p className="text-sm text-amber-200">
+          Not medical advice. This lens provides biological modeling tools for educational and research purposes only. Consult qualified professionals for health decisions.
+        </p>
+      </div>
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-2xl">🧬</span>
@@ -84,8 +98,43 @@ export default function BioLensPage() {
       <RealtimeDataPanel domain="bio" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <DTUExportButton domain="bio" data={{}} compact />
 
+      {/* Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { icon: Microscope, label: 'Bio Age', value: growthData?.bioAge || '0.00', color: 'text-neon-cyan' },
+          { icon: Dna, label: 'Maturation', value: `${((growthData?.maturationLevel || 0) * 100).toFixed(1)}%`, color: 'text-neon-purple' },
+          { icon: Bug, label: 'Organisms', value: String(bioItems.length), color: 'text-neon-green' },
+          { icon: Activity, label: 'Active Organs', value: String(growthData?.organs?.filter((o: GrowthOrgan) => o.active).length || 0), color: 'text-neon-pink' },
+        ].map((stat, i) => (
+          <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} className="lens-card text-center">
+            <stat.icon className={`w-6 h-6 mx-auto mb-2 ${stat.color}`} />
+            <p className={`text-2xl font-bold ${stat.color}`}>{stat.value}</p>
+            <p className="text-xs text-gray-400 mt-1">{stat.label}</p>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 bg-black/30 border border-white/10 rounded-lg p-1">
+        {([
+          { key: 'organisms' as const, label: 'Organisms', icon: Bug },
+          { key: 'experiments' as const, label: 'Experiments', icon: Microscope },
+          { key: 'sequences' as const, label: 'Sequences', icon: Dna },
+        ]).map(tab => (
+          <button key={tab.key} onClick={() => setActiveTab(tab.key)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors flex-1 justify-center ${
+              activeTab === tab.key ? 'bg-neon-purple/20 text-neon-purple' : 'text-gray-500 hover:text-white'
+            }`}>
+            <tab.icon className="w-4 h-4" /> {tab.label}
+          </button>
+        ))}
+      </div>
+
+      <AnimatePresence mode="wait">
+      {activeTab === 'organisms' && (
+        <motion.div key="organisms" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
       {/* Bio Age Display */}
-      <div className="panel p-6 text-center">
+      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="panel p-6 text-center">
         <Microscope className="w-12 h-12 mx-auto text-neon-cyan mb-4" />
         <p className="text-sm text-gray-400 mb-2">System Biological Age</p>
         <p className="text-5xl font-bold text-gradient-neon">
@@ -94,15 +143,42 @@ export default function BioLensPage() {
         <p className="text-sm text-gray-400 mt-2">
           Maturation: {((growthData?.maturationLevel || 0) * 100).toFixed(1)}%
         </p>
+      </motion.div>
+
+      {/* Organism Taxonomy Tree */}
+      <div className="panel p-4 mt-4">
+        <h3 className="font-semibold mb-3 flex items-center gap-2"><Bug className="w-4 h-4 text-neon-green" /> Taxonomy Classification</h3>
+        <div className="space-y-1">
+          {[
+            { level: 'Domain', name: 'Eukarya', indent: 0 },
+            { level: 'Kingdom', name: 'Animalia', indent: 1 },
+            { level: 'Phylum', name: 'Chordata', indent: 2 },
+            { level: 'Class', name: 'Mammalia', indent: 3 },
+            { level: 'Order', name: 'Primates', indent: 4 },
+            { level: 'Family', name: 'Hominidae', indent: 5 },
+            { level: 'Genus', name: 'Homo', indent: 6 },
+            { level: 'Species', name: 'H. sapiens', indent: 7 },
+          ].map((tax, i) => (
+            <motion.div key={tax.level} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
+              className="flex items-center gap-2 py-1" style={{ paddingLeft: `${tax.indent * 16 + 8}px` }}>
+              <div className="w-1.5 h-1.5 rounded-full bg-neon-green/50" />
+              <span className="text-xs text-gray-500 w-16">{tax.level}</span>
+              <span className="text-sm text-gray-300 font-mono">{tax.name}</span>
+            </motion.div>
+          ))}
+        </div>
       </div>
 
       {/* System Selector */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {systems.map((system) => {
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+        {systems.map((system, i) => {
           const Icon = system.icon;
           return (
-            <button
+            <motion.button
               key={system.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.1 }}
               onClick={() => setSelectedSystem(system.id)}
               className={`lens-card text-center ${
                 selectedSystem === system.id ? 'border-neon-cyan glow-blue' : ''
@@ -110,10 +186,58 @@ export default function BioLensPage() {
             >
               <Icon className={`w-8 h-8 mx-auto mb-2 ${system.color}`} />
               <p className="font-medium text-sm">{system.name}</p>
-            </button>
+            </motion.button>
           );
         })}
       </div>
+        </motion.div>
+      )}
+
+      {activeTab === 'experiments' && (
+        <motion.div key="experiments" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="panel p-4">
+          <h3 className="font-semibold mb-3 flex items-center gap-2"><Microscope className="w-4 h-4 text-neon-cyan" /> Active Experiments</h3>
+          <div className="space-y-2">
+            {['Gene Expression Analysis', 'Protein Folding Simulation', 'Cell Growth Assay', 'Metabolic Pathway Mapping'].map((exp, i) => (
+              <motion.div key={exp} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.08 }}
+                className="flex items-center justify-between p-3 bg-black/20 rounded-lg border border-white/5">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-neon-green" />
+                  <span className="text-sm text-gray-300">{exp}</span>
+                </div>
+                <span className={`text-xs px-2 py-0.5 rounded ${i === 0 ? 'bg-neon-green/20 text-neon-green' : i === 3 ? 'bg-gray-500/20 text-gray-400' : 'bg-neon-blue/20 text-neon-blue'}`}>
+                  {i === 0 ? 'Running' : i === 3 ? 'Queued' : 'In Progress'}
+                </span>
+              </motion.div>
+            ))}
+          </div>
+        </motion.div>
+      )}
+
+      {activeTab === 'sequences' && (
+        <motion.div key="sequences" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="panel p-4">
+          <h3 className="font-semibold mb-3 flex items-center gap-2"><Dna className="w-4 h-4 text-neon-purple" /> DNA Sequence Viewer</h3>
+          <div className="bg-black/30 rounded-lg p-4 font-mono text-xs leading-relaxed overflow-x-auto">
+            <div className="flex flex-wrap gap-x-1">
+              {'ATGCGTACGTTAACGGCTATGCAGTACGCTTAAGCGTACG'.split('').map((base, i) => {
+                const colors: Record<string, string> = { A: 'text-green-400', T: 'text-red-400', G: 'text-amber-400', C: 'text-blue-400' };
+                return (
+                  <motion.span key={i} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.02 }}
+                    className={colors[base] || 'text-gray-400'}>
+                    {base}
+                  </motion.span>
+                );
+              })}
+            </div>
+            <div className="mt-3 flex gap-4 text-xs text-gray-500">
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-400" /> Adenine (A)</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400" /> Thymine (T)</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400" /> Guanine (G)</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-400" /> Cytosine (C)</span>
+            </div>
+          </div>
+        </motion.div>
+      )}
+      </AnimatePresence>
 
       {/* System Details */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

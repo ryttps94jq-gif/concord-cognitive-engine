@@ -1,7 +1,7 @@
 /**
  * LLM Priority Queue
  *
- * Wraps all LLM calls (Ollama / OpenAI) behind a bounded priority queue.
+ * Wraps all LLM calls (Ollama) behind a bounded priority queue.
  * User-facing requests take priority over background tasks (autogen, etc.).
  *
  * Priority levels (lower = higher priority):
@@ -11,7 +11,7 @@
  *   3 — LOW:      autogen pipeline, background enrichment
  *
  * Features:
- *   - Configurable concurrency cap (defaults to 2)
+ *   - Configurable concurrency cap (defaults to 8, matching 4 brain instances)
  *   - Queue depth limit with rejection for low-priority overflow
  *   - Per-priority metrics (queued, inflight, completed, rejected, avg latency)
  *   - Drain support for graceful shutdown
@@ -36,7 +36,10 @@ const PRIORITY_LABELS = ["critical", "high", "normal", "low"];
  * @returns {LLMQueue}
  */
 export function createLLMQueue(opts = {}) {
-  const concurrency = opts.concurrency || parseInt(process.env.LLM_CONCURRENCY || "2", 10);
+  // Default 4: Two Ollama instances (14b conscious + 7b shared for sub/util/repair).
+  // 14b handles ~2 parallel requests, 7b handles ~2-3. Total safe concurrency = ~4.
+  // Previous default of 2 was too low; 8 would overwhelm the shared 7b instance.
+  const concurrency = opts.concurrency || parseInt(process.env.LLM_CONCURRENCY || "4", 10);
   const maxQueueDepth = opts.maxQueueDepth || 200;
   const onReject = opts.onReject || (() => {});
 

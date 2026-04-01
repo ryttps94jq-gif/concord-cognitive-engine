@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 
 interface ArtifactInfo {
   type: string;
@@ -44,7 +45,7 @@ function WaveformDisplay({ dtuId }: { dtuId: string }) {
     fetch(`/api/artifact/${dtuId}/thumbnail`)
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setPeaks(data); })
-      .catch(() => {});
+      .catch(err => console.error('[ArtifactRenderer] Failed to load waveform:', err));
   }, [dtuId]);
 
   if (!peaks.length) return <div className="h-12 bg-zinc-900 rounded animate-pulse" />;
@@ -84,11 +85,11 @@ export function ArtifactRenderer({ dtuId, artifact, mode = "inline" }: ArtifactR
   // Image
   if (artifact.type.startsWith("image/")) {
     if (mode === "thumbnail") {
-      return <img src={streamUrl} className="w-full h-32 object-cover rounded" alt={artifact.filename} />;
+      return <Image src={streamUrl} className="w-full h-32 object-cover rounded" alt={artifact.filename} width={400} height={128} unoptimized />;
     }
     return (
       <div className="space-y-2">
-        <img src={streamUrl} alt={artifact.filename} className="w-full rounded-lg max-h-96 object-contain bg-zinc-900" />
+        <Image src={streamUrl} alt={artifact.filename} className="w-full rounded-lg max-h-96 object-contain bg-zinc-900" width={800} height={384} unoptimized />
         <div className="flex items-center justify-between text-xs text-zinc-400">
           <span>{artifact.filename} — {formatSize(artifact.sizeBytes)}</span>
           <DownloadButton url={downloadUrl} filename={artifact.filename} />
@@ -135,7 +136,7 @@ export function ArtifactRenderer({ dtuId, artifact, mode = "inline" }: ArtifactR
     return (
       <div className="space-y-2">
         <div className="bg-zinc-900 rounded-lg border border-zinc-700 p-4 flex items-center justify-center">
-          <img src={streamUrl} alt={artifact.filename} className="max-w-full max-h-96" />
+          <Image src={streamUrl} alt={artifact.filename} className="max-w-full max-h-96" width={800} height={384} unoptimized />
         </div>
         <div className="flex items-center justify-between text-xs text-zinc-400">
           <span>{artifact.filename} — {formatSize(artifact.sizeBytes)}</span>
@@ -236,7 +237,7 @@ function CSVTablePreview({ dtuId, filename, downloadUrl }: { dtuId: string; file
         );
         setRows(parsed.slice(0, 100));
       })
-      .catch(() => {});
+      .catch(err => console.error('[ArtifactRenderer] Failed to load CSV data:', err));
   }, [dtuId]);
 
   if (!rows.length) return <div className="h-32 bg-zinc-900 rounded animate-pulse" />;
@@ -275,7 +276,7 @@ function CSVTablePreview({ dtuId, filename, downloadUrl }: { dtuId: string; file
 }
 
 // MEGA SPEC: MIDI Preview
-function MidiPreview({ dtuId, filename, downloadUrl }: { dtuId: string; filename: string; downloadUrl: string }) {
+function MidiPreview({ dtuId: _dtuId, filename, downloadUrl }: { dtuId: string; filename: string; downloadUrl: string }) {
   return (
     <div className="space-y-2 p-3 rounded-lg bg-zinc-900 border border-zinc-700">
       <div className="flex items-center gap-2">

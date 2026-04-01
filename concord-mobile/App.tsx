@@ -44,8 +44,23 @@ function LoadingScreen({ phase }: { phase: BootPhase }) {
 }
 
 // ── Placeholder Secure Storage ───────────────────────────────────────────────
-// In production this wraps iOS Keychain / Android Keystore via a native module.
-// Placeholder uses in-memory storage so the boot sequence can run.
+// SECURITY WARNING: This implementation stores the device identity keypair in
+// plain JavaScript heap memory. Data is NOT persisted across app restarts, and
+// is NOT protected by the OS secure enclave (iOS Keychain / Android Keystore).
+//
+// To fix this properly, add one of the following to package.json and wire it:
+//   • expo-secure-store  — Expo-managed Keychain/Keystore wrapper (recommended)
+//   • react-native-keychain — bare React Native Keychain/Keystore wrapper
+//
+// Neither package is currently installed (checked package.json). Until one is
+// added, the identity keypair is ephemeral — it regenerates on every cold
+// start — and must NOT be used for production signing or authentication.
+
+console.warn(
+  '[SecureStorage] Using in-memory placeholder — identity keypair is NOT ' +
+  'persisted and NOT protected by the OS secure enclave. ' +
+  'Install expo-secure-store or react-native-keychain to fix this.'
+);
 
 const memoryStorage = new Map<string, string>();
 

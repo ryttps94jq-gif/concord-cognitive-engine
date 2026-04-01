@@ -1,54 +1,63 @@
 // lib/brain-config.js
-// Four-Brain Cognitive Architecture — Configuration
+// Two-Model Cognitive Architecture — Configuration
 //
-// Each brain has a dedicated Ollama instance, model, temperature profile,
-// timeout, priority, and concurrency limit. The repair brain always runs
-// at highest priority (0). Conscious (user-facing) beats subconscious (autonomous).
+// Two standing Ollama models on a 20GB GPU:
+//   - 14b (qwen2.5:14b-instruct-q4_K_M) — Conscious brain. Chat. ~13GB.
+//   - 7b (qwen2.5:7b-instruct-q4_K_M) — Subconscious + Utility + Repair. ~6.3GB.
+//   - LLaVA 7b — Vision. Loads on demand, auto-unloads after 30s.
+//
+// Subconscious, utility, and repair share the SAME 7b Ollama instance
+// with different system prompts and temperature profiles per role.
+// Total concurrency across all three roles is capped by the shared instance.
+
+// The shared 7b URL (subconscious/utility/repair all point here)
+const SHARED_7B_URL = process.env.BRAIN_SUBCONSCIOUS_URL || process.env.BRAIN_UTILITY_URL || process.env.BRAIN_REPAIR_URL || "http://ollama-subconscious:11434";
+const SHARED_7B_MODEL = process.env.BRAIN_SUBCONSCIOUS_MODEL || "qwen2.5:7b-instruct-q4_K_M";
 
 export const BRAIN_CONFIG = Object.freeze({
   conscious: {
     url: process.env.BRAIN_CONSCIOUS_URL || process.env.OLLAMA_HOST || "http://ollama-conscious:11434",
-    model: process.env.BRAIN_CONSCIOUS_MODEL || "qwen2.5:7b",
+    model: process.env.BRAIN_CONSCIOUS_MODEL || "qwen2.5:14b-instruct-q4_K_M",
     role: "chat, deep reasoning, council deliberation",
     temperature: 0.7,
-    timeout: 45000,    // GPU inference is faster — tighten to fail fast on real errors
+    timeout: 45000,
     priority: 1,       // CRITICAL — user-facing
-    maxConcurrent: 3,  // GPU can handle parallel conscious thoughts
+    maxConcurrent: 2,  // 14b model is memory-heavy; 2 parallel max
     contextWindow: 32768,
-    maxTokens: 4096,   // Full output — let it think
+    maxTokens: 4096,
   },
   subconscious: {
-    url: process.env.BRAIN_SUBCONSCIOUS_URL || "http://ollama-subconscious:11434",
-    model: process.env.BRAIN_SUBCONSCIOUS_MODEL || "qwen2.5:1.5b",
+    url: SHARED_7B_URL,
+    model: SHARED_7B_MODEL,
     role: "autogen, dream, evolution, synthesis, birth",
     temperature: 0.85,
-    timeout: 30000,    // GPU: faster inference, tighter timeout
+    timeout: 30000,
     priority: 2,       // NORMAL — autonomous background
-    maxConcurrent: 4,  // GPU: autogen + dreams + evolution + entity teaching
+    maxConcurrent: 2,  // Shared 7b: total across sub+util+repair = ~4 parallel
     contextWindow: 8192,
-    maxTokens: 1200,   // GPU: 7B brain can generate longer, more coherent DTUs
+    maxTokens: 1200,
   },
   utility: {
-    url: process.env.BRAIN_UTILITY_URL || "http://ollama-utility:11434",
-    model: process.env.BRAIN_UTILITY_MODEL || "qwen2.5:3b",
+    url: SHARED_7B_URL,
+    model: SHARED_7B_MODEL,
     role: "lens interactions, entity actions, quick domain tasks",
     temperature: 0.3,
-    timeout: 20000,    // GPU: fast 3B model, tight timeout
+    timeout: 20000,
     priority: 3,       // LOW — support tasks
-    maxConcurrent: 6,  // GPU: entities spam lens/action calls, needs most parallelism
+    maxConcurrent: 2,  // Shared 7b: keep low to avoid starving subconscious
     contextWindow: 16384,
-    maxTokens: 800,    // GPU: more complete outputs for entity actions
+    maxTokens: 800,
   },
   repair: {
-    url: process.env.BRAIN_REPAIR_URL || "http://ollama-repair:11434",
-    model: process.env.BRAIN_REPAIR_MODEL || "qwen2.5:0.5b",
+    url: SHARED_7B_URL,
+    model: SHARED_7B_MODEL,
     role: "error detection, auto-fix, runtime repair",
     temperature: 0.1,
-    timeout: 10000,    // GPU: 1.5B repair brain is fast
+    timeout: 10000,
     priority: 0,       // HIGHEST — system health
-    maxConcurrent: 2,  // Stays same — repair is low-frequency
+    maxConcurrent: 1,  // Shared 7b: repair is low-frequency, 1 slot is enough
     contextWindow: 4096,
-    maxTokens: 500,    // GPU: 1.5B can actually articulate error analysis now
+    maxTokens: 500,
   },
 });
 

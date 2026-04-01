@@ -4,55 +4,16 @@ import { useState, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Palette, Info } from 'lucide-react';
 import { ArtistryFeed } from '@/components/artistry/ArtistryFeed';
+import { useLensData } from '@/lib/hooks/use-lens-data';
 import type {
-  ArtistryPost, ArtistryContentType, FeedMode, FeedFilter,
-  AudioPreview, ImagePreview, TextPreview, CodePreview,
+  ArtistryPost, FeedMode, FeedFilter,
 } from '@/lib/artistry/types';
 
 // ============================================================================
-// Seed Data for Artistry Discovery Feed
+// Seed Data — empty; all posts come from the backend API
 // ============================================================================
 
-function generatePost(
-  id: string, creatorName: string, sourceLens: string,
-  contentType: ArtistryContentType, title: string, tags: string[],
-  preview: ArtistryPost['preview'], daysAgo: number,
-): ArtistryPost {
-  return {
-    id,
-    creatorId: `creator-${creatorName.toLowerCase().replace(/\s/g, '-')}`,
-    creatorName,
-    creatorAvatarUrl: null,
-    sourceLens,
-    sourceArtifactId: `artifact-${id}`,
-    contentType,
-    preview,
-    title,
-    description: null,
-    tags,
-    createdAt: new Date(Date.now() - daysAgo * 86400000).toISOString(),
-    dedupeHash: `hash-${id}`,
-  };
-}
-
-const SEED_POSTS: ArtistryPost[] = [
-  generatePost('ap1', 'Luna Wave', 'music', 'audio', 'Substrate Dreams', ['electronic', 'ambient', 'synthesis'],
-    { type: 'audio', previewUrl: '/api/preview/ap1', waveformPeaks: Array.from({ length: 200 }, () => Math.random() * 0.8), duration: 245, previewDuration: 30, bpm: 128, key: 'Am', genre: 'electronic', coverArtUrl: null } as AudioPreview, 0),
-  generatePost('ap2', 'Cipher Studio', 'art', 'image', 'Lattice Topology #42', ['digital-art', 'generative', 'abstract'],
-    { type: 'image', imageUrl: '/api/preview/ap2.png', thumbnailUrl: '/api/preview/ap2-thumb.png', width: 2048, height: 2048, medium: 'digital' } as ImagePreview, 0),
-  generatePost('ap3', 'Void Poet', 'writing', 'text', 'The Architecture of Thought', ['poetry', 'philosophy', 'consciousness'],
-    { type: 'text', excerpt: 'In the lattice of meaning, each node\ncarries the weight of connections unmade.\nWe build structures from questions,\nnot answers — the framework itself\nis the revelation.\n\nConsider: the substrate does not think.\nIt remembers. And in remembering,\nit creates the conditions for thought\nto emerge, like condensation\non a cold surface—\nunasked for, inevitable,\nbeautiful in its clarity.', wordCount: 2400, genre: 'poetry' } as TextPreview, 1),
-  generatePost('ap4', 'Neon Archive', 'music', 'audio', 'Lattice Pulse (Midnight Mix)', ['techno', 'dark', 'driving'],
-    { type: 'audio', previewUrl: '/api/preview/ap4', waveformPeaks: Array.from({ length: 200 }, () => Math.random() * 0.9), duration: 312, previewDuration: 30, bpm: 135, key: 'Dm', genre: 'techno', coverArtUrl: null } as AudioPreview, 1),
-  generatePost('ap5', 'Lambda Labs', 'code', 'code', 'Resonance Field Algorithm', ['typescript', 'audio', 'dsp'],
-    { type: 'code', excerpt: `export function computeResonance(\n  signal: Float32Array,\n  frequency: number,\n  Q: number,\n): Float32Array {\n  const output = new Float32Array(signal.length);\n  const w0 = 2 * Math.PI * frequency / 44100;\n  const alpha = Math.sin(w0) / (2 * Q);\n  const b0 = alpha;\n  const b1 = 0;\n  const b2 = -alpha;\n  const a0 = 1 + alpha;\n  const a1 = -2 * Math.cos(w0);\n  const a2 = 1 - alpha;\n  // Biquad filter implementation\n  let x1 = 0, x2 = 0, y1 = 0, y2 = 0;\n  for (let i = 0; i < signal.length; i++) {\n    const x0 = signal[i];\n    output[i] = (b0/a0)*x0 + (b1/a0)*x1\n      + (b2/a0)*x2 - (a1/a0)*y1 - (a2/a0)*y2;\n    x2 = x1; x1 = x0;\n    y2 = y1; y1 = output[i];\n  }\n  return output;\n}`, language: 'typescript', totalLines: 340, description: 'DSP resonance filter' } as CodePreview, 2),
-  generatePost('ap6', 'Prism Effect', 'music', 'audio', 'Crystal Lattice', ['ambient', 'ethereal', 'pad'],
-    { type: 'audio', previewUrl: '/api/preview/ap6', waveformPeaks: Array.from({ length: 200 }, () => Math.random() * 0.5), duration: 510, previewDuration: 30, bpm: 72, key: 'D', genre: 'ambient', coverArtUrl: null } as AudioPreview, 2),
-  generatePost('ap7', 'Atlas Mind', 'music', 'audio', 'Cognitive Drift', ['ambient', 'meditation', 'texture'],
-    { type: 'audio', previewUrl: '/api/preview/ap7', waveformPeaks: Array.from({ length: 200 }, () => Math.random() * 0.4), duration: 420, previewDuration: 30, bpm: 80, key: 'C', genre: 'ambient', coverArtUrl: null } as AudioPreview, 3),
-  generatePost('ap8', 'Studio Nine', 'art', 'image', 'Concord Skyline — Neon Series', ['photography', 'urban', 'neon'],
-    { type: 'image', imageUrl: '/api/preview/ap8.png', thumbnailUrl: '/api/preview/ap8-thumb.png', width: 3840, height: 2160, medium: 'photography' } as ImagePreview, 3),
-];
+const SEED_POSTS: ArtistryPost[] = [];
 
 // ============================================================================
 // Artistry Page
@@ -66,7 +27,10 @@ export default function ArtistryPage() {
     tags: [],
     timeRange: 'all',
   });
-  const [posts] = useState<ArtistryPost[]>(SEED_POSTS);
+  const { items: postItems } = useLensData<ArtistryPost>('artistry', 'post', {
+    seed: SEED_POSTS.map(p => ({ title: p.title, data: p as unknown as Record<string, unknown> })),
+  });
+  const posts: ArtistryPost[] = postItems.map(i => ({ ...(i.data as unknown as ArtistryPost), id: i.id }));
 
   // ---- Filtering ----
   const filteredPosts = useMemo(() => {

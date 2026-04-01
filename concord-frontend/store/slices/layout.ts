@@ -17,7 +17,7 @@ export interface LayoutSlice {
 }
 
 export const createLayoutSlice: StateCreator<LayoutSlice, [], [], LayoutSlice> = (set) => ({
-  sidebarOpen: true,
+  sidebarOpen: false,
   sidebarCollapsed: false,
   commandPaletteOpen: false,
   theme: 'dark',

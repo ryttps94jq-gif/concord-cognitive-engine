@@ -48,12 +48,6 @@ interface CodeEngineStatusProps {
 
 // ── Helpers ─────────────────────────────────────────────────────────────
 
-function formatTime(dateStr: string | null): string {
-  if (!dateStr) return 'Never';
-  const date = new Date(dateStr);
-  return date.toLocaleString();
-}
-
 function formatRelativeTime(dateStr: string | null): string {
   if (!dateStr) return 'Never';
   const now = Date.now();

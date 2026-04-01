@@ -1,5 +1,6 @@
 'use client';
 
+import { motion } from 'framer-motion';
 import { useState, useMemo, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
@@ -1709,7 +1710,11 @@ export default function RetailLensPage() {
         </div>
       ) : (
         <div className={ds.grid3}>
-          {filtered.map(renderCard)}
+          {filtered.map((item, index) => (
+            <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }}>
+              {renderCard(item)}
+            </motion.div>
+          ))}
         </div>
       )}
     </>
@@ -1739,7 +1744,7 @@ export default function RetailLensPage() {
   }
 
   return (
-    <div className={ds.pageContainer}>
+    <div data-lens-theme="retail" className={ds.pageContainer}>
       {/* Header */}
       <header className={ds.sectionHeader}>
         <div className="flex items-center gap-3">
@@ -1762,6 +1767,24 @@ export default function RetailLensPage() {
         </div>
       </header>
 
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Products', value: items.length, icon: Package },
+          { label: 'Daily Sales', value: `$${items.reduce((s, i) => s + Number((i.data as Record<string, unknown>).revenue || 0), 0).toLocaleString()}`, icon: DollarSign },
+          { label: 'Inventory', value: items.reduce((s, i) => s + Number((i.data as Record<string, unknown>).stock || (i.data as Record<string, unknown>).qty || 0), 0), icon: ShoppingBag },
+          { label: 'Active Orders', value: items.filter(i => i.meta?.status === 'active' || i.meta?.status === 'processing').length, icon: Store },
+        ].map((stat) => (
+          <div key={stat.label} className={ds.panel + ' flex items-center gap-3 p-3'}>
+            <stat.icon className="w-5 h-5 text-neon-purple shrink-0" />
+            <div>
+              <p className="text-xs text-gray-400">{stat.label}</p>
+              <p className="text-lg font-bold text-white">{stat.value}</p>
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* AI Actions */}
       <UniversalActions domain="retail" artifactId={items[0]?.id} compact />

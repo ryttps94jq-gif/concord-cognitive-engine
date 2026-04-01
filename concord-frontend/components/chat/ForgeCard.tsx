@@ -215,6 +215,15 @@ export default function ForgeCard({
       {/* Actions */}
       {!actionTaken && (
         <div className="px-4 py-3 flex items-center gap-2 border-t border-zinc-800/50">
+          {offerForge && (
+            <button
+              onClick={handleSave}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-purple-600/20 text-purple-400 hover:bg-purple-600/30 transition-colors border border-purple-600/20"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              Forge
+            </button>
+          )}
           {actions.save?.available && (
             <button
               onClick={handleSave}

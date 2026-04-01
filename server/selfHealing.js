@@ -138,7 +138,7 @@ Return JSON only: {"needsUpdate": true/false, "updatedContent": "..." or null, "
             dtu.updatedAt = new Date().toISOString();
 
             // Re-embed the updated DTU
-            embedDTU(dtu).catch(() => {});
+            embedDTU(dtu).catch(e => console.warn('[selfHealing] embed failed:', e?.message));
 
             updated++;
           }

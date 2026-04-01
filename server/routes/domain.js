@@ -39,6 +39,54 @@ export default function registerDomainRoutes(app, {
       ensureExperienceLearning();
       ensureAttentionManager();
       ensureReflectionEngine();
+
+      // Goals
+      const goals = (() => {
+        try {
+          const active = Array.from(STATE.goals?.active || [])
+            .map(gid => STATE.goals?.registry?.get?.(gid)).filter(Boolean)
+            .slice(0, 10)
+            .map(g => ({ id: g.id, description: g.description || g.goal, priority: g.priority, status: g.status }));
+          return { activeCount: STATE.goals?.active?.size || 0, totalRegistered: STATE.goals?.registry?.size || 0, active };
+        } catch (_e) { return null; }
+      })();
+
+      // Hypothesis engine
+      const hypothesis = (() => {
+        try {
+          const hs = STATE.hypotheses;
+          if (!hs) return null;
+          return { active: hs.active?.size || hs.active?.length || 0, tested: hs.tested || 0, confirmed: hs.confirmed || 0 };
+        } catch (_e) { return null; }
+      })();
+
+      // Metacognition
+      const metacognition = (() => {
+        try {
+          const mc = STATE.metacognition;
+          if (!mc) return null;
+          return { predictions: mc.predictions?.length || 0, blindSpots: mc.blindSpots?.length || 0, calibration: mc.calibrationScore ?? null };
+        } catch (_e) { return null; }
+      })();
+
+      // World model
+      const worldModel = (() => {
+        try {
+          const wm = STATE.worldModel;
+          if (!wm) return null;
+          return { entities: wm.entities?.size || 0, relations: wm.relations?.size || 0 };
+        } catch (_e) { return null; }
+      })();
+
+      // Reasoning chains
+      const reasoning = (() => {
+        try {
+          const r = STATE.reasoning;
+          if (!r) return null;
+          return { chains: r.chains?.size || 0, steps: r.steps?.size || 0 };
+        } catch (_e) { return null; }
+      })();
+
       return res.json({
         ok: true,
         experience: {
@@ -56,7 +104,12 @@ export default function registerDomainRoutes(app, {
           strengths: STATE.reflection.selfModel.strengths,
           weaknesses: STATE.reflection.selfModel.weaknesses,
           reflections: STATE.reflection.reflections.length,
-        }
+        },
+        goals,
+        hypothesis,
+        metacognition,
+        worldModel,
+        reasoning,
       });
     } catch (e) {
       return res.status(500).json({ ok: false, error: String(e?.message || e) });
@@ -134,6 +187,19 @@ export default function registerDomainRoutes(app, {
   // ---- Macros registry + runner ----
   app.get("/api/macros/domains", (req,res)=> res.json({ ok:true, domains: listDomains() }));
   app.get("/api/macros/:domain", (req,res)=> res.json({ ok:true, domain:req.params.domain, macros: listMacros(req.params.domain) }));
+
+  // Feature 46: Macro Explorer — all macros across all domains in one call
+  app.get("/api/admin/macros", (req, res) => {
+    const domains = listDomains();
+    const all = [];
+    for (const domain of domains) {
+      const macros = listMacros(domain);
+      for (const m of macros) {
+        all.push({ domain, name: m.name, description: m.description || "", public: !!m.public, plugin: m.plugin || null });
+      }
+    }
+    res.json({ ok: true, macros: all, domainCount: domains.length, totalMacros: all.length });
+  });
   app.post("/api/macros/run", asyncHandler(async (req, res) => {
     const ctx = makeCtx(req);
     let domain = req.body?.domain;

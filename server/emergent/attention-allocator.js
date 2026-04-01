@@ -336,7 +336,7 @@ export function init({ STATE, helpers } = {}) {
   if (STATE) globalThis._concordSTATE = STATE;
 
   _timer = setInterval(() => {
-    runAttentionCycle().catch(() => {});
+    runAttentionCycle().catch(e => console.warn('[attention-allocator] async op failed:', e?.message));
   }, ATTENTION_INTERVAL_MS);
   if (_timer.unref) _timer.unref();
 

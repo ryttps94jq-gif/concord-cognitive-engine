@@ -128,7 +128,7 @@ describe('PurchaseFlow', () => {
     fireEvent.click(buyBtn);
 
     await waitFor(() => {
-      expect(mockedApi.post).toHaveBeenCalledWith('/api/billing/checkout', {
+      expect(mockedApi.post).toHaveBeenCalledWith('/api/economy/buy/checkout', {
         tokens: 100,
       });
     });

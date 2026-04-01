@@ -1,10 +1,11 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
-import { useState } from 'react';
-import { Target, Trophy, Coins, Clock, Users, Layers, ChevronDown } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { motion } from 'framer-motion';
+import { Target, Trophy, Coins, Clock, Users, Layers, ChevronDown, Swords, Award } from 'lucide-react';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
@@ -28,7 +29,6 @@ export default function QuestmarketLensPage() {
   useLensNav('questmarket');
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('questmarket');
 
-  const queryClient = useQueryClient();
   const [filter, setFilter] = useState<string>('all');
   const [showFeatures, setShowFeatures] = useState(false);
 
@@ -75,7 +75,7 @@ export default function QuestmarketLensPage() {
     );
   }
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="questmarket" className="p-6 space-y-6">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-2xl">🎯</span>
@@ -107,6 +107,17 @@ export default function QuestmarketLensPage() {
 
       {/* AI Actions */}
       <UniversalActions domain="questmarket" artifactId={questItems[0]?.id} compact />
+
+      {/* Stats Row */}
+      {(() => { const available = quests.filter(q => q.status === 'open').length; const completed = quests.filter(q => q.status === 'completed').length; const totalReward = quests.reduce((s, q) => s + (q.reward || 0), 0); return (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="lens-card"><Swords className="w-5 h-5 text-neon-purple mb-2" /><p className="text-2xl font-bold">{available}</p><p className="text-sm text-gray-400">Quests Available</p></div>
+          <div className="lens-card"><Trophy className="w-5 h-5 text-neon-green mb-2" /><p className="text-2xl font-bold">{completed}</p><p className="text-sm text-gray-400">Completed</p></div>
+          <div className="lens-card"><Coins className="w-5 h-5 text-yellow-400 mb-2" /><p className="text-2xl font-bold">{totalReward.toLocaleString()}</p><p className="text-sm text-gray-400">Reward Total</p></div>
+          <div className="lens-card"><Award className="w-5 h-5 text-neon-cyan mb-2" /><p className="text-2xl font-bold">{quests.filter(q => q.difficulty === 'legendary').length}</p><p className="text-sm text-gray-400">Legendary</p></div>
+        </div>
+      ); })()}
+
       {/* Filter Tabs */}
       <div className="flex gap-2">
         {['all', 'open', 'in_progress', 'completed'].map((status) => (
@@ -132,9 +143,10 @@ export default function QuestmarketLensPage() {
             No quests available. Check back later!
           </p>
         ) : (
-          quests?.map((quest: Quest) => (
-            <div
+          quests?.map((quest: Quest, index: number) => (
+            <motion.div
               key={quest.id}
+              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }}
               className="lens-card hover:glow-purple relative overflow-hidden"
             >
               {/* Difficulty Badge */}
@@ -194,7 +206,7 @@ export default function QuestmarketLensPage() {
                   </span>
                 )}
               </div>
-            </div>
+            </motion.div>
           ))
         )}
 

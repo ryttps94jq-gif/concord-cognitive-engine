@@ -2,7 +2,7 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, apiHelpers } from '@/lib/api/client';
+import { apiHelpers } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -42,6 +42,7 @@ import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
+import { DTUDetailView } from '@/components/dtu/DTUDetailView';
 
 /* ---------- types ---------- */
 type BoardMode = 'canvas' | 'moodboard' | 'arrangement';
@@ -151,6 +152,7 @@ export default function WhiteboardLensPage() {
   const [tool, setTool] = useState<Tool>('select');
   const [elements, setElements] = useState<Element[]>([]);
   const [selectedElement, setSelectedElement] = useState<Element | null>(null);
+  const [viewingDtuId, setViewingDtuId] = useState<string | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentElement, setCurrentElement] = useState<Element | null>(null);
   const [undoStack, setUndoStack] = useState<Element[][]>([]);
@@ -370,6 +372,18 @@ export default function WhiteboardLensPage() {
       setElements(prev => [...prev, n]);
     }
     setCurrentElement(null);
+  };
+
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    const { x, y } = getCanvasCoords(e);
+    const clicked = [...elements].reverse().find(el => {
+      const w = el.width || 100;
+      const h = el.height || 50;
+      return x >= el.x && x <= el.x + w && y >= el.y && y <= el.y + h;
+    });
+    if (clicked?.type === 'dtu' && clicked.dtuId) {
+      setViewingDtuId(clicked.dtuId);
+    }
   };
 
   const handleWheel = (e: React.WheelEvent) => {
@@ -920,7 +934,7 @@ export default function WhiteboardLensPage() {
                 <canvas ref={canvasRef} className="w-full h-full cursor-crosshair"
                   style={{ width: dimensions.width, height: dimensions.height }}
                   onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp}
-                  onMouseLeave={handleMouseUp} onWheel={handleWheel} />
+                  onMouseLeave={handleMouseUp} onWheel={handleWheel} onDoubleClick={handleDoubleClick} />
 
                 {/* Audio play overlay buttons (canvas-space) */}
                 {elements.filter(el => el.type === 'audio').map(el => (
@@ -1338,6 +1352,15 @@ export default function WhiteboardLensPage() {
           compact
         />
       )}
+
+      {/* DTU Detail View modal (opened by double-clicking a DTU element on canvas) */}
+      {viewingDtuId && (
+        <DTUDetailView
+          dtuId={viewingDtuId}
+          onClose={() => setViewingDtuId(null)}
+          onNavigate={(id) => setViewingDtuId(id)}
+        />
+      )}
     </div>
   );
 }
@@ -1349,7 +1372,7 @@ function CreateForm({ onClose, onCreate, creating }: { onClose: () => void; onCr
     <>
       <input type="text" placeholder="Whiteboard Title" value={title} onChange={(e) => setTitle(e.target.value)}
         className="w-full px-3 py-2 bg-lattice-surface border border-lattice-border rounded mb-4" />
-      <div className="flex gap-3 justify-end">
+      <div data-lens-theme="whiteboard" className="flex gap-3 justify-end">
         <button onClick={onClose} className="px-4 py-2 bg-lattice-surface rounded-lg">Cancel</button>
         <button onClick={() => onCreate({ title, linkedDtus: [] })} disabled={creating || !title}
           className="px-4 py-2 bg-neon-pink text-black rounded-lg disabled:opacity-50">{creating ? 'Creating...' : 'Create'}</button>

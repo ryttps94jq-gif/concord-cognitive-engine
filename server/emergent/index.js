@@ -628,7 +628,7 @@ function init({ register, STATE, helpers }) {
               try { mod.triggerEmotionalResponse(input.speakerId, otherId, interactionType, 0.5); } catch (_e) { logger.debug('emergent:index', 'silent catch', { error: _e?.message }); }
             }
           }
-        }).catch(() => {});
+        }).catch(e => logger.warn?.('[emergent] async op failed:', e?.message));
       } catch (_e) { logger.debug('emergent:index', 'silent catch', { error: _e?.message }); }
     }
     return result;

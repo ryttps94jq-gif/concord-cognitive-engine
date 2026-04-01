@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BookOpen, Sparkles, Heart, Zap, Users, ChevronDown, ChevronUp } from 'lucide-react';
@@ -139,7 +139,7 @@ export function EpisodicMemory({ className }: { className?: string }) {
               >
                 All
               </button>
-              {Object.entries(TYPE_CONFIG).map(([type, config]) => {
+              {Object.entries(TYPE_CONFIG).map(([type]) => {
                 const count = summary.byType?.[type] || 0;
                 if (count === 0) return null;
                 return (

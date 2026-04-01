@@ -50,6 +50,16 @@ function getStateLabel(state?: string): { label: string; colorClass: string } {
   }
 }
 
+function deriveDisplayName(emergent: EmergentEntity, roleLabel: string): string {
+  // If the entity has a specific name that isn't just a generic role label, use it
+  if (emergent.name && !['Global Synthesizer', 'Global Builder', 'Global Critic', 'Global Historian', 'Global Economist', 'Global Ethicist', 'Global Cipher'].includes(emergent.name)) {
+    return emergent.name;
+  }
+  // Generate a unique display name from role + id suffix
+  const idSuffix = emergent.id ? emergent.id.slice(-4) : '';
+  return idSuffix ? `${roleLabel}-${idSuffix}` : roleLabel;
+}
+
 function EmergentCardInner({ emergent }: { emergent: EmergentEntity }) {
   const [expanded, setExpanded] = useState(false);
   const role = emergent.role?.toLowerCase() || 'unknown';
@@ -71,7 +81,7 @@ function EmergentCardInner({ emergent }: { emergent: EmergentEntity }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-semibold text-white truncate">
-              {emergent.name || config.label}
+              {deriveDisplayName(emergent, config.label)}
             </h3>
             <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${stateInfo.colorClass}`}>
               {stateInfo.label}

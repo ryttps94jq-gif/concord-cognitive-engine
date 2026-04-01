@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, apiHelpers } from '@/lib/api/client';
+import { apiHelpers } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -188,6 +188,9 @@ export default function TimelineLensPage() {
   const reactMutation = useMutation({
     mutationFn: ({ postId, reaction }: { postId: string; reaction: string }) => apiHelpers.dtus.update(postId, { reaction }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['timeline-posts'] }),
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
 
   const shareMutation = useMutation({
@@ -195,11 +198,17 @@ export default function TimelineLensPage() {
       await navigator.clipboard.writeText(`${window.location.origin}/lenses/timeline?post=${postId}`);
       useUIStore.getState().addToast({ type: 'success', message: 'Link copied' });
     },
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
 
   const friendAction = useMutation({
-    mutationFn: ({ friendId, action }: { friendId: string; action: string }) => apiHelpers.social.follow(friendId),
+    mutationFn: ({ friendId, action: _action }: { friendId: string; action: string }) => apiHelpers.social.follow(friendId),
     onSuccess: (_, { action }) => useUIStore.getState().addToast({ type: 'success', message: action === 'confirm' ? 'Friend request accepted' : 'Request removed' }),
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
 
   const formatTime = (dateStr: string) => {
@@ -257,7 +266,7 @@ export default function TimelineLensPage() {
     );
   }
   return (
-    <div className="min-h-full bg-[#18191a]">
+    <div data-lens-theme="timeline" className="min-h-full bg-[#18191a]">
       <div className="max-w-7xl mx-auto px-4 pt-4">
         <div className="bg-[#242526] rounded-lg p-3 flex items-center justify-between text-sm">
           <span className="text-gray-300">Timeline defaults to 30 posts for speed.</span>
@@ -359,12 +368,18 @@ export default function TimelineLensPage() {
           <div className="bg-[#242526] rounded-lg p-4">
             <div className="flex gap-3">
               <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex-shrink-0" />
-              <button
-                className="flex-1 px-4 py-2.5 bg-[#3a3b3c] rounded-full text-left text-gray-400 hover:bg-[#4a4b4c] transition-colors"
-                onClick={() => setShowPostModal(true)}
-              >
-                What&apos;s on your mind?
-              </button>
+              <input
+                type="text"
+                value={newPost}
+                onChange={e => setNewPost(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && newPost.trim()) {
+                    postMutation.mutate(newPost.trim());
+                  }
+                }}
+                placeholder="What's on your mind?"
+                className="flex-1 px-4 py-2.5 bg-[#3a3b3c] rounded-full text-left text-gray-300 placeholder-gray-400 hover:bg-[#4a4b4c] focus:bg-[#4a4b4c] outline-none transition-colors"
+              />
             </div>
             <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-700">
               <button onClick={() => setShowPostModal(true)} className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-[#3a3b3c] transition-colors">

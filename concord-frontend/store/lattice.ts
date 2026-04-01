@@ -54,6 +54,10 @@ interface LatticeState {
   setActiveDomains: (domains: string[]) => void;
   setKnowledgeGaps: (gaps: KnowledgeGap[]) => void;
   setTopologyStats: (stats: { nodes: number; edges: number; clusters: number }) => void;
+
+  // Per-user tick info
+  userTickInfo: { tickCount: number; dtuCount: number; lastTick: string } | null;
+  setUserTickInfo: (info: { tickCount: number; dtuCount: number; lastTick: string }) => void;
 }
 
 interface GraphNode {
@@ -107,6 +111,7 @@ export const useLatticeStore = create<LatticeState>((set, get) => ({
   activeDomains: [],
   knowledgeGaps: [],
   topologyStats: { nodes: 0, edges: 0, clusters: 0 },
+  userTickInfo: null,
 
   // Actions
   setDTUs: (dtus) => {
@@ -183,6 +188,8 @@ export const useLatticeStore = create<LatticeState>((set, get) => ({
   setKnowledgeGaps: (gaps) => set({ knowledgeGaps: gaps }),
 
   setTopologyStats: (stats) => set({ topologyStats: stats }),
+
+  setUserTickInfo: (info) => set({ userTickInfo: info }),
 }));
 
 // Selectors

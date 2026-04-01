@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -10,7 +10,6 @@ import {
   Hash,
   Sparkles,
   Filter,
-  ChevronDown,
   Music,
   Video,
   Image as ImageIcon,
@@ -25,7 +24,6 @@ import {
   Play,
   Flame,
   BookOpen,
-  BarChart3,
   X,
 } from 'lucide-react';
 import { cn, formatNumber, formatRelativeTime, debounce } from '@/lib/utils';
@@ -394,9 +392,7 @@ export function Discovery({
   const usersQuery = useQuery({
     queryKey: ['discover-users', currentUserId],
     queryFn: async () => {
-      const res = await api.get('/api/social/discover', {
-        params: { userId: currentUserId, limit: 20 },
-      });
+      const res = await api.get(`/api/social/discover/${currentUserId}`);
       return (res.data.suggestions || []) as SuggestedUser[];
     },
     enabled: activeTab === 'users',
@@ -432,8 +428,8 @@ export function Discovery({
 
   // ── Search handler ───────────────────────────────────────────────────
 
-  const handleSearchChange = useCallback(
-    debounce((value: string) => {
+  const handleSearchChange = useMemo(
+    () => debounce((value: string) => {
       setSearchQuery(value);
     }, 300),
     []
@@ -681,7 +677,7 @@ export function Discovery({
               </div>
             ) : mediaFeedQuery.data && mediaFeedQuery.data.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {mediaFeedQuery.data.map((item, idx) => (
+                {mediaFeedQuery.data.map((item, _idx) => (
                   <MediaCard key={item.dtuId} item={item} onNavigate={onNavigateToContent} />
                 ))}
               </div>

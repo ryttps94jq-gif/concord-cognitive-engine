@@ -35,6 +35,7 @@ import { Loading } from '@/components/common/Loading';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { PersistentChatRail } from '@/components/chat/PersistentChatRail';
+import { ConnectiveTissueBar } from '@/components/lens/ConnectiveTissueBar';
 import { Search, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -75,6 +76,9 @@ interface LensShellProps {
   /** Persistent chat rail — enable the cross-lens conversation panel */
   enableChatRail?: boolean;
 
+  /** ConnectiveTissueBar — show DTU economy bar (tip, publish, bounty, fork, search) */
+  enableConnectiveTissue?: boolean;
+
   /** Data loading states */
   isLoading?: boolean;
   isError?: boolean;
@@ -102,6 +106,7 @@ export function LensShell({
   aiActions,
   selectedArtifactId,
   enableChatRail = true,
+  enableConnectiveTissue = true,
   isLoading,
   isError,
   error,
@@ -183,6 +188,11 @@ export function LensShell({
       {/* Universal AI Actions */}
       {aiActions && (
         <UniversalActions domain={domain} artifactId={selectedArtifactId} compact />
+      )}
+
+      {/* Connective Tissue — cross-lens DTU economy bar */}
+      {enableConnectiveTissue && (
+        <ConnectiveTissueBar lensId={domain} />
       )}
 
       {/* Content area with standard loading/error states */}

@@ -6,9 +6,10 @@ import { api, apiHelpers } from '@/lib/api/client';
 import { useState, useMemo } from 'react';
 import {
   Heart, Activity, Zap, TrendingUp, TrendingDown, RefreshCw,
-  AlertTriangle, CheckCircle, Clock, Shield, Wrench, Eye,
-  ChevronDown, ChevronRight, Search, BarChart3, Layers,
+  AlertTriangle, Clock, Shield, Wrench,
+  ChevronDown, Search, BarChart3, Layers, GitBranch,
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -212,9 +213,40 @@ export default function OrganLensPage() {
         </div>
       )}
 
+      {/* Organ Health Status Cards */}
+      <div className="grid grid-cols-3 gap-4">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}
+          className="panel p-4 border-l-4 border-l-green-500 bg-green-500/5">
+          <div className="flex items-center gap-2 mb-2">
+            <Heart className="w-4 h-4 text-green-400" />
+            <span className="text-sm font-semibold text-green-400">Healthy</span>
+          </div>
+          <p className="text-3xl font-bold text-green-400">{healthyOrgans.length}</p>
+          <p className="text-xs text-gray-500">Health &ge; 70%</p>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+          className="panel p-4 border-l-4 border-l-amber-500 bg-amber-500/5">
+          <div className="flex items-center gap-2 mb-2">
+            <Activity className="w-4 h-4 text-amber-400" />
+            <span className="text-sm font-semibold text-amber-400">Monitoring</span>
+          </div>
+          <p className="text-3xl font-bold text-amber-400">{organs.length - healthyOrgans.length - criticalOrgans.length}</p>
+          <p className="text-xs text-gray-500">Health 30-70%</p>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
+          className="panel p-4 border-l-4 border-l-red-500 bg-red-500/5">
+          <div className="flex items-center gap-2 mb-2">
+            <AlertTriangle className="w-4 h-4 text-red-400" />
+            <span className="text-sm font-semibold text-red-400">Critical</span>
+          </div>
+          <p className="text-3xl font-bold text-red-400">{criticalOrgans.length}</p>
+          <p className="text-xs text-gray-500">Health &lt; 30%</p>
+        </motion.div>
+      </div>
+
       {/* Organism Overview */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="lens-card">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="lens-card">
           <Activity className="w-5 h-5 text-neon-blue mb-2" />
           <p className="text-2xl font-bold">{organs.length}</p>
           <p className="text-sm text-gray-400">Active Organs</p>
@@ -224,25 +256,25 @@ export default function OrganLensPage() {
               <span className="text-xs text-red-400">/ {criticalOrgans.length} critical</span>
             )}
           </div>
-        </div>
-        <div className="lens-card">
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="lens-card">
           <TrendingUp className="w-5 h-5 text-neon-green mb-2" />
           <p className="text-2xl font-bold">{(avgMaturity * 100).toFixed(0)}%</p>
           <p className="text-sm text-gray-400">Avg Maturity</p>
           <GaugeBar value={avgMaturity} color="bg-neon-green" />
-        </div>
-        <div className="lens-card">
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="lens-card">
           <Zap className="w-5 h-5 text-neon-purple mb-2" />
           <p className="text-2xl font-bold">{(avgPlasticity * 100).toFixed(0)}%</p>
           <p className="text-sm text-gray-400">Avg Plasticity</p>
           <GaugeBar value={avgPlasticity} color="bg-neon-purple" />
-        </div>
-        <div className="lens-card">
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className="lens-card">
           <TrendingDown className="w-5 h-5 text-neon-pink mb-2" />
           <p className="text-2xl font-bold">{(avgWear * 100).toFixed(0)}%</p>
           <p className="text-sm text-gray-400">Avg Wear</p>
           <GaugeBar value={avgWear} color="bg-neon-pink" />
-        </div>
+        </motion.div>
       </div>
 
       {/* Controls */}
@@ -300,11 +332,14 @@ export default function OrganLensPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {displayOrgans.map((organ) => {
+              {displayOrgans.map((organ, idx) => {
                 const health = organ.maturity - organ.wear;
                 return (
-                  <button
+                  <motion.button
                     key={organ.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.04 }}
                     onClick={() => setSelectedOrgan(organ.id === selectedOrgan ? null : organ.id)}
                     className={`lens-card text-left transition-all ${
                       selectedOrgan === organ.id ? 'border-neon-cyan ring-1 ring-neon-cyan' : ''
@@ -358,7 +393,7 @@ export default function OrganLensPage() {
                         )}
                       </div>
                     )}
-                  </button>
+                  </motion.button>
                 );
               })}
             </div>
@@ -409,6 +444,43 @@ export default function OrganLensPage() {
           </div>
         </div>
       )}
+
+      {/* System Hierarchy & Dependency Graph */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}
+        className="panel p-4">
+        <h2 className="font-semibold mb-4 flex items-center gap-2">
+          <GitBranch className="w-4 h-4 text-neon-cyan" />
+          Dependency Graph
+        </h2>
+        <div className="bg-lattice-deep rounded-lg p-6 min-h-[120px] flex flex-col items-center justify-center relative overflow-hidden">
+          {displayOrgans.length > 0 ? (
+            <div className="flex flex-wrap gap-3 justify-center">
+              {displayOrgans.slice(0, 8).map((organ, idx) => {
+                const health = organ.maturity - organ.wear;
+                return (
+                  <motion.div key={organ.id} initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: idx * 0.08 }}
+                    className="flex flex-col items-center gap-1">
+                    <div className={`w-10 h-10 rounded-full border-2 flex items-center justify-center text-xs font-bold ${
+                      health >= 0.7 ? 'border-green-400 text-green-400' : health >= 0.4 ? 'border-yellow-400 text-yellow-400' : 'border-red-400 text-red-400'
+                    }`}>
+                      {organ.name.slice(0, 2).toUpperCase()}
+                    </div>
+                    <span className="text-[10px] text-gray-500 max-w-[60px] truncate">{organ.name}</span>
+                    {organ.dependencies.length > 0 && (
+                      <span className="text-[9px] text-gray-600">{organ.dependencies.length} deps</span>
+                    )}
+                  </motion.div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center text-gray-500">
+              <Layers className="w-8 h-8 mx-auto mb-2 opacity-40" />
+              <p className="text-sm">Dependency graph will appear when organs are registered</p>
+            </div>
+          )}
+        </div>
+      </motion.div>
 
       {/* Bio Age Indicator */}
       <div className="panel p-4">
@@ -486,6 +558,8 @@ export default function OrganLensPage() {
         </div>
       )}
 
+      <RealtimeDataPanel data={realtimeInsights} />
+
       {/* Lens Features */}
       <div className="border-t border-white/10">
         <button
@@ -524,7 +598,7 @@ function MetricBar({ label, value, color }: { label: string; value: number; colo
 
 function GaugeBar({ value, color }: { value: number; color: string }) {
   return (
-    <div className="h-1 bg-lattice-deep rounded-full overflow-hidden mt-2">
+    <div data-lens-theme="organ" className="h-1 bg-lattice-deep rounded-full overflow-hidden mt-2">
       <div className={`h-full ${color} transition-all`} style={{ width: `${value * 100}%` }} />
     </div>
   );

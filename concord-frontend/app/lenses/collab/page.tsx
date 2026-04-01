@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
-import { api, apiHelpers } from '@/lib/api/client';
+import { apiHelpers } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -42,6 +42,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
+import { SharedSessionChat } from '@/components/social/SharedSessionChat';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
@@ -297,7 +298,7 @@ export default function CollabLensPage() {
     );
   }
   return (
-    <div className="p-6 space-y-5 max-w-[1440px] mx-auto">
+    <div data-lens-theme="collab" className="p-6 space-y-5 max-w-[1440px] mx-auto">
       {/* Header */}
       <header className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-3">
@@ -504,6 +505,8 @@ export default function CollabLensPage() {
           <CreateSessionModal onClose={() => setShowCreateModal(false)} />
         )}
       </AnimatePresence>
+
+      <RealtimeDataPanel data={realtimeInsights} />
 
       {/* Lens Features */}
       <div className="border-t border-white/10">

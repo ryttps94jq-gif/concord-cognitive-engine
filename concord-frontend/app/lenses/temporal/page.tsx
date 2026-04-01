@@ -4,12 +4,16 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useState } from 'react';
+import { motion } from 'framer-motion';
 import {
   Clock,
   Calendar,
   ArrowRight,
   Play,
-  Layers
+  Layers,
+  Timer,
+  GitBranch,
+  ScanLine,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -71,7 +75,7 @@ export default function TemporalLensPage() {
     );
   }
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="temporal" className="p-6 space-y-6">
       <header className="flex items-center gap-3">
         <span className="text-2xl">⏳</span>
         <div>
@@ -93,21 +97,27 @@ export default function TemporalLensPage() {
       </div>
       </header>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+      {/* Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="lens-card">
-          <Clock className="w-5 h-5 text-neon-cyan mb-2" />
+          <Timer className="w-5 h-5 text-neon-cyan mb-2" />
           <p className="text-2xl font-bold">{Array.isArray(framesList) ? framesList.length : 0}</p>
-          <p className="text-sm text-gray-400">Time Frames</p>
+          <p className="text-sm text-gray-400">Events Tracked</p>
         </div>
         <div className="lens-card">
-          <Calendar className="w-5 h-5 text-neon-blue mb-2" />
-          <p className="text-2xl font-bold">—</p>
+          <GitBranch className="w-5 h-5 text-neon-blue mb-2" />
+          <p className="text-2xl font-bold">{Array.isArray(framesList) ? framesList.length : 0}</p>
+          <p className="text-sm text-gray-400">Timelines</p>
+        </div>
+        <div className="lens-card">
+          <ScanLine className="w-5 h-5 text-neon-purple mb-2" />
+          <p className="text-2xl font-bold">{results ? '1' : '0'}</p>
+          <p className="text-sm text-gray-400">Pattern Count</p>
+        </div>
+        <div className="lens-card">
+          <Calendar className="w-5 h-5 text-neon-green mb-2" />
+          <p className="text-2xl font-bold">{results ? '1' : '0'}</p>
           <p className="text-sm text-gray-400">Simulations</p>
-        </div>
-        <div className="lens-card">
-          <Layers className="w-5 h-5 text-neon-purple mb-2" />
-          <p className="text-2xl font-bold">—</p>
-          <p className="text-sm text-gray-400">Validated Claims</p>
         </div>
       </div>
 
@@ -178,10 +188,10 @@ export default function TemporalLensPage() {
             <h2 className="font-semibold mb-3">Time Frames</h2>
             <div className="space-y-2 max-h-48 overflow-y-auto">
               {Array.isArray(framesList) && framesList.map((f: Record<string, unknown>, i: number) => (
-                <div key={i} className="lens-card text-xs">
+                <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="lens-card text-xs">
                   <p className="font-medium">{f.name as string}</p>
                   <p className="text-gray-400">{f.start as string} → {f.end as string}</p>
-                </div>
+                </motion.div>
               ))}
               {(!Array.isArray(framesList) || framesList.length === 0) && (
                 <p className="text-center py-4 text-gray-500 text-sm">No time frames</p>

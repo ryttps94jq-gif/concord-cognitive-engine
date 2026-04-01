@@ -61,6 +61,7 @@ function getMediaState(STATE) {
   if (!STATE._media) {
     STATE._media = {
       mediaDTUs: new Map(),        // mediaId -> media DTU object
+      mediaBlobs: new Map(),       // mediaId -> Buffer (actual file binary data)
       views: new Map(),            // mediaId -> Set<userId>
       likes: new Map(),            // mediaId -> Set<userId>
       comments: new Map(),         // mediaId -> comment[]
@@ -237,6 +238,41 @@ export function getMediaDTU(STATE, mediaId) {
   dtu.engagement.comments = (media.comments.get(mediaId) || []).length;
 
   return { ok: true, mediaDTU: dtu };
+}
+
+/**
+ * Store binary data for a media DTU.
+ * @param {object} STATE
+ * @param {string} mediaId
+ * @param {Buffer} buffer - The raw file bytes
+ */
+export function storeMediaBlob(STATE, mediaId, buffer) {
+  const media = getMediaState(STATE);
+  if (!media.mediaDTUs.has(mediaId)) return { ok: false, error: "Media not found" };
+  media.mediaBlobs.set(mediaId, buffer);
+  // Update fileSize on the DTU
+  const dtu = media.mediaDTUs.get(mediaId);
+  if (dtu) {
+    dtu.fileSize = buffer.length;
+    dtu.transcodeStatus = "ready"; // mark as ready since we have the actual data
+  }
+  media.storageStats.totalSize += buffer.length;
+  media.storageStats.hotTierSize += buffer.length;
+  return { ok: true, size: buffer.length };
+}
+
+/**
+ * Retrieve binary data for a media DTU.
+ * @param {object} STATE
+ * @param {string} mediaId
+ * @returns {{ ok: boolean, buffer?: Buffer, mimeType?: string }}
+ */
+export function getMediaBlob(STATE, mediaId) {
+  const media = getMediaState(STATE);
+  const buffer = media.mediaBlobs.get(mediaId);
+  if (!buffer) return { ok: false, error: "Media binary data not found" };
+  const dtu = media.mediaDTUs.get(mediaId);
+  return { ok: true, buffer, mimeType: dtu?.mimeType || "application/octet-stream", fileSize: buffer.length };
 }
 
 /**

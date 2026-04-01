@@ -82,9 +82,9 @@ export function OfflineIndicator({
     pending: {
       icon: <Cloud className="w-4 h-4" />,
       label: `${pendingChanges} pending`,
-      color: 'text-yellow-400',
-      bgColor: 'bg-yellow-500/10',
-      borderColor: 'border-yellow-500/30'
+      color: 'text-amber-400',
+      bgColor: 'bg-amber-500/10',
+      borderColor: 'border-amber-500/30'
     },
     offline: {
       icon: <WifiOff className="w-4 h-4" />,
@@ -167,7 +167,7 @@ export function OfflineIndicator({
                 <span className="text-gray-400">Pending changes</span>
                 <span className={cn(
                   'font-medium',
-                  pendingChanges > 0 ? 'text-yellow-400' : 'text-green-400'
+                  pendingChanges > 0 ? 'text-amber-400' : 'text-green-400'
                 )}>
                   {pendingChanges}
                 </span>

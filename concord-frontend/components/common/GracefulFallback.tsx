@@ -28,8 +28,8 @@ export function GracefulFallback({ feature, brainRequired, children }: FallbackP
 
   if (!brain || !brain.online) {
     return (
-      <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
-        <p className="text-yellow-400 text-sm font-medium">
+      <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/20">
+        <p className="text-amber-400 text-sm font-medium">
           {feature} temporarily unavailable
         </p>
         <p className="text-gray-400 text-xs mt-1">

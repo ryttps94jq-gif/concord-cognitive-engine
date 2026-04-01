@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Wrench, Play, Zap, Activity, AlertTriangle } from 'lucide-react';
+import { Wrench, Zap, Activity } from 'lucide-react';
 import { apiHelpers } from '@/lib/api/client';
 
 interface RepairStatus {

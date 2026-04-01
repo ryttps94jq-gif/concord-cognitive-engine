@@ -7,6 +7,7 @@ import {
   Globe, Store, User, ArrowUpCircle, Layers,
   Filter, BarChart3
 } from 'lucide-react';
+import { FreshnessIndicator } from '@/components/common/FreshnessIndicator';
 
 type ScopeFilter = 'all' | 'global' | 'marketplace' | 'local';
 
@@ -27,7 +28,14 @@ function ScopeBadge({ scope }: { scope: string }) {
   );
 }
 
-function DTUCard({ dtu }: { dtu: { id: string; title: string; scope?: string; tier?: string; tags?: string[]; createdAt?: string } }) {
+function computeTimeFreshness(dateStr: string): number {
+  const ageMs = Date.now() - new Date(dateStr).getTime();
+  const ageDays = ageMs / (1000 * 60 * 60 * 24);
+  const halfLife = 30;
+  return Math.max(0, Math.min(1, Math.exp(-0.693 * ageDays / halfLife)));
+}
+
+function DTUCard({ dtu }: { dtu: { id: string; title: string; scope?: string; tier?: string; tags?: string[]; createdAt?: string; updatedAt?: string } }) {
   const queryClient = useQueryClient();
 
   const promoteMutation = useMutation({
@@ -53,6 +61,13 @@ function DTUCard({ dtu }: { dtu: { id: string; title: string; scope?: string; ti
               <span className="text-xs px-1.5 py-0.5 rounded bg-neon-yellow/10 text-neon-yellow border border-neon-yellow/20">
                 {dtu.tier}
               </span>
+            )}
+            {(dtu.updatedAt || dtu.createdAt) && (
+              <FreshnessIndicator
+                score={computeTimeFreshness(dtu.updatedAt || dtu.createdAt!)}
+                showLabel
+                size="sm"
+              />
             )}
           </div>
           {dtu.tags && dtu.tags.length > 0 && (

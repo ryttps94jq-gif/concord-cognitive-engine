@@ -10,8 +10,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
 import {
-  Shield, Lock, Globe, Layers, Trash2, Settings,
-  Database, Bot, RefreshCw, AlertTriangle,
+  Shield, Lock, Globe, Trash2, Settings,
+  Database, RefreshCw, AlertTriangle,
 } from 'lucide-react';
 
 type ConsentMode = 'ask' | 'always_temp' | 'always_permanent' | 'never';

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
-import { CommandPalette } from './CommandPalette';
+import { CommandPalette } from '@/components/common/CommandPalette';
 import { useUIStore } from '@/store/ui';
 import { Toasts } from '@/components/common/Toasts';
 import { OperatorErrorBanner } from '@/components/common/OperatorErrorBanner';
@@ -14,6 +14,7 @@ import { FirstWinWizard } from '@/components/guidance/FirstWinWizard';
 import { LensErrorBoundary } from '@/components/common/LensErrorBoundary';
 import { InstallPrompt } from '@/components/pwa/InstallPrompt';
 import { OfflineFallback } from '@/components/pwa/OfflineFallback';
+import { ConnectionStatus } from '@/components/common/ConnectionStatus';
 import { QuickCapture, useQuickCapture } from '@/components/capture/QuickCapture';
 import { NowPlayingBar } from '@/components/music/NowPlayingBar';
 
@@ -78,6 +79,7 @@ export function AppShell({ children }: AppShellProps) {
 
   return (
     <div className="flex h-screen overflow-hidden bg-lattice-void">
+      <ConnectionStatus />
       {/* FE-013: Skip-to-content link for keyboard navigation */}
       <a
         href="#main-content"
@@ -106,10 +108,7 @@ export function AppShell({ children }: AppShellProps) {
         </main>
       </div>
 
-      <CommandPalette
-        isOpen={commandPaletteOpen}
-        onClose={() => setCommandPaletteOpen(false)}
-      />
+      <CommandPalette />
       <Toasts />
       <SystemStatus />
       <SystemGuidePanel />

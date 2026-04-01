@@ -65,6 +65,7 @@ export function useRealtimeLens(domain: string): UseRealtimeLensResult {
   const [alerts, setAlerts] = useState<RealtimeAlert[]>([]);
   const [insights, setInsights] = useState<Array<{ domain: string; insight: string; confidence: number; timestamp: string }>>([]);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [hasReceivedData, setHasReceivedData] = useState(false);
   const alertIdCounter = useRef(0);
 
   const events = useMemo(() => DOMAIN_EVENTS[domain] || [`${domain}:update`], [domain]);
@@ -76,6 +77,7 @@ export function useRealtimeLens(domain: string): UseRealtimeLensResult {
 
     for (const event of events) {
       const handler = (data: RealtimeData) => {
+        setHasReceivedData(true);
         setLatestData(data);
         setLastUpdated(data.fetchedAt || new Date().toISOString());
 
@@ -132,7 +134,7 @@ export function useRealtimeLens(domain: string): UseRealtimeLensResult {
     latestData,
     alerts,
     insights,
-    isLive: isConnected,
+    isLive: isConnected && hasReceivedData,
     lastUpdated,
     clearAlerts,
   };

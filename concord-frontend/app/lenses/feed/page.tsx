@@ -4,8 +4,7 @@ import { useState, useCallback, useMemo, useRef } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
-import { api } from '@/lib/api/client';
-import { apiHelpers } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Heart,
@@ -47,6 +46,12 @@ import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
+import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
+import { ProvenanceBadge } from '@/components/dtu/ProvenanceBadge';
+import { StoriesBar } from '@/components/social/StoriesBar';
+import { SuggestedFollows } from '@/components/social/SuggestedFollows';
+import { SocialCommerceTag } from '@/components/social/SocialCommerceTag';
+import { ShoppingBag, Tag } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -108,6 +113,10 @@ interface FeedPost {
   collab?: CollabAttachment;
   tags?: string[];
   dtuId?: string;
+  dtuSource?: string;
+  dtuMeta?: Record<string, unknown>;
+  taggedProducts?: { listingId: string; title: string; price: number; imageUrl?: string; sellerId?: string }[];
+  linkedDTUs?: { dtuId: string; title: string; type?: string }[];
 }
 
 interface TrendingTopic {
@@ -115,15 +124,6 @@ interface TrendingTopic {
   tag: string;
   category: string;
   posts: number;
-}
-
-interface SuggestedUser {
-  id: string;
-  name: string;
-  handle: string;
-  gradient: string;
-  role: string;
-  verified: boolean;
 }
 
 interface MiniRelease {
@@ -157,7 +157,6 @@ const _INITIAL_AUTHORS: PostAuthor[] = [];
 const INITIAL_POSTS: FeedPost[] = [];
 const TRENDING_TOPICS: TrendingTopic[] = [];
 
-const SUGGESTED_USERS: SuggestedUser[] = [];
 const NEW_RELEASES: MiniRelease[] = [];
 
 // ── Subcomponents ──────────────────────────────────────────────────────────────
@@ -294,6 +293,9 @@ function CollabCard({ collab }: { collab: CollabAttachment }) {
   const joinMutation = useMutation({
     mutationFn: () => apiHelpers.artistry.collab.sessions.join(collab.sessionName, { userId: 'current-user' }),
     onSuccess: () => useUIStore.getState().addToast({ type: 'success', message: `Joined "${collab.sessionName}"` }),
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
   return (
     <motion.div
@@ -342,60 +344,91 @@ export default function FeedLensPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const composeRef = useRef<HTMLTextAreaElement>(null);
 
-  const { isError: isError, error: error, refetch: refetch, items: postLensItems, create: _createLensPost } = useLensData<Record<string, unknown>>('feed', 'post', {
+  // Product tagging state for compose
+  const [showProductPicker, setShowProductPicker] = useState(false);
+  const [productSearch, setProductSearch] = useState('');
+  const [taggedProducts, setTaggedProducts] = useState<{ listingId: string; title: string; price: number; imageUrl?: string; sellerId?: string }[]>([]);
+  const [purchaseLoading, setPurchaseLoading] = useState<string | null>(null);
+  const [purchaseSuccess, setPurchaseSuccess] = useState<string | null>(null);
+
+  // Fetch marketplace listings for product tagging
+  const { data: marketplaceListings } = useQuery({
+    queryKey: ['marketplace-listings-picker', productSearch],
+    queryFn: async () => {
+      const res = await api.get('/api/marketplace-lens-registry/search', { params: { q: productSearch || 'all' } }).catch(() => null);
+      return res?.data?.results || [];
+    },
+    enabled: showProductPicker,
+  });
+
+  const handleInlinePurchase = async (product: { listingId: string; title: string; price: number; sellerId?: string }) => {
+    setPurchaseLoading(product.listingId);
+    setPurchaseSuccess(null);
+    try {
+      await api.post('/api/economy/transfer', {
+        to: product.sellerId || 'platform',
+        amount: product.price,
+        type: 'SOCIAL_COMMERCE',
+        metadata: { listingId: product.listingId, title: product.title },
+      });
+      setPurchaseSuccess(product.listingId);
+      setTimeout(() => setPurchaseSuccess(null), 3000);
+    } catch (err) {
+      console.error('Inline purchase failed:', err);
+    } finally {
+      setPurchaseLoading(null);
+    }
+  };
+
+  const { isError: isError, error: error, refetch: refetch, items: postLensItems, create: createLensPost } = useLensData<Record<string, unknown>>('feed', 'post', {
     seed: INITIAL_POSTS.map(p => ({ title: p.content?.slice(0, 80) || p.id, data: p as unknown as Record<string, unknown> })),
   });
 
-  // Fetch real DTU data from backend
+  // Fetch feed from social API with DTU fallback
   const { data: feedPosts, isLoading, isError: isError2, error: error2, refetch: refetch2,} = useQuery<FeedPost[]>({
     queryKey: ['feed-posts', activeTab],
     queryFn: async () => {
       try {
-        const [dtuRes] = await Promise.allSettled([
-          apiHelpers.dtus.paginated({ limit: 50 }),
-          apiHelpers.artistry.distribution.feed('current'),
-        ]);
-
-        const serverPosts: FeedPost[] = [];
-        if (dtuRes.status === 'fulfilled' && dtuRes.value?.data?.dtus?.length) {
-          dtuRes.value.data.dtus.forEach((dtu: Record<string, unknown>) => {
-            serverPosts.push({
-              id: dtu.id as string,
-              type: 'text',
-              author: {
-                id: (dtu.authorId as string) || 'user',
-                name: (dtu.authorName as string) || 'Concord User',
-                handle: (dtu.authorHandle as string) || 'user',
-                gradient: pickGrad(serverPosts.length),
-                verified: (dtu.verified as boolean) || false,
-              },
-              content: (dtu.content as string)?.slice(0, 400) || (dtu.title as string) || '',
-              createdAt: (dtu.createdAt as string) || new Date().toISOString(),
-              likes: (dtu.likes as number) || 0,
-              comments: (dtu.comments as number) || 0,
-              reposts: (dtu.reposts as number) || 0,
-              shares: (dtu.shares as number) || 0,
-              views: (dtu.views as number) || 0,
-              liked: false, reposted: false, bookmarked: false,
-              dtuId: dtu.id as string,
-            });
-          });
+        const endpoint = activeTab === 'following' ? '/api/social/feed/following'
+          : activeTab === 'trending' ? '/api/social/feed/explore'
+          : '/api/social/feed/foryou';
+        const socialRes = await api.get(endpoint, { params: { limit: 50, offset: 0 } }).catch(() => null);
+        const socialPosts = socialRes?.data?.posts || socialRes?.data || [];
+        if (Array.isArray(socialPosts) && socialPosts.length > 0) {
+          return socialPosts.map((p: Record<string, unknown>, i: number) => ({
+            id: (p.id as string) || `sp-${i}`,
+            type: ((p.mediaType as string) || 'text') as PostType,
+            author: { id: (p.userId as string) || 'user', name: (p.displayName as string) || 'User', handle: (p.userId as string) || 'user', gradient: pickGrad(i), verified: false },
+            content: (p.content as string) || (p.title as string) || '',
+            createdAt: (p.createdAt as string) || new Date().toISOString(),
+            likes: (p.reactionCount as number) || 0, comments: (p.commentCount as number) || 0,
+            reposts: (p.shareCount as number) || 0, shares: (p.shareCount as number) || 0, views: (p.viewCount as number) || 0,
+            liked: false, reposted: false, bookmarked: false,
+            tags: (p.tags as string[]) || [], dtuId: (p.id as string),
+            taggedProducts: (p.taggedProducts as FeedPost['taggedProducts']) || [],
+            linkedDTUs: (p.linkedDTUs as FeedPost['linkedDTUs']) || [],
+          }));
         }
-
-
-        if (serverPosts.length > 0) return serverPosts;
-        // Fall back to persisted lens items (which include seeded data)
-        if (postLensItems.length > 0) {
-          return postLensItems.map(li => ({ id: li.id, ...(li.data as Record<string, unknown>) } as unknown as FeedPost));
+        // Fallback: DTUs as posts
+        const dtuRes = await apiHelpers.dtus.paginated({ limit: 50 }).catch(() => ({ data: { dtus: [] } }));
+        if (dtuRes?.data?.dtus?.length) {
+          return dtuRes.data.dtus.map((dtu: Record<string, unknown>, i: number) => ({
+            id: dtu.id as string, type: 'text' as PostType,
+            author: { id: (dtu.authorId as string) || 'user', name: (dtu.authorName as string) || 'User', handle: (dtu.authorHandle as string) || 'user', gradient: pickGrad(i), verified: false },
+            content: (dtu.content as string)?.slice(0, 400) || (dtu.title as string) || '',
+            createdAt: (dtu.createdAt as string) || new Date().toISOString(),
+            likes: 0, comments: 0, reposts: 0, shares: 0, views: 0,
+            liked: false, reposted: false, bookmarked: false, dtuId: dtu.id as string,
+            dtuSource: dtu.source as string | undefined,
+            dtuMeta: dtu.meta as Record<string, unknown> | undefined,
+          }));
         }
-        return [];
+        return postLensItems.length > 0
+          ? postLensItems.map(li => ({ id: li.id, ...(li.data as Record<string, unknown>) } as unknown as FeedPost)) : [];
       } catch {
-        if (postLensItems.length > 0) {
-          return postLensItems.map(li => ({ id: li.id, ...(li.data as Record<string, unknown>) } as unknown as FeedPost));
-        }
-        return [];
+        return postLensItems.length > 0
+          ? postLensItems.map(li => ({ id: li.id, ...(li.data as Record<string, unknown>) } as unknown as FeedPost)) : [];
       }
-      return [];
     },
   });
 
@@ -403,19 +436,23 @@ export default function FeedLensPage() {
     queryKey: ['trending-topics'],
     queryFn: async () => {
       try {
-        const r = await apiHelpers.dtus.list();
-        const allTags = new Set<string>();
-        (r.data?.dtus || []).forEach((d: Record<string, unknown>) => ((d.tags as string[]) || []).forEach(t => allTags.add(t)));
-        const tagArr = Array.from(allTags);
-        if (tagArr.length) {
-          return tagArr.slice(0, 5).map((tag: string, i: number) => ({
+        const r = await api.get('/api/social/topics/trending', { params: { limit: 10 } }).catch(() => null);
+        const topics = r?.data?.topics || r?.data || [];
+        if (Array.isArray(topics) && topics.length > 0) {
+          return topics.map((t: Record<string, unknown>, i: number) => ({
             id: `t-${i}`,
-            tag: `#${tag}`,
-            category: ['Music', 'Production', 'Community', 'Tech', 'Visual'][i % 5],
-            posts: 0,
+            tag: `#${(t.tag as string) || (t.topic as string) || ''}`,
+            category: (t.category as string) || ['Music', 'Production', 'Community', 'Tech', 'Visual'][i % 5],
+            posts: (t.count as number) || (t.posts as number) || 0,
           }));
         }
-        return [];
+        // Fallback: derive from DTU tags
+        const dtuR = await apiHelpers.dtus.list().catch(() => ({ data: { dtus: [] } }));
+        const allTags = new Set<string>();
+        (dtuR.data?.dtus || []).forEach((d: Record<string, unknown>) => ((d.tags as string[]) || []).forEach(t => allTags.add(t)));
+        return Array.from(allTags).slice(0, 5).map((tag, i) => ({
+          id: `t-${i}`, tag: `#${tag}`, category: ['Music', 'Production', 'Community', 'Tech', 'Visual'][i % 5], posts: 0,
+        }));
       } catch {
         return [];
       }
@@ -423,9 +460,14 @@ export default function FeedLensPage() {
   });
 
   const postMutation = useMutation({
-    mutationFn: (content: string) => apiHelpers.dtus.create({ content, tags: ['post'] }),
-    onSuccess: () => {
+    mutationFn: (content: string) => api.post('/api/social/post', {
+      content, mediaType: 'text', tags: [],
+      taggedProducts: taggedProducts.length > 0 ? taggedProducts : undefined,
+    }),
+    onSuccess: (_data, content) => {
       queryClient.invalidateQueries({ queryKey: ['feed-posts'] });
+      createLensPost({ title: content.slice(0, 80), data: { content, type: 'text', taggedProducts, createdAt: new Date().toISOString(), likes: 0, comments: 0, reposts: 0, shares: 0, views: 0, liked: false, reposted: false, bookmarked: false } });
+      setTaggedProducts([]);
       setNewPost('');
     },
     onError: (err) => {
@@ -434,24 +476,30 @@ export default function FeedLensPage() {
   });
 
   const likeMutation = useMutation({
-    mutationFn: (postId: string) => apiHelpers.dtus.update(postId, { liked: true }),
+    mutationFn: (postId: string) => api.post('/api/social/react', { postId, type: 'like' }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['feed-posts'] }),
-    onError: (err) => {
-      console.error('Failed to like post:', err instanceof Error ? err.message : err);
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
     },
   });
 
   const repostMutation = useMutation({
-    mutationFn: (postId: string) => apiHelpers.dtus.update(postId, { reposted: true }),
+    mutationFn: (postId: string) => api.post('/api/social/share', { postId }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['feed-posts'] });
       useUIStore.getState().addToast({ type: 'success', message: 'Reposted!' });
     },
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
 
   const bookmarkMutation = useMutation({
-    mutationFn: (postId: string) => apiHelpers.dtus.update(postId, { bookmarked: true }),
+    mutationFn: (postId: string) => api.post('/api/social/bookmark', { postId }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['feed-posts'] }),
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
 
   const shareMutation = useMutation({
@@ -463,11 +511,9 @@ export default function FeedLensPage() {
         useUIStore.getState().addToast({ type: 'success', message: 'Link copied to clipboard' });
       }
     },
-  });
-
-  const followMutation = useMutation({
-    mutationFn: (userId: string) => apiHelpers.social.follow(userId),
-    onSuccess: () => useUIStore.getState().addToast({ type: 'success', message: 'Followed!' }),
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
 
   const handleComposeHint = useCallback((hint: string) => {
@@ -522,10 +568,10 @@ export default function FeedLensPage() {
   const sidebarNav = [
     { icon: Home, label: 'Home', active: activeTab === 'for-you', action: () => setActiveTab('for-you') },
     { icon: Search, label: 'Explore', active: activeTab === 'trending', action: () => setActiveTab('trending') },
-    { icon: Bell, label: 'Notifications', active: false, action: () => useUIStore.getState().addToast({ type: 'info', message: 'Notifications coming soon' }) },
-    { icon: Mail, label: 'Messages', active: false, action: () => useUIStore.getState().addToast({ type: 'info', message: 'Messages coming soon' }) },
-    { icon: Bookmark, label: 'Bookmarks', active: false, action: () => useUIStore.getState().addToast({ type: 'info', message: 'Bookmarks coming soon' }) },
-    { icon: User, label: 'Profile', active: false, action: () => useUIStore.getState().addToast({ type: 'info', message: 'Profile coming soon' }) },
+    { icon: Bell, label: 'Notifications', active: activeTab === 'notifications' as string, action: () => setActiveTab('for-you' as FeedTab) },
+    { icon: Mail, label: 'Messages', active: false, action: () => useUIStore.getState().addToast({ type: 'info', message: 'Requires direct messaging to be enabled' }) },
+    { icon: Bookmark, label: 'Bookmarks', active: activeTab === 'bookmarks' as string, action: () => setActiveTab('following' as FeedTab) },
+    { icon: User, label: 'Profile', active: false, action: () => { apiHelpers.social.getProfile('me').then(() => useUIStore.getState().addToast({ type: 'success', message: 'Profile loaded' })).catch(() => useUIStore.getState().addToast({ type: 'info', message: 'No profile yet. Create DTUs to build your profile.' })); } },
     { icon: Music, label: 'Studio', active: activeTab === 'releases', action: () => setActiveTab('releases') },
   ];
 
@@ -538,11 +584,11 @@ export default function FeedLensPage() {
     );
   }
   return (
-    <div className="min-h-full bg-lattice-bg flex">
+    <div className="lens-feed min-h-full bg-lattice-bg flex" data-lens-theme="feed">
       {/* ── Left Sidebar ──────────────────────────────────────────────────── */}
-      <aside className="w-20 xl:w-64 border-r border-lattice-border p-2 xl:p-4 flex flex-col items-center xl:items-start sticky top-0 h-screen overflow-y-auto">
+      <aside className="w-20 xl:w-64 border-r border-lattice-border/50 p-2 xl:p-4 flex flex-col items-center xl:items-start sticky top-0 h-screen overflow-y-auto bg-gradient-to-b from-lattice-surface to-lattice-bg">
         <div className="flex items-center gap-2 mb-8 p-3">
-          <Disc3 className="w-8 h-8 text-neon-cyan" />
+          <Disc3 className="w-8 h-8 text-blue-400" />
           <span className="hidden xl:inline text-lg font-bold text-white tracking-tight">Concord</span>
         </div>
 
@@ -590,7 +636,12 @@ export default function FeedLensPage() {
         <header className="sticky top-0 z-10 bg-lattice-bg/80 backdrop-blur-md border-b border-lattice-border">
           <div className="flex items-center justify-between px-4 py-3">
             <h1 className="text-xl font-bold text-white">Feed</h1>
-            <Sparkles className="w-5 h-5 text-neon-cyan" />
+            <div className="flex items-center gap-2">
+              {dtusLoading && <span className="w-4 h-4 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin" />}
+              <button onClick={() => refetchDTUs()} disabled={dtusLoading} className="p-1 rounded hover:bg-lattice-surface/50 disabled:opacity-50 transition-colors" title="Refresh DTUs">
+                <Sparkles className="w-5 h-5 text-neon-cyan" />
+              </button>
+            </div>
           </div>
 
       {/* Real-time Enhancement Toolbar */}
@@ -625,6 +676,12 @@ export default function FeedLensPage() {
           </div>
         </header>
 
+        {/* Stories Bar — prominent with gradient border */}
+        <StoriesBar
+          currentUserId="current-user"
+          className="border-b border-lattice-border bg-gradient-to-r from-blue-500/5 via-transparent to-pink-500/5 py-1"
+        />
+
         {/* Compose Box */}
         <div className="p-4 border-b border-lattice-border">
           <div className="flex gap-3">
@@ -655,6 +712,19 @@ export default function FeedLensPage() {
                   <button onClick={() => handleComposeHint('Poll')} className="p-2 rounded-full hover:bg-neon-cyan/10 transition-colors" title="Add poll">
                     <BarChart3 className="w-5 h-5" />
                   </button>
+                  <button onClick={() => setShowProductPicker(!showProductPicker)} className={cn("p-2 rounded-full hover:bg-neon-green/10 transition-colors", showProductPicker && "bg-neon-green/10 text-neon-green")} title="Tag Product">
+                    <ShoppingBag className="w-5 h-5" />
+                  </button>
+                  <button onClick={() => handleComposeHint('Link DTU')} className="p-2 rounded-full hover:bg-neon-purple/10 transition-colors text-neon-purple" title="Link DTU">
+                    <Tag className="w-5 h-5" />
+                  </button>
+                  <VisionAnalyzeButton
+                    domain="feed"
+                    prompt="Describe this image for use as alt text in a social media post. Be concise but descriptive. Also suggest relevant hashtags."
+                    onResult={(res) => {
+                      setNewPost(prev => prev ? `${prev}\n\n[Alt: ${res.analysis}]` : `[Alt: ${res.analysis}]`);
+                    }}
+                  />
                 </div>
                 <button
                   onClick={() => postMutation.mutate(newPost)}
@@ -664,6 +734,70 @@ export default function FeedLensPage() {
                   {postMutation.isPending ? 'Posting...' : 'Post'}
                 </button>
               </div>
+
+              {/* Tagged Products Display */}
+              {taggedProducts.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {taggedProducts.map(p => (
+                    <span key={p.listingId} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-neon-green/10 text-neon-green text-xs font-medium border border-neon-green/20">
+                      <ShoppingBag className="w-3 h-3" />
+                      {p.title} ({p.price} CC)
+                      <button onClick={() => setTaggedProducts(prev => prev.filter(tp => tp.listingId !== p.listingId))} className="ml-0.5 hover:text-red-400">
+                        <span className="text-xs">x</span>
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Product Picker */}
+              {showProductPicker && (
+                <div className="mt-2 p-3 rounded-xl bg-lattice-deep border border-neon-green/20">
+                  <div className="flex items-center gap-2 mb-2">
+                    <ShoppingBag className="w-4 h-4 text-neon-green" />
+                    <span className="text-sm font-medium text-neon-green">Tag Product</span>
+                  </div>
+                  <input
+                    type="text"
+                    value={productSearch}
+                    onChange={(e) => setProductSearch(e.target.value)}
+                    placeholder="Search marketplace listings..."
+                    className="w-full px-3 py-2 bg-lattice-surface border border-lattice-border rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-neon-green mb-2"
+                  />
+                  <div className="max-h-40 overflow-y-auto space-y-1">
+                    {(marketplaceListings as { id: string; name: string; lensNumber?: number; uniqueValue?: string }[] || []).slice(0, 8).map((item: { id: string; name: string; lensNumber?: number; uniqueValue?: string }) => {
+                      const alreadyTagged = taggedProducts.some(t => t.listingId === item.id);
+                      return (
+                        <button
+                          key={item.id}
+                          disabled={alreadyTagged}
+                          onClick={() => {
+                            setTaggedProducts(prev => [...prev, { listingId: item.id, title: item.name, price: 10, sellerId: 'platform' }]);
+                          }}
+                          className={cn(
+                            "w-full flex items-center justify-between p-2 rounded-lg text-left text-sm transition-colors",
+                            alreadyTagged ? "opacity-50 cursor-not-allowed bg-lattice-surface" : "hover:bg-lattice-surface"
+                          )}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-white font-medium truncate">{item.name}</p>
+                            {item.uniqueValue && <p className="text-xs text-gray-500 truncate">{item.uniqueValue}</p>}
+                          </div>
+                          {alreadyTagged ? (
+                            <span className="text-xs text-neon-green ml-2">Tagged</span>
+                          ) : (
+                            <span className="text-xs text-gray-400 ml-2">+ Tag</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                    {(marketplaceListings || []).length === 0 && (
+                      <p className="text-xs text-gray-500 text-center py-2">Type to search marketplace listings</p>
+                    )}
+                  </div>
+                  <button onClick={() => setShowProductPicker(false)} className="mt-2 text-xs text-gray-400 hover:text-white">Close picker</button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -722,6 +856,9 @@ export default function FeedLensPage() {
                         <span className="text-gray-500 hover:underline cursor-pointer flex-shrink-0">
                           {formatTime(post.createdAt)}
                         </span>
+                        {post.dtuSource && (
+                          <ProvenanceBadge source={post.dtuSource} model={post.dtuMeta?.model as string} authority={post.dtuMeta?.authority as string} />
+                        )}
                         <button
                           onClick={() => useUIStore.getState().addToast({ type: 'info', message: `Post ${post.id} options` })}
                           className="ml-auto p-1 text-gray-600 hover:text-neon-cyan hover:bg-neon-cyan/10 rounded-full transition-colors flex-shrink-0"
@@ -748,7 +885,7 @@ export default function FeedLensPage() {
 
                       {/* Type-specific Content */}
                       {post.type === 'audio' && post.audio && (
-                        <WaveformPlayer {...post.audio} />
+                        <WaveformPlayer {...post.audio} waveform={post.audio.waveform?.length ? post.audio.waveform : generateWaveform()} />
                       )}
 
                       {post.type === 'release' && post.release && (
@@ -763,16 +900,70 @@ export default function FeedLensPage() {
                         <CollabCard collab={post.collab} />
                       )}
 
+                      {/* Inline Social Commerce: Tagged Products */}
+                      {post.taggedProducts && post.taggedProducts.length > 0 && (
+                        <div className="mt-3 space-y-2">
+                          <div className="flex items-center gap-1.5 text-xs text-neon-green/70">
+                            <ShoppingBag className="w-3 h-3" />
+                            <span>Tagged Products</span>
+                          </div>
+                          {post.taggedProducts.map((product) => (
+                            <SocialCommerceTag
+                              key={product.listingId}
+                              listing={{
+                                listingId: product.listingId,
+                                title: product.title,
+                                imageUrl: product.imageUrl,
+                                price: product.price,
+                                currency: 'CC',
+                              }}
+                              onBuy={(listingId) => {
+                                const p = post.taggedProducts?.find(tp => tp.listingId === listingId);
+                                if (p) handleInlinePurchase(p);
+                              }}
+                              onNavigateToListing={(listingId) => {
+                                window.open(`/lenses/marketplace?listing=${listingId}`, '_blank');
+                              }}
+                              className={cn(
+                                purchaseLoading === product.listingId && 'opacity-60 pointer-events-none',
+                                purchaseSuccess === product.listingId && 'border-green-500/50 bg-green-500/5'
+                              )}
+                            />
+                          ))}
+                          {purchaseSuccess && post.taggedProducts.some(p => p.listingId === purchaseSuccess) && (
+                            <p className="text-xs text-green-400 flex items-center gap-1">
+                              <span>Purchase complete!</span>
+                            </p>
+                          )}
+                        </div>
+                      )}
+
                       {/* Engagement Bar */}
                       <div className="flex items-center justify-between mt-3 max-w-md text-gray-500">
                         <button
-                          onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Comments coming soon' })}
+                          onClick={() => {
+                            if (post.dtuId) {
+                              apiHelpers.collab.getComments(post.dtuId, true)
+                                .then((res) => {
+                                  const comments = res.data?.comments || [];
+                                  useUIStore.getState().addToast({
+                                    type: 'info',
+                                    message: comments.length > 0
+                                      ? `${comments.length} comment${comments.length === 1 ? '' : 's'} on this post`
+                                      : 'No comments yet',
+                                  });
+                                })
+                                .catch(() => useUIStore.getState().addToast({ type: 'info', message: 'No comments yet' }));
+                            } else {
+                              useUIStore.getState().addToast({ type: 'info', message: 'No comments yet' });
+                            }
+                          }}
                           className="flex items-center gap-1.5 group"
                         >
-                          <div className="p-1.5 rounded-full group-hover:bg-blue-500/10 group-hover:text-blue-400 transition-colors">
+                          <div className="p-1.5 rounded-full group-hover:bg-blue-500/15 group-hover:text-blue-400 group-hover:scale-110 transition-all duration-200">
                             <MessageCircle className="w-4 h-4" />
                           </div>
-                          <span className="text-xs group-hover:text-blue-400">{formatNumber(post.comments)}</span>
+                          <span className="text-xs group-hover:text-blue-400 transition-colors">{formatNumber(post.comments)}</span>
                         </button>
 
                         <button
@@ -782,10 +973,10 @@ export default function FeedLensPage() {
                             post.reposted && 'text-neon-green'
                           )}
                         >
-                          <div className="p-1.5 rounded-full group-hover:bg-neon-green/10 group-hover:text-neon-green transition-colors">
+                          <div className="p-1.5 rounded-full group-hover:bg-neon-green/15 group-hover:text-neon-green group-hover:scale-110 transition-all duration-200">
                             <Repeat2 className="w-4 h-4" />
                           </div>
-                          <span className="text-xs group-hover:text-neon-green">{formatNumber(post.reposts)}</span>
+                          <span className="text-xs group-hover:text-neon-green transition-colors">{formatNumber(post.reposts)}</span>
                         </button>
 
                         <button
@@ -795,29 +986,29 @@ export default function FeedLensPage() {
                             post.liked && 'text-neon-pink'
                           )}
                         >
-                          <div className="p-1.5 rounded-full group-hover:bg-neon-pink/10 group-hover:text-neon-pink transition-colors">
+                          <div className="p-1.5 rounded-full group-hover:bg-gradient-to-r group-hover:from-pink-500/15 group-hover:to-rose-500/15 group-hover:text-neon-pink group-hover:scale-110 transition-all duration-200">
                             <Heart className={cn('w-4 h-4', post.liked && 'fill-current')} />
                           </div>
-                          <span className="text-xs group-hover:text-neon-pink">{formatNumber(post.likes)}</span>
+                          <span className="text-xs group-hover:text-neon-pink transition-colors">{formatNumber(post.likes)}</span>
                         </button>
 
                         <div className="flex items-center gap-1.5 group" title="Views">
-                          <div className="p-1.5 rounded-full group-hover:bg-neon-cyan/10 group-hover:text-neon-cyan transition-colors">
+                          <div className="p-1.5 rounded-full group-hover:bg-neon-cyan/15 group-hover:text-neon-cyan group-hover:scale-110 transition-all duration-200">
                             <Eye className="w-4 h-4" />
                           </div>
-                          <span className="text-xs group-hover:text-neon-cyan">{formatNumber(post.views)}</span>
+                          <span className="text-xs group-hover:text-neon-cyan transition-colors">{formatNumber(post.views)}</span>
                         </div>
 
                         <div className="flex items-center gap-0.5">
                           <button
                             onClick={() => bookmarkMutation.mutate(post.id)}
-                            className="p-1.5 rounded-full hover:bg-neon-cyan/10 hover:text-neon-cyan transition-colors"
+                            className="p-1.5 rounded-full hover:bg-neon-cyan/15 hover:text-neon-cyan hover:scale-110 transition-all duration-200"
                           >
                             <Bookmark className={cn('w-4 h-4', post.bookmarked && 'fill-current text-neon-cyan')} />
                           </button>
                           <button
                             onClick={() => shareMutation.mutate(post.id)}
-                            className="p-1.5 rounded-full hover:bg-neon-cyan/10 hover:text-neon-cyan transition-colors"
+                            className="p-1.5 rounded-full hover:bg-neon-cyan/15 hover:text-neon-cyan hover:scale-110 transition-all duration-200"
                           >
                             <Share className="w-4 h-4" />
                           </button>
@@ -860,7 +1051,7 @@ export default function FeedLensPage() {
             <TrendingUp className="w-4 h-4 text-neon-cyan" />
             <h2 className="text-base font-bold text-white">Trending in Studio</h2>
           </div>
-          {(trending || []).map(topic => (
+          {(trending || TRENDING_TOPICS).map(topic => (
             <button
               key={topic.id}
               onClick={() => setSearchQuery(topic.tag.replace('#', ''))}
@@ -879,34 +1070,12 @@ export default function FeedLensPage() {
           </button>
         </div>
 
-        {/* Who to Follow */}
-        <div className="bg-lattice-surface rounded-xl border border-lattice-border overflow-hidden">
-          <h2 className="text-base font-bold text-white p-4 pb-2">Who to Follow</h2>
-          {SUGGESTED_USERS.map(user => (
-            <div key={user.id} className="px-4 py-3 hover:bg-lattice-deep transition-colors flex items-center gap-3">
-              <div className={cn('w-10 h-10 rounded-full bg-gradient-to-br flex-shrink-0', user.gradient)} />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1">
-                  <p className="font-semibold text-white text-sm truncate">{user.name}</p>
-                  {user.verified && <Verified className="w-3.5 h-3.5 text-neon-cyan fill-neon-cyan flex-shrink-0" />}
-                </div>
-                <p className="text-gray-500 text-xs truncate">@{user.handle} &middot; {user.role}</p>
-              </div>
-              <button
-                onClick={() => followMutation.mutate(user.id)}
-                disabled={followMutation.isPending}
-                className="px-3.5 py-1.5 bg-white text-black font-bold rounded-full text-xs hover:bg-gray-200 transition-colors flex-shrink-0 disabled:opacity-50"
-              >
-                {followMutation.isPending ? '...' : 'Follow'}
-              </button>
-            </div>
-          ))}
-          <button
-            onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Discover more users in the social lens' })}
-            className="w-full px-4 py-3 text-neon-cyan hover:bg-lattice-deep transition-colors text-left text-sm"
-          >
-            Show more
-          </button>
+        {/* Rising Creators */}
+        <RisingCreatorsSidebar />
+
+        {/* Who to Follow — wired to real discovery data */}
+        <div className="bg-lattice-surface rounded-xl border border-lattice-border overflow-hidden p-4">
+          <SuggestedFollows currentUserId="current-user" />
         </div>
 
         {/* New Releases Mini */}
@@ -971,6 +1140,55 @@ export default function FeedLensPage() {
         />
       )}
       </div>
+    </div>
+  );
+}
+
+function RisingCreatorsSidebar() {
+  const { data: creatorsData } = useQuery({
+    queryKey: ['trending-creators'],
+    queryFn: async () => {
+      const res = await api.get('/api/social/trending/creators', { params: { limit: 5, days: 7 } }).catch(() => null);
+      return (res?.data?.creators || []) as Array<{
+        userId: string;
+        displayName: string;
+        followerCount: number;
+        followerGrowth: number;
+        postCount: number;
+        score: number;
+      }>;
+    },
+    staleTime: 60000,
+    retry: false,
+  });
+
+  if (!creatorsData || creatorsData.length === 0) return null;
+
+  return (
+    <div className="bg-lattice-surface rounded-xl border border-lattice-border overflow-hidden">
+      <div className="flex items-center gap-2 p-4 pb-2">
+        <TrendingUp className="w-4 h-4 text-neon-purple" />
+        <h2 className="text-base font-bold text-white">Rising Creators</h2>
+      </div>
+      {creatorsData.slice(0, 5).map((creator) => (
+        <div
+          key={creator.userId}
+          className="px-4 py-2.5 hover:bg-lattice-deep transition-colors flex items-center gap-3"
+        >
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-neon-purple to-neon-cyan flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
+            {creator.displayName?.charAt(0)?.toUpperCase() || '?'}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-white truncate">{creator.displayName}</p>
+            <div className="flex items-center gap-2 text-[11px] text-gray-500">
+              <span><Users className="w-3 h-3 inline" /> {creator.followerCount}</span>
+              {creator.followerGrowth > 0 && (
+                <span className="text-green-400">+{creator.followerGrowth}</span>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

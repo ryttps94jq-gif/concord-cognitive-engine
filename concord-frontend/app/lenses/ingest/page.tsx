@@ -4,7 +4,9 @@ import { useState, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
-import { Upload, Settings2, CheckCircle2, AlertTriangle, Loader2, Clock, Database, Layers, ChevronDown, FileUp, FileJson, FileText, Image, Music, Shield, Gauge, ArrowDownToLine, Zap } from 'lucide-react';
+import { useUIStore } from '@/store/ui';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Upload, Settings2, CheckCircle2, AlertTriangle, Loader2, Clock, Database, Layers, ChevronDown, FileUp, FileJson, FileText, Image as ImageIcon, Music, Shield, Gauge, ArrowDownToLine, Zap, Activity } from 'lucide-react';
 import { ConnectiveTissueBar } from '@/components/lens/ConnectiveTissueBar';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -13,6 +15,7 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
 
 interface IngestJob {
   id: string;
@@ -75,6 +78,9 @@ export default function IngestLensPage() {
       setTextInput('');
       setTitle('');
     },
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
 
   // File upload handler
@@ -107,7 +113,7 @@ export default function IngestLensPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="ingest" className="p-6 space-y-6">
       <header className="flex items-center gap-3">
         <Upload className="w-6 h-6 text-neon-cyan" />
         <div>
@@ -121,6 +127,14 @@ export default function IngestLensPage() {
       <div className="flex items-center gap-2 flex-wrap">
         <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} compact />
         <DTUExportButton domain="ingest" data={realtimeData || {}} compact />
+        <VisionAnalyzeButton
+          domain="ingest"
+          prompt="Analyze this image and extract all text and structured data visible. Describe the content for ingestion as a DTU (Data Transfer Unit). Suggest a title, domain, and relevant tags."
+          onResult={(res) => {
+            setTextInput(res.analysis);
+            if (res.suggestedTags?.length) setDomain(res.suggestedTags[0] || '');
+          }}
+        />
         {realtimeAlerts.length > 0 && (
           <span className="text-xs px-2 py-0.5 rounded bg-yellow-500/10 text-yellow-400">
             {realtimeAlerts.length} alert{realtimeAlerts.length !== 1 ? 's' : ''}
@@ -128,6 +142,72 @@ export default function IngestLensPage() {
         )}
       </div>
       </header>
+
+      {/* Stat Cards Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { icon: Upload, color: 'text-neon-cyan', value: history.length || recentDtus.length, label: 'Total Ingested' },
+          { icon: Database, color: 'text-neon-purple', value: recentDtus.length, label: 'Recent DTUs' },
+          { icon: Activity, color: 'text-neon-green', value: history.filter((j: IngestJob) => j.status === 'completed').length, label: 'Completed' },
+          { icon: AlertTriangle, color: 'text-amber-400', value: history.filter((j: IngestJob) => j.status === 'failed').length, label: 'Failed' },
+        ].map((stat, i) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.08 }}
+            className="lens-card"
+          >
+            <stat.icon className={`w-5 h-5 ${stat.color} mb-2`} />
+            <p className="text-2xl font-bold">{stat.value}</p>
+            <p className="text-sm text-gray-400">{stat.label}</p>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Throughput Gauge & Pipeline Status */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.35 }}
+        className="panel p-4"
+      >
+        <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+          <Gauge className="w-4 h-4 text-neon-cyan" />
+          Ingestion Pipeline Status
+        </h3>
+        <div className="flex items-center gap-2 overflow-x-auto py-2">
+          {[
+            { stage: 'Queued', count: 0, color: 'bg-gray-500', textColor: 'text-gray-400' },
+            { stage: 'Processing', count: ingestText.isPending ? 1 : 0, color: 'bg-neon-cyan', textColor: 'text-neon-cyan' },
+            { stage: 'Complete', count: history.filter((j: IngestJob) => j.status === 'completed').length || (ingestText.isSuccess ? 1 : 0), color: 'bg-neon-green', textColor: 'text-neon-green' },
+            { stage: 'Failed', count: history.filter((j: IngestJob) => j.status === 'failed').length, color: 'bg-red-500', textColor: 'text-red-400' },
+          ].map((stage, i) => (
+            <div key={stage.stage} className="flex items-center gap-2 flex-1">
+              <div className="flex-1 bg-lattice-deep rounded-lg p-3 text-center border border-white/5">
+                <p className={`text-xl font-bold font-mono ${stage.textColor}`}>{stage.count}</p>
+                <p className="text-xs text-gray-500">{stage.stage}</p>
+              </div>
+              {i < 3 && <div className="w-4 h-px bg-white/20 flex-shrink-0" />}
+            </div>
+          ))}
+        </div>
+        {/* Source type badges */}
+        <div className="flex items-center gap-2 mt-3 flex-wrap">
+          <span className="text-xs text-gray-500">Sources:</span>
+          {[
+            { label: '.txt', icon: FileText, color: 'text-neon-cyan bg-neon-cyan/10' },
+            { label: '.json', icon: FileJson, color: 'text-neon-purple bg-neon-purple/10' },
+            { label: '.csv', icon: Database, color: 'text-neon-green bg-neon-green/10' },
+            { label: '.md', icon: FileUp, color: 'text-amber-400 bg-amber-400/10' },
+          ].map((src) => (
+            <span key={src.label} className={`text-xs px-2 py-0.5 rounded-full flex items-center gap-1 ${src.color}`}>
+              <src.icon className="w-3 h-3" />
+              {src.label}
+            </span>
+          ))}
+        </div>
+      </motion.div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Upload area */}
@@ -317,7 +397,7 @@ export default function IngestLensPage() {
           <div className="flex items-center justify-center gap-3 text-xs text-gray-500">
             <span className="flex items-center gap-1"><FileText className="w-3 h-3" /> .txt .md</span>
             <span className="flex items-center gap-1"><FileJson className="w-3 h-3" /> .json .csv</span>
-            <span className="flex items-center gap-1"><Image className="w-3 h-3" /> .png .jpg</span>
+            <span className="flex items-center gap-1"><ImageIcon className="w-3 h-3" /> .png .jpg</span>
             <span className="flex items-center gap-1"><Music className="w-3 h-3" /> .mp3 .wav</span>
           </div>
           <button className="mt-2 px-6 py-2 bg-neon-cyan/20 border border-neon-cyan/40 rounded-lg text-sm text-neon-cyan hover:bg-neon-cyan/30 transition-colors">
@@ -352,7 +432,7 @@ export default function IngestLensPage() {
                 <span className={`text-xs px-1.5 py-0.5 rounded ${
                   conv.active ? 'bg-neon-green/20 text-neon-green' : 'bg-gray-500/20 text-gray-500'
                 }`}>
-                  {conv.active ? 'enabled' : 'coming soon'}
+                  {conv.active ? 'enabled' : 'Requires OCR service'}
                 </span>
               </div>
             ))}

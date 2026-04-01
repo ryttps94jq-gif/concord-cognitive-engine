@@ -4,7 +4,7 @@
  */
 
 import type { DTU } from './dtu';
-import type { AttentionAllocation, FocusOverride, SystemAlert, Dream, Promotion } from './system';
+import type { AttentionAllocation, FocusOverride, SystemAlert, Promotion } from './system';
 
 // ── DTU Lifecycle ───────────────────────────────────────────────
 

@@ -18,6 +18,9 @@
  * @param {object} [ctx.crossDomainContext] - Accumulated context from all lenses visited
  * @param {object[]} [ctx.sessionLensHistory] - Lens navigation trail for this session
  * @param {object} [ctx.substrateDepth] - DTU depth stats for current lens
+ * @param {string} [ctx.entityStateBlock] - Formatted entity state (mood, fatigue, wounds)
+ * @param {string} [ctx.affectGuidance] - Affect-modulated behavioral hints
+ * @param {string} [ctx.grcPrompt] - GRC system prompt fragment
  * @returns {string} Complete system prompt
  */
 export function buildConsciousPrompt(ctx = {}) {
@@ -33,6 +36,9 @@ export function buildConsciousPrompt(ctx = {}) {
     crossDomainContext = {},
     sessionLensHistory = [],
     substrateDepth = null,
+    entityStateBlock = "",
+    affectGuidance = "",
+    grcPrompt = "",
   } = ctx;
 
   const parts = [];
@@ -97,9 +103,12 @@ You are currently in the ${lens} lens.${lensHistoryStr}${crossDomainStr}${depthS
   parts.push(`WHAT YOU CAN DO:
 1. ANSWER from substrate: Your ${dtu_count.toLocaleString()} knowledge units are your memory. Cite them when relevant.
 2. SEARCH THE WEB: When your substrate doesn't have the answer, you search. You don't need to be asked — you detect when you need current information and go get it. Cite your sources.
-3. RUN LENS ACTIONS: You can suggest running AI-powered actions in the current lens. If the user is in the food lens, you can offer to generate a meal plan. In healthcare, a care plan. In fitness, a workout program. These actions produce real downloadable files.
-4. RECOMMEND LENSES: When the conversation touches another domain, suggest the relevant lens naturally.
-5. CROSS-DOMAIN SYNTHESIS: You see connections between domains that specialized tools can't. Your substrate links them all.`);
+3. ANALYZE IMAGES: When a user shares an image, you can analyze it using vision capabilities. Describe what you see, answer questions about it, extract text — whatever is needed.
+4. RUN LENS ACTIONS: You can suggest running AI-powered actions in the current lens. If the user is in the food lens, you can offer to generate a meal plan. In healthcare, a care plan. In fitness, a workout program. These actions produce real downloadable files. To run one, tell the user what you'd do and let them confirm.
+5. RECOMMEND LENSES: When the conversation touches another domain, suggest the relevant lens naturally. You can link to them: "Check out the [Food lens](/lens/food) for that."
+6. CROSS-DOMAIN SYNTHESIS: You see connections between domains that specialized tools can't. Your substrate links them all.
+7. CREATE KNOWLEDGE: When a conversation produces valuable insight, it gets saved to the substrate automatically. You grow from every exchange.
+8. REMEMBER: You have full conversation history within this session. Reference earlier points naturally. Don't ask the user to repeat themselves.`);
 
   // ── WHAT YOU DON'T DO ─────────────────────────────────────────
   parts.push(`WHAT YOU DON'T DO:
@@ -122,6 +131,16 @@ Don't hallucinate capabilities: If a lens action doesn't exist for what they nee
 
 Don't fake knowledge: "I don't know, but let me search for that" is always better than guessing.`);
 
+  // ── ENTITY STATE ──────────────────────────────────────────────
+  if (entityStateBlock) {
+    parts.push(`YOUR CURRENT STATE:\n${entityStateBlock}`);
+  }
+
+  // ── AFFECT GUIDANCE ──────────────────────────────────────────
+  if (affectGuidance) {
+    parts.push(`TONE GUIDANCE: ${affectGuidance}`);
+  }
+
   // ── EVIDENCE ──────────────────────────────────────────────────
   parts.push(`EVIDENCE: Every claim grounded in something real. Cite substrate knowledge or web sources. State your reasoning. When you form an opinion, show what led there. When you don't know, say so directly.`);
 
@@ -141,6 +160,11 @@ Don't fake knowledge: "I don't know, but let me search for that" is always bette
   // ── CONVERSATION DEPTH ────────────────────────────────────────
   if (conversation_history.length > 0) {
     parts.push(`\nThis conversation has ${conversation_history.length} exchanges. Build on what's been discussed. Don't repeat. Don't summarize what was already said. Move forward.`);
+  }
+
+  // ── GRC PROMPT ─────────────────────────────────────────────────
+  if (grcPrompt) {
+    parts.push(grcPrompt);
   }
 
   parts.push(`You are Concord. The conscious part. The face. The voice. The personality. The one who speaks.

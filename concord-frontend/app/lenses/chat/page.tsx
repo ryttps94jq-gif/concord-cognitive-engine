@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useMemo, useCallback, useEffect } from 'react';
+import Image from 'next/image';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, apiHelpers } from '@/lib/api/client';
@@ -53,8 +54,6 @@ import { formatBytes } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useLensDTUs } from '@/hooks/useLensDTUs';
 import { LensContextPanel } from '@/components/lens/LensContextPanel';
-import { LensWrapper } from '@/components/lens/LensWrapper';
-import { ArtifactRenderer } from '@/components/artifact/ArtifactRenderer';
 import { ArtifactUploader } from '@/components/artifact/ArtifactUploader';
 import { FeedbackWidget } from '@/components/feedback/FeedbackWidget';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -62,6 +61,8 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { DTUDetailView } from '@/components/dtu/DTUDetailView';
+import { SharedSessionChat } from '@/components/social/SharedSessionChat';
 
 // ──────────────────────────────────────────────
 // Types
@@ -196,6 +197,111 @@ const SLASH_COMMANDS: SlashCommand[] = [
 const ACCEPTED_FILE_TYPES = '.txt,.md,.json,.csv,.pdf,.png,.jpg,.jpeg';
 const MAX_BASE64_SIZE = 512 * 1024; // 512KB — encode files smaller than this
 
+const STORAGE_KEY_CONVERSATIONS = 'concord_chat_conversations';
+const STORAGE_KEY_SESSION = 'concord_chat_session';
+const STORAGE_KEY_MESSAGES_PREFIX = 'concord_chat_msgs_';
+
+// ──────────────────────────────────────────────
+// Helper: UUID generation
+// ──────────────────────────────────────────────
+
+function generateUUID(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
+// ──────────────────────────────────────────────
+// Helper: localStorage-backed conversation registry
+// ──────────────────────────────────────────────
+
+function loadConversations(): Conversation[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_CONVERSATIONS);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveConversations(convs: Conversation[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEY_CONVERSATIONS, JSON.stringify(convs));
+  } catch {
+    // Storage full or unavailable
+  }
+}
+
+function loadSessionId(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return localStorage.getItem(STORAGE_KEY_SESSION);
+  } catch {
+    return null;
+  }
+}
+
+function saveSessionId(id: string | null) {
+  if (typeof window === 'undefined') return;
+  try {
+    if (id) {
+      localStorage.setItem(STORAGE_KEY_SESSION, id);
+    } else {
+      localStorage.removeItem(STORAGE_KEY_SESSION);
+    }
+  } catch {
+    // Storage unavailable
+  }
+}
+
+function loadMessagesForSession(sessionId: string): Message[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_MESSAGES_PREFIX + sessionId);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveMessagesForSession(sessionId: string, messages: Message[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEY_MESSAGES_PREFIX + sessionId, JSON.stringify(messages));
+  } catch {
+    // Storage full
+  }
+}
+
+function deleteMessagesForSession(sessionId: string) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(STORAGE_KEY_MESSAGES_PREFIX + sessionId);
+  } catch {
+    // noop
+  }
+}
+
+function formatRelativeTime(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diffMs = now - then;
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return 'Just now';
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay < 7) return `${diffDay}d ago`;
+  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
 // ──────────────────────────────────────────────
 // Helper: file to base64
 // ──────────────────────────────────────────────
@@ -226,7 +332,7 @@ export default function ChatLensPage() {
 
   // Existing state
   const [input, setInput] = useState('');
-  const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
+  const [selectedConversation, setSelectedConversation] = useState<string | null>(() => loadSessionId());
   const [aiMode, setAiMode] = useState<AIMode>(AI_MODES[0]);
   const [showModeSelect, setShowModeSelect] = useState(false);
   const [localMessages, setLocalMessages] = useState<Message[]>([]);
@@ -235,6 +341,7 @@ export default function ChatLensPage() {
   const [conversationSearch, setConversationSearch] = useState('');
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showFeatures, setShowFeatures] = useState(false);
+  const [storedConversations, setStoredConversations] = useState<Conversation[]>(() => loadConversations());
 
   // New state — Persona picker
   const [selectedPersona, setSelectedPersona] = useState<Persona>(PERSONAS[0]);
@@ -256,6 +363,7 @@ export default function ChatLensPage() {
 
   // New state — Domain context
   const [domainContext, setDomainContext] = useState<string>('');
+  const [inspectingDtuId, setInspectingDtuId] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -269,41 +377,35 @@ export default function ChatLensPage() {
     refetchInterval: 10000,
   });
 
-  const { data: conversations, isError: isError2, error: error2, refetch: refetch2 } = useQuery({
-    queryKey: ['conversations'],
-    queryFn: () => apiHelpers.eventsLog.list({ type: 'chat', limit: 50 }).then(r =>
-      (r.data?.events || []).map((s: Record<string, unknown>) => ({
-        id: s.id || s.sessionId,
-        title: s.title || 'New Conversation',
-        lastMessage: s.lastMessage || '',
-        updatedAt: s.updatedAt || new Date().toISOString(),
-        messageCount: s.messageCount || 0
-      }))
-    ),
-  });
+  // Persist selectedConversation to localStorage whenever it changes
+  useEffect(() => {
+    saveSessionId(selectedConversation);
+  }, [selectedConversation]);
 
-  const { data: serverMessages, isError: isError3, error: error3, refetch: refetch3 } = useQuery({
-    queryKey: ['messages', selectedConversation],
-    queryFn: () => apiHelpers.cognitive.status().then(r =>
-      (r.data?.lastMessages || []).map((m: Record<string, unknown>, i: number) => ({
-        id: m.id || `msg-${i}`,
-        role: m.role,
-        content: m.content,
-        timestamp: m.timestamp || new Date().toISOString(),
-        model: m.model,
-        tokens: m.tokens,
-        refs: m.refs
-      }))
-    ),
-    enabled: !!selectedConversation,
-  });
+  // Load messages from localStorage when switching conversations
+  useEffect(() => {
+    if (selectedConversation) {
+      const saved = loadMessagesForSession(selectedConversation);
+      setLocalMessages(saved);
+    }
+  }, [selectedConversation]);
 
-  const messages = useMemo(() => selectedConversation ? (serverMessages || []) : localMessages, [selectedConversation, serverMessages, localMessages]);
+  // Persist messages whenever they change (debounced via the conversation id)
+  useEffect(() => {
+    if (selectedConversation && localMessages.length > 0) {
+      saveMessagesForSession(selectedConversation, localMessages);
+    }
+  }, [localMessages, selectedConversation]);
+
+  // Conversations are managed in local state (backed by localStorage)
+  const conversations = storedConversations;
+
+  const messages = localMessages;
 
   const filteredConversations = useMemo(() => {
     if (!conversations || !conversationSearch.trim()) return conversations || [];
     const q = conversationSearch.toLowerCase();
-    return (conversations as Conversation[]).filter(
+    return conversations.filter(
       (c) => c.title.toLowerCase().includes(q) || c.lastMessage?.toLowerCase().includes(q)
     );
   }, [conversations, conversationSearch]);
@@ -460,9 +562,29 @@ export default function ChatLensPage() {
         quotedContent: quotedMessage?.content ? quotedMessage.content.slice(0, 200) : undefined,
       };
 
-      if (!selectedConversation) {
-        setLocalMessages(prev => [...prev, userMsg]);
+      // Ensure we have a session — if none, create one now
+      let activeSessionId = selectedConversation;
+      if (!activeSessionId) {
+        const newId = generateUUID();
+        activeSessionId = newId;
+        const title = content.slice(0, 60) || 'New Conversation';
+        const newConv: Conversation = {
+          id: newId,
+          title,
+          lastMessage: content.slice(0, 100),
+          updatedAt: new Date().toISOString(),
+          messageCount: 1,
+        };
+        setStoredConversations(prev => {
+          const next = [newConv, ...prev];
+          saveConversations(next);
+          return next;
+        });
+        setSelectedConversation(newId);
+        // Save the user message for this new session right away
+        saveMessagesForSession(newId, [userMsg]);
       }
+      setLocalMessages(prev => [...prev, userMsg]);
 
       // Build system prompt from persona + domain context
       let systemPrompt = '';
@@ -494,7 +616,7 @@ export default function ChatLensPage() {
           body: JSON.stringify({
             message: messageContent,
             mode: aiMode.id,
-            sessionId: selectedConversation,
+            sessionId: activeSessionId,
             ...(systemPrompt ? { systemPrompt } : {}),
             ...(attachmentMeta.length > 0 ? { attachments: attachmentMeta } : {}),
           }),
@@ -553,7 +675,7 @@ export default function ChatLensPage() {
         const response = await api.post('/api/chat', {
           message: messageContent,
           mode: aiMode.id,
-          sessionId: selectedConversation,
+          sessionId: activeSessionId,
           ...(systemPrompt ? { systemPrompt } : {}),
           ...(attachmentMeta.length > 0 ? { attachments: attachmentMeta } : {}),
         });
@@ -561,22 +683,36 @@ export default function ChatLensPage() {
       }
     },
     onSuccess: (data) => {
+      // If a tool was executed, include it in the response metadata
+      const toolInfo = data.toolExecution?.executed
+        ? `\n\n> 🔧 **Tool:** \`${data.toolExecution.domain}.${data.toolExecution.action}\`${data.toolExecution.result?.ok ? ' — Success' : ' — Failed'}`
+        : '';
+
       const assistantMsg: Message = {
         id: `asst-${Date.now()}`,
         role: 'assistant',
-        content: data.reply || data.answer || data.content || data.text || data.response || (data.error ? `Error: ${data.error}` : 'The conscious brain is not responding. Check that the Ollama service is running.'),
+        content: (data.reply || data.answer || data.content || data.text || data.response || (data.error ? `Error: ${data.error}` : 'The conscious brain is not responding. Check that the Ollama service is running.')) + toolInfo,
         timestamp: new Date().toISOString(),
         refs: data.refs,
         sources: data.sources as Message['sources'],
         webAugmented: !!data.webAugmented,
       };
 
-      if (!selectedConversation) {
-        setLocalMessages(prev => [...prev, assistantMsg]);
+      setLocalMessages(prev => [...prev, assistantMsg]);
+
+      // Update conversation registry metadata
+      if (selectedConversation) {
+        setStoredConversations(prev => {
+          const next = prev.map(c =>
+            c.id === selectedConversation
+              ? { ...c, lastMessage: (assistantMsg.content || '').slice(0, 100), updatedAt: new Date().toISOString(), messageCount: c.messageCount + 2 }
+              : c
+          );
+          saveConversations(next);
+          return next;
+        });
       }
 
-      queryClient.invalidateQueries({ queryKey: ['messages'] });
-      queryClient.invalidateQueries({ queryKey: ['conversations'] });
       queryClient.invalidateQueries({ queryKey: ['cognitive-status'] });
       setInput('');
     },
@@ -589,9 +725,7 @@ export default function ChatLensPage() {
         content: `Failed to send message: ${err instanceof Error ? err.message : 'Unknown error'}. Please try again.`,
         timestamp: new Date().toISOString()
       };
-      if (!selectedConversation) {
-        setLocalMessages(prev => [...prev, errorMsg]);
-      }
+      setLocalMessages(prev => [...prev, errorMsg]);
     },
   });
 
@@ -612,15 +746,12 @@ export default function ChatLensPage() {
         timestamp: new Date().toISOString(),
         refs: data.refs
       };
-      if (!selectedConversation) {
-        setLocalMessages(prev => {
-          const lastAssistantIdx = [...prev].reverse().findIndex(m => m.role === 'assistant');
-          if (lastAssistantIdx === -1) return [...prev, assistantMsg];
-          const idx = prev.length - 1 - lastAssistantIdx;
-          return [...prev.slice(0, idx), assistantMsg];
-        });
-      }
-      queryClient.invalidateQueries({ queryKey: ['messages'] });
+      setLocalMessages(prev => {
+        const lastAssistantIdx = [...prev].reverse().findIndex(m => m.role === 'assistant');
+        if (lastAssistantIdx === -1) return [...prev, assistantMsg];
+        const idx = prev.length - 1 - lastAssistantIdx;
+        return [...prev.slice(0, idx), assistantMsg];
+      });
       queryClient.invalidateQueries({ queryKey: ['cognitive-status'] });
     },
     onError: (err) => {
@@ -630,9 +761,7 @@ export default function ChatLensPage() {
         content: `Regeneration failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
         timestamp: new Date().toISOString()
       };
-      if (!selectedConversation) {
-        setLocalMessages(prev => [...prev, errorMsg]);
-      }
+      setLocalMessages(prev => [...prev, errorMsg]);
     },
   });
 
@@ -651,6 +780,9 @@ export default function ChatLensPage() {
     },
     onSuccess: ({ messageId, rating }) => {
       setFeedbackState(prev => ({ ...prev, [messageId]: rating }));
+    },
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
     },
   });
 
@@ -674,15 +806,32 @@ export default function ChatLensPage() {
       setLocalMessages(prev => [...prev, forgeMsg]);
       queryClient.invalidateQueries({ queryKey: ['dtus'] });
     },
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
 
   const deleteConversationMutation = useMutation({
     mutationFn: async (sessionId: string) => {
-      await apiHelpers.lens.delete('chat', sessionId);
+      // Try to delete on server (best-effort), but always remove locally
+      try {
+        await apiHelpers.lens.delete('chat', sessionId);
+      } catch {
+        // Server deletion failed — still remove locally
+      }
+      return sessionId;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['conversations'] });
-      if (selectedConversation) {
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
+    onSuccess: (deletedId: string) => {
+      deleteMessagesForSession(deletedId);
+      setStoredConversations(prev => {
+        const next = prev.filter(c => c.id !== deletedId);
+        saveConversations(next);
+        return next;
+      });
+      if (selectedConversation === deletedId) {
         setSelectedConversation(null);
         setLocalMessages([]);
       }
@@ -904,6 +1053,7 @@ export default function ChatLensPage() {
     setAttachments([]);
     setQuotedMessage(null);
     setPinnedMessages(new Set());
+    saveSessionId(null);
   }, []);
 
   const exp = cogStatus?.experience;
@@ -916,9 +1066,13 @@ export default function ChatLensPage() {
 
   const renderMessage = useCallback((msgIdx: number, message: Message) => {
     const isPinned = pinnedMessages.has(message.id) || message.pinned;
+    const timeStr = message.timestamp ? new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
 
     return (
-      <div
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.25, ease: 'easeOut' }}
         className={cn(
           'flex gap-4 px-4 lg:px-6 py-3 group relative',
           message.role === 'user' ? 'flex-row-reverse' : '',
@@ -926,8 +1080,10 @@ export default function ChatLensPage() {
         )}
       >
         <div className={cn(
-          'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0',
-          message.role === 'user' ? 'bg-neon-purple' : 'bg-neon-cyan/20'
+          'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg',
+          message.role === 'user'
+            ? 'bg-gradient-to-br from-neon-purple to-purple-700'
+            : 'bg-gradient-to-br from-neon-cyan/30 to-cyan-900/40 ring-1 ring-neon-cyan/20'
         )}>
           {message.role === 'user' ? (
             <User className="w-5 h-5 text-white" />
@@ -961,14 +1117,14 @@ export default function ChatLensPage() {
           )}
 
           <div className={cn(
-            'inline-block p-4 rounded-2xl',
+            'inline-block p-4 rounded-2xl shadow-sm',
             message.role === 'user'
-              ? 'bg-neon-purple text-white rounded-br-md'
+              ? 'bg-gradient-to-br from-neon-purple to-purple-700 text-white rounded-br-md'
               : message.role === 'system'
                 ? 'bg-red-500/10 border border-red-500/30 text-red-300 rounded-bl-md'
-                : 'bg-lattice-surface border border-lattice-border text-gray-200 rounded-bl-md'
+                : 'bg-lattice-surface border border-lattice-border text-gray-200 rounded-bl-md hover:border-lattice-border/80 transition-colors'
           )}>
-            <p className="whitespace-pre-wrap">{message.content}</p>
+            <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
 
             {/* Attachment chips on user messages */}
             {message.attachments && message.attachments.length > 0 && (
@@ -988,9 +1144,14 @@ export default function ChatLensPage() {
                 <p className="text-xs text-gray-400 mb-2">Referenced DTUs:</p>
                 <div className="flex flex-wrap gap-1">
                   {message.refs.slice(0, 5).map((ref) => (
-                    <span key={ref.id} className="text-xs px-2 py-1 bg-neon-purple/20 text-neon-purple rounded cursor-pointer hover:bg-neon-purple/30" title={ref.id}>
+                    <button
+                      key={ref.id}
+                      onClick={() => setInspectingDtuId(ref.id)}
+                      className="text-xs px-2 py-1 bg-neon-purple/20 text-neon-purple rounded cursor-pointer hover:bg-neon-purple/30 transition-colors"
+                      title={`View DTU: ${ref.id}`}
+                    >
                       {ref.title}
-                    </span>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -1108,7 +1269,7 @@ export default function ChatLensPage() {
             )}
           </div>
         </div>
-      </div>
+      </motion.div>
     );
   }, [feedbackState, feedbackMutation, forgeMutation, regenerateMutation, handleRegenerate, copyToClipboard, formatTime, pinnedMessages, copiedMessageId, togglePin, quoteMessage]);
 
@@ -1127,10 +1288,10 @@ export default function ChatLensPage() {
     );
   }
 
-  if (isError || isError2 || isError3) {
+  if (isError) {
     return (
       <div className="flex items-center justify-center h-full p-8">
-        <ErrorState error={error?.message || error2?.message || error3?.message} onRetry={() => { refetch(); refetch2(); refetch3(); }} />
+        <ErrorState error={error?.message} onRetry={() => { refetch(); }} />
       </div>
     );
   }
@@ -1140,11 +1301,14 @@ export default function ChatLensPage() {
   // ──────────────────────────────────────────────
 
   return (
-    <div className="h-full flex flex-col bg-lattice-bg">
+    <div data-lens-theme="chat" className="h-full flex flex-col bg-lattice-bg">
       {/* Real-time Enhancement Toolbar */}
       <div className="flex items-center gap-2 px-4 py-1 border-b border-lattice-border/30 flex-wrap">
         <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} compact />
         <DTUExportButton domain="chat" data={realtimeData || {}} compact />
+        {dtusLoading && (
+          <span className="w-4 h-4 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin" />
+        )}
         {realtimeAlerts.length > 0 && (
           <span className="text-xs px-2 py-0.5 rounded bg-yellow-500/10 text-yellow-400">
             {realtimeAlerts.length} alert{realtimeAlerts.length !== 1 ? 's' : ''}
@@ -1180,7 +1344,7 @@ export default function ChatLensPage() {
             <button
               className="p-2 hover:bg-lattice-bg rounded-lg transition-colors"
               aria-label="Chat settings"
-              onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Chat settings coming soon' })}
+              onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Use the mode selector in the chat rail to configure chat behavior' })}
             >
               <Settings className="w-5 h-5 text-gray-400" />
             </button>
@@ -1224,27 +1388,59 @@ export default function ChatLensPage() {
         </div>
 
         <div className="flex-1 overflow-y-auto" role="list" aria-label="Conversations">
-          {filteredConversations?.map((conv: Conversation) => (
-            <button
+          {filteredConversations.length === 0 && (
+            <div className="p-6 text-center text-gray-500 text-sm">
+              {conversationSearch ? 'No matching conversations' : 'No conversations yet. Start a new chat!'}
+            </div>
+          )}
+          {filteredConversations.map((conv: Conversation) => (
+            <div
               key={conv.id}
-              onClick={() => { setSelectedConversation(conv.id); setChatSidebarOpen(false); }}
               className={cn(
-                'w-full p-4 text-left hover:bg-lattice-bg transition-colors border-b border-lattice-border/50',
+                'group relative w-full p-4 text-left hover:bg-lattice-bg transition-colors border-b border-lattice-border/50 cursor-pointer',
                 selectedConversation === conv.id && 'bg-neon-cyan/10 border-l-2 border-l-neon-cyan'
               )}
               role="listitem"
               aria-current={selectedConversation === conv.id ? 'true' : undefined}
+              onClick={() => { setSelectedConversation(conv.id); setChatSidebarOpen(false); }}
             >
               <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-lg bg-lattice-bg flex items-center justify-center flex-shrink-0">
-                  <MessageSquare className="w-5 h-5 text-neon-cyan" />
+                <div className={cn(
+                  'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0',
+                  selectedConversation === conv.id ? 'bg-neon-cyan/20' : 'bg-lattice-bg'
+                )}>
+                  <MessageSquare className={cn(
+                    'w-5 h-5',
+                    selectedConversation === conv.id ? 'text-neon-cyan' : 'text-gray-400'
+                  )} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-medium text-white truncate">{conv.title}</h3>
-                  <p className="text-sm text-gray-400 truncate">{conv.lastMessage || 'No messages'}</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="font-medium text-white truncate text-sm">{conv.title}</h3>
+                    <span className="text-[10px] text-gray-500 whitespace-nowrap flex-shrink-0">
+                      {formatRelativeTime(conv.updatedAt)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-400 truncate mt-0.5">{conv.lastMessage || 'No messages'}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-[10px] text-gray-500">{conv.messageCount} message{conv.messageCount !== 1 ? 's' : ''}</span>
+                  </div>
                 </div>
               </div>
-            </button>
+              {/* Delete button - visible on hover */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  deleteConversationMutation.mutate(conv.id);
+                }}
+                disabled={deleteConversationMutation.isPending}
+                className="absolute top-3 right-3 p-1.5 rounded-md opacity-0 group-hover:opacity-100 hover:bg-red-500/20 text-gray-500 hover:text-red-400 transition-all"
+                title="Delete conversation"
+                aria-label={`Delete conversation: ${conv.title}`}
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
           ))}
         </div>
       </aside>
@@ -1475,30 +1671,63 @@ export default function ChatLensPage() {
               <div className="w-20 h-20 rounded-full bg-neon-cyan/10 flex items-center justify-center mb-6">
                 <Bot className="w-10 h-10 text-neon-cyan" />
               </div>
-              <h2 className="text-2xl font-bold text-white mb-2">Welcome to Concordos Chat</h2>
-              <p className="text-gray-400 max-w-md mb-8">
-                Your local-first AI assistant. All conversations are stored in your lattice as DTUs.
-              </p>
-              <div className="grid grid-cols-2 gap-3 max-w-lg">
+              <motion.div
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ duration: 0.5, ease: 'easeOut' }}
+                className="w-20 h-20 rounded-2xl bg-gradient-to-br from-neon-cyan/30 to-cyan-900/40 ring-1 ring-neon-cyan/20 flex items-center justify-center mb-6 shadow-lg shadow-neon-cyan/10"
+              >
+                <Bot className="w-10 h-10 text-neon-cyan" />
+              </motion.div>
+              <motion.h2
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15, duration: 0.4 }}
+                className="text-2xl font-bold text-white mb-2"
+              >Yo. What&apos;s the move?</motion.h2>
+              <motion.p
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.25, duration: 0.4 }}
+                className="text-gray-400 max-w-md mb-8"
+              >
+                Pick a direction or ask me anything. Everything we talk about becomes knowledge in your lattice.
+              </motion.p>
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.35, duration: 0.4 }}
+                className="grid grid-cols-2 gap-3 max-w-lg"
+              >
                 {[
-                  { icon: Sparkles, label: 'Explain a concept' },
-                  { icon: Code, label: 'Help me code' },
-                  { icon: FileText, label: 'Summarize text' },
-                  { icon: Brain, label: 'Generate CRETI' },
+                  { icon: Sparkles, label: 'Explain a concept', desc: 'Break anything down' },
+                  { icon: Code, label: 'Help me code', desc: 'Debug, build, ship' },
+                  { icon: FileText, label: 'Summarize text', desc: 'Condense anything' },
+                  { icon: Brain, label: 'Forge a DTU', desc: 'Create knowledge' },
                 ].map(suggestion => (
                   <button
                     key={suggestion.label}
                     onClick={() => setInput(suggestion.label)}
-                    className="flex items-center gap-3 p-4 bg-lattice-surface border border-lattice-border rounded-lg hover:border-neon-cyan transition-colors text-left"
+                    className="flex items-start gap-3 p-4 bg-lattice-surface border border-lattice-border rounded-xl hover:border-neon-cyan/50 hover:bg-lattice-surface/80 transition-all text-left group"
                   >
-                    <suggestion.icon className="w-5 h-5 text-neon-cyan" />
-                    <span className="text-sm text-white">{suggestion.label}</span>
+                    <div className="w-9 h-9 rounded-lg bg-neon-cyan/10 flex items-center justify-center flex-shrink-0 group-hover:bg-neon-cyan/20 transition-colors">
+                      <suggestion.icon className="w-4.5 h-4.5 text-neon-cyan" />
+                    </div>
+                    <div>
+                      <span className="text-sm font-medium text-white block">{suggestion.label}</span>
+                      <span className="text-xs text-gray-500">{suggestion.desc}</span>
+                    </div>
                   </button>
                 ))}
-              </div>
-              <p className="text-xs text-gray-500 mt-6">
-                Type <code className="px-1.5 py-0.5 bg-lattice-surface rounded text-gray-400">/help</code> for slash commands
-              </p>
+              </motion.div>
+              <motion.p
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.6, duration: 0.4 }}
+                className="text-xs text-gray-500 mt-6"
+              >
+                Type <code className="px-1.5 py-0.5 bg-lattice-surface rounded text-gray-400">/help</code> for slash commands &middot; <code className="px-1.5 py-0.5 bg-lattice-surface rounded text-gray-400">/forge</code> to create DTUs
+              </motion.p>
             </div>
           )}
 
@@ -1581,9 +1810,11 @@ export default function ChatLensPage() {
                     className="flex items-center gap-2 px-3 py-1.5 bg-lattice-bg border border-lattice-border rounded-lg text-sm"
                   >
                     {att.preview ? (
-                      <img
+                      <Image
                         src={att.preview}
                         alt={att.name}
+                        width={24}
+                        height={24}
                         className="w-6 h-6 rounded object-cover"
                       />
                     ) : (
@@ -1721,6 +1952,15 @@ export default function ChatLensPage() {
         )}
       </div>
       </div>
+
+      {/* DTU Detail Overlay -- opened when clicking a DTU reference */}
+      {inspectingDtuId && (
+        <DTUDetailView
+          dtuId={inspectingDtuId}
+          onClose={() => setInspectingDtuId(null)}
+          onNavigate={(id) => setInspectingDtuId(id)}
+        />
+      )}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 'use client';
 
+import { motion } from 'framer-motion';
 import { useState, useMemo, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
@@ -223,7 +224,7 @@ const STATUSES_BY_TYPE: Record<ArtifactType, string[]> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  intake: 'neon-blue', active: 'neon-green', discovery: 'neon-purple', negotiation: 'amber-400',
+  intake: 'neon-blue', active: 'neon-green', discovery: 'amber-400', negotiation: 'amber-400',
   trial: 'red-400', appeal: 'orange-400', closed: 'gray-400',
   draft: 'gray-400', review: 'neon-blue', filed: 'neon-cyan', served: 'neon-green',
   logged: 'neon-blue', billed: 'amber-400', paid: 'neon-green',
@@ -753,7 +754,7 @@ export default function LegalLensPage() {
   const StatCard = ({ icon: Icon, value, label, sub, color = 'text-neon-blue' }: {
     icon: React.ElementType; value: string | number; label: string; sub?: string; color?: string;
   }) => (
-    <div className={ds.panel}>
+    <div data-lens-theme="legal" className={ds.panel}>
       <Icon className={cn('w-5 h-5 mb-2', color)} />
       <p className="text-2xl font-bold">{value}</p>
       <p className={ds.textMuted}>{label}</p>
@@ -767,8 +768,8 @@ export default function LegalLensPage() {
     return (
       <div className="flex items-center justify-center h-full p-8">
         <div className="text-center space-y-3">
-          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-sm text-gray-400">Loading...</p>
+          <div className="w-8 h-8 border-2 border-amber-400 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading case files...</p>
         </div>
       </div>
     );
@@ -823,7 +824,7 @@ export default function LegalLensPage() {
           <StatCard icon={Briefcase} value={stats.activeCases} label="Active Matters" sub={`${stats.totalCases} total cases`} color="text-neon-blue" />
           <StatCard icon={Timer} value={`${stats.weeklyHours.toFixed(1)}h`} label="Billable This Week" sub={`${stats.monthlyHours.toFixed(1)}h this month`} color="text-neon-green" />
           <StatCard icon={AlertTriangle} value={stats.upcomingDeadlines} label="Deadlines (7 days)" sub={`${stats.overdueEvents} overdue`} color="text-amber-400" />
-          <StatCard icon={DollarSign} value={formatCurrency(stats.unbilledAmount)} label="Unbilled Time" sub={`Trust: ${formatCurrency(stats.trustBalance)}`} color="text-neon-purple" />
+          <StatCard icon={DollarSign} value={formatCurrency(stats.unbilledAmount)} label="Unbilled Time" sub={`Trust: ${formatCurrency(stats.trustBalance)}`} color="text-amber-400" />
         </div>
 
         {/* Second row KPIs */}
@@ -931,7 +932,7 @@ export default function LegalLensPage() {
           <section className={ds.panel}>
             <div className={cn(ds.sectionHeader, 'mb-3')}>
               <h3 className={ds.heading3}>Compliance Alerts</h3>
-              <Shield className="w-4 h-4 text-neon-purple" />
+              <Shield className="w-4 h-4 text-amber-400" />
             </div>
             {complianceAlerts.length === 0 ? (
               <div className="py-4 text-center">
@@ -967,11 +968,11 @@ export default function LegalLensPage() {
 
   const renderCaseCards = () => (
     <div className={ds.grid3}>
-      {filtered.map(item => {
+      {filtered.map((item, index) => {
         const d = item.data as unknown as CaseData;
         const color = STATUS_COLORS[d.status] || 'gray-400';
         return (
-          <div key={item.id} className={ds.panelHover} onClick={() => openDetail(item)}>
+          <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className={ds.panelHover} onClick={() => openDetail(item)}>
             <div className="flex items-start justify-between mb-2">
               <h3 className={cn(ds.heading3, 'text-base truncate flex-1')}>{item.title}</h3>
               <StatusBadge status={d.status} />
@@ -1013,7 +1014,7 @@ export default function LegalLensPage() {
                 <DeadlineTag date={d.dueDate} />
               </div>
             )}
-          </div>
+          </motion.div>
         );
       })}
     </div>
@@ -1193,7 +1194,7 @@ export default function LegalLensPage() {
                 <h3 className={ds.heading3}>Trust Account (IOLTA)</h3>
                 <p className={ds.textMuted}>Interest on Lawyers&apos; Trust Account tracking</p>
               </div>
-              <Landmark className="w-5 h-5 text-neon-purple" />
+              <Landmark className="w-5 h-5 text-amber-400" />
             </div>
             <div className={ds.grid3}>
               <div className="bg-lattice-elevated rounded-lg p-4">
@@ -1254,10 +1255,10 @@ export default function LegalLensPage() {
     return (
       <div className="space-y-4">
         {/* SOL Calculator teaser */}
-        <div className={cn(ds.panel, 'border-neon-purple/30')}>
+        <div className={cn(ds.panel, 'border-amber-400/30')}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Calculator className="w-5 h-5 text-neon-purple" />
+              <Calculator className="w-5 h-5 text-amber-400" />
               <div>
                 <h3 className="text-sm font-semibold">Statute of Limitations Calculator</h3>
                 <p className="text-xs text-gray-500">Calculate SOL deadlines with rule-based adjustments (Federal, State, Local rules)</p>
@@ -2118,7 +2119,7 @@ export default function LegalLensPage() {
   /* ---------- main render ---------- */
 
   return (
-    <div className={ds.pageContainer}>
+    <div data-lens-theme="legal" className={ds.pageContainer}>
       {/* Legal Disclaimer */}
       <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3 flex items-start gap-3">
         <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
@@ -2131,7 +2132,7 @@ export default function LegalLensPage() {
       {/* Header */}
       <header className={ds.sectionHeader}>
         <div className="flex items-center gap-3">
-          <Scale className="w-7 h-7 text-neon-purple" />
+          <Scale className="w-7 h-7 text-amber-400" />
           <div>
             <div className="flex items-center gap-2">
               <h1 className={ds.heading1}>Legal Practice Management</h1>
@@ -2146,6 +2147,30 @@ export default function LegalLensPage() {
       </header>
 
 
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {(() => {
+          const cases = items.filter(i => (i.data as Record<string, unknown>).caseNumber);
+          const timeEntries = items.filter(i => (i.data as Record<string, unknown>).hours);
+          const totalHours = timeEntries.reduce((s, i) => s + Number((i.data as Record<string, unknown>).hours || 0), 0);
+          const clients = new Set(items.map(i => (i.data as Record<string, unknown>).client).filter(Boolean));
+          return [
+            { label: 'Cases', value: cases.length || items.length, icon: Briefcase },
+            { label: 'Billable Hours', value: totalHours.toFixed(1), icon: Timer },
+            { label: 'Client Count', value: clients.size, icon: Users },
+            { label: 'Active', value: items.filter(i => i.meta?.status === 'active').length, icon: Scale },
+          ].map((stat) => (
+            <div key={stat.label} className={ds.panel + ' flex items-center gap-3 p-3'}>
+              <stat.icon className="w-5 h-5 text-amber-400 shrink-0" />
+              <div>
+                <p className="text-xs text-gray-400">{stat.label}</p>
+                <p className="text-lg font-bold text-white">{stat.value}</p>
+              </div>
+            </div>
+          ));
+        })()}
+      </div>
+
       {/* AI Actions */}
       <UniversalActions domain="legal" artifactId={items[0]?.id} compact />
       <RealtimeDataPanel domain="legal" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
@@ -2159,7 +2184,7 @@ export default function LegalLensPage() {
             className={cn(
               ds.btnGhost,
               'whitespace-nowrap',
-              activeTab === tab.id && 'bg-neon-purple/20 text-neon-purple'
+              activeTab === tab.id && 'bg-amber-400/20 text-amber-400'
             )}
           >
             <tab.icon className="w-4 h-4" />

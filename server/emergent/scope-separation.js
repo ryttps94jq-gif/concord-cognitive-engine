@@ -727,38 +727,47 @@ export function getMarketplaceAnalytics(STATE, opts = {}) {
 
 /**
  * Get scope separation metrics.
+ * Cached for 10 seconds to avoid O(n) DTU iteration on every request.
  */
+let _scopeMetricsCache = { ts: 0, counts: null, userCounts: new Map() };
+const SCOPE_METRICS_TTL = 10_000;
+
 export function getScopeMetrics(STATE, opts = {}) {
   const ss = ensureScopeState(STATE);
   const userId = opts.userId || null;
+  const now = Date.now();
 
-  // Count DTUs by scope (total system counts)
-  const scopeCounts = { [SCOPES.LOCAL]: 0, [SCOPES.GLOBAL]: 0, [SCOPES.CREATIVE_GLOBAL]: 0, [SCOPES.MARKETPLACE]: 0, [SCOPES.SHADOW]: 0 };
-  // User-specific local count (only DTUs owned by this user)
-  let userLocalCount = 0;
-  let userSyncedCount = 0;
+  // Rebuild scope counts if cache is stale
+  if (!_scopeMetricsCache.counts || now - _scopeMetricsCache.ts > SCOPE_METRICS_TTL) {
+    const scopeCounts = { [SCOPES.LOCAL]: 0, [SCOPES.GLOBAL]: 0, [SCOPES.CREATIVE_GLOBAL]: 0, [SCOPES.MARKETPLACE]: 0, [SCOPES.SHADOW]: 0 };
+    const perUser = new Map(); // userId -> { local, synced }
 
-  for (const dtu of STATE.dtus.values()) {
-    const s = getDtuScope(dtu);
-    scopeCounts[s] = (scopeCounts[s] || 0) + 1;
-    if (userId && s === SCOPES.LOCAL) {
-      if (!dtu.ownerId || dtu.ownerId === userId) {
-        userLocalCount++;
-        if (dtu.meta?.syncedFromGlobal) userSyncedCount++;
+    for (const dtu of STATE.dtus.values()) {
+      const s = getDtuScope(dtu);
+      scopeCounts[s] = (scopeCounts[s] || 0) + 1;
+      if (s === SCOPES.LOCAL && dtu.ownerId) {
+        let uc = perUser.get(dtu.ownerId);
+        if (!uc) { uc = { local: 0, synced: 0 }; perUser.set(dtu.ownerId, uc); }
+        uc.local++;
+        if (dtu.meta?.syncedFromGlobal) uc.synced++;
       }
     }
+
+    _scopeMetricsCache = { ts: now, counts: scopeCounts, userCounts: perUser };
   }
+
+  const scopeCounts = _scopeMetricsCache.counts;
+  const uc = userId ? _scopeMetricsCache.userCounts.get(userId) : null;
 
   return {
     ok: true,
     scopeCounts,
-    // User-specific counts for the dashboard
     globalCount: scopeCounts[SCOPES.GLOBAL],
     creativeGlobalCount: scopeCounts[SCOPES.CREATIVE_GLOBAL],
-    localCount: userId ? userLocalCount : scopeCounts[SCOPES.LOCAL],
+    localCount: userId ? (uc?.local || 0) : scopeCounts[SCOPES.LOCAL],
     marketplaceCount: scopeCounts[SCOPES.MARKETPLACE],
     shadowCount: scopeCounts[SCOPES.SHADOW],
-    userSyncedCount,
+    userSyncedCount: uc?.synced || 0,
     globalTick: { ...ss.globalTick },
     metrics: { ...ss.metrics },
     influenceMatrix: INFLUENCE_MATRIX,

@@ -178,7 +178,13 @@ export type SocketEvent =
   | 'government:update'
   | 'insurance:update'
   | 'lens:dtu_generated'
-  | 'agent:domain_insight';
+  | 'agent:domain_insight'
+  // Per-user tick events
+  | 'user:tick'
+  // Spontaneous initiative events (proactive messages from Concord)
+  | 'initiative:new'
+  // Chat tool execution results
+  | 'chat:tool_result';
 
 // ---- Enriched Event Payload (Category 2+5: Concurrency + Observability) ----
 interface EnrichedPayload {

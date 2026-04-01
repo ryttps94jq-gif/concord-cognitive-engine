@@ -380,7 +380,7 @@ export function init({ STATE, helpers } = {}) {
 
   setTimeout(() => {
     _timer = setInterval(() => {
-      runForgettingCycle().catch(() => {});
+      runForgettingCycle().catch(e => logger.warn?.('[forgetting] cycle failed:', e?.message));
     }, FORGETTING_INTERVAL_MS);
     if (_timer.unref) _timer.unref();
   }, 120000); // 2 min after boot

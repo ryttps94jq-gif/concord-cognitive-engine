@@ -28,12 +28,35 @@ interface ResonanceEmpireGraphProps {
   fullHeight?: boolean;
 }
 
-const tierColors = {
+const tierColors: Record<string, string> = {
   regular: '#00d4ff',
   mega: '#a855f7',
   hyper: '#ec4899',
   shadow: '#6b7280',
 };
+
+// Domain-based colors for scope/domain coloring
+const domainColors: Record<string, string> = {
+  science: '#22c55e',
+  code: '#3b82f6',
+  music: '#f59e0b',
+  creative: '#ec4899',
+  finance: '#10b981',
+  law: '#8b5cf6',
+  health: '#ef4444',
+  research: '#06b6d4',
+  chat: '#a855f7',
+  general: '#00d4ff',
+};
+
+function getNodeColor(node: Node): string {
+  // If the node has a scope/domain, color by domain
+  if (node.scope && domainColors[node.scope]) {
+    return domainColors[node.scope];
+  }
+  // Otherwise fall back to tier color
+  return tierColors[node.tier || 'regular'] || '#00d4ff';
+}
 
 export function ResonanceEmpireGraph({
   nodes = [],
@@ -113,7 +136,7 @@ export function ResonanceEmpireGraph({
     positionedNodes.forEach((node) => {
       if (!node.x || !node.y) return;
 
-      const color = tierColors[node.tier || 'regular'];
+      const color = getNodeColor(node);
       const radius = node.tier === 'mega' ? 12 : node.tier === 'hyper' ? 14 : 8;
 
       // Glow effect
@@ -160,7 +183,7 @@ export function ResonanceEmpireGraph({
       ctx.strokeStyle = '#2a2a3a';
       ctx.lineWidth = 1;
 
-      const tooltipWidth = 120;
+      const tooltipWidth = 160;
       const tooltipHeight = 40;
       const tooltipX = hoveredNode.x - tooltipWidth / 2;
       const tooltipY = hoveredNode.y - 50;
@@ -173,7 +196,8 @@ export function ResonanceEmpireGraph({
       ctx.fillStyle = '#ffffff';
       ctx.font = '11px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(hoveredNode.id.slice(0, 12) + '...', hoveredNode.x, tooltipY + 16);
+      const displayLabel = hoveredNode.label || hoveredNode.id?.slice(0, 16) || 'Untitled';
+      ctx.fillText(displayLabel.length > 18 ? displayLabel.slice(0, 16) + '...' : displayLabel, hoveredNode.x, tooltipY + 16);
       ctx.fillStyle = tierColors[hoveredNode.tier || 'regular'];
       ctx.fillText(hoveredNode.tier || 'regular', hoveredNode.x, tooltipY + 30);
     }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, FormEvent } from 'react';
-import Link from 'next/link';
+
 import { api } from '@/lib/api/client';
 
 const EFFECTIVE_DATE = 'March 1, 2026';

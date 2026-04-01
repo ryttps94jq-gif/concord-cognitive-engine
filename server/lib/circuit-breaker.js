@@ -166,11 +166,6 @@ export function createBreakerRegistry(opts = {}) {
       onStateChange: log,
     }),
 
-    openai: createCircuitBreaker("openai", {
-      failureThreshold: 5,
-      cooldownMs: 60_000,
-      onStateChange: log,
-    }),
 
     embeddings: createCircuitBreaker("embeddings", {
       failureThreshold: 8,     // GPU: embeddings are fast and reliable

@@ -90,11 +90,23 @@ export function QuickCapture({ isOpen, onClose, onCapture }: QuickCaptureProps) 
 
     setIsSubmitting(true);
     try {
-      const response = await apiHelpers.forge.manual({
+      // Auto-domain detection: call lens/run classify to determine best domain
+      let detectedDomain: string | undefined;
+      try {
+        const classifyRes = await apiHelpers.lens.runDomain('meta', 'classify', { text: content.trim() });
+        detectedDomain = classifyRes.data?.domain || classifyRes.data?.lens;
+      } catch {
+        // Classification failed — proceed without domain, forge will auto-assign
+      }
+
+      const forgePayload: { content: string; tags: string[]; source: string; domain?: string } = {
         content: content.trim(),
         tags: [...tags, captureType],
-        source: 'quick-capture'
-      });
+        source: 'quick-capture',
+      };
+      if (detectedDomain) forgePayload.domain = detectedDomain;
+
+      const response = await apiHelpers.forge.manual(forgePayload);
       const dtu = response.data;
 
       onCapture?.(dtu);

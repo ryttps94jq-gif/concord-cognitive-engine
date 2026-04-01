@@ -7,8 +7,8 @@ import { api, ensureCsrfToken } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
 import { cn } from '@/lib/utils';
 import {
-  Brain, Globe, Compass, Layers, Sparkles,
-  Rocket, BookOpen, Zap, ChevronRight, Check,
+  Brain, Globe, Compass, Sparkles,
+  Rocket, ChevronRight, Check,
 } from 'lucide-react';
 
 type UniverseMode = 'empty' | 'starter' | 'domain-specific' | 'full';

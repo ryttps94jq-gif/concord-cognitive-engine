@@ -4,7 +4,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
-import { api, apiHelpers } from '@/lib/api/client';
+import { apiHelpers } from '@/lib/api/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowBigUp,
@@ -224,10 +224,10 @@ export default function ForumLensPage() {
   const [replyContent, setReplyContent] = useState('');
   const [postReplyContent, setPostReplyContent] = useState('');
 
-  const { isLoading, isError: isError, error: error, refetch: refetch, items: postItems, create: _createForumPost } = useLensData('forum', 'post', {
+  const { isLoading, isError: isError, error: error, refetch: refetch, items: postItems, create: createForumPost, update: updateForumPost, remove: removeForumPost } = useLensData('forum', 'post', {
     seed: INITIAL_POSTS.map(p => ({ title: p.title, data: p as unknown as Record<string, unknown> })),
   });
-  const { isError: isError2, error: error2, refetch: refetch2, items: communityItems } = useLensData('forum', 'community', {
+  const { isError: isError2, error: error2, refetch: refetch2, items: communityItems, create: createForumCommunity } = useLensData('forum', 'community', {
     seed: INITIAL_COMMUNITIES.map(c => ({ title: c.name, data: c as unknown as Record<string, unknown> })),
   });
 
@@ -308,18 +308,20 @@ export default function ForumLensPage() {
       pinned: false, locked: false, removed: false, awards: [], saved: false, comments: [], views: 1,
     };
     setPosts(prev => [newPost, ...prev]);
+    createForumPost({ title: newPost.title, data: newPost as unknown as Record<string, unknown>, meta: { status: 'active', tags: newPost.tags } });
     setShowCreatePost(false);
     setNewPostTitle(''); setNewPostContent(''); setNewPostCommunity(''); setNewPostTags(''); setNewPostFlair(null);
-  }, [newPostTitle, newPostContent, newPostCommunity, newPostTags, newPostFlair]);
+  }, [newPostTitle, newPostContent, newPostCommunity, newPostTags, newPostFlair, createForumPost]);
 
   const handleCreateCommunity = useCallback(() => {
     if (!newCommName.trim()) return;
     const slug = newCommName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     const newComm: Community = { id: slug, name: newCommName, description: newCommDesc, memberCount: 1, icon: '\uD83C\uDFB5', banner: 'from-neon-cyan to-neon-purple', joined: true, rules: ['Be respectful', 'Stay on topic'], createdAt: new Date().toISOString(), moderators: [DEFAULT_AUTHOR.username] };
     setCommunities(prev => [...prev, newComm]);
+    createForumCommunity({ title: newComm.name, data: newComm as unknown as Record<string, unknown>, meta: { status: 'active' } });
     setShowCreateCommunity(false);
     setNewCommName(''); setNewCommDesc('');
-  }, [newCommName, newCommDesc]);
+  }, [newCommName, newCommDesc, createForumCommunity]);
 
   const handleAddComment = useCallback((postId: string, parentCommentId: string | null, content: string) => {
     if (!content.trim()) return;
@@ -330,22 +332,47 @@ export default function ForumLensPage() {
         return { ...c, replies: insertReply(c.replies) };
       });
     }
-    setPosts(prev => prev.map(p => {
-      if (p.id !== postId) return p;
-      const updatedComments = parentCommentId ? insertReply(p.comments) : [...p.comments, newComment];
-      return { ...p, comments: updatedComments, commentCount: countAllComments(updatedComments) };
-    }));
+    setPosts(prev => {
+      const updated = prev.map(p => {
+        if (p.id !== postId) return p;
+        const updatedComments = parentCommentId ? insertReply(p.comments) : [...p.comments, newComment];
+        return { ...p, comments: updatedComments, commentCount: countAllComments(updatedComments) };
+      });
+      // Persist the updated post with new comment to backend
+      const updatedPost = updated.find(p => p.id === postId);
+      if (updatedPost) {
+        updateForumPost(postId, { data: updatedPost as unknown as Record<string, unknown> });
+      }
+      return updated;
+    });
     setReplyTo(null); setReplyContent(''); setPostReplyContent('');
-  }, []);
+  }, [updateForumPost]);
 
   const handleToggleSave = useCallback((postId: string) => {
-    setPosts(prev => prev.map(p => p.id === postId ? { ...p, saved: !p.saved } : p));
-  }, []);
+    setPosts(prev => {
+      const updated = prev.map(p => p.id === postId ? { ...p, saved: !p.saved } : p);
+      const post = updated.find(p => p.id === postId);
+      if (post) {
+        updateForumPost(postId, { data: post as unknown as Record<string, unknown> })
+          .catch(() => {
+            // Rollback on failure
+            setPosts(prev2 => prev2.map(p => p.id === postId ? { ...p, saved: !p.saved } : p));
+          });
+      }
+      return updated;
+    });
+  }, [updateForumPost]);
 
   const handleGiveAward = useCallback((awardEmoji: string) => {
     if (!showAwardModal) return;
     if (showAwardModal.type === 'post') {
-      setPosts(prev => prev.map(p => p.id === showAwardModal.id ? { ...p, awards: [...p.awards, awardEmoji], score: p.score + 10 } : p));
+      setPosts(prev => {
+        const updated = prev.map(p => p.id === showAwardModal.id ? { ...p, awards: [...p.awards, awardEmoji], score: p.score + 10 } : p);
+        // Persist award to backend
+        const post = updated.find(p => p.id === showAwardModal.id);
+        if (post) updateForumPost(showAwardModal.id, { data: post as unknown as Record<string, unknown> });
+        return updated;
+      });
     } else {
       function addAward(comments: Comment[]): Comment[] {
         return comments.map(c => {
@@ -353,10 +380,16 @@ export default function ForumLensPage() {
           return { ...c, replies: addAward(c.replies) };
         });
       }
-      setPosts(prev => prev.map(p => ({ ...p, comments: addAward(p.comments) })));
+      setPosts(prev => {
+        const updated = prev.map(p => ({ ...p, comments: addAward(p.comments) }));
+        // Persist the post containing the awarded comment
+        const postWithAward = updated.find(p => JSON.stringify(p.comments).includes(showAwardModal!.id));
+        if (postWithAward) updateForumPost(postWithAward.id, { data: postWithAward as unknown as Record<string, unknown> });
+        return updated;
+      });
     }
     setShowAwardModal(null);
-  }, [showAwardModal]);
+  }, [showAwardModal, updateForumPost]);
 
   const handleModAction = useCallback((postId: string, action: 'pin' | 'lock' | 'remove') => {
     setPosts(prev => prev.map(p => {
@@ -365,7 +398,17 @@ export default function ForumLensPage() {
       if (action === 'lock') return { ...p, locked: !p.locked };
       return { ...p, removed: true };
     }));
-  }, []);
+    if (action === 'remove') {
+      removeForumPost(postId);
+    } else {
+      // Persist pin/lock state changes to backend
+      const post = posts.find(p => p.id === postId);
+      if (post) {
+        const updated = action === 'pin' ? { ...post, pinned: !post.pinned } : { ...post, locked: !post.locked };
+        updateForumPost(postId, { data: updated as unknown as Record<string, unknown> });
+      }
+    }
+  }, [posts, removeForumPost, updateForumPost]);
 
   const handleToggleJoin = useCallback((commId: string) => {
     setCommunities(prev => prev.map(c => c.id === commId ? { ...c, joined: !c.joined, memberCount: c.memberCount + (c.joined ? -1 : 1) } : c));
@@ -392,7 +435,7 @@ export default function ForumLensPage() {
     const post = posts.find(p => p.id === postId);
     const isLocked = post?.locked;
     return (
-      <div key={comment.id} className={cn('border-l-2 pl-3 mt-3', depth === 0 ? 'border-lattice-border' : depth === 1 ? 'border-gray-700' : 'border-gray-800')}>
+      <div key={comment.id} className={cn('border-l-2 pl-3 mt-3', depth === 0 ? 'border-orange-500/20' : depth === 1 ? 'border-amber-700/20' : 'border-gray-800')}>
         <div className="flex items-start gap-2">
           <div className="flex flex-col items-center gap-0.5 mt-1">
             <button onClick={() => handleCommentVote(comment.id, 1)} className={cn('text-gray-500 hover:text-orange-400 transition-colors', comment.userVote === 1 && 'text-orange-500')}><ArrowBigUp className="w-4 h-4" /></button>
@@ -434,13 +477,13 @@ export default function ForumLensPage() {
   // ----- Post card -----
   function renderPostCard(post: Post) {
     return (
-      <motion.article key={post.id} layout className={cn('bg-lattice-surface border rounded-lg hover:border-gray-600 transition-colors lens-card', post.pinned ? 'border-neon-cyan/40' : 'border-lattice-border')}>
+      <motion.article key={post.id} layout className={cn('bg-lattice-surface border rounded-lg hover:border-orange-500/30 transition-colors lens-card', post.pinned ? 'border-orange-400/40' : 'border-lattice-border')}>
         <div className="flex">
-          {/* Vote column */}
+          {/* Vote column — orange/warm accent */}
           <div className="flex flex-col items-center p-2 bg-lattice-bg/50 rounded-l-lg min-w-[48px]">
-            <button onClick={() => handleVote(post.id, 1)} className={cn('p-1 rounded hover:bg-lattice-surface transition-colors', post.userVote === 1 ? 'text-orange-500' : 'text-gray-400 hover:text-orange-500')}><ArrowBigUp className="w-6 h-6" /></button>
+            <button onClick={() => handleVote(post.id, 1)} className={cn('p-1 rounded hover:bg-orange-500/10 transition-colors', post.userVote === 1 ? 'text-orange-500' : 'text-gray-400 hover:text-orange-500')}><ArrowBigUp className="w-6 h-6" /></button>
             <span className={cn('text-sm font-bold py-0.5', post.userVote === 1 ? 'text-orange-500' : post.userVote === -1 ? 'text-blue-500' : 'text-white')}>{formatScore(post.score)}</span>
-            <button onClick={() => handleVote(post.id, -1)} className={cn('p-1 rounded hover:bg-lattice-surface transition-colors', post.userVote === -1 ? 'text-blue-500' : 'text-gray-400 hover:text-blue-500')}><ArrowBigDown className="w-6 h-6" /></button>
+            <button onClick={() => handleVote(post.id, -1)} className={cn('p-1 rounded hover:bg-blue-500/10 transition-colors', post.userVote === -1 ? 'text-blue-500' : 'text-gray-400 hover:text-blue-500')}><ArrowBigDown className="w-6 h-6" /></button>
           </div>
           {/* Content */}
           <div className="flex-1 p-3 min-w-0">
@@ -458,7 +501,7 @@ export default function ForumLensPage() {
             {post.content && <p className="text-sm text-gray-400 mb-2 line-clamp-2">{post.content}</p>}
             {post.tags.length > 0 && (
               <div className="flex gap-1.5 mb-2 flex-wrap">
-                {post.tags.slice(0, 4).map(t => <span key={t} className="px-2 py-0.5 bg-lattice-bg border border-lattice-border rounded text-[10px] text-gray-400"><Hash className="w-2.5 h-2.5 inline mr-0.5" />{t}</span>)}
+                {post.tags.slice(0, 4).map(t => <span key={t} className="px-2 py-0.5 bg-orange-500/10 border border-orange-500/20 rounded-full text-[10px] text-orange-300 font-medium"><Hash className="w-2.5 h-2.5 inline mr-0.5" />{t}</span>)}
               </div>
             )}
             <div className="flex items-center gap-1 text-gray-400 flex-wrap">
@@ -689,15 +732,15 @@ export default function ForumLensPage() {
     );
   }
   return (
-    <div className="min-h-full bg-lattice-bg">
+    <div className="lens-forum min-h-full bg-lattice-bg" data-lens-theme="forum">
       {/* Header */}
-      <header className="sticky top-0 z-30 bg-lattice-surface/95 backdrop-blur border-b border-lattice-border">
+      <header className="sticky top-0 z-30 bg-lattice-surface/95 backdrop-blur border-b border-orange-500/10">
         <div className="max-w-6xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3 flex-shrink-0">
               <span className="text-2xl">{'\uD83D\uDD25'}</span>
               <div>
-                <h1 className="text-xl font-bold text-white">Forum Lens</h1>
+                <h1 className="text-xl font-bold bg-gradient-to-r from-orange-400 to-amber-400 bg-clip-text text-transparent">Forum Lens</h1>
                 <p className="text-xs text-gray-400">DTUs as discussion threads</p>
               </div>
             </div>

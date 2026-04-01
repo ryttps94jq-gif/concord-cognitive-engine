@@ -25,6 +25,8 @@ import {
   getMediaDTU,
   updateMediaDTU,
   deleteMediaDTU,
+  storeMediaBlob,
+  getMediaBlob,
   recordView,
   toggleLike,
   addComment,
@@ -123,6 +125,12 @@ export default function createMediaRouter({ STATE }) {
 
     if (!result.ok) {
       throw new ValidationError(result.error);
+    }
+
+    // Store binary data if base64-encoded data was provided
+    if (req.body.data) {
+      const buffer = Buffer.from(req.body.data, "base64");
+      storeMediaBlob(STATE, result.mediaDTU.id, buffer);
     }
 
     // Auto-generate thumbnail
@@ -251,41 +259,81 @@ export default function createMediaRouter({ STATE }) {
     if (!result.ok) throw new NotFoundError("Media", req.params.id);
 
     const mediaDTU = result.mediaDTU;
-    const quality = req.query.quality || "original";
 
-    // In production: serve actual file bytes with range support
-    // Here we return stream metadata
-    const fileSize = mediaDTU.fileSize || 1024 * 1024; // 1MB default
-    const range = req.headers.range;
+    // Try to serve actual binary data
+    const blobResult = getMediaBlob(STATE, req.params.id);
+    if (blobResult.ok) {
+      const buffer = blobResult.buffer;
+      const contentType = blobResult.mimeType || mediaDTU.mimeType || "application/octet-stream";
+      const fileSize = buffer.length;
+      const range = req.headers.range;
 
-    if (range) {
-      const parts = range.replace(/bytes=/, "").split("-");
-      const start = parseInt(parts[0], 10);
-      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-      const chunkSize = end - start + 1;
+      if (range) {
+        const parts = range.replace(/bytes=/, "").split("-");
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+        const chunkSize = end - start + 1;
 
-      res.status(206).json({
-        ok: true,
-        streaming: true,
-        mediaId: mediaDTU.id,
-        quality,
-        range: { start, end, total: fileSize },
-        chunkSize,
-        contentType: mediaDTU.mimeType,
-        note: "In production, this returns actual binary data with Content-Range headers",
-      });
-    } else {
-      res.json({
-        ok: true,
-        streaming: true,
-        mediaId: mediaDTU.id,
-        quality,
-        fileSize,
-        contentType: mediaDTU.mimeType,
-        duration: mediaDTU.duration,
-        note: "In production, this returns actual binary data",
-      });
+        res.writeHead(206, {
+          "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+          "Accept-Ranges": "bytes",
+          "Content-Length": chunkSize,
+          "Content-Type": contentType,
+        });
+        res.end(buffer.subarray(start, end + 1));
+      } else {
+        res.set({
+          "Accept-Ranges": "bytes",
+          "Content-Length": fileSize,
+          "Content-Type": contentType,
+        });
+        res.end(buffer);
+      }
+      return;
     }
+
+    // No binary data stored — return metadata fallback
+    const fileSize = mediaDTU.fileSize || 0;
+    res.set({ "Accept-Ranges": "bytes" });
+    res.json({
+      ok: true,
+      streaming: false,
+      mediaId: mediaDTU.id,
+      fileSize,
+      contentType: mediaDTU.mimeType,
+      duration: mediaDTU.duration,
+      note: "No binary data stored for this media",
+    });
+  }));
+
+  // ── Download (raw artifact) ───────────────────────────────────────────
+
+  /**
+   * GET /:id/download — Download the raw artifact file with original filename.
+   */
+  router.get("/:id/download", asyncHandler(async (req, res) => {
+    const result = getMediaDTU(STATE, req.params.id);
+    if (!result.ok) throw new NotFoundError("Media", req.params.id);
+
+    const mediaDTU = result.mediaDTU;
+    const filename = mediaDTU.originalFilename || `${mediaDTU.title || mediaDTU.id}.bin`;
+
+    const blobResult = getMediaBlob(STATE, req.params.id);
+    if (blobResult.ok) {
+      res.set({
+        "Content-Type": blobResult.mimeType || mediaDTU.mimeType || "application/octet-stream",
+        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Content-Length": blobResult.buffer.length,
+      });
+      res.end(blobResult.buffer);
+      return;
+    }
+
+    res.status(404).json({
+      ok: false,
+      error: "No binary data stored for this media",
+      mediaId: mediaDTU.id,
+    });
   }));
 
   // ── Thumbnail ─────────────────────────────────────────────────────────

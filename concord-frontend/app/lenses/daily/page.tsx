@@ -3,7 +3,7 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
-import { apiHelpers } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -217,14 +217,33 @@ export default function DailyLensPage() {
         stream.getTracks().forEach(t => t.stop());
         const duration = Math.round((Date.now() - recordingStartRef.current) / 1000);
         const waveform = Array.from({ length: 24 }, (_, i) => 0.2 + (Math.sin(i * 0.5) * 0.35 + 0.35 + Math.sin(i * 1.2 + 1) * 0.15));
+        const clipId = `clip-${Date.now()}`;
         const newClip: AudioClip = {
-          id: `clip-${Date.now()}`,
+          id: clipId,
           name: `Quick Note ${clips.length + 1}`,
           duration,
           waveform,
           recordedAt: new Date().toISOString(),
         };
         setClips(prev => [newClip, ...prev]);
+        // Upload actual audio data to backend
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64 = (reader.result as string).split(',')[1];
+          api.post('/api/media/upload', {
+            title: newClip.name,
+            mediaType: 'audio',
+            mimeType: 'audio/webm',
+            fileSize: blob.size,
+            originalFilename: `daily-note-${clipId}.webm`,
+            tags: ['daily', 'voice-note'],
+            privacy: 'private',
+            duration,
+            data: base64,
+          }).catch(err => console.error('[Daily] Upload failed:', err));
+        };
+        reader.readAsDataURL(blob);
       };
       mediaRecorderRef.current = recorder;
       recordingStartRef.current = Date.now();
@@ -268,7 +287,7 @@ export default function DailyLensPage() {
     return (new Date().getTime() - new Date(e.date).getTime()) / 86400000 <= 7;
   }).length;
 
-  // -- Daily digest (mock) --------------------------------------------------
+  // -- Daily digest ----------------------------------------------------------
   const dailyDigest = useMemo(() => {
     const tot = sessions.reduce((s, x) => s + x.duration, 0);
     const genres = [...new Set(sessions.map((s) => s.genre))].join(', ');
@@ -314,7 +333,7 @@ export default function DailyLensPage() {
     );
   }
   return (
-    <div className="h-[calc(100vh-4rem)] flex bg-lattice-deep text-white overflow-hidden">
+    <div data-lens-theme="daily" className="h-[calc(100vh-4rem)] flex bg-lattice-deep text-white overflow-hidden">
       {/* =================== LEFT SIDEBAR =================== */}
       <aside className="w-72 border-r border-lattice-border bg-lattice-surface/40 flex flex-col shrink-0">
         {/* Mini calendar */}

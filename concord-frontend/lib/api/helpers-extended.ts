@@ -138,6 +138,9 @@ export const adminApi = {
     history: () => api.get('/api/admin/promotion/history'),
     approve: (id: string) => api.post(`/api/admin/promotion/${id}/approve`),
     reject: (id: string, reason?: string) => api.post(`/api/admin/promotion/${id}/reject`, { reason }),
+    shadowPending: () => api.get('/api/dtus/shadow/pending'),
+    promoteShadow: (id: string, force?: boolean) => api.post(`/api/dtus/${id}/promote`, { force: !!force }),
+    promotionQueue: () => api.get('/api/dtus/promotion/queue'),
   },
 };
 
@@ -182,16 +185,14 @@ export const collabApi = {
 
 export const socialApi = {
   profile: (userId?: string) => api.get(userId ? `/api/social/profile/${userId}` : '/api/social/profile'),
-  updateProfile: (data: unknown) => api.put('/api/social/profile', data),
+  updateProfile: (data: unknown) => api.post('/api/social/profile', data),
   followers: (userId: string) => api.get(`/api/social/followers/${userId}`),
   following: (userId: string) => api.get(`/api/social/following/${userId}`),
-  follow: (userId: string) => api.post(`/api/social/follow/${userId}`),
-  unfollow: (userId: string) => api.post(`/api/social/unfollow/${userId}`),
+  follow: (userId: string) => api.post('/api/social/follow', { followedId: userId }),
+  unfollow: (userId: string) => api.post('/api/social/unfollow', { followedId: userId }),
   feed: () => api.get('/api/social/feed'),
-  timeline: (userId: string) => api.get(`/api/social/timeline/${userId}`),
-  search: (query: string) => api.get('/api/social/search', { params: { q: query } }),
-  block: (userId: string) => api.post(`/api/social/block/${userId}`),
-  unblock: (userId: string) => api.post(`/api/social/unblock/${userId}`),
+  discover: (userId: string) => api.get(`/api/social/discover/${userId}`),
+  trending: (limit?: number) => api.get('/api/social/trending', { params: { limit } }),
   notifications: () => api.get('/api/social/notifications'),
 };
 

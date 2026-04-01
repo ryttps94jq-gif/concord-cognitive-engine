@@ -17,7 +17,6 @@ import {
   getAbsorbedLenses,
   getExtensionsByCategory,
   getLensById,
-  isLensVisible,
   type CoreLensConfig,
   type LensEntry,
 } from '@/lib/lens-registry';

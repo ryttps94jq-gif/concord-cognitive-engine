@@ -9,9 +9,8 @@
  *   - DashboardPage for returning users
  */
 
-import { useState, useEffect, useRef, useMemo, Suspense } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { api, apiHelpers, ensureCsrfToken } from '@/lib/api/client';
 import dynamic from 'next/dynamic';
@@ -42,6 +41,7 @@ import { CORE_LENSES } from '@/lib/lens-registry';
 import {
   Activity, Zap, Compass, TrendingUp, Heart, Globe,
   MessageSquare, Layout, Share2, Code, Music,
+  Crown, Ghost, Archive, Layers, Moon,
 } from 'lucide-react';
 import { use70Lock } from '@/hooks/use70Lock';
 import { MorningBrief } from '@/components/brief/MorningBrief';
@@ -60,6 +60,7 @@ import { SwarmIntelligence } from '@/components/swarm/SwarmIntelligence';
 import { TimeCrystals } from '@/components/temporal/TimeCrystals';
 import { NervousSystem } from '@/components/nervous/NervousSystem';
 import { UniversalImport } from '@/components/import/UniversalImport';
+import { TrendingDomains } from '@/components/social/TrendingDomains';
 
 const ENTERED_KEY = 'concord_entered';
 
@@ -67,7 +68,6 @@ export function HomeClient() {
   const [hasEntered, setHasEntered] = useState<boolean | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const setFullPageMode = useUIStore((state) => state.setFullPageMode);
-  const router = useRouter();
   const authCheckRef = useRef(false);
 
   useEffect(() => {
@@ -149,6 +149,49 @@ export function HomeClient() {
 // Dashboard Page
 // ============================================================================
 
+function DreamForgettingIndicators() {
+  const { data: dreamData } = useQuery({
+    queryKey: ['dream-topics'],
+    queryFn: () => api.get('/api/dream/history', { params: { limit: 5 } }).then(r => r.data).catch(() => null),
+    refetchInterval: 60000,
+    retry: false,
+  });
+  const { data: forgettingData } = useQuery({
+    queryKey: ['forgetting-status-home'],
+    queryFn: () => api.get('/api/admin/forgetting/status').then(r => r.data).catch(() => null),
+    refetchInterval: 60000,
+    retry: false,
+  });
+
+  const dreams = (dreamData?.dreams || []) as Array<{ title?: string; tags?: string[] }>;
+  const dreamTopics = dreams.slice(0, 3).map(d => d.title || d.tags?.[0] || 'unknown').filter(Boolean);
+  const forgottenCount = forgettingData?.lifetimeForgotten || 0;
+  const threshold = forgettingData?.threshold || 0;
+
+  if (!dreamTopics.length && !forgottenCount) return null;
+
+  return (
+    <div className="flex flex-wrap gap-3">
+      {dreamTopics.length > 0 && (
+        <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20">
+          <Moon className="w-4 h-4 text-indigo-400" />
+          <span className="text-xs text-indigo-300">
+            Concord dreamed about: {dreamTopics.join(', ')}
+          </span>
+        </div>
+      )}
+      {forgottenCount > 0 && (
+        <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500/10 border border-red-500/20">
+          <Archive className="w-4 h-4 text-red-400" />
+          <span className="text-xs text-red-300">
+            {forgottenCount} DTUs archived (low salience, threshold: {threshold})
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DashboardPage() {
   const [inspecting, setInspecting] = useState<{ type: string; id: string } | null>(null);
   const { lockPercentage, isLoading: sovereigntyLoading } = use70Lock();
@@ -201,13 +244,53 @@ function DashboardPage() {
     retry: false,
   });
 
+  // DTU tier stats (Feature 10)
+  const { data: dtuStats, isLoading: dtuStatsLoading } = useQuery({
+    queryKey: ['dtu-tier-stats'],
+    queryFn: () => apiHelpers.dtus.stats().then((r) => r.data).catch(() => null),
+    refetchInterval: 30_000,
+    retry: 1,
+    staleTime: 15_000,
+  });
+
   // Fetch graph force-directed data for the Resonance Universe
-  const { data: graphData, isLoading: graphLoading } = useQuery({
+  const { data: rawGraphData, isLoading: graphLoading } = useQuery({
     queryKey: ['graph-force'],
     queryFn: () => apiHelpers.graph.force({ maxNodes: 200 }).then((r) => r.data).catch(() => null),
     retry: 1,
     staleTime: 30000,
   });
+
+  // Also fetch graph visual data as fallback (uses /api/graph/visual)
+  const { data: rawGraphVisualData } = useQuery({
+    queryKey: ['graph-visual-home'],
+    queryFn: () => apiHelpers.graph.visual({ limit: 200 }).then((r) => r.data).catch(() => null),
+    retry: 1,
+    staleTime: 30000,
+    enabled: !rawGraphData?.nodes?.length,
+  });
+
+  // Normalize graph data: map 'title' -> 'label', 'links' -> 'edges', assign tier colors
+  const graphData = useMemo(() => {
+    const source = rawGraphData?.nodes?.length ? rawGraphData : rawGraphVisualData;
+    if (!source?.nodes?.length) return null;
+    const nodes = source.nodes.map((n: Record<string, unknown>) => ({
+      id: n.id as string,
+      label: (n.label || n.title || (n.id as string)?.slice(0, 20) || 'Untitled') as string,
+      tier: (n.tier || 'regular') as string,
+      resonance: (n.resonance ?? n.lineageDepth ?? 0) as number,
+      scope: (n.scope || n.domain) as string | undefined,
+      source: n.source as string | undefined,
+    }));
+    // Normalize edges: force endpoint returns 'links', visual returns 'edges'
+    const rawEdges = source.edges || source.links || [];
+    const edges = rawEdges.map((e: Record<string, unknown>) => ({
+      source: (e.source || e.sourceId) as string,
+      target: (e.target || e.targetId) as string,
+      weight: (e.weight ?? 1) as number,
+    }));
+    return { nodes, edges };
+  }, [rawGraphData, rawGraphVisualData]);
 
   // Normalize DTU data to handle field name variations from backend
   const rawDtus = dtusData?.dtus || dtusData?.results || [];
@@ -268,7 +351,7 @@ function DashboardPage() {
   const coherence = resonanceData?.coherence || 0;
 
   return (
-    <div className="p-4 lg:p-6 space-y-5 max-w-[1600px] mx-auto">
+    <div className="px-3 py-3 sm:p-3 lg:p-4 space-y-3 sm:space-y-3 max-w-[1600px] mx-auto">
       {/* Header */}
       <header className="flex items-center justify-between">
         <div>
@@ -285,7 +368,7 @@ function DashboardPage() {
                 {healthData?.status === 'ok' ? (
                   <span className="text-neon-green">Healthy</span>
                 ) : (
-                  <span className="text-yellow-400">Checking...</span>
+                  <span className="text-amber-400">Checking...</span>
                 )}
               </>
             )}
@@ -315,7 +398,7 @@ function DashboardPage() {
       </LensErrorBoundary>
 
       {/* Metrics Row */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
         <MetricCard
           label="My DTUs"
           value={statusLoading ? '...' : (scopeMetrics?.localCount ?? dtuCount)}
@@ -336,7 +419,7 @@ function DashboardPage() {
         />
         <MetricCard
           label="Events"
-          value={statusLoading ? '...' : status?.counts?.events || 0}
+          value={statusLoading ? '...' : (status?.counts?.events ?? events.length ?? 0)}
           icon={<TrendingUp className="w-5 h-5" />}
           color="pink"
         />
@@ -349,20 +432,82 @@ function DashboardPage() {
         />
       </div>
 
+      {/* DTU Tier Stats (Feature 10) */}
+      {dtuStats && (
+        <div className="rounded-xl border border-lattice-border bg-lattice-surface/50 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold flex items-center gap-2">
+              <Layers className="w-4 h-4 text-neon-cyan" />
+              DTU Tier Breakdown
+            </h2>
+            <span className="text-[10px] text-gray-600">Auto-refreshes every 30s</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-7 gap-2">
+            <TierStatCard
+              label="Total"
+              value={dtuStatsLoading ? '...' : dtuStats.totalCount ?? 0}
+              icon={<Layers className="w-4 h-4" />}
+              color="cyan"
+            />
+            <TierStatCard
+              label="Shadow"
+              value={dtuStatsLoading ? '...' : dtuStats.shadowCount ?? 0}
+              icon={<Ghost className="w-4 h-4" />}
+              color="gray"
+            />
+            <TierStatCard
+              label="Regular"
+              value={dtuStatsLoading ? '...' : dtuStats.regularCount ?? 0}
+              icon={<Zap className="w-4 h-4" />}
+              color="blue"
+            />
+            <TierStatCard
+              label="MEGA"
+              value={dtuStatsLoading ? '...' : dtuStats.megaCount ?? 0}
+              icon={<Crown className="w-4 h-4" />}
+              color="purple"
+            />
+            <TierStatCard
+              label="HYPER"
+              value={dtuStatsLoading ? '...' : dtuStats.hyperCount ?? 0}
+              icon={<Zap className="w-4 h-4" />}
+              color="pink"
+            />
+            <TierStatCard
+              label="Archived"
+              value={dtuStatsLoading ? '...' : dtuStats.archivedCount ?? 0}
+              icon={<Archive className="w-4 h-4" />}
+              color="gray"
+            />
+            <TierStatCard
+              label="Compression"
+              value={dtuStatsLoading ? '...' : `${dtuStats.compressionRatio ?? 1}x`}
+              icon={<Activity className="w-4 h-4" />}
+              color="green"
+            />
+          </div>
+        </div>
+      )}
+
       {/* Morning Brief */}
       <LensErrorBoundary name="Morning Brief">
         <MorningBrief />
       </LensErrorBoundary>
 
+      {/* Trending in [Domain] */}
+      <LensErrorBoundary name="Trending Domains">
+        <TrendingDomains />
+      </LensErrorBoundary>
+
       {/* Live Feed + Emergent Council + Governance — each wrapped independently */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <LensErrorBoundary name="Live DTU Feed">
-          <LiveDTUFeed limit={12} />
+          <LiveDTUFeed limit={12} onDtuClick={(id) => setInspecting({ type: 'dtu', id })} />
         </LensErrorBoundary>
         <LensErrorBoundary name="Emergent Panel">
           <EmergentPanel />
         </LensErrorBoundary>
-        <div className="space-y-5">
+        <div className="space-y-3">
           <LensErrorBoundary name="Universal Import">
             <UniversalImport compact />
           </LensErrorBoundary>
@@ -373,7 +518,7 @@ function DashboardPage() {
       </div>
 
       {/* Resonance Universe Graph + Sovereignty */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <LensErrorBoundary name="Resonance Universe">
           <div className="lg:col-span-2 rounded-xl border border-lattice-border bg-lattice-surface/50 overflow-hidden">
             <div className="px-4 py-3 border-b border-lattice-border flex items-center justify-between">
@@ -394,10 +539,10 @@ function DashboardPage() {
                     Loading resonance graph...
                   </div>
                 </div>
-              ) : graphData?.nodes?.length > 0 ? (
+              ) : graphData?.nodes?.length ? (
                 <ResonanceEmpireGraph
-                  nodes={graphData.nodes}
-                  edges={graphData.edges || []}
+                  nodes={graphData!.nodes}
+                  edges={graphData!.edges || []}
                   height={420}
                   showLabels
                   onNodeClick={(node) => setInspecting({ type: 'dtu', id: node.id })}
@@ -421,8 +566,11 @@ function DashboardPage() {
         </div>
       </div>
 
+      {/* Dream & Forgetting Status Indicators */}
+      <DreamForgettingIndicators />
+
       {/* Living Substrate — Dreams, Metabolism, Memory, Council */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <LensErrorBoundary name="Substrate Dreams">
           <SubstrateDreams />
         </LensErrorBoundary>
@@ -438,7 +586,7 @@ function DashboardPage() {
       </div>
 
       {/* Multi-Agent & Economy — Personas, Tasks, Gardens, Bounties/Futures */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <LensErrorBoundary name="Agent Personas">
           <AgentPersonas />
         </LensErrorBoundary>
@@ -454,7 +602,7 @@ function DashboardPage() {
       </div>
 
       {/* Cognitive Civilization — Digital Twin, Swarms, Temporal Intelligence */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <LensErrorBoundary name="Cognitive Digital Twin">
           <CognitiveDigitalTwin />
         </LensErrorBoundary>
@@ -471,13 +619,8 @@ function DashboardPage() {
         <NervousSystem />
       </LensErrorBoundary>
 
-      {/* Queue Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <QueueCard label="Ingest Queue" value={status?.queues?.ingest || 0} color="blue" loading={statusLoading} />
-        <QueueCard label="Autocrawl" value={status?.queues?.autocrawl || 0} color="purple" loading={statusLoading} />
-        <QueueCard label="Domains" value={status?.macro?.domains?.length || 0} color="cyan" loading={statusLoading} />
-        <QueueCard label="Wallets" value={status?.counts?.wallets || 0} color="green" loading={statusLoading} />
-      </div>
+      {/* Queue Stats — collapse into a compact summary when all values are zero */}
+      <QueueStatsRow status={status} statusLoading={statusLoading} />
 
       {/* Recent DTUs */}
       <div className="rounded-xl border border-lattice-border bg-lattice-surface/50 p-4">
@@ -491,21 +634,21 @@ function DashboardPage() {
           </Link>
         </div>
         {dtusLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {[1, 2, 3].map((i) => (
               <div key={i} className="h-28 bg-lattice-deep animate-pulse rounded-lg" />
             ))}
           </div>
         ) : dtusError ? (
           <div className="col-span-full text-center py-10">
-            <p className="text-yellow-400 mb-1">Unable to load DTUs</p>
+            <p className="text-amber-400 mb-1">Unable to load DTUs</p>
             <p className="text-gray-500 text-sm">
               Check your connection or{' '}
               <Link href="/login" className="text-neon-cyan hover:underline">sign in again</Link>
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {dtus.slice(0, 6).map((dtu: { id: string; tier: 'regular' | 'mega' | 'hyper' | 'shadow'; summary: string; timestamp: string; resonance?: number; tags?: string[] }) => (
               <DTUEmpireCard key={dtu.id} dtu={dtu} onClick={(d) => setInspecting({ type: 'dtu', id: d.id })} />
             ))}
@@ -526,7 +669,7 @@ function DashboardPage() {
             <Compass className="w-4 h-4 text-neon-purple" />
             Suggestions
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {guidanceData.suggestions.slice(0, 4).map((s: { id?: string; title?: string; message?: string; action?: string }, i: number) => (
               <div key={s.id || i} className="p-3 rounded-lg bg-lattice-deep border border-lattice-border/50 text-sm text-gray-300">
                 {s.title || s.message || s.action || 'Suggestion'}
@@ -537,7 +680,7 @@ function DashboardPage() {
       )}
 
       {/* Core 5 Quick Access */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
         {CORE_LENSES.map((core) => {
           const coreIcons: Record<string, React.ReactNode> = {
             chat: <MessageSquare className="w-5 h-5" />,
@@ -605,12 +748,70 @@ function MetricCard({
   );
 }
 
+function QueueStatsRow({ status, statusLoading }: { status: Record<string, unknown> | null | undefined; statusLoading: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  const queues = [
+    { label: 'Ingest Queue', value: (status?.queues as Record<string, unknown>)?.ingest as number || 0, color: 'blue' as const },
+    { label: 'Autocrawl', value: (status?.queues as Record<string, unknown>)?.autocrawl as number || 0, color: 'purple' as const },
+    { label: 'Domains', value: ((status?.macro as Record<string, unknown>)?.domains as unknown[] || []).length || 0, color: 'cyan' as const },
+    { label: 'Wallets', value: (status?.counts as Record<string, unknown>)?.wallets as number || 0, color: 'green' as const },
+  ];
+  const allZero = !statusLoading && queues.every(q => q.value === 0);
+
+  if (allZero && !expanded) {
+    return (
+      <button
+        onClick={() => setExpanded(true)}
+        className="w-full rounded-lg border border-lattice-border bg-lattice-surface/30 px-4 py-2 flex items-center justify-between text-xs text-gray-500 hover:bg-lattice-surface/50 transition-colors"
+      >
+        <span>Queues: all idle</span>
+        <span className="text-gray-600">Click to expand</span>
+      </button>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+      {queues.map(q => (
+        <QueueCard key={q.label} label={q.label} value={q.value} color={q.color} loading={statusLoading} />
+      ))}
+    </div>
+  );
+}
+
 function QueueCard({ label, value, color, loading }: { label: string; value: number; color: 'blue' | 'purple' | 'cyan' | 'green'; loading?: boolean }) {
   const colorClasses = { blue: 'text-neon-blue', purple: 'text-neon-purple', cyan: 'text-neon-cyan', green: 'text-neon-green' };
   return (
     <div className="rounded-lg border border-lattice-border bg-lattice-surface/30 p-3">
       <p className="text-xs text-gray-500">{label}</p>
       <p className={`text-lg font-bold font-mono ${colorClasses[color]}`}>{loading ? <span className="animate-pulse">...</span> : value}</p>
+    </div>
+  );
+}
+
+function TierStatCard({
+  label, value, icon, color,
+}: {
+  label: string; value: string | number; icon?: React.ReactNode;
+  color: 'blue' | 'purple' | 'pink' | 'green' | 'cyan' | 'gray';
+}) {
+  const colorMap = {
+    blue: 'text-neon-blue border-neon-blue/15',
+    purple: 'text-neon-purple border-neon-purple/15',
+    pink: 'text-neon-pink border-neon-pink/15',
+    green: 'text-neon-green border-neon-green/15',
+    cyan: 'text-neon-cyan border-neon-cyan/15',
+    gray: 'text-gray-400 border-gray-600/15',
+  };
+  return (
+    <div className={`rounded-lg border p-2.5 bg-lattice-deep/30 ${colorMap[color]}`}>
+      <div className="flex items-center gap-2">
+        <span className="opacity-60">{icon}</span>
+        <div>
+          <p className="text-[10px] text-gray-500 uppercase">{label}</p>
+          <p className="text-base font-bold font-mono">{value}</p>
+        </div>
+      </div>
     </div>
   );
 }

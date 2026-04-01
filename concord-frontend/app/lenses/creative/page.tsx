@@ -1,5 +1,6 @@
 'use client';
 
+import { motion } from 'framer-motion';
 import { useState, useMemo, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
@@ -12,6 +13,8 @@ import type { DTU } from '@/lib/api/generated-types';
 import { LensContextPanel } from '@/components/lens/LensContextPanel';
 import { ArtifactRenderer } from '@/components/artifact/ArtifactRenderer';
 import { ArtifactUploader } from '@/components/artifact/ArtifactUploader';
+import { MediaUpload } from '@/components/media/MediaUpload';
+import { UniversalPlayer } from '@/components/media/UniversalPlayer';
 import { FeedbackWidget } from '@/components/feedback/FeedbackWidget';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
@@ -251,7 +254,7 @@ export default function CreativeLensPage() {
   const formConfig: Record<string, { key: string; label: string; type: 'input' | 'textarea' | 'select'; options?: string[] }[]> = {
     projects: [
       { key: 'client', label: 'Client', type: 'input' },
-      { key: 'projectType', label: 'Project Type', type: 'select', options: ['Video', 'Audio', 'Design', 'Writing', 'Branding', 'Campaign', 'Film', 'Social Media', 'Web', 'Print / Digital', 'Other'] },
+      { key: 'projectType', label: 'Project Type', type: 'select', options: PROJECT_TYPES.map(pt => pt.label) },
       { key: 'budget', label: 'Budget ($)', type: 'input' },
       { key: 'deadline', label: 'Deadline', type: 'input' },
       { key: 'lead', label: 'Project Lead', type: 'input' },
@@ -425,6 +428,20 @@ export default function CreativeLensPage() {
         </div>
       </div>
 
+      {/* Revision Alert Row */}
+      {pendingRevisions > 0 && (
+        <div className={cn(ds.panel, 'flex items-center gap-3 border-amber-400/20')}>
+          <RotateCcw className="w-5 h-5 text-amber-400 flex-shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-amber-400">{pendingRevisions} Pending Revision{pendingRevisions !== 1 ? 's' : ''}</p>
+            <p className={cn(ds.textMuted, 'text-xs')}>Revisions awaiting feedback review</p>
+          </div>
+          <button onClick={() => setMode('revisions')} className={cn(ds.btnSecondary, ds.btnSmall)}>
+            View Revisions
+          </button>
+        </div>
+      )}
+
       {/* Second KPI Row */}
       <div className={ds.grid3}>
         <div className={ds.panel}>
@@ -563,7 +580,7 @@ export default function CreativeLensPage() {
   // ---------------------------------------------------------------------------
   const renderProjects = () => (
     <div className={ds.grid2}>
-      {filtered.map(item => {
+      {filtered.map((item, index) => {
         const d = item.data as Record<string, unknown>;
         const milestones = parseSafe<{ name: string; date: string; done: boolean }[]>(d.milestones, []);
         const team = parseSafe<string[]>(d.teamMembers, []);
@@ -577,7 +594,7 @@ export default function CreativeLensPage() {
         const profitMargin = budget > 0 ? (budget - spent) / budget : 0;
 
         return (
-          <div key={item.id} className={ds.panelHover} onClick={() => openDetail(item)}>
+          <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className={ds.panelHover} onClick={() => openDetail(item)}>
             {/* Header */}
             <div className="flex items-start justify-between mb-3">
               <div className="min-w-0">
@@ -653,7 +670,7 @@ export default function CreativeLensPage() {
                 <button onClick={e => { e.stopPropagation(); remove(item.id); }} className={cn(ds.btnGhost, 'hover:text-red-400')}><Trash2 className="w-3.5 h-3.5" /></button>
               </div>
             </div>
-          </div>
+          </motion.div>
         );
       })}
     </div>
@@ -1354,7 +1371,7 @@ export default function CreativeLensPage() {
   // Main Render
   // ---------------------------------------------------------------------------
   return (
-    <div className={ds.pageContainer}>
+    <div data-lens-theme="creative" className={ds.pageContainer}>
       {/* Header */}
       <header className={ds.sectionHeader}>
         <div className="flex items-center gap-3">
@@ -1385,6 +1402,24 @@ export default function CreativeLensPage() {
         </div>
       </header>
 
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Projects', value: allProjects.length, icon: Palette },
+          { label: 'Assets', value: allAssets.length, icon: Camera },
+          { label: 'Collaborators', value: new Set(allProjects.flatMap(p => (Array.isArray((p.data as Record<string, unknown>).teamMembers) ? (p.data as Record<string, unknown>).teamMembers as string[] : []))).size, icon: Users },
+          { label: 'In Review', value: allProofs.filter(p => p.meta?.status === 'pending_review').length, icon: Eye },
+        ].map((stat) => (
+          <div key={stat.label} className={ds.panel + ' flex items-center gap-3 p-3'}>
+            <stat.icon className="w-5 h-5 text-neon-purple shrink-0" />
+            <div>
+              <p className="text-xs text-gray-400">{stat.label}</p>
+              <p className="text-lg font-bold text-white">{stat.value}</p>
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* AI Actions */}
       <UniversalActions domain="creative" artifactId={allProjects[0]?.id} compact />

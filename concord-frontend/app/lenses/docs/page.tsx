@@ -2,7 +2,8 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { useState, useMemo } from 'react';
-import { Book, ChevronRight, Search, Layers, ChevronDown, Code2, GitBranch, FileJson, Shield, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Book, ChevronRight, Search, Layers, ChevronDown, Code2, GitBranch, FileJson, Shield, RefreshCw, CheckCircle2, AlertCircle, FileText, Clock } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { ConnectiveTissueBar } from '@/components/lens/ConnectiveTissueBar';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -171,7 +172,7 @@ export default function DocsLensPage() {
   const currentContent = selectedSection ? sectionContent[selectedSection] : null;
 
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="docs" className="p-6 space-y-6">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-2xl">📚</span>
@@ -195,6 +196,38 @@ export default function DocsLensPage() {
         </div>
       </header>
 
+      {/* Quick Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <FileText className="w-5 h-5 text-neon-blue" />
+          <div>
+            <p className="text-lg font-bold">{sections.length}</p>
+            <p className="text-xs text-gray-500">Total Docs</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Clock className="w-5 h-5 text-neon-green" />
+          <div>
+            <p className="text-lg font-bold">3</p>
+            <p className="text-xs text-gray-500">Recently Updated</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 2 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <GitBranch className="w-5 h-5 text-neon-purple" />
+          <div>
+            <p className="text-lg font-bold">4</p>
+            <p className="text-xs text-gray-500">Version Count</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 3 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <CheckCircle2 className="w-5 h-5 text-neon-cyan" />
+          <div>
+            <p className="text-lg font-bold">98%</p>
+            <p className="text-xs text-gray-500">Schema Coverage</p>
+          </div>
+        </motion.div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Sidebar Navigation */}
         <div className="panel p-4 space-y-2">
@@ -213,9 +246,12 @@ export default function DocsLensPage() {
             <p className="text-sm text-gray-500 px-3 py-2">No matching sections.</p>
           )}
 
-          {filteredSections.map((section) => (
-            <button
+          {filteredSections.map((section, index) => (
+            <motion.button
               key={section.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.05 }}
               onClick={() => setSelectedSection(section.id)}
               className={`w-full text-left px-3 py-2 rounded-lg flex items-center gap-2 transition-colors ${
                 selectedSection === section.id
@@ -226,7 +262,7 @@ export default function DocsLensPage() {
               <span>{section.icon}</span>
               <span className="flex-1">{section.name}</span>
               <ChevronRight className="w-4 h-4" />
-            </button>
+            </motion.button>
           ))}
         </div>
 

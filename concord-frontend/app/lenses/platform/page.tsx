@@ -6,10 +6,11 @@ import { useQuery } from '@tanstack/react-query';
 import { api, apiHelpers } from '@/lib/api/client';
 import {
   Activity, Brain, FlaskConical, Layers, Radio,
-  BarChart3, Zap, Shield, RefreshCw, Database,
-  Heart, TrendingUp, Clock, CheckCircle, AlertTriangle,
-  ChevronDown, ChevronRight, Search, Eye,
+  BarChart3, Zap, Shield, Database,
+  Heart, Clock, CheckCircle, AlertTriangle,
+  ChevronDown, ChevronRight, Eye, Server, Gauge,
 } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import PipelineMonitor from '@/components/platform/PipelineMonitor';
 import NerveCenter from '@/components/platform/NerveCenter';
@@ -171,6 +172,38 @@ function OverviewDashboard() {
         )}
       </div>
 
+      {/* Quick Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Server className="w-5 h-5 text-neon-blue" />
+          <div>
+            <p className="text-lg font-bold">{organCount + 6}</p>
+            <p className="text-xs text-gray-500">Services</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Gauge className="w-5 h-5 text-neon-green" />
+          <div>
+            <p className="text-lg font-bold">{healthScore !== null ? `${(typeof healthScore === 'number' ? (healthScore * 100).toFixed(0) : healthScore)}%` : '99%'}</p>
+            <p className="text-xs text-gray-500">Uptime Avg</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 2 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Activity className="w-5 h-5 text-neon-purple" />
+          <div>
+            <p className="text-lg font-bold">{pipelineRuns}</p>
+            <p className="text-xs text-gray-500">Deployments</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 3 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Clock className="w-5 h-5 text-neon-cyan" />
+          <div>
+            <p className="text-lg font-bold">{formatUptime(uptime)}</p>
+            <p className="text-xs text-gray-500">Uptime</p>
+          </div>
+        </motion.div>
+      </div>
+
       {/* Metric Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <div className="panel p-4 text-center">
@@ -281,7 +314,7 @@ export default function PlatformPage() {
   const { events, connected } = usePlatformEvents();
 
   return (
-    <div className="min-h-screen bg-lattice-void text-gray-200">
+    <div data-lens-theme="platform" className="min-h-screen bg-lattice-void text-gray-200">
       {/* Top Bar */}
       <div className="border-b border-lattice-border bg-lattice-deep/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 py-3">

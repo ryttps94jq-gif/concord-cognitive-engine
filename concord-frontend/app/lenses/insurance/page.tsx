@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -40,21 +41,17 @@ import {
   GraduationCap,
   ChevronRight,
   Columns,
-  Upload,
   FolderOpen,
-  File,
-  Calendar,
-  Download,
-  Eye,
-  Clock,
   Layers,
   ChevronDown,
+  ArrowRight,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
+import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -191,8 +188,6 @@ const QUOTE_STATUSES: QuoteStatus[] = ['draft', 'quoted', 'accepted', 'declined'
 const RISK_PROFILES = ['preferred', 'standard', 'substandard', 'declined'];
 const PAYMENT_FREQUENCIES = ['monthly', 'quarterly', 'semi_annual', 'annual'];
 const COMPLIANCE_TYPES = ['CE Credits', 'License Renewal', 'E&O Insurance', 'Carrier Appointment'];
-const DOCUMENT_TYPES = ['Policy Declaration', 'Endorsement', 'Certificate of Insurance', 'Binder', 'Application', 'Claim Form', 'Proof of Loss', 'Appraisal', 'Correspondence', 'Other'];
-const DOCUMENT_CATEGORIES = ['Policy Documents', 'Claim Documents', 'Client Documents', 'Compliance', 'Invoices', 'Other'];
 
 const POLICY_ICONS: Record<string, typeof Car> = {
   auto: Car,
@@ -592,6 +587,43 @@ export default function InsuranceLensPage() {
             <div><label className={ds.label}>Details</label><textarea className={ds.textarea} rows={2} value={(formData.details as string) || ''} onChange={e => setFormData({ ...formData, details: e.target.value })} /></div>
           </>
         );
+      case 'Document':
+        return (
+          <>
+            <div className={ds.grid2}>
+              <div>
+                <label className={ds.label}>Document Type</label>
+                <select className={ds.select} value={(formData.documentType as string) || 'policy_doc'} onChange={e => setFormData({ ...formData, documentType: e.target.value })}>
+                  <option value="policy_doc">Policy Document</option>
+                  <option value="endorsement">Endorsement</option>
+                  <option value="declaration">Declaration Page</option>
+                  <option value="certificate">Certificate of Insurance</option>
+                  <option value="claim_form">Claim Form</option>
+                  <option value="proof_of_loss">Proof of Loss</option>
+                  <option value="correspondence">Correspondence</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div><label className={ds.label}>Policy Reference</label><input className={ds.input} value={(formData.policyRef as string) || ''} onChange={e => setFormData({ ...formData, policyRef: e.target.value })} placeholder="POL-0001" /></div>
+            </div>
+            <div>
+              <label className={ds.label}>Category</label>
+              <select className={ds.select} value={(formData.category as string) || 'general'} onChange={e => setFormData({ ...formData, category: e.target.value })}>
+                <option value="general">General</option>
+                <option value="underwriting">Underwriting</option>
+                <option value="claims">Claims</option>
+                <option value="compliance">Compliance</option>
+                <option value="billing">Billing</option>
+              </select>
+            </div>
+            <div className={ds.grid2}>
+              <div><label className={ds.label}>Upload Date</label><input type="date" className={ds.input} value={(formData.uploadDate as string) || new Date().toISOString().split('T')[0]} onChange={e => setFormData({ ...formData, uploadDate: e.target.value })} /></div>
+              <div><label className={ds.label}>Expiry Date</label><input type="date" className={ds.input} value={(formData.expiryDate as string) || ''} onChange={e => setFormData({ ...formData, expiryDate: e.target.value })} /></div>
+            </div>
+            <div><label className={ds.label}>File Name</label><input className={ds.input} value={(formData.fileName as string) || ''} onChange={e => setFormData({ ...formData, fileName: e.target.value })} placeholder="document.pdf" /></div>
+            <div><label className={ds.label}>Notes</label><textarea className={ds.textarea} rows={3} value={(formData.notes as string) || ''} onChange={e => setFormData({ ...formData, notes: e.target.value })} placeholder="Additional notes about this document..." /></div>
+          </>
+        );
       default:
         return null;
     }
@@ -901,7 +933,7 @@ export default function InsuranceLensPage() {
   }
 
   return (
-    <div className={ds.pageContainer}>
+    <div data-lens-theme="insurance" className={ds.pageContainer}>
       {/* Header */}
       <header className={ds.sectionHeader}>
         <div className="flex items-center gap-3">
@@ -928,6 +960,88 @@ export default function InsuranceLensPage() {
       <UniversalActions domain="insurance" artifactId={policies[0]?.id} compact />
       <RealtimeDataPanel domain="insurance" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <DTUExportButton domain="insurance" data={{}} compact />
+      <VisionAnalyzeButton
+        domain="insurance"
+        prompt="Analyze this insurance-related image (damage photo, document, property, vehicle, etc.). Describe visible damage or details, estimate severity, and suggest claim description text and relevant tags."
+        onResult={(res) => {
+          setFormData(prev => ({ ...prev, description: res.analysis }));
+          if (res.suggestedTags?.length) setFormData(prev => ({ ...prev, notes: `Vision tags: ${res.suggestedTags!.join(', ')}` }));
+        }}
+        className="inline-flex"
+      />
+
+      {/* Stat Cards Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { icon: Shield, label: 'Policies In-Force', value: dashboard.policiesInForce, color: 'text-blue-400' },
+          { icon: DollarSign, label: 'Premiums Written', value: `$${dashboard.premiumsWritten.toLocaleString()}`, color: 'text-green-400' },
+          { icon: FileText, label: 'Open Claims', value: dashboard.openClaims, color: 'text-amber-400' },
+          { icon: CheckCircle2, label: 'Loss Ratio', value: `${dashboard.lossRatio}%`, color: dashboard.lossRatio > 70 ? 'text-red-400' : 'text-green-400' },
+        ].map((stat, i) => (
+          <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }} className={ds.panel}>
+            <stat.icon className={`w-5 h-5 ${stat.color} mb-2`} />
+            <p className={ds.textMuted}>{stat.label}</p>
+            <p className="text-xl font-bold text-white">{stat.value}</p>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Policy Status Cards */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className={ds.panel}>
+        <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2"><Shield className="w-4 h-4 text-blue-400" /> Policy Status Overview</h3>
+        <div className="flex flex-wrap gap-3">
+          {(() => {
+            const active = policies.filter(p => p.meta.status === 'active').length;
+            const expired = policies.filter(p => p.meta.status === 'expired' || p.meta.status === 'cancelled').length;
+            const pending = policies.filter(p => p.meta.status === 'pending' || p.meta.status === 'draft').length;
+            return (
+              <>
+                <span className="px-3 py-1.5 rounded-lg text-sm font-medium bg-green-500/20 text-green-400">Active: {active}</span>
+                <span className="px-3 py-1.5 rounded-lg text-sm font-medium bg-red-500/20 text-red-400">Expired: {expired}</span>
+                <span className="px-3 py-1.5 rounded-lg text-sm font-medium bg-amber-500/20 text-amber-400">Pending: {pending}</span>
+              </>
+            );
+          })()}
+        </div>
+        {/* Coverage Amount Display */}
+        {(() => {
+          const totalCoverage = policies.reduce((s, p) => s + ((p.data as unknown as PolicyData).coverageLimit || 0), 0);
+          return totalCoverage > 0 ? (
+            <div className="mt-3 text-xs text-gray-400">
+              Total Coverage: <span className="text-white font-bold text-sm">${totalCoverage.toLocaleString()}</span>
+            </div>
+          ) : null;
+        })()}
+      </motion.div>
+
+      {/* Claim Status Pipeline */}
+      {claims.length > 0 && (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className={ds.panel}>
+          <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2"><FileText className="w-4 h-4 text-amber-400" /> Claim Pipeline</h3>
+          <div className="flex items-center gap-2">
+            {[
+              { stage: 'Filed', statuses: ['reported'], color: 'bg-blue-500' },
+              { stage: 'Reviewing', statuses: ['investigating', 'estimate'], color: 'bg-amber-500' },
+              { stage: 'Approved', statuses: ['approved', 'paid'], color: 'bg-green-500' },
+              { stage: 'Denied', statuses: ['denied', 'closed'], color: 'bg-red-500' },
+            ].map((step, i, arr) => {
+              const count = claims.filter(c => step.statuses.includes((c.data as unknown as ClaimData).status)).length;
+              return (
+                <div key={step.stage} className="flex items-center gap-2 flex-1">
+                  <div className="flex-1 text-center">
+                    <div className={`${step.color} rounded-lg py-3 px-2`}>
+                      <p className="text-lg font-bold text-white">{count}</p>
+                      <p className="text-xs text-white/80">{step.stage}</p>
+                    </div>
+                  </div>
+                  {i < arr.length - 1 && <ArrowRight className="w-4 h-4 text-gray-600 shrink-0" />}
+                </div>
+              );
+            })}
+          </div>
+        </motion.div>
+      )}
+
       {/* Tabs */}
       <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 overflow-x-auto">
         {MODE_TABS.map(tab => {

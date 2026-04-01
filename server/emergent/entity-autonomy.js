@@ -1129,6 +1129,7 @@ function _recordOverrideDTU(entityId, rightId, justification, overrideId) {
       },
       createdAt: nowISO(),
       tier: "regular",
+      source: "entity_autonomy",
     });
   } catch (_e) { logger.debug('emergent:entity-autonomy', 'silent', { error: _e?.message }); }
 }
