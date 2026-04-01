@@ -220,7 +220,7 @@ export default function VeterinaryLensPage() {
         )}
       </div>
 
-      <UniversalActions domain="veterinary" items={items} />
+      <UniversalActions domain="veterinary" artifactId={items[0]?.id} />
       <RealtimeDataPanel data={insights} />
 
       <div className="border-t border-white/10">

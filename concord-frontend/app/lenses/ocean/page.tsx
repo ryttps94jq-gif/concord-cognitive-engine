@@ -209,7 +209,7 @@ export default function OceanLensPage() {
         )}
       </div>
 
-      <UniversalActions domain="ocean" items={items} />
+      <UniversalActions domain="ocean" artifactId={items[0]?.id} />
       <RealtimeDataPanel data={insights} />
 
       <div className="border-t border-white/10">

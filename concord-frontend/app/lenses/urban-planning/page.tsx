@@ -213,7 +213,7 @@ export default function UrbanPlanningLensPage() {
         )}
       </div>
 
-      <UniversalActions domain="urban-planning" items={items} />
+      <UniversalActions domain="urban-planning" artifactId={items[0]?.id} />
       <RealtimeDataPanel data={insights} />
 
       <div className="border-t border-white/10">

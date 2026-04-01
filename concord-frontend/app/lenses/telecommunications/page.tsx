@@ -209,7 +209,7 @@ export default function TelecommunicationsLensPage() {
         )}
       </div>
 
-      <UniversalActions domain="telecommunications" items={items} />
+      <UniversalActions domain="telecommunications" artifactId={items[0]?.id} />
       <RealtimeDataPanel data={insights} />
 
       <div className="border-t border-white/10">

@@ -215,7 +215,7 @@ export default function SpaceLensPage() {
         )}
       </div>
 
-      <UniversalActions domain="space" items={items} />
+      <UniversalActions domain="space" artifactId={items[0]?.id} />
       <RealtimeDataPanel data={insights} />
 
       <div className="border-t border-white/10">
