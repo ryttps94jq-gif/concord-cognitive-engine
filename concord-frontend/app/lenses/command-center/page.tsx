@@ -1301,11 +1301,408 @@ function FederationStatusPanel() {
   );
 }
 
+// ── LOAF System Panel ───────────────────────────────────────────────────────
+
+function LoafPanel() {
+  const { data, isLoading } = useQuery({
+    queryKey: ['cc-loaf-status'],
+    queryFn: () => api.get('/api/loaf/status').then(r => r.data),
+    refetchInterval: 30000,
+    retry: false,
+  });
+
+  const meta = data?.meta;
+  const hyp = data?.hypothesisMarket;
+  const truth = data?.truthLifecycle;
+  const safety = data?.actionSafety;
+  const coord = data?.collectiveAction?.health;
+  const knowledge = data?.knowledgeSurvival;
+
+  const LOAF_TIERS = meta ? [
+    { tier: 'I', label: 'Hardening', modules: meta.loafI, color: 'text-red-400' },
+    { tier: 'II', label: 'Cognitive OS', modules: meta.loafII, color: 'text-orange-400' },
+    { tier: 'III', label: 'Civilizational', modules: meta.loafIII, color: 'text-yellow-400' },
+    { tier: 'IV', label: 'Advanced Ops', modules: meta.loafIV, color: 'text-green-400' },
+    { tier: 'V', label: 'Civ-Scale', modules: meta.loafV, color: 'text-teal-400' },
+    { tier: 'VI', label: 'Epistemic Limits', modules: meta.loafVI, color: 'text-cyan-400' },
+    { tier: 'VII', label: 'Reality-Grounded', modules: meta.loafVII, color: 'text-blue-400' },
+    { tier: 'VIII', label: 'Coordination', modules: meta.loafVIII, color: 'text-indigo-400' },
+    { tier: 'IX', label: 'Knowledge Survival', modules: meta.loafIX, color: 'text-purple-400' },
+    { tier: 'X', label: 'Environmental', modules: meta.loafX, color: 'text-pink-400' },
+  ] : [];
+
+  if (isLoading) return <div className="h-32 bg-lattice-deep animate-pulse rounded-lg" />;
+
+  return (
+    <div className="space-y-4">
+      <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">LOAF System</h3>
+
+      {/* Meta status */}
+      {meta && (
+        <div className="grid grid-cols-3 gap-3">
+          <Stat label="Version" value={`v${meta.version || '?'}`} />
+          <Stat label="Modules" value={meta.moduleCount ?? 0} />
+          <Stat label="Status" value={meta.initialized ? 'Active' : 'Down'} />
+        </div>
+      )}
+
+      {/* Hypothesis Market */}
+      {hyp?.ok && (
+        <div className="bg-lattice-surface rounded-lg p-3 border border-lattice-border space-y-2">
+          <p className="text-xs font-semibold text-amber-400">Hypothesis Market</p>
+          <div className="grid grid-cols-3 gap-2">
+            <Stat label="Total" value={hyp.totalHypotheses ?? 0} />
+            <Stat label="Proposed" value={hyp.byState?.proposed ?? 0} />
+            <Stat label="Challenged" value={hyp.byState?.challenged ?? 0} />
+          </div>
+          <div className="flex gap-3 text-[10px] text-gray-400">
+            <span>Defended: {hyp.byState?.defended ?? 0}</span>
+            <span>Resolved True: {hyp.byState?.resolved_true ?? 0}</span>
+            <span>Resolved False: {hyp.byState?.resolved_false ?? 0}</span>
+            <span>Red Teams: {hyp.redTeamChallenges ?? 0}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Truth Lifecycle */}
+      {truth?.ok && (
+        <div className="bg-lattice-surface rounded-lg p-3 border border-lattice-border space-y-2">
+          <p className="text-xs font-semibold text-teal-400">Truth Lifecycle</p>
+          <div className="grid grid-cols-3 gap-2">
+            <Stat label="Total Truths" value={truth.totalTruths ?? 0} />
+            <Stat label="Rollbacks" value={truth.rollbackCount ?? 0} />
+            <Stat label="Stabilized" value={truth.byState?.stabilized ?? 0} />
+          </div>
+          <div className="flex gap-3 text-[10px] text-gray-400">
+            <span>Born: {truth.byState?.born ?? 0}</span>
+            <span>Challenged: {truth.byState?.challenged ?? 0}</span>
+            <span>Decaying: {truth.byState?.decaying ?? 0}</span>
+            <span>Dead: {truth.byState?.dead ?? 0}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Action Safety */}
+      {safety?.ok && (
+        <div className="bg-lattice-surface rounded-lg p-3 border border-lattice-border space-y-2">
+          <p className="text-xs font-semibold text-red-400">Action Safety</p>
+          <div className="grid grid-cols-3 gap-2">
+            <Stat label="Envelopes" value={safety.envelopes ?? 0} />
+            <Stat label="Decisions" value={safety.decisions ?? 0} />
+            <Stat label="Experiments" value={safety.experiments ?? 0} />
+          </div>
+          <div className="flex gap-3 text-[10px] text-gray-400">
+            <span>Throttles: {safety.throttles ?? 0}</span>
+            <span>Abstention Rules: {safety.abstentionRules ?? 0}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Collective Action */}
+      {coord && (
+        <div className="bg-lattice-surface rounded-lg p-3 border border-lattice-border space-y-2">
+          <p className="text-xs font-semibold text-indigo-400">Collective Action</p>
+          <div className="grid grid-cols-3 gap-2">
+            <Stat label="Coalitions" value={coord.activeCoalitions ?? 0} />
+            <Stat label="Commitments" value={coord.activeCommitments ?? 0} />
+            <Stat label="Evidence Pools" value={coord.evidencePools ?? 0} />
+          </div>
+          {(coord.breachedCommitments ?? 0) > 0 && (
+            <div className="flex items-center gap-1 text-[10px] text-red-400">
+              <AlertTriangle className="w-3 h-3" /> {coord.breachedCommitments} breached commitments
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Knowledge Survival */}
+      {knowledge?.ok && (
+        <div className="bg-lattice-surface rounded-lg p-3 border border-lattice-border space-y-2">
+          <p className="text-xs font-semibold text-purple-400">Knowledge Survival</p>
+          <div className="grid grid-cols-2 gap-2">
+            <Stat label="At Risk" value={knowledge.atRisk?.length ?? 0} />
+            <Stat label="Total Scanned" value={knowledge.totalScanned ?? 0} />
+          </div>
+          {(knowledge.atRisk?.length ?? 0) > 0 && (
+            <div className="space-y-1">
+              {(knowledge.atRisk as Array<{ id: string; priority?: string }>)?.slice(0, 5).map((k: { id: string; priority?: string }) => (
+                <div key={k.id} className="text-[10px] text-yellow-300 flex items-center gap-1">
+                  <AlertTriangle className="w-2.5 h-2.5" /> {k.id} <span className="text-gray-500">{k.priority}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* LOAF Tier summary cards */}
+      {LOAF_TIERS.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-gray-400">Tier Summary</p>
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+            {LOAF_TIERS.map(t => (
+              <div key={t.tier} className="bg-lattice-deep rounded p-2 border border-lattice-border text-center">
+                <p className={`text-xs font-bold ${t.color}`}>LOAF {t.tier}</p>
+                <p className="text-[10px] text-gray-500">{t.label}</p>
+                <p className="text-sm font-mono text-white">{t.modules?.length ?? 0}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Cognitive Engines Panel ─────────────────────────────────────────────────
+
+function CognitiveEnginesPanel() {
+  const { data, isLoading } = useQuery({
+    queryKey: ['cc-cognitive-status'],
+    queryFn: () => api.get('/api/cognitive/status').then(r => r.data),
+    refetchInterval: 15000,
+    retry: false,
+  });
+
+  if (isLoading) return <div className="h-32 bg-lattice-deep animate-pulse rounded-lg" />;
+  if (!data?.ok) return <p className="text-xs text-gray-500">Cognitive status unavailable</p>;
+
+  const engines = [
+    { name: 'Goal System', status: data.goals ? 'active' : 'idle', detail: data.goals ? `${data.goals.activeCount} active / ${data.goals.totalRegistered} total` : null },
+    { name: 'Attention', status: data.attention ? 'active' : 'idle', detail: data.attention ? `Focus: ${data.attention.focus || 'none'} | ${data.attention.activeThreads} threads` : null },
+    { name: 'Reflection', status: data.reflection ? 'active' : 'idle', detail: data.reflection ? `${data.reflection.reflections} reflections | Cal: ${typeof data.reflection.calibration === 'number' ? data.reflection.calibration.toFixed(2) : '?'}` : null },
+    { name: 'Experience Learning', status: data.experience ? 'active' : 'idle', detail: data.experience ? `${data.experience.episodes} episodes | ${data.experience.patterns} patterns` : null },
+    { name: 'Hypothesis Engine', status: data.hypothesis ? 'active' : 'idle', detail: data.hypothesis ? `${data.hypothesis.active} active | ${data.hypothesis.confirmed} confirmed` : null },
+    { name: 'Metacognition', status: data.metacognition ? 'active' : 'idle', detail: data.metacognition ? `${data.metacognition.predictions} predictions | ${data.metacognition.blindSpots} blind spots` : null },
+    { name: 'World Model', status: data.worldModel ? 'active' : 'idle', detail: data.worldModel ? `${data.worldModel.entities} entities | ${data.worldModel.relations} relations` : null },
+    { name: 'Reasoning Chains', status: data.reasoning ? 'active' : 'idle', detail: data.reasoning ? `${data.reasoning.chains} chains | ${data.reasoning.steps} steps` : null },
+  ];
+
+  const activeCount = engines.filter(e => e.status === 'active').length;
+
+  return (
+    <div className="space-y-4">
+      <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Cognitive Engines</h3>
+
+      <div className="grid grid-cols-2 gap-3">
+        <Stat label="Active Engines" value={`${activeCount}/${engines.length}`} />
+        <Stat label="Active Goals" value={data.goals?.activeCount ?? 0} />
+      </div>
+
+      {/* Goal System — current goals */}
+      {data.goals?.active?.length > 0 && (
+        <div className="bg-lattice-surface rounded-lg p-3 border border-lattice-border space-y-2">
+          <p className="text-xs font-semibold text-neon-green">Active Goals</p>
+          {(data.goals.active as Array<{ id: string; description?: string; priority?: number; status?: string }>).slice(0, 5).map((g: { id: string; description?: string; priority?: number; status?: string }) => (
+            <div key={g.id} className="flex items-center gap-2 text-xs">
+              <StatusDot status="green" />
+              <span className="text-gray-300 flex-1 truncate">{g.description || g.id}</span>
+              {g.priority != null && <span className="text-gray-500">P{g.priority}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Reflection self-scores */}
+      {data.reflection && (
+        <div className="bg-lattice-surface rounded-lg p-3 border border-lattice-border space-y-2">
+          <p className="text-xs font-semibold text-blue-400">Reflection Self-Model</p>
+          {data.reflection.strengths?.length > 0 && (
+            <div className="text-[10px] text-green-300">Strengths: {data.reflection.strengths.join(', ')}</div>
+          )}
+          {data.reflection.weaknesses?.length > 0 && (
+            <div className="text-[10px] text-red-300">Weaknesses: {data.reflection.weaknesses.join(', ')}</div>
+          )}
+        </div>
+      )}
+
+      {/* Engine status list */}
+      <div className="space-y-2">
+        <p className="text-xs font-semibold text-gray-400">Engine Status</p>
+        {engines.map(e => (
+          <div key={e.name} className="flex items-center gap-2 bg-lattice-surface rounded p-2 border border-lattice-border text-xs">
+            <StatusDot status={e.status === 'active' ? 'green' : 'gray'} />
+            <span className="text-white font-medium w-36">{e.name}</span>
+            <span className="text-gray-400 flex-1 truncate">{e.detail || 'No data'}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Affect Indicator Panel ──────────────────────────────────────────────────
+
+function AffectPanel() {
+  const { data } = useQuery({
+    queryKey: ['cc-affect-state'],
+    queryFn: () => api.get('/api/affect/state').then(r => r.data),
+    refetchInterval: 15000,
+    retry: false,
+  });
+
+  const state = data?.state;
+  if (!state) return <p className="text-xs text-gray-500">Affect state unavailable</p>;
+
+  const dims = [
+    { key: 'v', label: 'Valence', color: 'bg-pink-400' },
+    { key: 'a', label: 'Arousal', color: 'bg-orange-400' },
+    { key: 's', label: 'Stability', color: 'bg-green-400' },
+    { key: 'c', label: 'Coherence', color: 'bg-blue-400' },
+    { key: 'g', label: 'Agency', color: 'bg-purple-400' },
+    { key: 't', label: 'Trust', color: 'bg-cyan-400' },
+    { key: 'f', label: 'Fatigue', color: 'bg-yellow-400' },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Affect Engine</h3>
+
+      {/* Mood projection */}
+      <div className="bg-lattice-surface rounded-lg p-3 border border-lattice-border">
+        <p className="text-xs text-gray-400 mb-1">Current Mood</p>
+        <p className="text-sm font-semibold text-white capitalize">{state.label || 'Unknown'}</p>
+        {state.summary && <p className="text-[10px] text-gray-400 mt-0.5">{state.summary}</p>}
+        {state.tags?.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-2">
+            {state.tags.map((tag: string) => (
+              <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded-full bg-lattice-elevated text-gray-300 border border-lattice-border">{tag}</span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* 7-dimension bars */}
+      <div className="space-y-2">
+        {dims.map(d => (
+          <div key={d.key} className="flex items-center gap-2 text-xs">
+            <span className="w-16 text-gray-400">{d.label}</span>
+            <div className="flex-1 h-3 bg-lattice-deep rounded-full overflow-hidden">
+              <div className={`h-full rounded-full ${d.color}`} style={{ width: `${Math.max(2, (state[d.key] ?? 0) * 100)}%` }} />
+            </div>
+            <span className="w-8 text-right text-gray-500 font-mono">{((state[d.key] ?? 0) * 100).toFixed(0)}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Organism Pipeline Status Panel (Feature 47) ───────────────────────────
+
+function OrganismPipelinePanel() {
+  const { data } = useQuery({
+    queryKey: ['cc-organism-pipeline'],
+    queryFn: () => api.get('/api/organism/pipeline/status').then(r => r.data).catch(() => null),
+    refetchInterval: 10000,
+  });
+
+  const pipeline = data?.pipeline;
+  const wal = data?.wal;
+  const snapshots = data?.snapshots;
+  const health = data?.health;
+  const recentCommits = (data?.recentCommits || []) as Array<{
+    id: string; action: string; status: string; createdAt: string;
+    updatedAt: string; dtuTitle: string | null; actor: { kind: string; id: string };
+  }>;
+
+  const healthColor = health?.status === 'healthy' ? 'text-neon-green' : health?.status === 'degraded' ? 'text-yellow-400' : 'text-red-400';
+  const backlogColor = health?.proposalBacklog === 'low' ? 'text-neon-green' : health?.proposalBacklog === 'medium' ? 'text-yellow-400' : 'text-red-400';
+
+  return (
+    <div className="space-y-4">
+      <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Organism Pipeline</h3>
+
+      {/* Health Status */}
+      {health && (
+        <div className="flex items-center gap-3 bg-lattice-surface rounded-lg p-3 border border-lattice-border">
+          <StatusDot status={health.status === 'healthy' ? 'green' : health.status === 'degraded' ? 'yellow' : 'red'} />
+          <span className={`text-sm font-medium ${healthColor}`}>{health.status}</span>
+          <span className="text-xs text-gray-500 ml-auto">
+            {pipeline?.enabled ? 'Pipeline enabled' : 'Pipeline disabled'}
+          </span>
+        </div>
+      )}
+
+      {/* Pipeline Counters */}
+      {pipeline && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <Stat label="Total Proposals" value={pipeline.totalProposals ?? '—'} />
+          <Stat label="Pending" value={pipeline.pending ?? 0} sub={`${health?.proposalBacklog || 'unknown'} backlog`} />
+          <Stat label="Verification Queue" value={pipeline.verificationQueue ?? 0} />
+          <Stat label="Council Pending" value={pipeline.councilPending ?? 0} />
+          <Stat label="Approved" value={pipeline.approved ?? 0} />
+          <Stat label="Rejected" value={pipeline.rejected ?? 0} />
+        </div>
+      )}
+
+      {/* WAL Status */}
+      {wal && (
+        <div className="bg-lattice-deep rounded-lg p-3 border border-lattice-border space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-gray-400 uppercase">Write-Ahead Log</p>
+            <StatusDot status={wal.exists ? 'green' : 'gray'} />
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div>
+              <span className="text-gray-500">Size: </span>
+              <span className="text-white font-mono">{wal.sizeFormatted}</span>
+            </div>
+            <div>
+              <span className="text-gray-500">Status: </span>
+              <span className={wal.exists ? 'text-neon-green' : 'text-gray-500'}>{wal.exists ? 'Active' : 'No WAL'}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Snapshots */}
+      {snapshots && (
+        <div className="bg-lattice-deep rounded-lg p-3 border border-lattice-border space-y-2">
+          <p className="text-xs font-semibold text-gray-400 uppercase">Snapshots (Rollback Points)</p>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div>
+              <span className="text-gray-500">Count: </span>
+              <span className="text-white font-mono">{snapshots.count}</span>
+            </div>
+            <div className="truncate">
+              <span className="text-gray-500">Latest: </span>
+              <span className="text-gray-300 font-mono">{snapshots.latest || 'none'}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Recent Commits */}
+      {recentCommits.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-gray-400 uppercase">Recent Commits (24h)</p>
+          <div className="max-h-48 overflow-y-auto space-y-1">
+            {recentCommits.map(c => (
+              <div key={c.id} className="flex items-center gap-2 bg-lattice-surface rounded p-2 border border-lattice-border text-xs">
+                <StatusDot status="green" />
+                <span className="text-white truncate flex-1">{c.dtuTitle || c.action}</span>
+                <span className="text-gray-500 shrink-0">{c.actor?.id?.slice(0, 15) || 'system'}</span>
+                <span className="text-gray-600 shrink-0">{c.createdAt ? new Date(c.createdAt).toLocaleTimeString() : ''}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!data && <p className="text-xs text-gray-500 text-center py-4">Loading pipeline status...</p>}
+    </div>
+  );
+}
+
 // ── Tab Navigation ──────────────────────────────────────────────────────────
 
 const TABS = [
   { id: 'vitals', label: 'Vitals', icon: Activity },
   { id: 'brains', label: 'Brains', icon: Brain },
+  { id: 'cognitive', label: 'Cognitive', icon: Brain },
+  { id: 'loaf', label: 'LOAF', icon: Shield },
+  { id: 'affect', label: 'Affect', icon: Activity },
   { id: 'emergents', label: 'Emergents', icon: Cpu },
   { id: 'lattice', label: 'Lattice', icon: Layers },
   { id: 'shield', label: 'Shield', icon: Shield },
@@ -1315,6 +1712,7 @@ const TABS = [
   { id: 'promotions', label: 'Promotions', icon: ArrowUp },
   { id: 'plugins', label: 'Plugins', icon: Puzzle },
   { id: 'pipeline', label: 'Pipeline', icon: Zap },
+  { id: 'organism', label: 'Organism', icon: GitBranch },
   { id: 'federation', label: 'Federation', icon: Globe },
   { id: 'users', label: 'Users', icon: Users },
   { id: 'config', label: 'Config', icon: Settings },
@@ -1323,6 +1721,7 @@ const TABS = [
   { id: 'breakthrough', label: 'Breakthrough', icon: Lightbulb },
   { id: 'metaDerivation', label: 'Meta-Derivation', icon: GitBranch },
   { id: 'foundation', label: 'Foundation', icon: Globe },
+  { id: 'predictions', label: 'Predictions', icon: Puzzle },
   { id: 'logs', label: 'Logs', icon: FileText },
 ] as const;
 
@@ -1357,6 +1756,9 @@ export default function CommandCenterPage() {
     switch (activeTab) {
       case 'vitals': return <VitalsPanel />;
       case 'brains': return <BrainsPanel />;
+      case 'cognitive': return <CognitiveEnginesPanel />;
+      case 'loaf': return <LoafPanel />;
+      case 'affect': return <AffectPanel />;
       case 'emergents': return <EmergentPanel />;
       case 'lattice': return <LatticePanel />;
       case 'shield': return <ShieldStatusPanel />;
@@ -1366,6 +1768,7 @@ export default function CommandCenterPage() {
       case 'promotions': return <PromotionPanel />;
       case 'plugins': return <PluginPanel />;
       case 'pipeline': return <PipelinePanel />;
+      case 'organism': return <OrganismPipelinePanel />;
       case 'federation': return <FederationStatusPanel />;
       case 'users': return <UserPanel />;
       case 'config': return <ConfigPanel />;
@@ -1375,6 +1778,7 @@ export default function CommandCenterPage() {
       case 'metaDerivation': return <MetaDerivationPanel />;
       case 'foundation': return <FoundationPanel />;
       case 'logs': return <LogsPanel />;
+      case 'predictions': return <PredictionMarketPanel />;
     }
   };
 
@@ -1458,6 +1862,168 @@ export default function CommandCenterPage() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── Feature 44: Prediction Market Panel ─────────────────────────────────────
+
+function PredictionMarketPanel() {
+  const queryClient = useQueryClient();
+  const [newClaim, setNewClaim] = useState('');
+  const [newDomain, setNewDomain] = useState('general');
+  const [filterState, setFilterState] = useState<string>('');
+
+  const { data: predictions, isLoading } = useQuery({
+    queryKey: ['cc-prediction-market', filterState],
+    queryFn: () => apiHelpers.predictions.list({ state: filterState || undefined }).then(r => r.data),
+    refetchInterval: 30000,
+  });
+
+  const { data: leaderboard } = useQuery({
+    queryKey: ['cc-prediction-leaderboard'],
+    queryFn: () => apiHelpers.predictions.leaderboard({ limit: 10 }).then(r => r.data),
+    refetchInterval: 60000,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (data: { claim: string; domain?: string }) =>
+      apiHelpers.predictions.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cc-prediction-market'] });
+      setNewClaim('');
+    },
+  });
+
+  const resolveMutation = useMutation({
+    mutationFn: (id: string) => apiHelpers.predictions.resolve(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['cc-prediction-market'] }),
+  });
+
+  const hypotheses = predictions?.hypotheses || [];
+  const leaders = leaderboard?.leaderboard || [];
+
+  const stateColors: Record<string, string> = {
+    proposed: 'text-blue-400 bg-blue-500/10',
+    challenged: 'text-yellow-400 bg-yellow-500/10',
+    defended: 'text-purple-400 bg-purple-500/10',
+    resolved_true: 'text-green-400 bg-green-500/10',
+    resolved_false: 'text-red-400 bg-red-500/10',
+    indeterminate: 'text-gray-400 bg-gray-500/10',
+    collapsed: 'text-red-600 bg-red-600/10',
+  };
+
+  return (
+    <div className="space-y-4 p-4">
+      {/* Create prediction */}
+      <div className="p-4 bg-lattice-surface border border-lattice-border rounded-lg space-y-3">
+        <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+          <Lightbulb className="w-4 h-4 text-neon-cyan" />
+          Create Prediction
+        </h3>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={newClaim}
+            onChange={e => setNewClaim(e.target.value)}
+            placeholder="Enter a prediction claim..."
+            className="flex-1 px-3 py-2 text-sm bg-lattice-deep border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-neon-cyan/50"
+          />
+          <select
+            value={newDomain}
+            onChange={e => setNewDomain(e.target.value)}
+            className="px-3 py-2 text-sm bg-lattice-deep border border-white/10 rounded-lg text-white"
+          >
+            <option value="general">General</option>
+            <option value="technical">Technical</option>
+            <option value="market">Market</option>
+            <option value="research">Research</option>
+          </select>
+          <button
+            onClick={() => newClaim.trim() && createMutation.mutate({ claim: newClaim, domain: newDomain })}
+            disabled={!newClaim.trim() || createMutation.isPending}
+            className="px-4 py-2 text-sm bg-neon-cyan text-black font-medium rounded-lg hover:bg-neon-cyan/90 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Send className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Filter bar */}
+      <div className="flex gap-2 flex-wrap">
+        {['', 'proposed', 'challenged', 'defended', 'resolved_true', 'resolved_false'].map(state => (
+          <button
+            key={state || 'all'}
+            onClick={() => setFilterState(state)}
+            className={`px-3 py-1 text-xs rounded-full border transition-colors ${
+              filterState === state
+                ? 'border-neon-cyan text-neon-cyan bg-neon-cyan/10'
+                : 'border-white/10 text-gray-400 hover:text-white'
+            }`}
+          >
+            {state ? state.replace(/_/g, ' ') : 'All'}
+          </button>
+        ))}
+      </div>
+
+      {/* Active predictions */}
+      {isLoading ? (
+        <p className="text-sm text-gray-400">Loading predictions...</p>
+      ) : hypotheses.length === 0 ? (
+        <p className="text-sm text-gray-500 text-center py-8">No predictions yet. Create one to get started.</p>
+      ) : (
+        <div className="space-y-2">
+          {hypotheses.map((h: { id: string; claim: string; state: string; domain: string; robustnessScore: number; truthWeight: number; evidenceCount: number; challengeCount: number; defenseCount: number; createdAt: string; resolvedAt: string | null }) => (
+            <div key={h.id} className="p-3 bg-lattice-surface border border-lattice-border rounded-lg">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-white">{h.claim}</p>
+                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${stateColors[h.state] || 'text-gray-400 bg-gray-500/10'}`}>
+                      {h.state.replace(/_/g, ' ')}
+                    </span>
+                    <span className="text-xs text-gray-500">{h.domain}</span>
+                    <span className="text-xs text-gray-500">
+                      {h.evidenceCount} evidence / {h.challengeCount} challenges / {h.defenseCount} defenses
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      robustness: {(h.robustnessScore * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                </div>
+                {!h.resolvedAt && (
+                  <button
+                    onClick={() => resolveMutation.mutate(h.id)}
+                    className="px-3 py-1 text-xs bg-green-500/10 text-green-400 border border-green-500/30 rounded-lg hover:bg-green-500/20 flex-shrink-0"
+                  >
+                    Resolve
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Accuracy Leaderboard */}
+      {leaders.length > 0 && (
+        <div className="p-4 bg-lattice-surface border border-lattice-border rounded-lg">
+          <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+            <Users className="w-4 h-4 text-neon-purple" />
+            Accuracy Leaderboard
+          </h3>
+          <div className="space-y-1.5">
+            {leaders.map((entry: { actorId: string; accuracy: number; totalClaims: number; weight: number }, i: number) => (
+              <div key={entry.actorId} className="flex items-center gap-3 text-sm">
+                <span className="text-xs text-gray-500 w-5 text-right">{i + 1}.</span>
+                <span className="text-white flex-1 truncate font-mono text-xs">{entry.actorId}</span>
+                <span className="text-green-400 text-xs">{(entry.accuracy * 100).toFixed(0)}%</span>
+                <span className="text-gray-500 text-xs">{entry.totalClaims} claims</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

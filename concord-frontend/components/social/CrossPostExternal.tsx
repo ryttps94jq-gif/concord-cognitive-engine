@@ -111,7 +111,7 @@ export function CrossPostExternal({
   title,
   content,
   tags = [],
-  authorName,
+  authorName: _authorName,
   className,
 }: CrossPostExternalProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);

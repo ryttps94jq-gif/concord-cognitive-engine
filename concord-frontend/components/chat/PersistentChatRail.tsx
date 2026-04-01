@@ -109,6 +109,13 @@ interface DTUSource {
   title: string;
   tier: string;
   score: number | null;
+  sources?: {
+    queryMatch?: boolean;
+    edgeSpread?: boolean;
+    globalWarmth?: boolean;
+    userProfileSeed?: boolean;
+    autogen?: boolean;
+  };
 }
 
 interface ChatMessage {
@@ -167,6 +174,15 @@ function DTUSourcesSection({ sources }: { sources: DTUSource[] }) {
   const [expanded, setExpanded] = useState(false);
   if (sources.length === 0) return null;
 
+  // Tier boost labels for context transparency
+  const TIER_BOOST: Record<string, string> = {
+    hyper: '2.0x boost',
+    mega: '1.5x boost',
+    regular: '',
+    shadow: '0.6x',
+    archive: '0.3x',
+  };
+
   return (
     <div className="mt-2 pt-2 border-t border-zinc-700/50">
       <button
@@ -178,21 +194,48 @@ function DTUSourcesSection({ sources }: { sources: DTUSource[] }) {
         <ChevronRight className={`w-2.5 h-2.5 ml-auto transition-transform ${expanded ? 'rotate-90' : ''}`} />
       </button>
       {expanded && (
-        <div className="mt-1.5 space-y-1 max-h-40 overflow-y-auto">
+        <div className="mt-1.5 space-y-1 max-h-52 overflow-y-auto">
           {sources.map((src) => {
             const tierStyle = TIER_BADGE_STYLES[src.tier] || TIER_BADGE_STYLES.regular;
+            const boost = TIER_BOOST[src.tier] || '';
+            const s = src.sources;
             return (
               <div
                 key={src.id}
-                className="flex items-center gap-1.5 text-[10px] px-1.5 py-1 rounded bg-zinc-800/50 hover:bg-zinc-700/50 cursor-pointer transition-colors"
+                className="text-[10px] px-1.5 py-1.5 rounded bg-zinc-800/50 hover:bg-zinc-700/50 cursor-pointer transition-colors"
                 title={`DTU: ${src.id}`}
               >
-                <span className={`px-1 py-0.5 rounded border text-[9px] font-medium uppercase ${tierStyle}`}>
-                  {src.tier}
-                </span>
-                <span className="text-zinc-300 truncate flex-1">{src.title || src.id}</span>
-                {src.score != null && (
-                  <span className="text-zinc-500 font-mono shrink-0">{(src.score * 100).toFixed(0)}%</span>
+                <div className="flex items-center gap-1.5">
+                  <span className={`px-1 py-0.5 rounded border text-[9px] font-medium uppercase ${tierStyle}`}>
+                    {src.tier}
+                  </span>
+                  <span className="text-zinc-300 truncate flex-1">{src.title || src.id}</span>
+                  {src.score != null && (
+                    <span className="text-zinc-500 font-mono shrink-0">{(src.score * 100).toFixed(0)}%</span>
+                  )}
+                </div>
+                {/* Activation sources and tier boost — why this DTU was selected */}
+                {(s || boost) && (
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {boost && (
+                      <span className="px-1 py-0.5 rounded bg-zinc-700/50 text-zinc-500 text-[9px]">{boost}</span>
+                    )}
+                    {s?.queryMatch && (
+                      <span className="px-1 py-0.5 rounded bg-blue-500/10 text-blue-400 text-[9px]">query</span>
+                    )}
+                    {s?.edgeSpread && (
+                      <span className="px-1 py-0.5 rounded bg-purple-500/10 text-purple-400 text-[9px]">spread</span>
+                    )}
+                    {s?.globalWarmth && (
+                      <span className="px-1 py-0.5 rounded bg-amber-500/10 text-amber-400 text-[9px]">global</span>
+                    )}
+                    {s?.userProfileSeed && (
+                      <span className="px-1 py-0.5 rounded bg-green-500/10 text-green-400 text-[9px]">profile</span>
+                    )}
+                    {s?.autogen && (
+                      <span className="px-1 py-0.5 rounded bg-cyan-500/10 text-cyan-400 text-[9px]">autogen</span>
+                    )}
+                  </div>
                 )}
               </div>
             );

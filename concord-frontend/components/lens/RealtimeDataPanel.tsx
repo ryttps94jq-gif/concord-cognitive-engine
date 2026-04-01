@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+// React import (hooks used by consumers)
 
 interface RealtimeDataPanelProps {
   domain?: string;

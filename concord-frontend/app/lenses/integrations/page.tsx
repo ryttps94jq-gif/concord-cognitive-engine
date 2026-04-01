@@ -135,6 +135,9 @@ export default function IntegrationsLensPage() {
       {/* Content */}
       {activeTab === 'webhooks' && (
         <div className="space-y-3">
+          {/* Webhook Ingest URL */}
+          <WebhookIngestInfo />
+
           {webhooks?.webhooks?.length === 0 ? (
             <EmptyState icon={<Webhook />} message="No webhooks configured" />
           ) : (
@@ -261,6 +264,64 @@ function EmptyState({ icon, message }: { icon: React.ReactNode; message: string 
     <div className="panel p-8 text-center text-gray-400">
       <div className="w-12 h-12 mx-auto mb-3 opacity-50">{icon}</div>
       <p>{message}</p>
+    </div>
+  );
+}
+
+function WebhookIngestInfo() {
+  const [copied, setCopied] = useState(false);
+  const [domain, setDomain] = useState('general');
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://your-concord-instance.com';
+  const webhookUrl = `${baseUrl}/api/webhook/${domain}`;
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(webhookUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="panel p-4 border-l-4 border-neon-green space-y-3">
+      <div className="flex items-center gap-2">
+        <Webhook className="w-5 h-5 text-neon-green" />
+        <h3 className="font-semibold text-white">External Webhook Ingest</h3>
+      </div>
+      <p className="text-sm text-gray-400">
+        Send data to Concord from external services. Each POST creates a DTU with source attribution.
+      </p>
+      <div className="flex items-center gap-2">
+        <label className="text-xs text-gray-400 whitespace-nowrap">Domain:</label>
+        <input
+          type="text"
+          value={domain}
+          onChange={(e) => setDomain(e.target.value.replace(/[^a-z0-9-]/gi, '').toLowerCase())}
+          className="px-2 py-1 bg-lattice-surface border border-lattice-border rounded text-sm text-white w-32"
+          placeholder="domain"
+        />
+      </div>
+      <div className="flex items-center gap-2 bg-lattice-surface rounded-lg p-2 border border-lattice-border">
+        <code className="text-sm text-neon-cyan flex-1 truncate font-mono">
+          POST {webhookUrl}
+        </code>
+        <button
+          onClick={handleCopy}
+          className="px-3 py-1 text-xs rounded bg-neon-green/20 text-neon-green border border-neon-green/30 hover:bg-neon-green/30 transition-colors whitespace-nowrap"
+        >
+          {copied ? 'Copied!' : 'Copy URL'}
+        </button>
+      </div>
+      <details className="text-xs text-gray-500">
+        <summary className="cursor-pointer hover:text-gray-300 transition-colors">Example payload</summary>
+        <pre className="mt-2 bg-lattice-deep p-3 rounded text-gray-400 overflow-auto">
+{`curl -X POST ${webhookUrl} \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "title": "My insight",
+    "content": "Something noteworthy happened",
+    "tags": ["${domain}", "external"]
+  }'`}
+        </pre>
+      </details>
     </div>
   );
 }

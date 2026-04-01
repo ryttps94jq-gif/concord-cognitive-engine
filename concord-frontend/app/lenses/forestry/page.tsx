@@ -231,7 +231,7 @@ export default function ForestryLensPage() {
           <MapView
             markers={[
               ...stands.filter(s => (s.data as StandData).lat && (s.data as StandData).lng).map(s => { const d = s.data as StandData; return { lat: d.lat!, lng: d.lng!, label: s.title || d.name, popup: `${d.species?.join(', ') || ''} - ${d.status} (${d.area} acres)` }; }),
-              ...fires.filter(f => (f.data as Record<string, unknown>).lat && (f.data as Record<string, unknown>).lng).map(f => { const d = f.data as Record<string, unknown>; return { lat: d.lat as number, lng: d.lng as number, label: f.title || (d.name as string), popup: `Fire - ${d.status}` }; }),
+              ...fires.filter(f => (f.data as unknown as Record<string, unknown>).lat && (f.data as unknown as Record<string, unknown>).lng).map(f => { const d = f.data as unknown as Record<string, unknown>; return { lat: d.lat as number, lng: d.lng as number, label: f.title || (d.name as string), popup: `Fire - ${d.status}` }; }),
             ]}
             className="h-[500px]"
           />

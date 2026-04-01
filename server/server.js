@@ -6643,6 +6643,7 @@ async function runMacro(domain, name, input, ctx) {
     goals: new Set(["list", "get", "status", "config"]),
     council: new Set(["tally", "status", "list"]),
     hypothesis: new Set(["list", "get", "status", "propose", "evaluate", "record_evidence", "design_experiment"]),
+    "loaf.hypothesis": new Set(["list", "status", "get_influence", "influence_leaderboard", "propose", "resolve"]),
     analytics: new Set(["dashboard", "growth", "density", "citations", "marketplace", "personal"]),
     atlas: new Set(["status", "get", "list", "scope", "config", "thresholds", "autogen", "chat", "contradictions", "score-explain", "submission", "search", "antigaming", "rights", "write-guard", "scope-metrics", "local-hints", "tile", "volume", "material", "subsurface", "change", "coverage", "live", "metrics"]),
     agents: new Set(["list", "get", "status"]),
@@ -25934,13 +25935,34 @@ register("graph", "query", (ctx, input) => {
 
 register("graph", "visualData", (ctx, input) => {
   if (GRAPH_INDEX.dirty) rebuildGraphIndex();
-  const { tier, limit, includeEdges } = input;
+  const { tier, limit, includeEdges, includeShadow } = input;
   let nodes = Array.from(GRAPH_INDEX.nodes.values()).filter(n => !n.type || n.type !== "tag");
   if (tier) nodes = nodes.filter(n => n.tier === tier);
   nodes = nodes.slice(0, Number(limit) || 200);
   const nodeIds = new Set(nodes.map(n => n.id));
   const edges = includeEdges !== false ? Array.from(GRAPH_INDEX.edges.values()).filter(e => nodeIds.has(e.source) && nodeIds.has(e.target)) : [];
-  return { ok: true, nodes, edges, stats: { totalNodes: GRAPH_INDEX.nodes.size, totalEdges: GRAPH_INDEX.edges.size } };
+
+  // Feature 42: Include shadow DTUs and their edges when requested
+  let shadowNodes = [];
+  let shadowEdges = [];
+  if (includeShadow && STATE.shadowDtus) {
+    for (const [id, dtu] of STATE.shadowDtus.entries()) {
+      shadowNodes.push({ id, title: dtu.title, tier: "shadow", tags: dtu.tags || [], isShadow: true, kind: dtu.machine?.kind });
+    }
+    shadowNodes = shadowNodes.slice(0, Number(limit) || 200);
+    const allIds = new Set([...nodeIds, ...shadowNodes.map(n => n.id)]);
+    for (const sn of shadowNodes) {
+      const dtu = STATE.shadowDtus.get(sn.id);
+      const topIds = dtu?.machine?.topIds || [];
+      for (const tid of topIds) {
+        if (allIds.has(tid)) {
+          shadowEdges.push({ id: `shadow:${sn.id}->${tid}`, source: sn.id, target: tid, type: "shadow_reference", weight: 0.4, isShadow: true });
+        }
+      }
+    }
+  }
+
+  return { ok: true, nodes: [...nodes, ...shadowNodes], edges: [...edges, ...shadowEdges], stats: { totalNodes: GRAPH_INDEX.nodes.size, totalEdges: GRAPH_INDEX.edges.size, shadowNodes: shadowNodes.length, shadowEdges: shadowEdges.length } };
 });
 
 register("graph", "forceGraph", (ctx, input) => {
@@ -25968,7 +25990,7 @@ register("graph", "forceGraph", (ctx, input) => {
 });
 
 app.post("/api/graph/query", asyncHandler(async (req, res) => res.json(await runMacro("graph", "query", req.body, makeCtx(req)))));
-app.get("/api/graph/visual", asyncHandler(async (req, res) => res.json(await runMacro("graph", "visualData", { tier: req.query.tier, limit: req.query.limit, includeEdges: req.query.includeEdges !== "false" }, makeCtx(req)))));
+app.get("/api/graph/visual", asyncHandler(async (req, res) => res.json(await runMacro("graph", "visualData", { tier: req.query.tier, limit: req.query.limit, includeEdges: req.query.includeEdges !== "false", includeShadow: req.query.includeShadow === "true" }, makeCtx(req)))));
 app.get("/api/graph/force", asyncHandler(async (req, res) => res.json(await runMacro("graph", "forceGraph", { centerNode: req.query.centerNode, depth: req.query.depth, maxNodes: req.query.maxNodes }, makeCtx(req)))));
 
 // ── Knowledge & Research Lens REST Routes (Lenses 1-11) ──────────────────────
@@ -25983,6 +26005,12 @@ app.post("/api/hypothesis", asyncHandler(async (req, res) => res.json(await runM
 app.post("/api/hypothesis/:id/evaluate", asyncHandler(async (req, res) => res.json(await runMacro("hypothesis", "evaluate", { hypothesisId: req.params.id }, makeCtx(req)))));
 app.post("/api/hypothesis/:id/evidence", asyncHandler(async (req, res) => res.json(await runMacro("hypothesis", "record_evidence", { hypothesisId: req.params.id, ...req.body }, makeCtx(req)))));
 app.post("/api/hypothesis/:id/experiment", asyncHandler(async (req, res) => res.json(await runMacro("hypothesis", "design_experiment", { hypothesisId: req.params.id, ...req.body }, makeCtx(req)))));
+
+// --- Feature 44: Prediction Markets REST routes (wired to LOAF hypothesis market) ---
+app.get("/api/predictions", asyncHandler(async (req, res) => res.json(await runMacro("loaf.hypothesis", "list", { state: req.query.state, domain: req.query.domain }, makeCtx(req)))));
+app.post("/api/predictions", asyncHandler(async (req, res) => res.json(await runMacro("loaf.hypothesis", "propose", req.body, makeCtx(req)))));
+app.post("/api/predictions/:id/resolve", asyncHandler(async (req, res) => res.json(await runMacro("loaf.hypothesis", "resolve", { hypothesisId: req.params.id }, makeCtx(req)))));
+app.get("/api/predictions/leaderboard", asyncHandler(async (req, res) => res.json(await runMacro("loaf.hypothesis", "influence_leaderboard", { limit: req.query.limit }, makeCtx(req)))));
 
 // --- Reasoning REST routes ---
 app.get("/api/reasoning/status", asyncHandler(async (req, res) => res.json(await runMacro("reasoning", "status", {}, makeCtx(req)))));
@@ -26817,6 +26845,96 @@ app.get("/api/context/user/:userId", asyncHandler(async (req, res) => {
 
 app.get("/api/context/metrics", asyncHandler(async (req, res) => {
   res.json(await runMacro("emergent", "context.metrics", {}, makeCtx(req)));
+}));
+
+// Context Inspector — aggregated context engine state for Debug lens (Feature 48)
+app.get("/api/context/inspector", asyncHandler(async (req, res) => {
+  const metrics = await runMacro("emergent", "context.metrics", {}, makeCtx(req));
+  const profiles = await runMacro("emergent", "context.profiles", {}, makeCtx(req));
+
+  // Gather pinned DTUs across active sessions from activation system
+  const activationSys = STATE._emergent?._activationSystem;
+  const activeSessions = [];
+  let totalWorkingSetSize = 0;
+  const pinnedDtus = [];
+  const coActivationPatterns = [];
+
+  if (activationSys?.sessions) {
+    for (const [sid, sessionMap] of activationSys.sessions) {
+      const entries = Array.from(sessionMap.values());
+      totalWorkingSetSize += entries.length;
+      activeSessions.push({
+        sessionId: sid,
+        activatedCount: entries.length,
+        topDtu: entries.sort((a, b) => b.score - a.score)[0]?.dtuId || null,
+      });
+
+      // Find pinned entries (manually activated with high score)
+      for (const entry of entries) {
+        if (entry.reasons?.includes("user_profile_seed") || entry.reasons?.includes("pinned")) {
+          const dtu = STATE.dtus?.get(entry.dtuId);
+          pinnedDtus.push({
+            dtuId: entry.dtuId,
+            title: dtu?.title || "(unknown)",
+            score: Math.round(entry.score * 1000) / 1000,
+            session: sid,
+          });
+        }
+      }
+    }
+  }
+
+  // Co-activation tracker summary
+  const ceState = STATE._emergent?._contextEngine;
+  if (ceState?.coActivationTracker) {
+    for (const [sid, tracker] of ceState.coActivationTracker) {
+      const dtuIds = Array.from(tracker.keys());
+      if (dtuIds.length >= 2) {
+        coActivationPatterns.push({
+          sessionId: sid,
+          trackedDtus: dtuIds.length,
+          queryCount: ceState.sessionQueryCounts?.get(sid) || 0,
+        });
+      }
+    }
+  }
+
+  // User profile weights
+  const userProfileSummary = [];
+  if (ceState?.userProfiles) {
+    for (const [userId, profile] of ceState.userProfiles) {
+      userProfileSummary.push({
+        userId,
+        topDtuCount: profile.topDTUs?.length || 0,
+        sessionCount: profile.sessionCount || 0,
+        lastSession: profile.lastSession,
+        topDtus: (profile.topDTUs || []).slice(0, 5).map(t => ({
+          dtuId: t.dtuId,
+          frequency: Math.round(t.frequency * 100) / 100,
+          title: STATE.dtus?.get(t.dtuId)?.title || "(unknown)",
+        })),
+      });
+    }
+  }
+
+  res.json({
+    ok: true,
+    workingSet: {
+      totalSize: totalWorkingSetSize,
+      activeSessions: activeSessions.slice(0, 20),
+    },
+    pinnedDtus: pinnedDtus.slice(0, 50),
+    coActivationPatterns: coActivationPatterns.slice(0, 20),
+    userProfiles: userProfileSummary.slice(0, 20),
+    profiles: profiles?.profiles || {},
+    metrics: metrics?.metrics || {},
+    engine: {
+      activeSessions: metrics?.activeSessions || 0,
+      trackedSessions: metrics?.trackedSessions || 0,
+      userProfileCount: metrics?.userProfiles || 0,
+      shadowDtuCount: metrics?.shadowDtus || 0,
+    },
+  });
 }));
 
 // ── Lens Integration API ──────────────────────────────────────────────────────
@@ -33745,6 +33863,41 @@ app.post("/api/webhooks", asyncHandler(async (req, res) => res.json(await runMac
 app.get("/api/webhooks", asyncHandler(async (req, res) => res.json(await runMacro("webhook", "list", {}, makeCtx(req)))));
 app.delete("/api/webhooks/:id", asyncHandler(async (req, res) => res.json(await runMacro("webhook", "delete", { webhookId: req.params.id }, makeCtx(req)))));
 app.post("/api/webhooks/:id/toggle", asyncHandler(async (req, res) => res.json(await runMacro("webhook", "toggle", { webhookId: req.params.id, ...req.body }, makeCtx(req)))));
+
+// ── Webhook Ingest — external systems POST JSON to create DTUs ─────────────
+app.post("/api/webhook/:domain", asyncHandler(async (req, res) => {
+  const domain = req.params.domain;
+  const body = req.body || {};
+  const title = normalizeText(body.title || body.subject || body.name || `Webhook ingest: ${domain}`) || `Webhook: ${domain}`;
+  const content = body.content || body.text || body.body || body.data || JSON.stringify(body);
+  const tags = Array.isArray(body.tags) ? body.tags : [domain, "webhook-ingest"];
+  const source = `webhook.${domain}`;
+  const sourceAttribution = {
+    via: "webhook-ingest",
+    domain,
+    remoteIp: req.ip,
+    userAgent: req.headers["user-agent"],
+    receivedAt: new Date().toISOString(),
+    originalPayload: Object.keys(body),
+  };
+
+  try {
+    const created = await runMacro("dtu", "create", {
+      title,
+      content: typeof content === "string" ? content : JSON.stringify(content),
+      tags,
+      tier: "regular",
+      source,
+      meta: { sourceAttribution },
+    }, makeCtx(req));
+    structuredLog("info", "webhook_ingest_created", { domain, dtuId: created?.dtu?.id || created?.id });
+    res.json({ ok: true, dtu: { id: created?.dtu?.id || created?.id, title, domain }, source });
+  } catch (e) {
+    structuredLog("error", "webhook_ingest_failed", { domain, error: String(e?.message || e) });
+    res.status(500).json({ ok: false, error: "Webhook ingest failed" });
+  }
+}));
+
 app.post("/api/automations", asyncHandler(async (req, res) => res.json(await runMacro("automation", "create", req.body, makeCtx(req)))));
 app.get("/api/automations", asyncHandler(async (req, res) => res.json(await runMacro("automation", "list", {}, makeCtx(req)))));
 app.post("/api/automations/:id/run", asyncHandler(async (req, res) => res.json(await runMacro("automation", "run", { automationId: req.params.id, triggerData: req.body }, makeCtx(req)))));

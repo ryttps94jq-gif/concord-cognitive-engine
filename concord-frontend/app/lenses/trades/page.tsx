@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
+import { apiHelpers } from '@/lib/api/client';
 import { ds } from '@/lib/design-system';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
@@ -2029,6 +2030,112 @@ export default function TradesLensPage() {
       </div>
     </div>
   );
+
+  // ---------------------------------------------------------------------------
+  // Invoice Generator sub-view
+  // ---------------------------------------------------------------------------
+
+  const renderInvoiceGenerator = () => {
+    const subtotal = invLineItems.reduce((sum, li) => sum + li.quantity * li.unitPrice, 0);
+    const taxAmount = subtotal * (invTaxRate / 100);
+    const total = subtotal + taxAmount;
+
+    const handleCreateInvoice = async () => {
+      setInvCreating(true);
+      try {
+        const resp = await apiHelpers.economy.createInvoice({
+          lineItems: invLineItems.filter(li => li.description.trim()),
+          taxRate: invTaxRate,
+          dueDate: invDueDate || undefined,
+          payerName: invPayerName || selectedJob?.title || undefined,
+          notes: invNotes || `Generated from trades lens${selectedJob ? ` — Job: ${selectedJob.title}` : ''}`,
+        });
+        setInvResult(resp.data as Record<string, unknown>);
+        // Reset form
+        setInvLineItems([{ description: '', quantity: 1, unitPrice: 0 }]);
+        setInvTaxRate(0);
+        setInvDueDate('');
+        setInvPayerName('');
+        setInvNotes('');
+      } catch (err) {
+        console.error('Invoice creation failed:', err);
+      } finally {
+        setInvCreating(false);
+      }
+    };
+
+    return (
+      <div className={ds.panel}>
+        <h3 className={cn(ds.heading3, 'mb-4')}>Invoice Generator</h3>
+
+        {/* Client / Payer */}
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div>
+            <label className={ds.label}>Bill To</label>
+            <input value={invPayerName} onChange={e => setInvPayerName(e.target.value)} placeholder="Client name" className={ds.input} />
+          </div>
+          <div>
+            <label className={ds.label}>Due Date</label>
+            <input type="date" value={invDueDate} onChange={e => setInvDueDate(e.target.value)} className={ds.input} />
+          </div>
+        </div>
+
+        {/* Line Items */}
+        <div className="space-y-2 mb-4">
+          <label className={ds.label}>Line Items</label>
+          {invLineItems.map((li, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input value={li.description} onChange={e => { const next = [...invLineItems]; next[i] = { ...li, description: e.target.value }; setInvLineItems(next); }} placeholder="Description" className={cn(ds.input, 'flex-1')} />
+              <input type="number" value={li.quantity} onChange={e => { const next = [...invLineItems]; next[i] = { ...li, quantity: Number(e.target.value) || 0 }; setInvLineItems(next); }} className={cn(ds.input, 'w-20')} min={0} />
+              <input type="number" value={li.unitPrice} onChange={e => { const next = [...invLineItems]; next[i] = { ...li, unitPrice: Number(e.target.value) || 0 }; setInvLineItems(next); }} className={cn(ds.input, 'w-24')} min={0} step={0.01} />
+              {invLineItems.length > 1 && (
+                <button onClick={() => setInvLineItems(prev => prev.filter((_, j) => j !== i))} className={ds.btnGhost}><X className="w-3 h-3" /></button>
+              )}
+            </div>
+          ))}
+          <button onClick={() => setInvLineItems(prev => [...prev, { description: '', quantity: 1, unitPrice: 0 }])} className={cn(ds.btnSmall, 'text-neon-cyan')}>
+            <Plus className="w-3 h-3" /> Add Line
+          </button>
+        </div>
+
+        {/* Tax & Notes */}
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div>
+            <label className={ds.label}>Tax Rate (%)</label>
+            <input type="number" value={invTaxRate} onChange={e => setInvTaxRate(Number(e.target.value) || 0)} className={ds.input} min={0} step={0.5} />
+          </div>
+          <div>
+            <label className={ds.label}>Notes</label>
+            <input value={invNotes} onChange={e => setInvNotes(e.target.value)} placeholder="Optional notes" className={ds.input} />
+          </div>
+        </div>
+
+        {/* Summary */}
+        <div className="bg-lattice-deep rounded-lg p-3 mb-4 space-y-1 text-sm">
+          <div className="flex justify-between"><span className="text-gray-400">Subtotal</span><span className="text-white font-mono">${subtotal.toFixed(2)}</span></div>
+          {invTaxRate > 0 && <div className="flex justify-between"><span className="text-gray-400">Tax ({invTaxRate}%)</span><span className="text-white font-mono">${taxAmount.toFixed(2)}</span></div>}
+          <div className="flex justify-between border-t border-lattice-border pt-1"><span className="text-gray-300 font-medium">Total</span><span className="text-white font-mono font-bold">${total.toFixed(2)}</span></div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-3">
+          <button onClick={handleCreateInvoice} disabled={invCreating || invLineItems.every(li => !li.description.trim())} className={cn(ds.btnPrimary, 'flex items-center gap-2')}>
+            <CreditCard className="w-4 h-4" /> {invCreating ? 'Creating...' : 'Create Invoice DTU'}
+          </button>
+          {invResult && (
+            <span className="text-xs text-green-400">Invoice DTU created: {(invResult as Record<string, unknown>)?.dtuId as string || 'success'}</span>
+          )}
+        </div>
+
+        {invResult && (
+          <div className="mt-3 bg-lattice-surface border border-lattice-border rounded-lg p-3">
+            <p className="text-xs text-gray-400 mb-1">Invoice DTU created and downloadable via DTU export</p>
+            <pre className={cn(ds.textMono, 'text-xs overflow-auto max-h-32')}>{JSON.stringify(invResult, null, 2)}</pre>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // ---------------------------------------------------------------------------
   // Sub-view selector rendering

@@ -43,9 +43,20 @@ export function Topbar() {
     retry: false,
   });
 
+  // Fetch affect state for mood indicator
+  const { data: affectData } = useQuery({
+    queryKey: ['affect-topbar'],
+    queryFn: () => api.get('/api/affect/state').then((r) => r.data).catch(() => null),
+    refetchInterval: 30000,
+    retry: false,
+  });
+
   const userName = userData?.username || userData?.displayName || userData?.name || userData?.email?.split('@')[0] || null;
   const systemHealthy = healthData?.status === 'ok' || healthData?.healthy === true;
   const systemDegraded = healthData && !systemHealthy;
+
+  const affectLabel = affectData?.state?.label as string | undefined;
+  const affectSummary = affectData?.state?.summary as string | undefined;
 
   return (
     <header
@@ -115,6 +126,17 @@ export function Topbar() {
             {systemDegraded ? 'Degraded' : systemHealthy ? 'Healthy' : 'Checking'}
           </span>
         </div>
+
+        {/* Affect mood indicator */}
+        {affectLabel && (
+          <div
+            className="hidden md:flex items-center gap-1.5 px-2 py-1"
+            title={affectSummary || `Current mood: ${affectLabel}`}
+          >
+            <span className="w-2 h-2 rounded-full bg-purple-400 inline-block" />
+            <span className="text-xs text-purple-300 capitalize">{affectLabel}</span>
+          </div>
+        )}
 
         {/* FE-010: Online/offline status indicator */}
         <div

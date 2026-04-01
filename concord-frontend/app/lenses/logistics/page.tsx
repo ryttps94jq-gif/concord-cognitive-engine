@@ -316,6 +316,7 @@ export default function LogisticsLensPage() {
     warehouse: ['SKU', 'Zone', 'Quantity', 'Capacity', 'Aisle', 'Rack'],
     routes: ['Origin', 'Destination', 'Distance (mi)', 'Est. Time', 'Fuel Cost', 'Toll Cost'],
     compliance: ['Type', 'Inspector', 'Findings', 'Result', 'Next Due', 'Category'],
+    map: [],
   };
 
   // ---------------------------------------------------------------------------

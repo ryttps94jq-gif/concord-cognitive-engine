@@ -717,7 +717,7 @@ function HeatmapTab() {
             </tbody>
           </table>
         </div>
-      </div>
+      </div>}
 
       {/* Key Insights */}
       <div className={ds.panel}>
@@ -743,7 +743,7 @@ function HeatmapTab() {
             </div>
           ))}
         </div>
-      </div>}
+      </div>
     </div>
   );
 }

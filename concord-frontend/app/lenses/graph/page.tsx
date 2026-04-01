@@ -186,6 +186,7 @@ export default function GraphLensPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterTiers, setFilterTiers] = useState<Set<string>>(new Set(['regular', 'mega', 'hyper', 'shadow']));
   const [showAutogen, setShowAutogen] = useState(false);
+  const [showShadowConnections, setShowShadowConnections] = useState(false);
   const [showIsolated, setShowIsolated] = useState(false);
   const [nodeLimit, setNodeLimit] = useState(100);
   const [showLabels, setShowLabels] = useState(true);
@@ -250,10 +251,10 @@ export default function GraphLensPage() {
     staleTime: 30000,
   });
 
-  // Fetch graph visual data (tier-based)
+  // Fetch graph visual data (tier-based), with optional shadow connections
   const { data: graphVisualData } = useQuery({
-    queryKey: ['graph-visual'],
-    queryFn: () => apiHelpers.graph.visual({ limit: 500 }).then((r) => r.data),
+    queryKey: ['graph-visual', showShadowConnections],
+    queryFn: () => apiHelpers.graph.visual({ limit: 500, includeShadow: showShadowConnections || undefined }).then((r) => r.data),
     retry: 1,
     staleTime: 30000,
   });
@@ -621,6 +622,12 @@ export default function GraphLensPage() {
           ctx.lineWidth = 4;
           ctx.shadowColor = '#22c55e';
           ctx.shadowBlur = 10;
+        } else if ((edge as GraphEdge & { isShadow?: boolean }).isShadow || (edge.type as string) === 'shadow_reference') {
+          // Feature 42: Shadow edges render as dotted/faded lines
+          ctx.strokeStyle = 'rgba(107, 114, 128, 0.35)';
+          ctx.lineWidth = 1;
+          ctx.shadowBlur = 0;
+          ctx.setLineDash([4, 6]);
         } else if (showEdgeTypes && edge.type) {
           ctx.strokeStyle = EDGE_COLORS[edge.type as EdgeType] || 'rgba(100, 100, 150, 0.3)';
           ctx.lineWidth = 1 + edge.weight * 2;
@@ -1212,6 +1219,9 @@ export default function GraphLensPage() {
           </button>
           <button onClick={() => setViewMode(viewMode === 'collab_network' ? 'default' : 'collab_network')} className={cn('p-2 backdrop-blur border border-lattice-border rounded-lg', viewMode === 'collab_network' ? 'bg-violet-500/20 text-violet-400' : 'bg-lattice-surface/90 text-gray-400')} title="Collab Network View">
             <Users className="w-5 h-5" />
+          </button>
+          <button onClick={() => setShowShadowConnections(!showShadowConnections)} className={cn('p-2 backdrop-blur border border-lattice-border rounded-lg', showShadowConnections ? 'bg-gray-500/20 text-gray-300' : 'bg-lattice-surface/90 text-gray-400')} title="Show Shadow Connections">
+            <Layers className="w-5 h-5" />
           </button>
 
           <button onClick={() => setShowSettings(!showSettings)} className="p-2 bg-lattice-surface/90 backdrop-blur border border-lattice-border rounded-lg hover:bg-lattice-bg" title="Settings">

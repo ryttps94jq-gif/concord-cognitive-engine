@@ -136,7 +136,7 @@ export function DTUDetailModal({ dtu, isOpen, onClose, onNavigate }: DTUDetailMo
               </div>
 
               {/* Tier consolidation details */}
-              {(dtu.tier === 'mega' || dtu.tier === 'hyper' || dtu.metadata?.consolidated) && (
+              {(dtu.tier === 'mega' || dtu.tier === 'hyper' || !!dtu.metadata?.consolidated) && (
                 <div className="pt-2 border-t border-lattice-border">
                   <TierBadgeDetail
                     tier={dtu.tier}

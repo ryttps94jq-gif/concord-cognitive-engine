@@ -142,7 +142,7 @@ export default function PodcastLensPage() {
       tags: episode.tags || [],
       waveformPeaks: [],
     };
-    playTrack(track as Parameters<typeof playTrack>[0]);
+    playTrack(track as unknown as Parameters<typeof playTrack>[0]);
   }, [playingId, nowPlaying.playbackState, playTrack]);
 
   // ---- Create episode ----
@@ -216,7 +216,7 @@ export default function PodcastLensPage() {
                 <h1 className="text-lg font-bold">Podcast Studio</h1>
                 <p className="text-xs text-gray-400">Create, publish, and distribute your podcast</p>
               </div>
-              {isLive && <LiveIndicator />}
+              {isLive && <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} />}
             </div>
             <button
               onClick={handleCopyRss}
@@ -424,9 +424,8 @@ export default function PodcastLensPage() {
                     </div>
                   ) : (
                     <MediaUpload
-                      accept="audio/*"
-                      domain="podcast"
-                      onUpload={handleAudioUpload}
+                      defaultMediaType="audio"
+                      onUploadComplete={(media) => handleAudioUpload(media, new File([], 'audio'))}
                     />
                   )}
                 </div>
@@ -492,7 +491,7 @@ export default function PodcastLensPage() {
               </div>
 
               {realtimeInsights.length > 0 && (
-                <RealtimeDataPanel insights={realtimeInsights} className="mt-6" />
+                <RealtimeDataPanel data={null} insights={realtimeInsights} />
               )}
             </motion.div>
           )}

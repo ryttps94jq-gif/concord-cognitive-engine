@@ -33,11 +33,12 @@ interface DTUDetailViewProps {
   onNavigate?: (id: string) => void;
 }
 
-const tierConfig = {
+const tierConfig: Record<string, { icon: typeof Zap; color: string; label: string; bg: string }> = {
   regular: { icon: Zap, color: 'text-neon-blue', label: 'Regular DTU', bg: 'bg-neon-blue/10' },
   mega: { icon: Crown, color: 'text-neon-purple', label: 'Mega DTU', bg: 'bg-neon-purple/10' },
   hyper: { icon: Zap, color: 'text-neon-pink', label: 'Hyper DTU', bg: 'bg-neon-pink/10' },
   shadow: { icon: Ghost, color: 'text-gray-400', label: 'Shadow DTU', bg: 'bg-gray-500/10' },
+  archive: { icon: FileType, color: 'text-gray-500', label: 'Archived DTU', bg: 'bg-gray-600/10' },
 };
 
 // ── DTU Creation Path Labels (Feature 11: All 15 DTU Creation Paths) ────────
@@ -206,8 +207,8 @@ export function DTUDetailView({ dtuId, onClose, onNavigate }: DTUDetailViewProps
   };
 
   // Determine primaryType for artifact rendering
-  const primaryType = dtu?.primaryType || dtu?.meta?.primaryType as string | undefined;
-  const artifactRef = dtu?.artifactRef || dtu?.meta?.artifactId as string | undefined;
+  const primaryType = (dtu?.meta?.primaryType || (dtu as unknown as Record<string, unknown>)?.primaryType) as string | undefined;
+  const artifactRef = (dtu?.artifact || dtu?.meta?.artifactId) as string | undefined;
 
   const primaryTypeIcon: Record<string, typeof Music> = {
     play_audio: Music,
@@ -250,7 +251,7 @@ export function DTUDetailView({ dtuId, onClose, onNavigate }: DTUDetailViewProps
                     <Copy className="w-3 h-3" />
                   </button>
                   <TierBadge tier={dtu?.tier || 'regular'} showRegular size="sm" />
-                  <ScopeBadge scope={dtu?.scope || 'local'} />
+                  <ScopeBadge scope={(dtu?.meta?.scope as string) || 'local'} />
                   {dtu?.domain && (
                     <span className="text-gray-600">{dtu.domain}</span>
                   )}
@@ -442,7 +443,7 @@ export function DTUDetailView({ dtuId, onClose, onNavigate }: DTUDetailViewProps
                   )}
 
                   {/* Scope promotion — Push to Marketplace for local DTUs */}
-                  {(!dtu.scope || dtu.scope === 'local') && !showPromote && (
+                  {(!(dtu.meta?.scope) || dtu.meta?.scope === 'local') && !showPromote && (
                     <button
                       onClick={() => setShowPromote(true)}
                       className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-neon-purple/10 text-neon-purple border border-neon-purple/30 hover:bg-neon-purple/20 transition-colors"
@@ -505,7 +506,7 @@ export function DTUDetailView({ dtuId, onClose, onNavigate }: DTUDetailViewProps
                   )}
 
                   {/* Tier consolidation details */}
-                  {(dtu.tier === 'mega' || dtu.tier === 'hyper' || dtu.meta?.consolidated) && (
+                  {(dtu.tier === 'mega' || dtu.tier === 'hyper' || !!dtu.meta?.consolidated) && (
                     <div className="pt-2 border-t border-lattice-border">
                       <TierBadgeDetail
                         tier={dtu.tier}

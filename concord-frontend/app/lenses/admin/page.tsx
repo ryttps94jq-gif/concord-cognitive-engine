@@ -3,7 +3,7 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Activity,
   Database,
@@ -30,7 +30,7 @@ import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { NervousSystem } from '@/components/nervous/NervousSystem';
 import { MonitoringPanel } from '@/components/admin/MonitoringPanel';
-import { Download, Globe, DollarSign, PieChart, BarChart3 } from 'lucide-react';
+import { Download, Globe, DollarSign, PieChart, BarChart3, Search, Power, Trash2 } from 'lucide-react';
 
 interface DashboardData {
   ok: boolean;
@@ -217,6 +217,8 @@ export default function AdminDashboardPage() {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [showFeatures, setShowFeatures] = useState(false);
   const [showTreasury, setShowTreasury] = useState(false);
+  const [showPlugins, setShowPlugins] = useState(false);
+  const [showMacros, setShowMacros] = useState(false);
 
   const {
     data: dashboard,
@@ -644,6 +646,36 @@ export default function AdminDashboardPage() {
         )}
       </div>
 
+      {/* Feature 45: Plugin Manager */}
+      <div className="border-t border-white/10">
+        <button
+          onClick={() => setShowPlugins(!showPlugins)}
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+        >
+          <span className="flex items-center gap-2">
+            <Box className="w-4 h-4" />
+            Plugin Manager
+          </span>
+          <ChevronDown className={`w-4 h-4 transition-transform ${showPlugins ? 'rotate-180' : ''}`} />
+        </button>
+        {showPlugins && <PluginManagerPanel />}
+      </div>
+
+      {/* Feature 46: Macro Explorer */}
+      <div className="border-t border-white/10">
+        <button
+          onClick={() => setShowMacros(!showMacros)}
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+        >
+          <span className="flex items-center gap-2">
+            <Zap className="w-4 h-4" />
+            Macro Explorer
+          </span>
+          <ChevronDown className={`w-4 h-4 transition-transform ${showMacros ? 'rotate-180' : ''}`} />
+        </button>
+        {showMacros && <MacroExplorerPanel />}
+      </div>
+
       {/* Lens Features */}
       <div className="border-t border-white/10">
         <button
@@ -829,6 +861,160 @@ function TreasuryDashboard({ data }: { data?: TreasuryData }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Feature 45: Plugin Manager Panel ───────────────────────────────────────
+
+function PluginManagerPanel() {
+  const { data: pluginData, isLoading } = useQuery({
+    queryKey: ['admin-plugins'],
+    queryFn: () => apiHelpers.plugins.list().then(r => r.data),
+  });
+
+  const { data: metricsData } = useQuery({
+    queryKey: ['admin-plugins-metrics'],
+    queryFn: () => apiHelpers.plugins.metrics().then(r => r.data),
+    retry: false,
+  });
+
+  const plugins = pluginData?.plugins || [];
+  const metrics = metricsData;
+
+  if (isLoading) {
+    return <div className="px-4 pb-4 text-sm text-gray-400">Loading plugins...</div>;
+  }
+
+  return (
+    <div className="px-4 pb-4 space-y-4">
+      {/* Summary stats */}
+      <div className="grid grid-cols-4 gap-3">
+        <div className="p-3 rounded-lg bg-lattice-deep border border-white/5 text-center">
+          <p className="text-xl font-bold text-white">{metrics?.loadedCount ?? plugins.length}</p>
+          <p className="text-xs text-gray-400">Loaded</p>
+        </div>
+        <div className="p-3 rounded-lg bg-lattice-deep border border-white/5 text-center">
+          <p className="text-xl font-bold text-neon-purple">{metrics?.pendingGovernanceCount ?? 0}</p>
+          <p className="text-xs text-gray-400">Pending</p>
+        </div>
+        <div className="p-3 rounded-lg bg-lattice-deep border border-white/5 text-center">
+          <p className="text-xl font-bold text-green-400">{metrics?.metrics?.totalHookCalls ?? 0}</p>
+          <p className="text-xs text-gray-400">Hook Calls</p>
+        </div>
+        <div className="p-3 rounded-lg bg-lattice-deep border border-white/5 text-center">
+          <p className="text-xl font-bold text-neon-cyan">{metrics?.metrics?.totalMacroCalls ?? 0}</p>
+          <p className="text-xs text-gray-400">Macro Calls</p>
+        </div>
+      </div>
+
+      {/* Plugin list */}
+      {plugins.length === 0 ? (
+        <p className="text-sm text-gray-500 text-center py-4">No plugins installed</p>
+      ) : (
+        <div className="space-y-2">
+          {plugins.map((plugin: { id: string; name: string; version?: string; description?: string; author?: string; isEmergentGen?: boolean; macros?: string[]; hooks?: string[]; hasTick?: boolean; loadedAt?: string }) => (
+            <div key={plugin.id} className="p-3 rounded-lg bg-lattice-deep border border-white/5 flex items-center justify-between">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-white truncate">{plugin.name || plugin.id}</span>
+                  {plugin.version && <span className="text-xs text-gray-500">v{plugin.version}</span>}
+                  {plugin.isEmergentGen && <span className="text-xs px-1.5 py-0.5 bg-neon-purple/20 text-neon-purple rounded">emergent</span>}
+                </div>
+                <p className="text-xs text-gray-500 truncate">{plugin.description || `${(plugin.macros || []).length} macros, ${(plugin.hooks || []).length} hooks`}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Power className="w-4 h-4 text-green-400" />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Feature 46: Macro Explorer Panel ───────────────────────────────────────
+
+function MacroExplorerPanel() {
+  const [macroSearch, setMacroSearch] = useState('');
+
+  const { data: macroData, isLoading } = useQuery({
+    queryKey: ['admin-macros-all'],
+    queryFn: () => apiHelpers.adminMacros.all().then(r => r.data),
+  });
+
+  const macros = macroData?.macros || [];
+  const domainCount = macroData?.domainCount || 0;
+  const totalMacros = macroData?.totalMacros || macros.length;
+
+  // Group by domain, filter by search
+  const grouped = useMemo(() => {
+    const searchLower = macroSearch.toLowerCase();
+    const filtered = macros.filter((m: { name: string; domain: string; description?: string }) =>
+      !macroSearch || m.name.toLowerCase().includes(searchLower) || m.domain.toLowerCase().includes(searchLower) || (m.description || '').toLowerCase().includes(searchLower)
+    );
+    const groups: Record<string, Array<{ name: string; domain: string; description?: string; public?: boolean; plugin?: string | null }>> = {};
+    for (const m of filtered) {
+      if (!groups[m.domain]) groups[m.domain] = [];
+      groups[m.domain].push(m);
+    }
+    return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
+  }, [macros, macroSearch]);
+
+  if (isLoading) {
+    return <div className="px-4 pb-4 text-sm text-gray-400">Loading macros...</div>;
+  }
+
+  return (
+    <div className="px-4 pb-4 space-y-4">
+      {/* Header with stats */}
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-gray-400">{totalMacros} macros across {domainCount} domains</p>
+      </div>
+
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+        <input
+          type="text"
+          value={macroSearch}
+          onChange={e => setMacroSearch(e.target.value)}
+          placeholder="Search macros by name, domain, or description..."
+          className="w-full pl-10 pr-4 py-2 text-sm bg-lattice-deep border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-neon-cyan/50"
+        />
+      </div>
+
+      {/* Grouped macro list */}
+      <div className="space-y-3 max-h-96 overflow-y-auto">
+        {grouped.length === 0 ? (
+          <p className="text-sm text-gray-500 text-center py-4">No macros match your search</p>
+        ) : (
+          grouped.map(([domain, domainMacros]) => (
+            <div key={domain}>
+              <div className="flex items-center gap-2 mb-1.5">
+                <Zap className="w-3.5 h-3.5 text-neon-cyan" />
+                <span className="text-xs font-medium text-neon-cyan uppercase tracking-wider">{domain}</span>
+                <span className="text-xs text-gray-600">({domainMacros.length})</span>
+              </div>
+              <div className="space-y-1 ml-5">
+                {domainMacros.map(m => (
+                  <div key={`${m.domain}.${m.name}`} className="flex items-center justify-between py-1.5 px-2 rounded bg-lattice-deep/50 hover:bg-lattice-deep transition-colors">
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm text-white font-mono">{m.name}</span>
+                      {m.description && <span className="text-xs text-gray-500 ml-2 truncate">{m.description}</span>}
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {m.plugin && <span className="text-xs px-1.5 py-0.5 bg-neon-purple/10 text-neon-purple rounded">plugin</span>}
+                      {m.public && <span className="text-xs px-1.5 py-0.5 bg-green-500/10 text-green-400 rounded">public</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 }

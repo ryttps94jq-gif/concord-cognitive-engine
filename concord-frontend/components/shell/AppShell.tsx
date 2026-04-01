@@ -108,10 +108,7 @@ export function AppShell({ children }: AppShellProps) {
         </main>
       </div>
 
-      <CommandPalette
-        isOpen={commandPaletteOpen}
-        onClose={() => setCommandPaletteOpen(false)}
-      />
+      <CommandPalette />
       <Toasts />
       <SystemStatus />
       <SystemGuidePanel />

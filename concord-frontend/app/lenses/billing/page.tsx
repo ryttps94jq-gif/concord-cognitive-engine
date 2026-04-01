@@ -401,14 +401,28 @@ export default function BillingPage() {
                 </button>
               ))}
             </div>
-            <button
-              onClick={handleExportCSV}
-              disabled={transactions.length === 0}
-              className="btn-neon flex items-center gap-2 text-sm disabled:opacity-50"
-            >
-              <Download className="w-4 h-4" />
-              Export CSV
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={async () => {
+                  try {
+                    const resp = await apiHelpers.economy.createTaxSummary({ year: new Date().getFullYear() });
+                    alert(`Tax Summary DTU created: ${(resp.data as Record<string, unknown>)?.dtuId || 'success'}`);
+                  } catch { /* silent */ }
+                }}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 transition-colors"
+              >
+                <BarChart3 className="w-4 h-4" />
+                Tax Summary DTU
+              </button>
+              <button
+                onClick={handleExportCSV}
+                disabled={transactions.length === 0}
+                className="btn-neon flex items-center gap-2 text-sm disabled:opacity-50"
+              >
+                <Download className="w-4 h-4" />
+                Export CSV
+              </button>
+            </div>
           </div>
 
           {/* Transaction List */}

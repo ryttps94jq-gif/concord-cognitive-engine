@@ -3,8 +3,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import {
-  TrendingUp,
-  TrendingDown,
   Users,
   Eye,
   Heart,
@@ -22,7 +20,6 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Flame,
-  Calendar,
 } from 'lucide-react';
 import { cn, formatNumber } from '@/lib/utils';
 import { api } from '@/lib/api/client';

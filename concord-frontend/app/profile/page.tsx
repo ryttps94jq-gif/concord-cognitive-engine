@@ -3,13 +3,13 @@
 import { useState, useCallback } from 'react';
 import Image from 'next/image';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { api, apiHelpers } from '@/lib/api/client';
 import { cn, formatNumber, formatRelativeTime } from '@/lib/utils';
 import { ds } from '@/lib/design-system';
 import {
-  Brain, Sparkles, Compass, TrendingUp, Zap,
-  Moon, Globe, BarChart3, BookOpen, Target,
+  Brain, Sparkles, Compass, Zap,
+  Globe, BarChart3, BookOpen, Target,
   Database, Clock, Tag, Edit3, Save, X,
   Users, UserPlus, Eye, Quote, Heart,
   Video, FileText, Image as ImageIcon, Music,
@@ -112,13 +112,13 @@ export default function ProfilePage() {
 
   // ── Cognitive profile data ────────────────────────────────────────────
 
-  const { data: personalityData, isLoading: personalityLoading } = useQuery({
+  const { data: personalityData } = useQuery({
     queryKey: ['personality'],
     queryFn: () => api.get('/api/universe/personality').then((r) => r.data),
     retry: 1,
   });
 
-  const { data: statsData, isLoading: statsLoading } = useQuery({
+  const { data: statsData } = useQuery({
     queryKey: ['universe-stats'],
     queryFn: () => api.get('/api/universe/stats').then((r) => r.data),
     retry: 1,
@@ -202,7 +202,7 @@ export default function ProfilePage() {
   }, []);
 
   const personality = personalityData?.personality;
-  const stats = statsData?.universe || statsData;
+  const _stats = statsData?.universe || statsData;
   const profile = profileData;
   const pinnedPosts = pinnedData || [];
 

@@ -689,8 +689,8 @@ export default function EventsLensPage() {
   // ---------------------------------------------------------------------------
   // Render: Event detail view
   // ---------------------------------------------------------------------------
-  const renderEventDetail = (item: LensItem) => {
-    const d = item.data as Record<string, unknown>;
+  const renderEventDetail = (item: LensItem): React.ReactNode => {
+    const d = item.data as Record<string, string | number | boolean | null | undefined>;
     const st = item.meta?.status as string;
     const evtType = EVENT_TYPES.find(t => t.id === d.eventType);
     const EvtIcon = evtType?.icon || CalendarDays;
@@ -751,7 +751,7 @@ export default function EventsLensPage() {
                   {Number(d.ticketPrice || 0) === 0 ? 'Free Event' : `${Number(d.ticketPrice)} CC per ticket`}
                 </span>
               </div>
-              {(() => {
+              {((): React.ReactNode => {
                 const attendees = parseJsonSafe<string[]>(d.attendees, []);
                 const cap = Number(d.capacity || 0);
                 const isFull = cap > 0 && attendees.length >= cap;
@@ -788,7 +788,7 @@ export default function EventsLensPage() {
               </div>
             )}
             {/* Attendee count & list */}
-            {(() => {
+            {((): React.ReactNode => {
               const attendees = parseJsonSafe<string[]>(d.attendees, []);
               return attendees.length > 0 ? (
                 <div>
@@ -807,7 +807,7 @@ export default function EventsLensPage() {
           </div>
 
           {/* Creator stats */}
-          {(() => {
+          {((): React.ReactNode => {
             const attendees = parseJsonSafe<string[]>(d.attendees, []);
             const ticketPrice = Number(d.ticketPrice || 0);
             const ticketRevenue = attendees.length * ticketPrice;

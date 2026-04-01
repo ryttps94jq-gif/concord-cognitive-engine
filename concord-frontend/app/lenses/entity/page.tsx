@@ -4,7 +4,7 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers, api } from '@/lib/api/client';
 import { useState } from 'react';
-import { Users, Plus, Terminal, GitFork, Activity, Play, Brain, X, Cpu } from 'lucide-react';
+import { Users, Plus, Terminal, GitFork, Activity, Play, Brain, X, Cpu, Bot, Search, Loader2 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -371,6 +371,9 @@ export default function EntityLensPage() {
           compact
         />
       )}
+
+      {/* Agent Status & Research Spawning (Feature 40) */}
+      <AgentStatusPanel />
       </div>
     </div>
   );
@@ -403,11 +406,24 @@ function QualiaEntityPanel({ entityId, entityName, onClose }: { entityId: string
     refetchInterval: 15000,
   });
 
-  const [section, setSection] = useState<'sensory' | 'body' | 'presence'>('sensory');
+  const { data: qualiaStateData } = useQuery({
+    queryKey: ['qualia-state', entityId],
+    queryFn: () => apiHelpers.qualia.state(entityId).then(r => r.data),
+    refetchInterval: 8000,
+  });
+
+  const { data: registryData } = useQuery({
+    queryKey: ['qualia-registry'],
+    queryFn: () => apiHelpers.qualia.registry().then(r => r.data),
+    staleTime: 60000,
+  });
+
+  const [section, setSection] = useState<'sensory' | 'body' | 'presence' | 'os-tiers'>('sensory');
   const sections = [
     { id: 'sensory' as const, label: 'Sensory Feed' },
     { id: 'body' as const, label: 'Body Map' },
     { id: 'presence' as const, label: 'Presence' },
+    { id: 'os-tiers' as const, label: 'OS Tiers' },
   ];
 
   return (
@@ -463,10 +479,216 @@ function QualiaEntityPanel({ entityId, entityName, onClose }: { entityId: string
         />
       )}
 
+      {/* OS Tiers Heatmap (Feature 41) */}
+      {section === 'os-tiers' && registryData?.grouped && (
+        <ExistentialOSHeatmap
+          grouped={registryData.grouped}
+          qualiaState={qualiaStateData?.state}
+        />
+      )}
+
       {/* Fallback when no data yet */}
-      {!channelsData?.channels && !embodimentData?.embodiment && !presenceData?.presence && (
+      {!channelsData?.channels && !embodimentData?.embodiment && !presenceData?.presence && section !== 'os-tiers' && (
         <div className="text-center py-8 text-zinc-500 text-sm">
           Loading qualia state for {entityName}...
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Existential OS Heatmap (Feature 41) ────────────────────────────────────
+
+interface OSEntry {
+  key: string;
+  label: string;
+  category: string;
+  description: string;
+  numeric_channels: string[];
+}
+
+interface QualiaState {
+  activeOS: string[];
+  channels: Record<string, number>;
+}
+
+function ExistentialOSHeatmap({ grouped, qualiaState }: {
+  grouped: Record<string, OSEntry[]>;
+  qualiaState?: QualiaState | null;
+}) {
+  const channels = qualiaState?.channels || {};
+  const activeOS = new Set(qualiaState?.activeOS || []);
+
+  // Color intensity based on float value 0-1
+  function intensityColor(value: number): string {
+    if (value <= 0) return 'bg-zinc-800';
+    if (value < 0.2) return 'bg-blue-900/60';
+    if (value < 0.4) return 'bg-blue-700/60';
+    if (value < 0.6) return 'bg-cyan-600/60';
+    if (value < 0.8) return 'bg-cyan-500/70';
+    return 'bg-cyan-400/80';
+  }
+
+  function intensityText(value: number): string {
+    if (value <= 0) return 'text-zinc-600';
+    if (value < 0.3) return 'text-blue-400';
+    if (value < 0.6) return 'text-cyan-400';
+    return 'text-cyan-300';
+  }
+
+  const tierOrder = [
+    'Tier 0 \u2014 Core',
+    'Tier 1 \u2014 Sensory',
+    'Tier 2 \u2014 Simulation',
+    'Tier 3 \u2014 Human Interface',
+    'Tier 4 \u2014 Cosmic',
+    'Tier 5 \u2014 Self/Meta',
+    'Tier 6 \u2014 Presence',
+  ];
+
+  const sortedTiers = tierOrder.filter(t => grouped[t]);
+
+  return (
+    <div className="space-y-3">
+      {!qualiaState && (
+        <div className="text-xs text-zinc-500 bg-zinc-900 rounded p-2">
+          No live qualia state for this entity. Showing registry structure.
+        </div>
+      )}
+      {sortedTiers.map(tierName => {
+        const osEntries = grouped[tierName] || [];
+        return (
+          <div key={tierName}>
+            <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">{tierName}</h4>
+            <div className="space-y-1.5">
+              {osEntries.map(os => {
+                const isActive = activeOS.has(os.key);
+                return (
+                  <div
+                    key={os.key}
+                    className={`bg-zinc-900 rounded-lg p-2 border ${
+                      isActive ? 'border-cyan-800/50' : 'border-zinc-800'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-cyan-400' : 'bg-zinc-600'}`} />
+                      <span className="text-xs font-medium text-white">{os.label}</span>
+                      {!isActive && <span className="text-[10px] text-zinc-600">(inactive)</span>}
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {os.numeric_channels.map(ch => {
+                        const channelKey = `${os.key}.${ch}`;
+                        const value = channels[channelKey] ?? 0;
+                        return (
+                          <div
+                            key={ch}
+                            className={`${intensityColor(value)} rounded px-1.5 py-0.5 text-[10px] flex items-center gap-1`}
+                            title={`${ch}: ${value.toFixed(3)}`}
+                          >
+                            <span className="text-zinc-400 truncate max-w-[80px]">{ch.replace(/_/g, ' ')}</span>
+                            <span className={`font-mono font-bold ${intensityText(value)}`}>{value.toFixed(2)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Agent Status Panel (Feature 40) ────────────────────────────────────────
+
+function AgentStatusPanel() {
+  const [researchTopic, setResearchTopic] = useState('');
+  const queryClient = useQueryClient();
+
+  const { data: statusData, isLoading } = useQuery({
+    queryKey: ['agents-status'],
+    queryFn: () => apiHelpers.agents.status().then(r => r.data),
+    refetchInterval: 10000,
+  });
+
+  const spawnMutation = useMutation({
+    mutationFn: (topic: string) => apiHelpers.agents.spawnResearch(topic).then(r => r.data),
+    onSuccess: () => {
+      setResearchTopic('');
+      queryClient.invalidateQueries({ queryKey: ['agents-status'] });
+    },
+  });
+
+  const agents = statusData?.agents || [];
+  const active = statusData?.active || 0;
+  const paused = statusData?.paused || 0;
+
+  return (
+    <div className="panel p-4 space-y-4 mt-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold flex items-center gap-2">
+          <Bot className="w-4 h-4 text-neon-cyan" />
+          Active Agents
+        </h3>
+        <div className="flex items-center gap-2 text-xs text-gray-500">
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-400" />{active} active</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-yellow-400" />{paused} paused</span>
+        </div>
+      </div>
+
+      {/* Research Spawning */}
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+          <input
+            type="text"
+            value={researchTopic}
+            onChange={e => setResearchTopic(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && researchTopic.trim() && !spawnMutation.isPending) {
+                spawnMutation.mutate(researchTopic.trim());
+              }
+            }}
+            placeholder="Research topic X..."
+            className="input-lattice w-full pl-9 text-sm"
+            disabled={spawnMutation.isPending}
+          />
+        </div>
+        <button
+          onClick={() => researchTopic.trim() && spawnMutation.mutate(researchTopic.trim())}
+          disabled={!researchTopic.trim() || spawnMutation.isPending}
+          className="btn-neon cyan text-sm"
+        >
+          {spawnMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Spawn Research Agent'}
+        </button>
+      </div>
+
+      {spawnMutation.data && (
+        <div className="bg-zinc-900 rounded p-2 text-xs border border-cyan-900/40">
+          <p className="text-cyan-400 font-medium">Agent spawned for &quot;{spawnMutation.data.topic}&quot;</p>
+          <p className="text-gray-400">{spawnMutation.data.findingsCount} initial findings from lattice scan</p>
+        </div>
+      )}
+
+      {/* Agent list */}
+      {isLoading ? (
+        <p className="text-xs text-gray-500">Loading agents...</p>
+      ) : agents.length === 0 ? (
+        <p className="text-xs text-gray-500">No agents deployed. Spawn a research agent above.</p>
+      ) : (
+        <div className="space-y-1 max-h-48 overflow-y-auto">
+          {agents.slice(0, 20).map((a: Record<string, unknown>) => (
+            <div key={a.agentId as string} className="flex items-center gap-2 text-xs bg-zinc-900 rounded p-2 border border-zinc-800">
+              <span className={`w-2 h-2 rounded-full ${a.status === 'active' ? 'bg-green-400' : 'bg-yellow-400'}`} />
+              <span className="text-white font-medium capitalize">{a.type as string}</span>
+              <span className="text-gray-500 truncate flex-1">{a.territory as string}</span>
+              <span className="text-gray-600 tabular-nums">{a.runCount as number} runs</span>
+              <span className="text-gray-600 tabular-nums">{a.findingsCount as number} findings</span>
+            </div>
+          ))}
         </div>
       )}
     </div>

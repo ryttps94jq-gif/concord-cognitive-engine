@@ -78,7 +78,7 @@ export default function DTUBrowserPage() {
     id: d.id,
     title: d.title || d.summary || d.id.slice(0, 16),
     excerpt: d.summary || d.content?.slice(0, 120),
-    tier: d.tier || 'regular' as const,
+    tier: (d.tier || 'regular') as 'regular' | 'mega' | 'hyper' | 'shadow',
     tags: d.tags || [],
     createdAt: new Date(d.timestamp || Date.now()),
     updatedAt: new Date(d.updatedAt || d.timestamp || Date.now()),

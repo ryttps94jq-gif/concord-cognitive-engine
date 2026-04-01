@@ -46,6 +46,7 @@ export function DTUQuickCreate({ onClose, onSuccess, source, defaultTags }: DTUQ
         tags: tags.length > 0 ? tags : undefined,
         source: source || 'manual',
         isGlobal,
+        meta: { tier },
       });
     },
     onSuccess: () => {
@@ -136,6 +137,17 @@ export function DTUQuickCreate({ onClose, onSuccess, source, defaultTags }: DTUQ
 
           {/* Tier + Global toggle */}
           <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-400 mb-1">Tier</label>
+              <select
+                value={tier}
+                onChange={(e) => setTier(e.target.value as DTUTier)}
+                className="w-full rounded-lg border border-lattice-border bg-lattice-deep px-3 py-2 text-sm"
+              >
+                <option value="regular">Regular</option>
+                <option value="shadow">Shadow</option>
+              </select>
+            </div>
             <div className="flex-1">
               <label className="block text-sm font-medium text-gray-400 mb-1">Scope</label>
               <label className="flex items-center gap-2 cursor-pointer">

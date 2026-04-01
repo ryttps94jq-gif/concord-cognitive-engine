@@ -187,6 +187,19 @@ export default function registerDomainRoutes(app, {
   // ---- Macros registry + runner ----
   app.get("/api/macros/domains", (req,res)=> res.json({ ok:true, domains: listDomains() }));
   app.get("/api/macros/:domain", (req,res)=> res.json({ ok:true, domain:req.params.domain, macros: listMacros(req.params.domain) }));
+
+  // Feature 46: Macro Explorer — all macros across all domains in one call
+  app.get("/api/admin/macros", (req, res) => {
+    const domains = listDomains();
+    const all = [];
+    for (const domain of domains) {
+      const macros = listMacros(domain);
+      for (const m of macros) {
+        all.push({ domain, name: m.name, description: m.description || "", public: !!m.public, plugin: m.plugin || null });
+      }
+    }
+    res.json({ ok: true, macros: all, domainCount: domains.length, totalMacros: all.length });
+  });
   app.post("/api/macros/run", asyncHandler(async (req, res) => {
     const ctx = makeCtx(req);
     let domain = req.body?.domain;

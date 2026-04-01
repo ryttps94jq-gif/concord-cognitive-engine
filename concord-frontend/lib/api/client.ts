@@ -355,6 +355,11 @@ export const apiHelpers = {
     status: () => api.get('/api/cognitive/status'),
   },
 
+  // LOAF system status (aggregated)
+  loaf: {
+    status: () => api.get('/api/loaf/status'),
+  },
+
   // Dream mode (synthesis + capture pipeline)
   dream: {
     run: (data?: { seed?: string }) => api.post('/api/dream', data || {}),
@@ -683,10 +688,37 @@ export const apiHelpers = {
   // Graph Queries
   graph: {
     query: (dsl: string) => api.post('/api/graph/query', { dsl }),
-    visual: (params?: { tier?: string; limit?: number }) =>
+    visual: (params?: { tier?: string; limit?: number; includeShadow?: boolean }) =>
       api.get('/api/graph/visual', { params }),
     force: (params?: { centerNode?: string; depth?: number; maxNodes?: number }) =>
       api.get('/api/graph/force', { params }),
+  },
+
+  // Feature 44: Prediction Markets (wired to LOAF hypothesis market)
+  predictions: {
+    list: (params?: { state?: string; domain?: string }) =>
+      api.get('/api/predictions', { params }),
+    create: (data: { claim: string; evidence?: Array<{ text: string; confidence?: number }>; domain?: string }) =>
+      api.post('/api/predictions', data),
+    resolve: (id: string) =>
+      api.post(`/api/predictions/${id}/resolve`, {}),
+    leaderboard: (params?: { limit?: number }) =>
+      api.get('/api/predictions/leaderboard', { params }),
+  },
+
+  // Feature 45: Plugin Manager
+  plugins: {
+    list: () => api.get('/api/plugins'),
+    get: (pluginId: string) => api.get(`/api/plugins/${pluginId}`),
+    metrics: () => api.get('/api/plugins/metrics'),
+    remove: (pluginId: string) => api.delete(`/api/plugins/${pluginId}`),
+  },
+
+  // Feature 46: Macro Explorer
+  adminMacros: {
+    all: () => api.get('/api/admin/macros'),
+    domains: () => api.get('/api/macros/domains'),
+    byDomain: (domain: string) => api.get(`/api/macros/${domain}`),
   },
 
   // Schema System
@@ -897,6 +929,8 @@ export const apiHelpers = {
   agents: {
     list: () => api.get('/api/agents'),
     get: (id: string) => api.get(`/api/agents/${id}`),
+    status: () => api.get('/api/agents/status'),
+    spawnResearch: (topic: string) => api.post('/api/agents/spawn-research', { topic }),
     create: (data: { name: string; type?: string; config?: Record<string, unknown> }) =>
       api.post('/api/agents', data),
     enable: (id: string) => api.post(`/api/agents/${id}/enable`, {}),
@@ -1976,6 +2010,7 @@ export const apiHelpers = {
     state: (entityId: string) => api.get(`/api/qualia/state/${entityId}`),
     summary: (entityId: string) => api.get(`/api/qualia/summary/${entityId}`),
     all: () => api.get('/api/qualia/all'),
+    registry: () => api.get('/api/qualia/registry'),
     channels: (entityId: string) => api.get(`/api/qualia/senses/channels/${entityId}`),
     presence: (entityId: string) => api.get(`/api/qualia/presence/${entityId}`),
     embodiment: (entityId: string) => api.get(`/api/qualia/embodiment/${entityId}`),

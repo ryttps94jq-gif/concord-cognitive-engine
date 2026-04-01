@@ -3,7 +3,6 @@
 import { motion } from 'framer-motion';
 import {
   ShoppingBag,
-  ExternalLink,
   Coins,
   Image as ImageIcon,
 } from 'lucide-react';
