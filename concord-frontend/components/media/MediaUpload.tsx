@@ -263,6 +263,12 @@ export function MediaUpload({
       }, 300);
 
       try {
+        // Convert file to base64 for binary storage
+        const arrayBuffer = await uploadFile.file.arrayBuffer();
+        const base64Data = btoa(
+          new Uint8Array(arrayBuffer).reduce((d, byte) => d + String.fromCharCode(byte), '')
+        );
+
         const response = await api.post('/api/media/upload', {
           authorId,
           title: title.trim(),
@@ -274,6 +280,7 @@ export function MediaUpload({
           tags,
           privacy,
           tier,
+          data: base64Data,
         });
 
         clearInterval(progressInterval);

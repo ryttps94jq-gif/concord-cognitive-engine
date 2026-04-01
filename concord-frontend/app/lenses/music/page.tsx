@@ -180,9 +180,15 @@ export default function MusicLensPage() {
     setUploadProgress({ stage: 'uploading', progress: 0, audioAnalysis: null, error: null });
 
     try {
-      // Upload via media API
-      setUploadProgress({ stage: 'uploading', progress: 30, audioAnalysis: null, error: null });
+      // Convert file to base64 for upload
+      setUploadProgress({ stage: 'uploading', progress: 10, audioAnalysis: null, error: null });
       const { api: apiClient } = await import('@/lib/api/client');
+      const arrayBuffer = await _file.arrayBuffer();
+      const base64Data = btoa(
+        new Uint8Array(arrayBuffer).reduce((d, byte) => d + String.fromCharCode(byte), '')
+      );
+
+      setUploadProgress({ stage: 'uploading', progress: 30, audioAnalysis: null, error: null });
       const mediaResp = await apiClient.post('/api/media/upload', {
         title: trackTitle,
         mediaType: 'audio',
@@ -191,10 +197,11 @@ export default function MusicLensPage() {
         originalFilename: _file.name,
         duration: (uploadData?.duration as number) || 240,
         tags: (uploadData?.tags as string[]) || [],
+        data: base64Data,
       });
 
       setUploadProgress({ stage: 'analyzing', progress: 60, audioAnalysis: null, error: null });
-      const mediaId = mediaResp.data?.id || mediaResp.data?.media?.id;
+      const mediaId = mediaResp.data?.mediaDTU?.id || mediaResp.data?.id || mediaResp.data?.media?.id;
 
       setUploadProgress({
         stage: 'processing', progress: 80,

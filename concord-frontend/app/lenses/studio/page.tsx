@@ -442,7 +442,13 @@ export default function StudioLensPage() {
     setIsSaving(true);
     setSaveStatus('idle');
     try {
-      // Upload metadata via the /api/media/upload endpoint
+      // Convert recorded blob to base64 for upload
+      const arrayBuffer = await recordedBlob.arrayBuffer();
+      const base64Data = btoa(
+        new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+      );
+
+      // Upload with actual audio data via the /api/media/upload endpoint
       const response = await api.post('/api/media/upload', {
         title: `${project.title} - Recording ${new Date().toLocaleTimeString()}`,
         description: `Studio recording from project "${project.title}" (${project.bpm} BPM, key ${project.key})`,
@@ -452,6 +458,7 @@ export default function StudioLensPage() {
         originalFilename: `studio-recording-${Date.now()}.webm`,
         tags: ['studio', 'recording', project.key, `${project.bpm}bpm`].filter(Boolean),
         privacy: 'private',
+        data: base64Data,
       });
 
       if (response.data?.ok || response.status === 200 || response.status === 201) {

@@ -117,6 +117,7 @@ export default function configureMiddleware(app, deps) {
     '/api/auth/login': '16kb',
     '/api/auth/change-password': '4kb',
     '/api/shared-session': '64kb',
+    '/api/media/upload': '100mb',
   };
 
   app.use((req, res, next) => {
