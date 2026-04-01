@@ -98,6 +98,8 @@ const FORWARDED_EVENTS: SocketEvent[] = [
   'lens:dtu_generated',
   // AI domain insights from lens-learning.js
   'agent:domain_insight',
+  // Per-user tick events
+  'user:tick',
 ];
 
 interface UseSocketOptions {
@@ -291,6 +293,17 @@ function routeToStores(event: SocketEvent, data: unknown) {
     case 'promotion:rejected':
       if (d && d.id) {
         useSovereignStore.getState().updatePromotion(d.id as string, d as never);
+      }
+      break;
+
+    // Per-user tick → lattice store
+    case 'user:tick':
+      if (d) {
+        useLatticeStore.getState().setUserTickInfo({
+          tickCount: d.tickCount as number,
+          dtuCount: d.dtuCount as number,
+          lastTick: d.ts as string,
+        });
       }
       break;
 

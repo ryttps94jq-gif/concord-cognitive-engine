@@ -2081,6 +2081,16 @@ export const apiHelpers = {
     submit: (dtuId: string, price?: number) =>
       api.post('/api/marketplace/submit', { dtuId, price }),
   },
+
+  /** User bookmarks — persist across sessions */
+  bookmarks: {
+    list: (domain?: string) =>
+      api.get('/api/user/bookmarks', { params: domain ? { domain } : {} }).then(r => r.data),
+    create: (data: { targetId: string; targetType: string; domain: string; metadata?: Record<string, unknown> }) =>
+      api.post('/api/user/bookmarks', data).then(r => r.data),
+    remove: (id: string) =>
+      api.delete(`/api/user/bookmarks/${id}`).then(r => r.data),
+  },
 };
 
 /**

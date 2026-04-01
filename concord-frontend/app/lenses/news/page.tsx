@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
+import { useBookmarks } from '@/hooks/useBookmarks';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
@@ -50,7 +51,7 @@ export default function NewsLensPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('feed');
   const [expandedArticle, setExpandedArticle] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
-  const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
+  const { bookmarkedIds, toggleBookmark } = useBookmarks('news');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
 
   const { data: news, isLoading, isError, error, refetch } = useQuery({
@@ -126,14 +127,7 @@ export default function NewsLensPage() {
     return list;
   }, [articles, searchText, sourceFilter, sortMode]);
 
-  const toggleBookmark = useCallback((id: string) => {
-    setBookmarkedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
+  // toggleBookmark provided by useBookmarks hook — persists to backend
 
   const handleRefresh = useCallback(() => {
     refetch();

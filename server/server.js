@@ -3144,6 +3144,7 @@ const STATE = {
   lensDomainIndex: new Map(), // domain → Set<artifactId> — O(1) domain lookup
   // v4: User Universes (local/global multiverse substrate)
   userUniverses: new Map(), // userId → { userId, localDTUs: Map, localLensArtifacts: Map, syncedFromGlobal: Set, preferences, stats, discoveryLog }
+  userTicks: new Map(), // userId → { timer, tickCount, lastTick } — per-user heartbeat timers
   globalThread: { councilQueue: [], acceptedContributions: [] }, // council submission queue + audit trail
   __chicken2: {
     enabled: true,
@@ -5431,7 +5432,7 @@ async function tryInitWebSockets(server) {
   const io = new Server(server, {
     cors: {
       origin: NODE_ENV === "production"
-        ? (process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(",").map(o => o.trim()) : [])
+        ? (process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(",").map(o => o.trim()) : true)
         : ["http://localhost:3000", "http://127.0.0.1:3000"],
       methods: ["GET", "POST"],
       credentials: true
@@ -5525,6 +5526,12 @@ async function tryInitWebSockets(server) {
     // Send hello
     socket.emit("hello", { clientId, version: VERSION, ts: nowISO(), authenticated: socket.data.authenticated });
 
+    // Start per-user tick if authenticated (drives personal DTU growth)
+    if (socket.data.userId) {
+      getOrCreateUserUniverse(socket.data.userId);
+      startUserTick(socket.data.userId);
+    }
+
     // Room management
     socket.on("room:join", ({ room }) => {
       if (room) {
@@ -5588,6 +5595,14 @@ async function tryInitWebSockets(server) {
 
     socket.on("disconnect", () => {
       REALTIME.clients.delete(clientId);
+      // Stop per-user tick if no remaining connections for this user
+      if (socket.data.userId) {
+        const hasOtherConnections = [...REALTIME.clients.values()]
+          .some(c => c.userId === socket.data.userId);
+        if (!hasOtherConnections) {
+          stopUserTick(socket.data.userId);
+        }
+      }
     });
 
     socket.on("error", () => {
@@ -55368,6 +55383,210 @@ function addDTUToUserUniverse(userId, dtu) {
     return false;
   }
 }
+
+// ── Per-User Tick System ─────────────────────────────────────────────────────
+// Each authenticated user gets their own heartbeat driving personal DTU growth,
+// score recalculation, and auto-synthesis — independent of the global tick.
+
+const USER_TICK_MS = 15000; // 15s per user tick (offset from global 10s)
+
+function startUserTick(userId) {
+  if (!userId || userId === "anon") return;
+  if (STATE.userTicks.has(userId)) return; // already running
+
+  const timer = setInterval(async () => {
+    const ut = STATE.userTicks.get(userId);
+    if (!ut) return;
+    ut.tickCount++;
+    ut.lastTick = nowISO();
+    try {
+      await tickUserUniverse(userId, ut.tickCount);
+    } catch (e) {
+      logger.warn("user_tick", { userId, error: String(e?.message || e) });
+    }
+  }, USER_TICK_MS);
+
+  STATE.userTicks.set(userId, { timer, tickCount: 0, lastTick: nowISO() });
+  structuredLog("info", "user_tick_started", { userId });
+}
+
+function stopUserTick(userId) {
+  const ut = STATE.userTicks.get(userId);
+  if (!ut) return;
+  if (ut.timer) clearInterval(ut.timer);
+  STATE.userTicks.delete(userId);
+  structuredLog("info", "user_tick_stopped", { userId });
+}
+
+async function tickUserUniverse(userId, tick) {
+  const universe = STATE.userUniverses?.get(userId);
+  if (!universe) return;
+
+  const localDTUs = universe.localDTUs || new Map();
+
+  // Every 5th tick (~75s): score recalculation for user's local DTUs
+  if (tick % 5 === 0 && localDTUs.size > 0) {
+    let updated = 0;
+    for (const [, dtu] of localDTUs) {
+      if (!dtu || dtu.status === "archived") continue;
+      dtu.scores = dtu.scores || {};
+      // Resonance: based on recency, interactions, and tag diversity
+      const ageHrs = (Date.now() - new Date(dtu.updatedAt || dtu.createdAt || Date.now()).getTime()) / 3.6e6;
+      const recencyBoost = Math.max(0, 1 - ageHrs / 168); // decays over 1 week
+      const tagCount = (dtu.tags || []).length;
+      const interactionScore = Math.min(1, ((dtu.meta?.views || 0) + (dtu.meta?.votes || 0) * 3) / 20);
+      dtu.scores.resonance = clamp(recencyBoost * 0.4 + interactionScore * 0.4 + Math.min(tagCount / 5, 1) * 0.2, 0, 1);
+      // Coherence: based on content completeness
+      const contentLen = (dtu.content || dtu.body || "").length;
+      dtu.scores.coherence = clamp(Math.min(contentLen / 500, 1) * 0.7 + (dtu.title ? 0.3 : 0), 0, 1);
+      updated++;
+    }
+    if (updated > 0) universe.stats.lastScoreRecalc = nowISO();
+  }
+
+  // Every 20th tick (~5 min): auto-synthesis — find related local DTUs and create synthesis
+  if (tick % 20 === 0 && localDTUs.size >= 3) {
+    try {
+      await synthesizeUserDTUs(userId, localDTUs);
+    } catch (e) {
+      logger.debug("user_synthesis", { userId, error: String(e?.message || e) });
+    }
+  }
+
+  // Every tick: update stats
+  universe.stats.localDTUCount = localDTUs.size;
+  universe.stats.lastActive = nowISO();
+
+  // Emit personal tick event to user's socket connections
+  realtimeEmit("user:tick", {
+    userId,
+    tickCount: tick,
+    dtuCount: localDTUs.size,
+    syncedCount: (universe.syncedFromGlobal || new Set()).size,
+    ts: nowISO(),
+  }, { sessionId: userId });
+}
+
+/**
+ * Auto-synthesize related DTUs in a user's personal universe.
+ * Groups by shared tags/domains and creates synthesis DTUs when clusters found.
+ */
+async function synthesizeUserDTUs(userId, localDTUs) {
+  // Group DTUs by primary tag/domain
+  const tagGroups = new Map();
+  for (const [id, dtu] of localDTUs) {
+    if (!dtu || dtu.source === "synthesis") continue;
+    const primaryTag = (dtu.tags || [])[0] || dtu.domain || "general";
+    if (!tagGroups.has(primaryTag)) tagGroups.set(primaryTag, []);
+    tagGroups.get(primaryTag).push({ id, dtu });
+  }
+
+  // For each group with 3+ DTUs, check if synthesis is due
+  for (const [tag, group] of tagGroups) {
+    if (group.length < 3) continue;
+
+    // Check if we already have a synthesis for this group recently
+    const existingSynthesis = [...localDTUs.values()].find(d =>
+      d.source === "synthesis" && (d.tags || []).includes(tag) &&
+      (Date.now() - new Date(d.createdAt || 0).getTime()) < 3600000 // 1 hour
+    );
+    if (existingSynthesis) continue;
+
+    // Create a synthesis DTU summarizing the cluster
+    const titles = group.slice(0, 5).map(g => g.dtu.title || "Untitled").join(", ");
+    const synthDTU = {
+      id: uid(),
+      title: `Synthesis: ${tag} (${group.length} sources)`,
+      content: `Auto-synthesized from ${group.length} personal DTUs in "${tag}": ${titles}`,
+      tags: [tag, "synthesis"],
+      domain: tag,
+      tier: "regular",
+      scope: "local",
+      source: "synthesis",
+      ownerId: userId,
+      status: "active",
+      scores: { resonance: 0.5, coherence: 0.6 },
+      meta: {
+        sourceIds: group.map(g => g.id),
+        synthesizedAt: nowISO(),
+      },
+      createdAt: nowISO(),
+      updatedAt: nowISO(),
+    };
+
+    localDTUs.set(synthDTU.id, synthDTU);
+    realtimeEmit("dtu:created", {
+      id: synthDTU.id,
+      title: synthDTU.title,
+      scope: "local",
+      source: "synthesis",
+      userId,
+    }, { sessionId: userId });
+
+    structuredLog("info", "user_synthesis_created", { userId, tag, sourceCount: group.length, synthId: synthDTU.id });
+  }
+}
+
+// ── User Bookmarks API ───────────────────────────────────────────────────────
+// Persists bookmarks (articles, DTUs, artifacts) to the user's universe.
+
+app.get("/api/user/bookmarks", asyncHandler(async (req, res) => {
+  const userId = req.actor?.userId || req.user?.id;
+  if (!userId || userId === "anon") return res.status(401).json({ ok: false, error: "authentication required" });
+
+  const universe = getUserUniverse(userId);
+  const bookmarks = universe?.bookmarks || new Map();
+  const domain = req.query.domain;
+
+  let results = [...bookmarks.values()];
+  if (domain) results = results.filter(b => b.domain === domain);
+  results.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+
+  res.json({ ok: true, items: results, total: results.length });
+}));
+
+app.post("/api/user/bookmarks", asyncHandler(async (req, res) => {
+  const userId = req.actor?.userId || req.user?.id;
+  if (!userId || userId === "anon") return res.status(401).json({ ok: false, error: "authentication required" });
+
+  const { targetId, targetType, domain, metadata } = req.body;
+  if (!targetId || !domain) return res.status(400).json({ ok: false, error: "targetId and domain required" });
+
+  const universe = getOrCreateUserUniverse(userId);
+  universe.bookmarks = universe.bookmarks || new Map();
+
+  // Prevent duplicates
+  for (const [, bk] of universe.bookmarks) {
+    if (bk.targetId === targetId && bk.domain === domain) {
+      return res.json({ ok: true, bookmark: bk, duplicate: true });
+    }
+  }
+
+  const id = uid();
+  const bookmark = {
+    id, userId, targetId,
+    targetType: targetType || "item",
+    domain,
+    metadata: metadata || {},
+    createdAt: nowISO(),
+  };
+  universe.bookmarks.set(id, bookmark);
+  saveStateDebounced();
+
+  res.json({ ok: true, bookmark });
+}));
+
+app.delete("/api/user/bookmarks/:id", asyncHandler(async (req, res) => {
+  const userId = req.actor?.userId || req.user?.id;
+  if (!userId || userId === "anon") return res.status(401).json({ ok: false, error: "authentication required" });
+
+  const universe = getUserUniverse(userId);
+  if (!universe?.bookmarks) return res.json({ ok: true });
+
+  universe.bookmarks.delete(req.params.id);
+  saveStateDebounced();
+  res.json({ ok: true });
+}));
 
 // ── Global Browse API ────────────────────────────────────────────────────────
 app.get("/api/global/browse", (req, res) => {

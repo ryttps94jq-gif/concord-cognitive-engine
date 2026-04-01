@@ -178,7 +178,9 @@ export type SocketEvent =
   | 'government:update'
   | 'insurance:update'
   | 'lens:dtu_generated'
-  | 'agent:domain_insight';
+  | 'agent:domain_insight'
+  // Per-user tick events
+  | 'user:tick';
 
 // ---- Enriched Event Payload (Category 2+5: Concurrency + Observability) ----
 interface EnrichedPayload {

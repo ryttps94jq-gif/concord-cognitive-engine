@@ -13,6 +13,7 @@ import { api } from '@/lib/api/client';
 import { Activity, Filter, RefreshCw, Undo2, Copy, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUIStore } from '@/store/ui';
+import { useSocket } from '@/hooks/useSocket';
 
 interface EventItem {
   id: string;
@@ -44,41 +45,18 @@ export function ActivityFeed() {
   const [scopeFilter, setScopeFilter] = useState('');
   const limit = 25;
 
-  // SSE for live updates with reconnection
+  // Live updates via WebSocket (replaces SSE which lacks cookie auth support)
+  const { isConnected, on, off } = useSocket();
+
   useEffect(() => {
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5050';
-    let es: EventSource | null = null;
-    let retryTimeout: ReturnType<typeof setTimeout>;
-    let retryDelay = 1000;
-    let cancelled = false;
-
-    function connect() {
-      if (cancelled) return;
-      es = new EventSource(`${baseUrl}/api/events/stream`);
-
-      es.onopen = () => { retryDelay = 1000; };
-
-      es.onmessage = () => {
-        queryClient.invalidateQueries({ queryKey: ['activity-feed'] });
-      };
-
-      es.onerror = () => {
-        es?.close();
-        if (!cancelled) {
-          retryTimeout = setTimeout(connect, retryDelay);
-          retryDelay = Math.min(retryDelay * 2, 30000);
-        }
-      };
-    }
-
-    connect();
-
-    return () => {
-      cancelled = true;
-      clearTimeout(retryTimeout);
-      es?.close();
+    if (!isConnected) return;
+    const handler = () => {
+      queryClient.invalidateQueries({ queryKey: ['activity-feed'] });
     };
-  }, [queryClient]);
+    const events = ['dtu:created', 'dtu:updated', 'dtu:deleted', 'system:alert', 'lens:dtu_generated'];
+    events.forEach(e => on(e, handler));
+    return () => { events.forEach(e => off(e, handler)); };
+  }, [isConnected, on, off, queryClient]);
 
   const { data, isLoading, refetch } = useQuery<EventsResponse>({
     queryKey: ['activity-feed', offset, typeFilter, scopeFilter],
