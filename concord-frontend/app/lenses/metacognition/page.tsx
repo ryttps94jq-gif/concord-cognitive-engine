@@ -1313,7 +1313,7 @@ export default function MetacognitionLensPage() {
         </button>
         {showFeatures && (
           <div className="px-4 pb-4">
-            <LensFeaturePanel lensId="cognitive_cluster" />
+            <LensFeaturePanel lensId="metacognition" />
           </div>
         )}
       </div>

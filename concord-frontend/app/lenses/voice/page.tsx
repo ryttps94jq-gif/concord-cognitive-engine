@@ -316,7 +316,7 @@ export default function VoiceLensPage() {
         const url = URL.createObjectURL(blob);
         const audio = new Audio(url);
         audio.onended = () => { setIsPlaying(false); playbackAudioRef.current = null; };
-        audio.play();
+        audio.play().catch(() => { setIsPlaying(false); });
         playbackAudioRef.current = audio;
         setIsPlaying(true);
       }

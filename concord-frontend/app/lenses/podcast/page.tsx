@@ -127,7 +127,7 @@ export default function PodcastLensPage() {
       if (nowPlaying.playbackState === 'playing') {
         player.pause();
       } else {
-        player.play();
+        player.play().catch(() => {});
       }
       return;
     }
