@@ -358,7 +358,7 @@ function ItemCard({
             {item.creator.name[0]}
           </div>
           <span className="truncate">{item.creator.name}</span>
-          {item.creator.verified && <Check className="w-3 h-3 text-neon-cyan shrink-0" />}
+          {item.creator.verified && <Check className="w-3 h-3 text-amber-400 shrink-0" />}
         </div>
         <div className="flex items-center gap-1">
           {starRating(item.rating)}
@@ -372,10 +372,10 @@ function ItemCard({
           </div>
         )}
         <div className="flex items-center justify-between pt-2 border-t border-lattice-border">
-          <span className="text-neon-green font-bold text-sm">From {formatPrice(item.prices.basic)}</span>
+          <span className="text-amber-400 font-bold text-sm">From {formatPrice(item.prices.basic)}</span>
           <button onClick={(e) => { e.stopPropagation(); onAddToCart(item); }}
-            className="p-1.5 rounded-lg bg-neon-purple/20 text-neon-purple hover:bg-neon-purple/30 transition-colors">
-            <ShoppingCart className="w-3.5 h-3.5" />
+            className="px-2.5 py-1 rounded-lg bg-gradient-to-r from-amber-500/20 to-orange-500/20 text-amber-400 border border-amber-500/30 hover:from-amber-500/30 hover:to-orange-500/30 transition-all text-xs font-medium flex items-center gap-1">
+            <ShoppingCart className="w-3 h-3" /> Buy
           </button>
         </div>
       </div>
