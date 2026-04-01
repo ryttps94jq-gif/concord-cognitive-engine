@@ -234,7 +234,7 @@ export default function GameLensPage() {
 
   const [activeTab, setActiveTab] = useState<MainTab>('dashboard');
   const [lbPeriod, setLbPeriod] = useState<LeaderboardPeriod>('alltime');
-  const { items: shopLensItems } = useLensData<ShopItem>('game', 'shop-item', {
+  const { items: shopLensItems, update: updateShopItem } = useLensData<ShopItem>('game', 'shop-item', {
     seed: SHOP_ITEMS.map(s => ({ title: s.name, data: s as unknown as Record<string, unknown> })),
   });
   const [shopItems, setShopItems] = useState<ShopItem[]>([]);
@@ -257,7 +257,7 @@ export default function GameLensPage() {
   const achievements: Achievement[] = achievementItems.map(i => ({ ...(i.data as unknown as Achievement), id: i.id }));
 
   // Fetch challenges/quests via useLensData
-  const { items: questItems, isError: isError2, error: error2, refetch: refetch2 } = useLensData<Quest>('game', 'quest', { seed: [] });
+  const { items: questItems, isError: isError2, error: error2, refetch: refetch2, create: createQuest } = useLensData<Quest>('game', 'quest', { seed: [] });
   const quests: Quest[] = questItems.map(i => ({ ...(i.data as unknown as Quest), id: i.id }));
 
   // Fetch profile via useLensData
@@ -295,7 +295,9 @@ export default function GameLensPage() {
   // Quest flow
   const acceptQuest = useCallback((id: string) => {
     setQuestStatusOverrides(prev => ({ ...prev, [id]: 'accepted' as QuestStatus }));
-  }, []);
+    updateQuest(id, { data: { status: 'accepted' } as unknown as Partial<Quest> })
+      .catch(err => console.error('Failed to accept quest:', err instanceof Error ? err.message : err));
+  }, [updateQuest]);
 
   const completeQuest = useCallback((id: string) => {
     const quest = quests.find((q) => q.id === id);
@@ -311,7 +313,9 @@ export default function GameLensPage() {
     if (!item || item.owned || playerXp < item.cost) return;
     setShopItems((prev) => prev.map((i) => (i.id === id ? { ...i, owned: true } : i)));
     setPlayerXp((prev) => prev - item.cost);
-  }, [shopItems, playerXp]);
+    updateShopItem(id, { data: { owned: true } as unknown as Partial<ShopItem> })
+      .catch(err => console.error('Failed to persist shop purchase:', err instanceof Error ? err.message : err));
+  }, [shopItems, playerXp, updateShopItem]);
 
   // Achievement unlock (optimistic UI - will refresh from API on next fetch)
   const [achievementOverrides, setAchievementOverrides] = useState<Record<string, boolean>>({});
@@ -332,11 +336,14 @@ export default function GameLensPage() {
   const allQuests = useMemo(() => [...effectiveQuests, ...localQuests], [effectiveQuests, localQuests]);
   const submitChallenge = useCallback(() => {
     if (!newChallenge.name.trim()) return;
-    const id = `q-custom-${Date.now()}`;
-    setLocalQuests((prev) => [...prev, { id, name: newChallenge.name, description: newChallenge.description, icon: '🎯', xpReward: newChallenge.xpReward, difficulty: newChallenge.difficulty, type: 'challenge', status: 'available' }]);
+    const questData: Quest = { id: `q-custom-${Date.now()}`, name: newChallenge.name, description: newChallenge.description, icon: '🎯', xpReward: newChallenge.xpReward, difficulty: newChallenge.difficulty, type: 'challenge', status: 'available' };
+    setLocalQuests((prev) => [...prev, questData]);
+    createQuest({ title: questData.name, data: questData as unknown as Record<string, unknown>, meta: { status: 'active', tags: ['challenge', questData.difficulty] } })
+      .then(() => { refetch2(); })
+      .catch(err => console.error('Failed to persist challenge:', err instanceof Error ? err.message : err));
     setNewChallenge({ name: '', description: '', difficulty: 'medium', xpReward: 300 });
     setShowCreateChallenge(false);
-  }, [newChallenge]);
+  }, [newChallenge, createQuest, refetch2]);
 
   // Computed
   const filteredQuests = useMemo(() => {

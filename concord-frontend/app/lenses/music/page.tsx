@@ -23,7 +23,7 @@ import type {
 import { previewRoyaltyObligations, ROYALTY_CONSTANTS } from '@/lib/music/royalty-cascade';
 import { TrackCard } from '@/components/music/TrackCard';
 import { ArtistProfile } from '@/components/music/ArtistProfile';
-// AlbumView unused until album data is wired — albums show placeholder for now
+// AlbumView unused — album support pending
 import { UploadFlow } from '@/components/music/UploadFlow';
 import { PlaylistView } from '@/components/music/PlaylistView';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -31,54 +31,14 @@ import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
 
 // ============================================================================
-// Sample Data — seeds for development (replaced by API in production)
+// Seed Data — empty; all data comes from the backend API
 // ============================================================================
 
-function generateSampleTrack(id: string, title: string, artist: string, genre: string, bpm: number, key: string, duration: number): MusicTrack {
-  return {
-    id, title, artistId: `artist-${artist.toLowerCase().replace(/\s/g, '-')}`,
-    artistName: artist, albumId: null, albumTitle: null, coverArtUrl: null,
-    audioUrl: `/api/audio/stream/${id}`, previewUrl: null, duration, trackNumber: null,
-    genre, subGenre: null, tags: [genre], bpm, key, loudnessLUFS: -14,
-    spectralCentroid: 2000, onsetDensity: 4, waveformPeaks: Array.from({ length: 200 }, () => Math.random() * 0.8),
-    tiers: [
-      { tier: 'listen', enabled: true, price: 0, currency: 'USD', maxLicenses: null, licensesIssued: 0 },
-      { tier: 'create', enabled: true, price: 9.99, currency: 'USD', maxLicenses: null, licensesIssued: 0 },
-      { tier: 'commercial', enabled: true, price: 99.99, currency: 'USD', maxLicenses: null, licensesIssued: 0 },
-    ],
-    playCount: Math.floor(Math.random() * 50000), purchaseCount: Math.floor(Math.random() * 200),
-    remixCount: Math.floor(Math.random() * 20), parentTrackId: null, parentArtistId: null,
-    parentTitle: null, lineageDepth: 0, stems: [], releaseDate: '2026-02-15T00:00:00Z',
-    createdAt: '2026-02-15T00:00:00Z', updatedAt: '2026-02-15T00:00:00Z',
-    isExplicit: false, lyrics: null, credits: [], chromaprintHash: null,
-  };
-}
+const SEED_TRACKS: MusicTrack[] = [];
 
-const SEED_TRACKS: MusicTrack[] = [
-  generateSampleTrack('t1', 'Substrate Dreams', 'Luna Wave', 'electronic', 128, 'Am', 245),
-  generateSampleTrack('t2', 'Lattice Pulse', 'Neon Archive', 'techno', 135, 'Dm', 312),
-  generateSampleTrack('t3', 'Sovereign Groove', 'The DTU Collective', 'house', 124, 'Fm', 198),
-  generateSampleTrack('t4', 'Cognitive Drift', 'Atlas Mind', 'ambient', 80, 'C', 420),
-  generateSampleTrack('t5', 'Resonance Field', 'Luna Wave', 'electronic', 140, 'Em', 267),
-  generateSampleTrack('t6', 'Cascade Theory', 'Zero Point', 'drum & bass', 174, 'Gm', 195),
-  generateSampleTrack('t7', 'Neural Bloom', 'Harmonic State', 'lo-fi', 85, 'Bb', 178),
-  generateSampleTrack('t8', 'Void Walker', 'Neon Archive', 'techno', 138, 'Cm', 342),
-  generateSampleTrack('t9', 'Crystal Lattice', 'Prism Effect', 'ambient', 72, 'D', 510),
-  generateSampleTrack('t10', 'Event Horizon', 'The DTU Collective', 'electronic', 130, 'Ab', 289),
-  generateSampleTrack('t11', 'Thought Engine', 'Atlas Mind', 'experimental', 110, 'F#m', 356),
-  generateSampleTrack('t12', 'Phase Shift', 'Zero Point', 'drum & bass', 170, 'Eb', 210),
-];
+const SEED_ARTISTS: Artist[] = [];
 
-const SEED_ARTISTS: Artist[] = [
-  { id: 'artist-luna-wave', name: 'Luna Wave', avatarUrl: null, bannerUrl: null, bio: 'Electronic artist exploring the intersection of synthesis and consciousness.', verified: true, genres: ['electronic', 'ambient'], links: [], associatedLenses: ['studio'], stats: { totalTracks: 24, totalAlbums: 3, totalPlays: 125000, totalPurchases: 1200, totalRevenue: 8540, citationRoyaltyIncome: 320, remixRoyaltyIncome: 890, remixesOfWork: 15 }, joinedAt: '2025-06-01T00:00:00Z' },
-  { id: 'artist-neon-archive', name: 'Neon Archive', avatarUrl: null, bannerUrl: null, bio: 'Techno producer from the depths of the lattice.', verified: true, genres: ['techno', 'house'], links: [], associatedLenses: ['studio', 'art'], stats: { totalTracks: 18, totalAlbums: 2, totalPlays: 89000, totalPurchases: 800, totalRevenue: 5200, citationRoyaltyIncome: 150, remixRoyaltyIncome: 420, remixesOfWork: 8 }, joinedAt: '2025-08-15T00:00:00Z' },
-  { id: 'artist-the-dtu-collective', name: 'The DTU Collective', avatarUrl: null, bannerUrl: null, bio: 'Collaborative group. Every beat is a DTU.', verified: false, genres: ['electronic', 'house'], links: [], associatedLenses: ['studio'], stats: { totalTracks: 12, totalAlbums: 1, totalPlays: 45000, totalPurchases: 350, totalRevenue: 2100, citationRoyaltyIncome: 80, remixRoyaltyIncome: 210, remixesOfWork: 5 }, joinedAt: '2025-10-01T00:00:00Z' },
-];
-
-const SEED_PLAYLISTS: Playlist[] = [
-  { id: 'pl1', name: 'Substrate Selections', description: 'Curated electronic from the lattice', coverArtUrl: null, creatorId: 'user-1', creatorName: 'Sovereign', isCollaborative: false, isPublic: true, tracks: SEED_TRACKS.slice(0, 5).map((t, i) => ({ trackId: t.id, track: t, addedAt: '2026-02-15T00:00:00Z', addedBy: 'user-1', position: i })), totalDuration: 1442, createdAt: '2026-02-15T00:00:00Z', updatedAt: '2026-02-15T00:00:00Z' },
-  { id: 'pl2', name: 'Deep Focus', description: 'Ambient and lo-fi for concentration', coverArtUrl: null, creatorId: 'user-1', creatorName: 'Sovereign', isCollaborative: false, isPublic: true, tracks: [SEED_TRACKS[3], SEED_TRACKS[6], SEED_TRACKS[8]].map((t, i) => ({ trackId: t.id, track: t, addedAt: '2026-02-15T00:00:00Z', addedBy: 'user-1', position: i })), totalDuration: 1108, createdAt: '2026-02-15T00:00:00Z', updatedAt: '2026-02-15T00:00:00Z' },
-];
+const SEED_PLAYLISTS: Playlist[] = [];
 
 // ============================================================================
 // Music Lens Page

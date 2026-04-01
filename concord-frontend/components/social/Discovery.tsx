@@ -392,9 +392,7 @@ export function Discovery({
   const usersQuery = useQuery({
     queryKey: ['discover-users', currentUserId],
     queryFn: async () => {
-      const res = await api.get('/api/social/discover', {
-        params: { userId: currentUserId, limit: 20 },
-      });
+      const res = await api.get(`/api/social/discover/${currentUserId}`);
       return (res.data.suggestions || []) as SuggestedUser[];
     },
     enabled: activeTab === 'users',

@@ -194,7 +194,7 @@ function createDefaultDrumPads(): DrumPad[] {
 export default function StudioLensPage() {
   useLensNav('studio');
   const { latestData: realtimeData, alerts: _realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('studio');
-  const { isLoading: _isLoading, isError: _isError, error: _error, refetch: _refetch, create: createLensItem } = useLensData('studio', 'project', { noSeed: true });
+  const { isLoading: _isLoading, isError: _isError, error: _error, refetch: _refetch, create: createLensItem, update: updateLensItem } = useLensData('studio', 'project', { noSeed: true });
   const queryClient = useQueryClient();
 
   // ---- State ----
@@ -330,7 +330,12 @@ export default function StudioLensPage() {
     setNewTitle('');
     transportRef.current?.updateConfig({ bpm: proj.bpm, timeSignature: proj.timeSignature });
     emitSessionDTU(proj, 'Project created');
-  }, [newTitle, newBpm, newKey, newGenre]);
+    createLensItem({
+      title: proj.title,
+      data: proj as unknown as Record<string, unknown>,
+      meta: { status: 'active', tags: [proj.key, `${proj.bpm}bpm`, proj.genre].filter(Boolean) as string[] },
+    }).catch(err => console.error('Failed to persist project:', err instanceof Error ? err.message : err));
+  }, [newTitle, newBpm, newKey, newGenre, createLensItem]);
 
   // ---- Transport controls ----
   const handlePlay = useCallback(() => {
@@ -733,7 +738,11 @@ export default function StudioLensPage() {
   const handleSave = useCallback(() => {
     if (!project) return;
     emitSessionDTU(project, 'Manual save');
-  }, [project]);
+    updateLensItem(project.id, {
+      title: project.title,
+      data: project as unknown as Record<string, unknown>,
+    }).catch(err => console.error('Failed to save project:', err instanceof Error ? err.message : err));
+  }, [project, updateLensItem]);
 
   // ---- Synth operations ----
   const handleSelectSynthPreset = useCallback((preset: SynthPreset) => {

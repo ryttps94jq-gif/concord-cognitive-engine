@@ -301,9 +301,9 @@ export function UserProfile({
         const res = await api.get(`/api/media/author/${userId}`, { params: { limit: 20, viewerId: currentUserId } });
         return (res.data.media || []) as FeedItem[];
       }
-      // For posts/dtus/liked, use the social feed
-      const res = await api.get(`/api/social/feed/${userId}`, { params: { limit: 20 } });
-      return (res.data.feed || []) as FeedItem[];
+      // For posts/dtus/liked, use the user's posts endpoint
+      const res = await api.get(`/api/social/posts/${userId}`, { params: { limit: 20 } });
+      return (res.data.posts || res.data.feed || []) as FeedItem[];
     },
   });
 
