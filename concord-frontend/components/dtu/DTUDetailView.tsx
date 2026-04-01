@@ -19,11 +19,10 @@ import { DTUIntegrityBadge } from './DTUIntegrityBadge';
 import { ProvenanceBadge } from './ProvenanceBadge';
 import {
   X, Clock, GitBranch, Tag, FileText, Zap, Crown, Ghost,
-  Copy, ExternalLink, ChevronRight, Download, Upload,
+  Copy, ChevronRight, Download,
   Music, Image as ImageIcon, Video, Code, FileType,
 } from 'lucide-react';
 import { ArtifactRenderer } from '@/components/artifact/ArtifactRenderer';
-import { DTUImportZone } from '@/components/lens/DTUImportZone';
 import { TierBadge, TierBadgeDetail, TierPromotionTimeline } from './TierBadge';
 
 interface DTUDetailViewProps {
