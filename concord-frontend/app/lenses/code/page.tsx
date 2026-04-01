@@ -618,9 +618,50 @@ export default function CodeLensPage() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [outputTab, setOutputTab] = useState<'output' | 'console'>('output');
   const [showFeatures, setShowFeatures] = useState(false);
+  const [showForge, setShowForge] = useState(false);
+  const [forgePrompt, setForgePrompt] = useState('');
+  const [forgeResult, setForgeResult] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
+
+  // Forge App Generation mutation
+  const forgeAppMutation = useMutation({
+    mutationFn: async (description: string) => {
+      const res = await api.post('/api/lens/run', {
+        domain: 'code',
+        action: 'forge-generate',
+        input: { description, format: 'single-file-monolith' },
+      });
+      return res.data;
+    },
+    onSuccess: (data) => {
+      const content = typeof data?.result === 'string'
+        ? data.result
+        : typeof data?.result?.content === 'string'
+          ? data.result.content
+          : typeof data?.result?.code === 'string'
+            ? data.result.code
+            : JSON.stringify(data?.result || {}, null, 2);
+      setForgeResult(content);
+      // Also open as a new tab for editing
+      const id = `forge-${Date.now()}`;
+      const newTab: Tab = {
+        id,
+        name: `forge_app_${Date.now().toString(36)}.js`,
+        language: 'javascript',
+        content,
+        isDirty: true,
+        scriptType: 'macro',
+      };
+      setTabs(prev => [...prev, newTab]);
+      setActiveTabId(id);
+      setShowForge(false);
+    },
+    onError: (error: Record<string, unknown>) => {
+      setForgeResult(`// Forge generation error: ${String(error.message || 'Unknown error')}\n// Try describing your app in more detail.`);
+    },
+  });
 
   const [savingOutputDTU, setSavingOutputDTU] = useState(false);
 
@@ -898,6 +939,15 @@ export default function CodeLensPage() {
               <Play className="w-4 h-4" />
             )}
             Run Script
+          </button>
+
+          <button
+            onClick={() => setShowForge(!showForge)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${showForge ? 'bg-purple-600/20 text-purple-400 border border-purple-600/30' : 'bg-lattice-elevated text-gray-300 hover:text-white'}`}
+            title="Generate Forge App"
+          >
+            <Sparkles className="w-4 h-4" />
+            Forge App
           </button>
 
           <button

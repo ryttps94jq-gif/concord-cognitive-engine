@@ -4,12 +4,15 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useState } from 'react';
-import { Users, Plus, Terminal, GitFork, Activity, Play } from 'lucide-react';
+import { Users, Plus, Terminal, GitFork, Activity, Play, Brain, X } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
+import QualiaSensoryFeed from '@/components/emergent/QualiaSensoryFeed';
+import QualiaBodyMap from '@/components/emergent/QualiaBodyMap';
+import PresenceDashboard from '@/components/emergent/PresenceDashboard';
 
 interface Entity {
   id: string;

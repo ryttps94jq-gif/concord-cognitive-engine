@@ -79,6 +79,7 @@ export function AppShell({ children }: AppShellProps) {
 
   return (
     <div className="flex h-screen overflow-hidden bg-lattice-void">
+      <ConnectionStatus />
       {/* FE-013: Skip-to-content link for keyboard navigation */}
       <a
         href="#main-content"

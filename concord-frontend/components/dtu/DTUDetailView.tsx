@@ -444,6 +444,44 @@ export function DTUDetailView({ dtuId, onClose, onNavigate }: DTUDetailViewProps
                     contentHash={dtu.meta?.contentHash as string}
                   />
 
+                  {/* Royalty Earnings Summary */}
+                  {cascadeData?.ok && (cascadeData.totalEarned > 0 || cascadeData.totalTransactions > 0) && (
+                    <div className="p-3 rounded-lg bg-neon-green/5 border border-neon-green/20">
+                      <h3 className="text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
+                        <DollarSign className="w-4 h-4 text-neon-green" />
+                        Royalties
+                      </h3>
+                      <div className="flex items-center gap-4 text-sm">
+                        <span className="text-gray-400">
+                          This DTU has earned{' '}
+                          <span className="text-neon-green font-mono font-bold">
+                            {cascadeData.totalEarned.toFixed(2)} CC
+                          </span>
+                          {' '}in royalties across{' '}
+                          <span className="text-white font-medium">{cascadeData.totalTransactions}</span>
+                          {' '}transaction{cascadeData.totalTransactions !== 1 ? 's' : ''}
+                        </span>
+                      </div>
+                      {cascadeData.ancestors.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          {cascadeData.ancestors.slice(0, 5).map((a, i) => (
+                            <div key={i} className="flex items-center justify-between text-xs">
+                              <span className="text-gray-400 truncate max-w-[160px]">
+                                Gen {a.generation}: {a.creatorId}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-neon-pink font-mono">{a.ratePercent}</span>
+                                {a.totalEarned > 0 && (
+                                  <span className="text-neon-green font-mono">{a.totalEarned.toFixed(2)} CC</span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Tier consolidation details */}
                   {(dtu.tier === 'mega' || dtu.tier === 'hyper' || dtu.meta?.consolidated) && (
                     <div className="pt-2 border-t border-lattice-border">

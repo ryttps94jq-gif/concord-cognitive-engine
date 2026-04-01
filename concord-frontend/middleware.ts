@@ -18,6 +18,7 @@ const PUBLIC_PREFIXES = [
   '/_next/',
   '/icons/',
   '/legal/',
+  '/dtu/',
   '/manifest.json',
   '/robots.txt',
   '/favicon.ico',
