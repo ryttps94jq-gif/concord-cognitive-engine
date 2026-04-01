@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useQuery } from '@tanstack/react-query';
@@ -9,7 +10,7 @@ import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   Scale, Plus, Search, Trash2, Users, MessageSquare,
   ThumbsUp, ThumbsDown, Clock, Layers, ChevronDown, Zap,
-  ChevronUp, Send,
+  ChevronUp, Send, Timer, Trophy, BarChart2, TrendingUp,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';

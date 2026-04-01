@@ -3,7 +3,8 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useState } from 'react';
-import { Scale, Gavel, FileText, CheckCircle, XCircle, AlertTriangle, Plus, Layers, ChevronDown, BookOpen, Shield, Users, Clock, Copy } from 'lucide-react';
+import { Scale, Gavel, FileText, CheckCircle, XCircle, AlertTriangle, Plus, Layers, ChevronDown, BookOpen, Shield, Users, Clock, Copy, Globe, Calendar, ChevronRight } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -12,11 +13,43 @@ import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { ConnectiveTissueBar } from '@/components/lens/ConnectiveTissueBar';
 
+const JURISDICTIONS = ['US', 'EU', 'UK', 'CA', 'AU', 'INT'] as const;
+type Jurisdiction = typeof JURISDICTIONS[number];
+
+const JURISDICTION_COLORS: Record<Jurisdiction, string> = {
+  US:  'bg-blue-400/15 border-blue-400/30 text-blue-400',
+  EU:  'bg-indigo-400/15 border-indigo-400/30 text-indigo-400',
+  UK:  'bg-purple-400/15 border-purple-400/30 text-purple-400',
+  CA:  'bg-red-400/15 border-red-400/30 text-red-400',
+  AU:  'bg-yellow-400/15 border-yellow-400/30 text-yellow-400',
+  INT: 'bg-teal-400/15 border-teal-400/30 text-teal-400',
+};
+
+const CASE_STATUSES = ['open', 'in-review', 'hearing', 'closed'] as const;
+type CaseStatus = typeof CASE_STATUSES[number];
+
+const STATUS_COLORS: Record<CaseStatus, string> = {
+  'open':      'bg-blue-400/15 border-blue-400/30 text-blue-400',
+  'in-review': 'bg-yellow-400/15 border-yellow-400/30 text-yellow-400',
+  'hearing':   'bg-orange-400/15 border-orange-400/30 text-orange-400',
+  'closed':    'bg-green-400/15 border-green-400/30 text-green-400',
+};
+
+// Days until deadline countdown
+function deadlineDays(deadlineStr: string): number | null {
+  if (!deadlineStr) return null;
+  const diff = new Date(deadlineStr).getTime() - Date.now();
+  return Math.ceil(diff / (1000 * 60 * 60 * 24));
+}
+
 export default function LawLensPage() {
   useLensNav('law');
   const [testProposal, setTestProposal] = useState('');
   const [gateResult, setGateResult] = useState<{ passed: boolean; reasons: string[] } | null>(null);
   const [newCaseTitle, setNewCaseTitle] = useState('');
+  const [newCaseJurisdiction, setNewCaseJurisdiction] = useState<Jurisdiction>('US');
+  const [newCaseDeadline, setNewCaseDeadline] = useState('');
+  const [expandedCase, setExpandedCase] = useState<string | null>(null);
   const [showFeatures, setShowFeatures] = useState(false);
   const { latestData: realtimeData, isLive, lastUpdated, insights } = useRealtimeLens('law');
 
@@ -32,8 +65,23 @@ export default function LawLensPage() {
 
   const handleCreateCase = () => {
     if (!newCaseTitle.trim()) return;
-    createCase({ title: newCaseTitle, data: { jurisdiction: 'US', frameworks: ['GDPR', 'CCPA', 'DMCA'] }, meta: { status: 'open' } });
+    createCase({
+      title: newCaseTitle,
+      data: {
+        jurisdiction: newCaseJurisdiction,
+        frameworks: ['GDPR', 'CCPA', 'DMCA'],
+        deadline: newCaseDeadline || null,
+        timeline: [
+          { label: 'Filed', date: new Date().toISOString(), done: true },
+          { label: 'Review', date: '', done: false },
+          { label: 'Hearing', date: '', done: false },
+          { label: 'Ruling', date: '', done: false },
+        ],
+      },
+      meta: { status: 'open' },
+    });
     setNewCaseTitle('');
+    setNewCaseDeadline('');
   };
 
   const handleGateCheck = () => {
@@ -159,38 +207,159 @@ export default function LawLensPage() {
           <FileText className="w-4 h-4 text-neon-cyan" />
           Case Files
         </h2>
-        <div className="flex gap-2 mb-4">
+
+        {/* New case form */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-4">
           <input
             type="text"
             value={newCaseTitle}
             onChange={(e) => setNewCaseTitle(e.target.value)}
-            placeholder="New case file title..."
-            className="input-lattice flex-1"
+            placeholder="Case title..."
+            className="input-lattice md:col-span-2"
           />
-          <button onClick={handleCreateCase} className="btn-neon purple">
-            <Plus className="w-4 h-4 mr-1 inline" />
-            Create
-          </button>
+          <select
+            value={newCaseJurisdiction}
+            onChange={e => setNewCaseJurisdiction(e.target.value as Jurisdiction)}
+            className="input-lattice"
+          >
+            {JURISDICTIONS.map(j => <option key={j} value={j}>{j}</option>)}
+          </select>
+          <div className="flex gap-2">
+            <input
+              type="date"
+              value={newCaseDeadline}
+              onChange={e => setNewCaseDeadline(e.target.value)}
+              className="input-lattice flex-1 text-xs"
+              title="Filing deadline"
+            />
+            <button onClick={handleCreateCase} className="btn-neon purple px-3">
+              <Plus className="w-4 h-4" />
+            </button>
+          </div>
         </div>
+
         <div className="space-y-2">
           {caseItems.length === 0 ? (
             <p className="text-center py-4 text-gray-500 text-sm">No case files yet</p>
           ) : (
-            caseItems.map((item) => (
-              <div key={item.id} className="lens-card">
-                <div className="flex items-center justify-between">
-                  <p className="font-medium">{item.title}</p>
-                  <span className={`text-xs px-2 py-0.5 rounded ${
-                    item.meta?.status === 'open' ? 'bg-blue-400/20 text-blue-400' : 'bg-green-400/20 text-green-400'
-                  }`}>
-                    {item.meta?.status || 'draft'}
-                  </span>
-                </div>
-                <p className="text-xs text-gray-400 mt-1">
-                  Created {new Date(item.createdAt).toLocaleDateString()}
-                </p>
-              </div>
-            ))
+            caseItems.map((item) => {
+              const jurisdiction = (item.data as Record<string, unknown>)?.jurisdiction as Jurisdiction || 'US';
+              const deadline = (item.data as Record<string, unknown>)?.deadline as string | null;
+              const timeline = ((item.data as Record<string, unknown>)?.timeline as { label: string; date: string; done: boolean }[]) || [];
+              const status = (item.meta?.status as CaseStatus) || 'open';
+              const daysLeft = deadline ? deadlineDays(deadline) : null;
+              const isExpanded = expandedCase === item.id;
+
+              return (
+                <motion.div key={item.id} layout className="lens-card overflow-hidden p-0">
+                  {/* Case header */}
+                  <div
+                    className="flex items-center justify-between p-3 cursor-pointer hover:bg-white/5 transition-colors"
+                    onClick={() => setExpandedCase(isExpanded ? null : item.id)}
+                  >
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <ChevronRight className={`w-3.5 h-3.5 text-gray-500 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                      <p className="font-medium text-sm">{item.title}</p>
+                      {/* Jurisdiction badge */}
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium flex items-center gap-1 ${JURISDICTION_COLORS[jurisdiction] || JURISDICTION_COLORS.US}`}>
+                        <Globe className="w-2.5 h-2.5" />
+                        {jurisdiction}
+                      </span>
+                      {/* Status badge */}
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${STATUS_COLORS[status] || STATUS_COLORS.open}`}>
+                        {status}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {/* Deadline countdown */}
+                      {daysLeft !== null && (
+                        <span className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border ${
+                          daysLeft <= 3
+                            ? 'bg-red-400/15 border-red-400/30 text-red-400'
+                            : daysLeft <= 14
+                            ? 'bg-yellow-400/15 border-yellow-400/30 text-yellow-400'
+                            : 'bg-gray-600/20 border-gray-600/30 text-gray-400'
+                        }`}>
+                          <Calendar className="w-2.5 h-2.5" />
+                          {daysLeft > 0 ? `${daysLeft}d` : daysLeft === 0 ? 'Today' : 'Overdue'}
+                        </span>
+                      )}
+                      <span className="text-xs text-gray-500">{new Date(item.createdAt).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+
+                  {/* Expanded: timeline */}
+                  <AnimatePresence>
+                    {isExpanded && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="border-t border-white/10 px-4 py-3 overflow-hidden"
+                      >
+                        <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-3">Case Timeline</p>
+                        <div className="flex items-start gap-0">
+                          {(timeline.length > 0 ? timeline : [
+                            { label: 'Filed', done: true },
+                            { label: 'Review', done: false },
+                            { label: 'Hearing', done: false },
+                            { label: 'Ruling', done: false },
+                          ]).map((step, idx, arr) => (
+                            <div key={step.label} className="flex-1 flex flex-col items-center">
+                              <div className="flex items-center w-full">
+                                {/* Line before */}
+                                {idx > 0 && (
+                                  <div className={`flex-1 h-0.5 ${step.done ? 'bg-neon-purple' : 'bg-white/10'}`} />
+                                )}
+                                {/* Node */}
+                                <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border-2 ${
+                                  step.done
+                                    ? 'bg-neon-purple border-neon-purple'
+                                    : idx === arr.findIndex(s => !s.done)
+                                    ? 'bg-yellow-400/20 border-yellow-400'
+                                    : 'bg-black/40 border-white/20'
+                                }`}>
+                                  {step.done ? (
+                                    <CheckCircle className="w-3 h-3 text-white" />
+                                  ) : (
+                                    <span className="w-2 h-2 rounded-full bg-white/20" />
+                                  )}
+                                </div>
+                                {/* Line after */}
+                                {idx < arr.length - 1 && (
+                                  <div className={`flex-1 h-0.5 ${arr[idx + 1]?.done ? 'bg-neon-purple' : 'bg-white/10'}`} />
+                                )}
+                              </div>
+                              <p className={`text-[10px] mt-1.5 text-center ${step.done ? 'text-neon-purple' : 'text-gray-500'}`}>
+                                {step.label}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                        {deadline && (
+                          <div className={`mt-3 p-2 rounded-lg flex items-center gap-2 text-xs ${
+                            (daysLeft ?? 99) <= 3
+                              ? 'bg-red-400/10 border border-red-400/20 text-red-400'
+                              : 'bg-yellow-400/10 border border-yellow-400/20 text-yellow-400'
+                          }`}>
+                            <Calendar className="w-3.5 h-3.5 shrink-0" />
+                            <span>
+                              Filing deadline: {new Date(deadline).toLocaleDateString()}
+                              {daysLeft !== null && (
+                                <span className="font-semibold ml-1">
+                                  ({daysLeft > 0 ? `${daysLeft} days remaining` : daysLeft === 0 ? 'Due today' : 'OVERDUE'})
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                        )}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </motion.div>
+              );
+            })
           )}
         </div>
       </div>
@@ -327,6 +496,22 @@ export default function LawLensPage() {
               ))}
             </div>
           </div>
+        </div>
+
+        {/* Document Category Color Legend */}
+        <div className="flex flex-wrap gap-2 mb-4">
+          <span className="text-xs text-gray-500">Document categories:</span>
+          {[
+            { label: 'Data Protection', color: 'text-neon-cyan', dot: 'bg-neon-cyan' },
+            { label: 'Intellectual Property', color: 'text-neon-purple', dot: 'bg-neon-purple' },
+            { label: 'Liability', color: 'text-neon-green', dot: 'bg-neon-green' },
+            { label: 'Termination', color: 'text-yellow-400', dot: 'bg-yellow-400' },
+          ].map(cat => (
+            <span key={cat.label} className="flex items-center gap-1 text-xs text-gray-400">
+              <span className={`w-2 h-2 rounded-full ${cat.dot}`} />
+              {cat.label}
+            </span>
+          ))}
         </div>
 
         {/* Contract Assembly Status */}

@@ -97,6 +97,22 @@ export default function GameDesignPage() {
   const [mechCategory, setMechCategory] = useState('Core Loop');
   const [mechComplexity, setMechComplexity] = useState<'low' | 'medium' | 'high'>('medium');
 
+  // Narrative state
+  const [characters, setCharacters] = useState<{ name: string; role: string; description: string }[]>([]);
+  const [storyBeats, setStoryBeats] = useState<string[]>([]);
+  const [showCharForm, setShowCharForm] = useState(false);
+  const [charName, setCharName] = useState('');
+  const [charRole, setCharRole] = useState('');
+  const [charDesc, setCharDesc] = useState('');
+  const [newBeat, setNewBeat] = useState('');
+
+  // Levels state
+  const [levels, setLevels] = useState<{ name: string; difficulty: string; description: string }[]>([]);
+  const [showLevelForm, setShowLevelForm] = useState(false);
+  const [levelName, setLevelName] = useState('');
+  const [levelDifficulty, setLevelDifficulty] = useState('easy');
+  const [levelDesc, setLevelDesc] = useState('');
+
   const handleCreate = useCallback(async () => {
     if (!newTitle.trim()) return;
     const data: Partial<GameDesignProject> = {
@@ -114,6 +130,30 @@ export default function GameDesignPage() {
     setNewDesc('');
     refetch();
   }, [newTitle, newGenre, newDesc, newPlatform, createProject, refetch]);
+
+  const handleAddCharacter = useCallback(() => {
+    if (!charName.trim()) return;
+    setCharacters(prev => [...prev, { name: charName, role: charRole, description: charDesc }]);
+    setCharName('');
+    setCharRole('');
+    setCharDesc('');
+    setShowCharForm(false);
+  }, [charName, charRole, charDesc]);
+
+  const handleAddBeat = useCallback(() => {
+    if (!newBeat.trim()) return;
+    setStoryBeats(prev => [...prev, newBeat]);
+    setNewBeat('');
+  }, [newBeat]);
+
+  const handleAddLevel = useCallback(() => {
+    if (!levelName.trim()) return;
+    setLevels(prev => [...prev, { name: levelName, difficulty: levelDifficulty, description: levelDesc }]);
+    setLevelName('');
+    setLevelDifficulty('easy');
+    setLevelDesc('');
+    setShowLevelForm(false);
+  }, [levelName, levelDifficulty, levelDesc]);
 
   const handleAddMechanic = useCallback(async () => {
     if (!mechName.trim()) return;
@@ -141,7 +181,9 @@ export default function GameDesignPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Gamepad2 className="w-6 h-6 text-emerald-400" />
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/30 to-teal-500/30 border border-emerald-500/20 flex items-center justify-center">
+              <Gamepad2 className="w-6 h-6 text-emerald-400" />
+            </div>
             <h1 className="text-2xl font-bold">Game Design</h1>
             <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} />
           </div>
@@ -193,6 +235,25 @@ export default function GameDesignPage() {
                       <button onClick={e => { e.stopPropagation(); removeProject(proj.id).catch(() => {}); refetch(); }} className="p-1 hover:bg-white/10 rounded text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
                     {proj.description && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{proj.description}</p>}
+                    {/* Dev phase progress */}
+                    <div className="mt-3 flex items-center gap-1.5">
+                      {(['concept', 'pre-production', 'production', 'testing', 'released'] as const).map((phase, idx) => {
+                        const phaseOrder = ['concept', 'pre-production', 'production', 'testing', 'released'];
+                        const currentIdx = phaseOrder.indexOf(proj.status || 'concept');
+                        const isPast = idx < currentIdx;
+                        const isCurrent = idx === currentIdx;
+                        return (
+                          <div key={phase} className="flex items-center gap-1.5">
+                            <div className={cn(
+                              'w-2 h-2 rounded-full transition-colors',
+                              isCurrent ? 'bg-emerald-400 ring-2 ring-emerald-400/30' : isPast ? 'bg-emerald-600' : 'bg-white/15'
+                            )} title={phase} />
+                            {idx < 4 && <div className={cn('h-px w-3', isPast ? 'bg-emerald-600' : 'bg-white/10')} />}
+                          </div>
+                        );
+                      })}
+                      <span className="ml-1 text-[10px] text-gray-500">{proj.status || 'concept'}</span>
+                    </div>
                   </motion.div>
                 ))}
               </div>
@@ -269,20 +330,154 @@ export default function GameDesignPage() {
 
         {/* Narrative */}
         {tab === 'narrative' && (
-          <div className="text-center py-16 text-gray-500">
-            <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-30" />
-            <p className="text-sm mb-2">Narrative Design</p>
-            <p className="text-xs text-gray-600">Build branching storylines, character profiles, and dialogue trees.</p>
-            <div className="mt-4 text-xs text-gray-600">Design DTUs: {contextDTUs.length}</div>
+          <div className="space-y-6">
+            {/* Characters section */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold flex items-center gap-2">
+                  <Users className="w-5 h-5 text-emerald-400" /> Characters
+                </h2>
+                <button onClick={() => setShowCharForm(!showCharForm)} className="px-3 py-1.5 text-xs bg-emerald-500/20 rounded-lg hover:bg-emerald-500/30 flex items-center gap-1">
+                  <Plus className="w-3 h-3" /> Add Character
+                </button>
+              </div>
+              <AnimatePresence>
+                {showCharForm && (
+                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
+                    <div className="bg-white/5 border border-white/10 rounded-lg p-4 space-y-3">
+                      <div className="flex gap-2">
+                        <input value={charName} onChange={e => setCharName(e.target.value)} placeholder="Character name" className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:outline-none focus:border-emerald-500/30" />
+                        <input value={charRole} onChange={e => setCharRole(e.target.value)} placeholder="Role (e.g. Protagonist)" className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:outline-none focus:border-emerald-500/30" />
+                      </div>
+                      <textarea value={charDesc} onChange={e => setCharDesc(e.target.value)} placeholder="Character description, backstory, motivations..." rows={2} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm resize-none focus:outline-none focus:border-emerald-500/30" />
+                      <div className="flex gap-2">
+                        <button onClick={handleAddCharacter} disabled={!charName.trim()} className="px-4 py-2 bg-emerald-500/20 rounded-lg text-sm hover:bg-emerald-500/30 disabled:opacity-50">Add</button>
+                        <button onClick={() => setShowCharForm(false)} className="px-4 py-2 bg-white/5 rounded-lg text-sm hover:bg-white/10">Cancel</button>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              {characters.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {characters.map((char, idx) => (
+                    <motion.div key={idx} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="bg-white/5 border border-white/10 rounded-lg p-4 hover:border-emerald-500/20 transition-colors">
+                      <div className="flex items-start justify-between mb-1">
+                        <h3 className="font-medium text-sm">{char.name}</h3>
+                        <div className="flex items-center gap-1.5">
+                          {char.role && <span className="px-1.5 py-0.5 text-[10px] bg-emerald-500/10 text-emerald-400 rounded-full border border-emerald-500/20">{char.role}</span>}
+                          <button onClick={() => setCharacters(prev => prev.filter((_, i) => i !== idx))} className="p-0.5 hover:text-red-400 text-gray-600 transition-colors"><X className="w-3 h-3" /></button>
+                        </div>
+                      </div>
+                      {char.description && <p className="text-xs text-gray-500 mt-1 line-clamp-3">{char.description}</p>}
+                    </motion.div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-600 text-xs">No characters yet. Add your first character above.</div>
+              )}
+            </div>
+
+            {/* Story beats section */}
+            <div className="space-y-3">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-emerald-400" /> Story Beats
+              </h2>
+              <div className="flex gap-2">
+                <input
+                  value={newBeat}
+                  onChange={e => setNewBeat(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleAddBeat()}
+                  placeholder="Describe a story beat and press Enter..."
+                  className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:outline-none focus:border-emerald-500/30"
+                />
+                <button onClick={handleAddBeat} disabled={!newBeat.trim()} className="px-3 py-2 bg-emerald-500/20 rounded-lg text-sm hover:bg-emerald-500/30 disabled:opacity-50 flex items-center gap-1">
+                  <Plus className="w-3 h-3" /> Add Beat
+                </button>
+              </div>
+              {storyBeats.length > 0 ? (
+                <div className="space-y-2">
+                  {storyBeats.map((beat, idx) => (
+                    <motion.div key={idx} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} className="flex items-start gap-3 bg-white/5 border border-white/10 rounded-lg px-4 py-3 group hover:border-emerald-500/20 transition-colors">
+                      <span className="text-xs text-emerald-400 font-mono mt-0.5 shrink-0">{String(idx + 1).padStart(2, '0')}</span>
+                      <p className="text-sm text-gray-300 flex-1">{beat}</p>
+                      <button onClick={() => setStoryBeats(prev => prev.filter((_, i) => i !== idx))} className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-red-400 text-gray-600 transition-all shrink-0"><X className="w-3 h-3" /></button>
+                    </motion.div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-600 text-xs">No story beats yet. Add key plot moments above.</div>
+              )}
+            </div>
+            <div className="text-xs text-gray-600">Design DTUs: {contextDTUs.length}</div>
           </div>
         )}
 
         {/* Levels */}
         {tab === 'levels' && (
-          <div className="text-center py-16 text-gray-500">
-            <Map className="w-12 h-12 mx-auto mb-3 opacity-30" />
-            <p className="text-sm mb-2">Level Design</p>
-            <p className="text-xs text-gray-600">Plan levels, zones, and encounters. Use the whiteboard lens for spatial layouts.</p>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <Map className="w-5 h-5 text-emerald-400" /> Level Design
+              </h2>
+              <button onClick={() => setShowLevelForm(!showLevelForm)} className="px-3 py-1.5 text-xs bg-emerald-500/20 rounded-lg hover:bg-emerald-500/30 flex items-center gap-1">
+                <Plus className="w-3 h-3" /> Add Level
+              </button>
+            </div>
+            <AnimatePresence>
+              {showLevelForm && (
+                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
+                  <div className="bg-white/5 border border-white/10 rounded-lg p-4 space-y-3">
+                    <div className="flex gap-2">
+                      <input value={levelName} onChange={e => setLevelName(e.target.value)} placeholder="Level name" className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:outline-none focus:border-emerald-500/30" />
+                      <select value={levelDifficulty} onChange={e => setLevelDifficulty(e.target.value)} className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:outline-none focus:border-emerald-500/30">
+                        <option value="easy">Easy</option>
+                        <option value="medium">Medium</option>
+                        <option value="hard">Hard</option>
+                        <option value="boss">Boss</option>
+                      </select>
+                    </div>
+                    <textarea value={levelDesc} onChange={e => setLevelDesc(e.target.value)} placeholder="Level description, objectives, layout notes..." rows={2} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm resize-none focus:outline-none focus:border-emerald-500/30" />
+                    <div className="flex gap-2">
+                      <button onClick={handleAddLevel} disabled={!levelName.trim()} className="px-4 py-2 bg-emerald-500/20 rounded-lg text-sm hover:bg-emerald-500/30 disabled:opacity-50">Add Level</button>
+                      <button onClick={() => setShowLevelForm(false)} className="px-4 py-2 bg-white/5 rounded-lg text-sm hover:bg-white/10">Cancel</button>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+            {levels.length > 0 ? (
+              <div className="space-y-2">
+                {levels.map((lvl, idx) => {
+                  const difficultyStyles: Record<string, string> = {
+                    easy: 'bg-green-500/10 text-green-400 border-green-500/20',
+                    medium: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+                    hard: 'bg-red-500/10 text-red-400 border-red-500/20',
+                    boss: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
+                  };
+                  const difficultyStyle = difficultyStyles[lvl.difficulty] ?? 'bg-gray-500/10 text-gray-400 border-gray-500/20';
+                  return (
+                    <motion.div key={idx} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex items-start gap-4 bg-white/5 border border-white/10 rounded-lg px-4 py-3 group hover:border-emerald-500/20 transition-colors">
+                      <span className="text-sm font-mono text-emerald-400 shrink-0 mt-0.5">{String(idx + 1).padStart(2, '0')}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="font-medium text-sm">{lvl.name}</span>
+                          <span className={cn('px-1.5 py-0.5 text-[10px] rounded border', difficultyStyle)}>{lvl.difficulty}</span>
+                        </div>
+                        {lvl.description && <p className="text-xs text-gray-500 line-clamp-2">{lvl.description}</p>}
+                      </div>
+                      <button onClick={() => setLevels(prev => prev.filter((_, i) => i !== idx))} className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-400 text-gray-600 transition-all shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-12 text-gray-600">
+                <Map className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                <p className="text-sm">No levels yet. Add your first level above.</p>
+                <p className="text-xs mt-1 text-gray-700">Plan levels, zones, and encounters. Use the whiteboard lens for spatial layouts.</p>
+              </div>
+            )}
           </div>
         )}
 

@@ -2,6 +2,7 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { useState, useCallback, useMemo } from 'react';
+import { motion } from 'framer-motion';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   Calculator, Play, CheckCircle, XCircle, Sigma, Pi, Loader2,
@@ -127,6 +128,16 @@ function generatePlotPoints(expr: string, xMin: number, xMax: number, steps: num
 /* ─── Equation Solver types ─── */
 type SolverMode = 'linear' | 'quadratic' | 'expression';
 
+/* ─── Difficulty badge for formulas ─── */
+const CATEGORY_DIFFICULTY: Record<string, { label: string; color: string; bg: string }> = {
+  general:    { label: 'Intro',     color: 'text-green-400',  bg: 'bg-green-400/15 border-green-400/30' },
+  algebra:    { label: 'Beginner',  color: 'text-blue-400',   bg: 'bg-blue-400/15 border-blue-400/30' },
+  geometry:   { label: 'Beginner',  color: 'text-cyan-400',   bg: 'bg-cyan-400/15 border-cyan-400/30' },
+  statistics: { label: 'Intermediate', color: 'text-yellow-400', bg: 'bg-yellow-400/15 border-yellow-400/30' },
+  calculus:   { label: 'Advanced',  color: 'text-orange-400', bg: 'bg-orange-400/15 border-orange-400/30' },
+  physics:    { label: 'Advanced',  color: 'text-red-400',    bg: 'bg-red-400/15 border-red-400/30' },
+};
+
 export default function MathLensPage() {
   useLensNav('math');
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('math');
@@ -142,6 +153,7 @@ export default function MathLensPage() {
   const [solverB, setSolverB] = useState('-5');
   const [solverC, setSolverC] = useState('6');
   const [solverResult, setSolverResult] = useState<string | null>(null);
+  const [solverSteps, setSolverSteps] = useState<string[]>([]);
 
   /* ─── Function plotter state ─── */
   const [plotExpr, setPlotExpr] = useState('sin(x)');
@@ -226,42 +238,64 @@ export default function MathLensPage() {
     const a = parseFloat(solverA);
     const b = parseFloat(solverB);
     const c = parseFloat(solverC);
+    const steps: string[] = [];
 
     if (solverMode === 'linear') {
       // ax + b = 0 => x = -b/a
+      steps.push(`Start with: ${solverA}x + ${solverB} = 0`);
       if (a === 0) {
         setSolverResult(b === 0 ? 'Infinite solutions' : 'No solution');
+        setSolverSteps(steps);
         return;
       }
+      steps.push(`Subtract ${solverB} from both sides: ${solverA}x = ${-b}`);
+      steps.push(`Divide both sides by ${solverA}`);
       const x = -b / a;
+      steps.push(`x = ${-b} ÷ ${a} = ${x}`);
       setSolverResult(`x = ${x}`);
     } else if (solverMode === 'quadratic') {
+      steps.push(`Start with: ${solverA}x² + ${solverB}x + ${solverC} = 0`);
+      steps.push(`Using the quadratic formula: x = (−b ± √(b²−4ac)) / 2a`);
+      steps.push(`Identify: a = ${a}, b = ${b}, c = ${c}`);
       if (a === 0) {
         if (b === 0) {
           setSolverResult(c === 0 ? 'Infinite solutions' : 'No solution');
         } else {
           setSolverResult(`x = ${-c / b}`);
         }
+        setSolverSteps(steps);
         return;
       }
       const discriminant = b * b - 4 * a * c;
+      steps.push(`Compute discriminant: b²−4ac = ${b}²−4·${a}·${c} = ${discriminant.toFixed(4)}`);
       if (discriminant > 0) {
         const x1 = (-b + Math.sqrt(discriminant)) / (2 * a);
         const x2 = (-b - Math.sqrt(discriminant)) / (2 * a);
+        steps.push(`√discriminant = √${discriminant.toFixed(4)} ≈ ${Math.sqrt(discriminant).toFixed(6)}`);
+        steps.push(`x₁ = (${-b} + ${Math.sqrt(discriminant).toFixed(4)}) / ${2 * a} = ${x1.toFixed(6)}`);
+        steps.push(`x₂ = (${-b} − ${Math.sqrt(discriminant).toFixed(4)}) / ${2 * a} = ${x2.toFixed(6)}`);
         setSolverResult(`x\u2081 = ${x1.toFixed(6)}, x\u2082 = ${x2.toFixed(6)}`);
       } else if (discriminant === 0) {
         const x = -b / (2 * a);
+        steps.push(`discriminant = 0 → one repeated root`);
+        steps.push(`x = −b / 2a = ${-b} / ${2 * a} = ${x.toFixed(6)}`);
         setSolverResult(`x = ${x.toFixed(6)} (repeated root)`);
       } else {
         const real = (-b / (2 * a)).toFixed(6);
         const imag = (Math.sqrt(-discriminant) / (2 * a)).toFixed(6);
+        steps.push(`discriminant < 0 → complex roots`);
+        steps.push(`Real part: ${-b} / ${2 * a} = ${real}`);
+        steps.push(`Imaginary part: √${Math.abs(discriminant).toFixed(4)} / ${2 * a} = ${imag}i`);
         setSolverResult(`x\u2081 = ${real} + ${imag}i, x\u2082 = ${real} - ${imag}i`);
       }
     } else {
       // expression mode - evaluate directly
       const val = evaluatePlotFn(solverA, 0);
+      steps.push(`Evaluate: ${solverA}`);
+      steps.push(val !== null ? `= ${val}` : 'Expression could not be parsed');
       setSolverResult(val !== null ? `Result = ${val}` : 'Could not evaluate');
     }
+    setSolverSteps(steps);
   }, [solverMode, solverA, solverB, solverC]);
 
   /* ─── Save formula to backend ─── */
@@ -423,8 +457,8 @@ export default function MathLensPage() {
                     value={expression}
                     onChange={(e) => setExpression(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && !evaluating && handleEvaluate()}
-                    placeholder="Enter mathematical expression..."
-                    className="input-lattice flex-1 font-mono"
+                    placeholder="e.g.  sin(pi/4) + sqrt(2)  or  integrate x^2..."
+                    className="input-lattice flex-1 font-mono text-base tracking-wide bg-black/40 border-neon-blue/20 focus:border-neon-blue/50"
                     disabled={evaluating}
                   />
                   <button
@@ -609,9 +643,28 @@ export default function MathLensPage() {
                   </button>
 
                   {solverResult && (
-                    <div className="p-4 bg-neon-green/10 rounded-lg border border-neon-green/30">
-                      <p className="text-sm text-gray-400 mb-1">Solution:</p>
-                      <p className="font-mono text-lg text-neon-green">{solverResult}</p>
+                    <div className="space-y-3">
+                      {/* Final answer */}
+                      <div className="p-4 bg-neon-green/10 rounded-lg border border-neon-green/30">
+                        <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Solution</p>
+                        <p className="font-mono text-lg text-neon-green">{solverResult}</p>
+                      </div>
+                      {/* Step-by-step */}
+                      {solverSteps.length > 0 && (
+                        <div className="p-3 bg-black/30 rounded-lg border border-white/5">
+                          <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Step-by-step</p>
+                          <ol className="space-y-1.5">
+                            {solverSteps.map((step, idx) => (
+                              <li key={idx} className="flex items-start gap-2 text-sm">
+                                <span className="shrink-0 w-5 h-5 rounded-full bg-neon-blue/20 text-neon-blue text-[10px] font-bold flex items-center justify-center mt-0.5">
+                                  {idx + 1}
+                                </span>
+                                <span className="font-mono text-gray-300">{step}</span>
+                              </li>
+                            ))}
+                          </ol>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -736,30 +789,45 @@ export default function MathLensPage() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {formulaItems.map(item => (
-                      <div key={item.id} className="lens-card group relative">
-                        <div className="flex items-start justify-between mb-2">
-                          <div>
-                            <p className="font-semibold text-sm">{item.data.name}</p>
-                            <span className="text-xs px-2 py-0.5 rounded bg-neon-purple/20 text-neon-purple">
-                              {item.data.category}
-                            </span>
+                    {formulaItems.map(item => {
+                      const diff = CATEGORY_DIFFICULTY[item.data.category] || CATEGORY_DIFFICULTY.general;
+                      return (
+                        <motion.div
+                          key={item.id}
+                          layout
+                          initial={{ opacity: 0, y: -4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="lens-card group relative"
+                        >
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="space-y-1">
+                              <p className="font-semibold text-sm">{item.data.name}</p>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-xs px-1.5 py-0.5 rounded border bg-neon-purple/15 border-neon-purple/30 text-neon-purple">
+                                  {item.data.category}
+                                </span>
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${diff.bg} ${diff.color}`}>
+                                  {diff.label}
+                                </span>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => removeFormula(item.id)}
+                              className="opacity-0 group-hover:opacity-100 p-1 hover:bg-neon-pink/20 rounded transition-all"
+                            >
+                              <Trash2 className="w-3 h-3 text-neon-pink" />
+                            </button>
                           </div>
-                          <button
-                            onClick={() => removeFormula(item.id)}
-                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-neon-pink/20 rounded transition-all"
-                          >
-                            <Trash2 className="w-3 h-3 text-neon-pink" />
-                          </button>
-                        </div>
-                        <div className="p-3 bg-lattice-deep rounded-lg mb-2">
-                          <p className="font-mono text-lg">{renderFormula(item.data.latex)}</p>
-                        </div>
-                        {item.data.description && (
-                          <p className="text-xs text-gray-400">{item.data.description}</p>
-                        )}
-                      </div>
-                    ))}
+                          {/* Equation editor style display */}
+                          <div className="p-3 bg-lattice-deep rounded-lg mb-2 border border-white/5 text-center">
+                            <p className="font-mono text-lg tracking-wide">{renderFormula(item.data.latex)}</p>
+                          </div>
+                          {item.data.description && (
+                            <p className="text-xs text-gray-400">{item.data.description}</p>
+                          )}
+                        </motion.div>
+                      );
+                    })}
                   </div>
                 )}
               </div>

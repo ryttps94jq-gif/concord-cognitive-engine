@@ -4,7 +4,8 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useState } from 'react';
-import { Bot, Cpu, Cog, Wifi, Plus, Trash2, Search, Layers, ChevronDown, Activity, Shield, Settings, Power } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Bot, Cpu, Cog, Wifi, Plus, Trash2, Search, Layers, ChevronDown, Activity, Shield, Settings, Power, Thermometer, Radio, Zap, AlertCircle, CheckCircle2, WifiOff, Clock } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -46,6 +47,22 @@ const STATUS_COLORS: Record<RobotStatus, string> = {
   offline: 'text-gray-500',
 };
 
+const STATUS_BG: Record<RobotStatus, string> = {
+  idle: 'bg-blue-400/20 border-blue-400/40',
+  running: 'bg-green-400/20 border-green-400/40',
+  error: 'bg-red-400/20 border-red-400/40',
+  maintenance: 'bg-yellow-400/20 border-yellow-400/40',
+  offline: 'bg-gray-600/20 border-gray-600/40',
+};
+
+const STATUS_DOT: Record<RobotStatus, string> = {
+  idle: 'bg-blue-400',
+  running: 'bg-green-400',
+  error: 'bg-red-400',
+  maintenance: 'bg-yellow-400',
+  offline: 'bg-gray-500',
+};
+
 const TYPE_ICONS: Record<RobotType, string> = {
   arm: 'Industrial Arm',
   mobile: 'Mobile Robot',
@@ -55,11 +72,70 @@ const TYPE_ICONS: Record<RobotType, string> = {
   custom: 'Custom',
 };
 
+// Mock sensor readings per robot type
+const MOCK_SENSORS: Record<RobotType, { label: string; value: string; unit: string }[]> = {
+  arm: [
+    { label: 'Torque', value: '12.4', unit: 'Nm' },
+    { label: 'Temp', value: '42', unit: '°C' },
+    { label: 'Load', value: '78', unit: '%' },
+  ],
+  mobile: [
+    { label: 'Speed', value: '0.8', unit: 'm/s' },
+    { label: 'Proximity', value: '1.2', unit: 'm' },
+    { label: 'Gyro', value: '0.02', unit: 'rad/s' },
+  ],
+  drone: [
+    { label: 'Altitude', value: '12.3', unit: 'm' },
+    { label: 'Wind', value: '3.1', unit: 'm/s' },
+    { label: 'IMU', value: '0.4', unit: '°' },
+  ],
+  humanoid: [
+    { label: 'Balance', value: '98', unit: '%' },
+    { label: 'Grip', value: '4.2', unit: 'N' },
+    { label: 'Vision', value: '60', unit: 'fps' },
+  ],
+  swarm: [
+    { label: 'Nodes', value: '8', unit: '' },
+    { label: 'Latency', value: '12', unit: 'ms' },
+    { label: 'Coverage', value: '85', unit: '%' },
+  ],
+  custom: [
+    { label: 'Sensor A', value: '--', unit: '' },
+    { label: 'Sensor B', value: '--', unit: '' },
+    { label: 'Sensor C', value: '--', unit: '' },
+  ],
+};
+
+// Mock command history
+const MOCK_COMMANDS = [
+  'INIT_SEQUENCE',
+  'MOVE_TO(0,0,0)',
+  'CALIBRATE_SENSORS',
+  'RUN_DIAGNOSTICS',
+  'STANDBY_MODE',
+];
+
+function StatusIndicator({ status }: { status: RobotStatus }) {
+  const isAnimated = status === 'running' || status === 'error';
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-xs font-medium ${STATUS_BG[status] || 'bg-white/10 border-white/20'} ${STATUS_COLORS[status] || 'text-gray-400'}`}>
+      <span className="relative flex h-2 w-2">
+        {isAnimated && (
+          <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${STATUS_DOT[status]}`} />
+        )}
+        <span className={`relative inline-flex rounded-full h-2 w-2 ${STATUS_DOT[status] || 'bg-gray-500'}`} />
+      </span>
+      {status}
+    </span>
+  );
+}
+
 export default function RoboticsLensPage() {
   useLensNav('robotics');
 
   const [activeTab, setActiveTab] = useState<'fleet' | 'tasks' | 'diagnostics'>('fleet');
   const [showFeatures, setShowFeatures] = useState(false);
+  const [expandedRobot, setExpandedRobot] = useState<string | null>(null);
   const { latestData: realtimeData, isLive, lastUpdated, insights } = useRealtimeLens('robotics');
 
   const { items: robotItems, isLoading, isError, error, refetch, create, update, remove } = useLensData<Record<string, unknown>>('robotics', 'robot', { seed: [] });
@@ -71,6 +147,7 @@ export default function RoboticsLensPage() {
 
   const onlineCount = robots.filter(r => r.status !== 'offline').length;
   const errorCount = robots.filter(r => r.status === 'error').length;
+  const runningCount = robots.filter(r => r.status === 'running').length;
 
   const [newRobot, setNewRobot] = useState({ name: '', type: 'arm' as RobotType });
   const [newTask, setNewTask] = useState({ name: '', robot: '', priority: '5' });
@@ -88,7 +165,7 @@ export default function RoboticsLensPage() {
         uptime: 0,
         sensors: [],
         actuators: [],
-        lastCommand: '',
+        lastCommand: MOCK_COMMANDS[Math.floor(Math.random() * MOCK_COMMANDS.length)],
         errorCount: 0,
       },
     });
@@ -143,22 +220,27 @@ export default function RoboticsLensPage() {
       <DTUExportButton domain="robotics" data={{}} compact />
 
       {/* Fleet Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="panel p-4 text-center">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <motion.div layout className="panel p-4 text-center">
           <Bot className="w-6 h-6 mx-auto text-neon-cyan mb-2" />
           <p className="text-2xl font-bold">{robots.length}</p>
           <p className="text-xs text-gray-400">Total Units</p>
-        </div>
-        <div className="panel p-4 text-center">
+        </motion.div>
+        <motion.div layout className="panel p-4 text-center">
           <Power className="w-6 h-6 mx-auto text-green-400 mb-2" />
-          <p className="text-2xl font-bold">{onlineCount}</p>
+          <p className="text-2xl font-bold text-green-400">{onlineCount}</p>
           <p className="text-xs text-gray-400">Online</p>
-        </div>
-        <div className="panel p-4 text-center">
-          <Shield className="w-6 h-6 mx-auto text-red-400 mb-2" />
-          <p className="text-2xl font-bold">{errorCount}</p>
+        </motion.div>
+        <motion.div layout className="panel p-4 text-center">
+          <Activity className="w-6 h-6 mx-auto text-neon-cyan mb-2" />
+          <p className="text-2xl font-bold text-neon-cyan">{runningCount}</p>
+          <p className="text-xs text-gray-400">Running</p>
+        </motion.div>
+        <motion.div layout className="panel p-4 text-center">
+          <AlertCircle className="w-6 h-6 mx-auto text-red-400 mb-2" />
+          <p className="text-2xl font-bold text-red-400">{errorCount}</p>
           <p className="text-xs text-gray-400">Errors</p>
-        </div>
+        </motion.div>
       </div>
 
       {/* Tabs */}
@@ -187,29 +269,145 @@ export default function RoboticsLensPage() {
             </div>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-3">
             {robots.length === 0 ? (
               <p className="text-gray-500 text-sm text-center py-4">No robots registered yet.</p>
             ) : (
-              robots.map(robot => (
-                <div key={robot.id} className="panel p-4 flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <Bot className="w-4 h-4 text-neon-cyan" />
-                      <span className="font-medium">{robot.name || robot.title}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded bg-white/10 ${STATUS_COLORS[robot.status as RobotStatus] || 'text-gray-400'}`}>
-                        {robot.status || 'idle'}
-                      </span>
+              robots.map(robot => {
+                const robotType = (robot.type as RobotType) || 'custom';
+                const sensors = MOCK_SENSORS[robotType] || MOCK_SENSORS.custom;
+                const isExpanded = expandedRobot === robot.id;
+                const mockCommands = [
+                  robot.lastCommand || 'INIT_SEQUENCE',
+                  'CALIBRATE_SENSORS',
+                  'STATUS_CHECK',
+                ].filter(Boolean);
+
+                return (
+                  <motion.div
+                    key={robot.id}
+                    layout
+                    className="panel overflow-hidden"
+                  >
+                    {/* Robot Header Row */}
+                    <div
+                      className="p-4 flex items-center justify-between cursor-pointer hover:bg-white/5 transition-colors"
+                      onClick={() => setExpandedRobot(isExpanded ? null : robot.id)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Bot className="w-5 h-5 text-neon-cyan shrink-0" />
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium">{robot.name || robot.title}</span>
+                            <StatusIndicator status={(robot.status as RobotStatus) || 'idle'} />
+                          </div>
+                          <div className="flex gap-3 mt-0.5 text-xs text-gray-400">
+                            <span>{TYPE_ICONS[robotType]}</span>
+                            <span>FW: {robot.firmware || '1.0.0'}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {/* Battery bar */}
+                        <div className="hidden md:flex items-center gap-1.5 text-xs text-gray-400">
+                          <Zap className="w-3 h-3" />
+                          <div className="w-16 h-1.5 bg-white/10 rounded-full">
+                            <div
+                              className={`h-full rounded-full transition-all ${(robot.battery ?? 100) > 50 ? 'bg-green-400' : (robot.battery ?? 100) > 20 ? 'bg-yellow-400' : 'bg-red-400'}`}
+                              style={{ width: `${robot.battery ?? 100}%` }}
+                            />
+                          </div>
+                          <span>{robot.battery ?? 100}%</span>
+                        </div>
+                        <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                        <button onClick={e => { e.stopPropagation(); remove(robot.id); }} className="text-gray-500 hover:text-red-400 ml-1">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex gap-4 mt-1 text-xs text-gray-400">
-                      <span>{TYPE_ICONS[robot.type as RobotType] || robot.type}</span>
-                      <span>Battery: {robot.battery ?? 100}%</span>
-                      <span>FW: {robot.firmware || '1.0.0'}</span>
-                    </div>
-                  </div>
-                  <button onClick={() => remove(robot.id)} className="text-gray-500 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
-                </div>
-              ))
+
+                    {/* Expanded: sensor readings + command history */}
+                    <AnimatePresence>
+                      {isExpanded && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.22, ease: 'easeInOut' }}
+                          className="border-t border-white/10 overflow-hidden"
+                        >
+                          <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* Sensor Readings */}
+                            <div>
+                              <p className="text-xs text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+                                <Radio className="w-3 h-3" /> Sensor Readings
+                              </p>
+                              <div className="space-y-2">
+                                {sensors.map(s => (
+                                  <div key={s.label} className="flex items-center justify-between p-2 rounded-lg bg-white/5">
+                                    <span className="text-xs text-gray-400">{s.label}</span>
+                                    <span className="font-mono text-xs text-neon-cyan">
+                                      {s.value}<span className="text-gray-500 ml-0.5">{s.unit}</span>
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Command History */}
+                            <div>
+                              <p className="text-xs text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+                                <Clock className="w-3 h-3" /> Command History
+                              </p>
+                              <div className="space-y-1.5">
+                                {mockCommands.map((cmd, idx) => (
+                                  <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-black/30">
+                                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${idx === 0 ? 'bg-neon-cyan' : 'bg-gray-600'}`} />
+                                    <span className="font-mono text-xs text-gray-300">{cmd}</span>
+                                    {idx === 0 && <span className="ml-auto text-[10px] text-gray-500">latest</span>}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Status-specific alert bar */}
+                          {robot.status === 'error' && (
+                            <motion.div
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              className="mx-4 mb-4 p-3 rounded-lg bg-red-400/10 border border-red-400/30 flex items-center gap-2 text-xs text-red-400"
+                            >
+                              <AlertCircle className="w-4 h-4 shrink-0" />
+                              <span>Robot is in error state. Run diagnostics or manual reset to recover.</span>
+                            </motion.div>
+                          )}
+                          {robot.status === 'offline' && (
+                            <motion.div
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              className="mx-4 mb-4 p-3 rounded-lg bg-gray-600/10 border border-gray-600/30 flex items-center gap-2 text-xs text-gray-400"
+                            >
+                              <WifiOff className="w-4 h-4 shrink-0" />
+                              <span>Robot is offline. Check network connection and power supply.</span>
+                            </motion.div>
+                          )}
+                          {robot.status === 'running' && (
+                            <motion.div
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              className="mx-4 mb-4 p-3 rounded-lg bg-green-400/10 border border-green-400/30 flex items-center gap-2 text-xs text-green-400"
+                            >
+                              <CheckCircle2 className="w-4 h-4 shrink-0" />
+                              <span>Robot is actively executing tasks. All systems nominal.</span>
+                            </motion.div>
+                          )}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.div>
+                );
+              })
             )}
           </div>
         </div>
@@ -237,17 +435,31 @@ export default function RoboticsLensPage() {
               <p className="text-gray-500 text-sm text-center py-4">No tasks queued.</p>
             ) : (
               tasks.map(task => (
-                <div key={task.id} className="panel p-3 flex items-center justify-between">
-                  <div>
-                    <span className="text-sm font-medium">{task.name || task.title}</span>
-                    <div className="flex gap-3 text-xs text-gray-400 mt-0.5">
-                      {task.robot && <span>Robot: {task.robot}</span>}
-                      <span>Priority: {task.priority}</span>
-                      <span className={task.status === 'complete' ? 'text-green-400' : task.status === 'failed' ? 'text-red-400' : 'text-yellow-400'}>{task.status}</span>
+                <motion.div
+                  key={task.id}
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="panel p-3 flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-3">
+                    {/* Priority badge */}
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                      (task.priority || 5) >= 8 ? 'bg-red-400/20 text-red-400' :
+                      (task.priority || 5) >= 5 ? 'bg-yellow-400/20 text-yellow-400' :
+                      'bg-gray-600/20 text-gray-400'
+                    }`}>
+                      {task.priority || 5}
+                    </div>
+                    <div>
+                      <span className="text-sm font-medium">{task.name || task.title}</span>
+                      <div className="flex gap-3 text-xs text-gray-400 mt-0.5">
+                        {task.robot && <span>Robot: {task.robot}</span>}
+                        <span className={task.status === 'complete' ? 'text-green-400' : task.status === 'failed' ? 'text-red-400' : task.status === 'running' ? 'text-neon-cyan' : 'text-yellow-400'}>{task.status}</span>
+                      </div>
                     </div>
                   </div>
                   <button onClick={() => removeTask(task.id)} className="text-gray-500 hover:text-red-400"><Trash2 className="w-3 h-3" /></button>
-                </div>
+                </motion.div>
               ))
             )}
           </div>
@@ -261,24 +473,53 @@ export default function RoboticsLensPage() {
             <p className="text-gray-500 text-sm text-center py-4">Register robots to see diagnostics.</p>
           ) : (
             <div className="space-y-3">
-              {robots.map(robot => (
-                <div key={robot.id} className="p-3 rounded-lg bg-white/5">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium">{robot.name || robot.title}</span>
-                    <span className={`text-xs ${STATUS_COLORS[robot.status as RobotStatus] || 'text-gray-400'}`}>{robot.status}</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 text-xs">
-                    <div>
-                      <span className="text-gray-500">Battery</span>
-                      <div className="h-1.5 bg-white/5 rounded-full mt-1">
-                        <div className={`h-full rounded-full ${(robot.battery ?? 100) > 20 ? 'bg-green-400' : 'bg-red-400'}`} style={{ width: `${robot.battery ?? 100}%` }} />
+              {robots.map(robot => {
+                const status = (robot.status as RobotStatus) || 'idle';
+                return (
+                  <motion.div
+                    key={robot.id}
+                    layout
+                    className="p-3 rounded-lg bg-white/5 border border-white/5"
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">{robot.name || robot.title}</span>
+                        <StatusIndicator status={status} />
+                      </div>
+                      <span className="text-xs text-gray-500">{TYPE_ICONS[(robot.type as RobotType) || 'custom']}</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <div>
+                        <span className="text-gray-500">Battery</span>
+                        <div className="h-1.5 bg-white/5 rounded-full mt-1">
+                          <div
+                            className={`h-full rounded-full transition-all ${(robot.battery ?? 100) > 50 ? 'bg-green-400' : (robot.battery ?? 100) > 20 ? 'bg-yellow-400' : 'bg-red-400'}`}
+                            style={{ width: `${robot.battery ?? 100}%` }}
+                          />
+                        </div>
+                        <p className="font-mono mt-0.5 text-gray-300">{robot.battery ?? 100}%</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Errors</span>
+                        <p className={`font-mono text-base mt-1 ${(robot.errorCount || 0) > 0 ? 'text-red-400' : 'text-green-400'}`}>{robot.errorCount || 0}</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Sensors</span>
+                        <p className="font-mono text-base mt-1 text-neon-cyan">{MOCK_SENSORS[(robot.type as RobotType) || 'custom']?.length || 3}</p>
                       </div>
                     </div>
-                    <div><span className="text-gray-500">Errors</span><p className="font-mono">{robot.errorCount || 0}</p></div>
-                    <div><span className="text-gray-500">Sensors</span><p className="font-mono">{robot.sensors?.length || 0}</p></div>
-                  </div>
-                </div>
-              ))}
+                    {/* Sensor readings in diagnostics */}
+                    <div className="mt-3 grid grid-cols-3 gap-1.5">
+                      {MOCK_SENSORS[(robot.type as RobotType) || 'custom'].map(s => (
+                        <div key={s.label} className="p-1.5 rounded bg-black/30 text-center">
+                          <p className="text-[10px] text-gray-500">{s.label}</p>
+                          <p className="font-mono text-xs text-neon-cyan">{s.value}{s.unit}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </motion.div>
+                );
+              })}
             </div>
           )}
         </div>
