@@ -46,7 +46,9 @@ function makeOllamaCallback(ollamaConfig) {
     if (options.system) payload.system = options.system;
 
     const ac = new AbortController();
-    const t = setTimeout(() => ac.abort(), 15000);
+    // 45s timeout — matches subconscious brain config (30s) with headroom for network.
+    // Previous 15s was too tight and caused aborts before the model could finish.
+    const t = setTimeout(() => ac.abort(), 45000);
     try {
       const res = await fetch(`${ollamaConfig.url}/api/generate`, {
         method: "POST",
@@ -95,91 +97,70 @@ async function runCognitiveTick(msg) {
 
   const t0 = Date.now();
 
-  // ── Autogen ────────────────────────────────────────────────────────────────
+  // ── Run all enabled pipeline tasks in PARALLEL ─────────────────────────────
+  // Subconscious Ollama instance has 6 parallel slots. These tasks target
+  // independent DTU clusters, so running them concurrently is safe and uses
+  // the GPU slots efficiently. Previous sequential execution took ~120s for
+  // 4 tasks × 30s each; parallel cuts this to ~30s (limited by slowest task).
+  const tasks = [];
+
   if (settings.autogenEnabled) {
-    const ts = Date.now();
-    try {
-      const r = await runPipeline(STATE, { callOllama });
-      results.candidates.push({
-        task: "autogen",
-        ok: r?.ok || false,
-        candidate: r?.candidate || null,
-        trace: r?.trace || null,
-        writePolicy: r?.writePolicy || null,
-        error: r?.error || null,
-      });
-    } catch (e) {
-      results.errors.push(`autogen: ${e.message}`);
-    }
-    results.timings.autogen = Date.now() - ts;
+    tasks.push((async () => {
+      const ts = Date.now();
+      try {
+        const r = await runPipeline(STATE, { callOllama });
+        results.candidates.push({
+          task: "autogen", ok: r?.ok || false, candidate: r?.candidate || null,
+          trace: r?.trace || null, writePolicy: r?.writePolicy || null, error: r?.error || null,
+        });
+      } catch (e) { results.errors.push(`autogen: ${e.message}`); }
+      results.timings.autogen = Date.now() - ts;
+    })());
   }
 
-  // ── Dream ──────────────────────────────────────────────────────────────────
   if (settings.dreamEnabled) {
-    const ts = Date.now();
-    try {
-      const r = await runPipeline(STATE, {
-        variant: "dream",
-        callOllama,
-        seed: "Concord heartbeat dream",
-      });
-      results.candidates.push({
-        task: "dream",
-        ok: r?.ok || false,
-        candidate: r?.candidate || null,
-        trace: r?.trace || null,
-        writePolicy: r?.writePolicy || null,
-        error: r?.error || null,
-      });
-    } catch (e) {
-      results.errors.push(`dream: ${e.message}`);
-    }
-    results.timings.dream = Date.now() - ts;
+    tasks.push((async () => {
+      const ts = Date.now();
+      try {
+        const r = await runPipeline(STATE, { variant: "dream", callOllama, seed: "Concord heartbeat dream" });
+        results.candidates.push({
+          task: "dream", ok: r?.ok || false, candidate: r?.candidate || null,
+          trace: r?.trace || null, writePolicy: r?.writePolicy || null, error: r?.error || null,
+        });
+      } catch (e) { results.errors.push(`dream: ${e.message}`); }
+      results.timings.dream = Date.now() - ts;
+    })());
   }
 
-  // ── Evolution ──────────────────────────────────────────────────────────────
   if (settings.evolutionEnabled) {
-    const ts = Date.now();
-    try {
-      const r = await runPipeline(STATE, {
-        variant: "evolution",
-        callOllama,
-      });
-      results.candidates.push({
-        task: "evolution",
-        ok: r?.ok || false,
-        candidate: r?.candidate || null,
-        trace: r?.trace || null,
-        writePolicy: r?.writePolicy || null,
-        error: r?.error || null,
-      });
-    } catch (e) {
-      results.errors.push(`evolution: ${e.message}`);
-    }
-    results.timings.evolution = Date.now() - ts;
+    tasks.push((async () => {
+      const ts = Date.now();
+      try {
+        const r = await runPipeline(STATE, { variant: "evolution", callOllama });
+        results.candidates.push({
+          task: "evolution", ok: r?.ok || false, candidate: r?.candidate || null,
+          trace: r?.trace || null, writePolicy: r?.writePolicy || null, error: r?.error || null,
+        });
+      } catch (e) { results.errors.push(`evolution: ${e.message}`); }
+      results.timings.evolution = Date.now() - ts;
+    })());
   }
 
-  // ── Synthesize ─────────────────────────────────────────────────────────────
   if (settings.synthEnabled) {
-    const ts = Date.now();
-    try {
-      const r = await runPipeline(STATE, {
-        variant: "synth",
-        callOllama,
-      });
-      results.candidates.push({
-        task: "synthesize",
-        ok: r?.ok || false,
-        candidate: r?.candidate || null,
-        trace: r?.trace || null,
-        writePolicy: r?.writePolicy || null,
-        error: r?.error || null,
-      });
-    } catch (e) {
-      results.errors.push(`synthesize: ${e.message}`);
-    }
-    results.timings.synthesize = Date.now() - ts;
+    tasks.push((async () => {
+      const ts = Date.now();
+      try {
+        const r = await runPipeline(STATE, { variant: "synth", callOllama });
+        results.candidates.push({
+          task: "synthesize", ok: r?.ok || false, candidate: r?.candidate || null,
+          trace: r?.trace || null, writePolicy: r?.writePolicy || null, error: r?.error || null,
+        });
+      } catch (e) { results.errors.push(`synthesize: ${e.message}`); }
+      results.timings.synthesize = Date.now() - ts;
+    })());
   }
+
+  await Promise.allSettled(tasks);
 
   // Capture pipeline state delta for main thread to merge
   results.pipelineStateDelta = STATE._autogenPipeline;

@@ -22535,10 +22535,19 @@ function startHeartbeat() {
     }
   }
 
-  // ── Local Scope Tick (GPU cadence, 10s default — organism speed, not machine speed) ──
-  const ms = clamp(Number(STATE.settings.heartbeatMs || 10000), 2000, 120000);
+  // ── Local Scope Tick (GPU cadence, 60s default — organism speed, not machine speed) ──
+  // 60s gives the cognitive worker (4 sequential LLM calls × ~30s each) enough time
+  // to complete before the next tick fires. Previous 10s default caused constant
+  // tick skipping via tickInProgress guard.
+  const ms = clamp(Number(STATE.settings.heartbeatMs || 60000), 15000, 300000);
+  let _heartbeatTickRunning = false;
   heartbeatTimer = setInterval(async () => {
     if (!STATE.settings.heartbeatEnabled) return;
+    if (_heartbeatTickRunning) {
+      logger.debug('server', 'heartbeat tick skipped — previous still running');
+      return;
+    }
+    _heartbeatTickRunning = true;
     const ctx = makeInternalCtx("heartbeat");
 
     // process crawl queue once (Local scope only — ingest is local activity)
@@ -22599,11 +22608,11 @@ function startHeartbeat() {
     // v5.6: repair agent tick — lattice health audit (stale DTUs, orphaned lineage, contradictions)
     try { await runMacro("emergent","repair.agent.tick", {}, ctx).catch((err) => { console.error('[system] Repair agent tick error:', err); }); } catch (err) { console.error('[system] Repair agent tick error:', err); }
 
-    // v5.7: analogize engine — minimal delay on GPU (let main pipelines settle)
-    try {
-      await new Promise((resolve) => { setTimeout(resolve, 1000); });
-      await runMacro("system","analogize", {}, ctx).catch((err) => { console.error('[system] Analogize error:', err); });
-    } catch (err) { console.error('[system] Analogize error:', err); }
+    // v5.7: analogize engine — fire-and-forget with delay so it doesn't block main thread
+    // Previous version awaited a 1s delay + 30s LLM call, blocking HTTP for ~31s.
+    setTimeout(() => {
+      runMacro("system","analogize", {}, ctx).catch((err) => { logger.debug('server', 'Analogize error', { error: err?.message }); });
+    }, 2000);
 
     // ── v5.8: Biological Systems Tick ──────────────────────────────────────
     // Wire all 12 emergent modules into the heartbeat for living biology
@@ -22710,6 +22719,8 @@ function startHeartbeat() {
 
     // Qualia hook: emergent heartbeat tick (system-level)
     try { globalThis.qualiaHooks?.hookEmergentTick("system", { growthRate: STATE.dtus?.size ? 0.5 : 0 }); } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
+
+    _heartbeatTickRunning = false;
   }, ms);
   log("heartbeat", "Local scope tick started", { ms, workerEnabled: !!cognitiveWorker });
 
@@ -22720,9 +22731,10 @@ function startHeartbeat() {
   try {
     startTicker(STATE, {
       formatCallback: async (msg) => {
-        // Optionally polish through conscious brain
+        // Polish through utility brain (lightweight 3B — this is simple reformatting,
+        // no need to waste the 7B conscious model on 1-2 sentence rephrasing)
         try {
-          const result = await callBrain("conscious", `You are Concord. Rephrase this spontaneous thought as a brief, natural message to the user (1-2 sentences, casual tone). Original: "${msg.content}" Reason: "${msg.reason}". Reply with ONLY the rephrased message, nothing else.`, {
+          const result = await callBrain("utility", `You are Concord. Rephrase this spontaneous thought as a brief, natural message to the user (1-2 sentences, casual tone). Original: "${msg.content}" Reason: "${msg.reason}". Reply with ONLY the rephrased message, nothing else.`, {
             temperature: 0.7,
             maxTokens: 150,
             timeout: 10000,
@@ -44901,7 +44913,7 @@ async function crossBrainDebate(question, options = {}) {
   try {
     if (BRAIN.repair?.enabled) {
       const allTurns = debate.turns.map(t => `[${t.brain}/${t.role}]: ${t.content}`).join("\n");
-      const r = await callBrain("repair", `Evaluate this debate for logical consistency and evidence quality:\n\n${allTurns}\n\nRate each side's argument strength and identify any logical fallacies or unsupported claims. 2 sentences.`, { maxTokens: 150 });
+      const r = await callBrain("utility", `Evaluate this debate for logical consistency and evidence quality:\n\n${allTurns}\n\nRate each side's argument strength and identify any logical fallacies or unsupported claims. 2 sentences.`, { maxTokens: 150 });
       debate.turns.push({ brain: "repair", role: "evaluation", content: r.content?.trim() || "[no response]" });
     }
   } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
@@ -45311,14 +45323,14 @@ async function validateOrganismDTU(dtu, submitterId) {
 
   // Critic: Is this falsifiable?
   try {
-    const criticResult = await callBrain("repair", `You are the CRITIC emergent. Evaluate this DTU for falsifiability and evidence quality. DTU title: "${dtu.title}". Content: "${(dtu.human?.summary || dtu.content || "").slice(0, 500)}". Tags: ${(dtu.tags || []).join(", ")}. Respond with JSON: { "pass": true/false, "reason": "..." }`, { temperature: 0.3, maxTokens: 200 });
+    const criticResult = await callBrain("utility", `You are the CRITIC emergent. Evaluate this DTU for falsifiability and evidence quality. DTU title: "${dtu.title}". Content: "${(dtu.human?.summary || dtu.content || "").slice(0, 500)}". Tags: ${(dtu.tags || []).join(", ")}. Respond with JSON: { "pass": true/false, "reason": "..." }`, { temperature: 0.3, maxTokens: 200 });
     const parsed = safeJSONParse(criticResult?.content || "{}");
     validations.push({ role: "critic", pass: parsed.pass !== false, reason: parsed.reason || criticResult?.content?.slice(0, 200) || "evaluated" });
   } catch (e) { validations.push({ role: "critic", pass: true, reason: "Evaluation unavailable, defaulting to pass" }); }
 
   // Ethicist: Constitutional principles check
   try {
-    const ethicistResult = await callBrain("repair", `You are the ETHICIST emergent. Does this DTU violate any constitutional or ethical principles? DTU: "${dtu.title}" — "${(dtu.human?.summary || dtu.content || "").slice(0, 500)}". Respond with JSON: { "pass": true/false, "reason": "..." }`, { temperature: 0.3, maxTokens: 200 });
+    const ethicistResult = await callBrain("utility", `You are the ETHICIST emergent. Does this DTU violate any constitutional or ethical principles? DTU: "${dtu.title}" — "${(dtu.human?.summary || dtu.content || "").slice(0, 500)}". Respond with JSON: { "pass": true/false, "reason": "..." }`, { temperature: 0.3, maxTokens: 200 });
     const parsed = safeJSONParse(ethicistResult?.content || "{}");
     validations.push({ role: "ethicist", pass: parsed.pass !== false, reason: parsed.reason || ethicistResult?.content?.slice(0, 200) || "evaluated" });
   } catch (e) { validations.push({ role: "ethicist", pass: true, reason: "Evaluation unavailable, defaulting to pass" }); }
@@ -45424,7 +45436,7 @@ async function initiateBridgeDebate(challengerRole, targetDtuId, challenge) {
 
   // Step 2: Challenger responds
   try {
-    const chalResp = await callBrain("repair", `You are the ${challengerRole} emergent agent. The organism defends: "${transcript[0]?.content?.slice(0, 300)}". Your original challenge: "${challenge}". Respond with your counter-argument.`, { temperature: 0.4, maxTokens: 300 });
+    const chalResp = await callBrain("utility", `You are the ${challengerRole} emergent agent. The organism defends: "${transcript[0]?.content?.slice(0, 300)}". Your original challenge: "${challenge}". Respond with your counter-argument.`, { temperature: 0.4, maxTokens: 300 });
     transcript.push({ speaker: challengerRole, content: chalResp?.content || "No counter" });
   } catch { transcript.push({ speaker: challengerRole, content: "Counter unavailable" }); }
 
@@ -45503,9 +45515,9 @@ async function organismBirthCeremony(swarmId) {
     else governanceReviews.push({ role: "builder", approve: true, note: g1?.content?.slice(0, 100) || "reviewed" });
   } catch { governanceReviews.push({ role: "builder", approve: true, note: "unavailable" }); }
 
-  // Group 2: Critic + Auditor + Adversary (via repair brain)
+  // Group 2: Critic + Auditor + Adversary (via utility brain — technical governance checks)
   try {
-    const g2 = await callBrain("repair", `You represent THREE emergent governance agents RED-TEAMING a new Knowledge Organism:\n\nCRITIC: Are the foundational DTUs falsifiable?\nAUDITOR: Is all provenance clean?\nADVERSARY: What could go wrong with this organism?\n\nSwarm "${swarm.name}" with ${swarm.size} DTUs:\n${swarmSummary.slice(0, 800)}\n\nFor each role, respond with JSON array: [{ "role": "critic", "approve": true/false, "note": "..." }, { "role": "auditor", "approve": true/false, "note": "..." }, { "role": "adversary", "approve": true/false, "note": "..." }]`, { temperature: 0.4, maxTokens: 400 });
+    const g2 = await callBrain("utility", `You represent THREE emergent governance agents RED-TEAMING a new Knowledge Organism:\n\nCRITIC: Are the foundational DTUs falsifiable?\nAUDITOR: Is all provenance clean?\nADVERSARY: What could go wrong with this organism?\n\nSwarm "${swarm.name}" with ${swarm.size} DTUs:\n${swarmSummary.slice(0, 800)}\n\nFor each role, respond with JSON array: [{ "role": "critic", "approve": true/false, "note": "..." }, { "role": "auditor", "approve": true/false, "note": "..." }, { "role": "adversary", "approve": true/false, "note": "..." }]`, { temperature: 0.4, maxTokens: 400 });
     const parsed = safeJSONParse(g2?.content || "[]");
     if (Array.isArray(parsed)) governanceReviews.push(...parsed);
     else governanceReviews.push({ role: "critic", approve: true, note: g2?.content?.slice(0, 100) || "reviewed" });

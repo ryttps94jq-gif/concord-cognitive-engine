@@ -11,7 +11,7 @@
  *   3 — LOW:      autogen pipeline, background enrichment
  *
  * Features:
- *   - Configurable concurrency cap (defaults to 2)
+ *   - Configurable concurrency cap (defaults to 8, matching 4 brain instances)
  *   - Queue depth limit with rejection for low-priority overflow
  *   - Per-priority metrics (queued, inflight, completed, rejected, avg latency)
  *   - Drain support for graceful shutdown
@@ -36,7 +36,11 @@ const PRIORITY_LABELS = ["critical", "high", "normal", "low"];
  * @returns {LLMQueue}
  */
 export function createLLMQueue(opts = {}) {
-  const concurrency = opts.concurrency || parseInt(process.env.LLM_CONCURRENCY || "2", 10);
+  // Default 8: conscious(3) + subconscious(4) + utility(6) + repair(2) = 15 brain slots,
+  // but 8 avoids oversaturation while still allowing meaningful parallelism across brains.
+  // Previous default of 2 bottlenecked the entire system — only 2 LLM calls at a time
+  // despite having 4 separate Ollama instances with 20 total parallel slots.
+  const concurrency = opts.concurrency || parseInt(process.env.LLM_CONCURRENCY || "8", 10);
   const maxQueueDepth = opts.maxQueueDepth || 200;
   const onReject = opts.onReject || (() => {});
 
