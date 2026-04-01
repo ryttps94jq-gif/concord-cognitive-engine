@@ -244,7 +244,7 @@ const ALL_STATUSES: Status[] = ['active', 'monitoring', 'critical', 'remediation
 
 const STATUS_COLORS: Record<Status, string> = {
   active: 'green-400',
-  monitoring: 'neon-blue',
+  monitoring: 'emerald-500',
   critical: 'red-400',
   remediation: 'orange-400',
   closed: 'gray-400',
@@ -273,7 +273,7 @@ const CONSERVATION_LABELS: Record<ConservationStatus, { label: string; color: st
 
 const TREND_ICONS: Record<PopulationTrend, { icon: typeof TrendingUp; color: string }> = {
   increasing: { icon: TrendingUp, color: 'text-green-400' },
-  stable: { icon: Minus, color: 'text-neon-blue' },
+  stable: { icon: Minus, color: 'text-emerald-500' },
   declining: { icon: TrendingDown, color: 'text-red-400' },
 };
 
@@ -1530,7 +1530,7 @@ export default function EnvironmentLensPage() {
             <>
               <p className={cn(ds.textMono, 'text-gray-500 text-xs')}>{d.sampleId as string}</p>
               <div className="flex items-center gap-2">
-                <span className={ds.badge('neon-blue')}>{d.medium as string}</span>
+                <span className={ds.badge('emerald-500')}>{d.medium as string}</span>
                 <span className={ds.textMuted}>{d.parameter as string}</span>
               </div>
               <p className={cn(ds.heading3, 'text-base')}>
@@ -1588,7 +1588,7 @@ export default function EnvironmentLensPage() {
                   <span className={ds.badge(
                     d.wasteType === 'hazardous' ? 'red-400' :
                     d.wasteType === 'recycling' ? 'green-400' :
-                    d.wasteType === 'organic' ? 'neon-purple' : 'neon-blue'
+                    d.wasteType === 'organic' ? 'neon-purple' : 'emerald-500'
                   )}>
                     {(d.wasteType as string).toUpperCase()}
                   </span>
@@ -1622,7 +1622,7 @@ export default function EnvironmentLensPage() {
               <>
                 <div className="flex items-center gap-2">
                   <span className={cn(ds.textMono, 'text-xs text-gray-500')}>{d.permitNumber as string}</span>
-                  {Boolean(d.permitType) && <span className={ds.badge('neon-blue')}>{d.permitType as string}</span>}
+                  {Boolean(d.permitType) && <span className={ds.badge('emerald-500')}>{d.permitType as string}</span>}
                 </div>
                 <p className={ds.textMuted}>Agency: {d.issuingAgency as string || 'N/A'}</p>
                 <div className="flex items-center gap-3">
@@ -1678,7 +1678,7 @@ export default function EnvironmentLensPage() {
             <>
               <div className="flex items-center gap-2 flex-wrap">
                 {Boolean(d.resourceType) && <span className={ds.badge(
-                  d.resourceType === 'Water' ? 'neon-blue' :
+                  d.resourceType === 'Water' ? 'emerald-500' :
                   d.resourceType === 'Energy' ? 'orange-400' :
                   d.resourceType === 'Waste' ? 'neon-purple' : 'neon-cyan'
                 )}>{d.resourceType as string}</span>}
@@ -1799,7 +1799,7 @@ export default function EnvironmentLensPage() {
         </div>
         <div className={ds.panel}>
           <div className="flex items-center gap-2 mb-2">
-            <FlaskConical className="w-5 h-5 text-neon-blue" />
+            <FlaskConical className="w-5 h-5 text-emerald-500" />
             <span className={ds.textMuted}>Samples Pending</span>
           </div>
           <p className={ds.heading1}>{dashboardStats.pendingSamples}</p>
@@ -1910,7 +1910,7 @@ export default function EnvironmentLensPage() {
             </div>
             <div className="flex items-center justify-between p-3 rounded-lg bg-lattice-elevated/30">
               <div className="flex items-center gap-2">
-                <Droplets className="w-5 h-5 text-neon-blue" />
+                <Droplets className="w-5 h-5 text-emerald-500" />
                 <span className="text-sm text-gray-300">Active Samples</span>
               </div>
               <span className={ds.heading3}>{sampleItems.length}</span>
@@ -2066,8 +2066,8 @@ export default function EnvironmentLensPage() {
           return (
             <div key={action.id} className={cn(ds.panelHover, 'space-y-3')}>
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-neon-blue/20 flex items-center justify-center">
-                  <Icon className="w-5 h-5 text-neon-blue" />
+                <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                  <Icon className="w-5 h-5 text-emerald-500" />
                 </div>
                 <div>
                   <h4 className={ds.heading3}>{action.label}</h4>
@@ -2123,8 +2123,8 @@ export default function EnvironmentLensPage() {
       {runAction.isPending && (
         <div className="flex items-center justify-center py-8">
           <div className="flex items-center gap-3">
-            <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-neon-blue" />
-            <span className="text-neon-blue text-sm">Running action...</span>
+            <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-emerald-500" />
+            <span className="text-emerald-500 text-sm">Running action...</span>
           </div>
         </div>
       )}
@@ -2139,8 +2139,8 @@ export default function EnvironmentLensPage() {
     return (
       <div className="flex items-center justify-center h-full p-8">
         <div className="text-center space-y-3">
-          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-sm text-gray-400">Loading...</p>
+          <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading ecosystem data...</p>
         </div>
       </div>
     );
@@ -2270,7 +2270,7 @@ export default function EnvironmentLensPage() {
                 {filtered.length} of {items.length} items
               </span>
               {runAction.isPending && (
-                <span className="text-xs text-neon-blue animate-pulse">Running action...</span>
+                <span className="text-xs text-emerald-500 animate-pulse">Running action...</span>
               )}
             </div>
           </div>

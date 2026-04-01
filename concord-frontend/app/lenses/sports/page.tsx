@@ -134,7 +134,7 @@ export default function SportsLensPage() {
         {isLoading ? (
           <div className="panel p-6 text-center text-gray-400">Loading games...</div>
         ) : games.length === 0 ? (
-          <div className="panel p-6 text-center text-gray-400">No games tracked yet.</div>
+          <div className="panel p-6 text-center text-gray-400">No games or matches tracked yet. Log your first competition.</div>
         ) : games.map(g => (
           <div key={g.id} className="panel p-4 flex items-center justify-between">
             <div className="min-w-0 flex-1">

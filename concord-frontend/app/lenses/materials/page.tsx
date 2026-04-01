@@ -70,8 +70,8 @@ export default function MaterialsLensPage() {
     return (
       <div data-lens-theme="materials" className="flex items-center justify-center h-full p-8">
         <div className="text-center space-y-3">
-          <div className="w-8 h-8 border-2 border-neon-blue border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-sm text-gray-400">Loading...</p>
+          <div className="w-8 h-8 border-2 border-zinc-300 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading materials database...</p>
         </div>
       </div>
     );
@@ -86,10 +86,10 @@ export default function MaterialsLensPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="materials" className="p-6 space-y-6">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Box className="w-8 h-8 text-neon-blue" />
+          <Box className="w-8 h-8 text-zinc-300" />
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-bold">Materials Science Lens</h1>
@@ -108,7 +108,7 @@ export default function MaterialsLensPage() {
       <div className="flex gap-2 border-b border-white/10 pb-2">
         {(['library', 'compare', 'properties'] as const).map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${activeTab === tab ? 'bg-neon-blue/20 text-neon-blue border-b-2 border-neon-blue' : 'text-gray-400 hover:text-white'}`}
+            className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${activeTab === tab ? 'bg-zinc-300/20 text-zinc-300 border-b-2 border-zinc-300' : 'text-gray-400 hover:text-white'}`}
           >
             {tab.charAt(0).toUpperCase() + tab.slice(1)}
           </button>
@@ -136,7 +136,7 @@ export default function MaterialsLensPage() {
               <select value={newMat.category} onChange={e => setNewMat({ ...newMat, category: e.target.value })} className="bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm">
                 {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
-              <button onClick={addMaterial} className="px-4 py-2 bg-neon-blue/20 text-neon-blue rounded-lg text-sm hover:bg-neon-blue/30">
+              <button onClick={addMaterial} className="px-4 py-2 bg-zinc-300/20 text-zinc-300 rounded-lg text-sm hover:bg-zinc-300/30">
                 <Plus className="w-4 h-4 inline mr-1" /> Add
               </button>
             </div>
@@ -151,7 +151,7 @@ export default function MaterialsLensPage() {
                 <div key={mat.id} className="panel p-4 flex items-center justify-between">
                   <div>
                     <div className="flex items-center gap-2">
-                      <Box className="w-4 h-4 text-neon-blue" />
+                      <Box className="w-4 h-4 text-zinc-300" />
                       <span className="font-medium">{mat.name || mat.title}</span>
                       <span className="text-xs px-2 py-0.5 rounded bg-white/10 text-gray-300">{mat.category}</span>
                     </div>
@@ -206,7 +206,7 @@ export default function MaterialsLensPage() {
             ].map(prop => (
               <div key={prop.name} className="lens-card">
                 <div className="flex items-center gap-2 mb-1">
-                  <prop.icon className="w-4 h-4 text-neon-blue" />
+                  <prop.icon className="w-4 h-4 text-zinc-300" />
                   <span className="font-medium text-sm">{prop.name}</span>
                 </div>
                 <p className="text-xs text-gray-400">{prop.desc}</p>

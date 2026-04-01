@@ -43,18 +43,18 @@ const ROUTE_STATUSES = ['planned', 'dispatched', 'in_progress', 'completed'] as 
 const GENERAL_STATUSES = ['active', 'inactive', 'maintenance', 'pending', 'flagged'] as const;
 
 const STATUS_COLORS: Record<string, string> = {
-  booked: 'neon-blue', picked_up: 'neon-cyan', in_transit: 'neon-purple',
+  booked: 'blue-500', picked_up: 'neon-cyan', in_transit: 'neon-purple',
   out_for_delivery: 'amber-400', delivered: 'green-400', exception: 'red-400',
-  planned: 'gray-400', dispatched: 'neon-blue', in_progress: 'neon-cyan', completed: 'green-400',
+  planned: 'gray-400', dispatched: 'blue-500', in_progress: 'neon-cyan', completed: 'green-400',
   active: 'green-400', inactive: 'gray-500', maintenance: 'amber-400',
-  pending: 'neon-blue', flagged: 'red-400',
+  pending: 'blue-500', flagged: 'red-400',
   overdue: 'red-400', upcoming: 'amber-400', current: 'green-400',
   pass: 'green-400', fail: 'red-400', warning: 'amber-400',
   skipped: 'gray-500', arrived: 'neon-cyan',
 };
 
 const KANBAN_COLUMNS: { key: ShipmentStatus; label: string; color: string }[] = [
-  { key: 'booked', label: 'Booked', color: 'neon-blue' },
+  { key: 'booked', label: 'Booked', color: 'blue-500' },
   { key: 'picked_up', label: 'Picked Up', color: 'neon-cyan' },
   { key: 'in_transit', label: 'In Transit', color: 'neon-purple' },
   { key: 'out_for_delivery', label: 'Out for Delivery', color: 'amber-400' },
@@ -520,9 +520,9 @@ export default function LogisticsLensPage() {
                   <span className={cn('ml-auto text-xs', totalHours > 60 ? 'text-red-400' : 'text-gray-400')}>{totalHours}h this week</span>
                 </div>
                 <div className="grid grid-cols-4 gap-2 text-center">
-                  <div className="bg-neon-blue/10 rounded-lg p-2">
+                  <div className="bg-blue-500/10 rounded-lg p-2">
                     <p className="text-xs text-gray-400">Driving</p>
-                    <p className="text-sm font-bold text-neon-blue">{driving}h</p>
+                    <p className="text-sm font-bold text-blue-500">{driving}h</p>
                   </div>
                   <div className="bg-amber-400/10 rounded-lg p-2">
                     <p className="text-xs text-gray-400">On-Duty</p>
@@ -773,9 +773,9 @@ export default function LogisticsLensPage() {
             return nc && daysUntil(String(nc)) <= 7;
           });
           return upcoming.length > 0 ? (
-            <div className={cn(ds.panel, 'border-neon-blue/30')}>
+            <div className={cn(ds.panel, 'border-blue-500/30')}>
               <div className="flex items-center gap-2 mb-2">
-                <Calendar className="w-4 h-4 text-neon-blue" />
+                <Calendar className="w-4 h-4 text-blue-500" />
                 <span className={ds.heading3}>Upcoming Cycle Counts</span>
               </div>
               <div className="space-y-1">
@@ -785,7 +785,7 @@ export default function LogisticsLensPage() {
                   return (
                     <div key={w.id} className="flex items-center gap-3 py-1 text-sm">
                       <span className="flex-1">{w.title}</span>
-                      <span className={ds.badge(days <= 2 ? 'amber-400' : 'neon-blue')}>
+                      <span className={ds.badge(days <= 2 ? 'amber-400' : 'blue-500')}>
                         {days <= 0 ? 'Today' : `In ${days}d`} - {String(d.nextCycleCount)}
                       </span>
                     </div>
@@ -928,7 +928,7 @@ export default function LogisticsLensPage() {
       {/* Route KPIs */}
       <div className={ds.grid4}>
         <StatCard icon={Route} label="Active Routes" value={filtered.filter(r => r.meta?.status === 'in_progress' || r.meta?.status === 'dispatched').length} />
-        <StatCard icon={Navigation} label="Total Distance" value={`${formatNumber(filtered.reduce((s, r) => s + (Number((r.data as Record<string, unknown>).distance) || 0), 0))} mi`} color="text-neon-blue" />
+        <StatCard icon={Navigation} label="Total Distance" value={`${formatNumber(filtered.reduce((s, r) => s + (Number((r.data as Record<string, unknown>).distance) || 0), 0))} mi`} color="text-blue-500" />
         <StatCard icon={Fuel} label="Total Fuel Cost" value={formatCurrency(filtered.reduce((s, r) => s + (Number((r.data as Record<string, unknown>).fuelCost) || 0), 0))} color="text-amber-400" />
         <StatCard icon={DollarSign} label="Total Tolls" value={formatCurrency(filtered.reduce((s, r) => s + (Number((r.data as Record<string, unknown>).tollCost) || 0), 0))} color="text-neon-purple" />
       </div>
@@ -1369,7 +1369,7 @@ export default function LogisticsLensPage() {
         <StatCard icon={Truck} label="Active Fleet" value={`${dashMetrics.activeVehicles}/${dashMetrics.totalVehicles}`} color="text-neon-cyan" />
         <StatCard icon={Package} label="In Transit" value={dashMetrics.inTransit} color="text-neon-purple" />
         <StatCard icon={Target} label="On-Time Rate" value={`${dashMetrics.onTimeRate}%`} color="text-green-400" trend="up" />
-        <StatCard icon={Gauge} label="Fleet Util." value={`${dashMetrics.utilizationAvg}%`} color="text-neon-blue" />
+        <StatCard icon={Gauge} label="Fleet Util." value={`${dashMetrics.utilizationAvg}%`} color="text-blue-500" />
         <StatCard icon={Warehouse} label="WH Capacity" value={`${dashMetrics.whUtilPct}%`} color="text-amber-400" />
         <StatCard icon={DollarSign} label="Rev/Mile" value={`$${dashMetrics.revPerMile}`} color="text-green-400" trend="up" />
       </div>
@@ -1426,7 +1426,7 @@ export default function LogisticsLensPage() {
         <button onClick={() => handleAction('complianceAudit')} className={ds.btnSecondary}>
           <ShieldCheck className="w-4 h-4" /> Compliance Audit
         </button>
-        {runAction.isPending && <span className="text-xs text-neon-blue animate-pulse">Running...</span>}
+        {runAction.isPending && <span className="text-xs text-blue-500 animate-pulse">Running...</span>}
       </div>
 
       {actionResult && (
@@ -1579,14 +1579,14 @@ export default function LogisticsLensPage() {
               { icon: Wrench, text: 'Peterbilt 579 #103 entered maintenance bay - brake service', time: '12h ago', color: 'text-amber-400' },
               { icon: ShieldCheck, text: 'DOT Level 1 inspection passed for Kenworth T680 #102', time: '1d ago', color: 'text-green-400' },
               { icon: Fuel, text: 'Fleet fuel cost up 4.2% this week - $3.89/gal avg diesel', time: '1d ago', color: 'text-red-400' },
-              { icon: Route, text: 'Route RT-ATL-PDX-01 optimized - saved 45 miles', time: '1d ago', color: 'text-neon-blue' },
+              { icon: Route, text: 'Route RT-ATL-PDX-01 optimized - saved 45 miles', time: '1d ago', color: 'text-blue-500' },
               { icon: FileWarning, text: 'International LT #105 insurance expiring in 26 days', time: '2d ago', color: 'text-amber-400' },
               { icon: Star, text: 'Diana Martinez achieved 99 safety score - top performer', time: '2d ago', color: 'text-neon-purple' },
               { icon: MapPin, text: 'Shipment SH-2026-0004 exception: delayed at Denver terminal', time: '2d ago', color: 'text-amber-400' },
             ].map((evt, i) => {
               const Icon = evt.icon;
               return (
-                <div key={i} className="flex items-center gap-3 py-3 px-2">
+                <div key={i} data-lens-theme="logistics" className="flex items-center gap-3 py-3 px-2">
                   <Icon className={cn('w-4 h-4 shrink-0', evt.color)} />
                   <span className="flex-1 text-sm text-gray-200">{evt.text}</span>
                   <span className={cn(ds.textMuted, 'shrink-0')}>{evt.time}</span>

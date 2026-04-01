@@ -254,7 +254,7 @@ export default function HRLensPage() {
         <button onClick={openCreate} className={ds.btnPrimary}><Plus className="w-4 h-4" /> New</button>
       </div>
       {isLoading ? (
-        <div className="flex items-center justify-center py-12"><div className="w-6 h-6 border-2 border-neon-blue border-t-transparent rounded-full animate-spin" /></div>
+        <div className="flex items-center justify-center py-12"><div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" /></div>
       ) : filtered.length === 0 ? (
         <div className={cn(ds.panel, 'text-center py-12')}>
           <Users className="w-12 h-12 text-gray-600 mx-auto mb-3" />
@@ -289,7 +289,7 @@ export default function HRLensPage() {
   );
 
   return (
-    <div className="space-y-6 p-6">
+    <div data-lens-theme="hr" className="space-y-6 p-6">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">

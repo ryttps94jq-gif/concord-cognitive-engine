@@ -135,7 +135,7 @@ export default function VeterinaryLensPage() {
   }
 
   return (
-    <div className={cn(ds.pageContainer, 'space-y-4')}>
+    <div data-lens-theme="veterinary" className={cn(ds.pageContainer, 'space-y-4')}>
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-pink-500/20 flex items-center justify-center">

@@ -41,7 +41,7 @@ interface TripData {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  planning: 'text-yellow-400 bg-yellow-400/10',
+  planning: 'text-yellow-400 bg-teal-400/10',
   booked: 'text-neon-cyan bg-neon-cyan/10',
   'in-progress': 'text-neon-green bg-neon-green/10',
   completed: 'text-gray-400 bg-gray-400/10',
@@ -114,7 +114,7 @@ export default function TravelLensPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="travel" className="p-6 space-y-6">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Compass className="w-6 h-6 text-neon-cyan" />
@@ -169,7 +169,7 @@ export default function TravelLensPage() {
         {isLoading ? (
           <div className="panel p-6 text-center text-gray-400">Loading trips...</div>
         ) : trips.length === 0 ? (
-          <div className="panel p-6 text-center text-gray-400">No trips yet. Create one to get started.</div>
+          <div className="panel p-6 text-center text-gray-400">No trips planned yet. Start mapping your next adventure.</div>
         ) : (
           trips.map(trip => (
             <div key={trip.id} className="panel p-4 flex items-center justify-between">

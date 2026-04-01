@@ -35,7 +35,7 @@ const CATEGORIES = ['Tops', 'Bottoms', 'Dresses', 'Outerwear', 'Shoes', 'Accesso
 const CONDITION_COLORS: Record<string, string> = {
   new: 'text-neon-green bg-neon-green/10',
   good: 'text-neon-cyan bg-neon-cyan/10',
-  worn: 'text-yellow-400 bg-yellow-400/10',
+  worn: 'text-yellow-400 bg-fuchsia-400/10',
   donate: 'text-red-400 bg-red-400/10',
 };
 
@@ -142,7 +142,7 @@ export default function FashionLensPage() {
         {isLoading ? (
           <div className="col-span-full panel p-6 text-center text-gray-400">Loading wardrobe...</div>
         ) : garments.length === 0 ? (
-          <div className="col-span-full panel p-6 text-center text-gray-400">No collections or designs yet. Create your first fashion piece. Add your first piece.</div>
+          <div className="col-span-full panel p-6 text-center text-gray-400">No collections or designs yet. Create your first fashion piece.</div>
         ) : garments.map(g => (
           <div key={g.id} className="panel p-4">
             <div className="flex items-center justify-between mb-2">

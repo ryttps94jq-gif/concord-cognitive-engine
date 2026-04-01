@@ -88,10 +88,10 @@ function getTypeForTab(tab: ModeTab): string {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  active: 'text-green-400 bg-green-400/10', development: 'text-blue-400 bg-blue-400/10',
+  active: 'text-green-400 bg-amber-500/10', development: 'text-blue-400 bg-blue-400/10',
   suspended: 'text-yellow-400 bg-yellow-400/10', reclamation: 'text-orange-400 bg-orange-400/10',
   closed: 'text-gray-500 bg-gray-500/10', open: 'text-red-400 bg-red-400/10',
-  investigating: 'text-yellow-400 bg-yellow-400/10', resolved: 'text-green-400 bg-green-400/10',
+  investigating: 'text-yellow-400 bg-yellow-400/10', resolved: 'text-green-400 bg-amber-500/10',
   minor: 'text-yellow-400 bg-yellow-400/10', moderate: 'text-orange-400 bg-orange-400/10',
   serious: 'text-red-400 bg-red-400/10', fatal: 'text-red-500 bg-red-500/10',
 };
@@ -136,7 +136,7 @@ export default function MiningLensPage() {
   }
 
   return (
-    <div className={cn(ds.pageContainer, 'space-y-4')}>
+    <div data-lens-theme="mining" className={cn(ds.pageContainer, 'space-y-4')}>
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-yellow-600/20 flex items-center justify-center">

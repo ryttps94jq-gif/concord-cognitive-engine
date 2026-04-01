@@ -184,7 +184,7 @@ export default function PlumbingLensPage() {
         <select className={cn(ds.select, 'w-auto')} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}><option value="all">All</option>{Object.entries(STATUS_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select>
         <button onClick={openCreate} className={ds.btnPrimary}><Plus className="w-4 h-4" /> New</button>
       </div>
-      {isLoading ? <div className="flex items-center justify-center py-12"><div className="w-6 h-6 border-2 border-neon-blue border-t-transparent rounded-full animate-spin" /></div>
+      {isLoading ? <div className="flex items-center justify-center py-12"><div className="w-6 h-6 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" /></div>
       : filtered.length === 0 ? <div className={cn(ds.panel, 'text-center py-12')}><Droplets className="w-12 h-12 text-gray-600 mx-auto mb-3" /><p className={ds.textMuted}>No {activeArtifactType} items yet</p><button onClick={openCreate} className={cn(ds.btnPrimary, 'mt-3')}><Plus className="w-4 h-4" /> Create First</button></div>
       : filtered.map(item => {
         const d = item.data as unknown as TradeArtifact; const sc = STATUS_CONFIG[d.status] || STATUS_CONFIG.pending;
@@ -194,7 +194,7 @@ export default function PlumbingLensPage() {
   );
 
   return (
-    <div className="space-y-6 p-6">
+    <div data-lens-theme="plumbing" className="space-y-6 p-6">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center"><Droplets className="w-5 h-5 text-white" /></div>

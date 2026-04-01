@@ -418,8 +418,8 @@ export default function GameLensPage() {
     return (
       <div data-lens-theme="game" className="flex items-center justify-center h-full p-8">
         <div className="text-center space-y-3">
-          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-sm text-gray-400">Loading...</p>
+          <div className="w-8 h-8 border-2 border-violet-400 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading game library...</p>
         </div>
       </div>
     );
@@ -598,7 +598,7 @@ export default function GameLensPage() {
             const BranchIcon = data.icon;
             const isExpanded = expandedBranch === branch;
             return (
-              <div key={branch} className="panel overflow-hidden">
+              <div key={branch} data-lens-theme="game" className="panel overflow-hidden">
                 <button
                   onClick={() => setExpandedBranch(isExpanded ? null : branch)}
                   className="w-full flex items-center justify-between p-4 hover:bg-lattice-surface/50 transition-colors"
@@ -812,7 +812,7 @@ export default function GameLensPage() {
               </thead>
               <tbody>
                 {sortedLeaderboard.length === 0 && (
-                  <tr><td colSpan={5} className="py-8 text-center text-gray-500">No players on the leaderboard yet</td></tr>
+                  <tr><td colSpan={5} className="py-8 text-center text-gray-500">No players on the leaderboard yet. Start a game to climb the ranks.</td></tr>
                 )}
                 {sortedLeaderboard.map((player, index) => (
                   <motion.tr

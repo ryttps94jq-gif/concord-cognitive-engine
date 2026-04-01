@@ -89,8 +89,8 @@ export default function AstronomyLensPage() {
     return (
       <div data-lens-theme="astronomy" className="flex items-center justify-center h-full p-8">
         <div className="text-center space-y-3">
-          <div className="w-8 h-8 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-sm text-gray-400">Loading...</p>
+          <div className="w-8 h-8 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Scanning the cosmos...</p>
         </div>
       </div>
     );
@@ -105,10 +105,10 @@ export default function AstronomyLensPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="astronomy" className="p-6 space-y-6">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Telescope className="w-8 h-8 text-yellow-400" />
+          <Telescope className="w-8 h-8 text-indigo-400" />
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-bold">Astronomy Lens</h1>
@@ -127,7 +127,7 @@ export default function AstronomyLensPage() {
       <div className="flex gap-2 border-b border-white/10 pb-2">
         {(['catalog', 'observations', 'planning'] as const).map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${activeTab === tab ? 'bg-yellow-400/20 text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-white'}`}
+            className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${activeTab === tab ? 'bg-indigo-400/20 text-indigo-400 border-b-2 border-indigo-400' : 'text-gray-400 hover:text-white'}`}
           >
             {tab.charAt(0).toUpperCase() + tab.slice(1)}
           </button>
@@ -149,7 +149,7 @@ export default function AstronomyLensPage() {
                 {(Object.keys(TYPE_ICONS) as CelestialType[]).map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
               </select>
               <input value={newObj.constellation} onChange={e => setNewObj({ ...newObj, constellation: e.target.value })} placeholder="Constellation" className="bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm" />
-              <button onClick={addObject} className="px-4 py-2 bg-yellow-400/20 text-yellow-400 rounded-lg text-sm hover:bg-yellow-400/30">
+              <button onClick={addObject} className="px-4 py-2 bg-indigo-400/20 text-indigo-400 rounded-lg text-sm hover:bg-indigo-400/30">
                 <Plus className="w-4 h-4 inline mr-1" /> Add
               </button>
             </div>
@@ -190,7 +190,7 @@ export default function AstronomyLensPage() {
               <input value={obsForm.telescope} onChange={e => setObsForm({ ...obsForm, telescope: e.target.value })} placeholder="Telescope/equipment" className="bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm" />
             </div>
             <textarea value={obsForm.notes} onChange={e => setObsForm({ ...obsForm, notes: e.target.value })} placeholder="Observation notes..." className="w-full bg-black/30 border border-white/10 rounded-lg p-3 text-sm resize-none h-20" />
-            <button onClick={logObservation} className="mt-2 px-4 py-2 bg-yellow-400/20 text-yellow-400 rounded-lg text-sm hover:bg-yellow-400/30">Log</button>
+            <button onClick={logObservation} className="mt-2 px-4 py-2 bg-indigo-400/20 text-indigo-400 rounded-lg text-sm hover:bg-indigo-400/30">Log</button>
           </div>
 
           <div className="space-y-2">
@@ -210,7 +210,7 @@ export default function AstronomyLensPage() {
 
       {activeTab === 'planning' && (
         <div className="panel p-4">
-          <h3 className="font-semibold mb-3 flex items-center gap-2"><Target className="w-4 h-4 text-yellow-400" /> Session Planner</h3>
+          <h3 className="font-semibold mb-3 flex items-center gap-2"><Target className="w-4 h-4 text-indigo-400" /> Session Planner</h3>
           <p className="text-gray-500 text-sm text-center py-4">Select objects from your catalog to plan an observation session. Best results with clear skies and low light pollution.</p>
           {objects.length > 0 && (
             <div className="mt-4 space-y-2">

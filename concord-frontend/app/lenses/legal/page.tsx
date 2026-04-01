@@ -223,7 +223,7 @@ const STATUSES_BY_TYPE: Record<ArtifactType, string[]> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  intake: 'neon-blue', active: 'neon-green', discovery: 'neon-purple', negotiation: 'amber-400',
+  intake: 'neon-blue', active: 'neon-green', discovery: 'amber-400', negotiation: 'amber-400',
   trial: 'red-400', appeal: 'orange-400', closed: 'gray-400',
   draft: 'gray-400', review: 'neon-blue', filed: 'neon-cyan', served: 'neon-green',
   logged: 'neon-blue', billed: 'amber-400', paid: 'neon-green',
@@ -767,8 +767,8 @@ export default function LegalLensPage() {
     return (
       <div className="flex items-center justify-center h-full p-8">
         <div className="text-center space-y-3">
-          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-sm text-gray-400">Loading...</p>
+          <div className="w-8 h-8 border-2 border-amber-400 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading case files...</p>
         </div>
       </div>
     );
@@ -823,7 +823,7 @@ export default function LegalLensPage() {
           <StatCard icon={Briefcase} value={stats.activeCases} label="Active Matters" sub={`${stats.totalCases} total cases`} color="text-neon-blue" />
           <StatCard icon={Timer} value={`${stats.weeklyHours.toFixed(1)}h`} label="Billable This Week" sub={`${stats.monthlyHours.toFixed(1)}h this month`} color="text-neon-green" />
           <StatCard icon={AlertTriangle} value={stats.upcomingDeadlines} label="Deadlines (7 days)" sub={`${stats.overdueEvents} overdue`} color="text-amber-400" />
-          <StatCard icon={DollarSign} value={formatCurrency(stats.unbilledAmount)} label="Unbilled Time" sub={`Trust: ${formatCurrency(stats.trustBalance)}`} color="text-neon-purple" />
+          <StatCard icon={DollarSign} value={formatCurrency(stats.unbilledAmount)} label="Unbilled Time" sub={`Trust: ${formatCurrency(stats.trustBalance)}`} color="text-amber-400" />
         </div>
 
         {/* Second row KPIs */}
@@ -931,7 +931,7 @@ export default function LegalLensPage() {
           <section className={ds.panel}>
             <div className={cn(ds.sectionHeader, 'mb-3')}>
               <h3 className={ds.heading3}>Compliance Alerts</h3>
-              <Shield className="w-4 h-4 text-neon-purple" />
+              <Shield className="w-4 h-4 text-amber-400" />
             </div>
             {complianceAlerts.length === 0 ? (
               <div className="py-4 text-center">
@@ -1193,7 +1193,7 @@ export default function LegalLensPage() {
                 <h3 className={ds.heading3}>Trust Account (IOLTA)</h3>
                 <p className={ds.textMuted}>Interest on Lawyers&apos; Trust Account tracking</p>
               </div>
-              <Landmark className="w-5 h-5 text-neon-purple" />
+              <Landmark className="w-5 h-5 text-amber-400" />
             </div>
             <div className={ds.grid3}>
               <div className="bg-lattice-elevated rounded-lg p-4">
@@ -1254,10 +1254,10 @@ export default function LegalLensPage() {
     return (
       <div className="space-y-4">
         {/* SOL Calculator teaser */}
-        <div className={cn(ds.panel, 'border-neon-purple/30')}>
+        <div className={cn(ds.panel, 'border-amber-400/30')}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Calculator className="w-5 h-5 text-neon-purple" />
+              <Calculator className="w-5 h-5 text-amber-400" />
               <div>
                 <h3 className="text-sm font-semibold">Statute of Limitations Calculator</h3>
                 <p className="text-xs text-gray-500">Calculate SOL deadlines with rule-based adjustments (Federal, State, Local rules)</p>
@@ -2118,7 +2118,7 @@ export default function LegalLensPage() {
   /* ---------- main render ---------- */
 
   return (
-    <div className={ds.pageContainer}>
+    <div data-lens-theme="legal" className={ds.pageContainer}>
       {/* Legal Disclaimer */}
       <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3 flex items-start gap-3">
         <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
@@ -2131,7 +2131,7 @@ export default function LegalLensPage() {
       {/* Header */}
       <header className={ds.sectionHeader}>
         <div className="flex items-center gap-3">
-          <Scale className="w-7 h-7 text-neon-purple" />
+          <Scale className="w-7 h-7 text-amber-400" />
           <div>
             <div className="flex items-center gap-2">
               <h1 className={ds.heading1}>Legal Practice Management</h1>
@@ -2159,7 +2159,7 @@ export default function LegalLensPage() {
             className={cn(
               ds.btnGhost,
               'whitespace-nowrap',
-              activeTab === tab.id && 'bg-neon-purple/20 text-neon-purple'
+              activeTab === tab.id && 'bg-amber-400/20 text-amber-400'
             )}
           >
             <tab.icon className="w-4 h-4" />

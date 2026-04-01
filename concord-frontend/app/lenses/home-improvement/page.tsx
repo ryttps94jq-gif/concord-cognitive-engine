@@ -33,7 +33,7 @@ interface ProjectData {
 
 const STATUS_COLORS: Record<string, string> = {
   idea: 'text-gray-400 bg-gray-400/10',
-  planning: 'text-yellow-400 bg-yellow-400/10',
+  planning: 'text-yellow-400 bg-amber-500/10',
   'in-progress': 'text-neon-cyan bg-neon-cyan/10',
   completed: 'text-neon-green bg-neon-green/10',
 };
@@ -152,7 +152,7 @@ export default function HomeImprovementLensPage() {
         {isLoading ? (
           <div className="panel p-6 text-center text-gray-400">Loading projects...</div>
         ) : projects.length === 0 ? (
-          <div className="panel p-6 text-center text-gray-400">No projects yet.</div>
+          <div className="panel p-6 text-center text-gray-400">No home improvement projects yet. Plan your first renovation or repair.</div>
         ) : projects.map(p => (
           <div key={p.id} className="panel p-4 flex items-center justify-between">
             <div className="min-w-0 flex-1">

@@ -86,9 +86,9 @@ function getTypeForTab(tab: ModeTab): string {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  planning: 'text-blue-400 bg-blue-400/10', active: 'text-green-400 bg-green-400/10',
+  planning: 'text-blue-400 bg-amber-400/10', active: 'text-green-400 bg-green-400/10',
   completed: 'text-gray-400 bg-gray-400/10', aborted: 'text-red-400 bg-red-400/10',
-  surveyed: 'text-blue-400 bg-blue-400/10', depleted: 'text-red-400 bg-red-400/10',
+  surveyed: 'text-blue-400 bg-amber-400/10', depleted: 'text-red-400 bg-red-400/10',
   protected: 'text-green-400 bg-green-400/10',
   low: 'text-green-400 bg-green-400/10', moderate: 'text-yellow-400 bg-yellow-400/10',
   high: 'text-orange-400 bg-orange-400/10', extreme: 'text-red-400 bg-red-400/10',
@@ -135,7 +135,7 @@ export default function DesertLensPage() {
   }
 
   return (
-    <div className={cn(ds.pageContainer, 'space-y-4')}>
+    <div data-lens-theme="desert" className={cn(ds.pageContainer, 'space-y-4')}>
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">

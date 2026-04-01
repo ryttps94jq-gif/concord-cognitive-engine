@@ -41,7 +41,7 @@ const GENERAL_STATUSES = ['active', 'inactive', 'draft', 'pending', 'review'] as
 const MACHINE_STATUSES: MachineStatus[] = ['running', 'idle', 'maintenance', 'down'];
 
 const STATUS_COLORS: Record<string, string> = {
-  planned: 'gray-400', released: 'neon-blue', in_progress: 'neon-cyan',
+  planned: 'gray-400', released: 'neon-blue', in_progress: 'orange-500',
   qc: 'amber-400', complete: 'green-400', shipped: 'neon-purple',
   reported: 'red-400', investigating: 'amber-400', corrective_action: 'neon-blue', closed: 'green-400',
   active: 'green-400', inactive: 'gray-500', draft: 'gray-400', pending: 'neon-blue', review: 'amber-400',
@@ -163,7 +163,7 @@ function BOMTreeNode({ node, depth = 0 }: { node: BOMNode; depth?: number }) {
         <span className={cn('text-sm flex-1', depth === 0 ? 'font-semibold text-white' : 'text-gray-300')}>{node.part}</span>
         <span className={cn(ds.textMono, 'text-xs text-gray-500 w-20')}>{node.partNumber}</span>
         <span className="text-xs text-gray-400 w-12 text-right">{node.qtyPer}x</span>
-        <span className="text-xs text-neon-cyan w-20 text-right font-mono">${rollupCost.toFixed(2)}</span>
+        <span className="text-xs text-orange-500 w-20 text-right font-mono">${rollupCost.toFixed(2)}</span>
       </div>
       {expanded && hasChildren && node.children!.map(child => (
         <BOMTreeNode key={child.id} node={child} depth={depth + 1} />
@@ -212,7 +212,7 @@ function OEEGauge({ value, label, size = 'md' }: { value: number; label: string;
 // Schedule Timeline mini-component
 // ---------------------------------------------------------------------------
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
-const DAY_COLORS = ['bg-neon-blue/40', 'bg-neon-cyan/40', 'bg-neon-purple/40', 'bg-green-400/40', 'bg-amber-400/40'];
+const DAY_COLORS = ['bg-neon-blue/40', 'bg-orange-500/40', 'bg-neon-purple/40', 'bg-green-400/40', 'bg-amber-400/40'];
 
 function ScheduleTimeline({ schedule }: { schedule: LensItem }) {
   const data = schedule.data as Record<string, unknown>;
@@ -457,8 +457,8 @@ export default function ManufacturingLensPage() {
     return (
       <div className="flex items-center justify-center h-full p-8">
         <div className="text-center space-y-3">
-          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-sm text-gray-400">Loading...</p>
+          <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading production data...</p>
         </div>
       </div>
     );
@@ -481,7 +481,7 @@ export default function ManufacturingLensPage() {
       <div className={ds.grid4}>
         <div className={ds.panel}>
           <div className="flex items-center gap-2 mb-1">
-            <PackageCheck className="w-4 h-4 text-neon-cyan" />
+            <PackageCheck className="w-4 h-4 text-orange-500" />
             <span className={ds.textMuted}>Units Produced</span>
           </div>
           <p className="text-2xl font-bold text-white">{metrics.unitsToday.toLocaleString()}</p>
@@ -545,7 +545,7 @@ export default function ManufacturingLensPage() {
         </div>
         <div className={ds.panel}>
           <div className="flex items-center gap-2 mb-1">
-            <Activity className="w-4 h-4 text-neon-cyan" />
+            <Activity className="w-4 h-4 text-orange-500" />
             <span className={ds.textMuted}>Machine Uptime</span>
           </div>
           <p className="text-2xl font-bold text-green-400">87.5%</p>
@@ -586,7 +586,7 @@ export default function ManufacturingLensPage() {
               <div key={i} className="flex-1 flex flex-col items-center gap-1">
                 <span className={cn('text-xs', d.rate < 95 ? 'text-red-400' : 'text-gray-400')}>{d.rate}%</span>
                 <div
-                  className={cn('w-full rounded-t transition-all', d.rate < 95 ? 'bg-red-400' : 'bg-neon-cyan/60')}
+                  className={cn('w-full rounded-t transition-all', d.rate < 95 ? 'bg-red-400' : 'bg-orange-500/60')}
                   style={{ height: `${(d.rate - 90) * 10}%` }}
                 />
                 <span className="text-[10px] text-gray-600">{d.day}</span>
@@ -641,13 +641,13 @@ export default function ManufacturingLensPage() {
                 const priority = wo.data.priority as string;
                 return (
                   <tr key={wo.title} className="border-b border-lattice-border/50 hover:bg-lattice-elevated/30">
-                    <td className="py-2 pr-4 font-mono text-neon-cyan">{wo.title}</td>
+                    <td className="py-2 pr-4 font-mono text-orange-500">{wo.title}</td>
                     <td className="py-2 pr-4 text-gray-300">{wo.data.product as string}</td>
                     <td className="py-2 pr-4"><span className={ds.badge(STATUS_COLORS[status])}>{status.replace(/_/g, ' ')}</span></td>
                     <td className="py-2 pr-4">
                       <div className="flex items-center gap-2">
                         <div className="w-24 h-1.5 bg-lattice-elevated rounded-full overflow-hidden">
-                          <div className="h-full bg-neon-cyan rounded-full" style={{ width: `${Math.min(100, pct)}%` }} />
+                          <div className="h-full bg-orange-500 rounded-full" style={{ width: `${Math.min(100, pct)}%` }} />
                         </div>
                         <span className="text-xs text-gray-400">{pct.toFixed(0)}%</span>
                       </div>
@@ -687,7 +687,7 @@ export default function ManufacturingLensPage() {
           const isDetail = detailItem === item.id;
 
           return (
-            <div key={item.id} className={cn(ds.panel, 'hover:border-neon-cyan/30 transition-colors')}>
+            <div key={item.id} className={cn(ds.panel, 'hover:border-orange-500/30 transition-colors')}>
               <div className="flex items-start justify-between mb-3 cursor-pointer" onClick={() => setDetailItem(isDetail ? null : item.id)}>
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-1">
@@ -711,7 +711,7 @@ export default function ManufacturingLensPage() {
                   <span className="font-mono">{pct.toFixed(1)}%</span>
                 </div>
                 <div className="w-full h-2.5 bg-lattice-elevated rounded-full overflow-hidden">
-                  <div className={cn('h-full rounded-full transition-all', status === 'complete' ? 'bg-green-400' : 'bg-neon-cyan')} style={{ width: `${Math.min(100, pct)}%` }} />
+                  <div className={cn('h-full rounded-full transition-all', status === 'complete' ? 'bg-green-400' : 'bg-orange-500')} style={{ width: `${Math.min(100, pct)}%` }} />
                 </div>
               </div>
 
@@ -739,7 +739,7 @@ export default function ManufacturingLensPage() {
                           <div className={cn(
                             'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
                             isComplete && 'bg-green-400/20 border-green-400/40 text-green-400',
-                            isCurrent && 'bg-neon-cyan/20 border-neon-cyan/40 text-neon-cyan animate-pulse',
+                            isCurrent && 'bg-orange-500/20 border-orange-500/40 text-orange-500 animate-pulse',
                             !isComplete && !isCurrent && 'bg-lattice-elevated border-lattice-border text-gray-500'
                           )}>
                             {isComplete ? <CheckCircle2 className="w-3 h-3" /> : isCurrent ? <Activity className="w-3 h-3" /> : <CircleDot className="w-3 h-3" />}
@@ -801,7 +801,7 @@ export default function ManufacturingLensPage() {
                 ))}
                 <div className="mt-3 pt-3 border-t border-lattice-border flex items-center justify-between px-2">
                   <span className="text-sm font-semibold text-white">Total BOM Cost</span>
-                  <span className="text-lg font-bold text-neon-cyan font-mono">${calcBOMCost(BOM_TREE[0]).toFixed(2)}</span>
+                  <span className="text-lg font-bold text-orange-500 font-mono">${calcBOMCost(BOM_TREE[0]).toFixed(2)}</span>
                 </div>
               </>
             )}
@@ -864,7 +864,7 @@ export default function ManufacturingLensPage() {
                 <p className={ds.textMuted}>Product: <span className="text-gray-300">{d.product as string}</span></p>
                 <p className={ds.textMuted}>Revision: <span className="text-white font-mono">{d.revision as string}</span> {d.prevRevision !== '-' && <span className="text-gray-600">(prev: {d.prevRevision as string})</span>}</p>
                 <p className={ds.textMuted}>Components: <span className="text-white">{String(d.components)}</span> across <span className="text-white">{String(d.levels)}</span> levels</p>
-                <p className={ds.textMuted}>Cost: <span className="text-neon-cyan font-mono">${(d.totalCost as number).toFixed(2)}</span></p>
+                <p className={ds.textMuted}>Cost: <span className="text-orange-500 font-mono">${(d.totalCost as number).toFixed(2)}</span></p>
                 <p className={ds.textMuted}>Approved: <span className="text-gray-300">{d.approvedBy as string}</span></p>
               </div>
               {Boolean(d.changeNote) && (
@@ -1062,7 +1062,7 @@ export default function ManufacturingLensPage() {
                 const isLong = setupTime > 40;
                 return (
                   <tr key={wo.title} className="border-b border-lattice-border/30">
-                    <td className="py-2 pr-4 font-mono text-neon-cyan">{wo.title}</td>
+                    <td className="py-2 pr-4 font-mono text-orange-500">{wo.title}</td>
                     <td className="py-2 pr-4 text-gray-300">{wo.data.product as string}</td>
                     <td className="py-2 pr-4 text-gray-400">{wo.data.line as string}</td>
                     <td className="py-2 pr-4">
@@ -1141,7 +1141,7 @@ export default function ManufacturingLensPage() {
         const totalDowntime = downtimeLog.reduce((s, e) => s + (e.duration as number), 0);
 
         return (
-          <div key={item.id} className={cn(ds.panel, 'hover:border-neon-cyan/30 transition-colors')}>
+          <div key={item.id} className={cn(ds.panel, 'hover:border-orange-500/30 transition-colors')}>
             <div className="flex items-start justify-between mb-3 cursor-pointer" onClick={() => setDetailItem(isDetail ? null : item.id)}>
               <div className="flex items-center gap-3">
                 <div className={cn(
@@ -1342,7 +1342,7 @@ export default function ManufacturingLensPage() {
           const isDetail = detailItem === item.id;
 
           return (
-            <div key={item.id} className={cn(ds.panel, 'hover:border-neon-cyan/30 transition-colors')}>
+            <div key={item.id} className={cn(ds.panel, 'hover:border-orange-500/30 transition-colors')}>
               <div className="flex items-start justify-between mb-2 cursor-pointer" onClick={() => setDetailItem(isDetail ? null : item.id)}>
                 <div>
                   <div className="flex items-center gap-2 mb-1">

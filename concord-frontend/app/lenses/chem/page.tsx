@@ -63,8 +63,8 @@ export default function ChemLensPage() {
     return (
       <div data-lens-theme="chem" className="flex items-center justify-center h-full p-8">
         <div className="text-center space-y-3">
-          <div className="w-8 h-8 border-2 border-neon-purple border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-sm text-gray-400">Loading...</p>
+          <div className="w-8 h-8 border-2 border-teal-400 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading lab results...</p>
         </div>
       </div>
     );
@@ -78,7 +78,7 @@ export default function ChemLensPage() {
     );
   }
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="chem" className="p-6 space-y-6">
       {/* Safety Disclaimer */}
       <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3 flex items-start gap-3">
         <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />

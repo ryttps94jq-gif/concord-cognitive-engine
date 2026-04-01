@@ -86,7 +86,7 @@ export default function GeologyLensPage() {
       <div data-lens-theme="geology" className="flex items-center justify-center h-full p-8">
         <div className="text-center space-y-3">
           <div className="w-8 h-8 border-2 border-orange-400 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-sm text-gray-400">Loading...</p>
+          <p className="text-sm text-gray-400">Loading geological survey...</p>
         </div>
       </div>
     );
@@ -101,7 +101,7 @@ export default function GeologyLensPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="geology" className="p-6 space-y-6">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Mountain className="w-8 h-8 text-orange-400" />

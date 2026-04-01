@@ -84,7 +84,7 @@ function getTypeForTab(tab: ModeTab): string {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  at_sea: 'text-cyan-400 bg-cyan-400/10', docked: 'text-green-400 bg-green-400/10',
+  at_sea: 'text-cyan-400 bg-blue-400/10', docked: 'text-green-400 bg-green-400/10',
   maintenance: 'text-orange-400 bg-orange-400/10', anchored: 'text-yellow-400 bg-yellow-400/10',
   planning: 'text-blue-400 bg-blue-400/10', active: 'text-green-400 bg-green-400/10',
   completed: 'text-gray-400 bg-gray-400/10', published: 'text-purple-400 bg-purple-400/10',
@@ -134,7 +134,7 @@ export default function OceanLensPage() {
   }
 
   return (
-    <div className={cn(ds.pageContainer, 'space-y-4')}>
+    <div data-lens-theme="ocean" className={cn(ds.pageContainer, 'space-y-4')}>
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">

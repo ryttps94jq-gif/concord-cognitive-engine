@@ -86,8 +86,8 @@ export default function EnergyLensPage() {
     return (
       <div data-lens-theme="energy" className="flex items-center justify-center h-full p-8">
         <div className="text-center space-y-3">
-          <div className="w-8 h-8 border-2 border-neon-green border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-sm text-gray-400">Loading...</p>
+          <div className="w-8 h-8 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Powering up systems...</p>
         </div>
       </div>
     );
@@ -105,7 +105,7 @@ export default function EnergyLensPage() {
     <div className="p-6 space-y-6">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Zap className="w-8 h-8 text-neon-green" />
+          <Zap className="w-8 h-8 text-yellow-500" />
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-bold">Energy Lens</h1>
@@ -123,7 +123,7 @@ export default function EnergyLensPage() {
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="panel p-4 text-center">
-          <Battery className="w-6 h-6 mx-auto text-neon-green mb-2" />
+          <Battery className="w-6 h-6 mx-auto text-yellow-500 mb-2" />
           <p className="text-2xl font-bold">{totalCapacity.toFixed(1)} MW</p>
           <p className="text-xs text-gray-400">Total Capacity</p>
         </div>
@@ -143,7 +143,7 @@ export default function EnergyLensPage() {
       <div className="flex gap-2 border-b border-white/10 pb-2">
         {(['assets', 'consumption', 'mix'] as const).map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${activeTab === tab ? 'bg-neon-green/20 text-neon-green border-b-2 border-neon-green' : 'text-gray-400 hover:text-white'}`}
+            className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${activeTab === tab ? 'bg-yellow-500/20 text-yellow-500 border-b-2 border-yellow-500' : 'text-gray-400 hover:text-white'}`}
           >
             {tab === 'mix' ? 'Energy Mix' : tab.charAt(0).toUpperCase() + tab.slice(1)}
           </button>
@@ -160,7 +160,7 @@ export default function EnergyLensPage() {
                 {(Object.keys(SOURCE_CONFIG) as EnergySource[]).map(s => <option key={s} value={s}>{s.replace('-', ' ')}</option>)}
               </select>
               <input value={newAsset.capacity} onChange={e => setNewAsset({ ...newAsset, capacity: e.target.value })} placeholder="Capacity (MW)" className="bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm" type="number" />
-              <button onClick={addAsset} className="px-4 py-2 bg-neon-green/20 text-neon-green rounded-lg text-sm hover:bg-neon-green/30">
+              <button onClick={addAsset} className="px-4 py-2 bg-yellow-500/20 text-yellow-500 rounded-lg text-sm hover:bg-yellow-500/30">
                 <Plus className="w-4 h-4 inline mr-1" /> Add
               </button>
             </div>
@@ -219,7 +219,7 @@ export default function EnergyLensPage() {
 
       {activeTab === 'mix' && (
         <div className="panel p-4">
-          <h3 className="font-semibold mb-3 flex items-center gap-2"><Zap className="w-4 h-4 text-neon-green" /> Energy Mix</h3>
+          <h3 className="font-semibold mb-3 flex items-center gap-2"><Zap className="w-4 h-4 text-yellow-500" /> Energy Mix</h3>
           {assets.length === 0 ? (
             <p className="text-gray-500 text-sm text-center py-4">Add energy assets to see the generation mix.</p>
           ) : (
@@ -232,13 +232,13 @@ export default function EnergyLensPage() {
                 const cfg = SOURCE_CONFIG[source];
                 const Icon = cfg.icon;
                 return (
-                  <div key={source}>
+                  <div data-lens-theme="energy" key={source}>
                     <div className="flex items-center justify-between text-sm mb-1">
                       <span className="flex items-center gap-2"><Icon className={`w-4 h-4 ${cfg.color}`} />{source.replace('-', ' ')}</span>
                       <span className="font-mono">{pct.toFixed(1)}%</span>
                     </div>
                     <div className="h-2 bg-white/5 rounded-full overflow-hidden">
-                      <div className="h-full bg-gradient-to-r from-neon-green to-neon-cyan rounded-full transition-all" style={{ width: `${pct}%` }} />
+                      <div className="h-full bg-gradient-to-r from-yellow-500 to-neon-cyan rounded-full transition-all" style={{ width: `${pct}%` }} />
                     </div>
                   </div>
                 );

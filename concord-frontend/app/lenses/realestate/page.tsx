@@ -521,8 +521,8 @@ export default function RealEstateLensPage() {
     return (
       <div className="flex items-center justify-center h-full p-8">
         <div className="text-center space-y-3">
-          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-sm text-gray-400">Loading...</p>
+          <div className="w-8 h-8 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading property listings...</p>
         </div>
       </div>
     );
@@ -808,7 +808,7 @@ export default function RealEstateLensPage() {
                 );
               })}
               {items.filter(i => (i.data as unknown as RealEstateArtifact).artifactType === 'Listing').length === 0 && (
-                <p className={cn(ds.textMuted, 'text-center py-4')}>No listings yet</p>
+                <p className={cn(ds.textMuted, 'text-center py-4')}>No properties listed yet. Add your first real estate listing.</p>
               )}
             </div>
             <div className={ds.panel}>
@@ -1436,7 +1436,7 @@ export default function RealEstateLensPage() {
                   const d = item.data as unknown as RealEstateArtifact;
                   const color = STATUS_COLORS[d.status] || 'gray-400';
                   return (
-                    <div key={item.id} className={ds.panelHover} onClick={() => openEditEditor(item)}>
+                    <div key={item.id} data-lens-theme="realestate" className={ds.panelHover} onClick={() => openEditEditor(item)}>
                       <div className="flex items-start justify-between mb-2">
                         <h3 className={cn(ds.heading3, 'text-base truncate flex-1')}>{item.title}</h3>
                         <span className={ds.badge(color)}>{d.status.replace(/_/g, ' ')}</span>
