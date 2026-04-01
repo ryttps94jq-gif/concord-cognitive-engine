@@ -1,7 +1,7 @@
 /**
  * LLM Priority Queue
  *
- * Wraps all LLM calls (Ollama / OpenAI) behind a bounded priority queue.
+ * Wraps all LLM calls (Ollama brains) behind a bounded priority queue.
  * User-facing requests take priority over background tasks (autogen, etc.).
  *
  * Priority levels (lower = higher priority):

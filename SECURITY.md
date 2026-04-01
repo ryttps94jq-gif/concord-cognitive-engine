@@ -697,7 +697,6 @@ Each is **disabled by default** in production unless explicitly enabled.
 | Surface            | Environment Gate         | Default   | Risk         | Notes                                                  |
 |--------------------|--------------------------|-----------|--------------|--------------------------------------------------------|
 | Terminal/sandbox   | `ENABLE_TERMINAL_EXEC`   | `false`   | **Critical** | Spawns `bash -c <cmd>` in entity workspace. Council-gated for medium+ risk. Only enable on air-gapped instances. |
-| Cloud LLM          | `OPENAI_API_KEY`         | Empty     | Medium       | Sends user content to external API. Requires session-level opt-in. |
 | Federation         | `FEDERATION_ENABLED`     | `false`   | Medium       | Redis pub/sub between instances. Opens cross-instance DTU sync.     |
 | Whisper STT        | `WHISPER_CPP_BIN`        | Empty     | Low          | Spawns whisper binary on audio files. Path must be pre-configured.  |
 | Piper TTS          | `PIPER_BIN`              | Empty     | Low          | Spawns piper binary for speech synthesis. Path must be pre-configured. |
@@ -716,7 +715,6 @@ Returns:
   "sqlite": true,
   "jwt": true,
   "bcrypt": true,
-  "openai": false,
   "ollama": true,
   "exec": false,
   "federation": false,

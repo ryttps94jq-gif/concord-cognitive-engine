@@ -33,6 +33,7 @@ import { spawnSync } from "child_process";
 import { Worker } from "node:worker_threads";
 import { initAll as initLoaf } from "./loaf/index.js";
 import { init as initEmergent } from "./emergent/index.js";
+import { initFederation, getFederationStatus } from "./emergent/cnet-federation.js";
 import { ConcordError } from "./lib/errors.js";
 import { asyncHandler } from "./lib/async-handler.js";
 import { init as initGRC, formatAndValidate as grcFormatAndValidate, getGRCSystemPrompt } from "./grc/index.js";
@@ -367,7 +368,7 @@ await tryLoadDotenv();
 
 // ---- Environment Validation ----
 const REQUIRED_ENV_PRODUCTION = ["JWT_SECRET", "ADMIN_PASSWORD"];
-const RECOMMENDED_ENV = ["OPENAI_API_KEY", "ALLOWED_ORIGINS"];
+const RECOMMENDED_ENV = ["OLLAMA_HOST", "ALLOWED_ORIGINS"];
 
 function validateEnvironment() {
   const errors = [];
@@ -742,7 +743,6 @@ class CircuitBreaker {
 // Shared breakers for external services
 const BREAKERS = {
   ollama: new CircuitBreaker("ollama", { threshold: 5, resetMs: 30000 }),
-  openai: new CircuitBreaker("openai", { threshold: 3, resetMs: 60000 }),
   stripe: new CircuitBreaker("stripe", { threshold: 3, resetMs: 60000 }),
 };
 
@@ -1020,22 +1020,21 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 const BCRYPT_ROUNDS = Number(process.env.BCRYPT_ROUNDS || 12);
 const RATE_LIMIT_WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_MS || 60000);
 const RATE_LIMIT_MAX = Number(process.env.RATE_LIMIT_MAX || 300);
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
-const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
-const OPENAI_MODEL_FAST = process.env.OPENAI_MODEL_FAST || process.env.OPENAI_MODEL || "gpt-4o-mini";
-const OPENAI_MODEL_SMART = process.env.OPENAI_MODEL_SMART || "gpt-4.1";
-let LLM_READY = Boolean(OPENAI_API_KEY);
-// Also mark LLM ready if conscious brain becomes available (updated in initThreeBrains)
+// Brain model aliases (replaces former LLM_MODEL_FAST/SMART)
+const LLM_MODEL_FAST = process.env.BRAIN_SUBCONSCIOUS_MODEL || "qwen2.5:1.5b";
+const LLM_MODEL_SMART = process.env.BRAIN_CONSCIOUS_MODEL || "qwen2.5:7b";
+let LLM_READY = false;
+// Mark LLM ready when conscious brain becomes available (updated in initThreeBrains)
 function _refreshLlmReady() {
-  LLM_READY = Boolean(OPENAI_API_KEY) || (BRAIN && BRAIN.conscious && BRAIN.conscious.enabled);
+  LLM_READY = Boolean(BRAIN && BRAIN.conscious && BRAIN.conscious.enabled);
 }
-// LLM toggle: default ON only when a key is present
+// LLM toggle: default ON only when a brain is configured
 const __envBool = (v) => String(v ?? "").toLowerCase().trim();
 const __llmDefaultForcedRaw = (process.env.CONCORD_LLM_DEFAULT_FORCED ?? process.env.LLM_DEFAULT_FORCED ?? null);
 const __llmForced = (__llmDefaultForcedRaw !== null) ? __envBool(__llmDefaultForcedRaw) : "";
 const DEFAULT_LLM_ON = (__llmDefaultForcedRaw !== null)
   ? (["1","true","yes","y","on"].includes(__llmForced))
-  : Boolean((process.env.OPENAI_API_KEY || "").trim()) || Boolean(process.env.BRAIN_CONSCIOUS_URL || process.env.OLLAMA_HOST);
+  : Boolean(process.env.BRAIN_CONSCIOUS_URL || process.env.OLLAMA_HOST);
 
 
 // ---- Terminal / sandbox execution gate ----
@@ -1206,8 +1205,7 @@ const CAPS = Object.freeze({
   helmet:       Boolean(helmet),
   compression:  Boolean(compression),
   // LLM
-  openai:       Boolean(OPENAI_API_KEY),
-  ollama:       Boolean((process.env.OLLAMA_HOST || "").trim()),
+  ollama:       Boolean((process.env.OLLAMA_HOST || process.env.BRAIN_CONSCIOUS_URL || "").trim()),
   // Unsafe surfaces (off by default)
   exec:         TERMINAL_EXEC_ENABLED,
   // Federation
@@ -1217,7 +1215,7 @@ const CAPS = Object.freeze({
   // Voice / media (presence of external binaries)
   whisper:      Boolean((process.env.WHISPER_CPP_BIN || "").trim()),
   piper:        Boolean((process.env.PIPER_BIN || "").trim()),
-  imagegen:     Boolean((process.env.SD_URL || process.env.COMFYUI_URL || "").trim()) || Boolean(OPENAI_API_KEY),
+  imagegen:     Boolean((process.env.SD_URL || process.env.COMFYUI_URL || "").trim()),
 });
 
 structuredLog("info", "capabilities_loaded", { caps: CAPS });
@@ -5259,7 +5257,6 @@ const _LLM_BUDGET = {
   MAX_PER_USER_ENTRIES: 50000,
 
   // Budget limits — effectively disabled for local Ollama (no API cost)
-  // checkBudget() short-circuits when no OPENAI_API_KEY is configured
   globalBudgetTokens: Number(process.env.LLM_BUDGET_TOKENS || 999999999),
   perUserBudgetTokens: Number(process.env.LLM_USER_BUDGET_TOKENS || 999999999),
   maxRetries: Number(process.env.LLM_MAX_RETRIES || 3),
@@ -5297,7 +5294,7 @@ const _LLM_BUDGET = {
 
   checkBudget(userId) {
     // Local Ollama = free tokens, no budget needed
-    if (!process.env.OPENAI_API_KEY) return { allowed: true };
+    return { allowed: true };
 
     // Reset global window if over 24h
     if (Date.now() - this.windowStart > 86400000) {
@@ -6100,7 +6097,7 @@ if (_DTU_STORE_READY && db) {
 try {
   if (STATE && STATE.settings) {
     if (__llmDefaultForcedRaw !== null) STATE.settings.llmDefault = DEFAULT_LLM_ON;
-    else if ((process.env.OPENAI_API_KEY || "").trim() || process.env.BRAIN_CONSCIOUS_URL || process.env.OLLAMA_HOST) STATE.settings.llmDefault = true;
+    else if (process.env.BRAIN_CONSCIOUS_URL || process.env.OLLAMA_HOST) STATE.settings.llmDefault = true;
   }
 } catch (e) {
   structuredLog("warn", "boot_normalization_failed", { error: String(e?.message || e) });
@@ -7492,40 +7489,7 @@ register("multimodal","vision_analyze", (ctx, input={}) => {
     }
   }
 
-  // Cloud fallback: OpenAI GPT-4 Vision
-  const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
-  if (OPENAI_API_KEY) {
-    const payload = {
-      model: "gpt-4o",
-      messages: [{
-        role: "user",
-        content: [
-          { type: "text", text: prompt },
-          { type: "image_url", image_url: { url: `data:image/jpeg;base64,${imageB64}` } }
-        ]
-      }],
-      max_tokens: 1000
-    };
-
-    const r = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${OPENAI_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(payload)
-    }).catch(_e => null);
-
-    if (!r || !r.ok) {
-      const errText = await r?.text().catch(() => "") || "";
-      return { ok:false, error:"OpenAI Vision API failed", status: r?.status || 0, detail: errText };
-    }
-    const j = await r.json().catch(() => null);
-    const content = j?.choices?.[0]?.message?.content || "";
-    return { ok:true, content, source: "openai_gpt4_vision" };
-  }
-
-  return { ok:false, error:"No vision backend configured. Set OLLAMA_URL or OPENAI_API_KEY" };
+  return { ok:false, error:"No vision backend configured. Set OLLAMA_URL with a vision model (e.g. llava)" };
   });
 }, { public:false });
 
@@ -7552,40 +7516,7 @@ register("multimodal","image_generate", (ctx, input={}) => {
     }
   }
 
-  // Cloud fallback: OpenAI DALL-E
-  const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
-  if (OPENAI_API_KEY) {
-    const size = String(input.size || "1024x1024"); // 1024x1024, 1792x1024, 1024x1792
-    const quality = String(input.quality || "standard"); // standard, hd
-    const model = String(input.model || "dall-e-3");
-
-    const r = await fetch("https://api.openai.com/v1/images/generations", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${OPENAI_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model,
-        prompt,
-        n: 1,
-        size,
-        quality,
-        response_format: "b64_json"
-      })
-    }).catch(_e => null);
-
-    if (!r || !r.ok) {
-      const errText = await r?.text().catch(() => "") || "";
-      return { ok:false, error:"OpenAI DALL-E API failed", status: r?.status || 0, detail: errText };
-    }
-    const j = await r.json().catch(() => null);
-    const imageB64 = j?.data?.[0]?.b64_json || "";
-    const revisedPrompt = j?.data?.[0]?.revised_prompt || prompt;
-    return { ok:true, image: imageB64, source: "openai_dalle", revisedPrompt };
-  }
-
-  return { ok:false, error:"No image generation backend configured. Set SD_URL or OPENAI_API_KEY" };
+  return { ok:false, error:"No image generation backend configured. Set SD_URL or COMFYUI_URL" };
   });
 }, { public:false });
 
@@ -7607,51 +7538,7 @@ register("voice","transcribe", async (ctx, input={}) => {
     return { ok:true, transcript: out.trim(), source: "whisper_cpp" };
   }
 
-  // Cloud fallback: OpenAI Whisper API
-  const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
-  if (OPENAI_API_KEY) {
-    const audioBase64 = String(input.audioBase64 || "");
-    const audioPath = String(input.audioPath || "");
-    let audioBuffer = null;
-
-    if (audioBase64) {
-      audioBuffer = Buffer.from(audioBase64, "base64");
-    } else if (audioPath && fs.existsSync(audioPath)) {
-      audioBuffer = fs.readFileSync(audioPath);
-    }
-
-    if (!audioBuffer) return { ok:false, error:"audioBase64 or valid audioPath required" };
-
-    const FormData = (await import("node:buffer")).Blob ? globalThis.FormData : null;
-    if (!FormData) {
-      // Node 18+ has native FormData, use fetch with multipart
-      const boundary = `----formdata-${Date.now()}`;
-      const filename = "audio.webm";
-      const body = Buffer.concat([
-        Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: audio/webm\r\n\r\n`),
-        audioBuffer,
-        Buffer.from(`\r\n--${boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\nwhisper-1\r\n--${boundary}--\r\n`)
-      ]);
-
-      const r = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${OPENAI_API_KEY}`,
-          "Content-Type": `multipart/form-data; boundary=${boundary}`
-        },
-        body
-      }).catch(_e => null);
-
-      if (!r || !r.ok) {
-        const errText = await r?.text().catch(() => "") || "";
-        return { ok:false, error:"OpenAI Whisper API failed", status: r?.status || 0, detail: errText };
-      }
-      const j = await r.json().catch(() => null);
-      return { ok:true, transcript: j?.text || "", source: "openai_whisper" };
-    }
-  }
-
-  return { ok:false, error:"No transcription backend configured. Set WHISPER_CPP_BIN or OPENAI_API_KEY" };
+  return { ok:false, error:"No transcription backend configured. Set WHISPER_CPP_BIN" };
 }, { public:false });
 
 register("voice","tts", async (ctx, input={}) => {
@@ -7683,36 +7570,7 @@ register("voice","tts", async (ctx, input={}) => {
     return { ok:true, source: "piper", audioBase64: Buffer.from(p.stdout).toString("base64") };
   }
 
-  // Cloud fallback: OpenAI TTS API
-  const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
-  if (OPENAI_API_KEY) {
-    const voice = String(input.voice || "alloy"); // alloy, echo, fable, onyx, nova, shimmer
-    const model = String(input.model || "tts-1"); // tts-1 or tts-1-hd
-
-    const r = await fetch("https://api.openai.com/v1/audio/speech", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${OPENAI_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ model, input: text, voice, response_format: "mp3" })
-    }).catch(_e => null);
-
-    if (!r || !r.ok) {
-      const errText = await r?.text().catch(() => "") || "";
-      return { ok:false, error:"OpenAI TTS API failed", status: r?.status || 0, detail: errText };
-    }
-
-    const audioBuffer = Buffer.from(await r.arrayBuffer());
-    const outPath = String(input.outPath || "");
-    if (outPath) {
-      try { fs.writeFileSync(outPath, audioBuffer); } catch (e) { return { ok:false, error:"Failed to write OpenAI TTS audio file", detail: String(e) }; }
-      return { ok:true, outPath, source: "openai_tts", format: "mp3" };
-    }
-    return { ok:true, source: "openai_tts", format: "mp3", audioBase64: audioBuffer.toString("base64") };
-  }
-
-  return { ok:false, error:"No TTS backend configured. Set PIPER_BIN or OPENAI_API_KEY" };
+  return { ok:false, error:"No TTS backend configured. Set PIPER_BIN" };
 }, { public:false });
 
 register("tools","web_search", (ctx, input={}) => {
@@ -9147,7 +9005,7 @@ function makeCtx(req=null) {
     env: {
       version: VERSION,
       llmReady: LLM_READY,
-      openaiModel: { fast: OPENAI_MODEL_FAST, smart: OPENAI_MODEL_SMART }
+      llmModel: { fast: LLM_MODEL_FAST, smart: LLM_MODEL_SMART }
     },
     affect: affectPolicy ? {
       policy: affectPolicy,
@@ -9235,18 +9093,17 @@ function makeCtx(req=null) {
     llm: {
       enabled: LLM_READY || (BRAIN.conscious && BRAIN.conscious.enabled),
       async chat({ system, messages, temperature=0.3, maxTokens=1500, model=null, timeoutMs=30000, dtuRefs, macroRefs, grcMode }) {
-        // ===== OLLAMA-FIRST ROUTING =====
-        // Sovereignty principle: always try local conscious brain first.
-        // Only fall back to OpenAI if Ollama is offline or fails.
+        // ===== OLLAMA BRAIN ROUTING =====
+        // Sovereignty principle: all inference stays local.
+        // Primary: conscious brain. Fallback: subconscious brain.
         const consciousAvailable = BRAIN.conscious && BRAIN.conscious.enabled;
-        const openaiAvailable = Boolean(OPENAI_API_KEY) && LLM_READY;
-        const useConscious = !OPENAI_API_KEY && BRAIN.conscious.enabled;
+        const subconsciousAvailable = BRAIN.subconscious && BRAIN.subconscious.enabled;
 
-        if (!consciousAvailable && !openaiAvailable) {
-          return { ok: false, reason: "LLM not configured (no conscious brain and no OPENAI_API_KEY)." };
+        if (!consciousAvailable && !subconsciousAvailable) {
+          return { ok: false, reason: "LLM not configured (no conscious or subconscious brain available)." };
         }
 
-        // ── Try Ollama conscious brain FIRST (local, free, sovereign) ──
+        // ── Try conscious brain FIRST (primary, user-facing) ──
         if (consciousAvailable) {
           const brainUrl = BRAIN.conscious.url;
           const brainModel = model || BRAIN.conscious.model;
@@ -9254,7 +9111,6 @@ function makeCtx(req=null) {
             ...(system ? [{ role: "system", content: system }] : []),
             ...(messages || [])
           ];
-          // Local models need more time than cloud — 120s for first call, 90s steady state
           const ollamaTimeout = Math.max(timeoutMs, 120000);
           const ac = new AbortController();
           const t = setTimeout(() => ac.abort(), ollamaTimeout);
@@ -9276,7 +9132,6 @@ function makeCtx(req=null) {
               structuredLog("info", "llm_ollama_primary", { brain: "conscious", model: brainModel, elapsed, tokens: json.eval_count || 0 });
               return { ok: true, content, raw: json, brain: "conscious", source: "ollama" };
             }
-            // Ollama responded but with error — log and fall through to OpenAI
             BRAIN.conscious.stats.errors++;
             structuredLog("warn", "llm_ollama_primary_error", { status: res.status, error: json?.error, elapsed });
           } catch (err) {
@@ -9284,61 +9139,46 @@ function makeCtx(req=null) {
             const elapsed = Date.now() - startMs;
             structuredLog("warn", "llm_ollama_primary_exception", { error: String(err?.message || err), elapsed });
           }
-          // If we reach here, Ollama failed — fall through to OpenAI ONLY as emergency
         }
 
-        // ── OpenAI EMERGENCY FALLBACK (cloud, costs money) ──
-        if (!openaiAvailable) {
-          return { ok: false, reason: "Conscious brain failed and no OpenAI fallback available." };
+        // ── Subconscious brain EMERGENCY FALLBACK (lighter model, more likely to respond) ──
+        if (!subconsciousAvailable) {
+          return { ok: false, reason: "Conscious brain failed and no subconscious fallback available." };
         }
-        structuredLog("warn", "llm_openai_emergency_fallback", { reason: "conscious_brain_failed" });
+        structuredLog("warn", "llm_subconscious_emergency_fallback", { reason: "conscious_brain_failed" });
 
-        // Budget & circuit breaker check
-        const userId = req?.user?.id || req?.actor?.id || null;
-        const budgetCheck = _LLM_BUDGET.checkBudget(userId);
-        if (!budgetCheck.allowed) {
-          structuredLog("warn", "llm_budget_blocked", { reason: budgetCheck.reason, userId });
-          return { ok: false, reason: `LLM request blocked: ${budgetCheck.reason}` };
-        }
-
-        const chosen = model || OPENAI_MODEL_FAST;
-        const payload = {
-          model: chosen,
-          temperature,
-          max_tokens: maxTokens,
-          messages: [
-            ...(system ? [{ role: "system", content: system }] : []),
-            ...(messages || [])
-          ]
-        };
-        const ac = new AbortController();
-        const t = setTimeout(() => ac.abort(), timeoutMs);
+        const fallbackUrl = BRAIN.subconscious.url;
+        const fallbackModel = BRAIN.subconscious.model;
+        const fallbackMessages = [
+          ...(system ? [{ role: "system", content: system }] : []),
+          ...(messages || [])
+        ];
+        const fallbackTimeout = Math.max(timeoutMs, 90000);
+        const ac2 = new AbortController();
+        const t2 = setTimeout(() => ac2.abort(), fallbackTimeout);
+        const startMs2 = Date.now();
         try {
-          const res = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
+          const res = await fetch(`${fallbackUrl}/api/chat`, {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${OPENAI_API_KEY}`
-            },
-            body: JSON.stringify(payload),
-            signal: ac.signal
-          }).finally(() => clearTimeout(t));
-          const text = await res.text().catch(()=> "");
-          const json = safeJson(text, null);
-          if (!res.ok) {
-            _LLM_BUDGET.recordFailure();
-            return { ok: false, status: res.status, error: json || text };
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ model: fallbackModel, messages: fallbackMessages, stream: false, options: { temperature, num_predict: maxTokens } }),
+            signal: ac2.signal
+          }).finally(() => clearTimeout(t2));
+          const json = await res.json().catch(() => ({}));
+          const elapsed = Date.now() - startMs2;
+          BRAIN.subconscious.stats.requests++;
+          BRAIN.subconscious.stats.totalMs += elapsed;
+          BRAIN.subconscious.stats.lastCallAt = new Date().toISOString();
+          if (res.ok && json.message?.content) {
+            const content = json.message.content ?? "";
+            structuredLog("info", "llm_subconscious_fallback_ok", { brain: "subconscious", model: fallbackModel, elapsed, tokens: json.eval_count || 0 });
+            return { ok: true, content, raw: json, brain: "subconscious", source: "ollama" };
           }
-          // ---- Track Token Usage (Category 6: Cost Controls) ----
-          const usage = json?.usage;
-          _LLM_BUDGET.recordUsage(userId, usage?.prompt_tokens, usage?.completion_tokens);
-          _LLM_BUDGET.recordSuccess();
-
-          const content = json?.choices?.[0]?.message?.content ?? "";
-          return { ok: true, content, raw: json };
-        } catch (llmErr) {
-          _LLM_BUDGET.recordFailure();
-          throw llmErr;
+          BRAIN.subconscious.stats.errors++;
+          return { ok: false, reason: "Both conscious and subconscious brains failed." };
+        } catch (err) {
+          BRAIN.subconscious.stats.errors++;
+          return { ok: false, reason: `All local brains unavailable: ${String(err?.message || err)}` };
         }
       }
     }
@@ -10391,7 +10231,7 @@ Respond with valid JSON only.`;
 
   try {
     const response = await llmChat([{ role: "user", content: prompt }], {
-      model: OPENAI_MODEL_FAST,
+      model: LLM_MODEL_FAST,
       temperature: 0.3,
       max_tokens: 1000
     });
@@ -10671,7 +10511,7 @@ async function chatWithLattice(query, { contextLimit = 5, sessionId: _sessionId 
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt }
     ], {
-      model: OPENAI_MODEL_FAST,
+      model: LLM_MODEL_FAST,
       temperature: 0.7,
       max_tokens: 1000
     });
@@ -10700,37 +10540,30 @@ if (String(process.env.EMBEDDINGS_ENABLED || "true").toLowerCase() === "true") {
 }
 
 // ============================================================================
-// LLM PIPELINE ORCHESTRATOR - Hybrid Local/Cloud AI
+// LLM PIPELINE ORCHESTRATOR - Local Ollama Brain Architecture
 // ============================================================================
 
 const LLM_PIPELINE = {
-  modes: ["local_only", "balanced", "quality_first"],
-  defaultMode: "local_first",  // Sovereignty: prefer local Ollama, OpenAI only on failure
+  modes: ["local_only", "local_first", "quality_first"],
+  defaultMode: "local_first",  // Sovereignty: all inference stays local
 
   // Provider status
   providers: {
     ollama: { enabled: false, url: null, model: "llama3.2" },
-    openai: { enabled: false, model: "gpt-4.1-mini" }
   }
 };
 
 // Initialize LLM providers
 function initLLMPipeline() {
-  // Use BRAIN_CONSCIOUS_URL as the primary Ollama URL (matches 4-brain architecture)
   const ollamaUrl = process.env.OLLAMA_URL || process.env.BRAIN_CONSCIOUS_URL || process.env.OLLAMA_HOST || "http://ollama:11434";
   LLM_PIPELINE.providers.ollama.url = ollamaUrl;
-  // Use BRAIN_CONSCIOUS_MODEL if set; fall back to OLLAMA_MODEL; last resort llama3.2
   LLM_PIPELINE.providers.ollama.model = process.env.OLLAMA_MODEL || process.env.BRAIN_CONSCIOUS_MODEL || "qwen2.5:14b-instruct-q4_K_M";
   LLM_PIPELINE.providers.ollama.enabled = Boolean(ollamaUrl);
-
-  LLM_PIPELINE.providers.openai.enabled = Boolean(OPENAI_API_KEY);
-  LLM_PIPELINE.providers.openai.model = OPENAI_MODEL_FAST;
 
   structuredLog("info", "llm_pipeline_initialized", {
     ollama: LLM_PIPELINE.providers.ollama.enabled,
     ollamaUrl: ollamaUrl ? "configured" : null,
     ollamaModel: LLM_PIPELINE.providers.ollama.model,
-    openai: LLM_PIPELINE.providers.openai.enabled,
     defaultMode: LLM_PIPELINE.defaultMode
   });
 }
@@ -10775,137 +10608,15 @@ async function callOllama(prompt, options = {}) {
   }
 }
 
-// Call OpenAI (cloud)
-async function callOpenAI(prompt, options = {}) {
-  if (!OPENAI_API_KEY) return { ok: false, error: "OpenAI not configured" };
-
-  try {
-    const payload = {
-      model: options.model || LLM_PIPELINE.providers.openai.model,
-      messages: [{ role: "user", content: prompt }],
-      temperature: options.temperature || 0.7,
-      max_tokens: options.maxTokens || 500
-    };
-
-    const response = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${OPENAI_API_KEY}`
-      },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(options.timeout || 30000)
-    });
-
-    if (!response.ok) {
-      // SECURITY: Never include raw API response text — it may echo auth headers
-      const statusCode = response.status;
-      return { ok: false, error: `OpenAI error: ${statusCode}` };
-    }
-
-    const data = await response.json();
-    return {
-      ok: true,
-      content: data.choices?.[0]?.message?.content || "",
-      source: "openai",
-      model: payload.model,
-      tokens: data.usage?.total_tokens || 0
-    };
-  } catch (e) {
-    return { ok: false, error: String(e.message || e), source: "openai" };
-  }
-}
-
-// HYBRID PIPELINE: The magic sauce
+// LLM PIPELINE: All inference routes through local Ollama brains
 async function llmPipeline(input, options = {}) {
-  const mode = options.mode || LLM_PIPELINE.defaultMode;
-  const { ollama, openai } = LLM_PIPELINE.providers;
+  const { ollama } = LLM_PIPELINE.providers;
 
-  // Mode: local_only - Privacy first, Ollama only
-  if (mode === "local_only") {
-    if (!ollama.enabled) {
-      return { ok: false, error: "Local mode requires Ollama", mode };
-    }
-    return callOllama(input, options);
+  if (!ollama.enabled) {
+    return { ok: false, error: "Ollama not configured", mode: LLM_PIPELINE.defaultMode };
   }
 
-  // Mode: local_first - Sovereignty: try Ollama, fall back to OpenAI on failure
-  if (mode === "local_first") {
-    if (ollama.enabled) {
-      const result = await callOllama(input, options);
-      if (result.ok) return result;
-      structuredLog("warn", "llm_local_first_fallback", { reason: result.error, fallback: "openai" });
-    }
-    if (openai.enabled) return callOpenAI(input, options);
-    if (ollama.enabled) return callOllama(input, options); // retry if no OpenAI
-    return { ok: false, error: "No LLM providers available", mode };
-  }
-
-  // Mode: quality_first - OpenAI only (fastest, best quality)
-  if (mode === "quality_first") {
-    if (!openai.enabled) {
-      // Fallback to Ollama if OpenAI not available
-      if (ollama.enabled) return callOllama(input, options);
-      return { ok: false, error: "No LLM providers available", mode };
-    }
-    return callOpenAI(input, options);
-  }
-
-  // Mode: balanced - THE HYBRID PIPELINE
-  // Step 1: Ollama generates rough draft (private, free)
-  // Step 2: OpenAI polishes (cheap, fast)
-
-  if (!ollama.enabled && !openai.enabled) {
-    return { ok: false, error: "No LLM providers available", mode };
-  }
-
-  // If only one provider available, use it
-  if (!ollama.enabled) return callOpenAI(input, options);
-  if (!openai.enabled) return callOllama(input, options);
-
-  // HYBRID: Draft with Ollama, polish with OpenAI
-  const draftResult = await callOllama(input, {
-    ...options,
-    maxTokens: Math.min(options.maxTokens || 500, 300) // Limit draft length
-  });
-
-  if (!draftResult.ok) {
-    // Ollama failed, fallback to OpenAI only
-    structuredLog("warn", "llm_ollama_fallback", { reason: "draft_failed", fallback: "openai" });
-    return callOpenAI(input, options);
-  }
-
-  // Polish the draft with OpenAI
-  const polishPrompt = `Improve and polish this text while preserving its meaning. Make it clearer and more coherent. Keep the same length or shorter.
-
-DRAFT:
-${draftResult.content}
-
-POLISHED VERSION:`;
-
-  const polishResult = await callOpenAI(polishPrompt, {
-    ...options,
-    maxTokens: Math.min(options.maxTokens || 500, 400),
-    temperature: 0.3 // Lower temp for polish
-  });
-
-  if (!polishResult.ok) {
-    // Polish failed, return draft
-    structuredLog("warn", "llm_openai_fallback", { reason: "polish_failed", fallback: "draft" });
-    return { ...draftResult, polished: false };
-  }
-
-  return {
-    ok: true,
-    content: polishResult.content,
-    source: "hybrid",
-    draft: draftResult.content,
-    draftSource: "ollama",
-    polishSource: "openai",
-    tokens: (draftResult.tokens || 0) + (polishResult.tokens || 0),
-    polished: true,
-    mode: "balanced"
-  };
+  return callOllama(input, options);
 }
 
 // Get pipeline status
@@ -10918,15 +10629,11 @@ function getLLMPipelineStatus() {
         model: LLM_PIPELINE.providers.ollama.model,
         url: LLM_PIPELINE.providers.ollama.url ? "configured" : null
       },
-      openai: {
-        enabled: LLM_PIPELINE.providers.openai.enabled,
-        model: LLM_PIPELINE.providers.openai.model
-      }
     },
     capabilities: {
       local_only: LLM_PIPELINE.providers.ollama.enabled,
-      balanced: LLM_PIPELINE.providers.ollama.enabled && LLM_PIPELINE.providers.openai.enabled,
-      quality_first: LLM_PIPELINE.providers.openai.enabled || LLM_PIPELINE.providers.ollama.enabled
+      local_first: LLM_PIPELINE.providers.ollama.enabled,
+      quality_first: LLM_PIPELINE.providers.ollama.enabled
     }
   };
 }
@@ -10943,6 +10650,19 @@ function setLLMPipelineMode(mode) {
 // Initialize on startup
 setTimeout(() => initLLMPipeline(), 100);
 
+// ── Federation Init (C-NET) ─────────────────────────────────────────────
+if (String(process.env.FEDERATION_ENABLED || "").toLowerCase() === "true") {
+  setTimeout(() => {
+    const fedResult = initFederation({
+      instanceId: process.env.CONCORD_INSTANCE_ID || undefined,
+      publicKey: process.env.CONCORD_PUBLIC_KEY || undefined,
+      capabilities: (process.env.CONCORD_CAPABILITIES || "").split(",").filter(Boolean),
+      registryUrl: process.env.CONCORD_REGISTRY_URL || undefined,
+    });
+    structuredLog("info", "federation_init", fedResult);
+  }, 200);
+}
+
 // ── LLM Queue + Circuit Breakers ──────────────────────────────────────────
 const _llmQueue = createLLMQueue({
   concurrency: parseInt(process.env.LLM_CONCURRENCY || "8", 10),
@@ -10958,9 +10678,8 @@ const _breakers = createBreakerRegistry({
   },
 });
 
-// Wrap callOllama and callOpenAI through breakers
+// Wrap callOllama through breakers
 const _rawCallOllama = callOllama;
-const _rawCallOpenAI = callOpenAI;
 
 async function callOllamaWithBreaker(prompt, options = {}) {
   return _breakers.ollama.call(
@@ -10969,22 +10688,10 @@ async function callOllamaWithBreaker(prompt, options = {}) {
   );
 }
 
-async function callOpenAIWithBreaker(prompt, options = {}) {
-  return _breakers.openai.call(
-    () => _rawCallOpenAI(prompt, options),
-    () => ({ ok: false, error: "openai_circuit_open", source: "openai" })
-  );
-}
-
 // Queued + breakered versions for external use
 function queuedOllamaCall(prompt, options = {}) {
   const priority = options._priority ?? PRIORITY.NORMAL;
   return _llmQueue.enqueue(() => callOllamaWithBreaker(prompt, options), priority);
-}
-
-function queuedOpenAICall(prompt, options = {}) {
-  const priority = options._priority ?? PRIORITY.NORMAL;
-  return _llmQueue.enqueue(() => callOpenAIWithBreaker(prompt, options), priority);
 }
 
 // Global llmChat() wrapper - routes all LLM calls through the pipeline
@@ -11050,7 +10757,7 @@ async function llmChat(messagesOrCtx, messagesOrOptions = {}, maybeOptions = {})
     }
   }
 
-  // Format response to match OpenAI chat format (for compatibility)
+  // Format response to match chat completion format (for compatibility)
   return {
     ok: true,
     text: result.content,
@@ -13010,13 +12717,11 @@ function getBrainStatus() {
     onlineCount,
     brains,
     routing: {
-      chatPrimary: BRAIN.conscious?.enabled ? "ollama_conscious" : (OPENAI_API_KEY ? "openai" : "none"),
-      chatFallback: BRAIN.conscious?.enabled && OPENAI_API_KEY ? "openai_emergency" : "none",
+      chatPrimary: BRAIN.conscious?.enabled ? "ollama_conscious" : "none",
+      chatFallback: BRAIN.subconscious?.enabled ? "ollama_subconscious_emergency" : "none",
       pipelineMode: LLM_PIPELINE.defaultMode,
       pipelineOllamaEnabled: LLM_PIPELINE.providers.ollama.enabled,
       pipelineOllamaModel: LLM_PIPELINE.providers.ollama.model,
-      pipelineOpenaiEnabled: LLM_PIPELINE.providers.openai.enabled,
-      openaiConfigured: Boolean(OPENAI_API_KEY),
       circuitBreakerOllama: (() => { try { return BREAKERS?.ollama?.getState?.()?.state || "unknown"; } catch { return "unknown"; } })(),
     },
     embeddings: getEmbeddingStatus(STATE.dtus.size),
@@ -14080,7 +13785,7 @@ Respond with valid JSON only: ["challenge1", "challenge2", ...]`;
 
   try {
     const response = await llmChat([{ role: "user", content: prompt }], {
-      model: OPENAI_MODEL_FAST,
+      model: LLM_MODEL_FAST,
       temperature: 0.8,
       max_tokens: 500
     });
@@ -14129,7 +13834,7 @@ Respond with valid JSON only: ["suggestion1", "suggestion2", ...]`;
 
   try {
     const response = await llmChat([{ role: "user", content: prompt }], {
-      model: OPENAI_MODEL_FAST,
+      model: LLM_MODEL_FAST,
       temperature: 0.7,
       max_tokens: 500
     });
@@ -19229,7 +18934,7 @@ register("synth", "combine", async (ctx, input) => {
   });
 
   const llm = !!input.llm;
-  const model = input.model === "smart" ? OPENAI_MODEL_SMART : OPENAI_MODEL_FAST;
+  const model = input.model === "smart" ? LLM_MODEL_SMART : LLM_MODEL_FAST;
   if (llm && ctx.llm.enabled) {
     const system = "You are ConcordOS. Produce a CRETI document. Keep it grounded, testable, and concise. Preserve lineage and tag contradictions explicitly.";
     const bundle = dtus.map(d=>`TITLE: ${d.title}\nTAGS: ${(d.tags||[]).join(", ")}\nCONTENT:\n${dtuText(d)}\n---`).join("\n");
@@ -21675,7 +21380,7 @@ app.use((req, res, next) => {
 // ---- Health, Ready, Metrics, Status, Backup, Time, Weather, etc. (extracted to routes/system.js) ----
 registerSystemRoutes(app, {
   STATE, makeCtx, runMacro, requireRole, db, MACROS, VERSION, PORT, NODE_ENV,
-  LLM_READY, OPENAI_MODEL_FAST, OPENAI_MODEL_SMART, SEED_INFO, STATE_DISK,
+  LLM_READY, LLM_MODEL_FAST, LLM_MODEL_SMART, SEED_INFO, STATE_DISK,
   USE_SQLITE_STATE, ENV_VALIDATION, AUTH_MODE, CAPS, METRICS, JWT_SECRET,
   AUTH_USES_JWT, AUTH_USES_APIKEY, AuthDB, rateLimiter, helmet,
   normalizeText, nowISO, clamp, dtusArray, isShadowDTU, saveStateDebounced,
@@ -24707,7 +24412,7 @@ register("admin", "dashboard", (_ctx, _input) => {
       healthy: Array.from(STATE.organs?.values() || []).filter(o => (o.maturity?.score || 0) > 0.5).length
     },
     llm: {
-      openaiReady: LLM_READY,
+      ollamaReady: LLM_READY,
       ollamaEnabled: OLLAMA_ENABLED,
       defaultOn: DEFAULT_LLM_ON
     },
@@ -35463,7 +35168,7 @@ async function generateDailyDigest(date = null) {
 
     try {
       const response = await llmChat([{ role: "user", content: prompt }], {
-        model: OPENAI_MODEL_FAST,
+        model: LLM_MODEL_FAST,
         max_tokens: 150
       });
       digest.narrative = response?.choices?.[0]?.message?.content || null;
@@ -35492,7 +35197,7 @@ Completion:`;
 
   try {
     const response = await llmChat([{ role: "user", content: prompt }], {
-      model: OPENAI_MODEL_FAST,
+      model: LLM_MODEL_FAST,
       temperature: 0.7,
       max_tokens: 100,
       stop: ["\n\n", ".", "!", "?"]
@@ -35537,7 +35242,7 @@ New tags:`;
 
   try {
     const response = await llmChat([{ role: "user", content: prompt }], {
-      model: OPENAI_MODEL_FAST,
+      model: LLM_MODEL_FAST,
       temperature: 0.3,
       max_tokens: 50
     });

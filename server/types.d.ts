@@ -347,8 +347,6 @@ export interface Config {
   rateLimitWindowMs: number;
   /** Rate limit max requests */
   rateLimitMax: number;
-  /** OpenAI API key (if configured) */
-  openaiApiKey?: string;
   /** Whether LLM is ready */
   llmReady: boolean;
   /** Data directory path */

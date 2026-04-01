@@ -223,9 +223,11 @@ Copy `.env.example` to `.env` and configure the following:
 
 | Variable | Default | Description |
 |---|---|---|
-| `OPENAI_API_KEY` | -- | Enables OpenAI fallback for LLM features |
 | `EMBEDDINGS_ENABLED` | `true` | Enable embedding-based search |
 | `FEDERATION_ENABLED` | `false` | Enable multi-instance federation |
+| `CONCORD_INSTANCE_ID` | auto | Unique instance ID for federation |
+| `CONCORD_CAPABILITIES` | -- | Comma-separated federation capabilities |
+| `CONCORD_REGISTRY_URL` | default | Federation registry URL |
 | `ENABLE_TERMINAL_EXEC` | `false` | Enable terminal execution (dangerous) |
 | `CONCORD_WS_ENABLED` | `true` | Enable WebSocket realtime |
 | `MAX_DTUS_IN_MEMORY` | `10000` | Max DTUs held in heap |

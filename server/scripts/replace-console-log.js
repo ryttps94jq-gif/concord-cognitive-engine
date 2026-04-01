@@ -78,12 +78,8 @@ const replacements = [
    'structuredLog("info", "embeddings_loaded", { model: "all-MiniLM-L6-v2" })'],
 
   // LLM Pipeline
-  ['console.log(`[LLM Pipeline] Initialized - Ollama: ${LLM_PIPELINE.providers.ollama.enabled ? \'enabled\' : \'disabled\'}, OpenAI: ${LLM_PIPELINE.providers.openai.enabled ? \'enabled\' : \'disabled\'}`)',
-   'structuredLog("info", "llm_pipeline_initialized", { ollama: LLM_PIPELINE.providers.ollama.enabled, openai: LLM_PIPELINE.providers.openai.enabled })'],
-  ['console.log("[LLM Pipeline] Ollama draft failed, falling back to OpenAI")',
-   'structuredLog("warn", "llm_ollama_fallback", { reason: "draft_failed", fallback: "openai" })'],
-  ['console.log("[LLM Pipeline] OpenAI polish failed, returning draft")',
-   'structuredLog("warn", "llm_openai_fallback", { reason: "polish_failed", fallback: "draft" })'],
+  ['console.log(`[LLM Pipeline] Initialized - Ollama: ${LLM_PIPELINE.providers.ollama.enabled ? \'enabled\' : \'disabled\'}`)',
+   'structuredLog("info", "llm_pipeline_initialized", { ollama: LLM_PIPELINE.providers.ollama.enabled })'],
 
   // Plugins
   ['console.log(`[Plugins] Registered: ${plugin.name} v${registered.version}`)',

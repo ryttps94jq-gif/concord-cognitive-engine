@@ -54,9 +54,6 @@ Configuration
 JWT_SECRET=<openssl rand -hex 64>
 ADMIN_PASSWORD=<min 12 chars>
 
-# Optional — enables cloud LLM enhancement
-OPENAI_API_KEY=<your-key>
-
 # Brain models (defaults work, but configurable)
 BRAIN_CONSCIOUS_MODEL=qwen2.5:14b-q4_K_M
 BRAIN_SUBCONSCIOUS_MODEL=qwen2.5:7b
