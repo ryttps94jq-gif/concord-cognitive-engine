@@ -13,13 +13,13 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { apiHelpers } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import type { DTU } from '@/lib/api/generated-types';
 import { DTUIntegrityBadge } from './DTUIntegrityBadge';
 import { ProvenanceBadge } from './ProvenanceBadge';
 import {
   X, Clock, GitBranch, Tag, FileText, Zap, Crown, Ghost,
-  Copy, ChevronRight, Download,
+  Copy, ChevronRight, Download, DollarSign, Users,
   Music, Image as ImageIcon, Video, Code, FileType,
 } from 'lucide-react';
 import { ArtifactRenderer } from '@/components/artifact/ArtifactRenderer';

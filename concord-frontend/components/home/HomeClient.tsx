@@ -41,7 +41,7 @@ import { CORE_LENSES } from '@/lib/lens-registry';
 import {
   Activity, Zap, Compass, TrendingUp, Heart, Globe,
   MessageSquare, Layout, Share2, Code, Music,
-  Crown, Ghost, Archive, Layers,
+  Crown, Ghost, Archive, Layers, Moon,
 } from 'lucide-react';
 import { use70Lock } from '@/hooks/use70Lock';
 import { MorningBrief } from '@/components/brief/MorningBrief';
@@ -148,6 +148,49 @@ export function HomeClient() {
 // ============================================================================
 // Dashboard Page
 // ============================================================================
+
+function DreamForgettingIndicators() {
+  const { data: dreamData } = useQuery({
+    queryKey: ['dream-topics'],
+    queryFn: () => api.get('/api/dream/history', { params: { limit: 5 } }).then(r => r.data).catch(() => null),
+    refetchInterval: 60000,
+    retry: false,
+  });
+  const { data: forgettingData } = useQuery({
+    queryKey: ['forgetting-status-home'],
+    queryFn: () => api.get('/api/admin/forgetting/status').then(r => r.data).catch(() => null),
+    refetchInterval: 60000,
+    retry: false,
+  });
+
+  const dreams = (dreamData?.dreams || []) as Array<{ title?: string; tags?: string[] }>;
+  const dreamTopics = dreams.slice(0, 3).map(d => d.title || d.tags?.[0] || 'unknown').filter(Boolean);
+  const forgottenCount = forgettingData?.lifetimeForgotten || 0;
+  const threshold = forgettingData?.threshold || 0;
+
+  if (!dreamTopics.length && !forgottenCount) return null;
+
+  return (
+    <div className="flex flex-wrap gap-3">
+      {dreamTopics.length > 0 && (
+        <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20">
+          <Moon className="w-4 h-4 text-indigo-400" />
+          <span className="text-xs text-indigo-300">
+            Concord dreamed about: {dreamTopics.join(', ')}
+          </span>
+        </div>
+      )}
+      {forgottenCount > 0 && (
+        <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500/10 border border-red-500/20">
+          <Archive className="w-4 h-4 text-red-400" />
+          <span className="text-xs text-red-300">
+            {forgottenCount} DTUs archived (low salience, threshold: {threshold})
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function DashboardPage() {
   const [inspecting, setInspecting] = useState<{ type: string; id: string } | null>(null);
@@ -522,6 +565,9 @@ function DashboardPage() {
           <LockDashboard />
         </div>
       </div>
+
+      {/* Dream & Forgetting Status Indicators */}
+      <DreamForgettingIndicators />
 
       {/* Living Substrate — Dreams, Metabolism, Memory, Council */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">

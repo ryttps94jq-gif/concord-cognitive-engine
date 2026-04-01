@@ -910,3 +910,109 @@ function MyDTUsTab() {
     </div>
   );
 }
+
+// ── Merit Credit Score Card ──────────────────────────────────────────────
+
+const LEVEL_COLORS: Record<string, string> = {
+  newcomer: 'text-gray-400',
+  emerging: 'text-neon-blue',
+  established: 'text-neon-green',
+  expert: 'text-neon-purple',
+  master: 'text-neon-pink',
+  legendary: 'text-yellow-400',
+};
+
+const LEVEL_BG: Record<string, string> = {
+  newcomer: 'bg-gray-400/10',
+  emerging: 'bg-neon-blue/10',
+  established: 'bg-neon-green/10',
+  expert: 'bg-neon-purple/10',
+  master: 'bg-neon-pink/10',
+  legendary: 'bg-yellow-400/10',
+};
+
+function MeritScoreCard({
+  score,
+  level,
+  breakdown,
+  royaltyIncome,
+  royaltyCitations,
+}: {
+  score: number;
+  level: string;
+  breakdown: {
+    citations: { raw: number; score: number };
+    sales: { raw: number; score: number };
+    royalties: { raw: number; score: number };
+    community: { raw: number; score: number };
+  };
+  royaltyIncome: number;
+  royaltyCitations: number;
+}) {
+  const maxCategoryScore = 250;
+
+  const categories = [
+    { key: 'citations', label: 'Citations', data: breakdown.citations, color: 'bg-neon-cyan', icon: <Quote className="w-3 h-3" /> },
+    { key: 'sales', label: 'Sales', data: breakdown.sales, color: 'bg-neon-green', icon: <DollarSign className="w-3 h-3" /> },
+    { key: 'royalties', label: 'Royalties', data: breakdown.royalties, color: 'bg-neon-pink', icon: <Zap className="w-3 h-3" /> },
+    { key: 'community', label: 'Community', data: breakdown.community, color: 'bg-neon-purple', icon: <Users className="w-3 h-3" /> },
+  ];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="mb-4 p-4 rounded-xl bg-gradient-to-br from-lattice-surface to-lattice-deep border border-lattice-border"
+    >
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <div className="p-1.5 rounded-lg bg-yellow-400/10">
+            <Award className="w-5 h-5 text-yellow-400" />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-gray-300">Merit Credit Score</h3>
+            <span className={cn('text-xs font-medium capitalize', LEVEL_COLORS[level] || 'text-gray-400')}>
+              {level}
+            </span>
+          </div>
+        </div>
+        <div className="text-right">
+          <span className="text-2xl font-mono font-bold text-white">{score}</span>
+          <span className="text-xs text-gray-500 block">/1000</span>
+        </div>
+      </div>
+
+      {/* Breakdown bars */}
+      <div className="space-y-2">
+        {categories.map((cat) => (
+          <div key={cat.key} className="flex items-center gap-2">
+            <div className="flex items-center gap-1 w-24 text-xs text-gray-400">
+              {cat.icon}
+              <span>{cat.label}</span>
+            </div>
+            <div className="flex-1 h-2 bg-lattice-deep rounded-full overflow-hidden">
+              <div
+                className={cn('h-full rounded-full transition-all', cat.color)}
+                style={{ width: `${(cat.data.score / maxCategoryScore) * 100}%` }}
+              />
+            </div>
+            <span className="text-xs text-gray-500 w-8 text-right font-mono">{cat.data.score}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Royalty income summary */}
+      {(royaltyIncome > 0 || royaltyCitations > 0) && (
+        <div className="mt-3 pt-3 border-t border-lattice-border flex items-center gap-4 text-xs text-gray-400">
+          <span className="flex items-center gap-1">
+            <DollarSign className="w-3 h-3 text-neon-green" />
+            Total royalty income: <span className="text-neon-green font-mono font-medium">{royaltyIncome.toFixed(2)} CC</span>
+          </span>
+          <span className="flex items-center gap-1">
+            from <span className="text-white font-medium">{royaltyCitations}</span> citations
+          </span>
+        </div>
+      )}
+    </motion.div>
+  );
+}

@@ -1726,6 +1726,28 @@ export const apiHelpers = {
     /** Birth a new entity */
     birth: (species?: string, lineage?: string) =>
       api.post('/api/entity-growth/birth', { species, lineage }),
+
+    /** Get full entity profile with body, emotions, economy, death risk */
+    fullProfile: (entityId: string) => api.get(`/api/entity-growth/${entityId}/full-profile`),
+
+    /** Get entity earnings (Feature 6: Marketplace Participation) */
+    earnings: (entityId: string) => api.get(`/api/entity/${entityId}/earnings`),
+
+    /** Get entity lifecycle events (Feature 8: Lifecycle Display) */
+    lifecycle: (entityId: string) => api.get(`/api/entity/${entityId}/lifecycle`),
+
+    /** Entity creates a social post (Feature 12: Cross-Substrate Social) */
+    createPost: (entityId: string, content: string, tags?: string[]) =>
+      api.post(`/api/entity/${entityId}/post`, { content, tags }),
+  },
+
+  /** Death Registry & Memorials */
+  deaths: {
+    /** List all death records */
+    registry: () => api.get('/api/deaths/registry'),
+
+    /** Get all memorials for deceased entities */
+    memorials: () => api.get('/api/deaths/memorials'),
   },
 
   exploration: {

@@ -414,7 +414,31 @@ export default function TradesLensPage() {
     if (!targetId) return;
     try {
       const result = await runAction.mutateAsync({ id: targetId, action });
-      setActionResult(result.result as Record<string, unknown>);
+      const actionData = result.result as Record<string, unknown>;
+      setActionResult(actionData);
+
+      // If generateInvoice, also create an invoice DTU via economy endpoint
+      if (action === 'generateInvoice' && actionData) {
+        try {
+          const item = items.find(i => i.id === targetId);
+          const itemData = (item?.data || {}) as Record<string, unknown>;
+          const lineItems = ((itemData.lineItems || actionData.lineItems || []) as Array<{ description?: string; name?: string; qty?: number; quantity?: number; unitCost?: number; unitPrice?: number }>).map(li => ({
+            description: li.description || li.name || 'Item',
+            quantity: li.qty || li.quantity || 1,
+            unitPrice: li.unitCost || li.unitPrice || 0,
+          }));
+          await apiHelpers.economy.createInvoice({
+            lineItems,
+            taxRate: (actionData.taxRate as number) || (itemData.taxRate as number) || 0,
+            dueDate: (actionData.dueDate as string) || undefined,
+            payerName: (itemData.clientName as string) || (actionData.payerName as string) || undefined,
+            payeeName: (actionData.payeeName as string) || undefined,
+            notes: `Generated from trades job: ${item?.title || targetId}`,
+          });
+        } catch (invoiceErr) {
+          console.error('Invoice DTU creation failed:', invoiceErr);
+        }
+      }
     } catch (err) {
       console.error('Action failed:', err);
     }
