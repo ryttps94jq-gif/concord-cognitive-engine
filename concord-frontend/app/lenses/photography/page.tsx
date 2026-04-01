@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useCallback, useMemo, useRef } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, apiHelpers } from '@/lib/api/client';
+import { useUIStore } from '@/store/ui';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useLensDTUs } from '@/hooks/useLensDTUs';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -11,7 +12,7 @@ import {
   Camera, Plus, Search, Upload, Grid, Image as ImageIcon,
   Heart, Share2, Filter, Eye, Download, X,
   Aperture, Sun, Contrast, Sliders, BarChart3,
-  Layers, MapPin, Clock, Star,
+  Layers, MapPin, Clock, Star, ChevronLeft, ChevronRight, Focus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -34,14 +35,19 @@ interface PhotoItem {
   iso?: number;
   aperture?: string;
   shutter?: string;
+  focalLength?: string;
   location?: string;
   mediaId?: string;
   likes: number;
   views: number;
+  favorited?: boolean;
   createdAt: string;
 }
 
 const PHOTO_CATEGORIES = ['Landscape', 'Portrait', 'Street', 'Architecture', 'Nature', 'Macro', 'Astrophotography', 'Abstract', 'Documentary', 'Fashion'];
+
+/** Masonry-style aspect ratios assigned deterministically by item index */
+const MASONRY_RATIOS = ['3/4', '4/3', '1/1', '3/4', '4/5', '16/9', '1/1', '4/3', '3/2', '4/5'] as const;
 
 export default function PhotographyPage() {
   useLensNav('photography');
@@ -49,7 +55,7 @@ export default function PhotographyPage() {
   const { latestData: realtimeData, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('photography');
   const { contextDTUs, isLoading: dtusLoading } = useLensDTUs({ lens: 'photography' });
 
-  const { items: photoItems, isLoading, isError, error, refetch, create: createPhoto } = useLensData<PhotoItem>('photography', 'photo', { seed: [] });
+  const { items: photoItems, isLoading, isError, error, refetch, create: createPhoto, update: updatePhoto } = useLensData<PhotoItem>('photography', 'photo', { seed: [] });
   const photos = useMemo(() => photoItems.map(i => ({ ...(i.data as unknown as PhotoItem), id: i.id, title: i.title })), [photoItems]);
 
   const [tab, setTab] = useState<PhotoTab>('gallery');
@@ -57,6 +63,8 @@ export default function PhotographyPage() {
   const [showFeatures, setShowFeatures] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [showUpload, setShowUpload] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [favorites, setFavorites] = useState<Set<string>>(new Set());
 
   // Upload form
   const [uploadTitle, setUploadTitle] = useState('');
@@ -66,6 +74,31 @@ export default function PhotographyPage() {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadPreview, setUploadPreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Favorite toggle — optimistic local state + persist via update
+  const toggleFavorite = useCallback((photoId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setFavorites(prev => {
+      const next = new Set(prev);
+      const nowFav = !next.has(photoId);
+      if (nowFav) next.add(photoId); else next.delete(photoId);
+      // Persist to backend
+      const item = photoItems.find(i => i.id === photoId);
+      if (item) {
+        updatePhoto(photoId, { data: { ...(item.data as Partial<PhotoItem>), favorited: nowFav } });
+      }
+      return next;
+    });
+  }, [photoItems, updatePhoto]);
+
+  // Seed favorites from persisted data on load
+  useEffect(() => {
+    const favSet = new Set<string>();
+    photoItems.forEach(i => {
+      if ((i.data as unknown as PhotoItem)?.favorited) favSet.add(i.id);
+    });
+    if (favSet.size > 0) setFavorites(favSet);
+  }, [photoItems]);
 
   const handleFileSelect = useCallback((file: File) => {
     if (!file.type.startsWith('image/')) return;
@@ -110,6 +143,9 @@ export default function PhotographyPage() {
       setUploadPreview(null);
       refetch();
     },
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
 
   const handleUpload = useCallback(() => {
@@ -130,6 +166,29 @@ export default function PhotographyPage() {
     }
     return result;
   }, [photos, categoryFilter, searchQuery]);
+
+  // Lightbox navigation helpers
+  const lightboxPhoto = lightboxIndex !== null ? filteredPhotos[lightboxIndex] : null;
+  const openLightbox = useCallback((index: number) => setLightboxIndex(index), []);
+  const closeLightbox = useCallback(() => setLightboxIndex(null), []);
+  const prevPhoto = useCallback(() => {
+    setLightboxIndex(prev => (prev !== null && prev > 0 ? prev - 1 : prev));
+  }, []);
+  const nextPhoto = useCallback(() => {
+    setLightboxIndex(prev => (prev !== null && prev < filteredPhotos.length - 1 ? prev + 1 : prev));
+  }, [filteredPhotos.length]);
+
+  // Keyboard navigation for lightbox
+  useEffect(() => {
+    if (lightboxIndex === null) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeLightbox();
+      else if (e.key === 'ArrowLeft') prevPhoto();
+      else if (e.key === 'ArrowRight') nextPhoto();
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [lightboxIndex, closeLightbox, prevPhoto, nextPhoto]);
 
   const TABS: { id: PhotoTab; label: string; icon: typeof Camera }[] = [
     { id: 'gallery', label: 'Gallery', icon: Grid },
@@ -194,11 +253,40 @@ export default function PhotographyPage() {
                 <button onClick={() => setShowUpload(true)} className="mt-3 px-4 py-2 text-xs bg-sky-500/20 rounded-lg hover:bg-sky-500/30">Upload Photo</button>
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                {filteredPhotos.map(photo => (
-                  <motion.div key={photo.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-white/5 border border-white/10 rounded-lg overflow-hidden hover:border-sky-500/30 transition-colors group">
-                    <div className="aspect-square bg-gradient-to-br from-sky-900/30 to-purple-900/30 flex items-center justify-center">
-                      <ImageIcon className="w-8 h-8 text-gray-600" />
+              <div className="columns-2 sm:columns-3 lg:columns-4 gap-3 [column-fill:_balance]">
+                {filteredPhotos.map((photo, idx) => (
+                  <motion.div
+                    key={photo.id}
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.03 }}
+                    className="mb-3 break-inside-avoid bg-white/5 border border-white/10 rounded-lg overflow-hidden hover:border-sky-500/30 transition-colors group cursor-pointer relative"
+                    onClick={() => openLightbox(idx)}
+                  >
+                    {/* Masonry image placeholder with varied aspect ratio */}
+                    <div
+                      className="bg-gradient-to-br from-sky-900/30 to-purple-900/30 flex items-center justify-center relative"
+                      style={{ aspectRatio: MASONRY_RATIOS[idx % MASONRY_RATIOS.length] }}
+                    >
+                      {photo.mediaId ? (
+                        <img
+                          src={`/api/media/stream/${photo.mediaId}`}
+                          alt={photo.title}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <ImageIcon className="w-8 h-8 text-gray-600" />
+                      )}
+                      {/* Favorite heart overlay */}
+                      <button
+                        onClick={(e) => toggleFavorite(photo.id, e)}
+                        className="absolute top-2 right-2 p-1.5 rounded-full bg-black/40 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/60"
+                      >
+                        <Heart
+                          className={cn('w-3.5 h-3.5 transition-colors', favorites.has(photo.id) ? 'fill-rose-500 text-rose-500' : 'text-white/70')}
+                        />
+                      </button>
                     </div>
                     <div className="p-3">
                       <h3 className="text-xs font-medium truncate">{photo.title}</h3>
@@ -280,6 +368,155 @@ export default function PhotographyPage() {
             </div>
           </div>
         )}
+
+        {/* Lightbox modal */}
+        <AnimatePresence>
+          {lightboxPhoto && lightboxIndex !== null && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-md"
+              onClick={closeLightbox}
+            >
+              {/* Close button */}
+              <button
+                onClick={closeLightbox}
+                className="absolute top-4 right-4 z-10 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+              >
+                <X className="w-5 h-5 text-white" />
+              </button>
+
+              {/* Left arrow */}
+              {lightboxIndex > 0 && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); prevPhoto(); }}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 z-10 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+                >
+                  <ChevronLeft className="w-6 h-6 text-white" />
+                </button>
+              )}
+
+              {/* Right arrow */}
+              {lightboxIndex < filteredPhotos.length - 1 && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); nextPhoto(); }}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 z-10 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+                >
+                  <ChevronRight className="w-6 h-6 text-white" />
+                </button>
+              )}
+
+              {/* Image + EXIF panel */}
+              <motion.div
+                key={lightboxPhoto.id}
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                className="flex flex-col lg:flex-row items-center gap-6 max-w-5xl w-full mx-4 max-h-[90vh]"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Photo display */}
+                <div className="flex-1 flex items-center justify-center min-h-0 max-h-[70vh] lg:max-h-[80vh]">
+                  {lightboxPhoto.mediaId ? (
+                    <img
+                      src={`/api/media/stream/${lightboxPhoto.mediaId}`}
+                      alt={lightboxPhoto.title}
+                      className="max-w-full max-h-[70vh] lg:max-h-[80vh] object-contain rounded-lg shadow-2xl"
+                    />
+                  ) : (
+                    <div className="w-full aspect-[4/3] max-w-lg bg-gradient-to-br from-sky-900/40 to-purple-900/40 rounded-lg flex items-center justify-center shadow-2xl">
+                      <ImageIcon className="w-16 h-16 text-gray-600" />
+                    </div>
+                  )}
+                </div>
+
+                {/* EXIF / info panel */}
+                <div className="lg:w-72 w-full bg-white/5 border border-white/10 rounded-lg p-5 backdrop-blur-sm flex-shrink-0">
+                  <h3 className="text-sm font-semibold mb-1 truncate">{lightboxPhoto.title}</h3>
+                  {lightboxPhoto.description && (
+                    <p className="text-xs text-gray-400 mb-4 line-clamp-3">{lightboxPhoto.description}</p>
+                  )}
+
+                  {/* EXIF metadata grid */}
+                  {(lightboxPhoto.camera || lightboxPhoto.lens || lightboxPhoto.iso || lightboxPhoto.aperture || lightboxPhoto.shutter || lightboxPhoto.focalLength) && (
+                    <div className="mb-4">
+                      <h4 className="text-[10px] uppercase tracking-wider text-gray-500 mb-2 flex items-center gap-1">
+                        <Focus className="w-3 h-3" /> EXIF Data
+                      </h4>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                        {lightboxPhoto.camera && (
+                          <>
+                            <span className="text-gray-500">Camera</span>
+                            <span className="text-gray-300 truncate">{lightboxPhoto.camera}</span>
+                          </>
+                        )}
+                        {lightboxPhoto.lens && (
+                          <>
+                            <span className="text-gray-500">Lens</span>
+                            <span className="text-gray-300 truncate">{lightboxPhoto.lens}</span>
+                          </>
+                        )}
+                        {lightboxPhoto.iso && (
+                          <>
+                            <span className="text-gray-500">ISO</span>
+                            <span className="text-gray-300">{lightboxPhoto.iso}</span>
+                          </>
+                        )}
+                        {lightboxPhoto.aperture && (
+                          <>
+                            <span className="text-gray-500">Aperture</span>
+                            <span className="text-gray-300">f/{lightboxPhoto.aperture}</span>
+                          </>
+                        )}
+                        {lightboxPhoto.shutter && (
+                          <>
+                            <span className="text-gray-500">Shutter</span>
+                            <span className="text-gray-300">{lightboxPhoto.shutter}</span>
+                          </>
+                        )}
+                        {lightboxPhoto.focalLength && (
+                          <>
+                            <span className="text-gray-500">Focal Length</span>
+                            <span className="text-gray-300">{lightboxPhoto.focalLength}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Tags */}
+                  {lightboxPhoto.tags?.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-4">
+                      {lightboxPhoto.tags.map(tag => (
+                        <span key={tag} className="px-2 py-0.5 text-[10px] bg-sky-500/10 text-sky-400 rounded-full border border-sky-500/20">{tag}</span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Stats + favorite */}
+                  <div className="flex items-center gap-3 text-xs text-gray-500 pt-3 border-t border-white/10">
+                    <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{lightboxPhoto.views || 0}</span>
+                    <span className="flex items-center gap-1"><Heart className="w-3 h-3" />{lightboxPhoto.likes || 0}</span>
+                    <button
+                      onClick={(e) => toggleFavorite(lightboxPhoto.id, e)}
+                      className="ml-auto flex items-center gap-1 hover:text-rose-400 transition-colors"
+                    >
+                      <Heart className={cn('w-3.5 h-3.5', favorites.has(lightboxPhoto.id) ? 'fill-rose-500 text-rose-500' : '')} />
+                      <span className="text-[10px]">{favorites.has(lightboxPhoto.id) ? 'Favorited' : 'Favorite'}</span>
+                    </button>
+                  </div>
+
+                  {/* Counter */}
+                  <div className="text-center text-[10px] text-gray-600 mt-3">
+                    {lightboxIndex + 1} / {filteredPhotos.length}
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Upload modal */}
         <AnimatePresence>

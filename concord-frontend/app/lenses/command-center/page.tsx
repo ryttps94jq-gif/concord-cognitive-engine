@@ -3,6 +3,7 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers, api } from '@/lib/api/client';
+import { useUIStore } from '@/store/ui';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -840,10 +841,16 @@ function BreakthroughPanel() {
   const initMutation = useMutation({
     mutationFn: (clusterId: string) => apiHelpers.breakthrough.init(clusterId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['breakthrough-list'] }),
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
   const researchMutation = useMutation({
     mutationFn: (clusterId: string) => apiHelpers.breakthrough.research(clusterId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['breakthrough-list'] }),
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
 
   const clusters = data?.clusters || [];
@@ -1902,11 +1909,17 @@ function PredictionMarketPanel() {
       queryClient.invalidateQueries({ queryKey: ['cc-prediction-market'] });
       setNewClaim('');
     },
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
 
   const resolveMutation = useMutation({
     mutationFn: (id: string) => apiHelpers.predictions.resolve(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['cc-prediction-market'] }),
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
 
   const hypotheses = predictions?.hypotheses || [];

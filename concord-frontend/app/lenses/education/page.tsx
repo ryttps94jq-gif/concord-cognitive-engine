@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { api, apiHelpers } from '@/lib/api/client';
+import { useUIStore } from '@/store/ui';
 import { ds } from '@/lib/design-system';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
@@ -2763,6 +2764,9 @@ function StudyModePanel() {
     mutationFn: ({ dtuId, quality }: { dtuId: string; quality: number }) =>
       apiHelpers.srs.review(dtuId, { quality }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['srs-due'] }),
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
 
   const cards = srsData?.due || srsData?.cards || [];

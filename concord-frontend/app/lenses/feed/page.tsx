@@ -293,6 +293,9 @@ function CollabCard({ collab }: { collab: CollabAttachment }) {
   const joinMutation = useMutation({
     mutationFn: () => apiHelpers.artistry.collab.sessions.join(collab.sessionName, { userId: 'current-user' }),
     onSuccess: () => useUIStore.getState().addToast({ type: 'success', message: `Joined "${collab.sessionName}"` }),
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
   return (
     <motion.div
@@ -475,6 +478,9 @@ export default function FeedLensPage() {
   const likeMutation = useMutation({
     mutationFn: (postId: string) => api.post('/api/social/react', { postId, type: 'like' }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['feed-posts'] }),
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
 
   const repostMutation = useMutation({
@@ -483,11 +489,17 @@ export default function FeedLensPage() {
       queryClient.invalidateQueries({ queryKey: ['feed-posts'] });
       useUIStore.getState().addToast({ type: 'success', message: 'Reposted!' });
     },
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
 
   const bookmarkMutation = useMutation({
     mutationFn: (postId: string) => api.post('/api/social/bookmark', { postId }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['feed-posts'] }),
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
 
   const shareMutation = useMutation({
@@ -498,6 +510,9 @@ export default function FeedLensPage() {
         await navigator.clipboard.writeText(`${window.location.origin}/lenses/feed?post=${postId}`);
         useUIStore.getState().addToast({ type: 'success', message: 'Link copied to clipboard' });
       }
+    },
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
     },
   });
 

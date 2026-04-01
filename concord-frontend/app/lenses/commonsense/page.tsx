@@ -3,6 +3,7 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
+import { useUIStore } from '@/store/ui';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useLensBridge } from '@/lib/hooks/use-lens-bridge';
 import { UniversalActions } from '@/components/lens/UniversalActions';
@@ -82,11 +83,17 @@ export default function CommonsenseLensPage() {
       setObject('');
       setShowAddForm(false);
     },
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
 
   const queryFacts = useMutation({
     mutationFn: () => apiHelpers.commonsense.query({ query: queryText }),
     onSuccess: (res) => setResults(res.data),
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
 
   const rawFacts: Fact[] = useMemo(() => {

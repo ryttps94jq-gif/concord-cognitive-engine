@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useUIStore } from '@/store/ui';
@@ -111,6 +111,38 @@ type TimeRange = '1H' | '24H' | '7D' | '30D' | '90D' | '1Y' | 'ALL';
 type ViewMode = 'overview' | 'portfolio' | 'trade' | 'orders' | 'alerts' | 'news';
 type ChartType = 'line' | 'candle' | 'area';
 
+/** Hook: animates a number from 0 to `target` over `duration` ms on mount / when target changes. */
+function useAnimatedNumber(target: number, duration = 1000): number {
+  const [display, setDisplay] = useState(0);
+  const prevTarget = useRef(0);
+
+  useEffect(() => {
+    const start = prevTarget.current;
+    const delta = target - start;
+    if (delta === 0) return;
+
+    const t0 = performance.now();
+
+    let raf: number;
+    const step = (now: number) => {
+      const elapsed = now - t0;
+      const progress = Math.min(elapsed / duration, 1);
+      // ease-out quad
+      const eased = 1 - (1 - progress) * (1 - progress);
+      setDisplay(start + delta * eased);
+      if (progress < 1) {
+        raf = requestAnimationFrame(step);
+      } else {
+        prevTarget.current = target;
+      }
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration]);
+
+  return display;
+}
+
 const INITIAL_ASSETS: Asset[] = [];
 
 const INITIAL_TRANSACTIONS: Transaction[] = [];
@@ -169,6 +201,11 @@ export default function FinanceLensPage() {
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [showFeatures, setShowFeatures] = useState(false);
 
+  // Chart tooltip state
+  const [chartTooltip, setChartTooltip] = useState<{ x: number; y: number; value: number; index: number } | null>(null);
+  const chartDataRef = useRef<number[]>([]);
+  const chartMetaRef = useRef<{ padding: number; width: number; height: number; minVal: number; maxVal: number; range: number }>({ padding: 40, width: 1000, height: 320, minVal: 0, maxVal: 1, range: 1 });
+
   const handleSubmitOrder = async () => {
     if (!tradeAmount || isSubmittingOrder) return;
     const amount = parseFloat(tradeAmount);
@@ -208,6 +245,12 @@ export default function FinanceLensPage() {
   const totalPnl = assets.reduce((sum, a) => sum + a.pnl, 0);
   const totalPnlPercent = totalValue - totalPnl !== 0 ? (totalPnl / (totalValue - totalPnl)) * 100 : 0;
 
+  // Animated KPI values
+  const animatedTotalValue = useAnimatedNumber(totalValue);
+  const animatedTotalPnl = useAnimatedNumber(totalPnl);
+  const animatedVolume = useAnimatedNumber(assets.reduce((sum, a) => sum + a.volume24h, 0));
+  const animatedAlertCount = useAnimatedNumber(alerts.filter(a => a.active).length, 600);
+
   // Chart rendering
   useEffect(() => {
     const canvas = chartRef.current;
@@ -238,9 +281,14 @@ export default function FinanceLensPage() {
     }
     data[data.length - 1] = totalValue;
 
+    // Store for tooltip handler
+    chartDataRef.current = data;
+
     const minVal = Math.min(...data) * 0.95;
     const maxVal = Math.max(...data) * 1.05;
     const range = maxVal - minVal;
+
+    chartMetaRef.current = { padding, width, height, minVal, maxVal, range };
 
     // Draw grid
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
@@ -351,6 +399,97 @@ export default function FinanceLensPage() {
     }
   }, [timeRange, chartType, totalValue]);
 
+  // Chart hover handler — draws crosshair and sets tooltip state
+  const handleChartMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = chartRef.current;
+    if (!canvas) return;
+    const data = chartDataRef.current;
+    if (data.length === 0) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const mouseX = (e.clientX - rect.left) * scaleX;
+    const { padding, width, height, minVal, maxVal, range } = chartMetaRef.current;
+
+    // Find nearest data index
+    const chartWidth = width - padding * 2;
+    const relX = mouseX - padding;
+    const index = Math.round((relX / chartWidth) * (data.length - 1));
+    const clampedIndex = Math.max(0, Math.min(data.length - 1, index));
+    const val = data[clampedIndex];
+
+    // Position tooltip relative to the container div
+    const tooltipX = e.clientX - rect.left;
+    const tooltipY = e.clientY - rect.top;
+
+    setChartTooltip({ x: tooltipX, y: tooltipY, value: val, index: clampedIndex });
+
+    // Redraw crosshair on canvas — trigger a re-render of chart + crosshair
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // We need to redraw the chart first. Instead, we'll overlay a crosshair by saving/restoring.
+    // For simplicity, draw the crosshair as an overlay stroke.
+    // The chart effect will redraw on next render; for now draw directly:
+    const dataX = padding + (clampedIndex / (data.length - 1)) * chartWidth;
+    const dataY = padding + ((maxVal - val) / range) * (height - padding * 2);
+
+    // Clear previous crosshair area by re-triggering render is expensive;
+    // instead we use a compositing trick — store image and redraw:
+    // Actually the simplest approach: the chart useEffect stores an image we can restore.
+    // For now, just overlay on existing canvas (will accumulate until next full redraw).
+
+    // Save the base chart image once
+    if (!(canvas as unknown as Record<string, unknown>).__baseImage) {
+      (canvas as unknown as Record<string, unknown>).__baseImage = ctx.getImageData(0, 0, width, height);
+    }
+    const baseImage = (canvas as unknown as Record<string, unknown>).__baseImage as ImageData;
+    ctx.putImageData(baseImage, 0, 0);
+
+    // Vertical crosshair line
+    ctx.save();
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(dataX, padding);
+    ctx.lineTo(dataX, height - padding);
+    ctx.stroke();
+
+    // Highlight dot
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.arc(dataX, dataY, 5, 0, Math.PI * 2);
+    ctx.fillStyle = '#00d4ff';
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.restore();
+  }, []);
+
+  const handleChartMouseLeave = useCallback(() => {
+    setChartTooltip(null);
+    // Restore base image
+    const canvas = chartRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const baseImage = (canvas as unknown as Record<string, unknown>).__baseImage as ImageData | undefined;
+    if (baseImage) {
+      ctx.putImageData(baseImage, 0, 0);
+    }
+  }, []);
+
+  // After chart renders, store the base image for crosshair overlay
+  useEffect(() => {
+    const canvas = chartRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    (canvas as unknown as Record<string, unknown>).__baseImage = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  }, [timeRange, chartType, totalValue]);
+
   const formatCurrency = (value: number, compact = false) => {
     if (compact) {
       if (value >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
@@ -396,16 +535,56 @@ export default function FinanceLensPage() {
 
     const isPositive = data[data.length - 1] >= data[0];
 
-    return (
-      <svg width={width} height={height} className="overflow-visible">
-        <polyline
-          points={points}
-          fill="none"
-          stroke={isPositive ? '#22c55e' : '#ef4444'}
-          strokeWidth="1.5"
-        />
-      </svg>
-    );
+    const SparklineWithHover = () => {
+      const [hoverInfo, setHoverInfo] = useState<{ x: number; y: number; value: number } | null>(null);
+      const svgRef = useRef<SVGSVGElement>(null);
+
+      const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+        const svg = svgRef.current;
+        if (!svg) return;
+        const rect = svg.getBoundingClientRect();
+        const relX = e.clientX - rect.left;
+        const idx = Math.round((relX / rect.width) * (data.length - 1));
+        const clampedIdx = Math.max(0, Math.min(data.length - 1, idx));
+        const val = data[clampedIdx];
+        const x = (clampedIdx / (data.length - 1)) * width;
+        const y = height - ((val - min) / range) * height;
+        setHoverInfo({ x, y, value: val });
+      };
+
+      return (
+        <div className="relative inline-block">
+          <svg
+            ref={svgRef}
+            width={width}
+            height={height}
+            className="overflow-visible cursor-crosshair"
+            onMouseMove={handleMouseMove}
+            onMouseLeave={() => setHoverInfo(null)}
+          >
+            <polyline
+              points={points}
+              fill="none"
+              stroke={isPositive ? '#22c55e' : '#ef4444'}
+              strokeWidth="1.5"
+            />
+            {hoverInfo && (
+              <>
+                <circle cx={hoverInfo.x} cy={hoverInfo.y} r={3} fill={isPositive ? '#22c55e' : '#ef4444'} stroke="#fff" strokeWidth={1} />
+                <line x1={hoverInfo.x} y1={0} x2={hoverInfo.x} y2={height} stroke="rgba(255,255,255,0.3)" strokeWidth={0.5} strokeDasharray="2,2" />
+              </>
+            )}
+          </svg>
+          {hoverInfo && (
+            <div className="absolute -top-7 left-1/2 -translate-x-1/2 px-1.5 py-0.5 bg-lattice-elevated border border-lattice-border rounded text-[10px] font-mono whitespace-nowrap pointer-events-none z-10">
+              ${hoverInfo.value.toFixed(2)}
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    return <SparklineWithHover />;
   };
 
   const renderOverview = () => (
@@ -420,11 +599,11 @@ export default function FinanceLensPage() {
             </button>
           </div>
           <p className="text-3xl font-bold font-mono tracking-tight">
-            {showBalances ? formatCurrency(totalValue) : '••••••'}
+            {showBalances ? formatCurrency(animatedTotalValue) : '••••••'}
           </p>
-          <div className={cn('flex items-center gap-1 mt-1 text-sm font-mono', totalPnlPercent >= 0 ? 'text-green-400' : 'text-red-500')}>
+          <div className={cn('flex items-center gap-1 mt-1 text-sm font-mono', totalPnlPercent >= 0 ? 'text-green-400' : 'text-red-400')}>
             {totalPnlPercent >= 0 ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
-            <span>{showBalances ? formatCurrency(totalPnl) : '••••'}</span>
+            <span>{showBalances ? formatCurrency(animatedTotalPnl) : '••••'}</span>
             <span>({formatPercent(totalPnlPercent)})</span>
           </div>
         </div>
@@ -435,7 +614,9 @@ export default function FinanceLensPage() {
             <span className="text-sm text-gray-400">Best Performer</span>
           </div>
           <p className="text-xl font-bold">{assets.length > 0 ? [...assets].sort((a, b) => b.pnlPercent - a.pnlPercent)[0].symbol : '--'}</p>
-          <p className="text-green-400 text-sm">{assets.length > 0 ? `+${[...assets].sort((a, b) => b.pnlPercent - a.pnlPercent)[0].pnlPercent.toFixed(2)}%` : '--'}</p>
+          <p className={cn('text-sm', assets.length > 0 && [...assets].sort((a, b) => b.pnlPercent - a.pnlPercent)[0].pnlPercent >= 0 ? 'text-green-400' : 'text-red-400')}>
+            {assets.length > 0 ? formatPercent([...assets].sort((a, b) => b.pnlPercent - a.pnlPercent)[0].pnlPercent) : '--'}
+          </p>
         </div>
 
         <div className="lens-card">
@@ -444,7 +625,7 @@ export default function FinanceLensPage() {
             <span className="text-sm text-gray-400">24h Volume</span>
           </div>
           <p className="text-xl font-bold">
-            {formatCurrency(assets.reduce((sum, a) => sum + a.volume24h, 0), true)}
+            {formatCurrency(animatedVolume, true)}
           </p>
           <p className="text-gray-400 text-sm">Across all assets</p>
         </div>
@@ -454,7 +635,7 @@ export default function FinanceLensPage() {
             <Bell className="w-4 h-4 text-neon-yellow" />
             <span className="text-sm text-gray-400">Active Alerts</span>
           </div>
-          <p className="text-xl font-bold">{alerts.filter(a => a.active).length}</p>
+          <p className="text-xl font-bold">{Math.round(animatedAlertCount)}</p>
           <p className="text-gray-400 text-sm">{orders.filter(o => o.status === 'open').length} open orders</p>
         </div>
       </div>
@@ -507,8 +688,29 @@ export default function FinanceLensPage() {
             ref={chartRef}
             width={1000}
             height={320}
-            className="w-full h-full"
+            className="w-full h-full cursor-crosshair"
+            onMouseMove={handleChartMouseMove}
+            onMouseLeave={handleChartMouseLeave}
           />
+          {chartTooltip && (
+            <div
+              className="absolute pointer-events-none z-20"
+              style={{
+                left: chartTooltip.x,
+                top: chartTooltip.y - 48,
+                transform: 'translateX(-50%)',
+              }}
+            >
+              <div className="bg-lattice-elevated/95 border border-lattice-border rounded-lg px-3 py-1.5 shadow-lg backdrop-blur-sm text-center">
+                <p className="text-xs text-gray-400 font-mono">
+                  Point {chartTooltip.index + 1}
+                </p>
+                <p className="text-sm font-bold font-mono text-white">
+                  {formatCurrency(chartTooltip.value)}
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -700,8 +902,8 @@ export default function FinanceLensPage() {
                   <p className="text-xs text-gray-400">{formatTime(tx.timestamp)}</p>
                 </div>
                 <div className="text-right">
-                  <p className={cn('font-mono', tx.type === 'sell' ? 'text-green-400' : '')}>
-                    {tx.type === 'sell' ? '+' : ''}{formatCurrency(tx.value)}
+                  <p className={cn('font-mono', tx.type === 'sell' || tx.type === 'reward' ? 'text-green-400' : tx.type === 'buy' ? 'text-red-400' : 'text-gray-300')}>
+                    {tx.type === 'sell' || tx.type === 'reward' ? '+' : tx.type === 'buy' ? '-' : ''}{formatCurrency(tx.value)}
                   </p>
                   <p className="text-xs text-gray-400">{tx.amount} {tx.symbol}</p>
                 </div>

@@ -4,6 +4,7 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useMutation } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
+import { useUIStore } from '@/store/ui';
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -116,6 +117,9 @@ export default function AgentsLensPage() {
         await updateLensAgent(id, { data: { enabled: !agent.enabled, status: agent.enabled ? 'dormant' : 'idle' } as unknown as Record<string, unknown> });
       }
     },
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
 
   const tickAgent = useMutation({
@@ -126,6 +130,9 @@ export default function AgentsLensPage() {
       if (agent) {
         await updateLensAgent(id, { data: { tickCount: (agent.tickCount || 0) + 1, lastTick: new Date().toISOString() } as unknown as Record<string, unknown> });
       }
+    },
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
     },
   });
 

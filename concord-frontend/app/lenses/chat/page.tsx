@@ -781,6 +781,9 @@ export default function ChatLensPage() {
     onSuccess: ({ messageId, rating }) => {
       setFeedbackState(prev => ({ ...prev, [messageId]: rating }));
     },
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
 
   const forgeMutation = useMutation({
@@ -803,6 +806,9 @@ export default function ChatLensPage() {
       setLocalMessages(prev => [...prev, forgeMsg]);
       queryClient.invalidateQueries({ queryKey: ['dtus'] });
     },
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
 
   const deleteConversationMutation = useMutation({
@@ -814,6 +820,9 @@ export default function ChatLensPage() {
         // Server deletion failed — still remove locally
       }
       return sessionId;
+    },
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
     },
     onSuccess: (deletedId: string) => {
       deleteMessagesForSession(deletedId);
@@ -1057,9 +1066,13 @@ export default function ChatLensPage() {
 
   const renderMessage = useCallback((msgIdx: number, message: Message) => {
     const isPinned = pinnedMessages.has(message.id) || message.pinned;
+    const timeStr = message.timestamp ? new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
 
     return (
-      <div
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.25, ease: 'easeOut' }}
         className={cn(
           'flex gap-4 px-4 lg:px-6 py-3 group relative',
           message.role === 'user' ? 'flex-row-reverse' : '',
@@ -1067,8 +1080,10 @@ export default function ChatLensPage() {
         )}
       >
         <div className={cn(
-          'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0',
-          message.role === 'user' ? 'bg-neon-purple' : 'bg-neon-cyan/20'
+          'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg',
+          message.role === 'user'
+            ? 'bg-gradient-to-br from-neon-purple to-purple-700'
+            : 'bg-gradient-to-br from-neon-cyan/30 to-cyan-900/40 ring-1 ring-neon-cyan/20'
         )}>
           {message.role === 'user' ? (
             <User className="w-5 h-5 text-white" />
@@ -1102,14 +1117,14 @@ export default function ChatLensPage() {
           )}
 
           <div className={cn(
-            'inline-block p-4 rounded-2xl',
+            'inline-block p-4 rounded-2xl shadow-sm',
             message.role === 'user'
-              ? 'bg-neon-purple text-white rounded-br-md'
+              ? 'bg-gradient-to-br from-neon-purple to-purple-700 text-white rounded-br-md'
               : message.role === 'system'
                 ? 'bg-red-500/10 border border-red-500/30 text-red-300 rounded-bl-md'
-                : 'bg-lattice-surface border border-lattice-border text-gray-200 rounded-bl-md'
+                : 'bg-lattice-surface border border-lattice-border text-gray-200 rounded-bl-md hover:border-lattice-border/80 transition-colors'
           )}>
-            <p className="whitespace-pre-wrap">{message.content}</p>
+            <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
 
             {/* Attachment chips on user messages */}
             {message.attachments && message.attachments.length > 0 && (
@@ -1254,7 +1269,7 @@ export default function ChatLensPage() {
             )}
           </div>
         </div>
-      </div>
+      </motion.div>
     );
   }, [feedbackState, feedbackMutation, forgeMutation, regenerateMutation, handleRegenerate, copyToClipboard, formatTime, pinnedMessages, copiedMessageId, togglePin, quoteMessage]);
 
@@ -1656,30 +1671,63 @@ export default function ChatLensPage() {
               <div className="w-20 h-20 rounded-full bg-neon-cyan/10 flex items-center justify-center mb-6">
                 <Bot className="w-10 h-10 text-neon-cyan" />
               </div>
-              <h2 className="text-2xl font-bold text-white mb-2">Welcome to Concordos Chat</h2>
-              <p className="text-gray-400 max-w-md mb-8">
-                Your local-first AI assistant. All conversations are stored in your lattice as DTUs.
-              </p>
-              <div className="grid grid-cols-2 gap-3 max-w-lg">
+              <motion.div
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ duration: 0.5, ease: 'easeOut' }}
+                className="w-20 h-20 rounded-2xl bg-gradient-to-br from-neon-cyan/30 to-cyan-900/40 ring-1 ring-neon-cyan/20 flex items-center justify-center mb-6 shadow-lg shadow-neon-cyan/10"
+              >
+                <Bot className="w-10 h-10 text-neon-cyan" />
+              </motion.div>
+              <motion.h2
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15, duration: 0.4 }}
+                className="text-2xl font-bold text-white mb-2"
+              >Yo. What&apos;s the move?</motion.h2>
+              <motion.p
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.25, duration: 0.4 }}
+                className="text-gray-400 max-w-md mb-8"
+              >
+                Pick a direction or ask me anything. Everything we talk about becomes knowledge in your lattice.
+              </motion.p>
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.35, duration: 0.4 }}
+                className="grid grid-cols-2 gap-3 max-w-lg"
+              >
                 {[
-                  { icon: Sparkles, label: 'Explain a concept' },
-                  { icon: Code, label: 'Help me code' },
-                  { icon: FileText, label: 'Summarize text' },
-                  { icon: Brain, label: 'Generate CRETI' },
+                  { icon: Sparkles, label: 'Explain a concept', desc: 'Break anything down' },
+                  { icon: Code, label: 'Help me code', desc: 'Debug, build, ship' },
+                  { icon: FileText, label: 'Summarize text', desc: 'Condense anything' },
+                  { icon: Brain, label: 'Forge a DTU', desc: 'Create knowledge' },
                 ].map(suggestion => (
                   <button
                     key={suggestion.label}
                     onClick={() => setInput(suggestion.label)}
-                    className="flex items-center gap-3 p-4 bg-lattice-surface border border-lattice-border rounded-lg hover:border-neon-cyan transition-colors text-left"
+                    className="flex items-start gap-3 p-4 bg-lattice-surface border border-lattice-border rounded-xl hover:border-neon-cyan/50 hover:bg-lattice-surface/80 transition-all text-left group"
                   >
-                    <suggestion.icon className="w-5 h-5 text-neon-cyan" />
-                    <span className="text-sm text-white">{suggestion.label}</span>
+                    <div className="w-9 h-9 rounded-lg bg-neon-cyan/10 flex items-center justify-center flex-shrink-0 group-hover:bg-neon-cyan/20 transition-colors">
+                      <suggestion.icon className="w-4.5 h-4.5 text-neon-cyan" />
+                    </div>
+                    <div>
+                      <span className="text-sm font-medium text-white block">{suggestion.label}</span>
+                      <span className="text-xs text-gray-500">{suggestion.desc}</span>
+                    </div>
                   </button>
                 ))}
-              </div>
-              <p className="text-xs text-gray-500 mt-6">
-                Type <code className="px-1.5 py-0.5 bg-lattice-surface rounded text-gray-400">/help</code> for slash commands
-              </p>
+              </motion.div>
+              <motion.p
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.6, duration: 0.4 }}
+                className="text-xs text-gray-500 mt-6"
+              >
+                Type <code className="px-1.5 py-0.5 bg-lattice-surface rounded text-gray-400">/help</code> for slash commands &middot; <code className="px-1.5 py-0.5 bg-lattice-surface rounded text-gray-400">/forge</code> to create DTUs
+              </motion.p>
             </div>
           )}
 

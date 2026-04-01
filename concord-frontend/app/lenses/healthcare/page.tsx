@@ -240,6 +240,96 @@ function getVitalBg(key: string, value: number): string {
   return 'bg-green-500/10 border-green-500/30';
 }
 
+function isVitalCritical(key: string, value: number): boolean {
+  const range = VITAL_RANGES[key];
+  if (!range) return false;
+  return value < range.critLow || value > range.critHigh;
+}
+
+/** Hex color for gauge arcs: green=normal, yellow=warning, red=critical */
+function getVitalArcColor(key: string, value: number): string {
+  const range = VITAL_RANGES[key];
+  if (!range) return '#9ca3af';
+  if (value < range.critLow || value > range.critHigh) return '#ef4444';
+  if (value < range.low || value > range.high) return '#eab308';
+  return '#22c55e';
+}
+
+/** SVG mini-gauge for vital signs (~60px) */
+function VitalGauge({ value, vitalKey, label, unit }: { value: number; vitalKey: string; label: string; unit: string }) {
+  const range = VITAL_RANGES[vitalKey];
+  if (!range) return null;
+  const fullMin = range.critLow - (range.high - range.low) * 0.2;
+  const fullMax = range.critHigh + (range.high - range.low) * 0.2;
+  const pct = Math.min(1, Math.max(0, (value - fullMin) / (fullMax - fullMin)));
+  const color = getVitalArcColor(vitalKey, value);
+  const critical = isVitalCritical(vitalKey, value);
+  const r = 24;
+  const cx = 30;
+  const cy = 30;
+  const startAngle = -225;
+  const endAngle = 45;
+  const totalArc = endAngle - startAngle; // 270 degrees
+  const circumference = 2 * Math.PI * r;
+  const arcLength = (totalArc / 360) * circumference;
+  const filledLength = arcLength * pct;
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const sx = cx + r * Math.cos(toRad(startAngle));
+  const sy = cy + r * Math.sin(toRad(startAngle));
+
+  return (
+    <div className="flex flex-col items-center">
+      <div className="relative" style={critical ? { animation: 'pulse-critical 2s ease-in-out infinite' } : undefined}>
+        <svg width="60" height="60" viewBox="0 0 60 60">
+          {/* Background arc */}
+          <circle
+            cx={cx} cy={cy} r={r}
+            fill="none" stroke="#374151" strokeWidth="5"
+            strokeDasharray={`${arcLength} ${circumference}`}
+            strokeDashoffset={0}
+            strokeLinecap="round"
+            transform={`rotate(${startAngle + 90}, ${cx}, ${cy})`}
+          />
+          {/* Filled arc */}
+          <circle
+            cx={cx} cy={cy} r={r}
+            fill="none" stroke={color} strokeWidth="5"
+            strokeDasharray={`${filledLength} ${circumference}`}
+            strokeDashoffset={0}
+            strokeLinecap="round"
+            transform={`rotate(${startAngle + 90}, ${cx}, ${cy})`}
+            style={{ transition: 'stroke-dasharray 0.5s ease' }}
+          />
+          {/* Center value */}
+          <text x={cx} y={cy - 2} textAnchor="middle" dominantBaseline="middle"
+            fill={color} fontSize="13" fontWeight="bold">{value}</text>
+          <text x={cx} y={cy + 10} textAnchor="middle" dominantBaseline="middle"
+            fill="#9ca3af" fontSize="7">{unit}</text>
+        </svg>
+      </div>
+      <span className="text-[10px] text-gray-400 mt-0.5">{label}</span>
+    </div>
+  );
+}
+
+/** Enhanced status badge with distinct background tints */
+function StatusBadge({ status }: { status: Status }) {
+  const config: Record<Status, { bg: string; text: string; border: string; label: string }> = {
+    active: { bg: 'bg-green-500/15', text: 'text-green-400', border: 'border-green-500/30', label: 'Active' },
+    scheduled: { bg: 'bg-blue-500/15', text: 'text-blue-400', border: 'border-blue-500/30', label: 'Scheduled' },
+    completed: { bg: 'bg-cyan-500/15', text: 'text-cyan-400', border: 'border-cyan-500/30', label: 'Completed' },
+    cancelled: { bg: 'bg-red-500/15', text: 'text-red-400', border: 'border-red-500/30', label: 'Cancelled' },
+    archived: { bg: 'bg-gray-500/15', text: 'text-gray-400', border: 'border-gray-500/30', label: 'Archived' },
+  };
+  const c = config[status] || config.archived;
+  return (
+    <span className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border', c.bg, c.text, c.border)}>
+      {status === 'active' && <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />}
+      {c.label}
+    </span>
+  );
+}
+
 function calculateBMI(weightLbs: number, heightIn: number): { value: number; category: string; color: string } {
   if (!weightLbs || !heightIn) return { value: 0, category: 'N/A', color: 'text-gray-400' };
   const bmi = (weightLbs / (heightIn * heightIn)) * 703;
@@ -703,19 +793,37 @@ export default function HealthcareLensPage() {
   }) => {
     const range = VITAL_RANGES[vitalKey];
     const displayUnit = unit || range?.unit || '';
+    const critical = value !== undefined && isVitalCritical(vitalKey, value);
     return (
-      <div className={cn('rounded-lg border p-3', value ? getVitalBg(vitalKey, value) : 'bg-gray-500/10 border-lattice-border')}>
-        <div className="flex items-center gap-2 mb-1">
-          <Icon className={cn('w-4 h-4', value ? getVitalColor(vitalKey, value) : 'text-gray-500')} />
-          <span className={ds.textMuted}>{label}</span>
-        </div>
-        <p className={cn('text-xl font-bold', value ? getVitalColor(vitalKey, value) : 'text-gray-500')}>
-          {value ?? '--'}
-          <span className="text-xs font-normal ml-1">{displayUnit}</span>
-        </p>
-        {range && (
-          <p className="text-xs text-gray-500 mt-1">{range.low}-{range.high} {displayUnit}</p>
+      <div
+        className={cn(
+          'rounded-lg border p-3 flex items-center gap-3',
+          value ? getVitalBg(vitalKey, value) : 'bg-gray-500/10 border-lattice-border',
+          critical && 'pulse-critical-glow',
         )}
+      >
+        {/* SVG Gauge */}
+        {value !== undefined && range ? (
+          <VitalGauge value={value} vitalKey={vitalKey} label="" unit={displayUnit} />
+        ) : (
+          <div className="w-[60px] h-[60px] flex items-center justify-center">
+            <Icon className="w-6 h-6 text-gray-500" />
+          </div>
+        )}
+        {/* Label + range */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-0.5">
+            <Icon className={cn('w-3.5 h-3.5', value ? getVitalColor(vitalKey, value) : 'text-gray-500')} />
+            <span className={cn(ds.textMuted, 'text-xs')}>{label}</span>
+          </div>
+          <p className={cn('text-lg font-bold', value ? getVitalColor(vitalKey, value) : 'text-gray-500')}>
+            {value ?? '--'}
+            <span className="text-xs font-normal ml-1">{displayUnit}</span>
+          </p>
+          {range && (
+            <p className="text-[10px] text-gray-500">{range.low}-{range.high} {displayUnit}</p>
+          )}
+        </div>
       </div>
     );
   };
@@ -740,7 +848,7 @@ export default function HealthcareLensPage() {
               <TypeIcon className="w-4 h-4 text-gray-400" />
               <span className={ds.heading3}>{item.title}</span>
             </div>
-            <span className={ds.badge(STATUS_COLORS[d.status])}>{d.status}</span>
+            <StatusBadge status={d.status} />
           </div>
           <p className={cn(ds.textMuted, 'line-clamp-2 mb-2')}>{d.description}</p>
           <div className="flex items-center gap-4 text-xs text-gray-500">
@@ -767,7 +875,7 @@ export default function HealthcareLensPage() {
             <div className="flex items-center gap-2 mb-1">
               <h3 className={cn(ds.heading3, 'text-base')}>{item.title}</h3>
               {d.isPRN && <span className={ds.badge('neon-blue')}>PRN</span>}
-              <span className={ds.badge(STATUS_COLORS[d.status])}>{d.status}</span>
+              <StatusBadge status={d.status} />
             </div>
             <p className={ds.textMuted}>{d.description}</p>
           </div>
@@ -842,7 +950,7 @@ export default function HealthcareLensPage() {
     const outOfRange = isOutOfRange(d.resultValue || '', d.referenceRange || '');
     const trend = getTrend(d.resultValue, d.previousValue);
     return (
-      <div className={cn(ds.panelHover, d.isCritical && 'border-red-500/50')} onClick={() => openEditEditor(item)}>
+      <div className={cn(ds.panelHover, d.isCritical && 'border-red-500/50 pulse-critical-glow')} onClick={() => openEditEditor(item)}>
         <div className="flex items-start justify-between mb-2">
           <div className="flex-1">
             <div className="flex items-center gap-2">
@@ -853,7 +961,7 @@ export default function HealthcareLensPage() {
                 </span>
               )}
               {d.testPanel && <span className={ds.badge('neon-cyan')}>{d.testPanel}</span>}
-              <span className={ds.badge(STATUS_COLORS[d.status])}>{d.status}</span>
+              <StatusBadge status={d.status} />
             </div>
             <p className={cn(ds.textMuted, 'mt-1')}>{d.description}</p>
           </div>
@@ -861,7 +969,7 @@ export default function HealthcareLensPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
           <div>
             <span className="text-gray-500 block">Result</span>
-            <span className={cn('font-bold text-sm', outOfRange ? 'text-red-400' : 'text-green-400')}>
+            <span className={cn('font-bold text-sm', outOfRange ? 'text-red-400' : 'text-green-400', outOfRange && 'pulse-critical-glow rounded px-1')}>
               {d.resultValue || '--'} {d.unit || ''}
             </span>
           </div>
@@ -904,7 +1012,7 @@ export default function HealthcareLensPage() {
             <h3 className={cn(ds.heading3, 'text-base')}>{item.title}</h3>
             <p className={cn(ds.textMuted, 'mt-1')}>{d.description}</p>
           </div>
-          <span className={ds.badge(STATUS_COLORS[d.status])}>{d.status}</span>
+          <StatusBadge status={d.status} />
         </div>
         {/* Overall progress bar */}
         <div>
@@ -969,6 +1077,16 @@ export default function HealthcareLensPage() {
 
   return (
     <div data-lens-theme="healthcare" className="p-6 space-y-6 bg-gradient-to-b from-blue-950/20 to-transparent">
+      {/* Critical pulse animation */}
+      <style>{`
+        @keyframes pulse-critical {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.4); }
+          50% { box-shadow: 0 0 8px 4px rgba(239,68,68,0.2); }
+        }
+        .pulse-critical-glow {
+          animation: pulse-critical 2s ease-in-out infinite;
+        }
+      `}</style>
       {/* ============================================================ */}
       {/* Compliance Banner                                            */}
       {/* ============================================================ */}
@@ -1280,7 +1398,7 @@ export default function HealthcareLensPage() {
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className={ds.badge(STATUS_COLORS[(item.data as unknown as HealthcareArtifact).status])}>{(item.data as unknown as HealthcareArtifact).status}</span>
+                            <StatusBadge status={(item.data as unknown as HealthcareArtifact).status} />
                             <ChevronRight className="w-4 h-4 text-gray-500" />
                           </div>
                         </div>
@@ -1313,26 +1431,23 @@ export default function HealthcareLensPage() {
                       <div key={item.id} className={ds.panelHover} onClick={() => openDetailDrawer(item)}>
                         <div className="flex items-start justify-between mb-2">
                           <h3 className={cn(ds.heading3, 'text-base truncate flex-1')}>{item.title}</h3>
-                          <span className={ds.badge(STATUS_COLORS[d.status])}>{d.status}</span>
+                          <StatusBadge status={d.status} />
                         </div>
                         <p className={cn(ds.textMuted, 'line-clamp-2 mb-3')}>{d.description}</p>
-                        {/* Quick vitals preview */}
+                        {/* Quick vitals preview with mini gauges */}
                         {(d.heartRate || d.bpSystolic) && (
-                          <div className="flex items-center gap-3 text-xs mb-2">
+                          <div className="flex items-center gap-2 mb-2">
                             {d.heartRate && (
-                              <span className={cn('flex items-center gap-1', getVitalColor('heartRate', d.heartRate))}>
-                                <Activity className="w-3 h-3" /> {d.heartRate}
-                              </span>
+                              <VitalGauge value={d.heartRate} vitalKey="heartRate" label="HR" unit="bpm" />
                             )}
-                            {d.bpSystolic && d.bpDiastolic && (
-                              <span className={cn('flex items-center gap-1', getVitalColor('bpSystolic', d.bpSystolic))}>
-                                <Droplets className="w-3 h-3" /> {d.bpSystolic}/{d.bpDiastolic}
-                              </span>
+                            {d.bpSystolic && (
+                              <VitalGauge value={d.bpSystolic} vitalKey="bpSystolic" label="SBP" unit="mmHg" />
                             )}
                             {d.o2Sat && (
-                              <span className={cn('flex items-center gap-1', getVitalColor('o2Sat', d.o2Sat))}>
-                                <Wind className="w-3 h-3" /> {d.o2Sat}%
-                              </span>
+                              <VitalGauge value={d.o2Sat} vitalKey="o2Sat" label="SpO2" unit="%" />
+                            )}
+                            {d.temperature && (
+                              <VitalGauge value={d.temperature} vitalKey="temperature" label="Temp" unit="F" />
                             )}
                           </div>
                         )}
@@ -1372,7 +1487,7 @@ export default function HealthcareLensPage() {
                       <div key={item.id} className={ds.panelHover} onClick={() => openEditEditor(item)}>
                         <div className="flex items-start justify-between mb-2">
                           <h3 className={cn(ds.heading3, 'text-base truncate flex-1')}>{item.title}</h3>
-                          <span className={ds.badge(STATUS_COLORS[d.status])}>{d.status}</span>
+                          <StatusBadge status={d.status} />
                         </div>
                         <p className={cn(ds.textMuted, 'line-clamp-2 mb-2')}>{d.description}</p>
                         {d.chiefComplaint && (
@@ -1420,7 +1535,7 @@ export default function HealthcareLensPage() {
                       <div key={item.id} className={ds.panelHover} onClick={() => openEditEditor(item)}>
                         <div className="flex items-start justify-between mb-2">
                           <h3 className={cn(ds.heading3, 'text-base truncate flex-1')}>{item.title}</h3>
-                          <span className={ds.badge(STATUS_COLORS[d.status])}>{d.status}</span>
+                          <StatusBadge status={d.status} />
                         </div>
                         <p className={cn(ds.textMuted, 'line-clamp-2 mb-3')}>{d.description}</p>
                         <div className="flex items-center justify-between text-xs">
@@ -1544,7 +1659,7 @@ export default function HealthcareLensPage() {
                         <div key={item.id} className={cn(ds.panelHover, 'space-y-2')} onClick={() => openEditEditor(item)}>
                           <div className="flex items-start justify-between">
                             <h3 className={cn(ds.heading3, 'text-base')}>{item.title}</h3>
-                            <span className={ds.badge(STATUS_COLORS[d.status])}>{d.status}</span>
+                            <StatusBadge status={d.status} />
                           </div>
                           {d.symptomName && <p className="text-sm text-gray-300">{d.symptomName}</p>}
                           <p className={cn(ds.textMuted, 'line-clamp-2')}>{d.description}</p>
@@ -1637,9 +1752,7 @@ export default function HealthcareLensPage() {
                 <h3 className={cn(ds.heading3, 'text-lg')}>{drawerItem.title}</h3>
                 <p className={ds.textMuted}>{(drawerItem.data as unknown as HealthcareArtifact).description}</p>
                 <div className="flex items-center gap-2 mt-2">
-                  <span className={ds.badge(STATUS_COLORS[(drawerItem.data as unknown as HealthcareArtifact).status])}>
-                    {(drawerItem.data as unknown as HealthcareArtifact).status}
-                  </span>
+                  <StatusBadge status={(drawerItem.data as unknown as HealthcareArtifact).status} />
                   {(drawerItem.data as unknown as HealthcareArtifact).provider && (
                     <span className={cn(ds.textMuted, 'text-xs')}>{(drawerItem.data as unknown as HealthcareArtifact).provider}</span>
                   )}
@@ -1690,7 +1803,7 @@ export default function HealthcareLensPage() {
                           return (
                             <div key={l.id} className="flex items-center justify-between text-xs p-2 rounded bg-lattice-surface hover:bg-lattice-elevated cursor-pointer" onClick={() => openEditEditor(l)}>
                               <span className="text-gray-300 truncate flex-1">{l.title}</span>
-                              <span className={ds.badge(STATUS_COLORS[ld.status])}>{ld.artifactType}</span>
+                              <StatusBadge status={ld.status} />
                             </div>
                           );
                         })}
@@ -1792,13 +1905,13 @@ export default function HealthcareLensPage() {
                       const ld = lab.data as unknown as HealthcareArtifact;
                       const outOfRange = isOutOfRange(ld.resultValue || '', ld.referenceRange || '');
                       return (
-                        <div key={lab.id} className={cn('p-2 rounded cursor-pointer text-xs', ld.isCritical ? 'bg-red-500/10 border border-red-500/30' : 'bg-lattice-surface hover:bg-lattice-elevated')} onClick={() => openEditEditor(lab)}>
+                        <div key={lab.id} className={cn('p-2 rounded cursor-pointer text-xs', ld.isCritical ? 'bg-red-500/10 border border-red-500/30 pulse-critical-glow' : 'bg-lattice-surface hover:bg-lattice-elevated')} onClick={() => openEditEditor(lab)}>
                           <div className="flex items-center justify-between mb-1">
                             <span className="text-gray-200 font-medium">{lab.title}</span>
-                            {ld.isCritical && <span className={cn(ds.badge('red-400'), 'text-[10px]')}>CRITICAL</span>}
+                            {ld.isCritical && <span className={cn(ds.badge('red-400'), 'text-[10px] animate-pulse')}>CRITICAL</span>}
                           </div>
                           <div className="flex items-center justify-between">
-                            <span className={cn(outOfRange ? 'text-red-400 font-bold' : 'text-green-400')}>
+                            <span className={cn(outOfRange ? 'text-red-400 font-bold' : 'text-green-400', outOfRange && 'pulse-critical-glow rounded px-1')}>
                               {ld.resultValue || '--'} {ld.unit || ''}
                             </span>
                             <span className="text-gray-500">Ref: {ld.referenceRange || '--'}</span>

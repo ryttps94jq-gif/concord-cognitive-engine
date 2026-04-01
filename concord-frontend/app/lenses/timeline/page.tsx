@@ -188,6 +188,9 @@ export default function TimelineLensPage() {
   const reactMutation = useMutation({
     mutationFn: ({ postId, reaction }: { postId: string; reaction: string }) => apiHelpers.dtus.update(postId, { reaction }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['timeline-posts'] }),
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
 
   const shareMutation = useMutation({
@@ -195,11 +198,17 @@ export default function TimelineLensPage() {
       await navigator.clipboard.writeText(`${window.location.origin}/lenses/timeline?post=${postId}`);
       useUIStore.getState().addToast({ type: 'success', message: 'Link copied' });
     },
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
 
   const friendAction = useMutation({
     mutationFn: ({ friendId, action: _action }: { friendId: string; action: string }) => apiHelpers.social.follow(friendId),
     onSuccess: (_, { action }) => useUIStore.getState().addToast({ type: 'success', message: action === 'confirm' ? 'Friend request accepted' : 'Request removed' }),
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
 
   const formatTime = (dateStr: string) => {

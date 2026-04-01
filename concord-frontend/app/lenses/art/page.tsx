@@ -123,6 +123,34 @@ export default function ArtLensPage() {
   const redoStackRef = useRef<ImageData[]>([]);
   const [brushOpacity, setBrushOpacity] = useState(100);
 
+  // Dynamic brush cursor — shows brush size circle
+  const [cursorPos, setCursorPos] = useState<{ x: number; y: number } | null>(null);
+  const showBrushCursor = canvasTool === 'brush' || canvasTool === 'eraser';
+
+  // Keyboard shortcuts for tools — use refs for undo/redo to avoid stale closures
+  const undoFnRef = useRef<() => void>(() => {});
+  const redoFnRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      const key = e.key.toLowerCase();
+      if (key === 'b') setCanvasTool('brush');
+      else if (key === 'e') setCanvasTool('eraser');
+      else if (key === 'g') setCanvasTool('fill');
+      else if (key === 'i') setCanvasTool('eyedropper');
+      else if (key === 't') setCanvasTool('text');
+      else if (key === 'r') setCanvasTool('rectangle');
+      else if (key === 'c') setCanvasTool('circle');
+      else if (key === 'l') setCanvasTool('line');
+      else if (key === '[') setBrushSize(s => Math.max(1, s - 2));
+      else if (key === ']') setBrushSize(s => Math.min(100, s + 2));
+      else if (e.ctrlKey && key === 'z' && !e.shiftKey) { e.preventDefault(); undoFnRef.current(); }
+      else if ((e.ctrlKey && key === 'z' && e.shiftKey) || (e.ctrlKey && key === 'y')) { e.preventDefault(); redoFnRef.current(); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
   // Initialize canvas with white background
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -364,6 +392,9 @@ export default function ArtLensPage() {
       queryClient.invalidateQueries({ queryKey: ['art-marketplace'] });
       useUIStore.getState().addToast({ type: 'success', message: 'Purchase complete!' });
     },
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
 
   const handleCanvasUndo = useCallback(() => {
@@ -388,6 +419,10 @@ export default function ArtLensPage() {
     undoStackRef.current.push(next);
     ctx.putImageData(next, 0, 0);
   }, []);
+
+  // Wire keyboard shortcut refs to actual handlers
+  undoFnRef.current = handleCanvasUndo;
+  redoFnRef.current = handleCanvasRedo;
 
   const handleCanvasSave = useCallback(async () => {
     const canvas = canvasRef.current;
@@ -688,18 +723,61 @@ export default function ArtLensPage() {
               </button>
             </div>
           </div>
-          <div className="flex-1 flex items-center justify-center bg-[#1a1a2e] overflow-auto p-8">
-            <canvas
-              ref={canvasRef}
-              width={1024}
-              height={768}
-              className="bg-white/10 border border-white/20 rounded shadow-2xl cursor-crosshair"
-              style={{ width: `${1024 * canvasZoom / 100}px`, height: `${768 * canvasZoom / 100}px` }}
-              onMouseDown={handleCanvasMouseDown}
-              onMouseMove={handleCanvasMouseMove}
-              onMouseUp={handleCanvasMouseUp}
-              onMouseLeave={handleCanvasMouseUp}
-            />
+          <div className="flex-1 flex items-center justify-center bg-[#1a1a2e] overflow-auto p-8 relative">
+            <div className="relative">
+              <canvas
+                ref={canvasRef}
+                width={1024}
+                height={768}
+                className="bg-white/10 border border-white/20 rounded shadow-2xl"
+                style={{
+                  width: `${1024 * canvasZoom / 100}px`,
+                  height: `${768 * canvasZoom / 100}px`,
+                  cursor: showBrushCursor ? 'none' : canvasTool === 'eyedropper' ? 'crosshair' : canvasTool === 'text' ? 'text' : 'crosshair',
+                }}
+                onMouseDown={handleCanvasMouseDown}
+                onMouseMove={(e) => {
+                  handleCanvasMouseMove(e);
+                  if (showBrushCursor) {
+                    const rect = canvasRef.current?.getBoundingClientRect();
+                    if (rect) setCursorPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+                  }
+                }}
+                onMouseUp={handleCanvasMouseUp}
+                onMouseLeave={(e) => { handleCanvasMouseUp(e); setCursorPos(null); }}
+                onMouseEnter={() => setCursorPos({ x: 0, y: 0 })}
+              />
+              {/* Dynamic brush cursor */}
+              {showBrushCursor && cursorPos && (
+                <div
+                  className="pointer-events-none absolute rounded-full border"
+                  style={{
+                    width: `${brushSize * canvasZoom / 100}px`,
+                    height: `${brushSize * canvasZoom / 100}px`,
+                    left: `${cursorPos.x - (brushSize * canvasZoom / 100) / 2}px`,
+                    top: `${cursorPos.y - (brushSize * canvasZoom / 100) / 2}px`,
+                    borderColor: canvasTool === 'eraser' ? 'rgba(255,255,255,0.5)' : brushColor,
+                    opacity: 0.8,
+                  }}
+                />
+              )}
+            </div>
+            {/* Keyboard shortcut hint */}
+            <div className="absolute bottom-4 left-4 text-xs text-gray-500 space-x-3 select-none">
+              <span title="Brush">B</span>
+              <span title="Eraser">E</span>
+              <span title="Fill">G</span>
+              <span title="Eyedropper">I</span>
+              <span title="Text">T</span>
+              <span title="Rectangle">R</span>
+              <span title="Circle">C</span>
+              <span title="Line">L</span>
+              <span className="text-gray-600">|</span>
+              <span title="Decrease brush size">[</span>
+              <span title="Increase brush size">]</span>
+              <span className="text-gray-600">|</span>
+              <span title="Undo">Ctrl+Z</span>
+            </div>
           </div>
         </main>
 

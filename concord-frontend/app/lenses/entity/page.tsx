@@ -3,6 +3,7 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers, api } from '@/lib/api/client';
+import { useUIStore } from '@/store/ui';
 import { useState } from 'react';
 import { Users, Plus, Terminal, GitFork, Activity, Play, Brain, X, Cpu, Bot, Search, Loader2 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -55,6 +56,9 @@ export default function EntityLensPage() {
       setNewEntityName('');
       queryClient.invalidateQueries({ queryKey: ['worldmodel-entities'] });
     },
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
 
   const forkEntity = useMutation({
@@ -71,6 +75,9 @@ export default function EntityLensPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['worldmodel-entities'] });
+    },
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
     },
   });
 
@@ -619,6 +626,9 @@ function AgentStatusPanel() {
     onSuccess: () => {
       setResearchTopic('');
       queryClient.invalidateQueries({ queryKey: ['agents-status'] });
+    },
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
     },
   });
 

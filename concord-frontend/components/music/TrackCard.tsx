@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Image from 'next/image';
 import {
   Play, Pause, Plus, Heart, ShoppingCart, MoreHorizontal,
-  Music, Clock, Tag,
+  Music, Clock, Tag, Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useMusicStore } from '@/lib/music/store';
@@ -92,7 +92,10 @@ export function TrackCard({
   // ---- Card Variant ----
   if (variant === 'card') {
     return (
-      <div className="group bg-white/[0.03] rounded-xl border border-white/5 hover:border-white/10 hover:bg-white/[0.05] transition-all overflow-hidden">
+      <div className={cn(
+        'group bg-white/[0.03] rounded-xl border border-white/5 hover:border-white/10 hover:bg-white/[0.05] transition-all overflow-hidden',
+        isPlaying && 'border-l-2 border-l-neon-cyan shadow-[inset_4px_0_12px_-4px_rgba(0,255,255,0.2)] ring-1 ring-neon-cyan/10',
+      )}>
         {/* Cover */}
         <div className="relative aspect-square bg-white/5 overflow-hidden">
           {track.coverArtUrl ? (
@@ -141,6 +144,11 @@ export function TrackCard({
               {track.genre && (
                 <span className="flex items-center gap-0.5">
                   <Tag className="w-3 h-3" /> {track.genre}
+                </span>
+              )}
+              {track.bpm != null && (
+                <span className="inline-flex items-center gap-0.5 px-1.5 py-px rounded-full bg-neon-purple/10 text-neon-purple font-medium">
+                  <Activity className="w-2.5 h-2.5" /> {track.bpm}
                 </span>
               )}
             </div>
@@ -193,15 +201,19 @@ export function TrackCard({
         className={cn(
           'group flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 transition-colors',
           isCurrentTrack && 'bg-white/5',
+          isPlaying && 'border-l-2 border-l-neon-cyan bg-neon-cyan/[0.04] shadow-[inset_4px_0_12px_-4px_rgba(0,255,255,0.15)]',
         )}
       >
         {/* Play button / track number */}
         <button
           onClick={handlePlay}
-          className="w-8 h-8 flex-shrink-0 flex items-center justify-center text-gray-500 group-hover:text-white transition-colors"
+          className="w-8 h-8 flex-shrink-0 flex items-center justify-center text-gray-500 group-hover:text-white transition-colors relative"
         >
           {isPlaying ? (
-            <Pause className="w-4 h-4 text-neon-cyan" />
+            <>
+              <span className="absolute inset-0 rounded-full bg-neon-cyan/20 animate-ping" />
+              <Pause className="w-4 h-4 text-neon-cyan relative z-10" />
+            </>
           ) : (
             <Play className="w-4 h-4" />
           )}
@@ -259,6 +271,13 @@ export function TrackCard({
           {formatTime(track.duration)}
         </span>
 
+        {/* BPM badge */}
+        {track.bpm != null && (
+          <span className="flex-shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-neon-purple/10 text-neon-purple text-[10px] font-medium">
+            <Activity className="w-2.5 h-2.5" /> {track.bpm}
+          </span>
+        )}
+
         {/* Actions */}
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
           <button
@@ -310,6 +329,7 @@ export function TrackCard({
       className={cn(
         'flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/5 cursor-pointer transition-colors',
         isCurrentTrack && 'bg-white/5',
+        isPlaying && 'border-l-2 border-l-neon-cyan bg-neon-cyan/[0.04]',
       )}
       onClick={handlePlay}
     >

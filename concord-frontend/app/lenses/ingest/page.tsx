@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
+import { useUIStore } from '@/store/ui';
 import { Upload, Settings2, CheckCircle2, AlertTriangle, Loader2, Clock, Database, Layers, ChevronDown, FileUp, FileJson, FileText, Image as ImageIcon, Music, Shield, Gauge, ArrowDownToLine, Zap } from 'lucide-react';
 import { ConnectiveTissueBar } from '@/components/lens/ConnectiveTissueBar';
 import { cn } from '@/lib/utils';
@@ -75,6 +76,9 @@ export default function IngestLensPage() {
       queryClient.invalidateQueries({ queryKey: ['ingest-history'] });
       setTextInput('');
       setTitle('');
+    },
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
     },
   });
 

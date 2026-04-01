@@ -3,6 +3,7 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
+import { useUIStore } from '@/store/ui';
 import { useState } from 'react';
 import { Plug, Webhook, Zap, Code, FileText, Plus, Trash2, Play, ToggleLeft, ToggleRight, Layers, ChevronDown } from 'lucide-react';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
@@ -41,17 +42,26 @@ export default function IntegrationsLensPage() {
       queryClient.invalidateQueries({ queryKey: ['webhooks'] });
       setShowCreate(false);
     },
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
 
   const deleteWebhookMutation = useMutation({
     mutationFn: (id: string) => apiHelpers.webhooks.deactivate(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['webhooks'] }),
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
 
   const toggleWebhookMutation = useMutation({
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
       enabled ? apiHelpers.webhooks.deactivate(id) : apiHelpers.webhooks.register({ id }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['webhooks'] }),
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
 
   const runAutomationMutation = useMutation({

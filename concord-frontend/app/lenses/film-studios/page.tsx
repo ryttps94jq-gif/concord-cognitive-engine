@@ -83,6 +83,9 @@ export default function FilmStudiosPage() {
       setNewTitle('');
       refetch2();
     },
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
 
   const handleCreate = useCallback(() => {

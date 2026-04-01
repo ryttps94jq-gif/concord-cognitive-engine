@@ -10,7 +10,7 @@ import {
   Music, Play, Pause, Plus, Search, Home, Disc3, ListMusic,
   Clock, Upload, BarChart3, Heart, Library, Mic2,
   TrendingUp, Sparkles, GitFork, DollarSign,
-  Users, X, Headphones,
+  Users, X, Headphones, Volume2,
 } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
@@ -831,47 +831,89 @@ export default function MusicLensPage() {
         </AnimatePresence>
       </main>
 
-      {/* Now Playing Bar — purple/indigo accent */}
-      {nowPlaying.track && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 bg-gradient-to-r from-purple-950/90 via-lattice-surface/95 to-indigo-950/90 backdrop-blur-xl border-t border-purple-500/20 px-6 py-3 shadow-[0_-4px_24px_rgba(139,92,246,0.15)]">
-          <div className="flex items-center justify-between max-w-screen-xl mx-auto">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-12 h-12 rounded-lg bg-purple-500/20 border border-purple-500/30 flex items-center justify-center flex-shrink-0 shadow-lg shadow-purple-500/10">
-                <Music className="w-5 h-5 text-purple-400" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-medium truncate">{nowPlaying.track.title}</p>
-                <p className="text-xs text-gray-500 truncate">{nowPlaying.track.artistName}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => toggleLike(nowPlaying.track!.id)}
-                className={cn('p-1.5 rounded transition-colors', likedTrackIds.has(nowPlaying.track.id) ? 'text-pink-400' : 'text-gray-500 hover:text-white')}
-              >
-                <Heart className={cn('w-4 h-4', likedTrackIds.has(nowPlaying.track.id) && 'fill-current')} />
-              </button>
-              <button
-                onClick={() => {
-                  const player = getPlayer();
-                  if (nowPlaying.playbackState === 'playing') player.pause();
-                  else player.play().catch(() => {});
+      {/* Floating Mini Player Bar */}
+      <AnimatePresence>
+        {nowPlaying.track && (
+          <motion.div
+            initial={{ y: 80, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 80, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+            className="fixed bottom-0 left-0 right-0 z-50 bg-gradient-to-r from-purple-950/90 via-lattice-surface/95 to-indigo-950/90 backdrop-blur-xl border-t border-purple-500/20 shadow-[0_-4px_24px_rgba(139,92,246,0.15)]"
+          >
+            {/* Progress bar — top edge of the mini player */}
+            <div className="absolute top-0 left-0 right-0 h-[2px] bg-white/5">
+              <motion.div
+                className="h-full bg-gradient-to-r from-neon-cyan via-neon-purple to-neon-pink"
+                style={{
+                  width: nowPlaying.duration > 0
+                    ? `${(nowPlaying.currentTime / nowPlaying.duration) * 100}%`
+                    : '0%',
                 }}
-                className="p-2 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 text-white hover:brightness-110 transition shadow-lg shadow-purple-500/25"
-              >
-                {nowPlaying.playbackState === 'playing' ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-              </button>
-              <button
-                onClick={() => addToQueue(nowPlaying.track!)}
-                className="p-1.5 rounded text-gray-500 hover:text-white transition-colors"
-                title="Add to queue"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
+                transition={{ duration: 0.3, ease: 'linear' }}
+              />
             </div>
-          </div>
-        </div>
-      )}
+
+            <div className="flex items-center justify-between max-w-screen-xl mx-auto px-6 py-3">
+              {/* Track info */}
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className={cn(
+                  'w-12 h-12 rounded-lg bg-purple-500/20 border border-purple-500/30 flex items-center justify-center flex-shrink-0 shadow-lg shadow-purple-500/10',
+                  nowPlaying.playbackState === 'playing' && 'animate-pulse',
+                )}>
+                  <Music className="w-5 h-5 text-purple-400" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{nowPlaying.track.title}</p>
+                  <p className="text-xs text-gray-500 truncate">{nowPlaying.track.artistName}</p>
+                </div>
+              </div>
+
+              {/* Playback controls */}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => toggleLike(nowPlaying.track!.id)}
+                  className={cn('p-1.5 rounded transition-colors', likedTrackIds.has(nowPlaying.track.id) ? 'text-pink-400' : 'text-gray-500 hover:text-white')}
+                >
+                  <Heart className={cn('w-4 h-4', likedTrackIds.has(nowPlaying.track.id) && 'fill-current')} />
+                </button>
+                <button
+                  onClick={() => {
+                    const player = getPlayer();
+                    if (nowPlaying.playbackState === 'playing') player.pause();
+                    else player.play().catch(() => {});
+                  }}
+                  className="p-2 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 text-white hover:brightness-110 transition shadow-lg shadow-purple-500/25"
+                >
+                  {nowPlaying.playbackState === 'playing' ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                </button>
+                <button
+                  onClick={() => addToQueue(nowPlaying.track!)}
+                  className="p-1.5 rounded text-gray-500 hover:text-white transition-colors"
+                  title="Add to queue"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+
+                {/* Time display */}
+                <span className="text-[10px] text-gray-500 font-mono w-20 text-center flex-shrink-0">
+                  {Math.floor(nowPlaying.currentTime / 60)}:{Math.floor(nowPlaying.currentTime % 60).toString().padStart(2, '0')}
+                  {' / '}
+                  {Math.floor(nowPlaying.duration / 60)}:{Math.floor(nowPlaying.duration % 60).toString().padStart(2, '0')}
+                </span>
+
+                {/* Volume icon */}
+                <div className={cn(
+                  'p-1.5 rounded transition-colors',
+                  nowPlaying.muted ? 'text-gray-600' : 'text-gray-400',
+                )}>
+                  <Volume2 className="w-4 h-4" />
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Real-time panel */}
       {isLive && realtimeData && (
