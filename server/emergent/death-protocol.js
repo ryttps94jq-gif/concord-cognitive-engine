@@ -692,6 +692,7 @@ function _generateMemorial(entityId, entityInfo, finalState, cause, deathAt, mem
           authority: 1.0,
           resonance: 1.0,
           createdAt: deathAt,
+          source: "death_memorial",
         });
       }
     } catch (_e) { logger.debug('emergent:death-protocol', 'silent', { error: _e?.message }); }

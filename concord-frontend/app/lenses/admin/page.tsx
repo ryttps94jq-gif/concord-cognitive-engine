@@ -215,6 +215,7 @@ export default function AdminDashboardPage() {
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('admin');
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [showFeatures, setShowFeatures] = useState(false);
+  const [showTreasury, setShowTreasury] = useState(false);
 
   const {
     data: dashboard,
