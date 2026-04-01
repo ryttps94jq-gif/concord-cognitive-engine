@@ -629,6 +629,28 @@ export const apiHelpers = {
       api.post('/api/stripe/connect/onboard', { user_id: userId }),
     connectStatus: (userId?: string) =>
       api.get('/api/stripe/connect/status', { params: { user_id: userId } }),
+
+    // Merit Credit Score
+    meritScore: (userId: string) =>
+      api.get(`/api/economy/merit-score/${userId}`),
+
+    // Royalty Cascade Visualization
+    royaltyCascade: (dtuId: string) =>
+      api.get(`/api/economy/royalty-cascade/${dtuId}`),
+    creatorRoyalties: (creatorId: string, params?: { limit?: number; offset?: number }) =>
+      api.get(`/api/economy/royalties/creator/${creatorId}`, { params }),
+
+    // Admin Treasury Dashboard
+    adminTreasury: () =>
+      api.get('/api/admin/treasury'),
+
+    // Invoice DTU creation
+    createInvoice: (data: { lineItems: Array<{ description: string; quantity: number; unitPrice: number }>; taxRate?: number; dueDate?: string; payerName?: string; payeeName?: string; notes?: string; currency?: string }) =>
+      api.post('/api/economy/invoice', data),
+
+    // Tax summary DTU generation
+    createTaxSummary: (data?: { year?: number }) =>
+      api.post('/api/economy/tax-summary', data || {}),
   },
 
   // Macros

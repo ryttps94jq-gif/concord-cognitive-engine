@@ -14,7 +14,7 @@ import {
   Users, UserPlus, Eye, Quote, Heart,
   Video, FileText, Image as ImageIcon, Music,
   Bookmark, BarChart2, Pin, Loader2,
-  Calendar, Link2,
+  Calendar, Link2, Award, DollarSign, Star,
 } from 'lucide-react';
 import type { DTU } from '@/lib/api/generated-types';
 import { DTUDetailView } from '@/components/dtu/DTUDetailView';
@@ -122,6 +122,44 @@ export default function ProfilePage() {
     queryKey: ['universe-stats'],
     queryFn: () => api.get('/api/universe/stats').then((r) => r.data),
     retry: 1,
+  });
+
+  // ── Merit Credit Score ──────────────────────────────────────────────
+
+  const { data: meritData } = useQuery({
+    queryKey: ['merit-score', profileData?.userId],
+    queryFn: async () => {
+      const res = await apiHelpers.economy.meritScore(profileData!.userId);
+      return res.data as {
+        ok: boolean;
+        score: number;
+        breakdown: {
+          citations: { raw: number; score: number };
+          sales: { raw: number; score: number };
+          royalties: { raw: number; score: number };
+          community: { raw: number; score: number };
+        };
+        level: string;
+      };
+    },
+    enabled: !!profileData?.userId,
+    retry: false,
+  });
+
+  // ── Creator Royalty Income ────────────────────────────────────────────
+
+  const { data: royaltyData } = useQuery({
+    queryKey: ['creator-royalties', profileData?.userId],
+    queryFn: async () => {
+      const res = await apiHelpers.economy.creatorRoyalties(profileData!.userId);
+      return res.data as {
+        ok: boolean;
+        totalEarned: number;
+        total: number;
+      };
+    },
+    enabled: !!profileData?.userId,
+    retry: false,
   });
 
   // ── Pinned posts ──────────────────────────────────────────────────────
@@ -352,6 +390,17 @@ export default function ProfilePage() {
                 color="text-yellow-400"
               />
             </div>
+          )}
+
+          {/* Merit Credit Score + Royalty Income */}
+          {profile && meritData?.ok && (
+            <MeritScoreCard
+              score={meritData.score}
+              level={meritData.level}
+              breakdown={meritData.breakdown}
+              royaltyIncome={royaltyData?.totalEarned || 0}
+              royaltyCitations={royaltyData?.total || 0}
+            />
           )}
 
           {/* Tab bar */}

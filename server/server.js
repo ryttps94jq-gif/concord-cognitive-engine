@@ -38898,6 +38898,111 @@ app.get("/api/culture/status", asyncHandler(async (_req, res) => {
   } catch (e) { res.json({ ok: false, error: String(e?.message || e), moduleUnavailable: true, traditions: [], values: {}, stories: [], identity: {}, metrics: {} }); }
 }));
 
+// ── Entity Earnings (Feature 6: Marketplace Participation) ────────────
+app.get("/api/entity/:id/earnings", asyncHandler(async (req, res) => {
+  try {
+    const id = req.params.id;
+    const econMod = await import("./emergent/entity-economy.js").catch(() => null);
+    if (!econMod) return res.json({ ok: true, totalEarned: 0, totalSpent: 0, balance: 0, sales: [] });
+    const acctResult = econMod.getAccount ? econMod.getAccount(id) : null;
+    if (!acctResult || !acctResult.ok) return res.json({ ok: true, totalEarned: 0, totalSpent: 0, balance: 0, sales: [] });
+    const acct = acctResult.account;
+    const totalEarned = Object.values(acct.earned || {}).reduce((s, v) => s + (Number(v) || 0), 0);
+    const totalSpent = Object.values(acct.spent || {}).reduce((s, v) => s + (Number(v) || 0), 0);
+    const balance = totalEarned - totalSpent;
+    const sales = (acct.tradeHistory || []).filter(t => t.type === "earn" || t.direction === "incoming").slice(-50);
+    res.json({ ok: true, totalEarned, totalSpent, balance, sales, earned: acct.earned, spent: acct.spent });
+  } catch (e) { res.json({ ok: false, error: String(e?.message || e), totalEarned: 0, totalSpent: 0, balance: 0, sales: [] }); }
+}));
+
+// ── Entity Lifecycle (Feature 8: Lifecycle Display) ───────────────────
+app.get("/api/entity/:id/lifecycle", asyncHandler(async (req, res) => {
+  try {
+    const id = req.params.id;
+    const events = [];
+    // Birth event from growth profile
+    const profile = getGrowthProfile(id);
+    if (profile) {
+      events.push({ type: "birth", at: profile.bornAt, data: { species: profile.species, lineage: profile.lineage } });
+      // Growth log events (organ level-ups, new domains, rest cycles)
+      for (const entry of (profile.growthLog || []).slice(-100)) {
+        events.push({ type: entry.event || "growth", at: entry.at, data: entry.data });
+      }
+    }
+    // Reproduction events
+    try {
+      const reproMod = await import("./emergent/reproduction.js").catch(() => null);
+      if (reproMod?.getReproductionHistory) {
+        const history = reproMod.getReproductionHistory(id);
+        if (Array.isArray(history)) {
+          for (const r of history) { events.push({ type: "reproduction", at: r.at || r.createdAt, data: r }); }
+        }
+      }
+    } catch (_e) { logger.debug('server', 'lifecycle-repro', { error: _e?.message }); }
+    // Death event
+    try {
+      const deathMod = await import("./emergent/death-protocol.js").catch(() => null);
+      if (deathMod) {
+        const deathRecord = deathMod.getDeathRecordByEntity ? deathMod.getDeathRecordByEntity(id) : null;
+        if (deathRecord) {
+          events.push({ type: "death", at: deathRecord.deathAt, data: { cause: deathRecord.cause, age: deathRecord.age, memorialDtuId: deathRecord.memorialDtuId } });
+        }
+      }
+    } catch (_e) { logger.debug('server', 'lifecycle-death', { error: _e?.message }); }
+    // Sort chronologically
+    events.sort((a, b) => { try { return new Date(a.at).getTime() - new Date(b.at).getTime(); } catch { return 0; } });
+    res.json({ ok: true, entityId: id, events });
+  } catch (e) { res.json({ ok: false, error: String(e?.message || e), events: [] }); }
+}));
+
+// ── Entity Post (Feature 12: Cross-Substrate Social) ──────────────────
+app.post("/api/entity/:id/post", asyncHandler(async (req, res) => {
+  try {
+    const entityId = req.params.id;
+    const profile = getGrowthProfile(entityId);
+    if (!profile) return res.status(404).json({ ok: false, error: "Entity not found" });
+    const { content, title, tags } = req.body || {};
+    if (!content) return res.status(400).json({ ok: false, error: "content required" });
+    const result = createPost(STATE, {
+      userId: entityId,
+      content,
+      title: title || "",
+      tags: [...(tags || []), "entity-post"],
+      mentionedUsers: [],
+      mediaType: "text",
+      mediaUrl: null,
+      pollOptions: null,
+      isStory: false,
+      expiresAt: null,
+      taggedProducts: [],
+      linkedDTUs: [],
+    });
+    res.json({ ...result, isEntity: true, entitySpecies: profile.species });
+  } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
+}));
+
+// ── Death Registry & Memorials (Feature 8) ────────────────────────────
+app.get("/api/deaths/registry", asyncHandler(async (_req, res) => {
+  try {
+    const deathMod = await import("./emergent/death-protocol.js");
+    const result = deathMod.listDeaths ? deathMod.listDeaths({ limit: 100 }) : { ok: true, deaths: [], total: 0 };
+    res.json(result);
+  } catch (e) { res.json({ ok: true, deaths: [], total: 0, error: String(e?.message || e) }); }
+}));
+
+app.get("/api/deaths/memorials", asyncHandler(async (_req, res) => {
+  try {
+    const deathMod = await import("./emergent/death-protocol.js");
+    const registry = deathMod.getDeathRegistry ? deathMod.getDeathRegistry() : {};
+    const memorials = [];
+    for (const record of Object.values(registry)) {
+      const memorial = deathMod.getMemorial ? deathMod.getMemorial(record.entityId) : null;
+      if (memorial) memorials.push(memorial);
+    }
+    res.json({ ok: true, memorials });
+  } catch (e) { res.json({ ok: true, memorials: [], error: String(e?.message || e) }); }
+}));
+
 // ── Entity Economy Dashboard (Phase 3.4) ────────────────────────────────
 app.get("/api/entity-economy/dashboard", asyncHandler(async (_req, res) => {
   try {
