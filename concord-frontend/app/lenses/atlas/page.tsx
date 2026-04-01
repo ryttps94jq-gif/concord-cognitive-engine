@@ -4,9 +4,10 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useLensNav } from '@/hooks/useLensNav';
+import { motion } from 'framer-motion';
 import {
   Map, Layers, Radio, AlertTriangle, Activity, RefreshCw,
-  ChevronDown,
+  ChevronDown, Compass, Globe, Radar,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import type { MapMarker } from '@/components/common/MapView';
@@ -126,14 +127,58 @@ export default function AtlasLensPage() {
         </div>
       </div>
 
+      {/* Stat Cards Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: 'Active Nodes', value: markers.length, icon: Radar, color: 'text-emerald-400 bg-emerald-500/10' },
+          { label: 'Signals', value: (taxonomyData as { signals?: unknown[] })?.signals?.length || (taxonomyData as { total?: number })?.total || 0, icon: Radio, color: 'text-cyan-400 bg-cyan-500/10' },
+          { label: 'Anomalies', value: (anomalyData as { anomalies?: unknown[] })?.anomalies?.length || (anomalyData as { total?: number })?.total || 0, icon: AlertTriangle, color: 'text-amber-400 bg-amber-500/10' },
+          { label: 'Coverage', value: (coverageData as { coverage?: number })?.coverage ? `${((coverageData as { coverage: number }).coverage * 100).toFixed(0)}%` : '--', icon: Globe, color: 'text-blue-400 bg-blue-500/10' },
+        ].map((stat, i) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.08, duration: 0.4 }}
+            className="rounded-lg bg-zinc-900 border border-zinc-800 p-3"
+          >
+            <div className={`w-8 h-8 rounded-lg ${stat.color} flex items-center justify-center mb-2`}>
+              <stat.icon className="w-4 h-4" />
+            </div>
+            <p className="text-xl font-bold text-white">{stat.value}</p>
+            <p className="text-xs text-zinc-500">{stat.label}</p>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Zoom Level Indicator */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.3 }}
+        className="flex items-center gap-2 text-xs text-zinc-500"
+      >
+        <Compass className="w-3.5 h-3.5 text-emerald-400" />
+        <span>Lat: {queryLat || '--'}</span>
+        <span className="text-zinc-700">|</span>
+        <span>Lng: {queryLng || '--'}</span>
+        <span className="text-zinc-700">|</span>
+        <span className="text-emerald-400">{markers.length} markers loaded</span>
+      </motion.div>
+
       {/* Interactive Map */}
-      <div className="rounded-lg overflow-hidden border border-zinc-800">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.98 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.5, delay: 0.2 }}
+        className="rounded-lg overflow-hidden border border-zinc-800"
+      >
         <MapView
           markers={markers}
           className="h-[360px]"
           onMarkerClick={handleMarkerClick}
         />
-      </div>
+      </motion.div>
 
       {/* Coordinate Query */}
       <div className="flex items-center gap-3">

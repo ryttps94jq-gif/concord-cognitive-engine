@@ -1058,7 +1058,7 @@ export default function ScienceLensPage() {
         </button>
         {showFeatures && (
           <div className="px-4 pb-4">
-            <LensFeaturePanel lensId="science" />
+            <LensFeaturePanel lensId="science_fieldwork" />
           </div>
         )}
       </div>

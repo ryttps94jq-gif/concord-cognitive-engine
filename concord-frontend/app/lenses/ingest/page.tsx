@@ -5,7 +5,8 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
-import { Upload, Settings2, CheckCircle2, AlertTriangle, Loader2, Clock, Database, Layers, ChevronDown, FileUp, FileJson, FileText, Image as ImageIcon, Music, Shield, Gauge, ArrowDownToLine, Zap } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Upload, Settings2, CheckCircle2, AlertTriangle, Loader2, Clock, Database, Layers, ChevronDown, FileUp, FileJson, FileText, Image as ImageIcon, Music, Shield, Gauge, ArrowDownToLine, Zap, Activity } from 'lucide-react';
 import { ConnectiveTissueBar } from '@/components/lens/ConnectiveTissueBar';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -141,6 +142,72 @@ export default function IngestLensPage() {
         )}
       </div>
       </header>
+
+      {/* Stat Cards Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { icon: Upload, color: 'text-neon-cyan', value: history.length || recentDtus.length, label: 'Total Ingested' },
+          { icon: Database, color: 'text-neon-purple', value: recentDtus.length, label: 'Recent DTUs' },
+          { icon: Activity, color: 'text-neon-green', value: history.filter((j: IngestJob) => j.status === 'completed').length, label: 'Completed' },
+          { icon: AlertTriangle, color: 'text-amber-400', value: history.filter((j: IngestJob) => j.status === 'failed').length, label: 'Failed' },
+        ].map((stat, i) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.08 }}
+            className="lens-card"
+          >
+            <stat.icon className={`w-5 h-5 ${stat.color} mb-2`} />
+            <p className="text-2xl font-bold">{stat.value}</p>
+            <p className="text-sm text-gray-400">{stat.label}</p>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Throughput Gauge & Pipeline Status */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.35 }}
+        className="panel p-4"
+      >
+        <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+          <Gauge className="w-4 h-4 text-neon-cyan" />
+          Ingestion Pipeline Status
+        </h3>
+        <div className="flex items-center gap-2 overflow-x-auto py-2">
+          {[
+            { stage: 'Queued', count: 0, color: 'bg-gray-500', textColor: 'text-gray-400' },
+            { stage: 'Processing', count: ingestText.isPending ? 1 : 0, color: 'bg-neon-cyan', textColor: 'text-neon-cyan' },
+            { stage: 'Complete', count: history.filter((j: IngestJob) => j.status === 'completed').length || (ingestText.isSuccess ? 1 : 0), color: 'bg-neon-green', textColor: 'text-neon-green' },
+            { stage: 'Failed', count: history.filter((j: IngestJob) => j.status === 'failed').length, color: 'bg-red-500', textColor: 'text-red-400' },
+          ].map((stage, i) => (
+            <div key={stage.stage} className="flex items-center gap-2 flex-1">
+              <div className="flex-1 bg-lattice-deep rounded-lg p-3 text-center border border-white/5">
+                <p className={`text-xl font-bold font-mono ${stage.textColor}`}>{stage.count}</p>
+                <p className="text-xs text-gray-500">{stage.stage}</p>
+              </div>
+              {i < 3 && <div className="w-4 h-px bg-white/20 flex-shrink-0" />}
+            </div>
+          ))}
+        </div>
+        {/* Source type badges */}
+        <div className="flex items-center gap-2 mt-3 flex-wrap">
+          <span className="text-xs text-gray-500">Sources:</span>
+          {[
+            { label: '.txt', icon: FileText, color: 'text-neon-cyan bg-neon-cyan/10' },
+            { label: '.json', icon: FileJson, color: 'text-neon-purple bg-neon-purple/10' },
+            { label: '.csv', icon: Database, color: 'text-neon-green bg-neon-green/10' },
+            { label: '.md', icon: FileUp, color: 'text-amber-400 bg-amber-400/10' },
+          ].map((src) => (
+            <span key={src.label} className={`text-xs px-2 py-0.5 rounded-full flex items-center gap-1 ${src.color}`}>
+              <src.icon className="w-3 h-3" />
+              {src.label}
+            </span>
+          ))}
+        </div>
+      </motion.div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Upload area */}

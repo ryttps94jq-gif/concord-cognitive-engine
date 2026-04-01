@@ -126,9 +126,9 @@ export default function AstronomyLensPage() {
 
   // Constellation grouping
   const groupedByConstellation = useMemo(() => {
-    const groups: Record<string, typeof filtered> = {};
+    const groups: Record<string, (CelestialObject & { id: string; title: string })[]> = {};
     filtered.forEach(o => {
-      const key = o.constellation || 'Unknown';
+      const key = (o.constellation as string) || 'Unknown';
       if (!groups[key]) groups[key] = [];
       groups[key].push(o);
     });
@@ -253,22 +253,22 @@ export default function AstronomyLensPage() {
             <p className="text-gray-500 text-sm text-center py-4">No celestial objects cataloged yet.</p>
           ) : groupByConstellation ? (
             <div className="space-y-4">
-              {Object.entries(groupedByConstellation).sort(([a], [b]) => a.localeCompare(b)).map(([constellation, objs]) => (
+              {(Object.entries(groupedByConstellation) as [string, (CelestialObject & { id: string; title: string })[]][]).sort(([a], [b]) => a.localeCompare(b)).map(([constellation, conObjs]) => (
                 <div key={constellation}>
                   <h4 className="text-xs text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-2">
                     <Star className="w-3 h-3 text-indigo-400" />
                     {constellation}
-                    <span className="text-gray-600">({objs.length})</span>
+                    <span className="text-gray-600">({conObjs.length})</span>
                   </h4>
                   <div className="space-y-2 pl-2 border-l border-indigo-400/20">
-                    {objs.map(obj => <CelestialCard key={obj.id} obj={obj} onRemove={() => remove(obj.id)} />)}
+                    {conObjs.map((obj: CelestialObject & { id: string; title: string }) => <CelestialCard key={obj.id} obj={obj} onRemove={() => { remove(obj.id); }} />)}
                   </div>
                 </div>
               ))}
             </div>
           ) : (
             <div className="space-y-2">
-              {filtered.map(obj => <CelestialCard key={obj.id} obj={obj} onRemove={() => remove(obj.id)} />)}
+              {filtered.map(obj => <CelestialCard key={obj.id} obj={obj} onRemove={() => { remove(obj.id); }} />)}
             </div>
           )}
         </div>

@@ -1874,7 +1874,7 @@ export default function CommandCenterPage() {
         </button>
         {showFeatures && (
           <div className="px-4 pb-4">
-            <LensFeaturePanel lensId="command-center" />
+            <LensFeaturePanel lensId="command_center" />
           </div>
         )}
       </div>

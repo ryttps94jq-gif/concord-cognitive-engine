@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -14,7 +15,7 @@ import {
   Gauge, Calendar, ChevronRight, ChevronDown, Activity,
   Clock, Target, Wrench, TrendingUp, BarChart3, CheckCircle2,
   XCircle, FileText, Zap, Settings, Timer,
-  Eye, PackageCheck, Truck,
+  Eye, PackageCheck, Truck, Factory, Package,
   Calculator, CircleDot, ListChecks, Shield,
 } from 'lucide-react';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -477,17 +478,67 @@ export default function ManufacturingLensPage() {
   // ---------------------------------------------------------------------------
   const renderDashboard = () => (
     <div className="space-y-6">
+      {/* Production Line Status */}
+      <div className={ds.panel}>
+        <h3 className={ds.heading3 + ' mb-3 flex items-center gap-2'}><Factory className="w-4 h-4 text-orange-500" /> Production Line Status</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {[
+            { line: 'Line A', status: 'running' as const, product: 'Assembly Unit X1', uptime: 96 },
+            { line: 'Line B', status: 'idle' as const, product: 'Waiting for materials', uptime: 78 },
+            { line: 'Line C', status: 'maintenance' as const, product: 'Scheduled PM', uptime: 45 },
+          ].map((line, i) => {
+            const statusConfig = { running: { color: 'bg-green-500', text: 'text-green-400', label: 'Running', pulse: true }, idle: { color: 'bg-amber-500', text: 'text-amber-400', label: 'Idle', pulse: false }, maintenance: { color: 'bg-blue-500', text: 'text-blue-400', label: 'Maintenance', pulse: false } };
+            const cfg = statusConfig[line.status];
+            return (
+              <motion.div key={line.line} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.1 }} className="p-3 bg-lattice-elevated/30 rounded-lg border border-lattice-border">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-semibold text-white">{line.line}</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className={cn('w-2 h-2 rounded-full', cfg.color, cfg.pulse && 'animate-pulse')} />
+                    <span className={cn('text-xs font-medium', cfg.text)}>{cfg.label}</span>
+                  </span>
+                </div>
+                <p className="text-xs text-gray-400 mb-2">{line.product}</p>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-1.5 bg-lattice-elevated rounded-full overflow-hidden">
+                    <div className={cn('h-full rounded-full', cfg.color)} style={{ width: `${line.uptime}%` }} />
+                  </div>
+                  <span className="text-xs text-gray-500">{line.uptime}%</span>
+                </div>
+              </motion.div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Defect Rate Gauge */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: 'Defect Rate', value: metrics.qcPassRate > 0 ? (100 - metrics.qcPassRate).toFixed(2) + '%' : '0%', desc: 'Current batch', icon: Package, color: metrics.qcPassRate >= 98 ? 'text-green-400' : metrics.qcPassRate >= 95 ? 'text-amber-400' : 'text-red-400' },
+          { label: 'First Pass Yield', value: firstPassYield.toFixed(1) + '%', desc: 'Without rework', icon: Gauge, color: firstPassYield >= 95 ? 'text-green-400' : 'text-amber-400' },
+          { label: 'Scrap Cost', value: '$' + (dashWOs.reduce((s, w) => s + (((w.data as Record<string, unknown>).scrapQty as number) || 0), 0) * 12).toLocaleString(), desc: 'Month to date', icon: Trash2, color: 'text-red-400' },
+          { label: 'Throughput', value: metrics.unitsToday + ' /hr', desc: 'All lines combined', icon: TrendingUp, color: 'text-orange-500' },
+        ].map((card, i) => (
+          <motion.div key={card.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }} className={ds.panel}>
+            <card.icon className={cn('w-4 h-4 mb-1', card.color)} />
+            <p className={cn('text-2xl font-bold', card.color)}>{card.value}</p>
+            <p className="text-xs text-gray-400">{card.label}</p>
+            <p className="text-xs text-gray-600">{card.desc}</p>
+          </motion.div>
+        ))}
+      </div>
+
       {/* KPI Cards */}
       <div className={ds.grid4}>
-        <div className={ds.panel}>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 }} className={ds.panel}>
           <div className="flex items-center gap-2 mb-1">
             <PackageCheck className="w-4 h-4 text-orange-500" />
             <span className={ds.textMuted}>Units Produced</span>
           </div>
           <p className="text-2xl font-bold text-white">{metrics.unitsToday.toLocaleString()}</p>
           <p className="text-xs text-green-400 mt-1">+12% vs yesterday</p>
-        </div>
-        <div className={ds.panel}>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className={ds.panel}>
           <div className="flex items-center gap-2 mb-1">
             <Gauge className="w-4 h-4 text-green-400" />
             <span className={ds.textMuted}>Avg OEE</span>
@@ -496,7 +547,7 @@ export default function ManufacturingLensPage() {
             {metrics.avgOEE.toFixed(1)}%
           </p>
           <p className="text-xs text-gray-500 mt-1">World-class: 85%+</p>
-        </div>
+        </motion.div>
         <div className={ds.panel}>
           <div className="flex items-center gap-2 mb-1">
             <ClipboardList className="w-4 h-4 text-neon-blue" />

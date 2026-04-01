@@ -969,6 +969,58 @@ export default function PhysicsLensPage() {
   }
   return (
     <div data-lens-theme="physics" className="p-6 space-y-6">
+      {/* Stat Cards Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: 'Bodies', value: bodies.length, color: 'text-violet-400', bg: 'bg-violet-500/10', icon: Circle },
+          { label: 'Constraints', value: constraints.length, color: 'text-cyan-400', bg: 'bg-cyan-500/10', icon: Link2 },
+          { label: 'Force Fields', value: forceFields.filter(f => f.active).length, color: 'text-amber-400', bg: 'bg-amber-500/10', icon: Magnet },
+          { label: 'Time Scale', value: `${settings.timeScale}x`, color: 'text-emerald-400', bg: 'bg-emerald-500/10', icon: Gauge },
+        ].map((s, i) => (
+          <motion.div
+            key={s.label}
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: i * 0.06 }}
+            className={`${s.bg} border border-white/5 rounded-lg p-3 flex items-center gap-3`}
+          >
+            <s.icon className={`w-4 h-4 ${s.color}`} />
+            <div>
+              <p className="text-lg font-bold font-mono">{s.value}</p>
+              <p className="text-[10px] text-gray-500 uppercase">{s.label}</p>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Equation Reference Card */}
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3 }}
+        className="flex items-center gap-4 px-4 py-2 bg-white/[0.02] border border-white/5 rounded-lg overflow-x-auto"
+      >
+        <span className="text-[10px] text-gray-500 uppercase tracking-wider flex-shrink-0">Constants</span>
+        {[
+          { sym: 'g', val: `${settings.gravity.y.toFixed(1)} m/s\u00B2`, label: 'Gravity' },
+          { sym: '\u03BC', val: settings.airFriction.toFixed(3), label: 'Air Friction' },
+          { sym: 'F', val: `F = ma`, label: 'Newton 2' },
+          { sym: 'E', val: `\u00BD mv\u00B2`, label: 'Kinetic Energy' },
+        ].map((eq, i) => (
+          <div key={eq.label} className="flex items-center gap-2 flex-shrink-0 px-2 py-1 bg-white/[0.03] rounded">
+            <span className="text-sm font-mono font-bold text-violet-400">{eq.sym}</span>
+            <span className="text-xs text-gray-400 font-mono">{eq.val}</span>
+          </div>
+        ))}
+        {/* Experiment status badge */}
+        <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
+          <span className={`w-2 h-2 rounded-full ${isRunning ? 'bg-green-400 animate-pulse' : 'bg-gray-600'}`} />
+          <span className={`text-xs font-medium ${isRunning ? 'text-green-400' : 'text-gray-500'}`}>
+            {isRunning ? 'Simulating' : 'Paused'}
+          </span>
+        </div>
+      </motion.div>
+
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-2xl">⚛️</span>

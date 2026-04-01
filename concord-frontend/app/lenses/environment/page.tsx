@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
@@ -2226,6 +2227,74 @@ export default function EnvironmentLensPage() {
           );
         })}
       </nav>
+
+      {/* Quick Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { icon: TreePine, label: 'Sites', value: siteItems.length, color: 'text-green-400' },
+          { icon: Bug, label: 'Species', value: speciesItems.length, color: 'text-yellow-400' },
+          { icon: Droplets, label: 'Samples', value: sampleItems.length, color: 'text-blue-400' },
+          { icon: Leaf, label: 'Carbon Entries', value: carbonItems.length, color: 'text-emerald-400' },
+        ].map((stat, i) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.08 }}
+            className="lens-card"
+          >
+            <stat.icon className={cn('w-5 h-5 mb-2', stat.color)} />
+            <p className="text-2xl font-bold">{stat.value}</p>
+            <p className="text-sm text-gray-400">{stat.label}</p>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Carbon Footprint Tracker */}
+      {carbonItems.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="panel p-4 space-y-3"
+        >
+          <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+            <Leaf className="w-4 h-4 text-green-400" /> Carbon Footprint Progress
+          </h3>
+          <div className="flex items-center gap-4">
+            <div className="relative w-20 h-20">
+              <svg className="w-20 h-20 -rotate-90" viewBox="0 0 36 36">
+                <path
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  fill="none"
+                  stroke="rgba(255,255,255,0.1)"
+                  strokeWidth="3"
+                />
+                <path
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  fill="none"
+                  stroke="#4ade80"
+                  strokeWidth="3"
+                  strokeDasharray={`${Math.min(100, (goalItems.filter(g => {
+                    const d = g.data as unknown as Record<string, unknown>;
+                    return (d.progress as number || 0) >= 100;
+                  }).length / Math.max(1, goalItems.length)) * 100)}, 100`}
+                  strokeLinecap="round"
+                />
+              </svg>
+              <span className="absolute inset-0 flex items-center justify-center text-sm font-bold text-green-400">
+                {goalItems.length > 0 ? Math.round((goalItems.filter(g => { const d = g.data as unknown as Record<string, unknown>; return (d.progress as number || 0) >= 100; }).length / goalItems.length) * 100) : 0}%
+              </span>
+            </div>
+            <div className="flex-1 space-y-1.5">
+              <p className="text-sm text-white">{carbonItems.length} carbon entries tracked</p>
+              <p className="text-xs text-gray-400">{goalItems.length} sustainability goals, {goalItems.filter(g => { const d = g.data as unknown as Record<string, unknown>; return (d.progress as number || 0) >= 100; }).length} completed</p>
+              <div className="h-2 bg-lattice-deep rounded-full overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-green-500 to-emerald-400 rounded-full transition-all" style={{ width: `${Math.min(100, carbonItems.length * 10)}%` }} />
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {/* View Content */}
       {view === 'dashboard' ? renderDashboard() : view === 'actions' ? renderActionsPanel() : (

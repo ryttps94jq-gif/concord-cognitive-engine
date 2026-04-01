@@ -2,7 +2,8 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { useState } from 'react';
-import { Brain, Network, Activity, Layers, Loader2, ChevronDown } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Brain, Network, Activity, Layers, Loader2, ChevronDown, Zap } from 'lucide-react';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';

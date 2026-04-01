@@ -1890,7 +1890,7 @@ export default function RealEstateLensPage() {
         </button>
         {showFeatures && (
           <div className="px-4 pb-4">
-            <LensFeaturePanel lensId="realestate" />
+            <LensFeaturePanel lensId="real_estate" />
           </div>
         )}
       </div>

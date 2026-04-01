@@ -4,7 +4,8 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useState } from 'react';
-import { Brain, Heart, Shield, Activity, Smile, Frown, Meh, AlertTriangle, Plus, Search, X, Trash2, Layers, ChevronDown } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Brain, Heart, Shield, Activity, Smile, Frown, Meh, AlertTriangle, Plus, Search, X, Trash2, Layers, ChevronDown, Calendar, Clock } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -119,7 +120,7 @@ export default function MentalHealthLensPage() {
         </div>
       </div>
 
-      <header className="flex items-center justify-between">
+      <motion.header initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Brain className="w-8 h-8 text-neon-purple" />
           <div>
@@ -130,7 +131,101 @@ export default function MentalHealthLensPage() {
             <p className="text-sm text-gray-400">Mood tracking, journaling, and coping strategies</p>
           </div>
         </div>
-      </header>
+      </motion.header>
+
+      {/* Stat Cards Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {(() => {
+          const totalEntries = moods.length;
+          const journalCount = journals.length;
+          const avgScore = totalEntries > 0 ? (moods.reduce((s, m) => s + (m.score || 3), 0) / totalEntries) : 0;
+          const recentMood = moods.length > 0 ? (MOOD_CONFIG[moods[0]?.mood] || MOOD_CONFIG.neutral) : MOOD_CONFIG.neutral;
+          return [
+            { icon: Activity, label: 'Mood Entries', value: totalEntries, color: 'text-purple-400', bg: 'bg-purple-400/10' },
+            { icon: Heart, label: 'Journal Entries', value: journalCount, color: 'text-pink-400', bg: 'bg-pink-400/10' },
+            { icon: Brain, label: 'Avg Wellness', value: avgScore.toFixed(1), color: 'text-cyan-400', bg: 'bg-cyan-400/10' },
+            { icon: Calendar, label: 'Streak', value: `${Math.min(totalEntries, 7)}d`, color: 'text-green-400', bg: 'bg-green-400/10' },
+          ].map((stat, i) => (
+            <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08, duration: 0.35 }}
+              className="panel p-3 flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${stat.bg}`}>
+                <stat.icon className={`w-5 h-5 ${stat.color}`} />
+              </div>
+              <div>
+                <p className="text-xl font-bold text-white">{stat.value}</p>
+                <p className="text-xs text-gray-400">{stat.label}</p>
+              </div>
+            </motion.div>
+          ));
+        })()}
+      </div>
+
+      {/* Wellness Score Ring */}
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.35 }} className="panel p-4">
+        <h3 className="font-semibold mb-3 flex items-center gap-2"><Activity className="w-4 h-4 text-neon-purple" /> Wellness Score</h3>
+        <div className="flex items-center gap-6">
+          {/* SVG Ring Indicator */}
+          <div className="relative w-24 h-24">
+            {(() => {
+              const avgScore = moods.length > 0 ? moods.reduce((s, m) => s + (m.score || 3), 0) / moods.length : 0;
+              const pct = (avgScore / 5) * 100;
+              const radius = 40;
+              const circumference = 2 * Math.PI * radius;
+              const offset = circumference - (pct / 100) * circumference;
+              const ringColor = pct >= 80 ? '#4ade80' : pct >= 60 ? '#22d3ee' : pct >= 40 ? '#facc15' : pct >= 20 ? '#fb923c' : '#f87171';
+              return (
+                <svg className="w-24 h-24 -rotate-90" viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r={radius} fill="none" stroke="#27272a" strokeWidth="8" />
+                  <motion.circle cx="50" cy="50" r={radius} fill="none" stroke={ringColor} strokeWidth="8" strokeLinecap="round"
+                    strokeDasharray={circumference} initial={{ strokeDashoffset: circumference }} animate={{ strokeDashoffset: offset }} transition={{ duration: 1, delay: 0.5 }} />
+                  <text x="50" y="55" textAnchor="middle" fill="white" fontSize="18" fontWeight="bold" className="rotate-90 origin-center">{Math.round(pct)}%</text>
+                </svg>
+              );
+            })()}
+          </div>
+          {/* Mood Color Tracker (last 7 entries) */}
+          <div className="flex-1">
+            <p className="text-xs text-gray-400 mb-2">Recent Mood Trend</p>
+            <div className="flex gap-1">
+              {moods.slice(0, 14).reverse().map((entry, i) => {
+                const cfg = MOOD_CONFIG[entry.mood] || MOOD_CONFIG.neutral;
+                const colorMap: Record<string, string> = { 'text-green-400': 'bg-green-400', 'text-neon-cyan': 'bg-cyan-400', 'text-yellow-400': 'bg-yellow-400', 'text-orange-400': 'bg-orange-400', 'text-red-400': 'bg-red-400' };
+                return <motion.div key={entry.id || i} initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: i * 0.05 }}
+                  className={cn('w-4 h-8 rounded-sm', colorMap[cfg.color] || 'bg-gray-600')}
+                  style={{ height: `${(entry.score || 3) * 8}px`, minHeight: '8px' }}
+                  title={`${cfg.label} - ${entry.date ? new Date(entry.date).toLocaleDateString() : ''}`} />;
+              })}
+              {moods.length === 0 && <p className="text-xs text-gray-600">No entries yet</p>}
+            </div>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Session History Timeline */}
+      {moods.length > 0 && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.45 }} className="panel p-4">
+          <h3 className="font-semibold mb-3 flex items-center gap-2"><Clock className="w-4 h-4 text-neon-cyan" /> Session Timeline</h3>
+          <div className="relative border-l-2 border-zinc-700 ml-3 space-y-3">
+            {moods.slice(0, 5).map((entry) => {
+              const cfg = MOOD_CONFIG[entry.mood] || MOOD_CONFIG.neutral;
+              const Icon = cfg.icon;
+              return (
+                <div key={entry.id} className="flex items-start gap-3 pl-4 relative">
+                  <div className={cn('absolute -left-[9px] top-1 w-4 h-4 rounded-full border-2 border-zinc-900', cfg.color === 'text-green-400' ? 'bg-green-400' : cfg.color === 'text-neon-cyan' ? 'bg-cyan-400' : cfg.color === 'text-yellow-400' ? 'bg-yellow-400' : cfg.color === 'text-orange-400' ? 'bg-orange-400' : 'bg-red-400')} />
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <Icon className={cn('w-4 h-4', cfg.color)} />
+                      <span className={cn('text-sm font-medium', cfg.color)}>{cfg.label}</span>
+                      <span className="text-xs text-gray-500">{entry.date ? new Date(entry.date).toLocaleDateString() : ''}</span>
+                    </div>
+                    {entry.notes && <p className="text-xs text-gray-400 mt-0.5">{entry.notes}</p>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </motion.div>
+      )}
 
       <RealtimeDataPanel domain="mental-health" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <UniversalActions domain="mental-health" artifactId={undefined} compact />

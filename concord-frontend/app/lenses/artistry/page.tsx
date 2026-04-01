@@ -133,6 +133,31 @@ export default function ArtistryLensPage() {
         {showFeatures && <LensFeaturePanel lensId="artistry" />}
         <RealtimeDataPanel data={realtimeData} insights={realtimeInsights} />
 
+        {/* Stat Cards — creative palette feel */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: 'Assets', value: (assets as unknown[]).length, icon: Layers, color: 'text-neon-pink' },
+            { label: 'Artistry DTUs', value: contextDTUs.length, icon: Sparkles, color: 'text-purple-400' },
+            { label: 'Genres', value: (genres as unknown[]).length, icon: Music, color: 'text-cyan-400' },
+            { label: 'Marketplace', value: (marketplaceBeats as unknown[]).length, icon: ShoppingBag, color: 'text-yellow-400' },
+          ].map((stat, i) => (
+            <motion.div key={stat.label} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.07 }} className="bg-white/5 border border-white/10 rounded-lg p-3 hover:border-neon-pink/30 transition-colors group">
+              <stat.icon className={cn('w-4 h-4 mb-1 group-hover:scale-110 transition-transform', stat.color)} />
+              <div className="text-xl font-bold">{stat.value}</div>
+              <div className="text-[10px] text-gray-500 uppercase tracking-wider">{stat.label}</div>
+            </motion.div>
+          ))}
+        </div>
+
+        {/* Technique Badges — Inspiration Board */}
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="flex flex-wrap gap-1.5">
+          {['Digital Painting', 'Vector Art', 'Photography', '3D Modeling', 'Animation', 'Typography', 'Collage', 'Mixed Media'].map((technique, i) => (
+            <span key={technique} className="text-[10px] px-2 py-1 rounded-full border border-white/10 text-gray-400 hover:border-neon-pink/40 hover:text-neon-pink cursor-default transition-colors" style={{ animationDelay: `${i * 50}ms` }}>
+              {technique}
+            </span>
+          ))}
+        </motion.div>
+
         {/* Tabs */}
         <div className="flex gap-1 bg-white/5 p-1 rounded-lg border border-white/10">
           {TABS.map(t => (

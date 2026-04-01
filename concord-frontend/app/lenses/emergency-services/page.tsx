@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
@@ -14,6 +15,7 @@ import {
   Layers, ChevronDown, MapPin, Users,
   Flame, Phone, Heart, Truck,
   Eye, AlertTriangle, Clock, Radio, Map,
+  Shield, Activity,
 } from 'lucide-react';
 
 const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });
@@ -149,7 +151,7 @@ export default function EmergencyServicesLensPage() {
 
   return (
     <div data-lens-theme="emergency-services" className={cn(ds.pageContainer, 'space-y-4')}>
-      <header className="flex items-center justify-between">
+      <motion.header initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
             <Siren className="w-5 h-5 text-red-400" />
@@ -163,7 +165,45 @@ export default function EmergencyServicesLensPage() {
           <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} compact />
           <DTUExportButton domain="emergency-services" data={realtimeData || {}} compact />
         </div>
-      </header>
+      </motion.header>
+
+      {/* Stat Cards Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { icon: Siren, label: 'Active Calls', value: stats.activeCalls, color: 'text-red-400', bg: 'bg-red-400/10' },
+          { icon: Truck, label: 'Available Units', value: stats.availableUnits, color: 'text-green-400', bg: 'bg-green-400/10' },
+          { icon: AlertTriangle, label: 'Critical (D/E)', value: stats.criticalCalls, color: 'text-orange-400', bg: 'bg-orange-400/10' },
+          { icon: Clock, label: 'Avg Response', value: '4.2m', color: 'text-blue-400', bg: 'bg-blue-400/10' },
+        ].map((stat, i) => (
+          <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08, duration: 0.35 }}
+            className="p-3 bg-zinc-900 rounded-lg border border-zinc-800 flex items-center gap-3">
+            <div className={cn('w-10 h-10 rounded-lg flex items-center justify-center', stat.bg)}>
+              <stat.icon className={cn('w-5 h-5', stat.color)} />
+            </div>
+            <div>
+              <p className="text-xl font-bold text-white">{stat.value}</p>
+              <p className="text-xs text-gray-400">{stat.label}</p>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Incident Severity Badges */}
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.35 }} className="flex items-center gap-3 flex-wrap">
+        <span className="text-xs text-gray-500 uppercase tracking-wide">Severity:</span>
+        {[
+          { label: 'Critical', count: calls.filter(c => (c.data as CallData).priority === 'echo').length, color: 'bg-red-500/20 text-red-400 border-red-500/30' },
+          { label: 'Major', count: calls.filter(c => (c.data as CallData).priority === 'delta').length, color: 'bg-orange-500/20 text-orange-400 border-orange-500/30' },
+          { label: 'Minor', count: calls.filter(c => ['alpha', 'bravo'].includes((c.data as CallData).priority)).length, color: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' },
+        ].map(sev => (
+          <span key={sev.label} className={cn('text-xs px-3 py-1 rounded-full border font-medium', sev.color)}>
+            {sev.label}: {sev.count}
+          </span>
+        ))}
+        <span className="ml-auto text-xs text-gray-500 flex items-center gap-1">
+          <Activity className="w-3 h-3" /> {stats.totalUnits} total units
+        </span>
+      </motion.div>
 
       <div className="flex gap-1 bg-zinc-900 rounded-lg p-1 overflow-x-auto">
         {MODE_TABS.map(({ key, label, icon: Icon }) => (
@@ -204,19 +244,26 @@ export default function EmergencyServicesLensPage() {
       )}
 
       <div className="space-y-2">
-        {items.map(item => (
-          <div key={item.id} className="p-4 bg-zinc-900 rounded-lg border border-zinc-800 hover:border-zinc-700 transition-colors">
+        <AnimatePresence mode="popLayout">
+        {items.map((item, idx) => {
+          const d = item.data as Record<string, unknown>;
+          const severity = String(d.priority || '');
+          const severityBorder = severity === 'echo' ? 'border-l-red-500' : severity === 'delta' ? 'border-l-orange-500' : severity === 'charlie' ? 'border-l-yellow-500' : 'border-l-transparent';
+          return (
+          <motion.div key={item.id} layout initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ delay: idx * 0.04, duration: 0.3 }}
+            className={cn("p-4 bg-zinc-900 rounded-lg border border-zinc-800 hover:border-zinc-700 transition-colors border-l-4", severityBorder)}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <h3 className="text-sm font-semibold text-white">{item.title}</h3>
-                {Boolean((item.data as Record<string, unknown>).status) && (
-                  <span className={cn('text-xs px-2 py-0.5 rounded-full', STATUS_COLORS[String((item.data as Record<string, unknown>).status)] || 'text-gray-400 bg-gray-400/10')}>
-                    {String((item.data as Record<string, unknown>).status)}
+                {Boolean(d.status) && (
+                  <span className={cn('text-xs px-2 py-0.5 rounded-full', STATUS_COLORS[String(d.status)] || 'text-gray-400 bg-gray-400/10')}>
+                    {String(d.status)}
                   </span>
                 )}
-                {Boolean((item.data as Record<string, unknown>).priority) && (
-                  <span className={cn('text-xs px-2 py-0.5 rounded-full font-mono', STATUS_COLORS[String((item.data as Record<string, unknown>).priority)] || 'text-gray-400 bg-gray-400/10')}>
-                    {String((item.data as Record<string, unknown>).priority).toUpperCase()}
+                {Boolean(d.priority) && (
+                  <span className={cn('text-xs px-2 py-0.5 rounded-full font-mono', STATUS_COLORS[String(d.priority)] || 'text-gray-400 bg-gray-400/10')}>
+                    {String(d.priority).toUpperCase()}
                   </span>
                 )}
               </div>
@@ -224,13 +271,15 @@ export default function EmergencyServicesLensPage() {
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
             </div>
-            {Boolean((item.data as Record<string, unknown>).location) && (
+            {Boolean(d.location) && (
               <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
-                <MapPin className="w-3 h-3" /> {String((item.data as Record<string, unknown>).location)}
+                <MapPin className="w-3 h-3" /> {String(d.location)}
               </p>
             )}
-          </div>
-        ))}
+          </motion.div>
+          );
+        })}
+        </AnimatePresence>
         {items.length === 0 && (
           <div className="text-center py-12 text-gray-500">
             <Siren className="w-10 h-10 mx-auto mb-3 opacity-30" />

@@ -229,6 +229,30 @@ export default function PhotographyPage() {
           ))}
         </div>
 
+        {/* Stat Cards Row */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { icon: Camera, label: 'Photos', value: photos.length, color: 'text-sky-400', bg: 'bg-sky-500/10' },
+            { icon: Heart, label: 'Favorites', value: favorites.size, color: 'text-rose-400', bg: 'bg-rose-500/10' },
+            { icon: Layers, label: 'Collections', value: new Set(photos.flatMap(p => p.tags || [])).size, color: 'text-violet-400', bg: 'bg-violet-500/10' },
+            { icon: Eye, label: 'Total Views', value: photos.reduce((s, p) => s + (p.views || 0), 0).toLocaleString(), color: 'text-amber-400', bg: 'bg-amber-500/10' },
+          ].map((s, i) => (
+            <motion.div
+              key={s.label}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.05 }}
+              className={`${s.bg} border border-white/5 rounded-xl p-3 flex items-center gap-3`}
+            >
+              <s.icon className={`w-5 h-5 ${s.color}`} />
+              <div>
+                <p className="text-lg font-bold">{s.value}</p>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider">{s.label}</p>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+
         {isError && <ErrorState error={error?.message} onRetry={refetch} />}
 
         {/* Gallery */}
@@ -290,6 +314,21 @@ export default function PhotographyPage() {
                     </div>
                     <div className="p-3">
                       <h3 className="text-xs font-medium truncate">{photo.title}</h3>
+                      {/* EXIF-like badges */}
+                      <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                        {photo.iso && (
+                          <span className="px-1.5 py-0.5 text-[9px] bg-sky-500/10 text-sky-400 rounded border border-sky-500/20 font-mono">ISO {photo.iso}</span>
+                        )}
+                        {photo.aperture && (
+                          <span className="px-1.5 py-0.5 text-[9px] bg-violet-500/10 text-violet-400 rounded border border-violet-500/20 font-mono">f/{photo.aperture}</span>
+                        )}
+                        {photo.shutter && (
+                          <span className="px-1.5 py-0.5 text-[9px] bg-amber-500/10 text-amber-400 rounded border border-amber-500/20 font-mono">{photo.shutter}</span>
+                        )}
+                        {photo.focalLength && (
+                          <span className="px-1.5 py-0.5 text-[9px] bg-emerald-500/10 text-emerald-400 rounded border border-emerald-500/20 font-mono">{photo.focalLength}</span>
+                        )}
+                      </div>
                       <div className="flex items-center gap-2 mt-1 text-[10px] text-gray-500">
                         {photo.camera && <span className="flex items-center gap-0.5"><Aperture className="w-2.5 h-2.5" />{photo.camera}</span>}
                         <span className="flex items-center gap-0.5"><Eye className="w-2.5 h-2.5" />{photo.views || 0}</span>

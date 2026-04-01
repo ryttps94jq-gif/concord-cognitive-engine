@@ -3,11 +3,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { api } from '@/lib/api/client';
+import { motion } from 'framer-motion';
 import {
   Network, ArrowLeftRight, Shield, MessageSquare, Skull,
   Baby, Eye, CheckCircle2, XCircle,
   RefreshCw, ChevronDown, ChevronRight, Loader2, Search,
-  Users, Zap, Activity, Layers,
+  Users, Zap, Activity, Layers, Radio, GitMerge,
 } from 'lucide-react';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import MeshStatusCard from '@/components/chat/MeshStatusCard';
@@ -151,6 +152,66 @@ export default function BridgeLens() {
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
         </button>
       </div>
+
+      {/* Stat Cards — connected system health overview */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        {[
+          { label: 'Organisms', value: organisms.length, icon: <Network className="w-5 h-5 text-purple-400" />, color: 'text-purple-400' },
+          { label: 'Bridge Events', value: log.length, icon: <Activity className="w-5 h-5 text-cyan-400" />, color: 'text-cyan-400' },
+          { label: 'Debates', value: debates.length, icon: <MessageSquare className="w-5 h-5 text-amber-400" />, color: 'text-amber-400' },
+          { label: 'Emergent Roles', value: emergents.length, icon: <Radio className="w-5 h-5 text-green-400" />, color: 'text-green-400' },
+        ].map((stat, i) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.08, duration: 0.35 }}
+            className="p-4 bg-zinc-900 rounded-lg border border-zinc-800"
+          >
+            <div className="flex items-center gap-2 mb-2">{stat.icon}</div>
+            <p className={`text-2xl font-bold font-mono ${stat.color}`}>{stat.value}</p>
+            <p className="text-xs text-zinc-500">{stat.label}</p>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Data Flow Arrows — unique visual: animated bridge connection indicator */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.3 }}
+        className="mb-6 p-3 bg-zinc-900/60 rounded-lg border border-purple-500/20 flex items-center justify-center gap-4"
+      >
+        <div className="flex items-center gap-2 text-xs text-zinc-400">
+          <GitMerge className="w-4 h-4 text-purple-400" />
+          <span>Knowledge Organisms</span>
+        </div>
+        <div className="flex items-center gap-1">
+          {[0, 1, 2].map(i => (
+            <motion.div
+              key={i}
+              className="w-2 h-2 rounded-full bg-purple-400"
+              animate={{ opacity: [0.2, 1, 0.2], x: [0, 8, 16] }}
+              transition={{ duration: 1.5, delay: i * 0.3, repeat: Infinity }}
+            />
+          ))}
+        </div>
+        <ArrowLeftRight className="w-4 h-4 text-purple-400" />
+        <div className="flex items-center gap-1">
+          {[0, 1, 2].map(i => (
+            <motion.div
+              key={i}
+              className="w-2 h-2 rounded-full bg-cyan-400"
+              animate={{ opacity: [0.2, 1, 0.2], x: [16, 8, 0] }}
+              transition={{ duration: 1.5, delay: i * 0.3, repeat: Infinity }}
+            />
+          ))}
+        </div>
+        <div className="flex items-center gap-2 text-xs text-zinc-400">
+          <span>Emergent Agents</span>
+          <Shield className="w-4 h-4 text-cyan-400" />
+        </div>
+      </motion.div>
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6 bg-zinc-900 rounded-lg p-1">

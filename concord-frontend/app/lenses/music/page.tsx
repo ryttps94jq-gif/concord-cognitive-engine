@@ -327,6 +327,68 @@ export default function MusicLensPage() {
             {/* ---- HOME ---- */}
             {view === 'home' && (
               <div className="space-y-8">
+                {/* Stat Cards Row */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { icon: Music, label: 'Tracks', value: tracks.length, color: 'text-neon-cyan', bg: 'from-cyan-500/10 to-transparent' },
+                    { icon: Users, label: 'Artists', value: artists.length, color: 'text-neon-purple', bg: 'from-purple-500/10 to-transparent' },
+                    { icon: ListMusic, label: 'Playlists', value: playlists.length, color: 'text-neon-green', bg: 'from-green-500/10 to-transparent' },
+                    { icon: Headphones, label: 'Total Plays', value: tracks.reduce((s, t) => s + (t.playCount || 0), 0).toLocaleString(), color: 'text-neon-pink', bg: 'from-pink-500/10 to-transparent' },
+                  ].map((s, i) => (
+                    <motion.div
+                      key={s.label}
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: i * 0.06, type: 'spring', stiffness: 200 }}
+                      className="relative overflow-hidden bg-white/[0.03] border border-white/5 rounded-xl p-4 group hover:border-white/10 transition-colors"
+                    >
+                      <div className={`absolute inset-0 bg-gradient-to-br ${s.bg} opacity-0 group-hover:opacity-100 transition-opacity`} />
+                      <div className="relative">
+                        <s.icon className={`w-5 h-5 ${s.color} mb-2`} />
+                        <p className="text-2xl font-bold">{s.value}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">{s.label}</p>
+                      </div>
+                      {/* Waveform decoration */}
+                      <div className="absolute bottom-0 right-0 flex items-end gap-[2px] h-8 px-2 pb-1 opacity-20">
+                        {Array.from({ length: 8 }, (_, j) => (
+                          <motion.div
+                            key={j}
+                            className={`w-1 rounded-full ${s.color.replace('text-', 'bg-')}`}
+                            animate={{ height: [4 + Math.random() * 12, 4 + Math.random() * 20, 4 + Math.random() * 12] }}
+                            transition={{ duration: 1.2 + j * 0.1, repeat: Infinity, ease: 'easeInOut' }}
+                          />
+                        ))}
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+
+                {/* Genre Color Tags */}
+                {Object.keys(genreGroups).length > 0 && (
+                  <div className="flex gap-2 flex-wrap">
+                    {Object.entries(genreGroups).slice(0, 8).map(([genre, genreTracks], i) => {
+                      const hue = (i * 47) % 360;
+                      return (
+                        <motion.button
+                          key={genre}
+                          initial={{ opacity: 0, x: -8 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: i * 0.04 }}
+                          onClick={() => { setBrowseGenre(genre); setView('browse'); }}
+                          className="px-3 py-1.5 rounded-full text-xs font-medium border transition-all hover:scale-105"
+                          style={{
+                            backgroundColor: `hsla(${hue}, 60%, 50%, 0.12)`,
+                            borderColor: `hsla(${hue}, 60%, 50%, 0.25)`,
+                            color: `hsl(${hue}, 70%, 70%)`,
+                          }}
+                        >
+                          {genre} ({genreTracks.length})
+                        </motion.button>
+                      );
+                    })}
+                  </div>
+                )}
+
                 {/* Hero */}
                 <div className="bg-gradient-to-r from-neon-cyan/10 via-neon-purple/10 to-neon-pink/10 rounded-2xl p-8 border border-white/5">
                   <h1 className="text-3xl font-bold mb-2">Music Lens</h1>

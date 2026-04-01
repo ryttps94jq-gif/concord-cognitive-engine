@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -9,7 +10,7 @@ import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   BookOpen, Plus, Search, X, Edit3, Trash2,
   Eye, Layers, ChevronDown, Scale, Lightbulb,
-  MessageSquare, Hash, Sparkles, Target,
+  MessageSquare, Hash, Sparkles, Target, Brain,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -187,9 +188,71 @@ export default function PhilosophyLensPage() {
         ))}
       </div>
 
+      {/* Quick Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { icon: Scale, label: 'Arguments', value: arguments_.length, color: 'text-neon-purple' },
+          { icon: Lightbulb, label: 'Concepts', value: concepts.length, color: 'text-neon-cyan' },
+          { icon: Brain, label: 'Thinkers', value: thinkers.length, color: 'text-blue-400' },
+          { icon: BookOpen, label: 'Traditions', value: traditions.length, color: 'text-green-400' },
+        ].map((stat, i) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.08 }}
+            className="lens-card"
+          >
+            <stat.icon className={cn('w-5 h-5 mb-2', stat.color)} />
+            <p className="text-2xl font-bold">{stat.value}</p>
+            <p className="text-sm text-gray-400">{stat.label}</p>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Thought Experiment Cards */}
+      {activeTab === 'Arguments' && arguments_.filter(a => a.data.premises && a.data.premises.length > 0).length > 0 && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
+          <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+            <Brain className="w-4 h-4 text-neon-purple" /> Thought Experiments & Arguments
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {arguments_.filter(a => a.data.premises && a.data.premises.length > 0).slice(0, 4).map((arg, idx) => (
+              <motion.div
+                key={arg.id}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: idx * 0.1 }}
+                onClick={() => { setSelectedId(arg.id); setActiveTab('Arguments'); }}
+                className="panel p-4 cursor-pointer hover:border-neon-purple/30 transition-colors space-y-2"
+              >
+                <h4 className="text-sm font-semibold text-white flex items-center gap-2">
+                  <Lightbulb className="w-3.5 h-3.5 text-yellow-400" />
+                  {arg.title}
+                </h4>
+                <div className="space-y-1">
+                  <p className="text-xs text-gray-500 uppercase tracking-wider">Premises</p>
+                  {arg.data.premises!.slice(0, 3).map((p, i) => (
+                    <p key={i} className="text-xs text-gray-400 pl-2 border-l-2 border-neon-purple/30">{p}</p>
+                  ))}
+                </div>
+                {arg.data.conclusion && (
+                  <div className="pt-1.5 border-t border-lattice-border">
+                    <p className="text-xs text-neon-purple font-medium">Conclusion: {arg.data.conclusion}</p>
+                  </div>
+                )}
+                <span className={cn('text-xs px-1.5 py-0.5 rounded inline-block', BRANCH_COLORS[arg.data.branch])}>
+                  {arg.data.branch?.replace(/_/g, ' ')}
+                </span>
+              </motion.div>
+            ))}
+          </div>
+        </motion.div>
+      )}
+
       {/* Dashboard Tab */}
       {activeTab === 'Dashboard' && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div className="lens-card">
             <Scale className="w-5 h-5 text-neon-purple mb-2" />
             <p className="text-2xl font-bold">{arguments_.length}</p>
@@ -215,7 +278,7 @@ export default function PhilosophyLensPage() {
             <p className="text-2xl font-bold">{dialogues.length}</p>
             <p className="text-sm text-gray-400">Dialogues</p>
           </div>
-        </div>
+        </motion.div>
       )}
 
       {activeTab !== 'Dashboard' && (
@@ -322,9 +385,12 @@ export default function PhilosophyLensPage() {
                   <p className="text-sm">No {currentType.toLowerCase()}s yet. Create one to get started.</p>
                 </div>
               ) : (
-                filtered.map(item => (
-                  <button
+                filtered.map((item, idx) => (
+                  <motion.button
                     key={item.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.04 }}
                     onClick={() => setSelectedId(item.id)}
                     className={cn(
                       'w-full text-left p-4 rounded-lg border transition-colors',
@@ -348,7 +414,7 @@ export default function PhilosophyLensPage() {
                       </div>
                       <Eye className="w-4 h-4 text-gray-600 flex-shrink-0 mt-1" />
                     </div>
-                  </button>
+                  </motion.button>
                 ))
               )}
             </div>

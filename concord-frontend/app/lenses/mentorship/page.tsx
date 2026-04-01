@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useQuery } from '@tanstack/react-query';
@@ -41,6 +42,12 @@ const STATUS_COLORS: Record<string, string> = {
   paused: 'text-gray-400 bg-gray-400/10',
 };
 
+const cardVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: (i: number) => ({ opacity: 1, y: 0, transition: { delay: i * 0.05, duration: 0.35, ease: 'easeOut' } }),
+  exit: { opacity: 0, y: -10, transition: { duration: 0.2 } },
+};
+
 export default function MentorshipLensPage() {
   useLensNav('mentorship');
   const { latestData: realtimeData, isLive, lastUpdated, insights } = useRealtimeLens('mentorship');
@@ -48,6 +55,7 @@ export default function MentorshipLensPage() {
   const [selectedRelation, setSelectedRelation] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showFeatures, setShowFeatures] = useState(false);
+  const [activeTab, setActiveTab] = useState<'mentors' | 'sessions' | 'goals'>('mentors');
   const [newMentorship, setNewMentorship] = useState({ mentorName: '', menteeName: '', topic: '', meetingFrequency: 'weekly' });
   const [newNote, setNewNote] = useState('');
 
@@ -80,6 +88,7 @@ export default function MentorshipLensPage() {
     active: relations.filter(r => r.status === 'active').length,
     totalSessions: relations.reduce((s, r) => s + (r.sessionsCompleted || 0), 0),
     seeking: relations.filter(r => r.status === 'seeking').length,
+    avgRating: relations.length > 0 ? (relations.reduce((s, r) => s + (r.rating || 0), 0) / relations.length) : 0,
   }), [relations]);
 
   const handleCreate = useCallback(async () => {
@@ -108,11 +117,55 @@ export default function MentorshipLensPage() {
     setNewNote('');
   }, [newNote, selectedRelation, items, update]);
 
+  // Compute mentor match scores (simple heuristic)
+  const matchScores = useMemo(() => {
+    return relations.map(r => {
+      let score = 50;
+      if (r.status === 'active') score += 20;
+      if (r.sessionsCompleted > 5) score += 15;
+      if (r.rating > 3) score += 10;
+      if (r.goals && r.goals.length > 0) score += 5;
+      return { id: r.id, score: Math.min(score, 100) };
+    });
+  }, [relations]);
+
+  const getMatchScore = (id: string) => matchScores.find(m => m.id === id)?.score || 0;
+
+  // Session history timeline
+  const sessionTimeline = useMemo(() => {
+    return relations
+      .filter(r => r.sessionsCompleted > 0)
+      .sort((a, b) => (b.sessionsCompleted || 0) - (a.sessionsCompleted || 0))
+      .slice(0, 8);
+  }, [relations]);
+
+  // Goal progress
+  const goalProgress = useMemo(() => {
+    return relations
+      .filter(r => r.goals && r.goals.length > 0)
+      .flatMap(r => r.goals.map((g, i) => ({
+        goal: g,
+        topic: r.topic,
+        progress: Math.min(100, ((r.sessionsCompleted || 0) * 15) + (i * 10)),
+      })))
+      .slice(0, 6);
+  }, [relations]);
+
   if (isError) return <div className="flex items-center justify-center h-full p-8"><ErrorState error={error?.message} onRetry={refetch} /></div>;
+
+  const tabs = [
+    { key: 'mentors' as const, label: 'Mentors', icon: Users },
+    { key: 'sessions' as const, label: 'Sessions', icon: Calendar },
+    { key: 'goals' as const, label: 'Goals', icon: Target },
+  ];
 
   return (
     <div data-lens-theme="mentorship" className="p-6 space-y-6">
-      <header className="flex items-center justify-between">
+      <motion.header
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex items-center justify-between"
+      >
         <div className="flex items-center gap-3">
           <BadgeCheck className="w-6 h-6 text-neon-blue" />
           <div>
@@ -125,33 +178,74 @@ export default function MentorshipLensPage() {
         <button onClick={() => setShowCreate(!showCreate)} className="btn-neon">
           <Plus className="w-4 h-4 mr-2 inline" /> New Mentorship
         </button>
-      </header>
+      </motion.header>
 
       <UniversalActions domain="mentorship" artifactId={items[0]?.id} compact />
 
-      {showCreate && (
-        <div className="panel p-4 space-y-3">
-          <h3 className="font-semibold">Create Mentorship</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <input value={newMentorship.topic} onChange={e => setNewMentorship(p => ({ ...p, topic: e.target.value }))} placeholder="Topic / skill area..." className="input-lattice" />
-            <select value={newMentorship.meetingFrequency} onChange={e => setNewMentorship(p => ({ ...p, meetingFrequency: e.target.value }))} className="input-lattice">
-              <option value="weekly">Weekly</option><option value="biweekly">Biweekly</option>
-              <option value="monthly">Monthly</option><option value="as-needed">As Needed</option>
-            </select>
-            <input value={newMentorship.mentorName} onChange={e => setNewMentorship(p => ({ ...p, mentorName: e.target.value }))} placeholder="Mentor name (optional)..." className="input-lattice" />
-            <input value={newMentorship.menteeName} onChange={e => setNewMentorship(p => ({ ...p, menteeName: e.target.value }))} placeholder="Mentee name (optional)..." className="input-lattice" />
-          </div>
-          <button onClick={handleCreate} disabled={createMut.isPending || !newMentorship.topic.trim()} className="btn-neon green w-full">
-            {createMut.isPending ? 'Creating...' : 'Create Mentorship'}
-          </button>
-        </div>
-      )}
+      <AnimatePresence>
+        {showCreate && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="panel p-4 space-y-3 overflow-hidden"
+          >
+            <h3 className="font-semibold">Create Mentorship</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <input value={newMentorship.topic} onChange={e => setNewMentorship(p => ({ ...p, topic: e.target.value }))} placeholder="Topic / skill area..." className="input-lattice" />
+              <select value={newMentorship.meetingFrequency} onChange={e => setNewMentorship(p => ({ ...p, meetingFrequency: e.target.value }))} className="input-lattice">
+                <option value="weekly">Weekly</option><option value="biweekly">Biweekly</option>
+                <option value="monthly">Monthly</option><option value="as-needed">As Needed</option>
+              </select>
+              <input value={newMentorship.mentorName} onChange={e => setNewMentorship(p => ({ ...p, mentorName: e.target.value }))} placeholder="Mentor name (optional)..." className="input-lattice" />
+              <input value={newMentorship.menteeName} onChange={e => setNewMentorship(p => ({ ...p, menteeName: e.target.value }))} placeholder="Mentee name (optional)..." className="input-lattice" />
+            </div>
+            <button onClick={handleCreate} disabled={createMut.isPending || !newMentorship.topic.trim()} className="btn-neon green w-full">
+              {createMut.isPending ? 'Creating...' : 'Create Mentorship'}
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
+      {/* Stat Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="lens-card"><BadgeCheck className="w-5 h-5 text-neon-blue mb-2" /><p className="text-2xl font-bold">{stats.total}</p><p className="text-sm text-gray-400">Mentorships</p></div>
-        <div className="lens-card"><Users className="w-5 h-5 text-neon-green mb-2" /><p className="text-2xl font-bold">{stats.active}</p><p className="text-sm text-gray-400">Active</p></div>
-        <div className="lens-card"><Target className="w-5 h-5 text-neon-cyan mb-2" /><p className="text-2xl font-bold">{stats.totalSessions}</p><p className="text-sm text-gray-400">Sessions</p></div>
-        <div className="lens-card"><UserPlus className="w-5 h-5 text-yellow-400 mb-2" /><p className="text-2xl font-bold">{stats.seeking}</p><p className="text-sm text-gray-400">Seeking Match</p></div>
+        {[
+          { icon: BadgeCheck, color: 'text-neon-blue', value: stats.total, label: 'Mentorships' },
+          { icon: Users, color: 'text-neon-green', value: stats.active, label: 'Active' },
+          { icon: Target, color: 'text-neon-cyan', value: stats.totalSessions, label: 'Sessions' },
+          { icon: Star, color: 'text-yellow-400', value: stats.avgRating > 0 ? `${stats.avgRating.toFixed(1)}/5` : '--', label: 'Avg Rating' },
+        ].map((stat, i) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: i * 0.08, duration: 0.3 }}
+            className="lens-card"
+          >
+            <stat.icon className={`w-5 h-5 ${stat.color} mb-2`} />
+            <p className="text-2xl font-bold">{stat.value}</p>
+            <p className="text-sm text-gray-400">{stat.label}</p>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 bg-lattice-void border border-lattice-border rounded-lg p-1">
+        {tabs.map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all flex-1 justify-center',
+              activeTab === tab.key
+                ? 'bg-neon-blue/20 text-neon-blue border border-neon-blue/30'
+                : 'text-gray-400 hover:text-white hover:bg-lattice-surface'
+            )}
+          >
+            <tab.icon className="w-4 h-4" />
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       <div className="relative">
@@ -159,93 +253,221 @@ export default function MentorshipLensPage() {
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search mentorships..." className="w-full bg-lattice-void border border-lattice-border rounded-lg pl-9 pr-3 py-2 text-sm" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Relations list */}
-        <div className="panel p-4">
-          <h2 className="font-semibold mb-4 flex items-center gap-2"><BadgeCheck className="w-4 h-4 text-neon-blue" />Mentorships</h2>
-          <div className="space-y-3">
-            {isLoading ? (
-              <p className="text-gray-400 text-center py-4">Loading...</p>
-            ) : relations.length === 0 ? (
-              <p className="text-gray-400 text-center py-4">No mentorships yet.</p>
-            ) : relations.map(r => (
-              <button key={r.id} onClick={() => setSelectedRelation(r.id)} className={cn('w-full text-left lens-card transition-all', selectedRelation === r.id && 'border-neon-blue ring-1 ring-neon-blue')}>
-                <div className="flex items-center justify-between mb-1">
-                  <h3 className="font-semibold text-sm truncate">{r.topic}</h3>
-                  <span className={cn('text-xs px-2 py-0.5 rounded', STATUS_COLORS[r.status || 'seeking'])}>{r.status}</span>
-                </div>
-                <div className="text-xs text-gray-400">
-                  {r.mentorName && <span>Mentor: {r.mentorName}</span>}
-                  {r.mentorName && r.menteeName && <span> | </span>}
-                  {r.menteeName && <span>Mentee: {r.menteeName}</span>}
-                </div>
-                <div className="text-xs text-gray-500 mt-1">{r.sessionsCompleted || 0} sessions | {r.meetingFrequency}</div>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Detail */}
-        <div className="lg:col-span-2 space-y-4">
-          {selectedData ? (
-            <>
-              <div className="panel p-4">
-                <h2 className="font-semibold text-lg mb-2">{selectedData.topic}</h2>
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  <div className="lens-card">
-                    <p className="text-xs text-gray-400">Mentor</p>
-                    <p className="font-semibold">{selectedData.mentorName || 'Unassigned'}</p>
-                  </div>
-                  <div className="lens-card">
-                    <p className="text-xs text-gray-400">Mentee</p>
-                    <p className="font-semibold">{selectedData.menteeName || 'Unassigned'}</p>
-                  </div>
-                  <div className="lens-card">
-                    <p className="text-xs text-gray-400">Sessions Completed</p>
-                    <p className="text-xl font-bold text-neon-cyan">{selectedData.sessionsCompleted || 0}</p>
-                  </div>
-                  <div className="lens-card">
-                    <p className="text-xs text-gray-400">Frequency</p>
-                    <p className="capitalize">{selectedData.meetingFrequency}</p>
-                  </div>
-                </div>
-                {selectedData.goals?.length > 0 && (
-                  <div className="mb-4">
-                    <p className="text-xs text-gray-400 mb-2">Goals</p>
-                    <div className="flex flex-wrap gap-2">
-                      {selectedData.goals.map((g, i) => (
-                        <span key={i} className="px-2 py-1 bg-lattice-elevated rounded text-sm">{g}</span>
-                      ))}
+      <AnimatePresence mode="wait">
+        {activeTab === 'mentors' && (
+          <motion.div
+            key="mentors"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            transition={{ duration: 0.25 }}
+            className="grid grid-cols-1 lg:grid-cols-3 gap-6"
+          >
+            {/* Relations list */}
+            <div className="panel p-4">
+              <h2 className="font-semibold mb-4 flex items-center gap-2"><BadgeCheck className="w-4 h-4 text-neon-blue" />Mentorships</h2>
+              <div className="space-y-3">
+                {isLoading ? (
+                  <p className="text-gray-400 text-center py-4">Loading...</p>
+                ) : relations.length === 0 ? (
+                  <p className="text-gray-400 text-center py-4">No mentorships yet.</p>
+                ) : relations.map((r, i) => (
+                  <motion.button
+                    key={r.id}
+                    custom={i}
+                    variants={cardVariants}
+                    initial="hidden"
+                    animate="visible"
+                    exit="exit"
+                    onClick={() => setSelectedRelation(r.id)}
+                    className={cn('w-full text-left lens-card transition-all', selectedRelation === r.id && 'border-neon-blue ring-1 ring-neon-blue')}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <h3 className="font-semibold text-sm truncate">{r.topic}</h3>
+                      <span className={cn('text-xs px-2 py-0.5 rounded', STATUS_COLORS[r.status || 'seeking'])}>{r.status}</span>
                     </div>
-                  </div>
-                )}
-                {selectedData.notes && (
-                  <div>
-                    <p className="text-xs text-gray-400 mb-2">Session Notes</p>
-                    <pre className="text-sm text-gray-300 whitespace-pre-wrap bg-lattice-deep p-3 rounded-lg max-h-48 overflow-auto">{selectedData.notes}</pre>
-                  </div>
-                )}
-              </div>
-
-              {/* Add note */}
-              <div className="panel p-4">
-                <h3 className="font-semibold mb-3 flex items-center gap-2"><MessageSquare className="w-4 h-4 text-neon-blue" />Add Session Note</h3>
-                <div className="flex gap-2">
-                  <input value={newNote} onChange={e => setNewNote(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleAddNote(); }} placeholder="Session notes..." className="input-lattice flex-1" />
-                  <button onClick={handleAddNote} disabled={!newNote.trim()} className="btn-neon"><Send className="w-4 h-4" /></button>
-                </div>
-              </div>
-            </>
-          ) : (
-            <div className="panel p-4 h-full flex items-center justify-center">
-              <div className="text-center text-gray-500">
-                <BadgeCheck className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>Select a mentorship to view details</p>
+                    <div className="text-xs text-gray-400">
+                      {r.mentorName && <span>Mentor: {r.mentorName}</span>}
+                      {r.mentorName && r.menteeName && <span> | </span>}
+                      {r.menteeName && <span>Mentee: {r.menteeName}</span>}
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-gray-500 mt-1">
+                      <span>{r.sessionsCompleted || 0} sessions | {r.meetingFrequency}</span>
+                      <span className="flex items-center gap-1 text-neon-cyan">
+                        <Star className="w-3 h-3" /> {getMatchScore(r.id)}%
+                      </span>
+                    </div>
+                  </motion.button>
+                ))}
               </div>
             </div>
-          )}
-        </div>
-      </div>
+
+            {/* Detail */}
+            <div className="lg:col-span-2 space-y-4">
+              {selectedData ? (
+                <>
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="panel p-4"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <h2 className="font-semibold text-lg">{selectedData.topic}</h2>
+                      <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-neon-cyan/10 border border-neon-cyan/20">
+                        <Star className="w-4 h-4 text-neon-cyan" />
+                        <span className="text-sm font-bold text-neon-cyan">Match: {getMatchScore(selectedData.id)}%</span>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                      <div className="lens-card">
+                        <p className="text-xs text-gray-400">Mentor</p>
+                        <p className="font-semibold">{selectedData.mentorName || 'Unassigned'}</p>
+                      </div>
+                      <div className="lens-card">
+                        <p className="text-xs text-gray-400">Mentee</p>
+                        <p className="font-semibold">{selectedData.menteeName || 'Unassigned'}</p>
+                      </div>
+                      <div className="lens-card">
+                        <p className="text-xs text-gray-400">Sessions Completed</p>
+                        <p className="text-xl font-bold text-neon-cyan">{selectedData.sessionsCompleted || 0}</p>
+                      </div>
+                      <div className="lens-card">
+                        <p className="text-xs text-gray-400">Frequency</p>
+                        <p className="capitalize">{selectedData.meetingFrequency}</p>
+                      </div>
+                    </div>
+                    {selectedData.goals?.length > 0 && (
+                      <div className="mb-4">
+                        <p className="text-xs text-gray-400 mb-2">Goals</p>
+                        <div className="flex flex-wrap gap-2">
+                          {selectedData.goals.map((g, i) => (
+                            <span key={i} className="px-2 py-1 bg-lattice-elevated rounded text-sm">{g}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {selectedData.notes && (
+                      <div>
+                        <p className="text-xs text-gray-400 mb-2">Session Notes</p>
+                        <pre className="text-sm text-gray-300 whitespace-pre-wrap bg-lattice-deep p-3 rounded-lg max-h-48 overflow-auto">{selectedData.notes}</pre>
+                      </div>
+                    )}
+                  </motion.div>
+
+                  {/* Add note */}
+                  <div className="panel p-4">
+                    <h3 className="font-semibold mb-3 flex items-center gap-2"><MessageSquare className="w-4 h-4 text-neon-blue" />Add Session Note</h3>
+                    <div className="flex gap-2">
+                      <input value={newNote} onChange={e => setNewNote(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleAddNote(); }} placeholder="Session notes..." className="input-lattice flex-1" />
+                      <button onClick={handleAddNote} disabled={!newNote.trim()} className="btn-neon"><Send className="w-4 h-4" /></button>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="panel p-4 h-full flex items-center justify-center">
+                  <div className="text-center text-gray-500">
+                    <BadgeCheck className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                    <p>Select a mentorship to view details</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+
+        {activeTab === 'sessions' && (
+          <motion.div
+            key="sessions"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            transition={{ duration: 0.25 }}
+            className="panel p-6"
+          >
+            <h2 className="font-semibold mb-4 flex items-center gap-2"><Clock className="w-4 h-4 text-neon-cyan" />Session History Timeline</h2>
+            {sessionTimeline.length === 0 ? (
+              <p className="text-gray-500 text-center py-8">No sessions recorded yet. Complete some mentorship sessions to see the timeline.</p>
+            ) : (
+              <div className="relative">
+                <div className="absolute left-4 top-0 bottom-0 w-px bg-lattice-border" />
+                <div className="space-y-4">
+                  {sessionTimeline.map((r, i) => (
+                    <motion.div
+                      key={r.id}
+                      custom={i}
+                      variants={cardVariants}
+                      initial="hidden"
+                      animate="visible"
+                      className="relative pl-10"
+                    >
+                      <div className="absolute left-2.5 top-3 w-3 h-3 rounded-full bg-neon-cyan border-2 border-lattice-void" />
+                      <div className="lens-card">
+                        <div className="flex items-center justify-between mb-1">
+                          <h3 className="font-semibold text-sm">{r.topic}</h3>
+                          <span className="text-xs text-neon-cyan font-mono">{r.sessionsCompleted} sessions</span>
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          {r.mentorName && <span>{r.mentorName}</span>}
+                          {r.mentorName && r.menteeName && <span> with </span>}
+                          {r.menteeName && <span>{r.menteeName}</span>}
+                          <span className="ml-2">{r.meetingFrequency}</span>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </motion.div>
+        )}
+
+        {activeTab === 'goals' && (
+          <motion.div
+            key="goals"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            transition={{ duration: 0.25 }}
+            className="panel p-6"
+          >
+            <h2 className="font-semibold mb-4 flex items-center gap-2"><Target className="w-4 h-4 text-neon-green" />Goal Progress</h2>
+            {goalProgress.length === 0 ? (
+              <p className="text-gray-500 text-center py-8">No goals set yet. Add goals to your mentorship relationships to track progress.</p>
+            ) : (
+              <div className="space-y-4">
+                {goalProgress.map((g, i) => (
+                  <motion.div
+                    key={i}
+                    custom={i}
+                    variants={cardVariants}
+                    initial="hidden"
+                    animate="visible"
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm font-medium text-white">{g.goal}</span>
+                      <span className="text-xs text-gray-400">{g.topic}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 h-3 bg-lattice-deep rounded-full overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${g.progress}%` }}
+                          transition={{ duration: 0.8, delay: i * 0.1 }}
+                          className={cn(
+                            'h-full rounded-full',
+                            g.progress >= 80 ? 'bg-neon-green' : g.progress >= 40 ? 'bg-neon-cyan' : 'bg-yellow-400'
+                          )}
+                        />
+                      </div>
+                      <span className="text-xs font-mono text-gray-300 w-10 text-right">{g.progress}%</span>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <RealtimeDataPanel domain="mentorship" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
 

@@ -3,8 +3,9 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
-import { useState } from 'react';
-import { Wrench, Cog, FileText, Plus, Trash2, Search, Layers, ChevronDown, CheckCircle, AlertTriangle, Settings } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Wrench, Cog, FileText, Plus, Trash2, Search, Layers, ChevronDown, CheckCircle, AlertTriangle, Settings, ArrowRight, HardHat, FlaskConical } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -46,6 +47,13 @@ export default function EngineeringLensPage() {
   const runAction = useRunArtifact('engineering');
 
   const projects = projectItems.map(i => ({ id: i.id, title: i.title, ...(i.data || {}) })) as unknown as (EngineeringProject & { id: string; title: string })[];
+
+  const stats = useMemo(() => ({
+    total: projects.length,
+    specs: specItems.length,
+    inProgress: projects.filter(p => p.status && p.status !== 'complete').length,
+    completed: projects.filter(p => p.status === 'complete').length,
+  }), [projects, specItems]);
 
   const [newProject, setNewProject] = useState({ name: '', discipline: 'mechanical', specifications: '' });
 
@@ -104,6 +112,51 @@ export default function EngineeringLensPage() {
       <UniversalActions domain="engineering" artifactId={undefined} compact />
       <DTUExportButton domain="engineering" data={{}} compact />
 
+      {/* Quick Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { icon: Wrench, label: 'Projects', value: stats.total, color: 'text-neon-cyan' },
+          { icon: FileText, label: 'Specs', value: stats.specs, color: 'text-purple-400' },
+          { icon: Cog, label: 'In Progress', value: stats.inProgress, color: 'text-yellow-400' },
+          { icon: CheckCircle, label: 'Completed', value: stats.completed, color: 'text-green-400' },
+        ].map((stat, i) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.08 }}
+            className="lens-card"
+          >
+            <stat.icon className={`w-5 h-5 mb-2 ${stat.color}`} />
+            <p className="text-2xl font-bold">{stat.value}</p>
+            <p className="text-sm text-gray-400">{stat.label}</p>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Project Phase Pipeline */}
+      {projects.length > 0 && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="panel p-4 space-y-3">
+          <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+            <HardHat className="w-4 h-4 text-neon-cyan" /> Project Pipeline
+          </h3>
+          <div className="flex items-center gap-1 overflow-x-auto pb-2">
+            {(['planning', 'design', 'review', 'fabrication', 'testing', 'complete'] as ProjectStatus[]).map((phase, i) => {
+              const count = projects.filter(p => (p.status || 'planning') === phase).length;
+              return (
+                <div key={phase} className="flex items-center">
+                  <div className={`px-3 py-2 rounded-lg text-center min-w-[90px] ${count > 0 ? 'bg-neon-cyan/10 border border-neon-cyan/30' : 'bg-lattice-surface border border-lattice-border'}`}>
+                    <p className={`text-lg font-bold ${count > 0 ? 'text-neon-cyan' : 'text-gray-600'}`}>{count}</p>
+                    <p className="text-xs text-gray-400 capitalize">{phase}</p>
+                  </div>
+                  {i < 5 && <ArrowRight className="w-4 h-4 text-gray-600 mx-1 shrink-0" />}
+                </div>
+              );
+            })}
+          </div>
+        </motion.div>
+      )}
+
       {/* Tabs */}
       <div className="flex gap-2 border-b border-white/10 pb-2">
         {(['projects', 'specs', 'standards'] as const).map(tab => (
@@ -139,8 +192,8 @@ export default function EngineeringLensPage() {
             {projects.length === 0 ? (
               <p className="text-gray-500 text-sm text-center py-4">No projects yet.</p>
             ) : (
-              projects.map(proj => (
-                <div key={proj.id} className="panel p-4 flex items-center justify-between">
+              projects.map((proj, idx) => (
+                <motion.div key={proj.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.05 }} className="panel p-4 flex items-center justify-between">
                   <div>
                     <div className="flex items-center gap-2">
                       <Cog className="w-4 h-4 text-neon-cyan" />
@@ -152,7 +205,7 @@ export default function EngineeringLensPage() {
                     <p className="text-xs text-gray-400 mt-1">{proj.discipline} engineering</p>
                   </div>
                   <button onClick={() => remove(proj.id)} className="text-gray-500 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
-                </div>
+                </motion.div>
               ))
             )}
           </div>

@@ -1056,6 +1056,43 @@ export default function GraphLensPage() {
   }
   return (
     <div data-lens-theme="graph" className="h-full flex flex-col bg-[#0a0e14]">
+      {/* Stat Cards Row */}
+      <div className="flex items-center gap-3 px-4 py-2 border-b border-cyan-900/20 bg-[#0a0e14]/90 backdrop-blur-sm overflow-x-auto">
+        {[
+          { label: 'Nodes', value: stats.nodeCount, color: 'text-cyan-400', bg: 'bg-cyan-400/10' },
+          { label: 'Edges', value: stats.edgeCount, color: 'text-purple-400', bg: 'bg-purple-400/10' },
+          { label: 'Density', value: `${stats.density.toFixed(1)}%`, color: 'text-emerald-400', bg: 'bg-emerald-400/10' },
+          { label: 'Avg Connections', value: stats.avgConnections.toFixed(1), color: 'text-amber-400', bg: 'bg-amber-400/10' },
+        ].map((s, i) => (
+          <motion.div
+            key={s.label}
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.05 }}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${s.bg} border border-white/5 flex-shrink-0`}
+          >
+            <span className={`text-lg font-bold font-mono ${s.color}`}>{s.value}</span>
+            <span className="text-[10px] text-gray-500 uppercase tracking-wider">{s.label}</span>
+          </motion.div>
+        ))}
+        {/* Connection visualization mini-graph */}
+        <div className="flex items-center gap-1 ml-auto flex-shrink-0">
+          <div className="flex items-center gap-0.5">
+            {Object.entries(stats.typeCounts).slice(0, 4).map(([tier, count]) => (
+              count > 0 && (
+                <motion.div
+                  key={tier}
+                  initial={{ width: 0 }}
+                  animate={{ width: Math.max(4, Math.min(count * 2, 32)) }}
+                  className="h-3 rounded-full"
+                  style={{ backgroundColor: NODE_COLORS[tier as NodeType]?.fill || '#6b7280' }}
+                  title={`${NODE_COLORS[tier as NodeType]?.name}: ${count}`}
+                />
+              )
+            ))}
+          </div>
+        </div>
+      </div>
       {/* Real-time Enhancement Toolbar */}
       <div className="flex items-center gap-2 px-4 py-1 border-b border-cyan-900/20 bg-[#0a0e14]/80 backdrop-blur-sm flex-wrap">
         <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} compact />

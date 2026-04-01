@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -43,6 +44,7 @@ import {
   FolderOpen,
   Layers,
   ChevronDown,
+  ArrowRight,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -967,6 +969,79 @@ export default function InsuranceLensPage() {
         }}
         className="inline-flex"
       />
+
+      {/* Stat Cards Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { icon: Shield, label: 'Policies In-Force', value: dashboard.policiesInForce, color: 'text-blue-400' },
+          { icon: DollarSign, label: 'Premiums Written', value: `$${dashboard.premiumsWritten.toLocaleString()}`, color: 'text-green-400' },
+          { icon: FileText, label: 'Open Claims', value: dashboard.openClaims, color: 'text-amber-400' },
+          { icon: CheckCircle2, label: 'Loss Ratio', value: `${dashboard.lossRatio}%`, color: dashboard.lossRatio > 70 ? 'text-red-400' : 'text-green-400' },
+        ].map((stat, i) => (
+          <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }} className={ds.panel}>
+            <stat.icon className={`w-5 h-5 ${stat.color} mb-2`} />
+            <p className={ds.textMuted}>{stat.label}</p>
+            <p className="text-xl font-bold text-white">{stat.value}</p>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Policy Status Cards */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className={ds.panel}>
+        <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2"><Shield className="w-4 h-4 text-blue-400" /> Policy Status Overview</h3>
+        <div className="flex flex-wrap gap-3">
+          {(() => {
+            const active = policies.filter(p => p.meta.status === 'active').length;
+            const expired = policies.filter(p => p.meta.status === 'expired' || p.meta.status === 'cancelled').length;
+            const pending = policies.filter(p => p.meta.status === 'pending' || p.meta.status === 'draft').length;
+            return (
+              <>
+                <span className="px-3 py-1.5 rounded-lg text-sm font-medium bg-green-500/20 text-green-400">Active: {active}</span>
+                <span className="px-3 py-1.5 rounded-lg text-sm font-medium bg-red-500/20 text-red-400">Expired: {expired}</span>
+                <span className="px-3 py-1.5 rounded-lg text-sm font-medium bg-amber-500/20 text-amber-400">Pending: {pending}</span>
+              </>
+            );
+          })()}
+        </div>
+        {/* Coverage Amount Display */}
+        {(() => {
+          const totalCoverage = policies.reduce((s, p) => s + ((p.data as unknown as PolicyData).coverageLimit || 0), 0);
+          return totalCoverage > 0 ? (
+            <div className="mt-3 text-xs text-gray-400">
+              Total Coverage: <span className="text-white font-bold text-sm">${totalCoverage.toLocaleString()}</span>
+            </div>
+          ) : null;
+        })()}
+      </motion.div>
+
+      {/* Claim Status Pipeline */}
+      {claims.length > 0 && (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className={ds.panel}>
+          <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2"><FileText className="w-4 h-4 text-amber-400" /> Claim Pipeline</h3>
+          <div className="flex items-center gap-2">
+            {[
+              { stage: 'Filed', statuses: ['reported'], color: 'bg-blue-500' },
+              { stage: 'Reviewing', statuses: ['investigating', 'estimate'], color: 'bg-amber-500' },
+              { stage: 'Approved', statuses: ['approved', 'paid'], color: 'bg-green-500' },
+              { stage: 'Denied', statuses: ['denied', 'closed'], color: 'bg-red-500' },
+            ].map((step, i, arr) => {
+              const count = claims.filter(c => step.statuses.includes((c.data as unknown as ClaimData).status)).length;
+              return (
+                <div key={step.stage} className="flex items-center gap-2 flex-1">
+                  <div className="flex-1 text-center">
+                    <div className={`${step.color} rounded-lg py-3 px-2`}>
+                      <p className="text-lg font-bold text-white">{count}</p>
+                      <p className="text-xs text-white/80">{step.stage}</p>
+                    </div>
+                  </div>
+                  {i < arr.length - 1 && <ArrowRight className="w-4 h-4 text-gray-600 shrink-0" />}
+                </div>
+              );
+            })}
+          </div>
+        </motion.div>
+      )}
+
       {/* Tabs */}
       <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 overflow-x-auto">
         {MODE_TABS.map(tab => {

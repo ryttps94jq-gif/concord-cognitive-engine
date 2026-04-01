@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import dynamic from 'next/dynamic';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -174,46 +175,115 @@ export default function OceanLensPage() {
       </div>
 
       {activeMode === 'Dashboard' && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[
-            { label: 'Vessels at Sea', value: stats.atSea, total: stats.totalVessels, color: 'cyan' },
-            { label: 'Active Research', value: stats.activeResearch, total: research.length, color: 'blue' },
-            { label: 'Endangered Species', value: stats.endangeredSpecies, total: marine.length, color: 'red' },
-          ].map(s => (
-            <div key={s.label} className="p-3 bg-zinc-900 rounded-lg border border-zinc-800">
-              <p className={`text-2xl font-bold text-${s.color}-400`}>{s.value}</p>
-              <p className="text-xs text-gray-400">{s.label}</p>
-              <p className="text-xs text-gray-600">of {s.total} total</p>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { label: 'Vessels at Sea', value: stats.atSea, total: stats.totalVessels, color: 'cyan', icon: Ship },
+              { label: 'Active Research', value: stats.activeResearch, total: research.length, color: 'blue', icon: Eye },
+              { label: 'Endangered Species', value: stats.endangeredSpecies, total: marine.length, color: 'red', icon: Fish },
+              { label: 'Specimens Collected', value: research.reduce((s, r) => s + ((r.data as ResearchData).specimens || 0), 0), total: research.length, color: 'purple', icon: Anchor },
+            ].map((s, i) => (
+              <motion.div
+                key={s.label}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.1 }}
+                className="p-3 bg-zinc-900 rounded-lg border border-zinc-800"
+              >
+                <s.icon className={`w-4 h-4 text-${s.color}-400 mb-1`} />
+                <p className={`text-2xl font-bold text-${s.color}-400`}>{s.value}</p>
+                <p className="text-xs text-gray-400">{s.label}</p>
+                <p className="text-xs text-gray-600">of {s.total} total</p>
+              </motion.div>
+            ))}
+          </div>
+
+          {/* Depth Zone Visualization */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="p-4 bg-zinc-900 rounded-lg border border-zinc-800"
+          >
+            <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+              <Waves className="w-4 h-4 text-cyan-400" /> Ocean Depth Zones
+            </h3>
+            <div className="space-y-1">
+              {[
+                { zone: 'Epipelagic (Sunlight)', depth: '0 - 200m', color: 'from-cyan-400/30 to-cyan-500/20', border: 'border-cyan-500/30', species: Math.floor(marine.length * 0.5) || 12 },
+                { zone: 'Mesopelagic (Twilight)', depth: '200 - 1,000m', color: 'from-blue-500/30 to-blue-600/20', border: 'border-blue-500/30', species: Math.floor(marine.length * 0.25) || 8 },
+                { zone: 'Bathypelagic (Midnight)', depth: '1,000 - 4,000m', color: 'from-indigo-600/30 to-indigo-700/20', border: 'border-indigo-500/30', species: Math.floor(marine.length * 0.15) || 4 },
+                { zone: 'Abyssopelagic (Abyss)', depth: '4,000 - 6,000m', color: 'from-slate-700/30 to-slate-800/20', border: 'border-slate-600/30', species: Math.floor(marine.length * 0.07) || 2 },
+                { zone: 'Hadopelagic (Trenches)', depth: '6,000m+', color: 'from-zinc-800/30 to-zinc-900/20', border: 'border-zinc-700/30', species: Math.floor(marine.length * 0.03) || 1 },
+              ].map((zone, i) => (
+                <motion.div
+                  key={zone.zone}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.5 + i * 0.1 }}
+                  className={cn('flex items-center justify-between p-3 rounded-lg bg-gradient-to-r border', zone.color, zone.border)}
+                  style={{ paddingLeft: `${12 + i * 8}px` }}
+                >
+                  <div>
+                    <p className="text-sm font-medium text-white">{zone.zone}</p>
+                    <p className="text-xs text-gray-400">{zone.depth}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Fish className="w-3 h-3 text-gray-400" />
+                    <span className="text-xs text-gray-300">{zone.species} species</span>
+                  </div>
+                </motion.div>
+              ))}
             </div>
-          ))}
+          </motion.div>
         </div>
       )}
 
-      <div className="space-y-2">
-        {items.map(item => (
-          <div key={item.id} className="p-4 bg-zinc-900 rounded-lg border border-zinc-800 hover:border-zinc-700 transition-colors">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <h3 className="text-sm font-semibold text-white">{item.title}</h3>
-                {!!(item.data as Record<string, unknown>).status && (
-                  <span className={cn('text-xs px-2 py-0.5 rounded-full', STATUS_COLORS[String((item.data as Record<string, unknown>).status)] || 'text-gray-400 bg-gray-400/10')}>
-                    {String((item.data as Record<string, unknown>).status)}
-                  </span>
-                )}
+      <AnimatePresence mode="popLayout">
+        <div className="space-y-2">
+          {items.map((item, i) => (
+            <motion.div
+              key={item.id}
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ delay: i * 0.05 }}
+              className="p-4 bg-zinc-900 rounded-lg border border-zinc-800 hover:border-zinc-700 transition-colors"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <h3 className="text-sm font-semibold text-white">{item.title}</h3>
+                  {!!(item.data as Record<string, unknown>).status && (
+                    <span className={cn('text-xs px-2 py-0.5 rounded-full', STATUS_COLORS[String((item.data as Record<string, unknown>).status)] || 'text-gray-400 bg-gray-400/10')}>
+                      {String((item.data as Record<string, unknown>).status)}
+                    </span>
+                  )}
+                  {!!(item.data as Record<string, unknown>).conservationStatus && (
+                    <span className={cn('text-xs px-2 py-0.5 rounded-full', STATUS_COLORS[String((item.data as Record<string, unknown>).conservationStatus)] || 'text-gray-400 bg-gray-400/10')}>
+                      {String((item.data as Record<string, unknown>).conservationStatus)}
+                    </span>
+                  )}
+                </div>
+                <button onClick={() => remove(item.id)} className="p-1.5 hover:bg-zinc-800 rounded text-gray-500 hover:text-red-400">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
               </div>
-              <button onClick={() => remove(item.id)} className="p-1.5 hover:bg-zinc-800 rounded text-gray-500 hover:text-red-400">
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        ))}
-        {items.length === 0 && (
-          <div className="text-center py-12 text-gray-500">
-            <Waves className="w-10 h-10 mx-auto mb-3 opacity-30" />
-            <p>No {currentType.toLowerCase()}s found</p>
-          </div>
-        )}
-      </div>
+              {!!(item.data as Record<string, unknown>).depth && (
+                <p className="text-xs text-cyan-400/70 mt-1 flex items-center gap-1"><Anchor className="w-3 h-3" /> Depth: {String((item.data as Record<string, unknown>).depth)}m</p>
+              )}
+              {!!(item.data as Record<string, unknown>).habitat && (
+                <p className="text-xs text-gray-500 mt-1">{String((item.data as Record<string, unknown>).habitat)}</p>
+              )}
+            </motion.div>
+          ))}
+          {items.length === 0 && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-12 text-gray-500">
+              <Waves className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p>No {currentType.toLowerCase()}s found</p>
+            </motion.div>
+          )}
+        </div>
+      </AnimatePresence>
 
       {activeMode === 'Map' && (
         <div className="p-4 bg-zinc-900 rounded-lg border border-zinc-800">

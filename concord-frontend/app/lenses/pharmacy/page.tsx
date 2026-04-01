@@ -4,7 +4,8 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useState } from 'react';
-import { Pill, AlertTriangle, Search, Plus, Trash2, ClipboardList, Clock, ShieldCheck, Layers, ChevronDown, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Pill, AlertTriangle, Search, Plus, Trash2, ClipboardList, Clock, ShieldCheck, Layers, ChevronDown, X, AlertCircle, Package, Activity } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -107,7 +108,7 @@ export default function PharmacyLensPage() {
         </div>
       </div>
 
-      <header className="flex items-center justify-between">
+      <motion.header initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Pill className="w-8 h-8 text-neon-green" />
           <div>
@@ -118,7 +119,80 @@ export default function PharmacyLensPage() {
             <p className="text-sm text-gray-400">Medication tracking, interaction checks, and refill management</p>
           </div>
         </div>
-      </header>
+      </motion.header>
+
+      {/* Stat Cards Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {(() => {
+          const activeMeds = medications.filter(m => m.status === 'active').length;
+          const needsRefill = medications.filter(m => (m.refillsLeft || 0) <= 1 && m.status === 'active').length;
+          const interactionCount = interactions.length;
+          const totalMeds = medications.length;
+          return [
+            { icon: Pill, label: 'Active Meds', value: activeMeds, color: 'text-green-400', bg: 'bg-green-400/10' },
+            { icon: Package, label: 'Total Tracked', value: totalMeds, color: 'text-blue-400', bg: 'bg-blue-400/10' },
+            { icon: AlertCircle, label: 'Refill Needed', value: needsRefill, color: 'text-red-400', bg: 'bg-red-400/10' },
+            { icon: AlertTriangle, label: 'Interactions', value: interactionCount, color: 'text-amber-400', bg: 'bg-amber-400/10' },
+          ].map((stat, i) => (
+            <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08, duration: 0.35 }}
+              className="panel p-3 flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${stat.bg}`}>
+                <stat.icon className={`w-5 h-5 ${stat.color}`} />
+              </div>
+              <div>
+                <p className="text-xl font-bold text-white">{stat.value}</p>
+                <p className="text-xs text-gray-400">{stat.label}</p>
+              </div>
+            </motion.div>
+          ));
+        })()}
+      </div>
+
+      {/* Prescription Status Badges & Drug Interaction Warning */}
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.35 }} className="flex items-center gap-3 flex-wrap">
+        <span className="text-xs text-gray-500 uppercase tracking-wide">Rx Status:</span>
+        {[
+          { label: 'Ready', count: medications.filter(m => m.status === 'active' && (m.refillsLeft || 0) > 1).length, cls: 'bg-green-500/20 text-green-400 border-green-500/30' },
+          { label: 'Processing', count: medications.filter(m => m.status === 'pending').length, cls: 'bg-amber-500/20 text-amber-400 border-amber-500/30' },
+          { label: 'Refill Needed', count: medications.filter(m => (m.refillsLeft || 0) <= 1 && m.status === 'active').length, cls: 'bg-red-500/20 text-red-400 border-red-500/30' },
+        ].map(s => (
+          <span key={s.label} className={`text-xs px-3 py-1 rounded-full border font-medium ${s.cls}`}>
+            {s.label}: {s.count}
+          </span>
+        ))}
+        {interactions.some(ix => ix.severity === 'critical' || ix.severity === 'major') && (
+          <span className="ml-auto text-xs px-3 py-1 rounded-full border bg-red-500/20 text-red-400 border-red-500/30 flex items-center gap-1 animate-pulse">
+            <AlertCircle className="w-3 h-3" /> Drug Interaction Warning
+          </span>
+        )}
+      </motion.div>
+
+      {/* Inventory Level Indicator */}
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="panel p-3">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs text-gray-400 flex items-center gap-1"><Package className="w-3 h-3" /> Inventory Overview</span>
+        </div>
+        <div className="flex gap-1 h-3 rounded-full overflow-hidden bg-zinc-800">
+          {(() => {
+            const total = Math.max(1, medications.length);
+            const ready = medications.filter(m => m.status === 'active' && (m.refillsLeft || 0) > 1).length;
+            const low = medications.filter(m => (m.refillsLeft || 0) === 1).length;
+            const out = medications.filter(m => (m.refillsLeft || 0) <= 0 || m.status === 'discontinued').length;
+            return (
+              <>
+                <div className="bg-green-500 transition-all" style={{ width: `${(ready / total) * 100}%` }} />
+                <div className="bg-amber-500 transition-all" style={{ width: `${(low / total) * 100}%` }} />
+                <div className="bg-red-500 transition-all" style={{ width: `${(out / total) * 100}%` }} />
+              </>
+            );
+          })()}
+        </div>
+        <div className="flex items-center gap-4 mt-1">
+          <span className="text-[10px] text-green-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500" /> In Stock</span>
+          <span className="text-[10px] text-amber-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" /> Low</span>
+          <span className="text-[10px] text-red-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500" /> Out</span>
+        </div>
+      </motion.div>
 
       <RealtimeDataPanel domain="pharmacy" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <UniversalActions domain="pharmacy" artifactId={undefined} compact />
@@ -161,21 +235,29 @@ export default function PharmacyLensPage() {
             {medications.length === 0 ? (
               <p className="text-gray-500 text-sm text-center py-4">No medications tracked yet.</p>
             ) : (
-              medications.map(med => (
-                <div key={med.id} className="panel p-4 flex items-center justify-between">
+              <AnimatePresence mode="popLayout">
+              {medications.map((med, idx) => (
+                <motion.div key={med.id} layout initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ delay: idx * 0.04, duration: 0.3 }} className="panel p-4 flex items-center justify-between">
                   <div>
                     <div className="flex items-center gap-2">
                       <Pill className="w-4 h-4 text-neon-green" />
                       <span className="font-medium">{med.name || med.title}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded ${med.status === 'active' ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'}`}>
-                        {med.status || 'active'}
+                      <span className={`text-xs px-2 py-0.5 rounded ${med.status === 'active' ? 'bg-green-500/20 text-green-400' : med.status === 'pending' ? 'bg-amber-500/20 text-amber-400' : 'bg-gray-500/20 text-gray-400'}`}>
+                        {med.status === 'active' ? 'Ready' : med.status === 'pending' ? 'Processing' : med.status || 'active'}
                       </span>
+                      {(med.refillsLeft || 0) <= 1 && med.status === 'active' && (
+                        <span className="text-xs px-2 py-0.5 rounded bg-red-500/20 text-red-400 flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3" /> Refill Needed
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-gray-400 mt-1">{med.dosage} - {med.frequency} - {med.route}</p>
                   </div>
                   <button onClick={() => remove(med.id)} className="text-gray-500 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
-                </div>
-              ))
+                </motion.div>
+              ))}
+              </AnimatePresence>
             )}
           </div>
         </div>

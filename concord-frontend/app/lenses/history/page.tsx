@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -8,7 +9,7 @@ import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   Clock, Plus, Search, X, Trash2, Eye, Layers, ChevronDown,
-  Globe, BookOpen, Users, Flag, MapPin, ArrowRight,
+  Globe, BookOpen, Users, Flag, MapPin, ArrowRight, Scroll, Calendar,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -198,30 +199,89 @@ export default function HistoryLensPage() {
         ))}
       </div>
 
+      {/* Quick Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { icon: Flag, label: 'Events', value: events.length, color: 'text-neon-cyan' },
+          { icon: Clock, label: 'Periods', value: periods.length, color: 'text-neon-purple' },
+          { icon: Users, label: 'Figures', value: figures.length, color: 'text-blue-400' },
+          { icon: BookOpen, label: 'Sources', value: sources.length, color: 'text-green-400' },
+        ].map((stat, i) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.08 }}
+            className="lens-card"
+          >
+            <stat.icon className={cn('w-5 h-5 mb-2', stat.color)} />
+            <p className="text-2xl font-bold">{stat.value}</p>
+            <p className="text-sm text-gray-400">{stat.label}</p>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Era Filter Badges */}
+      {activeTab !== 'Dashboard' && activeTab !== 'Timeline' && (() => {
+        const eras = [...new Set(items.map(i => i.data.era).filter(Boolean))];
+        return eras.length > 0 ? (
+          <div className="flex gap-2 flex-wrap">
+            <Scroll className="w-4 h-4 text-gray-500 mt-0.5" />
+            {eras.map(era => (
+              <button
+                key={era}
+                onClick={() => setSearchQuery(searchQuery === era ? '' : era!)}
+                className={cn(
+                  'text-xs px-2.5 py-1 rounded-full border transition-colors',
+                  searchQuery === era
+                    ? 'bg-neon-cyan/20 border-neon-cyan/50 text-neon-cyan'
+                    : 'border-lattice-border text-gray-400 hover:text-white hover:border-gray-500'
+                )}
+              >
+                {era}
+              </button>
+            ))}
+          </div>
+        ) : null;
+      })()}
+
       {/* Dashboard Tab */}
       {activeTab === 'Dashboard' && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="lens-card">
-            <Flag className="w-5 h-5 text-neon-cyan mb-2" />
-            <p className="text-2xl font-bold">{events.length}</p>
-            <p className="text-sm text-gray-400">Events</p>
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="grid grid-cols-1 md:grid-cols-2 gap-4"
+        >
+          <div className="panel p-4">
+            <h3 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-neon-cyan" /> Recent Timeline
+            </h3>
+            <div className="space-y-2">
+              {events.filter(e => e.data.date).sort((a, b) => (b.data.date || '').localeCompare(a.data.date || '')).slice(0, 5).map(e => (
+                <div key={e.id} className="flex items-center gap-2 text-xs">
+                  <span className="font-mono text-neon-cyan w-20 shrink-0">{e.data.date}</span>
+                  <span className="text-gray-300 truncate">{e.title}</span>
+                </div>
+              ))}
+              {events.filter(e => e.data.date).length === 0 && <p className="text-xs text-gray-500">No dated events yet.</p>}
+            </div>
           </div>
-          <div className="lens-card">
-            <Clock className="w-5 h-5 text-neon-purple mb-2" />
-            <p className="text-2xl font-bold">{periods.length}</p>
-            <p className="text-sm text-gray-400">Periods</p>
+          <div className="panel p-4">
+            <h3 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
+              <Globe className="w-4 h-4 text-blue-400" /> By Region
+            </h3>
+            <div className="space-y-2">
+              {Object.entries(
+                events.reduce<Record<string, number>>((acc, e) => { acc[e.data.region] = (acc[e.data.region] || 0) + 1; return acc; }, {})
+              ).sort((a, b) => b[1] - a[1]).map(([region, count]) => (
+                <div key={region} className="flex items-center justify-between text-xs">
+                  <span className={cn(REGION_COLORS[region as Region] || 'text-gray-400', 'capitalize')}>{region.replace(/_/g, ' ')}</span>
+                  <span className="text-gray-400">{count}</span>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="lens-card">
-            <Users className="w-5 h-5 text-blue-400 mb-2" />
-            <p className="text-2xl font-bold">{figures.length}</p>
-            <p className="text-sm text-gray-400">Figures</p>
-          </div>
-          <div className="lens-card">
-            <BookOpen className="w-5 h-5 text-green-400 mb-2" />
-            <p className="text-2xl font-bold">{sources.length}</p>
-            <p className="text-sm text-gray-400">Sources</p>
-          </div>
-        </div>
+        </motion.div>
       )}
 
       {/* Timeline Tab */}
@@ -235,9 +295,12 @@ export default function HistoryLensPage() {
           ) : (
             <div className="relative pl-8 space-y-4">
               <div className="absolute left-3 top-0 bottom-0 w-0.5 bg-lattice-border" />
-              {timelineItems.map(item => (
-                <div
+              {timelineItems.map((item, idx) => (
+                <motion.div
                   key={item.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: idx * 0.05 }}
                   className="relative cursor-pointer"
                   onClick={() => { setSelectedId(item.id); setActiveTab('Events'); }}
                 >
@@ -253,7 +316,7 @@ export default function HistoryLensPage() {
                     <h3 className="text-sm font-medium text-white">{item.title}</h3>
                     <p className="text-xs text-gray-400 mt-1 line-clamp-2">{item.data.description}</p>
                   </div>
-                </div>
+                </motion.div>
               ))}
             </div>
           )}
@@ -367,9 +430,12 @@ export default function HistoryLensPage() {
                   <p className="text-sm">No {currentType.toLowerCase()}s yet. Create one to get started.</p>
                 </div>
               ) : (
-                filtered.map(item => (
-                  <button
+                filtered.map((item, idx) => (
+                  <motion.button
                     key={item.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.04 }}
                     onClick={() => setSelectedId(item.id)}
                     className={cn(
                       'w-full text-left p-4 rounded-lg border transition-colors',
@@ -396,7 +462,7 @@ export default function HistoryLensPage() {
                       </div>
                       <Eye className="w-4 h-4 text-gray-600 flex-shrink-0 mt-1" />
                     </div>
-                  </button>
+                  </motion.button>
                 ))
               )}
             </div>

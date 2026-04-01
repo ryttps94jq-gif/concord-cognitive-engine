@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import dynamic from 'next/dynamic';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -176,48 +177,110 @@ export default function UrbanPlanningLensPage() {
       </div>
 
       {activeMode === 'Dashboard' && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[
-            { label: 'Active Projects', value: stats.activeProjects, total: stats.totalProjects, color: 'emerald' },
-            { label: 'Critical Infrastructure', value: stats.criticalInfra, total: stats.totalInfra, color: 'red' },
-          ].map(s => (
-            <div key={s.label} className="p-3 bg-zinc-900 rounded-lg border border-zinc-800">
-              <p className={`text-2xl font-bold text-${s.color}-400`}>{s.value}</p>
-              <p className="text-xs text-gray-400">{s.label}</p>
-              <p className="text-xs text-gray-600">of {s.total} total</p>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { label: 'Active Projects', value: stats.activeProjects, total: stats.totalProjects, color: 'emerald', icon: Building2 },
+              { label: 'Critical Infrastructure', value: stats.criticalInfra, total: stats.totalInfra, color: 'red', icon: AlertTriangle },
+              { label: 'Total Zones', value: items.length, total: items.length, color: 'blue', icon: Map },
+              { label: 'Pending Permits', value: projects.filter(p => (p.data as ProjectData).status === 'proposed').length, total: stats.totalProjects, color: 'amber', icon: Ruler },
+            ].map((s, i) => (
+              <motion.div
+                key={s.label}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.1 }}
+                className="p-3 bg-zinc-900 rounded-lg border border-zinc-800"
+              >
+                <s.icon className={`w-4 h-4 text-${s.color}-400 mb-1`} />
+                <p className={`text-2xl font-bold text-${s.color}-400`}>{s.value}</p>
+                <p className="text-xs text-gray-400">{s.label}</p>
+                <p className="text-xs text-gray-600">of {s.total} total</p>
+              </motion.div>
+            ))}
+          </div>
+
+          {/* Zoning Map Color Legend */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="p-4 bg-zinc-900 rounded-lg border border-zinc-800"
+          >
+            <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+              <Landmark className="w-4 h-4 text-emerald-400" /> Zoning Classification Legend
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
+              {[
+                { zone: 'R1 - Low Density Residential', color: 'bg-green-500', textColor: 'text-green-400' },
+                { zone: 'R2 - Medium Residential', color: 'bg-green-600', textColor: 'text-green-500' },
+                { zone: 'R3 - High Density Residential', color: 'bg-green-700', textColor: 'text-green-600' },
+                { zone: 'C1 - Neighborhood Commercial', color: 'bg-blue-500', textColor: 'text-blue-400' },
+                { zone: 'C2 - General Commercial', color: 'bg-blue-600', textColor: 'text-blue-500' },
+                { zone: 'M1 - Light Industrial', color: 'bg-orange-500', textColor: 'text-orange-400' },
+                { zone: 'M2 - Heavy Industrial', color: 'bg-orange-600', textColor: 'text-orange-500' },
+                { zone: 'PD - Planned Development', color: 'bg-purple-500', textColor: 'text-purple-400' },
+                { zone: 'OS - Open Space', color: 'bg-emerald-500', textColor: 'text-emerald-400' },
+              ].map(z => (
+                <div key={z.zone} className="flex items-center gap-2">
+                  <div className={cn('w-4 h-4 rounded-sm flex-shrink-0', z.color)} />
+                  <span className={cn('text-xs', z.textColor)}>{z.zone}</span>
+                </div>
+              ))}
             </div>
-          ))}
+          </motion.div>
         </div>
       )}
 
-      <div className="space-y-2">
-        {items.map(item => (
-          <div key={item.id} className="p-4 bg-zinc-900 rounded-lg border border-zinc-800 hover:border-zinc-700 transition-colors">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <h3 className="text-sm font-semibold text-white">{item.title}</h3>
-                {!!(item.data as Record<string, unknown>).status && (
-                  <span className={cn('text-xs px-2 py-0.5 rounded-full', STATUS_COLORS[String((item.data as Record<string, unknown>).status)] || 'text-gray-400 bg-gray-400/10')}>
-                    {String((item.data as Record<string, unknown>).status)}
-                  </span>
-                )}
+      <AnimatePresence mode="popLayout">
+        <div className="space-y-2">
+          {items.map((item, i) => (
+            <motion.div
+              key={item.id}
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ delay: i * 0.05 }}
+              className="p-4 bg-zinc-900 rounded-lg border border-zinc-800 hover:border-zinc-700 transition-colors"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <h3 className="text-sm font-semibold text-white">{item.title}</h3>
+                  {!!(item.data as Record<string, unknown>).status && (
+                    <span className={cn('text-xs px-2 py-0.5 rounded-full', STATUS_COLORS[String((item.data as Record<string, unknown>).status)] || 'text-gray-400 bg-gray-400/10')}>
+                      {String((item.data as Record<string, unknown>).status)}
+                    </span>
+                  )}
+                  {!!(item.data as Record<string, unknown>).type && (
+                    <span className="text-xs px-2 py-0.5 rounded-full text-emerald-400 bg-emerald-400/10">
+                      {String((item.data as Record<string, unknown>).type)}
+                    </span>
+                  )}
+                </div>
+                <button onClick={() => remove(item.id)} className="p-1.5 hover:bg-zinc-800 rounded text-gray-500 hover:text-red-400">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
               </div>
-              <button onClick={() => remove(item.id)} className="p-1.5 hover:bg-zinc-800 rounded text-gray-500 hover:text-red-400">
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
-            {!!(item.data as Record<string, unknown>).description && (
-              <p className="text-xs text-gray-500 mt-2">{String((item.data as Record<string, unknown>).description)}</p>
-            )}
-          </div>
-        ))}
-        {items.length === 0 && (
-          <div className="text-center py-12 text-gray-500">
-            <Building2 className="w-10 h-10 mx-auto mb-3 opacity-30" />
-            <p>No {currentType.toLowerCase()}s found</p>
-          </div>
-        )}
-      </div>
+              {!!(item.data as Record<string, unknown>).description && (
+                <p className="text-xs text-gray-500 mt-2">{String((item.data as Record<string, unknown>).description)}</p>
+              )}
+              {!!(item.data as Record<string, unknown>).district && (
+                <p className="text-xs text-gray-600 mt-1 flex items-center gap-1"><MapPin className="w-3 h-3" />{String((item.data as Record<string, unknown>).district)}</p>
+              )}
+            </motion.div>
+          ))}
+          {items.length === 0 && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-center py-12 text-gray-500"
+            >
+              <Building2 className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p>No {currentType.toLowerCase()}s found</p>
+            </motion.div>
+          )}
+        </div>
+      </AnimatePresence>
 
       {activeMode === 'Map' && (
         <div className="p-4 bg-zinc-900 rounded-lg border border-zinc-800">

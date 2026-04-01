@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useMemo, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
-import { Search, Filter, ArrowRight, BookOpen, Tag, Calendar, Layers, ChevronDown, RefreshCw, Beaker, Download, X, AlertCircle, Zap, Save } from 'lucide-react';
+import { Search, Filter, ArrowRight, BookOpen, Tag, Calendar, Layers, ChevronDown, RefreshCw, Beaker, Download, X, AlertCircle, Zap, Save, FileText, Microscope, CheckCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useLensDTUs } from '@/hooks/useLensDTUs';
@@ -209,6 +210,28 @@ export default function ResearchLensPage() {
       </div>
       </header>
 
+      {/* Quick Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { icon: FileText, label: 'Total DTUs', value: dtus.length, color: 'text-neon-cyan' },
+          { icon: Microscope, label: 'Hyper Tier', value: dtus.filter(d => d.tier === 'hyper').length, color: 'text-pink-400' },
+          { icon: BookOpen, label: 'Domains', value: domains.length, color: 'text-purple-400' },
+          { icon: Tag, label: 'Tagged', value: dtus.filter(d => (d.tags || []).length > 0).length, color: 'text-green-400' },
+        ].map((stat, i) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.08 }}
+            className="lens-card"
+          >
+            <stat.icon className={`w-5 h-5 mb-2 ${stat.color}`} />
+            <p className="text-2xl font-bold">{stat.value}</p>
+            <p className="text-sm text-gray-400">{stat.label}</p>
+          </motion.div>
+        ))}
+      </div>
+
       {/* Hypothesis / Generate Panel */}
       <div className="p-4 bg-lattice-surface border border-lattice-border rounded-xl space-y-3">
         <div className="flex items-center gap-2">
@@ -343,9 +366,12 @@ export default function ResearchLensPage() {
               </p>
             </div>
           ) : (
-            results.map(dtu => (
-              <button
+            results.map((dtu, idx) => (
+              <motion.button
                 key={dtu.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: idx * 0.04 }}
                 onClick={() => setSelectedDtu(dtu)}
                 className={cn(
                   'w-full text-left p-4 rounded-lg border transition-colors',
@@ -360,7 +386,7 @@ export default function ResearchLensPage() {
                       {dtu.title || dtu.summary?.slice(0, 80) || `DTU ${dtu.id.slice(0, 8)}`}
                     </h3>
                     <p className="text-xs text-gray-400 mt-1 line-clamp-2">{getSnippet(dtu)}</p>
-                    <div className="flex items-center gap-2 mt-2">
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
                       {dtu.domain && (
                         <span className="text-xs px-1.5 py-0.5 rounded bg-neon-cyan/10 text-neon-cyan">{dtu.domain}</span>
                       )}
@@ -371,6 +397,18 @@ export default function ResearchLensPage() {
                           'bg-gray-500/20 text-gray-400'
                         )}>{dtu.tier}</span>
                       )}
+                      {/* Citation count badge */}
+                      {dtu.creti && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-400 flex items-center gap-1">
+                          <Microscope className="w-3 h-3" /> {Object.keys(dtu.creti).length} scores
+                        </span>
+                      )}
+                      {/* Peer review status */}
+                      {dtu.tier === 'hyper' && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-green-500/10 text-green-400 flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3" /> Verified
+                        </span>
+                      )}
                       {(dtu.tags || []).slice(0, 3).map(tag => (
                         <span key={tag} className="text-xs text-gray-500">#{tag}</span>
                       ))}
@@ -378,7 +416,7 @@ export default function ResearchLensPage() {
                   </div>
                   <ArrowRight className="w-4 h-4 text-gray-600 flex-shrink-0 mt-1" />
                 </div>
-              </button>
+              </motion.button>
             ))
           )}
         </div>

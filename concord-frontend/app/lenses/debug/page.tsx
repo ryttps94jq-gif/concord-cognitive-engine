@@ -1,10 +1,10 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { api, apiHelpers } from '@/lib/api/client';
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { motion } from 'framer-motion';
 import {
   Terminal, Eye, RefreshCw, Play, Database, Cpu, HardDrive,
   AlertTriangle, CheckCircle, Trash2, Copy,
@@ -192,27 +192,32 @@ export default function DebugLensPage() {
 
       {/* Quick Health Indicators */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <HealthCard
-          label="System"
-          status={status?.ok ? 'ok' : 'error'}
-          detail={status?.version || 'unknown'}
-        />
-        <HealthCard
-          label="Database"
-          status={dbStatus?.ok !== false ? 'ok' : 'error'}
-          detail={dbStatus?.engine || 'checking'}
-        />
-        <HealthCard
-          label="Jobs"
-          status={jobs?.active !== undefined ? 'ok' : 'warn'}
-          detail={`${jobs?.active || 0} active`}
-        />
-        <HealthCard
-          label="Memory"
-          status="ok"
-          detail={perfMetrics?.memory ? `${Math.round((perfMetrics.memory.heapUsed || 0) / 1024 / 1024)}MB` : 'N/A'}
-        />
+        {[
+          { label: 'System', status: (status?.ok ? 'ok' : 'error') as 'ok' | 'warn' | 'error', detail: status?.version || 'unknown' },
+          { label: 'Database', status: (dbStatus?.ok !== false ? 'ok' : 'error') as 'ok' | 'warn' | 'error', detail: dbStatus?.engine || 'checking' },
+          { label: 'Jobs', status: (jobs?.active !== undefined ? 'ok' : 'warn') as 'ok' | 'warn' | 'error', detail: `${jobs?.active || 0} active` },
+          { label: 'Memory', status: 'ok' as const, detail: perfMetrics?.memory ? `${Math.round((perfMetrics.memory.heapUsed || 0) / 1024 / 1024)}MB` : 'N/A' },
+        ].map((card, i) => (
+          <motion.div key={card.label} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }}>
+            <HealthCard label={card.label} status={card.status} detail={card.detail} />
+          </motion.div>
+        ))}
       </div>
+
+      {/* Log Level Badges */}
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.35 }} className="flex items-center gap-2 flex-wrap">
+        <Terminal className="w-3.5 h-3.5 text-gray-500" />
+        {[
+          { level: 'INFO', color: 'bg-neon-blue/15 text-neon-blue border-neon-blue/30', count: logEntries.filter(l => l.level === 'info').length },
+          { level: 'WARN', color: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30', count: logEntries.filter(l => l.level === 'warn').length },
+          { level: 'ERROR', color: 'bg-red-500/15 text-red-400 border-red-500/30', count: logEntries.filter(l => l.level === 'error').length },
+          { level: 'DEBUG', color: 'bg-gray-500/15 text-gray-400 border-gray-500/30', count: logEntries.filter(l => l.level === 'debug').length },
+        ].map(badge => (
+          <span key={badge.level} className={`text-[10px] px-2 py-0.5 rounded-full border ${badge.color} font-mono`}>
+            {badge.level} {badge.count > 0 && <span className="ml-1 opacity-70">{badge.count}</span>}
+          </span>
+        ))}
+      </motion.div>
 
       {/* Tabs */}
       <div className="flex gap-2 overflow-x-auto no-scrollbar">

@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useMemo, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   Wrench, Plus, Search, Trash2, DollarSign, Clock,
-  CheckCircle2, Hammer, Package, Layers, ChevronDown, Zap,
+  CheckCircle2, Hammer, Package, Layers, ChevronDown, Zap, Ruler,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -52,6 +53,7 @@ export default function DIYLensPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [showFeatures, setShowFeatures] = useState(false);
+  const [activeTab, setActiveTab] = useState<'projects' | 'tools' | 'materials'>('projects');
   const [newProject, setNewProject] = useState({ name: '', category: 'Woodworking', difficulty: 'beginner' as 'beginner' | 'intermediate' | 'advanced', estimatedHours: 0, cost: 0 });
 
   const {
@@ -130,12 +132,38 @@ export default function DIYLensPage() {
       )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="lens-card"><Hammer className="w-5 h-5 text-orange-400 mb-2" /><p className="text-2xl font-bold">{stats.total}</p><p className="text-sm text-gray-400">Projects</p></div>
-        <div className="lens-card"><CheckCircle2 className="w-5 h-5 text-neon-green mb-2" /><p className="text-2xl font-bold">{stats.completed}</p><p className="text-sm text-gray-400">Completed</p></div>
-        <div className="lens-card"><Clock className="w-5 h-5 text-neon-cyan mb-2" /><p className="text-2xl font-bold">{stats.totalHours}h</p><p className="text-sm text-gray-400">Hours Spent</p></div>
-        <div className="lens-card"><DollarSign className="w-5 h-5 text-yellow-400 mb-2" /><p className="text-2xl font-bold">${stats.totalCost.toLocaleString()}</p><p className="text-sm text-gray-400">Total Cost</p></div>
+        {[
+          { icon: Hammer, value: stats.total, label: 'Projects', color: 'text-orange-400' },
+          { icon: CheckCircle2, value: stats.completed, label: 'Completed', color: 'text-neon-green' },
+          { icon: Clock, value: `${stats.totalHours}h`, label: 'Hours Spent', color: 'text-neon-cyan' },
+          { icon: DollarSign, value: `$${stats.totalCost.toLocaleString()}`, label: 'Total Cost', color: 'text-yellow-400' },
+        ].map((card, i) => (
+          <motion.div key={card.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} className="lens-card">
+            <card.icon className={cn('w-5 h-5 mb-2', card.color)} />
+            <p className="text-2xl font-bold">{card.value}</p>
+            <p className="text-sm text-gray-400">{card.label}</p>
+          </motion.div>
+        ))}
       </div>
 
+      {/* Tabs */}
+      <div className="flex gap-1 bg-lattice-void border border-lattice-border rounded-lg p-1">
+        {([
+          { key: 'projects' as const, label: 'Projects', icon: Hammer },
+          { key: 'tools' as const, label: 'Tool Inventory', icon: Wrench },
+          { key: 'materials' as const, label: 'Materials', icon: Ruler },
+        ]).map(tab => (
+          <button key={tab.key} onClick={() => setActiveTab(tab.key)}
+            className={cn('flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors flex-1 justify-center',
+              activeTab === tab.key ? 'bg-orange-500/20 text-orange-400' : 'text-gray-500 hover:text-white')}>
+            <tab.icon className="w-4 h-4" /> {tab.label}
+          </button>
+        ))}
+      </div>
+
+      <AnimatePresence mode="wait">
+      {activeTab === 'projects' && (
+        <motion.div key="projects" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
       <div className="flex gap-3">
         <div className="relative flex-1">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
@@ -148,29 +176,106 @@ export default function DIYLensPage() {
         </select>
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-3 mt-3">
         {isLoading ? (
           <div className="panel p-6 text-center text-gray-400">Loading projects...</div>
         ) : projects.length === 0 ? (
           <div className="panel p-6 text-center text-gray-400">No DIY projects yet. Start making!</div>
-        ) : projects.map(p => (
-          <div key={p.id} className="panel p-4 flex items-center justify-between">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 mb-1">
-                <h3 className="font-semibold text-white truncate">{p.name}</h3>
-                <span className={cn('text-xs px-2 py-0.5 rounded', STATUS_COLORS[p.status || 'idea'])}>{p.status}</span>
-                <span className={cn('text-xs', DIFFICULTY_COLORS[p.difficulty || 'beginner'])}>{p.difficulty}</span>
+        ) : projects.map((p, i) => (
+          <motion.div key={p.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }} className="panel p-4">
+            <div className="flex items-center justify-between">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <h3 className="font-semibold text-white truncate">{p.name}</h3>
+                  <span className={cn('text-xs px-2 py-0.5 rounded', STATUS_COLORS[p.status || 'idea'])}>{p.status}</span>
+                  {/* Difficulty Badge */}
+                  <span className={cn('text-xs px-2 py-0.5 rounded-full font-medium',
+                    p.difficulty === 'beginner' ? 'bg-green-500/20 text-green-400' :
+                    p.difficulty === 'intermediate' ? 'bg-amber-500/20 text-amber-400' :
+                    'bg-red-500/20 text-red-400'
+                  )}>
+                    {p.difficulty === 'beginner' ? 'Beginner' : p.difficulty === 'intermediate' ? 'Intermediate' : 'Advanced'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-4 text-sm text-gray-400">
+                  {p.category && <span>{p.category}</span>}
+                  {p.estimatedHours > 0 && <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{p.hoursSpent || 0}/{p.estimatedHours}h</span>}
+                  {p.cost > 0 && <span className="flex items-center gap-1"><DollarSign className="w-3 h-3" />${p.cost}</span>}
+                </div>
+                {/* Progress Bar */}
+                {p.estimatedHours > 0 && (
+                  <div className="mt-2">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-2 bg-lattice-void rounded-full overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${Math.min(100, ((p.hoursSpent || 0) / p.estimatedHours) * 100)}%` }}
+                          transition={{ duration: 0.8, ease: 'easeOut' }}
+                          className={cn('h-full rounded-full',
+                            p.status === 'completed' ? 'bg-neon-green' : 'bg-orange-500'
+                          )}
+                        />
+                      </div>
+                      <span className="text-xs text-gray-500">{Math.min(100, Math.round(((p.hoursSpent || 0) / p.estimatedHours) * 100))}%</span>
+                    </div>
+                  </div>
+                )}
               </div>
-              <div className="flex items-center gap-4 text-sm text-gray-400">
-                {p.category && <span>{p.category}</span>}
-                {p.estimatedHours > 0 && <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{p.hoursSpent || 0}/{p.estimatedHours}h</span>}
-                {p.cost > 0 && <span className="flex items-center gap-1"><DollarSign className="w-3 h-3" />${p.cost}</span>}
-              </div>
+              <button onClick={() => remove(p.id)} className="text-gray-500 hover:text-red-400 p-1 ml-2"><Trash2 className="w-4 h-4" /></button>
             </div>
-            <button onClick={() => remove(p.id)} className="text-gray-500 hover:text-red-400 p-1"><Trash2 className="w-4 h-4" /></button>
-          </div>
+          </motion.div>
         ))}
       </div>
+        </motion.div>
+      )}
+
+      {activeTab === 'tools' && (
+        <motion.div key="tools" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-3">
+          <div className="panel p-4">
+            <h3 className="font-semibold text-white mb-3 flex items-center gap-2"><Wrench className="w-4 h-4 text-orange-400" /> Tool Inventory</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {['Table Saw', 'Drill Press', 'Soldering Iron', 'Sewing Machine', 'Heat Gun', '3D Printer', 'Jigsaw', 'Oscilloscope'].map((tool, i) => (
+                <motion.div key={tool} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
+                  className="flex items-center gap-3 p-2 bg-lattice-void rounded-lg border border-lattice-border">
+                  <Wrench className="w-4 h-4 text-gray-500" />
+                  <span className="text-sm text-gray-300">{tool}</span>
+                  <span className="ml-auto text-xs px-2 py-0.5 rounded bg-green-500/20 text-green-400">Available</span>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {activeTab === 'materials' && (
+        <motion.div key="materials" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-3">
+          <div className="panel p-4">
+            <h3 className="font-semibold text-white mb-3 flex items-center gap-2"><Package className="w-4 h-4 text-orange-400" /> Material Stock</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              {[
+                { name: 'Pine Wood (1x6)', qty: '12 boards', stock: 'good' },
+                { name: 'Acrylic Sheet', qty: '3 sheets', stock: 'good' },
+                { name: 'PLA Filament', qty: '0.5 kg', stock: 'low' },
+                { name: 'Copper Wire (22AWG)', qty: '50m', stock: 'good' },
+                { name: 'Sandpaper (220 grit)', qty: '2 sheets', stock: 'low' },
+                { name: 'Wood Glue', qty: '1 bottle', stock: 'good' },
+              ].map((mat, i) => (
+                <motion.div key={mat.name} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
+                  className="p-3 bg-lattice-void rounded-lg border border-lattice-border">
+                  <p className="text-sm font-medium text-white">{mat.name}</p>
+                  <div className="flex items-center justify-between mt-1">
+                    <span className="text-xs text-gray-400">{mat.qty}</span>
+                    <span className={cn('text-xs px-2 py-0.5 rounded',
+                      mat.stock === 'good' ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-400'
+                    )}>{mat.stock === 'good' ? 'In Stock' : 'Low Stock'}</span>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </motion.div>
+      )}
+      </AnimatePresence>
 
       <RealtimeDataPanel domain="diy" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
 

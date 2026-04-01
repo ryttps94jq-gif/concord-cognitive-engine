@@ -4,6 +4,7 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useState, useMemo } from 'react';
+import { motion } from 'framer-motion';
 import {
   Activity,
   Database,
@@ -123,7 +124,13 @@ function StatCard({
   };
 
   return (
-    <div className="dashboard-card">
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: 'easeOut' }}
+      whileHover={{ scale: 1.03, transition: { duration: 0.15 } }}
+      className="dashboard-card"
+    >
       <div className="flex items-start justify-between">
         <div className={`p-2 rounded-lg border ${colorClasses[color]}`}>
           <Icon className="w-5 h-5" />
@@ -145,7 +152,7 @@ function StatCard({
         <p className="dashboard-label">{label}</p>
         {subValue && <p className="text-xs text-gray-500 mt-1">{subValue}</p>}
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -179,9 +186,11 @@ function ProgressBar({
         </div>
       )}
       <div className="progress-bar">
-        <div
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${percentage}%` }}
+          transition={{ duration: 0.8, ease: 'easeOut' }}
           className={`progress-fill ${colorClass}`}
-          style={{ width: `${percentage}%` }}
         />
       </div>
     </div>
@@ -335,8 +344,47 @@ export default function AdminDashboardPage() {
 
       <RealtimeDataPanel domain="admin" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={realtimeInsights} compact />
 
+      {/* System Health Gauge */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.5 }}
+        className="relative overflow-hidden rounded-xl bg-gradient-to-r from-neon-purple/5 via-neon-blue/5 to-neon-green/5 border border-lattice-border p-4"
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="relative w-16 h-16">
+              <svg viewBox="0 0 36 36" className="w-16 h-16 -rotate-90">
+                <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="3" />
+                <motion.path
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  fill="none"
+                  stroke={systemHealth === 'healthy' ? '#22c55e' : '#eab308'}
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  initial={{ strokeDasharray: '0, 100' }}
+                  animate={{ strokeDasharray: `${systemHealth === 'healthy' ? 92 : 60}, 100` }}
+                  transition={{ duration: 1.2, ease: 'easeOut' }}
+                />
+              </svg>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Activity className={`w-5 h-5 ${systemHealth === 'healthy' ? 'text-green-400' : 'text-yellow-400'}`} />
+              </div>
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-white">System Health</p>
+              <p className="text-xs text-gray-500">All subsystems monitored in real-time</p>
+            </div>
+          </div>
+          <div className="flex gap-4">
+            <StatusBadge status={systemHealth} />
+            <StatusBadge status={organHealth} />
+          </div>
+        </div>
+      </motion.div>
+
       {/* Status Overview */}
-      <div className="flex gap-4">
+      <div className="flex gap-4 sr-only">
         <StatusBadge status={systemHealth} />
         <StatusBadge status={organHealth} />
         {dashboard?.searchIndex.dirty && (
@@ -400,7 +448,11 @@ export default function AdminDashboardPage() {
       {/* Metrics Section */}
       <div className="grid md:grid-cols-2 gap-6">
         {/* Chicken2 Metrics */}
-        <div className="panel p-6">
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.5, delay: 0.2 }}
+          className="panel p-6">
           <h2 className="font-semibold mb-4 flex items-center gap-2">
             <Activity className="w-5 h-5 text-neon-cyan" />
             Reality Guard (Chicken2)
@@ -435,10 +487,14 @@ export default function AdminDashboardPage() {
               </span>
             </div>
           </div>
-        </div>
+        </motion.div>
 
         {/* Growth OS Metrics */}
-        <div className="panel p-6">
+        <motion.div
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.5, delay: 0.3 }}
+          className="panel p-6">
           <h2 className="font-semibold mb-4 flex items-center gap-2">
             <TrendingUp className="w-5 h-5 text-neon-green" />
             Growth OS
@@ -477,12 +533,12 @@ export default function AdminDashboardPage() {
               </div>
             </div>
           </div>
-        </div>
+        </motion.div>
       </div>
 
       {/* System Resources */}
       <div className="grid md:grid-cols-3 gap-6">
-        <div className="panel p-6">
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className="panel p-6">
           <h2 className="font-semibold mb-4 flex items-center gap-2">
             <Cpu className="w-5 h-5 text-neon-blue" />
             Memory
@@ -501,9 +557,9 @@ export default function AdminDashboardPage() {
               <span>{dashboard?.system.memory.rss || '...'}</span>
             </div>
           </div>
-        </div>
+        </motion.div>
 
-        <div className="panel p-6">
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="panel p-6">
           <h2 className="font-semibold mb-4 flex items-center gap-2">
             <HardDrive className="w-5 h-5 text-neon-purple" />
             LLM Status
@@ -534,9 +590,9 @@ export default function AdminDashboardPage() {
               />
             </div>
           </div>
-        </div>
+        </motion.div>
 
-        <div className="panel p-6">
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }} className="panel p-6">
           <h2 className="font-semibold mb-4 flex items-center gap-2">
             <Clock className="w-5 h-5 text-neon-green" />
             Queues
@@ -555,7 +611,7 @@ export default function AdminDashboardPage() {
               <span>{dashboard?.queues.hypotheses || 0}</span>
             </div>
           </div>
-        </div>
+        </motion.div>
       </div>
 
       {/* Recent Logs */}

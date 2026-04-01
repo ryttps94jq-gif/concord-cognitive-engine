@@ -247,34 +247,34 @@ export default function AgentsLensPage() {
         {/* ===== DASHBOARD ===== */}
         {!selectedAgent && (
           <div className="space-y-6">
-            {/* Stats */}
+            {/* Stats — Agent status indicators */}
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-              <div className="lens-card text-center">
-                <Bot className="w-5 h-5 text-neon-blue mx-auto mb-1" />
-                <p className="text-2xl font-bold">{agents.length}</p>
-                <p className="text-xs text-gray-400">Total Agents</p>
-              </div>
-              <div className="lens-card text-center">
-                <Power className="w-5 h-5 text-neon-green mx-auto mb-1" />
-                <p className="text-2xl font-bold">{activeCount}</p>
-                <p className="text-xs text-gray-400">Active</p>
-              </div>
-              <div className="lens-card text-center">
-                <Zap className="w-5 h-5 text-neon-yellow mx-auto mb-1" />
-                <p className="text-2xl font-bold">{totalTicks.toLocaleString()}</p>
-                <p className="text-xs text-gray-400">Total Ticks</p>
-              </div>
-              <div className="lens-card text-center">
-                <TrendingUp className="w-5 h-5 text-neon-cyan mx-auto mb-1" />
-                <p className="text-2xl font-bold">{avgSuccess}%</p>
-                <p className="text-xs text-gray-400">Avg Success</p>
-              </div>
-              <div className="lens-card text-center">
-                <Activity className="w-5 h-5 text-neon-purple mx-auto mb-1" />
-                <p className="text-2xl font-bold">{agents.filter(a => a.status === 'running').length}</p>
-                <p className="text-xs text-gray-400">Running Now</p>
-              </div>
+              {[
+                { icon: Bot, color: 'text-neon-blue', value: agents.length, label: 'Total Agents' },
+                { icon: Power, color: 'text-neon-green', value: activeCount, label: 'Active' },
+                { icon: Zap, color: 'text-neon-yellow', value: totalTicks.toLocaleString(), label: 'Total Ticks' },
+                { icon: TrendingUp, color: 'text-neon-cyan', value: `${avgSuccess}%`, label: 'Avg Success' },
+                { icon: Activity, color: 'text-neon-purple', value: agents.filter(a => a.status === 'running').length, label: 'Running Now' },
+              ].map((stat, i) => (
+                <motion.div key={stat.label} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.07 }} className="lens-card text-center">
+                  <stat.icon className={`w-5 h-5 ${stat.color} mx-auto mb-1`} />
+                  <p className="text-2xl font-bold">{stat.value}</p>
+                  <p className="text-xs text-gray-400">{stat.label}</p>
+                </motion.div>
+              ))}
             </div>
+
+            {/* Agent Capability Badges */}
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="flex flex-wrap gap-1.5">
+              {AGENT_TYPES.map((at) => {
+                const count = agents.filter(a => a.type === at.id).length;
+                return (
+                  <span key={at.id} className={`text-[10px] px-2 py-1 rounded-full border border-white/10 ${at.color} flex items-center gap-1`}>
+                    <at.icon className="w-3 h-3" /> {at.label} {count > 0 && <span className="bg-white/10 px-1 rounded-full">{count}</span>}
+                  </span>
+                );
+              })}
+            </motion.div>
 
             {/* Filters & search */}
             <div className="flex items-center gap-3 flex-wrap">

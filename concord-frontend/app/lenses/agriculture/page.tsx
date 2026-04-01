@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
@@ -32,6 +33,8 @@ import {
   Sprout,
   ChevronDown,
   Map,
+  Sun,
+  CloudRain,
 } from 'lucide-react';
 
 const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });
@@ -722,6 +725,76 @@ export default function AgricultureLensPage() {
 
       {/* AI Actions */}
       <UniversalActions domain="agriculture" artifactId={items[0]?.id} compact />
+
+      {/* Stat Cards Row */}
+      {(() => {
+        const all = items.map(i => i.data as unknown as AgricultureArtifact);
+        const totalAcres = all.reduce((s, a) => s + (a.acreage || 0), 0);
+        const totalHead = all.reduce((s, a) => s + (a.headCount || 0), 0);
+        const totalYield = all.reduce((s, a) => s + (a.quantity || 0), 0);
+        const cropCount = all.filter(a => a.type === 'Crop').length;
+        return (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              { icon: Sprout, label: 'Total Acreage', value: `${totalAcres.toLocaleString()} ac`, color: 'text-green-400' },
+              { icon: Wheat, label: 'Active Crops', value: cropCount, color: 'text-amber-400' },
+              { icon: Beef, label: 'Livestock Head', value: totalHead.toLocaleString(), color: 'text-orange-400' },
+              { icon: Scale, label: 'Harvest Yield', value: totalYield.toLocaleString(), color: 'text-cyan-400' },
+            ].map((stat, i) => (
+              <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }} className={ds.panel}>
+                <stat.icon className={`w-5 h-5 ${stat.color} mb-2`} />
+                <p className={ds.textMuted}>{stat.label}</p>
+                <p className="text-xl font-bold text-white">{stat.value}</p>
+              </motion.div>
+            ))}
+          </div>
+        );
+      })()}
+
+      {/* Crop Health Status Badges */}
+      {(() => {
+        const crops = items.filter(i => (i.data as unknown as AgricultureArtifact).type === 'Crop').map(i => ({ id: i.id, title: i.title, ...(i.data as unknown as AgricultureArtifact) }));
+        if (crops.length === 0) return null;
+        const healthMap = { low: 'thriving', medium: 'stressed', high: 'critical' } as Record<string, string>;
+        const thriving = crops.filter(c => !c.pestPressure || c.pestPressure === 'low').length;
+        const stressed = crops.filter(c => c.pestPressure === 'medium').length;
+        const critical = crops.filter(c => c.pestPressure === 'high').length;
+        return (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className={ds.panel}>
+            <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2"><Sun className="w-4 h-4 text-amber-400" /> Crop Health Overview</h3>
+            <div className="flex gap-3">
+              <span className="px-3 py-1.5 rounded-lg text-sm font-medium bg-green-500/20 text-green-400">Thriving: {thriving}</span>
+              <span className="px-3 py-1.5 rounded-lg text-sm font-medium bg-amber-500/20 text-amber-400">Stressed: {stressed}</span>
+              <span className="px-3 py-1.5 rounded-lg text-sm font-medium bg-red-500/20 text-red-400">Critical: {critical}</span>
+            </div>
+            {/* Harvest Yield Tracker */}
+            {(() => {
+              const harvests = items.filter(i => (i.data as unknown as AgricultureArtifact).type === 'Harvest').map(i => i.data as unknown as AgricultureArtifact);
+              const totalQty = harvests.reduce((s, h) => s + (h.quantity || 0), 0);
+              const totalEstimated = crops.reduce((s, c) => s + (c.estimatedYield || 0), 0);
+              if (totalEstimated === 0) return null;
+              const pct = Math.min((totalQty / totalEstimated) * 100, 100);
+              return (
+                <div className="mt-3">
+                  <div className="flex justify-between text-xs text-gray-400 mb-1">
+                    <span>Harvest Progress</span>
+                    <span>{pct.toFixed(0)}%</span>
+                  </div>
+                  <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                    <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 1, ease: 'easeOut' }} className="h-full bg-gradient-to-r from-green-500 to-amber-400 rounded-full" />
+                  </div>
+                </div>
+              );
+            })()}
+            {/* Weather Impact Indicator */}
+            <div className="mt-3 flex items-center gap-2 text-xs text-gray-400">
+              <CloudRain className="w-3.5 h-3.5 text-blue-400" />
+              <span>Weather impact: {critical > 0 ? <span className="text-red-400 font-medium">High stress detected</span> : stressed > 0 ? <span className="text-amber-400 font-medium">Moderate</span> : <span className="text-green-400 font-medium">Favorable conditions</span>}</span>
+            </div>
+          </motion.div>
+        );
+      })()}
+
       <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 overflow-x-auto">
         {MODE_TABS.map(tab => (
           <button

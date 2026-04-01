@@ -3,8 +3,9 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
-import { useState } from 'react';
-import { Zap, Sun, Wind, Droplets, Flame, Plus, Trash2, Search, Layers, ChevronDown, TrendingUp, BarChart3, Battery } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Zap, Sun, Wind, Droplets, Flame, Plus, Trash2, Search, Layers, ChevronDown, TrendingUp, BarChart3, Battery, Gauge, AlertTriangle } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -61,6 +62,11 @@ export default function EnergyLensPage() {
   const totalCapacity = assets.reduce((sum, a) => sum + (a.capacity || 0), 0);
   const totalOutput = assets.reduce((sum, a) => sum + (a.output || 0), 0);
   const totalCO2 = assets.reduce((sum, a) => sum + (a.co2Avoided || 0), 0);
+  const avgEfficiency = assets.length > 0 ? assets.reduce((sum, a) => sum + (a.efficiency || 0), 0) / assets.length : 0;
+  const onlineCount = assets.filter(a => a.status === 'online').length;
+  const renewableCount = assets.filter(a => ['solar', 'wind', 'hydro', 'geothermal', 'biomass'].includes(a.source)).length;
+  const renewablePct = assets.length > 0 ? (renewableCount / assets.length * 100) : 0;
+  const peakAsset = assets.reduce<(EnergyAsset & { id: string; title: string }) | null>((best, a) => (!best || (a.output || 0) > (best.output || 0)) ? a : best, null);
 
   const [newAsset, setNewAsset] = useState({ name: '', source: 'solar' as EnergySource, capacity: '' });
 
@@ -120,24 +126,87 @@ export default function EnergyLensPage() {
       <UniversalActions domain="energy" artifactId={undefined} compact />
       <DTUExportButton domain="energy" data={{}} compact />
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="panel p-4 text-center">
-          <Battery className="w-6 h-6 mx-auto text-yellow-500 mb-2" />
-          <p className="text-2xl font-bold">{totalCapacity.toFixed(1)} MW</p>
-          <p className="text-xs text-gray-400">Total Capacity</p>
-        </div>
-        <div className="panel p-4 text-center">
-          <TrendingUp className="w-6 h-6 mx-auto text-neon-cyan mb-2" />
-          <p className="text-2xl font-bold">{totalOutput.toFixed(0)} MWh</p>
-          <p className="text-xs text-gray-400">Total Output</p>
-        </div>
-        <div className="panel p-4 text-center">
-          <Wind className="w-6 h-6 mx-auto text-green-400 mb-2" />
-          <p className="text-2xl font-bold">{totalCO2.toFixed(0)} t</p>
-          <p className="text-xs text-gray-400">CO2 Avoided</p>
-        </div>
+      {/* Stat Cards Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { icon: Battery, label: 'Total Capacity', value: `${totalCapacity.toFixed(1)} MW`, color: 'text-yellow-500' },
+          { icon: TrendingUp, label: 'Total Output', value: `${totalOutput.toFixed(0)} MWh`, color: 'text-neon-cyan' },
+          { icon: Wind, label: 'CO2 Avoided', value: `${totalCO2.toFixed(0)} t`, color: 'text-green-400' },
+          { icon: Gauge, label: 'Renewable Mix', value: `${renewablePct.toFixed(0)}%`, color: 'text-emerald-400' },
+        ].map((stat, i) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.08 }}
+            className="panel p-4 text-center"
+          >
+            <stat.icon className={`w-6 h-6 mx-auto ${stat.color} mb-2`} />
+            <p className="text-2xl font-bold">{stat.value}</p>
+            <p className="text-xs text-gray-400">{stat.label}</p>
+          </motion.div>
+        ))}
       </div>
+
+      {/* Energy Source Distribution Bar */}
+      {assets.length > 0 && (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="panel p-4">
+          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2"><Zap className="w-4 h-4 text-yellow-500" /> Source Distribution</h3>
+          <div className="h-6 rounded-full overflow-hidden flex">
+            {(Object.keys(SOURCE_CONFIG) as EnergySource[]).map(source => {
+              const sourceCap = assets.filter(a => a.source === source).reduce((s, a) => s + (a.capacity || 0), 0);
+              const pct = totalCapacity > 0 ? (sourceCap / totalCapacity * 100) : 0;
+              if (pct === 0) return null;
+              const bgColors: Record<string, string> = { solar: 'bg-yellow-400', wind: 'bg-cyan-400', hydro: 'bg-blue-400', nuclear: 'bg-purple-400', 'natural-gas': 'bg-orange-400', coal: 'bg-gray-400', geothermal: 'bg-red-400', biomass: 'bg-green-400' };
+              return <div key={source} className={`${bgColors[source] || 'bg-gray-500'} h-full transition-all relative group`} style={{ width: `${pct}%` }} title={`${source}: ${pct.toFixed(1)}%`}>
+                <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-black/70 opacity-0 group-hover:opacity-100 transition-opacity">{pct.toFixed(0)}%</span>
+              </div>;
+            })}
+          </div>
+          <div className="flex flex-wrap gap-3 mt-2">
+            {(Object.keys(SOURCE_CONFIG) as EnergySource[]).map(source => {
+              const count = assets.filter(a => a.source === source).length;
+              if (count === 0) return null;
+              const cfg = SOURCE_CONFIG[source];
+              const Icon = cfg.icon;
+              return <span key={source} className="flex items-center gap-1 text-xs text-gray-400"><Icon className={`w-3 h-3 ${cfg.color}`} />{source.replace('-', ' ')}</span>;
+            })}
+          </div>
+        </motion.div>
+      )}
+
+      {/* Consumption vs Production Gauge */}
+      {assets.length > 0 && (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="panel p-4">
+          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2"><BarChart3 className="w-4 h-4 text-neon-cyan" /> Production Efficiency</h3>
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <div className="flex justify-between text-xs text-gray-400 mb-1">
+                <span>Output vs Capacity</span>
+                <span>{totalCapacity > 0 ? (totalOutput / totalCapacity * 100).toFixed(1) : 0}%</span>
+              </div>
+              <div className="h-3 bg-white/5 rounded-full overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${totalCapacity > 0 ? Math.min(totalOutput / totalCapacity * 100, 100) : 0}%` }}
+                  transition={{ duration: 1, ease: 'easeOut' }}
+                  className="h-full bg-gradient-to-r from-yellow-500 to-green-400 rounded-full"
+                />
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-gray-400">Online</p>
+              <p className="text-sm font-bold text-green-400">{onlineCount}/{assets.length}</p>
+            </div>
+          </div>
+          {peakAsset && (
+            <div className="mt-3 flex items-center gap-2 text-xs text-gray-400">
+              <AlertTriangle className="w-3 h-3 text-yellow-400" />
+              <span>Peak producer: <span className="text-white font-medium">{peakAsset.name || peakAsset.title}</span> ({peakAsset.output || 0} MWh)</span>
+            </div>
+          )}
+        </motion.div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-2 border-b border-white/10 pb-2">
@@ -170,11 +239,11 @@ export default function EnergyLensPage() {
             {assets.length === 0 ? (
               <p className="text-gray-500 text-sm text-center py-4">No energy assets tracked yet.</p>
             ) : (
-              assets.map(asset => {
+              assets.map((asset, idx) => {
                 const cfg = SOURCE_CONFIG[asset.source as EnergySource] || { icon: Zap, color: 'text-gray-400' };
                 const Icon = cfg.icon;
                 return (
-                  <div key={asset.id} className="panel p-4 flex items-center justify-between">
+                  <motion.div key={asset.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.05 }} className="panel p-4 flex items-center justify-between">
                     <div>
                       <div className="flex items-center gap-2">
                         <Icon className={`w-4 h-4 ${cfg.color}`} />
@@ -190,7 +259,7 @@ export default function EnergyLensPage() {
                       </div>
                     </div>
                     <button onClick={() => remove(asset.id)} className="text-gray-500 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
-                  </div>
+                  </motion.div>
                 );
               })
             )}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -10,7 +11,7 @@ import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   Languages, Plus, Search, X, Trash2, Eye, Layers, ChevronDown,
   BookOpen, Hash, Type, Globe,
-  FileText, Sparkles,
+  FileText, Sparkles, BookA, GraduationCap,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -266,9 +267,86 @@ export default function LinguisticsLensPage() {
         ))}
       </div>
 
+      {/* Quick Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { icon: FileText, label: 'Analyses', value: analyses.length, color: 'text-pink-400' },
+          { icon: BookA, label: 'Lexicon', value: lexicon.length, color: 'text-purple-400' },
+          { icon: Type, label: 'Grammars', value: grammars.length, color: 'text-blue-400' },
+          { icon: Globe, label: 'Translations', value: translations.length, color: 'text-neon-cyan' },
+        ].map((stat, i) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.08 }}
+            className="lens-card"
+          >
+            <stat.icon className={cn('w-5 h-5 mb-2', stat.color)} />
+            <p className="text-2xl font-bold">{stat.value}</p>
+            <p className="text-sm text-gray-400">{stat.label}</p>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Language Family Tree & Proficiency Badges */}
+      {(() => {
+        const langs = [...new Set(items.map(i => i.data.language).filter(Boolean))];
+        const subfieldCounts = items.reduce<Record<string, number>>((acc, i) => {
+          acc[i.data.subfield] = (acc[i.data.subfield] || 0) + 1;
+          return acc;
+        }, {});
+        return langs.length > 0 || Object.keys(subfieldCounts).length > 0 ? (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {langs.length > 0 && (
+              <div className="panel p-4 space-y-3">
+                <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+                  <Languages className="w-4 h-4 text-pink-400" /> Languages Studied
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {langs.map(lang => {
+                    const count = items.filter(i => i.data.language === lang).length;
+                    return (
+                      <motion.span
+                        key={lang}
+                        initial={{ scale: 0.8, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-pink-400/10 border border-pink-400/20 text-xs text-pink-300"
+                      >
+                        <Globe className="w-3 h-3" />
+                        {lang}
+                        <span className="text-pink-500 font-mono">{count}</span>
+                      </motion.span>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            {Object.keys(subfieldCounts).length > 0 && (
+              <div className="panel p-4 space-y-3">
+                <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+                  <GraduationCap className="w-4 h-4 text-purple-400" /> Proficiency by Subfield
+                </h3>
+                <div className="space-y-2">
+                  {Object.entries(subfieldCounts).sort((a, b) => b[1] - a[1]).map(([subfield, count]) => (
+                    <div key={subfield} className="flex items-center gap-2">
+                      <span className={cn('text-xs w-24 capitalize', SUBFIELD_COLORS[subfield as LingSubfield] || 'text-gray-400')}>{subfield}</span>
+                      <div className="flex-1 h-2 bg-lattice-deep rounded-full overflow-hidden">
+                        <div className="h-full bg-pink-400/60 rounded-full" style={{ width: `${Math.min(100, count * 20)}%` }} />
+                      </div>
+                      <span className="text-xs text-gray-500 w-8 text-right">{count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </motion.div>
+        ) : null;
+      })()}
+
       {/* Dashboard Tab */}
       {activeTab === 'Dashboard' && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div className="lens-card">
             <FileText className="w-5 h-5 text-pink-400 mb-2" />
             <p className="text-2xl font-bold">{analyses.length}</p>
@@ -294,7 +372,7 @@ export default function LinguisticsLensPage() {
             <p className="text-2xl font-bold">{translations.length}</p>
             <p className="text-sm text-gray-400">Translations</p>
           </div>
-        </div>
+        </motion.div>
       )}
 
       {activeTab !== 'Dashboard' && (
@@ -408,9 +486,12 @@ export default function LinguisticsLensPage() {
                   <p className="text-sm">No {currentType.toLowerCase()}s yet. Create one to get started.</p>
                 </div>
               ) : (
-                filtered.map(item => (
-                  <button
+                filtered.map((item, idx) => (
+                  <motion.button
                     key={item.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.04 }}
                     onClick={() => setSelectedId(item.id)}
                     className={cn(
                       'w-full text-left p-4 rounded-lg border transition-colors',
@@ -434,7 +515,7 @@ export default function LinguisticsLensPage() {
                       </div>
                       <Eye className="w-4 h-4 text-gray-600 flex-shrink-0 mt-1" />
                     </div>
-                  </button>
+                  </motion.button>
                 ))
               )}
             </div>

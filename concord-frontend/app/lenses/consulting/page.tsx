@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -11,7 +12,7 @@ import {
   Lightbulb, Briefcase, FileText, Users, Clock, DollarSign,
   Plus, Search, X, Trash2, BarChart3, CheckCircle2,
   Target, TrendingUp, Calendar, PieChart, ArrowRight,
-  Layers, ChevronDown, Presentation, BookOpen,
+  Layers, ChevronDown, Presentation, BookOpen, Star,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -159,11 +160,11 @@ export default function ConsultingLensPage() {
       {isLoading ? <div className="flex items-center justify-center py-12"><div className="w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" /></div>
       : filtered.length === 0 ? (
         <div className={cn(ds.panel, 'text-center py-12')}><Lightbulb className="w-12 h-12 text-gray-600 mx-auto mb-3" /><p className={ds.textMuted}>No {activeArtifactType} items yet</p><button onClick={openCreate} className={cn(ds.btnPrimary, 'mt-3')}><Plus className="w-4 h-4" /> Create First</button></div>
-      ) : filtered.map(item => {
+      ) : filtered.map((item, idx) => {
         const d = item.data as unknown as ConsultingArtifact;
         const sc = STATUS_CONFIG[d.status] || STATUS_CONFIG.draft;
         return (
-          <div key={item.id} className={ds.panelHover} onClick={() => openEdit(item)}>
+          <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.05 }} className={ds.panelHover} onClick={() => openEdit(item)}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3"><Briefcase className="w-5 h-5 text-neon-cyan" /><div><p className="text-white font-medium">{d.name || item.title}</p><p className={ds.textMuted}>{d.client} {d.engagementType ? `- ${d.engagementType}` : ''}</p></div></div>
               <div className="flex items-center gap-2">
@@ -172,7 +173,7 @@ export default function ConsultingLensPage() {
                 <button onClick={e => { e.stopPropagation(); remove(item.id); }} className={ds.btnGhost}><Trash2 className="w-4 h-4 text-red-400" /></button>
               </div>
             </div>
-          </div>
+          </motion.div>
         );
       })}
     </div>
@@ -189,6 +190,57 @@ export default function ConsultingLensPage() {
       </header>
       <RealtimeDataPanel domain="consulting" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <UniversalActions domain="consulting" artifactId={items[0]?.id} compact />
+
+      {/* Stat Cards Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {(() => {
+          const all = items.map(i => i.data as unknown as ConsultingArtifact);
+          const totalRevenue = all.reduce((s, e) => s + (e.totalFee || 0), 0);
+          const totalHours = all.reduce((s, e) => s + (e.billedHours || 0), 0);
+          const activeCount = all.filter(e => e.status === 'active').length;
+          const avgRate = all.filter(e => e.hourlyRate).length > 0 ? all.reduce((s, e) => s + (e.hourlyRate || 0), 0) / all.filter(e => e.hourlyRate).length : 0;
+          const utilRate = all.length > 0 ? (activeCount / all.length * 100) : 0;
+          return [
+            { icon: DollarSign, label: 'Total Revenue', value: `$${totalRevenue.toLocaleString()}`, color: 'text-green-400' },
+            { icon: Clock, label: 'Billed Hours', value: totalHours.toLocaleString(), color: 'text-blue-400' },
+            { icon: Briefcase, label: 'Active Engagements', value: activeCount, color: 'text-purple-400' },
+            { icon: Star, label: 'Utilization Rate', value: `${utilRate.toFixed(0)}%`, color: 'text-amber-400' },
+          ].map((stat, i) => (
+            <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }} className={ds.panel}>
+              <stat.icon className={`w-5 h-5 ${stat.color} mb-2`} />
+              <p className={ds.textMuted}>{stat.label}</p>
+              <p className="text-xl font-bold text-white">{stat.value}</p>
+            </motion.div>
+          ));
+        })()}
+      </div>
+
+      {/* Engagement Status Pipeline */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className={ds.panel}>
+        <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2"><ArrowRight className="w-4 h-4 text-amber-400" /> Engagement Pipeline</h3>
+        <div className="flex items-center gap-2">
+          {[
+            { stage: 'Proposal', statuses: ['draft', 'pending'], color: 'bg-gray-500' },
+            { stage: 'Active', statuses: ['active'], color: 'bg-green-500' },
+            { stage: 'Review', statuses: ['on_hold'], color: 'bg-amber-500' },
+            { stage: 'Closed', statuses: ['completed', 'cancelled'], color: 'bg-blue-500' },
+          ].map((step, i, arr) => {
+            const count = items.filter(it => step.statuses.includes((it.data as unknown as ConsultingArtifact).status)).length;
+            return (
+              <div key={step.stage} className="flex items-center gap-2 flex-1">
+                <div className="flex-1 text-center">
+                  <div className={`${step.color} rounded-lg py-3 px-2`}>
+                    <p className="text-lg font-bold text-white">{count}</p>
+                    <p className="text-xs text-white/80">{step.stage}</p>
+                  </div>
+                </div>
+                {i < arr.length - 1 && <ArrowRight className="w-4 h-4 text-gray-600 shrink-0" />}
+              </div>
+            );
+          })}
+        </div>
+      </motion.div>
+
       <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 overflow-x-auto">
         {MODE_TABS.map(tab => (<button key={tab.id} onClick={() => { setActiveTab(tab.id); setShowDashboard(false); }} className={cn('flex items-center gap-2 px-4 py-2 rounded-lg transition-colors whitespace-nowrap', activeTab === tab.id && !showDashboard ? 'bg-neon-blue/20 text-neon-blue' : 'text-gray-400 hover:text-white hover:bg-lattice-elevated')}><tab.icon className="w-4 h-4" />{tab.label}</button>))}
       </nav>

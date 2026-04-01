@@ -5,6 +5,7 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useState } from 'react';
+import { motion } from 'framer-motion';
 import { Mountain, MapPin, Plus, Trash2, Search, Layers, ChevronDown, Droplets, Gem, Map } from 'lucide-react';
 
 const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });
@@ -118,6 +119,43 @@ export default function GeologyLensPage() {
       <RealtimeDataPanel domain="geology" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <UniversalActions domain="geology" artifactId={undefined} compact />
       <DTUExportButton domain="geology" data={{}} compact />
+
+      {/* Stat Cards — earth science metrics */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: 'Samples', value: samples.length, icon: Gem, color: 'text-purple-400' },
+          { label: 'Field Sites', value: sites.length, icon: MapPin, color: 'text-orange-400' },
+          { label: 'Igneous', value: samples.filter(s => s.rockType === 'igneous').length, icon: Mountain, color: 'text-red-400' },
+          { label: 'Sedimentary', value: samples.filter(s => s.rockType === 'sedimentary').length, icon: Layers, color: 'text-yellow-400' },
+        ].map((stat, i) => (
+          <motion.div key={stat.label} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }} className="panel p-3">
+            <stat.icon className={`w-4 h-4 mb-1 ${stat.color}`} />
+            <div className="text-xl font-bold">{stat.value}</div>
+            <div className="text-[10px] text-gray-500 uppercase">{stat.label}</div>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Rock Type Distribution Bar */}
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.35 }} className="flex items-center gap-2">
+        <span className="text-[10px] text-gray-500 shrink-0">Rock Types</span>
+        <div className="flex-1 h-3 rounded-full overflow-hidden flex bg-white/5">
+          {samples.length > 0 ? (
+            <>
+              <div className="bg-red-500/60 h-full" style={{ width: `${(samples.filter(s => s.rockType === 'igneous').length / samples.length) * 100}%` }} title="Igneous" />
+              <div className="bg-yellow-500/60 h-full" style={{ width: `${(samples.filter(s => s.rockType === 'sedimentary').length / samples.length) * 100}%` }} title="Sedimentary" />
+              <div className="bg-purple-500/60 h-full" style={{ width: `${(samples.filter(s => s.rockType === 'metamorphic').length / samples.length) * 100}%` }} title="Metamorphic" />
+            </>
+          ) : (
+            <div className="bg-white/10 h-full w-full" />
+          )}
+        </div>
+        <div className="flex items-center gap-2 text-[10px] text-gray-500 shrink-0">
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500/60" />Ign</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-yellow-500/60" />Sed</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-purple-500/60" />Met</span>
+        </div>
+      </motion.div>
 
       {/* Tabs */}
       <div className="flex gap-2 border-b border-white/10 pb-2">

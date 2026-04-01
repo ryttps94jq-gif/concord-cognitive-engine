@@ -6,12 +6,13 @@ import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { ds } from '@/lib/design-system';
 import { cn } from '@/lib/utils';
+import { motion } from 'framer-motion';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   Hammer, Wrench, ClipboardList, DollarSign, Camera, Users,
   Plus, Search, X, Trash2, BarChart3, CheckCircle2,
   AlertTriangle, FileText, Shield, Award, Calculator,
-  Layers, ChevronDown, Receipt,
+  Layers, ChevronDown, Receipt, TreePine, Ruler, HardHat,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -181,15 +182,79 @@ export default function CarpentryLensPage() {
     </div>
   );
 
+  // Carpentry stat calculations
+  const carpentryStats = useMemo(() => {
+    const all = items.map(i => i.data as unknown as TradeArtifact);
+    const activeJobs = all.filter(j => j.status === 'in_progress' || j.status === 'scheduled').length;
+    const totalRevenue = all.reduce((s, j) => s + (j.totalCost || j.amount || 0), 0);
+    const completedCount = all.filter(j => j.status === 'completed' || j.status === 'paid').length;
+    return { activeJobs, totalRevenue, completedCount, total: all.length };
+  }, [items]);
+
   return (
     <div data-lens-theme="carpentry" className="space-y-6 p-6">
-      <header className="flex items-center justify-between">
+      <motion.header
+        initial={{ opacity: 0, y: -12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+        className="flex items-center justify-between"
+      >
         <div className="flex items-center gap-4">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-600 to-yellow-700 flex items-center justify-center"><Hammer className="w-5 h-5 text-white" /></div>
           <div><div className="flex items-center gap-2"><h1 className={ds.heading1}>Carpentry</h1><LiveIndicator isLive={isLive} lastUpdated={lastUpdated} /></div><p className={ds.textMuted}>Jobs, estimates, codes, materials, CRM, invoicing, inspections, and certifications</p></div>
         </div>
         <div className="flex items-center gap-2"><DTUExportButton domain="carpentry" data={{}} compact /><button onClick={() => setShowDashboard(!showDashboard)} className={cn(showDashboard ? ds.btnPrimary : ds.btnSecondary)}><BarChart3 className="w-4 h-4" /> Dashboard</button></div>
-      </header>
+      </motion.header>
+
+      {/* Stat Cards — wood-themed project metrics */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: 'Active Jobs', value: carpentryStats.activeJobs, icon: <HardHat className="w-5 h-5 text-amber-400" />, color: 'text-amber-400' },
+          { label: 'Revenue', value: `$${carpentryStats.totalRevenue.toLocaleString()}`, icon: <DollarSign className="w-5 h-5 text-green-400" />, color: 'text-green-400' },
+          { label: 'Completed', value: carpentryStats.completedCount, icon: <CheckCircle2 className="w-5 h-5 text-emerald-400" />, color: 'text-emerald-400' },
+          { label: 'Total Items', value: carpentryStats.total, icon: <TreePine className="w-5 h-5 text-yellow-600" />, color: 'text-yellow-600' },
+        ].map((stat, i) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, scale: 0.92 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: i * 0.08, duration: 0.3 }}
+            className={cn(ds.panel, 'relative overflow-hidden')}
+          >
+            {/* Wood grain texture hint */}
+            <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'repeating-linear-gradient(90deg, transparent, transparent 8px, rgba(217,169,99,0.4) 8px, rgba(217,169,99,0.4) 9px)' }} />
+            <div className="relative">
+              <div className="mb-2">{stat.icon}</div>
+              <p className={`text-2xl font-bold ${stat.color}`}>{stat.value}</p>
+              <p className={ds.textMuted}>{stat.label}</p>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Unique: Tool rack / difficulty gauge */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.35 }}
+        className="flex items-center gap-4 p-3 bg-amber-900/10 rounded-lg border border-amber-700/20"
+      >
+        <Ruler className="w-4 h-4 text-amber-500" />
+        <div className="flex items-center gap-2 text-xs text-amber-400/80">
+          <span>Skill Level:</span>
+          {['Apprentice', 'Journeyman', 'Master'].map((level, i) => (
+            <span key={level} className={cn(
+              'px-2 py-0.5 rounded-full border',
+              i <= 1 ? 'bg-amber-500/20 border-amber-500/30 text-amber-400' : 'border-amber-800/30 text-amber-700'
+            )}>{level}</span>
+          ))}
+        </div>
+        <div className="ml-auto flex items-center gap-1 text-xs text-amber-500/60">
+          <Wrench className="w-3 h-3" />
+          <span>{items.length} tools tracked</span>
+        </div>
+      </motion.div>
+
       <RealtimeDataPanel domain="carpentry" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <UniversalActions domain="carpentry" artifactId={items[0]?.id} compact />
       <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 overflow-x-auto">{MODE_TABS.map(tab => (<button key={tab.id} onClick={() => { setActiveTab(tab.id); setShowDashboard(false); }} className={cn('flex items-center gap-2 px-4 py-2 rounded-lg transition-colors whitespace-nowrap', activeTab === tab.id && !showDashboard ? 'bg-neon-blue/20 text-neon-blue' : 'text-gray-400 hover:text-white hover:bg-lattice-elevated')}><tab.icon className="w-4 h-4" />{tab.label}</button>))}</nav>

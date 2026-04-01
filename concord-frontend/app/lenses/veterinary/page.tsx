@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -12,7 +13,7 @@ import {
   Heart, Plus, Search, Trash2, BarChart3,
   Layers, ChevronDown, Users, Calendar,
   Stethoscope, Syringe, Pill, ClipboardList,
-  Eye, AlertTriangle, FileText, Clock,
+  Eye, AlertTriangle, FileText, Clock, Activity,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -136,7 +137,7 @@ export default function VeterinaryLensPage() {
 
   return (
     <div data-lens-theme="veterinary" className={cn(ds.pageContainer, 'space-y-4')}>
-      <header className="flex items-center justify-between">
+      <motion.header initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-pink-500/20 flex items-center justify-center">
             <Heart className="w-5 h-5 text-pink-400" />
@@ -150,7 +151,67 @@ export default function VeterinaryLensPage() {
           <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} compact />
           <DTUExportButton domain="veterinary" data={realtimeData || {}} compact />
         </div>
-      </header>
+      </motion.header>
+
+      {/* Stat Cards Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { icon: Stethoscope, label: 'Active Patients', value: stats.activePatients, color: 'text-pink-400', bg: 'bg-pink-400/10' },
+          { icon: Calendar, label: "Today's Appts", value: stats.todayAppts, color: 'text-blue-400', bg: 'bg-blue-400/10' },
+          { icon: Heart, label: 'Total Patients', value: stats.totalPatients, color: 'text-green-400', bg: 'bg-green-400/10' },
+          { icon: ClipboardList, label: 'Total Appts', value: stats.totalAppts, color: 'text-purple-400', bg: 'bg-purple-400/10' },
+        ].map((stat, i) => (
+          <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08, duration: 0.35 }}
+            className="p-3 bg-zinc-900 rounded-lg border border-zinc-800 flex items-center gap-3">
+            <div className={cn('w-10 h-10 rounded-lg flex items-center justify-center', stat.bg)}>
+              <stat.icon className={cn('w-5 h-5', stat.color)} />
+            </div>
+            <div>
+              <p className="text-xl font-bold text-white">{stat.value}</p>
+              <p className="text-xs text-gray-400">{stat.label}</p>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Species Badges with Emojis */}
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.35 }} className="flex items-center gap-3 flex-wrap">
+        <span className="text-xs text-gray-500 uppercase tracking-wide">Species:</span>
+        {(() => {
+          const speciesEmoji: Record<string, string> = { canine: '\uD83D\uDC36', feline: '\uD83D\uDC31', equine: '\uD83D\uDC34', bovine: '\uD83D\uDC2E', avian: '\uD83D\uDC26', reptile: '\uD83E\uDD8E', exotic: '\uD83E\uDD9C', other: '\uD83D\uDC3E' };
+          const speciesCounts: Record<string, number> = {};
+          patients.forEach(p => {
+            const s = (p.data as PatientData).species || 'other';
+            speciesCounts[s] = (speciesCounts[s] || 0) + 1;
+          });
+          return Object.entries(speciesCounts).map(([species, count]) => (
+            <span key={species} className="text-xs px-3 py-1 rounded-full border border-zinc-700 bg-zinc-800 text-gray-300">
+              {speciesEmoji[species] || '\uD83D\uDC3E'} {species} ({count})
+            </span>
+          ));
+        })()}
+      </motion.div>
+
+      {/* Vaccination Schedule Tracker */}
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="p-3 bg-zinc-900 rounded-lg border border-zinc-800">
+        <h3 className="text-sm font-semibold text-white mb-2 flex items-center gap-2"><Syringe className="w-4 h-4 text-pink-400" /> Vaccination Schedule</h3>
+        <div className="grid grid-cols-7 gap-1">
+          {Array.from({ length: 7 }, (_, i) => {
+            const d = new Date(); d.setDate(d.getDate() + i);
+            const dayAppts = appointments.filter(a => {
+              const ad = (a.data as AppointmentData).date;
+              return ad && new Date(ad).toDateString() === d.toDateString() && (a.data as AppointmentData).type === 'vaccination';
+            }).length;
+            return (
+              <div key={i} className={cn('text-center p-2 rounded-lg', dayAppts > 0 ? 'bg-pink-500/20 border border-pink-500/30' : 'bg-zinc-800')}>
+                <p className="text-[10px] text-gray-500">{d.toLocaleDateString('en-US', { weekday: 'short' })}</p>
+                <p className="text-xs font-bold text-white">{d.getDate()}</p>
+                {dayAppts > 0 && <p className="text-[10px] text-pink-400">{dayAppts} vax</p>}
+              </div>
+            );
+          })}
+        </div>
+      </motion.div>
 
       <div className="flex gap-1 bg-zinc-900 rounded-lg p-1 overflow-x-auto">
         {MODE_TABS.map(({ key, label, icon: Icon }) => (
@@ -190,19 +251,27 @@ export default function VeterinaryLensPage() {
       )}
 
       <div className="space-y-2">
-        {items.map(item => (
-          <div key={item.id} className="p-4 bg-zinc-900 rounded-lg border border-zinc-800 hover:border-zinc-700 transition-colors">
+        <AnimatePresence mode="popLayout">
+        {items.map((item, idx) => {
+          const d = item.data as Record<string, unknown>;
+          const speciesEmoji: Record<string, string> = { canine: '\uD83D\uDC36', feline: '\uD83D\uDC31', equine: '\uD83D\uDC34', bovine: '\uD83D\uDC2E', avian: '\uD83D\uDC26', reptile: '\uD83E\uDD8E', exotic: '\uD83E\uDD9C', other: '\uD83D\uDC3E' };
+          const species = String(d.species || '');
+          return (
+          <motion.div key={item.id} layout initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ delay: idx * 0.04, duration: 0.3 }}
+            className="p-4 bg-zinc-900 rounded-lg border border-zinc-800 hover:border-zinc-700 transition-colors">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
+                {species && <span className="text-lg">{speciesEmoji[species] || '\uD83D\uDC3E'}</span>}
                 <h3 className="text-sm font-semibold text-white">{item.title}</h3>
-                {!!(item.data as Record<string, unknown>).status && (
-                  <span className={cn('text-xs px-2 py-0.5 rounded-full', STATUS_COLORS[String((item.data as Record<string, unknown>).status)] || 'text-gray-400 bg-gray-400/10')}>
-                    {String((item.data as Record<string, unknown>).status)}
+                {!!d.status && (
+                  <span className={cn('text-xs px-2 py-0.5 rounded-full', STATUS_COLORS[String(d.status)] || 'text-gray-400 bg-gray-400/10')}>
+                    {String(d.status)}
                   </span>
                 )}
-                {!!(item.data as Record<string, unknown>).species && (
+                {!!species && (
                   <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-800 text-gray-300">
-                    {String((item.data as Record<string, unknown>).species)}
+                    {species}
                   </span>
                 )}
               </div>
@@ -210,8 +279,10 @@ export default function VeterinaryLensPage() {
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
             </div>
-          </div>
-        ))}
+          </motion.div>
+          );
+        })}
+        </AnimatePresence>
         {items.length === 0 && (
           <div className="text-center py-12 text-gray-500">
             <Heart className="w-10 h-10 mx-auto mb-3 opacity-30" />

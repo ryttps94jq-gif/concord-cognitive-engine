@@ -453,25 +453,45 @@ export default function GoalsLensPage() {
       <UniversalActions domain="goals" artifactId={goalItems[0]?.id} compact />
       {/* ---- Hero Stats Bar ---- */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="lens-card flex flex-col items-center justify-center col-span-1">
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="lens-card flex flex-col items-center justify-center col-span-1 relative overflow-hidden group">
+          <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
           <div className="relative">
             <ProgressRing radius={36} stroke={5} progress={overallProgress} size={72} color="#22d3ee" />
             <span className="absolute inset-0 flex items-center justify-center text-sm font-bold text-cyan-400">{Math.round(overallProgress * 100)}%</span>
           </div>
           <p className="text-xs text-gray-400 mt-2">Overall Progress</p>
+          {/* Milestone markers */}
+          <div className="flex items-center gap-1 mt-1.5">
+            {[25, 50, 75, 100].map((m) => (
+              <motion.div
+                key={m}
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ delay: m * 0.005, type: 'spring', stiffness: 300 }}
+                className={`w-2 h-2 rounded-full ${Math.round(overallProgress * 100) >= m ? 'bg-cyan-400' : 'bg-white/10'}`}
+                title={`${m}% milestone`}
+              />
+            ))}
+          </div>
         </motion.div>
         {[
-          { icon: Flame, iconCls: 'text-orange-400', value: streakDays, label: 'Day Streak', delay: 0.05 },
-          { icon: CheckCircle2, iconCls: 'text-green-400', value: completedThisMonth, label: 'Completed', delay: 0.1 },
-          { icon: Zap, iconCls: 'text-yellow-400', value: totalXp.toLocaleString(), label: 'XP Earned', delay: 0.15 },
+          { icon: Flame, iconCls: 'text-orange-400', value: streakDays, label: 'Day Streak', delay: 0.05, glow: 'from-orange-500/5' },
+          { icon: CheckCircle2, iconCls: 'text-green-400', value: completedThisMonth, label: 'Completed', delay: 0.1, glow: 'from-green-500/5' },
+          { icon: Zap, iconCls: 'text-yellow-400', value: totalXp.toLocaleString(), label: 'XP Earned', delay: 0.15, glow: 'from-yellow-500/5' },
         ].map((s) => (
-          <motion.div key={s.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: s.delay }} className="lens-card flex flex-col items-center justify-center">
+          <motion.div key={s.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: s.delay }} className="lens-card flex flex-col items-center justify-center relative overflow-hidden group" whileHover={{ scale: 1.02, y: -2 }}>
+            <div className={`absolute inset-0 bg-gradient-to-br ${s.glow} to-transparent opacity-0 group-hover:opacity-100 transition-opacity`} />
             <s.icon className={`w-6 h-6 ${s.iconCls} mb-1`} />
-            <p className="text-2xl font-bold text-white">{s.value}</p>
+            <motion.p className="text-2xl font-bold text-white" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: s.delay + 0.2 }}>{s.value}</motion.p>
             <p className="text-xs text-gray-400">{s.label}</p>
           </motion.div>
         ))}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="lens-card flex flex-col items-center justify-center">
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="lens-card flex flex-col items-center justify-center relative overflow-hidden" whileHover={{ scale: 1.02 }}>
+          <motion.div
+            className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-transparent"
+            animate={{ opacity: [0.3, 0.6, 0.3] }}
+            transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+          />
           <Star className="w-6 h-6 text-purple-400 mb-1" />
           <p className={`text-lg font-bold ${level.color}`}>{level.label}</p>
           <p className="text-xs text-gray-400">Level</p>

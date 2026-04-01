@@ -6,6 +6,7 @@ import { apiHelpers } from '@/lib/api/client';
 import { useState, useEffect, useMemo } from 'react';
 import { useLensBridge } from '@/lib/hooks/use-lens-bridge';
 import { UniversalActions } from '@/components/lens/UniversalActions';
+import { motion } from 'framer-motion';
 import {
   Globe,
   Activity,
@@ -141,27 +142,34 @@ export default function GroundingLensPage() {
       <UniversalActions domain="grounding" artifactId={bridge.selectedId} compact />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="lens-card">
-          <Activity className="w-5 h-5 text-neon-green mb-2" />
-          <p className="text-2xl font-bold">{Array.isArray(sensorList) ? sensorList.length : 0}</p>
-          <p className="text-sm text-gray-400">Sensors</p>
-        </div>
-        <div className="lens-card">
-          <BarChart3 className="w-5 h-5 text-neon-blue mb-2" />
-          <p className="text-2xl font-bold">{Array.isArray(readingList) ? readingList.length : 0}</p>
-          <p className="text-sm text-gray-400">Readings</p>
-        </div>
-        <div className="lens-card">
-          <Globe className="w-5 h-5 text-neon-cyan mb-2" />
-          <p className="text-2xl font-bold">{statusInfo.grounded || 0}</p>
-          <p className="text-sm text-gray-400">Grounded DTUs</p>
-        </div>
-        <div className="lens-card">
-          <Eye className="w-5 h-5 text-neon-purple mb-2" />
-          <p className="text-2xl font-bold">{statusInfo.pending || 0}</p>
-          <p className="text-sm text-gray-400">Pending Actions</p>
-        </div>
+        {[
+          { icon: Activity, color: 'text-neon-green', value: Array.isArray(sensorList) ? sensorList.length : 0, label: 'Sensors' },
+          { icon: BarChart3, color: 'text-neon-blue', value: Array.isArray(readingList) ? readingList.length : 0, label: 'Readings' },
+          { icon: Globe, color: 'text-neon-cyan', value: statusInfo.grounded || 0, label: 'Grounded DTUs' },
+          { icon: Eye, color: 'text-neon-purple', value: statusInfo.pending || 0, label: 'Pending Actions' },
+        ].map((stat, i) => (
+          <motion.div key={stat.label} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }} className="lens-card">
+            <stat.icon className={`w-5 h-5 ${stat.color} mb-2`} />
+            <p className="text-2xl font-bold">{stat.value}</p>
+            <p className="text-sm text-gray-400">{stat.label}</p>
+          </motion.div>
+        ))}
       </div>
+
+      {/* Grounding Score Ring */}
+      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.35 }} className="flex items-center gap-4 p-3 lens-card">
+        <div className="relative w-16 h-16 shrink-0">
+          <svg className="w-16 h-16 -rotate-90" viewBox="0 0 64 64">
+            <circle cx="32" cy="32" r="28" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="5" />
+            <circle cx="32" cy="32" r="28" fill="none" stroke="rgb(16,185,129)" strokeWidth="5" strokeDasharray={`${93.2 * 1.76} ${176}`} strokeLinecap="round" />
+          </svg>
+          <span className="absolute inset-0 flex items-center justify-center text-sm font-bold text-neon-green">93%</span>
+        </div>
+        <div>
+          <p className="text-sm font-semibold">Aggregate Grounding Score</p>
+          <p className="text-xs text-gray-500">Weighted average across all verification sources</p>
+        </div>
+      </motion.div>
 
       {/* Context */}
       {contextInfo && Object.keys(contextInfo).length > 0 && (

@@ -258,22 +258,88 @@ export default function CookingLensPage() {
           <div className="col-span-full panel p-6 text-center text-gray-400">Loading recipes...</div>
         ) : recipes.length === 0 ? (
           <div className="col-span-full panel p-6 text-center text-gray-400">No recipes yet. Create your first one.</div>
-        ) : recipes.map(r => (
-          <div key={r.id} className="panel p-4">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="font-semibold text-white truncate">{r.name}</h3>
-              <button onClick={() => remove(r.id)} className="text-gray-500 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
-            </div>
-            <div className="flex flex-wrap gap-2 text-xs mb-2">
-              {r.cuisine && <span className="px-2 py-0.5 rounded bg-lattice-elevated text-orange-300">{r.cuisine}</span>}
-              {r.difficulty && <span className={cn('px-2 py-0.5 rounded', DIFFICULTY_COLORS[r.difficulty])}>{r.difficulty}</span>}
-            </div>
-            <div className="flex items-center gap-4 text-xs text-gray-400">
-              {(r.prepTime || r.cookTime) > 0 && <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{(r.prepTime || 0) + (r.cookTime || 0)}m</span>}
-              {r.servings > 0 && <span className="flex items-center gap-1"><Users className="w-3 h-3" />{r.servings} servings</span>}
-            </div>
-          </div>
-        ))}
+        ) : recipes.map(r => {
+          const mult = servingMultipliers[r.id] ?? 1;
+          const badge = r.difficulty ? DIFFICULTY_BADGE[r.difficulty] : null;
+          const adjustedServings = r.servings ? Math.round(r.servings * mult) : 0;
+          const expanded = expandedRecipe === r.id;
+          return (
+            <motion.div key={r.id} layout className="panel p-4 flex flex-col gap-3">
+              {/* Title row */}
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-white truncate flex-1 mr-2">{r.name}</h3>
+                <button onClick={() => remove(r.id)} className="text-gray-500 hover:text-red-400 shrink-0"><Trash2 className="w-4 h-4" /></button>
+              </div>
+
+              {/* Badges row */}
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                {r.cuisine && <span className="px-2 py-0.5 rounded bg-lattice-elevated text-orange-300">{r.cuisine}</span>}
+                {badge && (
+                  <span className={cn('px-2 py-0.5 rounded font-semibold flex items-center gap-1', badge.color)}>
+                    <span className="tracking-tighter">{badge.icon}</span> {badge.label}
+                  </span>
+                )}
+              </div>
+
+              {/* Meta row */}
+              <div className="flex items-center gap-4 text-xs text-gray-400">
+                {(r.prepTime || r.cookTime) > 0 && (
+                  <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{(r.prepTime || 0) + (r.cookTime || 0)}m</span>
+                )}
+                {r.servings > 0 && (
+                  <span className="flex items-center gap-1 text-neon-green">
+                    <Users className="w-3 h-3" />{adjustedServings} serving{adjustedServings !== 1 ? 's' : ''}
+                    {mult !== 1 && <span className="text-gray-500 ml-1">(×{mult})</span>}
+                  </span>
+                )}
+              </div>
+
+              {/* Serving adjuster */}
+              {r.servings > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500">Servings:</span>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => setServingMultipliers(p => ({ ...p, [r.id]: Math.max(0.25, (p[r.id] ?? 1) - 0.25) }))}
+                      className="w-6 h-6 rounded bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 text-xs">−</button>
+                    <span className="text-xs w-8 text-center font-medium text-white">{adjustedServings}</span>
+                    <button onClick={() => setServingMultipliers(p => ({ ...p, [r.id]: (p[r.id] ?? 1) + 0.25 }))}
+                      className="w-6 h-6 rounded bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 text-xs">+</button>
+                  </div>
+                  {mult !== 1 && (
+                    <button onClick={() => setServingMultipliers(p => ({ ...p, [r.id]: 1 }))} className="text-xs text-gray-600 hover:text-gray-400">reset</button>
+                  )}
+                </div>
+              )}
+
+              {/* Expand to show ingredients */}
+              {r.ingredients && r.ingredients.length > 0 && (
+                <div>
+                  <button onClick={() => setExpandedRecipe(expanded ? null : r.id)}
+                    className="text-xs text-orange-400 hover:text-orange-300 flex items-center gap-1">
+                    <ChevronDown className={cn('w-3 h-3 transition-transform', expanded && 'rotate-180')} />
+                    {expanded ? 'Hide' : 'Show'} ingredients ({r.ingredients.length})
+                  </button>
+                  <AnimatePresence>
+                    {expanded && (
+                      <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }} className="overflow-hidden mt-2">
+                        <IngredientChecklist ingredients={r.ingredients.map(ing => {
+                          if (mult === 1) return ing;
+                          const numMatch = ing.match(/^([\d.]+)\s*(.*)/);
+                          if (numMatch) {
+                            const adj = Math.round(parseFloat(numMatch[1]) * mult * 4) / 4;
+                            return `${adj} ${numMatch[2]}`;
+                          }
+                          return ing;
+                        })} />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
+            </motion.div>
+          );
+        })}
       </div>
 
       <RealtimeDataPanel domain="cooking" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />

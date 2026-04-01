@@ -4,7 +4,8 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useState } from 'react';
-import { Glasses, Camera, Scan, Settings } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Glasses, Camera, Scan, Settings, Layers, Eye, Maximize } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -84,6 +85,28 @@ export default function ARLensPage() {
       <RealtimeDataPanel domain="ar" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <DTUExportButton domain="ar" data={{}} compact />
 
+      {/* Stat Cards Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { icon: Layers, color: 'text-neon-purple', value: layers.filter((l) => arLayers?.active?.includes(l.id)).length, label: 'Active Layers' },
+          { icon: Eye, color: 'text-neon-cyan', value: arEnabled ? 'LIVE' : 'OFF', label: 'AR Status' },
+          { icon: Scan, color: 'text-neon-green', value: arEnabled ? '60' : '--', label: 'FPS' },
+          { icon: Maximize, color: 'text-neon-blue', value: '1920x1080', label: 'Viewport' },
+        ].map((stat, i) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.08 }}
+            className="lens-card"
+          >
+            <stat.icon className={`w-5 h-5 ${stat.color} mb-2`} />
+            <p className="text-2xl font-bold">{stat.value}</p>
+            <p className="text-sm text-gray-400">{stat.label}</p>
+          </motion.div>
+        ))}
+      </div>
+
       {/* AR Viewport */}
       <div className="panel p-4">
         <div className="graph-container relative overflow-hidden">
@@ -130,15 +153,18 @@ export default function ARLensPage() {
 
       {/* AR Layers */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {layers.map((layer) => {
+        {layers.map((layer, i) => {
           const isActive = arLayers?.active?.includes(layer.id);
           return (
-            <button
+            <motion.button
               key={layer.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.08 }}
               onClick={() => setSelectedLayer(layer.id)}
-              className={`lens-card text-left ${
-                isActive ? 'border-neon-cyan' : ''
-              } ${selectedLayer === layer.id ? 'glow-blue' : ''}`}
+              className={`lens-card text-left transition-all ${
+                isActive ? 'border-neon-cyan shadow-[0_0_15px_rgba(0,212,255,0.3)]' : ''
+              } ${selectedLayer === layer.id ? 'ring-2 ring-neon-cyan shadow-[0_0_20px_rgba(0,212,255,0.4)]' : ''}`}
             >
               <div className="flex items-start gap-3">
                 <span className="text-2xl">{layer.icon}</span>
@@ -158,10 +184,36 @@ export default function ARLensPage() {
                   <p className="text-sm text-gray-400 mt-1">{layer.description}</p>
                 </div>
               </div>
-            </button>
+            </motion.button>
           );
         })}
       </div>
+
+      {/* AR Scene Statistics */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.4 }}
+        className="panel p-4"
+      >
+        <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+          <Glasses className="w-4 h-4 text-neon-purple" />
+          Scene Statistics
+        </h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            { label: 'DTU Anchors', value: 24, color: 'text-neon-cyan' },
+            { label: 'Tracked Planes', value: 3, color: 'text-neon-green' },
+            { label: 'Light Probes', value: 8, color: 'text-amber-400' },
+            { label: 'Render Calls', value: 142, color: 'text-neon-purple' },
+          ].map((item) => (
+            <div key={item.label} className="bg-lattice-deep rounded-lg p-3 text-center">
+              <p className={`text-xl font-bold font-mono ${item.color}`}>{item.value}</p>
+              <p className="text-xs text-gray-500">{item.label}</p>
+            </div>
+          ))}
+        </div>
+      </motion.div>
 
       {/* AR Settings */}
       <div className="panel p-4">

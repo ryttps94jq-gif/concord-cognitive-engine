@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -12,6 +13,7 @@ import {
   Plus, Search, X, Edit3, Trash2, Clock, DollarSign,
   BarChart3, CheckCircle2, AlertCircle, Star, GraduationCap,
   Layers, ChevronDown, Building2, Heart, Shield, ClipboardList,
+  UserCheck, UserMinus, Target,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -262,14 +264,18 @@ export default function HRLensPage() {
           <button onClick={openCreate} className={cn(ds.btnPrimary, 'mt-3')}><Plus className="w-4 h-4" /> Create First</button>
         </div>
       ) : (
-        filtered.map(item => {
+        <AnimatePresence mode="popLayout">
+        {filtered.map((item, idx) => {
           const d = item.data as unknown as HRArtifact;
           const sc = STATUS_CONFIG[d.status] || STATUS_CONFIG.active;
+          const statusIcon = d.status === 'active' ? UserCheck : d.status === 'pending' ? UserPlus : d.status === 'terminated' ? UserMinus : Users;
+          const StatusIcon = statusIcon;
           return (
-            <div key={item.id} className={ds.panelHover} onClick={() => openEdit(item)}>
+            <motion.div key={item.id} layout initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ delay: idx * 0.04, duration: 0.3 }} className={ds.panelHover} onClick={() => openEdit(item)}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <Users className="w-5 h-5 text-neon-cyan" />
+                  <StatusIcon className={`w-5 h-5 text-${sc.color}`} />
                   <div>
                     <p className="text-white font-medium">{d.name || item.title}</p>
                     <p className={ds.textMuted}>{d.department} {d.position ? `- ${d.position}` : ''}</p>
@@ -281,16 +287,29 @@ export default function HRLensPage() {
                   <button onClick={e => { e.stopPropagation(); remove(item.id); }} className={ds.btnGhost}><Trash2 className="w-4 h-4 text-red-400" /></button>
                 </div>
               </div>
-            </div>
+            </motion.div>
           );
-        })
+        })}
+        </AnimatePresence>
       )}
     </div>
   );
 
+  /* Stat computations */
+  const allEmployees = items.map(i => i.data as unknown as HRArtifact);
+  const activeCount = allEmployees.filter(e => e.status === 'active').length;
+  const onboardingCount = allEmployees.filter(e => e.status === 'pending').length;
+  const offboardingCount = allEmployees.filter(e => e.status === 'terminated').length;
+  const openPositions = allEmployees.filter(e => e.status === 'open').length;
+  const deptCounts = DEPARTMENTS.reduce<Record<string, number>>((acc, dept) => {
+    acc[dept] = allEmployees.filter(e => e.department === dept).length;
+    return acc;
+  }, {});
+  const maxDeptCount = Math.max(1, ...Object.values(deptCounts));
+
   return (
     <div data-lens-theme="hr" className="space-y-6 p-6">
-      <header className="flex items-center justify-between">
+      <motion.header initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
             <Users className="w-5 h-5 text-white" />
@@ -304,7 +323,45 @@ export default function HRLensPage() {
           <DTUExportButton domain="hr" data={{}} compact />
           <button onClick={() => setShowDashboard(!showDashboard)} className={cn(showDashboard ? ds.btnPrimary : ds.btnSecondary)}><BarChart3 className="w-4 h-4" /> Dashboard</button>
         </div>
-      </header>
+      </motion.header>
+
+      {/* Stat Cards Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { icon: UserCheck, label: 'Active', value: activeCount, color: 'text-green-400', bg: 'bg-green-400/10' },
+          { icon: UserPlus, label: 'Onboarding', value: onboardingCount, color: 'text-yellow-400', bg: 'bg-yellow-400/10' },
+          { icon: UserMinus, label: 'Offboarding', value: offboardingCount, color: 'text-red-400', bg: 'bg-red-400/10' },
+          { icon: Briefcase, label: 'Open Positions', value: openPositions, color: 'text-cyan-400', bg: 'bg-cyan-400/10' },
+        ].map((stat, i) => (
+          <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08, duration: 0.35 }}
+            className={cn(ds.panel, 'flex items-center gap-3')}>
+            <div className={cn('w-10 h-10 rounded-lg flex items-center justify-center', stat.bg)}>
+              <stat.icon className={cn('w-5 h-5', stat.color)} />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-white">{stat.value}</p>
+              <p className={ds.textMuted}>{stat.label}</p>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Employee Status Badges & Department Headcount Bar */}
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.35 }} className={cn(ds.panel, 'space-y-4')}>
+        <h3 className={cn(ds.heading3, 'flex items-center gap-2')}><Building2 className="w-4 h-4 text-blue-400" /> Department Headcount</h3>
+        <div className="space-y-2">
+          {DEPARTMENTS.filter(d => deptCounts[d] > 0).map(dept => (
+            <div key={dept} className="flex items-center gap-3">
+              <span className="text-xs text-gray-400 w-24 truncate">{dept}</span>
+              <div className="flex-1 h-5 bg-lattice-elevated rounded-full overflow-hidden">
+                <motion.div initial={{ width: 0 }} animate={{ width: `${(deptCounts[dept] / maxDeptCount) * 100}%` }} transition={{ duration: 0.6, delay: 0.1 }}
+                  className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full" />
+              </div>
+              <span className="text-xs text-white font-medium w-6 text-right">{deptCounts[dept]}</span>
+            </div>
+          ))}
+        </div>
+      </motion.div>
 
       <RealtimeDataPanel domain="hr" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <UniversalActions domain="hr" artifactId={items[0]?.id} compact />

@@ -4,7 +4,8 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { Loading } from '@/components/common/Loading';
 import { useState } from 'react';
-import { Users, Plus, MessageSquare, Target, Shield, Zap, Layers, ChevronDown } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Users, Plus, MessageSquare, Target, Shield, Zap, Layers, ChevronDown, Handshake, Crown } from 'lucide-react';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
@@ -96,6 +97,13 @@ export default function AllianceLensPage() {
     security: 'text-neon-green bg-neon-green/20',
     development: 'text-neon-cyan bg-neon-cyan/20',
     governance: 'text-neon-blue bg-neon-blue/20',
+  };
+
+  const typeBorderGradients: Record<string, string> = {
+    research: 'border-purple-500/60',
+    security: 'border-red-500/60',
+    development: 'border-blue-500/60',
+    governance: 'border-amber-500/60',
   };
 
   const selectedAllianceData = alliances.find((a) => a.id === selectedAlliance);
@@ -226,29 +234,64 @@ export default function AllianceLensPage() {
         </div>
       )}
 
-      {/* Stats */}
+      {/* Stat Cards Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="lens-card">
-          <Users className="w-5 h-5 text-neon-purple mb-2" />
-          <p className="text-2xl font-bold">{alliances.length}</p>
-          <p className="text-sm text-gray-400">Total Alliances</p>
-        </div>
-        <div className="lens-card">
-          <Zap className="w-5 h-5 text-neon-green mb-2" />
-          <p className="text-2xl font-bold">{alliances.filter((a) => a.status === 'active').length}</p>
-          <p className="text-sm text-gray-400">Active</p>
-        </div>
-        <div className="lens-card">
-          <Target className="w-5 h-5 text-neon-blue mb-2" />
-          <p className="text-2xl font-bold">{alliances.reduce((s, a) => s + a.activeProposals, 0)}</p>
-          <p className="text-sm text-gray-400">Joint Proposals</p>
-        </div>
-        <div className="lens-card">
-          <Shield className="w-5 h-5 text-neon-cyan mb-2" />
-          <p className="text-2xl font-bold">{alliances.reduce((s, a) => s + a.members.length, 0)}</p>
-          <p className="text-sm text-gray-400">Total Members</p>
-        </div>
+        {[
+          { icon: Users, color: 'text-neon-purple', value: alliances.length, label: 'Total Alliances' },
+          { icon: Zap, color: 'text-neon-green', value: alliances.filter((a) => a.status === 'active').length, label: 'Active' },
+          { icon: Target, color: 'text-neon-blue', value: alliances.reduce((s, a) => s + a.activeProposals, 0), label: 'Joint Proposals' },
+          { icon: Handshake, color: 'text-neon-cyan', value: alliances.reduce((s, a) => s + a.members.length, 0), label: 'Total Members' },
+        ].map((stat, i) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.08 }}
+            className="lens-card"
+          >
+            <stat.icon className={`w-5 h-5 ${stat.color} mb-2`} />
+            <p className="text-2xl font-bold">{stat.value}</p>
+            <p className="text-sm text-gray-400">{stat.label}</p>
+          </motion.div>
+        ))}
       </div>
+
+      {/* Alliance Strength Meter */}
+      {alliances.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.35 }}
+          className="panel p-4"
+        >
+          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+            <Crown className="w-4 h-4 text-amber-400" />
+            Alliance Strength Overview
+          </h3>
+          <div className="space-y-2">
+            {alliances.slice(0, 5).map((alliance) => {
+              const strength = Math.min(100, (alliance.members.length * 20) + (alliance.activeProposals * 10) + (alliance.status === 'active' ? 30 : 0));
+              return (
+                <div key={alliance.id} className="flex items-center gap-3">
+                  <span className="text-xs text-gray-400 w-32 truncate">{alliance.name}</span>
+                  <div className="flex-1 h-2 bg-lattice-deep rounded-full overflow-hidden">
+                    <motion.div
+                      className={`h-full rounded-full ${strength >= 70 ? 'bg-neon-green' : strength >= 40 ? 'bg-amber-400' : 'bg-neon-pink'}`}
+                      initial={{ width: 0 }}
+                      animate={{ width: `${strength}%` }}
+                      transition={{ duration: 0.8, delay: 0.4 }}
+                    />
+                  </div>
+                  <span className="text-xs font-mono w-10 text-right text-gray-300">{strength}%</span>
+                  <span className={`text-xs px-1.5 py-0.5 rounded-full ${typeColors[alliance.type]}`}>
+                    {alliance.members.length}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </motion.div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Alliance List */}
@@ -258,12 +301,17 @@ export default function AllianceLensPage() {
             Alliances
           </h2>
           <div className="space-y-3">
-            {alliances.map((alliance) => (
-              <button
+            <AnimatePresence>
+            {alliances.map((alliance, i) => (
+              <motion.button
                 key={alliance.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ delay: i * 0.06 }}
                 onClick={() => setSelectedAlliance(alliance.id)}
-                className={`w-full text-left lens-card transition-all ${
-                  selectedAlliance === alliance.id ? 'border-neon-cyan ring-1 ring-neon-cyan' : ''
+                className={`w-full text-left lens-card transition-all border-2 ${
+                  selectedAlliance === alliance.id ? 'border-neon-cyan ring-1 ring-neon-cyan' : typeBorderGradients[alliance.type] || 'border-transparent'
                 }`}
               >
                 <div className="flex items-center justify-between mb-2">
@@ -274,13 +322,17 @@ export default function AllianceLensPage() {
                 </div>
                 <p className="text-sm text-gray-400 mb-2">{alliance.description}</p>
                 <div className="flex items-center justify-between text-xs text-gray-500">
-                  <span>{alliance.members.length} members</span>
+                  <span className="flex items-center gap-1">
+                    <Users className="w-3 h-3" />
+                    {alliance.members.length} members
+                  </span>
                   <span className={alliance.status === 'active' ? 'text-neon-green' : 'text-gray-400'}>
                     {alliance.status}
                   </span>
                 </div>
-              </button>
+              </motion.button>
             ))}
+            </AnimatePresence>
           </div>
         </div>
 

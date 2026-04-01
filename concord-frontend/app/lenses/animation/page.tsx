@@ -138,6 +138,35 @@ export default function AnimationPage() {
         {showFeatures && <LensFeaturePanel lensId="animation" />}
         <RealtimeDataPanel data={realtimeData} insights={realtimeInsights} />
 
+        {/* Stat Cards — keyframe timeline feel */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: 'Projects', value: projects.length, icon: Film, color: 'text-orange-400' },
+            { label: 'Total Frames', value: projects.reduce((s, p) => s + (p.frameCount || 0), 0), icon: Layers, color: 'text-cyan-400' },
+            { label: 'Avg FPS', value: projects.length > 0 ? Math.round(projects.reduce((s, p) => s + (p.fps || 24), 0) / projects.length) : 24, icon: Zap, color: 'text-yellow-400' },
+            { label: 'DTUs', value: contextDTUs.length, icon: Sparkles, color: 'text-purple-400' },
+          ].map((stat, i) => (
+            <motion.div key={stat.label} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }} className="bg-white/5 border border-white/10 rounded-lg p-3 hover:border-orange-500/30 transition-colors">
+              <stat.icon className={cn('w-4 h-4 mb-1', stat.color)} />
+              <div className="text-xl font-bold">{stat.value}</div>
+              <div className="text-[10px] text-gray-500 uppercase tracking-wider">{stat.label}</div>
+            </motion.div>
+          ))}
+        </div>
+
+        {/* Mini Keyframe Timeline Hint */}
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.35 }} className="bg-white/5 border border-white/10 rounded-lg p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <Clock className="w-3.5 h-3.5 text-orange-400" />
+            <span className="text-xs text-gray-400 font-medium">Keyframe Timeline</span>
+          </div>
+          <div className="flex items-center gap-0.5 h-6">
+            {Array.from({ length: 32 }).map((_, i) => (
+              <motion.div key={i} initial={{ scaleY: 0 }} animate={{ scaleY: 1 }} transition={{ delay: 0.4 + i * 0.02 }} className="flex-1 rounded-sm" style={{ height: `${20 + Math.sin(i * 0.5) * 12 + Math.random() * 8}px`, backgroundColor: i % 8 === 0 ? 'rgba(251,146,60,0.5)' : 'rgba(255,255,255,0.08)' }} />
+            ))}
+          </div>
+        </motion.div>
+
         {/* Tabs */}
         <div className="flex gap-1 bg-white/5 p-1 rounded-lg border border-white/10">
           {TABS.map(t => (

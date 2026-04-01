@@ -41,6 +41,232 @@ const STATUS_COLORS: Record<string, string> = {
   closed: 'text-gray-400 bg-gray-400/10',
 };
 
+/* ------------------------------------------------------------------ */
+/*  Argument Strength Meter                                            */
+/* ------------------------------------------------------------------ */
+
+function ArgumentStrengthMeter({ text }: { text: string }) {
+  const strength = useMemo(() => {
+    if (!text) return 0;
+    let score = 0;
+    if (text.length > 20) score += 20;
+    if (text.length > 60) score += 20;
+    if (/because|therefore|since|thus|hence|evidence|data|study|research|shows?/i.test(text)) score += 25;
+    if (/however|although|moreover|furthermore|consequently/i.test(text)) score += 15;
+    if (/\d+%|\d+ (million|billion|thousand)|\d{4}/i.test(text)) score += 20;
+    return Math.min(100, score);
+  }, [text]);
+
+  const label = strength >= 80 ? 'Strong' : strength >= 50 ? 'Moderate' : strength >= 25 ? 'Weak' : 'Insufficient';
+  const color = strength >= 80 ? '#22c55e' : strength >= 50 ? '#eab308' : strength >= 25 ? '#f97316' : '#6b7280';
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-gray-500 flex items-center gap-1"><TrendingUp className="w-3 h-3" /> Argument Strength</span>
+        <span className="font-semibold" style={{ color }}>{label} ({strength}%)</span>
+      </div>
+      <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+        <motion.div className="h-full rounded-full" style={{ backgroundColor: color }}
+          initial={{ width: 0 }} animate={{ width: `${strength}%` }} transition={{ duration: 0.4 }} />
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Pro / Con Balance Scale                                            */
+/* ------------------------------------------------------------------ */
+
+function ProConScale({ proCount, conCount, proVotes, conVotes }:
+  { proCount: number; conCount: number; proVotes: number; conVotes: number }) {
+  const totalArgs = proCount + conCount;
+  const totalVotes = proVotes + conVotes;
+  const proPct = totalArgs > 0 ? (proCount / totalArgs) * 100 : 50;
+  const proVotePct = totalVotes > 0 ? (proVotes / totalVotes) * 100 : 50;
+
+  return (
+    <div className="panel p-4 space-y-3">
+      <h3 className="font-semibold text-sm flex items-center gap-2">
+        <Scale className="w-4 h-4 text-neon-purple" /> Balance
+      </h3>
+      {/* Arguments bar */}
+      <div className="space-y-1">
+        <div className="flex justify-between text-xs text-gray-500">
+          <span className="text-neon-green">Pro ({proCount})</span>
+          <span>Arguments</span>
+          <span className="text-red-400">Con ({conCount})</span>
+        </div>
+        <div className="h-3 rounded-full overflow-hidden flex">
+          <motion.div className="h-full bg-neon-green/70"
+            initial={{ width: 0 }} animate={{ width: `${proPct}%` }} transition={{ duration: 0.5 }} />
+          <motion.div className="h-full bg-red-400/70 flex-1"
+            initial={{ width: 0 }} animate={{ width: `${100 - proPct}%` }} transition={{ duration: 0.5 }} />
+        </div>
+      </div>
+      {/* Votes bar */}
+      <div className="space-y-1">
+        <div className="flex justify-between text-xs text-gray-500">
+          <span className="text-neon-green">{proVotes} votes</span>
+          <span>Community</span>
+          <span className="text-red-400">{conVotes} votes</span>
+        </div>
+        <div className="h-3 rounded-full overflow-hidden flex">
+          <motion.div className="h-full bg-neon-green/40"
+            initial={{ width: 0 }} animate={{ width: `${proVotePct}%` }} transition={{ duration: 0.5 }} />
+          <motion.div className="h-full bg-red-400/40 flex-1" />
+        </div>
+      </div>
+      {/* Verdict */}
+      {totalArgs > 0 && (
+        <div className={cn('text-xs px-3 py-2 rounded-lg text-center font-semibold',
+          proPct > 60 ? 'bg-neon-green/10 text-neon-green border border-neon-green/20' :
+          proPct < 40 ? 'bg-red-400/10 text-red-400 border border-red-400/20' :
+          'bg-yellow-400/10 text-yellow-400 border border-yellow-400/20')}>
+          {proPct > 60 ? '✓ Pro side leads' : proPct < 40 ? '✗ Con side leads' : '⚖ Evenly matched'}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Debate Round Timer                                                 */
+/* ------------------------------------------------------------------ */
+
+function DebateRoundTimer() {
+  const [minutes, setMinutes] = useState(3);
+  const [running, setRunning] = useState(false);
+  const [remaining, setRemaining] = useState(3 * 60);
+  const [round, setRound] = useState(1);
+  const [finished, setFinished] = useState(false);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => { if (!running) setRemaining(minutes * 60); }, [minutes]);
+
+  useEffect(() => {
+    if (running) {
+      intervalRef.current = setInterval(() => {
+        setRemaining(r => {
+          if (r <= 1) { setRunning(false); setFinished(true); return 0; }
+          return r - 1;
+        });
+      }, 1000);
+    } else {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    }
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [running]);
+
+  const reset = () => { setRunning(false); setFinished(false); setRemaining(minutes * 60); };
+  const nextRound = () => { setRound(r => r + 1); reset(); };
+  const total = minutes * 60;
+  const pct = total > 0 ? (remaining / total) * 100 : 0;
+  const mm = Math.floor(remaining / 60).toString().padStart(2, '0');
+  const ss = (remaining % 60).toString().padStart(2, '0');
+  const circumference = 2 * Math.PI * 28;
+  const dash = (pct / 100) * circumference;
+  const urgentColor = remaining <= 30 ? '#ef4444' : running ? '#a855f7' : '#6b7280';
+
+  return (
+    <div className="panel p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold text-sm flex items-center gap-2">
+          <Timer className="w-4 h-4 text-neon-purple" /> Round Timer
+        </h3>
+        <span className="text-xs text-gray-500">Round {round}</span>
+      </div>
+      <div className="flex items-center gap-4">
+        <div className="relative w-16 h-16 shrink-0">
+          <svg className="w-full h-full -rotate-90" viewBox="0 0 64 64">
+            <circle cx="32" cy="32" r="28" fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="5" />
+            <circle cx="32" cy="32" r="28" fill="none"
+              stroke={urgentColor} strokeWidth="5" strokeLinecap="round"
+              strokeDasharray={`${dash} ${circumference}`}
+              style={{ transition: 'stroke-dasharray 0.5s linear' }} />
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className={cn('text-xs font-mono font-bold', remaining <= 30 && running ? 'text-red-400 animate-pulse' : 'text-white')}>
+              {mm}:{ss}
+            </span>
+          </div>
+        </div>
+        <div className="flex-1 space-y-2">
+          {!running && !finished && (
+            <div className="flex items-center gap-2">
+              <input type="number" min={1} max={15} value={minutes}
+                onChange={e => setMinutes(Math.max(1, Number(e.target.value)))}
+                className="w-16 bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-center" />
+              <span className="text-xs text-gray-400">minutes</span>
+            </div>
+          )}
+          <div className="flex gap-2 flex-wrap">
+            <button onClick={() => finished ? reset() : setRunning(r => !r)}
+              className={cn('px-3 py-1 rounded text-xs font-medium transition-colors',
+                running ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
+                        : 'bg-neon-purple/20 text-neon-purple border border-neon-purple/30')}>
+              {finished ? 'Reset' : running ? 'Pause' : 'Start'}
+            </button>
+            {finished && (
+              <button onClick={nextRound}
+                className="px-3 py-1 rounded text-xs bg-neon-green/20 text-neon-green border border-neon-green/30">
+                Next Round
+              </button>
+            )}
+            {running && (
+              <button onClick={reset} className="px-3 py-1 rounded text-xs bg-white/5 border border-white/10 hover:bg-white/10">
+                Reset
+              </button>
+            )}
+          </div>
+          {finished && <p className="text-xs text-yellow-400 animate-bounce">Time's up! Round {round} complete.</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Verdict Scoring Display                                            */
+/* ------------------------------------------------------------------ */
+
+function VerdictDisplay({ proArguments, conArguments, proVotes, conVotes }:
+  { proArguments: {votes:number}[]; conArguments: {votes:number}[]; proVotes:number; conVotes:number }) {
+  const proScore = (proArguments?.length || 0) * 10 + proVotes * 2;
+  const conScore = (conArguments?.length || 0) * 10 + conVotes * 2;
+  const total = proScore + conScore;
+  const winner = proScore > conScore ? 'Pro' : conScore > proScore ? 'Con' : 'Tie';
+  const winnerColor = winner === 'Pro' ? 'text-neon-green' : winner === 'Con' ? 'text-red-400' : 'text-yellow-400';
+  const proWidth = total > 0 ? (proScore / total) * 100 : 50;
+
+  return (
+    <div className="panel p-4 space-y-3">
+      <h3 className="font-semibold text-sm flex items-center gap-2">
+        <Trophy className="w-4 h-4 text-yellow-400" /> Scoring
+      </h3>
+      <div className="grid grid-cols-3 items-center gap-2 text-center">
+        <div>
+          <p className="text-2xl font-bold text-neon-green">{proScore}</p>
+          <p className="text-xs text-gray-500">Pro Score</p>
+        </div>
+        <div>
+          <p className={cn('text-sm font-bold', winnerColor)}>{winner}</p>
+          <p className="text-xs text-gray-600">leads</p>
+        </div>
+        <div>
+          <p className="text-2xl font-bold text-red-400">{conScore}</p>
+          <p className="text-xs text-gray-500">Con Score</p>
+        </div>
+      </div>
+      <div className="h-2 rounded-full overflow-hidden flex">
+        <div className="h-full bg-neon-green/60 transition-all duration-500" style={{ width: `${proWidth}%` }} />
+        <div className="h-full bg-red-400/60 flex-1" />
+      </div>
+      <p className="text-xs text-gray-600 text-center">Score = (args × 10) + (votes × 2)</p>
+    </div>
+  );
+}
+
 export default function DebateLensPage() {
   useLensNav('debate');
   const { latestData: realtimeData, isLive, lastUpdated, insights } = useRealtimeLens('debate');
@@ -48,6 +274,7 @@ export default function DebateLensPage() {
   const [selectedDebate, setSelectedDebate] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showFeatures, setShowFeatures] = useState(false);
+  const [showDebateTools, setShowDebateTools] = useState(false);
   const [newDebate, setNewDebate] = useState<{ topic: string; description: string; format: DebateData['format']; timeLimit: number }>({ topic: '', description: '', format: 'open', timeLimit: 30 });
   const [newArgument, setNewArgument] = useState('');
   const [argumentSide, setArgumentSide] = useState<'pro' | 'con'>('pro');
@@ -128,6 +355,10 @@ export default function DebateLensPage() {
           <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} compact />
           <DTUExportButton domain="debate" data={realtimeData || {}} compact />
         </div>
+        <button onClick={() => setShowDebateTools(t => !t)}
+          className={cn('btn-neon', showDebateTools && 'bg-purple-500/20 border-purple-500/40')}>
+          <Timer className="w-4 h-4 mr-1 inline" /> Tools
+        </button>
         <button onClick={() => setShowCreate(!showCreate)} className="btn-neon purple">
           <Plus className="w-4 h-4 mr-2 inline" /> New Debate
         </button>
@@ -158,6 +389,42 @@ export default function DebateLensPage() {
         <div className="lens-card"><MessageSquare className="w-5 h-5 text-neon-cyan mb-2" /><p className="text-2xl font-bold">{stats.totalArguments}</p><p className="text-sm text-gray-400">Arguments</p></div>
         <div className="lens-card"><Users className="w-5 h-5 text-yellow-400 mb-2" /><p className="text-2xl font-bold">{stats.totalVotes}</p><p className="text-sm text-gray-400">Votes Cast</p></div>
       </div>
+
+      {/* ========== Debate Tools Panel ========== */}
+      <AnimatePresence>
+        {showDebateTools && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+              <DebateRoundTimer />
+              {selectedDebateData ? (
+                <div className="space-y-4">
+                  <ProConScale
+                    proCount={selectedDebateData.proArguments?.length || 0}
+                    conCount={selectedDebateData.conArguments?.length || 0}
+                    proVotes={selectedDebateData.proVotes || 0}
+                    conVotes={selectedDebateData.conVotes || 0}
+                  />
+                  <VerdictDisplay
+                    proArguments={selectedDebateData.proArguments || []}
+                    conArguments={selectedDebateData.conArguments || []}
+                    proVotes={selectedDebateData.proVotes || 0}
+                    conVotes={selectedDebateData.conVotes || 0}
+                  />
+                </div>
+              ) : (
+                <div className="panel p-4 flex items-center justify-center text-gray-500 text-sm">
+                  Select a debate to see balance & scoring
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="relative">
         <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
@@ -203,9 +470,10 @@ export default function DebateLensPage() {
                     <h3 className="text-neon-green font-semibold mb-3 flex items-center gap-2"><ThumbsUp className="w-4 h-4" />Pro ({selectedDebateData.proArguments?.length || 0})</h3>
                     <div className="space-y-2">
                       {(selectedDebateData.proArguments || []).map((arg, i) => (
-                        <div key={i} className="bg-neon-green/5 border border-neon-green/20 rounded-lg p-3">
+                        <div key={i} className="bg-neon-green/5 border border-neon-green/20 rounded-lg p-3 space-y-2">
                           <p className="text-sm text-gray-200">{arg.text}</p>
-                          <p className="text-xs text-gray-500 mt-1">{arg.author}</p>
+                          <p className="text-xs text-gray-500">{arg.author}</p>
+                          <ArgumentStrengthMeter text={arg.text} />
                         </div>
                       ))}
                     </div>
@@ -215,9 +483,10 @@ export default function DebateLensPage() {
                     <h3 className="text-red-400 font-semibold mb-3 flex items-center gap-2"><ThumbsDown className="w-4 h-4" />Con ({selectedDebateData.conArguments?.length || 0})</h3>
                     <div className="space-y-2">
                       {(selectedDebateData.conArguments || []).map((arg, i) => (
-                        <div key={i} className="bg-red-400/5 border border-red-400/20 rounded-lg p-3">
+                        <div key={i} className="bg-red-400/5 border border-red-400/20 rounded-lg p-3 space-y-2">
                           <p className="text-sm text-gray-200">{arg.text}</p>
-                          <p className="text-xs text-gray-500 mt-1">{arg.author}</p>
+                          <p className="text-xs text-gray-500">{arg.author}</p>
+                          <ArgumentStrengthMeter text={arg.text} />
                         </div>
                       ))}
                     </div>
@@ -236,6 +505,11 @@ export default function DebateLensPage() {
                   <input value={newArgument} onChange={e => setNewArgument(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleAddArgument(); }} placeholder="Your argument..." className="input-lattice flex-1" />
                   <button onClick={handleAddArgument} disabled={!newArgument.trim()} className="btn-neon"><Send className="w-4 h-4" /></button>
                 </div>
+                {newArgument.trim() && (
+                  <div className="mt-3">
+                    <ArgumentStrengthMeter text={newArgument} />
+                  </div>
+                )}
               </div>
             </>
           ) : (

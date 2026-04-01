@@ -191,7 +191,7 @@ export default function FilmStudiosPage() {
           </div>
         </div>
 
-        {showFeatures && <LensFeaturePanel lensId="film-studios" />}
+        {showFeatures && <LensFeaturePanel lensId="film_studios" />}
         <RealtimeDataPanel data={realtimeData} insights={realtimeInsights} />
 
         {/* Tabs */}

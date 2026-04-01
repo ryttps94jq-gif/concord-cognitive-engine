@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -12,7 +13,7 @@ import {
   Plus, Search, X, Edit3, Trash2, TrendingUp, DollarSign,
   Calendar, Eye, MousePointerClick, Globe, Hash,
   Layers, ChevronDown, CheckCircle2, AlertCircle,
-  PenTool, Zap, Filter,
+  PenTool, Zap, Filter, ArrowRight,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -347,11 +348,11 @@ export default function MarketingLensPage() {
           <button onClick={openCreate} className={cn(ds.btnPrimary, 'mt-3')}><Plus className="w-4 h-4" /> Create First</button>
         </div>
       ) : (
-        filtered.map(item => {
+        filtered.map((item, idx) => {
           const d = item.data as unknown as MarketingArtifact;
           const sc = STATUS_CONFIG[d.status] || STATUS_CONFIG.draft;
           return (
-            <div key={item.id} className={ds.panelHover} onClick={() => openEdit(item)}>
+            <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.05 }} className={ds.panelHover} onClick={() => openEdit(item)}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <Megaphone className="w-5 h-5 text-neon-cyan" />
@@ -366,7 +367,7 @@ export default function MarketingLensPage() {
                   <button onClick={e => { e.stopPropagation(); remove(item.id); }} className={ds.btnGhost}><Trash2 className="w-4 h-4 text-red-400" /></button>
                 </div>
               </div>
-            </div>
+            </motion.div>
           );
         })
       )}
@@ -402,6 +403,62 @@ export default function MarketingLensPage() {
 
       <RealtimeDataPanel domain="marketing" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <UniversalActions domain="marketing" artifactId={items[0]?.id} compact />
+
+      {/* Stat Cards */}
+      {(() => {
+        const allCampaigns = items.map(i => i.data as unknown as MarketingArtifact);
+        const totalBudget = allCampaigns.reduce((s, c) => s + (c.budget || 0), 0);
+        const totalImpressions = allCampaigns.reduce((s, c) => s + (c.impressions || 0), 0);
+        const totalClicks = allCampaigns.reduce((s, c) => s + (c.clicks || 0), 0);
+        const totalConversions = allCampaigns.reduce((s, c) => s + (c.conversions || 0), 0);
+        const ctr = totalImpressions > 0 ? (totalClicks / totalImpressions * 100) : 0;
+        const convRate = totalClicks > 0 ? (totalConversions / totalClicks * 100) : 0;
+        return (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              { icon: DollarSign, label: 'Total Budget', value: `$${totalBudget.toLocaleString()}`, color: 'text-green-400' },
+              { icon: Eye, label: 'Impressions', value: totalImpressions.toLocaleString(), color: 'text-purple-400' },
+              { icon: MousePointerClick, label: 'CTR', value: `${ctr.toFixed(2)}%`, color: 'text-cyan-400' },
+              { icon: Target, label: 'Conv. Rate', value: `${convRate.toFixed(2)}%`, color: 'text-pink-400' },
+            ].map((stat, i) => (
+              <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }} className={ds.panel}>
+                <stat.icon className={`w-5 h-5 ${stat.color} mb-2`} />
+                <p className={ds.textMuted}>{stat.label}</p>
+                <p className="text-xl font-bold text-white">{stat.value}</p>
+              </motion.div>
+            ))}
+          </div>
+        );
+      })()}
+
+      {/* Channel Distribution Bar */}
+      {(() => {
+        const allCampaigns = items.map(i => i.data as unknown as MarketingArtifact);
+        const channelMap = new Map<string, number>();
+        allCampaigns.forEach(c => { if (c.channel) channelMap.set(c.channel, (channelMap.get(c.channel) || 0) + 1); });
+        const total = allCampaigns.length || 1;
+        const channelColors: Record<string, string> = { 'Social Media': 'bg-blue-500', Email: 'bg-green-500', PPC: 'bg-amber-500', SEO: 'bg-purple-500', 'Content Marketing': 'bg-pink-500', Influencer: 'bg-cyan-500', Display: 'bg-orange-500', Video: 'bg-red-500', Affiliate: 'bg-teal-500' };
+        if (channelMap.size === 0) return null;
+        return (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className={ds.panel}>
+            <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2"><BarChart3 className="w-4 h-4 text-pink-400" /> Channel Distribution</h3>
+            <div className="h-5 rounded-full overflow-hidden flex">
+              {Array.from(channelMap.entries()).map(([ch, count]) => (
+                <div key={ch} className={`${channelColors[ch] || 'bg-gray-500'} h-full relative group`} style={{ width: `${(count / total) * 100}%` }} title={`${ch}: ${count}`}>
+                  <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white/80 opacity-0 group-hover:opacity-100 transition-opacity">{ch}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-3 mt-2">
+              {Array.from(channelMap.entries()).map(([ch, count]) => (
+                <span key={ch} className="flex items-center gap-1 text-xs text-gray-400">
+                  <span className={`w-2 h-2 rounded-full ${channelColors[ch] || 'bg-gray-500'}`} />{ch} ({count})
+                </span>
+              ))}
+            </div>
+          </motion.div>
+        );
+      })()}
 
       <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 overflow-x-auto">
         {MODE_TABS.map(tab => (
