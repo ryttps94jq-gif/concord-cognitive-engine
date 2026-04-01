@@ -683,10 +683,15 @@ export default function ChatLensPage() {
       }
     },
     onSuccess: (data) => {
+      // If a tool was executed, include it in the response metadata
+      const toolInfo = data.toolExecution?.executed
+        ? `\n\n> 🔧 **Tool:** \`${data.toolExecution.domain}.${data.toolExecution.action}\`${data.toolExecution.result?.ok ? ' — Success' : ' — Failed'}`
+        : '';
+
       const assistantMsg: Message = {
         id: `asst-${Date.now()}`,
         role: 'assistant',
-        content: data.reply || data.answer || data.content || data.text || data.response || (data.error ? `Error: ${data.error}` : 'The conscious brain is not responding. Check that the Ollama service is running.'),
+        content: (data.reply || data.answer || data.content || data.text || data.response || (data.error ? `Error: ${data.error}` : 'The conscious brain is not responding. Check that the Ollama service is running.')) + toolInfo,
         timestamp: new Date().toISOString(),
         refs: data.refs,
         sources: data.sources as Message['sources'],

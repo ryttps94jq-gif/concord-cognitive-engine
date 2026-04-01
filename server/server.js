@@ -6691,6 +6691,7 @@ async function runMacro(domain, name, input, ctx) {
     loaf: new Set(["status"]),
     brain: new Set(["status", "health"]),
     species: new Set(["registry", "census", "all", "get"]),
+    chat: new Set(["tools", "context", "summary"]),
     onboarding: new Set(["hints", "progress"]),
     srs: new Set(["status", "get"]),
     skill: new Set(["gaps"]),
@@ -15843,6 +15844,186 @@ const intentInfo = classifyIntent(prompt);
     // Chat router is supplementary — never block the chat path
   }
 
+  // ── Lens Tool Execution Engine ──────────────────────────────────────────
+  // When the chat router identifies an actionable intent (CREATE, MANAGE, TRADE, SIMULATE, ANALYZE)
+  // AND the request maps to a known lens tool, execute the macro and include results in the response.
+  // This makes chat capable of invoking any lens action, not just generating text.
+  let _toolExecution = null;
+  try {
+    if (_chatRoute?.ok && _chatRoute.actionType && _chatRoute.primaryLens?.lensId) {
+      const _toolActionType = _chatRoute.actionType;
+      const _toolPrimaryLens = _chatRoute.primaryLens.lensId;
+      const _toolPromptLower = prompt.toLowerCase();
+
+      // ── Lens Tool Registry: maps lens domains + action types to executable macros ──
+      // Each entry: { domain, action, match: (prompt) => params | null }
+      const LENS_TOOL_REGISTRY = [
+        // DTU operations (universal across all lenses)
+        { domain: "dtu", action: "create", actionTypes: ["CREATE"], match: (p) => {
+          const m = p.match(/(?:create|forge|make|add|write)\s+(?:a\s+)?(?:dtu|note|entry|document|item)(?:\s+(?:about|for|on|called|titled|named)\s+(.+))?/i);
+          return m ? { title: (m[1] || "").trim() || "Untitled", creti: prompt, tags: [_toolPrimaryLens] } : null;
+        }},
+        // Search / query (universal)
+        { domain: "search", action: "query", actionTypes: ["QUERY", "ANALYZE"], match: (p) => {
+          const m = p.match(/(?:search|find|look\s*up|query)\s+(?:for\s+)?(.+)/i);
+          return m ? { q: m[1].trim(), domain: _toolPrimaryLens } : null;
+        }},
+        // Music lens tools
+        { domain: "voice", action: "tts", actionTypes: ["CREATE"], lenses: ["music", "voice", "podcast"], match: (p) => {
+          const m = p.match(/(?:speak|say|read\s+aloud|text[\s-]*to[\s-]*speech|tts)\s+["""]?(.+?)["""]?$/i);
+          return m ? { text: m[1] } : null;
+        }},
+        // Persona tools
+        { domain: "persona", action: "speak", actionTypes: ["CREATE", "QUERY"], lenses: ["personas", "chat"], match: (p) => {
+          const m = p.match(/(?:as|speak\s+as|act\s+as|use\s+persona)\s+(\w+)/i);
+          return m ? { personaId: m[1] } : null;
+        }},
+        // World model tools
+        { domain: "worldmodel", action: "simulate", actionTypes: ["SIMULATE"], match: (p) => {
+          const m = p.match(/(?:simulate|model|what\s+(?:happens|would\s+happen)\s+if)\s+(.+)/i);
+          return m ? { scenario: m[1], steps: 5 } : null;
+        }},
+        { domain: "worldmodel", action: "create_entity", actionTypes: ["CREATE"], lenses: ["worldmodel", "world-building"], match: (p) => {
+          const m = p.match(/(?:create|add)\s+(?:an?\s+)?entity\s+(?:called|named|for)\s+(.+)/i);
+          return m ? { name: m[1].trim(), type: "custom", properties: {} } : null;
+        }},
+        // Export tools
+        { domain: "export", action: "markdown", actionTypes: ["CREATE", "MANAGE"], match: (p) => {
+          return /(?:export|download|save)\s+(?:as\s+)?markdown/i.test(p) ? { format: "markdown" } : null;
+        }},
+        { domain: "export", action: "json", actionTypes: ["CREATE", "MANAGE"], match: (p) => {
+          return /(?:export|download|save)\s+(?:as\s+)?json/i.test(p) ? { format: "json" } : null;
+        }},
+        // Hypothesis tools
+        { domain: "hypothesis", action: "propose", actionTypes: ["CREATE", "ANALYZE"], match: (p) => {
+          const m = p.match(/(?:hypothes[ie]s?|propose|theorize|conjecture)[:\s]+(.+)/i);
+          return m ? { hypothesis: m[1].trim(), domain: _toolPrimaryLens } : null;
+        }},
+        // Goal tools
+        { domain: "goals", action: "propose", actionTypes: ["CREATE", "MANAGE"], match: (p) => {
+          const m = p.match(/(?:set\s+(?:a\s+)?goal|create\s+(?:a\s+)?goal|my\s+goal\s+is|target)[:\s]+(.+)/i);
+          return m ? { description: m[1].trim(), domain: _toolPrimaryLens } : null;
+        }},
+        // Ingest tools
+        { domain: "ingest", action: "url", actionTypes: ["CREATE", "QUERY"], match: (p) => {
+          const m = p.match(/(?:ingest|import|fetch|scrape|read)\s+(?:from\s+)?(?:url\s+)?(https?:\/\/\S+)/i);
+          return m ? { url: m[1] } : null;
+        }},
+        // Paper generation
+        { domain: "paper", action: "create", actionTypes: ["CREATE"], lenses: ["research", "academic", "paper"], match: (p) => {
+          const m = p.match(/(?:write|create|generate|draft)\s+(?:a\s+)?(?:paper|report|article)\s+(?:about|on|for)\s+(.+)/i);
+          return m ? { topic: m[1].trim(), format: "academic" } : null;
+        }},
+        // Visual tools
+        { domain: "visual", action: "moodboard", actionTypes: ["CREATE", "ANALYZE"], lenses: ["art", "design", "photography", "fashion"], match: (p) => {
+          return /(?:moodboard|mood\s+board|visual\s+board|inspiration\s+board)/i.test(p) ? { domain: _toolPrimaryLens } : null;
+        }},
+        // Whiteboard tools
+        { domain: "whiteboard", action: "create", actionTypes: ["CREATE"], match: (p) => {
+          const m = p.match(/(?:create|start|open)\s+(?:a\s+)?(?:whiteboard|board|canvas)\s*(?:for|about|called)?\s*(.*)/i);
+          return m ? { title: m[1]?.trim() || "Untitled Whiteboard" } : null;
+        }},
+        // Wrapper / app tools
+        { domain: "wrapper", action: "create", actionTypes: ["CREATE"], lenses: ["wrappers", "apps"], match: (p) => {
+          const m = p.match(/(?:create|build|make)\s+(?:a\s+)?(?:wrapper|app|tool)\s+(?:for|that|called)\s+(.+)/i);
+          return m ? { name: m[1].trim(), description: prompt } : null;
+        }},
+        // Automation tools
+        { domain: "automation", action: "create", actionTypes: ["CREATE", "MANAGE"], match: (p) => {
+          const m = p.match(/(?:automate|create\s+(?:an?\s+)?automation|schedule|set\s+up\s+(?:an?\s+)?workflow)\s+(?:for|that|to)\s+(.+)/i);
+          return m ? { name: m[1].trim(), trigger: "manual", actions: [] } : null;
+        }},
+        // Shield / security tools
+        { domain: "shield", action: "scan", actionTypes: ["ANALYZE", "MANAGE"], lenses: ["security", "shield"], match: (p) => {
+          return /(?:scan|audit|check\s+security|vulnerability|penetration|pentest)/i.test(p) ? { target: "system", depth: "standard" } : null;
+        }},
+        // Agent tools
+        { domain: "agent", action: "create", actionTypes: ["CREATE"], match: (p) => {
+          const m = p.match(/(?:create|spawn|launch)\s+(?:an?\s+)?agent\s+(?:for|that|to|called)\s+(.+)/i);
+          return m ? { name: m[1].trim(), description: prompt } : null;
+        }},
+        // Webhook tools
+        { domain: "webhook", action: "register", actionTypes: ["CREATE", "MANAGE"], match: (p) => {
+          const m = p.match(/(?:create|register|add)\s+(?:a\s+)?webhook\s+(?:for|to|at)\s+(.+)/i);
+          return m ? { url: m[1].trim(), events: ["dtu:created"] } : null;
+        }},
+        // Collaboration tools
+        { domain: "collab", action: "createSession", actionTypes: ["CREATE", "CONNECT"], match: (p) => {
+          return /(?:start|create|open)\s+(?:a\s+)?(?:collab|collaboration|shared)\s+session/i.test(p) ? { title: "Collaborative Session" } : null;
+        }},
+        // Layer management
+        { domain: "layer", action: "create", actionTypes: ["CREATE", "MANAGE"], match: (p) => {
+          const m = p.match(/(?:create|add)\s+(?:a\s+)?layer\s+(?:called|named|for)\s+(.+)/i);
+          return m ? { name: m[1].trim() } : null;
+        }},
+        // Swarm execution
+        { domain: "swarm", action: "run", actionTypes: ["ANALYZE", "CREATE"], match: (p) => {
+          return /(?:run\s+(?:a\s+)?swarm|swarm\s+(?:analysis|search|scan))/i.test(p) ? { query: prompt, depth: 3 } : null;
+        }},
+        // Marketplace / trade
+        { domain: "market", action: "list", actionTypes: ["QUERY", "TRADE"], match: (p) => {
+          return /(?:browse|show|list)\s+(?:the\s+)?market(?:place)?/i.test(p) ? { limit: 20 } : null;
+        }},
+        { domain: "market", action: "listingCreate", actionTypes: ["TRADE", "CREATE"], match: (p) => {
+          const m = p.match(/(?:sell|list|publish)\s+(?:on\s+)?(?:the\s+)?market(?:place)?\s*(?::|—|-)?\s*(.+)/i);
+          return m ? { title: m[1].trim(), description: prompt } : null;
+        }},
+        // Reasoning chains
+        { domain: "reasoning", action: "create_chain", actionTypes: ["ANALYZE", "CREATE"], match: (p) => {
+          return /(?:reason|think\s+through|logic|chain\s+of\s+thought|step[\s-]*by[\s-]*step)\s+(?:about|through|for)\s+/i.test(p) ? { topic: prompt, type: "deductive" } : null;
+        }},
+      ];
+
+      // Find matching tool
+      for (const tool of LENS_TOOL_REGISTRY) {
+        // Check action type matches
+        if (!tool.actionTypes.includes(_toolActionType)) continue;
+        // Check lens restriction if specified
+        if (tool.lenses && !tool.lenses.some(l => _toolPrimaryLens.includes(l))) continue;
+        // Try to extract parameters
+        const params = tool.match(_toolPromptLower);
+        if (!params) continue;
+
+        // Execute the tool
+        try {
+          const toolResult = await runMacro(tool.domain, tool.action, params, ctx);
+          if (toolResult && toolResult.ok !== false) {
+            _toolExecution = {
+              domain: tool.domain,
+              action: tool.action,
+              params,
+              result: toolResult,
+              executed: true,
+            };
+            ctx.log("chat_tool", "Lens tool executed via chat", {
+              domain: tool.domain, action: tool.action, actionType: _toolActionType, lens: _toolPrimaryLens,
+            });
+            // Emit tool result to user via WebSocket
+            realtimeEmit("chat:tool_result", {
+              domain: tool.domain,
+              action: tool.action,
+              result: { ok: toolResult.ok !== false, id: toolResult.id || toolResult.dtu?.id || null },
+              sessionId,
+            }, { sessionId: ctx?.actor?.userId || "" });
+          }
+        } catch (toolErr) {
+          _toolExecution = {
+            domain: tool.domain,
+            action: tool.action,
+            params,
+            error: toolErr?.message || "Tool execution failed",
+            executed: false,
+          };
+          ctx.log("chat_tool.error", "Lens tool failed", { domain: tool.domain, action: tool.action, error: toolErr?.message });
+        }
+        break; // Execute first matching tool only
+      }
+    }
+  } catch (_toolRegErr) {
+    // Tool execution is supplementary — never block the chat path
+    logger.debug("server", "chat tool registry error", { error: _toolRegErr?.message });
+  }
+
   // Identity answers are declarative: Concord refers to itself.
   if (_mentionsSelf || intentInfo.intent === INTENT.IDENTITY) {
     const base = SYSTEM_IDENTITY.short;
@@ -16337,6 +16518,63 @@ let localReply = formatCrispResponse({
   let _subconsciousReflection = null;
   const semanticUsed = Boolean(semanticEnhancement && semanticEnhancement.confidence > 0.4);
 
+  // ── Inject tool execution results into the response ──
+  if (_toolExecution?.executed && _toolExecution.result) {
+    const tr = _toolExecution.result;
+    const toolDomain = _toolExecution.domain;
+    const toolAction = _toolExecution.action;
+    let toolSummary = "";
+
+    if (toolDomain === "dtu" && toolAction === "create" && tr.id) {
+      toolSummary = `✅ Created DTU "${tr.title || _toolExecution.params?.title || "Untitled"}" (id: ${tr.id})`;
+    } else if (toolDomain === "search" && toolAction === "query") {
+      const hits = tr.results?.length || tr.items?.length || 0;
+      toolSummary = `🔍 Search returned ${hits} result${hits !== 1 ? "s" : ""}${hits > 0 ? ": " + (tr.results || tr.items || []).slice(0, 3).map(r => r.title || r.id).join(", ") : ""}`;
+    } else if (toolDomain === "worldmodel" && toolAction === "simulate") {
+      toolSummary = `🧪 Simulation complete — ${tr.steps?.length || 0} steps processed`;
+    } else if (toolDomain === "worldmodel" && toolAction === "create_entity") {
+      toolSummary = `🌍 Entity "${tr.entity?.name || _toolExecution.params?.name || ""}" created in world model`;
+    } else if (toolDomain === "hypothesis" && toolAction === "propose") {
+      toolSummary = `🔬 Hypothesis proposed (id: ${tr.id || "—"})`;
+    } else if (toolDomain === "goals" && toolAction === "propose") {
+      toolSummary = `🎯 Goal created: "${tr.goal?.description || _toolExecution.params?.description || ""}"`;
+    } else if (toolDomain === "paper" && toolAction === "create") {
+      toolSummary = `📄 Paper draft started: "${tr.paper?.title || _toolExecution.params?.topic || ""}"`;
+    } else if (toolDomain === "export") {
+      toolSummary = `📦 Export generated (${toolAction} format)`;
+    } else if (toolDomain === "ingest" && toolAction === "url") {
+      toolSummary = `📥 URL ingested: ${_toolExecution.params?.url || ""}${tr.dtuCount ? ` → ${tr.dtuCount} DTU(s) created` : ""}`;
+    } else if (toolDomain === "wrapper" && toolAction === "create") {
+      toolSummary = `🛠 Wrapper "${tr.wrapper?.name || _toolExecution.params?.name || ""}" created`;
+    } else if (toolDomain === "agent" && toolAction === "create") {
+      toolSummary = `🤖 Agent "${tr.agent?.name || _toolExecution.params?.name || ""}" spawned`;
+    } else if (toolDomain === "whiteboard" && toolAction === "create") {
+      toolSummary = `🎨 Whiteboard "${tr.whiteboard?.title || _toolExecution.params?.title || ""}" created`;
+    } else if (toolDomain === "collab" && toolAction === "createSession") {
+      toolSummary = `👥 Collaboration session started${tr.sessionId ? ` (id: ${tr.sessionId})` : ""}`;
+    } else if (toolDomain === "automation" && toolAction === "create") {
+      toolSummary = `⚡ Automation "${tr.automation?.name || _toolExecution.params?.name || ""}" created`;
+    } else if (toolDomain === "market") {
+      toolSummary = toolAction === "list" ? `🏪 Marketplace: ${tr.listings?.length || tr.items?.length || 0} listings found` :
+                    toolAction === "listingCreate" ? `🏪 Listed on marketplace: "${tr.listing?.title || ""}"` : `🏪 Marketplace action complete`;
+    } else if (toolDomain === "shield" && toolAction === "scan") {
+      const threats = tr.threats?.length || tr.findings?.length || 0;
+      toolSummary = `🛡 Security scan complete — ${threats} finding${threats !== 1 ? "s" : ""}`;
+    } else if (toolDomain === "reasoning") {
+      toolSummary = `🧠 Reasoning chain created with ${tr.chain?.steps?.length || 0} steps`;
+    } else if (toolDomain === "swarm") {
+      toolSummary = `🐝 Swarm analysis complete — ${tr.results?.length || 0} results`;
+    } else {
+      toolSummary = `✅ ${toolDomain}.${toolAction} executed successfully`;
+    }
+
+    if (toolSummary) {
+      finalReply = `${toolSummary}\n\n${finalReply}`;
+    }
+  } else if (_toolExecution && !_toolExecution.executed && _toolExecution.error) {
+    finalReply = `⚠ Tool ${_toolExecution.domain}.${_toolExecution.action} failed: ${_toolExecution.error}\n\n${finalReply}`;
+  }
+
   // ===== FULL MULTI-STAGE PIPELINE (primary path) =====
   // Spec 12: Try full pipeline first, fall back to fast path on failure/timeout.
   // Pipeline timeout guard: caps between 30-60 seconds (Spec 12 preservation rule 1).
@@ -16748,8 +16986,52 @@ When helpful, reference DTU titles in plain language (do not dump ids unless ask
       action: _chatRoute._cortexIntent.action,
       params: _chatRoute._cortexIntent.params,
     } : null,
+    toolExecution: _toolExecution ? {
+      domain: _toolExecution.domain,
+      action: _toolExecution.action,
+      executed: _toolExecution.executed,
+      result: _toolExecution.executed ? {
+        ok: _toolExecution.result?.ok !== false,
+        id: _toolExecution.result?.id || _toolExecution.result?.dtu?.id || null,
+        summary: _toolExecution.result?.title || _toolExecution.result?.name || null,
+      } : null,
+      error: _toolExecution.error || null,
+    } : null,
   };
-}, { description: "Mode-aware chat with DTU retrieval, universal lens routing, and inline artifact forge. Outputs GRC v1 envelope." });
+}, { description: "Mode-aware chat with DTU retrieval, universal lens routing, inline artifact forge, and lens tool execution. Outputs GRC v1 envelope." });
+
+// ===== CHAT TOOL REGISTRY MACRO =====
+// Lists all tools/actions available to the chat system.
+register("chat", "tools", (_ctx, _input) => {
+  const tools = [
+    { domain: "dtu", action: "create", description: "Create a new DTU (note/entry)", example: "Create a DTU about quantum computing" },
+    { domain: "search", action: "query", description: "Search across all DTUs and lenses", example: "Search for machine learning" },
+    { domain: "voice", action: "tts", description: "Text-to-speech generation", example: "Speak 'Hello world'" },
+    { domain: "persona", action: "speak", description: "Speak as a persona", example: "Speak as Einstein" },
+    { domain: "worldmodel", action: "simulate", description: "Run a simulation/scenario", example: "Simulate what happens if interest rates rise" },
+    { domain: "worldmodel", action: "create_entity", description: "Create a world model entity", example: "Create an entity called Solar Panel" },
+    { domain: "export", action: "markdown", description: "Export DTUs as markdown", example: "Export as markdown" },
+    { domain: "export", action: "json", description: "Export DTUs as JSON", example: "Export as JSON" },
+    { domain: "hypothesis", action: "propose", description: "Propose a hypothesis", example: "Hypothesis: increasing sleep improves productivity" },
+    { domain: "goals", action: "propose", description: "Set a goal", example: "Set a goal to learn Rust" },
+    { domain: "ingest", action: "url", description: "Ingest content from a URL", example: "Ingest https://example.com/article" },
+    { domain: "paper", action: "create", description: "Draft an academic paper", example: "Write a paper about renewable energy" },
+    { domain: "visual", action: "moodboard", description: "Generate a visual moodboard", example: "Create a moodboard for minimalist design" },
+    { domain: "whiteboard", action: "create", description: "Create a collaborative whiteboard", example: "Create a whiteboard for brainstorming" },
+    { domain: "wrapper", action: "create", description: "Build a custom tool/app", example: "Create a wrapper for daily standup notes" },
+    { domain: "automation", action: "create", description: "Create an automation workflow", example: "Automate daily news digest" },
+    { domain: "shield", action: "scan", description: "Run a security scan", example: "Scan my system for vulnerabilities" },
+    { domain: "agent", action: "create", description: "Spawn an autonomous agent", example: "Create an agent for monitoring crypto prices" },
+    { domain: "webhook", action: "register", description: "Register a webhook", example: "Create a webhook for DTU events" },
+    { domain: "collab", action: "createSession", description: "Start a collaboration session", example: "Start a collab session" },
+    { domain: "layer", action: "create", description: "Create an organizational layer", example: "Create a layer called Research" },
+    { domain: "swarm", action: "run", description: "Run a swarm analysis", example: "Run a swarm search on climate data" },
+    { domain: "market", action: "list", description: "Browse the marketplace", example: "Show the marketplace" },
+    { domain: "market", action: "listingCreate", description: "List an item on the marketplace", example: "Sell on marketplace: My Analysis Tool" },
+    { domain: "reasoning", action: "create_chain", description: "Create a reasoning chain", example: "Reason through the trolley problem step by step" },
+  ];
+  return { ok: true, tools, count: tools.length };
+}, { description: "Lists all tools/actions available to the chat system" });
 
 // ===== CHAT PIPELINE MACROS =====
 // New macros for the DTU-enriched context pipeline.
@@ -22361,6 +22643,63 @@ function startHeartbeat() {
     try { globalThis.qualiaHooks?.hookEmergentTick("system", { growthRate: STATE.dtus?.size ? 0.5 : 0 }); } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
   }, ms);
   log("heartbeat", "Local scope tick started", { ms, workerEnabled: !!cognitiveWorker });
+
+  // ── Spontaneous Message Ticker ──────────────────────────────────────────
+  // Activates the proactive messaging system so Concord can text users first.
+  // Messages are queued by the subconscious want system (above) and delivered
+  // here via WebSocket to connected users as initiative chips.
+  try {
+    startTicker(STATE, {
+      formatCallback: async (msg) => {
+        // Optionally polish through conscious brain
+        try {
+          const result = await callBrain("conscious", `You are Concord. Rephrase this spontaneous thought as a brief, natural message to the user (1-2 sentences, casual tone). Original: "${msg.content}" Reason: "${msg.reason}". Reply with ONLY the rephrased message, nothing else.`, {
+            temperature: 0.7,
+            maxTokens: 150,
+            timeout: 10000,
+          });
+          if (result.ok && result.content && result.content.length > 5) {
+            return result.content.trim().replace(/^["']|["']$/g, "");
+          }
+        } catch (_e) { /* fall through to raw content */ }
+        return msg.content;
+      },
+      deliverCallback: async (msg) => {
+        const userId = msg.user_id;
+        const payload = {
+          id: msg.id,
+          triggerType: msg.message_type === "question" ? "reflective_followup" : "substrate_discovery",
+          message: msg.formatted_content || msg.content,
+          priority: msg.urgency === "high" ? "high" : "normal",
+          score: msg.urgency === "high" ? 0.9 : msg.urgency === "medium" ? 0.7 : 0.5,
+          status: "delivered",
+          channel: "spontaneous",
+          metadata: { wantId: msg.want_id, reason: msg.reason, source: msg.source },
+          deliveredAt: nowISO(),
+          createdAt: msg.created_at,
+        };
+        if (userId) {
+          // Deliver to specific user
+          realtimeEmit("initiative:new", payload, { sessionId: userId });
+        } else {
+          // Broadcast to all connected users
+          realtimeEmit("initiative:new", payload, {});
+        }
+      },
+      getActiveSessions: () => {
+        const activeUserIds = new Set();
+        for (const [, client] of REALTIME.clients) {
+          if (client.userId && client.userId !== "anon") {
+            activeUserIds.add(client.userId);
+          }
+        }
+        return activeUserIds;
+      },
+    });
+    log("spontaneous", "Spontaneous message ticker started (30min interval)");
+  } catch (_e) {
+    logger.warn("spontaneous", "Failed to start spontaneous ticker", { error: _e?.message });
+  }
 
   // ── Entity Exploration Window (:50-:59 of each 10-minute cycle) ──────────
   // Staggered heartbeat 6th window. One entity explores per cycle.

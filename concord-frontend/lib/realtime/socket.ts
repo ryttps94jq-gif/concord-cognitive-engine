@@ -180,7 +180,11 @@ export type SocketEvent =
   | 'lens:dtu_generated'
   | 'agent:domain_insight'
   // Per-user tick events
-  | 'user:tick';
+  | 'user:tick'
+  // Spontaneous initiative events (proactive messages from Concord)
+  | 'initiative:new'
+  // Chat tool execution results
+  | 'chat:tool_result';
 
 // ---- Enriched Event Payload (Category 2+5: Concurrency + Observability) ----
 interface EnrichedPayload {

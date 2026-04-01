@@ -100,6 +100,10 @@ const FORWARDED_EVENTS: SocketEvent[] = [
   'agent:domain_insight',
   // Per-user tick events
   'user:tick',
+  // Spontaneous initiative events (proactive messages from Concord)
+  'initiative:new',
+  // Chat tool execution results
+  'chat:tool_result',
 ];
 
 interface UseSocketOptions {
