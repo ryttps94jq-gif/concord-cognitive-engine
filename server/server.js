@@ -5605,7 +5605,8 @@ async function tryInitWebSockets(server) {
       }
     });
 
-    socket.on("error", () => {
+    socket.on("error", (err) => {
+      logger.warn?.('[realtime] socket error', { clientId, error: err?.message || String(err) });
       REALTIME.clients.delete(clientId);
     });
   });
@@ -5701,8 +5702,8 @@ async function tryInitNativeWebSockets(server) {
       } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
     });
 
-    ws.on("close", () => { try { REALTIME.clients.delete(clientId); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); } });
-    ws.on("error", () => { try { REALTIME.clients.delete(clientId); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); } });
+    ws.on("close", (code, reason) => { try { logger.debug?.('server', 'ws closed', { clientId, code, reason: reason?.toString() }); REALTIME.clients.delete(clientId); } catch (_e) { logger.debug('server', 'ws close cleanup failed', { error: _e?.message }); } });
+    ws.on("error", (err) => { try { logger.warn?.('server', 'ws error', { clientId, error: err?.message || String(err) }); REALTIME.clients.delete(clientId); } catch (_e) { logger.debug('server', 'ws error cleanup failed', { error: _e?.message }); } });
   });
 
   structuredLog("info", "websocket_enabled", { port: PORT });
