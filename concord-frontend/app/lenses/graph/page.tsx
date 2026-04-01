@@ -1150,7 +1150,7 @@ export default function GraphLensPage() {
           </div>
 
           {/* Tier filter chips — only show universal types by default, music types when detected */}
-          <div className="flex flex-wrap gap-1.5 bg-lattice-surface/90 backdrop-blur border border-lattice-border rounded-lg p-2">
+          <div className="flex flex-wrap gap-1.5 bg-[#0d1117]/80 backdrop-blur-md border border-cyan-900/20 rounded-xl p-2">
             {Object.entries(NODE_COLORS)
               .filter(([k]) => hasMusicDomain || !['track', 'artist', 'sample', 'release'].includes(k))
               .map(([tier, colors]) => (
@@ -1463,11 +1463,11 @@ export default function GraphLensPage() {
           <motion.aside initial={{ x: 320, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 320, opacity: 0 }}
             role="complementary"
             aria-label={`Details for ${selectedNode.label}`}
-            className="w-80 border-l border-lattice-border bg-lattice-surface p-4 overflow-y-auto">
+            className="w-80 border-l border-cyan-900/20 bg-[#0d1117]/95 backdrop-blur-md p-4 overflow-y-auto shadow-2xl shadow-cyan-900/10">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-bold text-white">Node Details</h2>
-              <button onClick={() => setSelectedNode(null)} className="p-1 hover:bg-lattice-bg rounded">
-                <X className="w-5 h-5 text-gray-400" />
+              <h2 className="font-bold text-cyan-100">Node Details</h2>
+              <button onClick={() => setSelectedNode(null)} className="p-1 hover:bg-cyan-900/20 rounded-lg transition-colors">
+                <X className="w-5 h-5 text-cyan-500/50" />
               </button>
             </div>
             <div className="space-y-4">

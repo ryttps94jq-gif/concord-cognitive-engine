@@ -33,15 +33,21 @@ interface SystemHealth {
 
 function StatusDot({ status }: { status: 'green' | 'yellow' | 'red' | 'gray' }) {
   const colors = { green: 'bg-green-400', yellow: 'bg-yellow-400', red: 'bg-red-400', gray: 'bg-gray-500' };
-  return <span className={`inline-block w-2.5 h-2.5 rounded-full ${colors[status]}`} />;
+  return (
+    <span className="relative inline-flex">
+      <span className={`inline-block w-2.5 h-2.5 rounded-full ${colors[status]}`} />
+      {status === 'green' && <span className="absolute inset-0 rounded-full bg-green-400 animate-ping opacity-30" />}
+      {status === 'red' && <span className="absolute inset-0 rounded-full bg-red-400 animate-ping opacity-30" />}
+    </span>
+  );
 }
 
 function Stat({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
-    <div className="bg-lattice-surface rounded-lg p-3 border border-lattice-border">
-      <p className="text-lg font-mono font-bold text-white">{value}</p>
-      <p className="text-xs text-gray-400">{label}</p>
-      {sub && <p className="text-[10px] text-gray-600 mt-0.5">{sub}</p>}
+    <div className="bg-[#0d1219] rounded-xl p-3 border border-cyan-900/15 shadow-sm hover:border-cyan-800/25 transition-colors">
+      <p className="text-lg font-mono font-bold text-cyan-50">{value}</p>
+      <p className="text-xs text-cyan-500/50">{label}</p>
+      {sub && <p className="text-[10px] text-cyan-700/40 mt-0.5">{sub}</p>}
     </div>
   );
 }

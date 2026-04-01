@@ -2469,10 +2469,10 @@ export default function HealthcareLensPage() {
       )}
 
       {/* Lens Features */}
-      <div className="border-t border-white/10">
+      <div className="border-t border-blue-900/15">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-blue-400/60 hover:text-blue-300 transition-colors"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />
@@ -2485,6 +2485,14 @@ export default function HealthcareLensPage() {
             <LensFeaturePanel lensId="healthcare" />
           </div>
         )}
+      </div>
+
+      {/* Persistent bottom disclaimer */}
+      <div className="sticky bottom-0 bg-blue-950/90 backdrop-blur-sm border-t border-blue-400/10 px-4 py-2 text-center">
+        <p className="text-xs text-blue-400/50">
+          <ShieldCheck className="w-3 h-3 inline mr-1" />
+          This tool is for organizational purposes only. Not a substitute for professional medical advice, diagnosis, or treatment.
+        </p>
       </div>
     </div>
   );

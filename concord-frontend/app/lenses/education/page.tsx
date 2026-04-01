@@ -1138,10 +1138,10 @@ export default function EducationLensPage() {
       {/* Dashboard Insights Row */}
       <div className={ds.grid3}>
         {/* At-Risk Students */}
-        <div className={cn(ds.panel, 'border-red-500/20')}>
+        <div className="bg-gradient-to-br from-red-500/5 to-orange-600/5 rounded-xl border border-red-500/15 p-4">
           <div className="flex items-center gap-2 mb-3">
             <AlertTriangle className="w-4 h-4 text-red-400" />
-            <h3 className={cn(ds.heading3, 'text-sm')}>At-Risk Students</h3>
+            <h3 className="text-sm font-semibold text-red-300">At-Risk Students</h3>
           </div>
           {stats.atRiskStudents.length === 0 ? (
             <p className={cn(ds.textMuted, 'text-xs')}>No at-risk students detected</p>
