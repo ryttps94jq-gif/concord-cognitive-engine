@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -17,8 +18,10 @@ import {
   FileText, Shield, Eye, Timer, TrendingUp, TrendingDown,
   CircleDot, Hash, Box, Layers, Target,
   Navigation, Milestone, CheckCircle2, XCircle,
-  FileWarning, BadgeCheck, Siren, Wrench, ThermometerSun,
+  FileWarning, BadgeCheck, Siren, Wrench, ThermometerSun, Map,
 } from 'lucide-react';
+
+const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -29,7 +32,7 @@ import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-type ModeTab = 'fleet' | 'drivers' | 'shipments' | 'warehouse' | 'routes' | 'compliance';
+type ModeTab = 'fleet' | 'drivers' | 'shipments' | 'warehouse' | 'routes' | 'compliance' | 'map';
 
 type ArtifactType = 'Vehicle' | 'Driver' | 'Shipment' | 'WarehouseItem' | 'Route' | 'ComplianceLog';
 
@@ -65,6 +68,7 @@ const MODE_TABS: { id: ModeTab; label: string; icon: typeof Truck; type: Artifac
   { id: 'warehouse', label: 'Warehouse', icon: Warehouse, type: 'WarehouseItem' },
   { id: 'routes', label: 'Routes', icon: Route, type: 'Route' },
   { id: 'compliance', label: 'Compliance', icon: ShieldCheck, type: 'ComplianceLog' },
+  { id: 'map', label: 'Map', icon: Map, type: 'Shipment' },
 ];
 
 // ---------------------------------------------------------------------------

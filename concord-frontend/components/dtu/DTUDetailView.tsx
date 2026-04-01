@@ -19,8 +19,11 @@ import { DTUIntegrityBadge } from './DTUIntegrityBadge';
 import { ProvenanceBadge } from './ProvenanceBadge';
 import {
   X, Clock, GitBranch, Tag, FileText, Zap, Crown, Ghost,
-  Copy, ExternalLink, ChevronRight,
+  Copy, ExternalLink, ChevronRight, Download, Upload,
+  Music, Image as ImageIcon, Video, Code, FileType,
 } from 'lucide-react';
+import { ArtifactRenderer } from '@/components/artifact/ArtifactRenderer';
+import { DTUImportZone } from '@/components/lens/DTUImportZone';
 
 interface DTUDetailViewProps {
   dtuId: string;
@@ -77,6 +80,45 @@ export function DTUDetailView({ dtuId, onClose, onNavigate }: DTUDetailViewProps
     navigator.clipboard.writeText(dtuId);
   };
 
+  const [downloading, setDownloading] = useState(false);
+
+  const handleDownloadDtu = async () => {
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      const res = await fetch(`/api/dtus/${dtuId}/export.dtu`);
+      if (!res.ok) throw new Error('Export failed');
+      const blob = await res.blob();
+      const tier = dtu?.tier || 'regular';
+      const ext = tier === 'hyper' ? '.hyper.dtu' : tier === 'mega' ? '.mega.dtu' : '.dtu';
+      const name = (dtu?.title || dtuId).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 60);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${name}${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('DTU download failed:', e);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  // Determine primaryType for artifact rendering
+  const primaryType = dtu?.primaryType || dtu?.meta?.primaryType as string | undefined;
+  const artifactRef = dtu?.artifactRef || dtu?.meta?.artifactId as string | undefined;
+
+  const primaryTypeIcon: Record<string, typeof Music> = {
+    play_audio: Music,
+    display_image: ImageIcon,
+    play_video: Video,
+    render_code: Code,
+    render_document: FileType,
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
@@ -119,12 +161,23 @@ export function DTUDetailView({ dtuId, onClose, onNavigate }: DTUDetailViewProps
               </div>
             </div>
           )}
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg hover:bg-lattice-elevated transition-colors flex-shrink-0"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              onClick={handleDownloadDtu}
+              disabled={downloading || isLoading}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-neon-cyan/10 text-neon-cyan hover:bg-neon-cyan/20 transition-colors disabled:opacity-40"
+              title="Download as .dtu file"
+            >
+              <Download className="w-3.5 h-3.5" />
+              {downloading ? 'Exporting...' : `.${dtu?.tier === 'mega' ? 'mega.' : dtu?.tier === 'hyper' ? 'hyper.' : ''}dtu`}
+            </button>
+            <button
+              onClick={onClose}
+              className="p-2 rounded-lg hover:bg-lattice-elevated transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Tabs */}

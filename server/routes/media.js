@@ -297,6 +297,35 @@ export default function createMediaRouter({ STATE }) {
     }
   }));
 
+  // ── Download (raw artifact) ───────────────────────────────────────────
+
+  /**
+   * GET /:id/download — Download the raw artifact file with original filename.
+   */
+  router.get("/:id/download", asyncHandler(async (req, res) => {
+    const result = getMediaDTU(STATE, req.params.id);
+    if (!result.ok) throw new NotFoundError("Media", req.params.id);
+
+    const mediaDTU = result.mediaDTU;
+    const filename = mediaDTU.originalFilename || `${mediaDTU.title || mediaDTU.id}.bin`;
+
+    res.set({
+      "Content-Type": mediaDTU.mimeType || "application/octet-stream",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Length": mediaDTU.fileSize || 0,
+    });
+
+    // In production, pipe the actual file data here.
+    res.json({
+      ok: true,
+      download: true,
+      mediaId: mediaDTU.id,
+      filename,
+      fileSize: mediaDTU.fileSize,
+      mimeType: mediaDTU.mimeType,
+    });
+  }));
+
   // ── Thumbnail ─────────────────────────────────────────────────────────
 
   /**
