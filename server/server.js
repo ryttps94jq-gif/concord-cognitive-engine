@@ -6661,6 +6661,8 @@ async function runMacro(domain, name, input, ctx) {
     council: new Set(["tally", "status", "list"]),
     hypothesis: new Set(["list", "get", "status", "propose", "evaluate", "record_evidence", "design_experiment"]),
     "loaf.hypothesis": new Set(["list", "status", "get_influence", "influence_leaderboard", "propose", "resolve"]),
+    "loaf.truth": new Set(["status", "list", "challenge", "stabilize", "decay", "rollback", "detect_fractures", "robustness", "stress_test", "rollback_log"]),
+    "loaf.action_safety": new Set(["status", "record_observation", "check_throttle", "list_decisions"]),
     analytics: new Set(["dashboard", "growth", "density", "citations", "marketplace", "personal"]),
     atlas: new Set(["status", "get", "list", "scope", "config", "thresholds", "autogen", "chat", "contradictions", "score-explain", "submission", "search", "antigaming", "rights", "write-guard", "scope-metrics", "local-hints", "tile", "volume", "material", "subsurface", "change", "coverage", "live", "metrics"]),
     agents: new Set(["list", "get", "status"]),
@@ -7994,6 +7996,70 @@ register("goals", "config", (ctx, input = {}) => {
 }, { public: false });
 
 // ===== END GOAL SYSTEM MACROS =====
+
+// ===== CALENDAR / FITNESS / FOOD MACROS (used by agentTick) =====
+
+register("calendar", "upcoming", (ctx, input = {}) => {
+  const userId = input.userId || ctx?.userId;
+  const hoursAhead = input.hoursAhead || 4;
+  // Pull calendar events from lens data if available
+  const events = [];
+  for (const [id, item] of STATE.lensArtifacts || []) {
+    if (item.domain === "calendar" && item.ownerId === userId) {
+      const d = item.data || {};
+      if (d.startTime) {
+        const startMs = new Date(d.startTime).getTime();
+        const nowMs = Date.now();
+        const hoursUntil = (startMs - nowMs) / 3600000;
+        if (hoursUntil > 0 && hoursUntil <= hoursAhead) {
+          events.push({ id, title: item.title || d.title || "Event", description: d.description || "", hoursUntil: Math.round(hoursUntil * 10) / 10, startTime: d.startTime });
+        }
+      }
+    }
+  }
+  return { ok: true, events };
+});
+
+register("fitness", "today-schedule", (ctx, input = {}) => {
+  const userId = input.userId || ctx?.userId;
+  // Pull today's workout from lens data
+  const today = new Date().toISOString().slice(0, 10);
+  let workout = null;
+  for (const [, item] of STATE.lensArtifacts || []) {
+    if (item.domain === "fitness" && item.ownerId === userId) {
+      const d = item.data || {};
+      const itemDate = (d.date || item.createdAt || "").slice(0, 10);
+      if (itemDate === today && d.type === "workout") {
+        workout = { name: item.title || d.name || "Workout", exercises: d.exercises || [], duration: d.duration };
+        break;
+      }
+    }
+  }
+  return { ok: true, workout };
+});
+
+register("food", "todays-meals", (ctx, input = {}) => {
+  const userId = input.userId || ctx?.userId;
+  const today = new Date().toISOString().slice(0, 10);
+  const meals = [];
+  for (const [, item] of STATE.lensArtifacts || []) {
+    if (item.domain === "food" && item.ownerId === userId) {
+      const d = item.data || {};
+      const itemDate = (d.date || item.createdAt || "").slice(0, 10);
+      if (itemDate === today) {
+        meals.push({ name: item.title || d.name || "Meal", time: d.time || "", type: d.mealType || "meal" });
+      }
+    }
+  }
+  // Find next upcoming meal
+  const now = new Date();
+  const nextMeal = meals.find(m => {
+    if (!m.time) return false;
+    const [h, min] = m.time.split(":").map(Number);
+    return h > now.getHours() || (h === now.getHours() && (min || 0) > now.getMinutes());
+  }) || null;
+  return { ok: true, meals, nextMeal };
+});
 
 // ===== WORLD MODEL MACROS =====
 
