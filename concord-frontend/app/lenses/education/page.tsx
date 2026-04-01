@@ -1098,12 +1098,12 @@ export default function EducationLensPage() {
       <RealtimeDataPanel domain="education" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
 
       {/* Mode Tabs */}
-      <nav className="flex items-center gap-1 border-b border-lattice-border pb-3 overflow-x-auto">
+      <nav className="flex items-center gap-1 border-b border-amber-800/20 pb-3 overflow-x-auto">
         {MODE_TABS.map(tab => (
           <button
             key={tab.id}
             onClick={() => { setActiveTab(tab.id); setFilterStatus('all'); setShowGradeBook(false); setShowAttendance(false); setShowCurriculum(false); setShowAssignmentBuilder(false); }}
-            className={cn(ds.btnGhost, 'whitespace-nowrap', activeTab === tab.id && 'bg-neon-blue/20 text-neon-blue')}
+            className={cn(ds.btnGhost, 'whitespace-nowrap rounded-lg', activeTab === tab.id && 'bg-amber-500/15 text-amber-400 border-amber-400/20')}
           >
             <tab.icon className="w-4 h-4" />
             {tab.id}
@@ -1113,25 +1113,25 @@ export default function EducationLensPage() {
 
       {/* Enhanced Dashboard */}
       <div className={ds.grid4}>
-        <div className={ds.panel}>
-          <Users className="w-5 h-5 text-neon-blue mb-2" />
-          <p className="text-2xl font-bold">{stats.students}</p>
-          <p className={ds.textMuted}>Students</p>
+        <div className="bg-gradient-to-br from-amber-500/10 to-orange-600/5 rounded-xl border border-amber-400/15 p-4">
+          <Users className="w-5 h-5 text-amber-400 mb-2" />
+          <p className="text-2xl font-bold text-white">{stats.students}</p>
+          <p className="text-sm text-amber-300/50">Students</p>
         </div>
-        <div className={ds.panel}>
-          <BookOpen className="w-5 h-5 text-neon-green mb-2" />
-          <p className="text-2xl font-bold">{stats.activeCourses}</p>
-          <p className={ds.textMuted}>Active Courses</p>
+        <div className="bg-gradient-to-br from-orange-500/10 to-amber-600/5 rounded-xl border border-amber-400/15 p-4">
+          <BookOpen className="w-5 h-5 text-orange-400 mb-2" />
+          <p className="text-2xl font-bold text-white">{stats.activeCourses}</p>
+          <p className="text-sm text-amber-300/50">Active Courses</p>
         </div>
-        <div className={ds.panel}>
-          <ClipboardList className="w-5 h-5 text-amber-400 mb-2" />
-          <p className="text-2xl font-bold">{stats.pendingAssignments}</p>
-          <p className={ds.textMuted}>Pending Assignments</p>
+        <div className="bg-gradient-to-br from-yellow-500/10 to-amber-600/5 rounded-xl border border-amber-400/15 p-4">
+          <ClipboardList className="w-5 h-5 text-yellow-400 mb-2" />
+          <p className="text-2xl font-bold text-white">{stats.pendingAssignments}</p>
+          <p className="text-sm text-amber-300/50">Pending Assignments</p>
         </div>
-        <div className={ds.panel}>
-          <TrendingUp className="w-5 h-5 text-neon-cyan mb-2" />
-          <p className="text-2xl font-bold">{stats.avgScore > 0 ? `${stats.avgScore}%` : '--'}</p>
-          <p className={ds.textMuted}>Avg Score</p>
+        <div className="bg-gradient-to-br from-amber-500/10 to-yellow-600/5 rounded-xl border border-amber-400/15 p-4">
+          <TrendingUp className="w-5 h-5 text-amber-300 mb-2" />
+          <p className="text-2xl font-bold text-white">{stats.avgScore > 0 ? `${stats.avgScore}%` : '--'}</p>
+          <p className="text-sm text-amber-300/50">Avg Score</p>
         </div>
       </div>
 

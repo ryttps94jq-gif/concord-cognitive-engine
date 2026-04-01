@@ -292,10 +292,10 @@ export default function ArtLensPage() {
   }, []);
 
   const renderNav = () => (
-    <div className="flex items-center justify-between border-b border-white/10 px-6 py-3">
+    <div className="flex items-center justify-between border-b border-rose-900/15 px-6 py-3 bg-neutral-950/50">
       <div className="flex items-center gap-2">
-        <Palette className="w-6 h-6 text-neon-pink" />
-        <h1 className="text-xl font-bold">Art Studio</h1>
+        <Palette className="w-6 h-6 text-rose-400" />
+        <h1 className="text-xl font-bold text-rose-50 tracking-tight">Art Studio</h1>
         {dtusLoading ? (
           <span className="ml-2 w-4 h-4 border-2 border-neon-pink border-t-transparent rounded-full animate-spin inline-block" />
         ) : (

@@ -1,7 +1,18 @@
 /**
- * Lens Theme Configuration
+ * SPEC-49: Lens Theme Configuration
  * Domain-specific visual identity for each lens view.
+ *
+ * Each lens gets a unique accent palette, preferred layout, and empty-state
+ * messaging so the UI feels like a purpose-built app rather than a generic
+ * CRUD shell.
+ *
+ * Usage:
+ *   import { useLensTheme } from '@/lib/lens-themes';
+ *   const theme = useLensTheme('music');
+ *   <div data-lens-theme="music" className={theme.classes.root}>...</div>
  */
+
+import { useMemo } from 'react';
 
 export interface LensTheme {
   id: string;
@@ -11,6 +22,14 @@ export interface LensTheme {
   accentText: string;     // text- variant
   fontFamily?: string;    // optional override font class
   darkMode: boolean;
+  /** Preferred layout mode for this lens */
+  layout: 'grid' | 'list' | 'timeline' | 'canvas' | 'dashboard' | 'feed' | 'masonry';
+  /** Whether to prefer dark backgrounds */
+  darkPreference: boolean;
+  /** Lucide icon name for empty state */
+  emptyStateIcon: string;
+  /** Message shown when no data */
+  emptyStateMessage: string;
 }
 
 export const lensThemes: Record<string, LensTheme> = {
