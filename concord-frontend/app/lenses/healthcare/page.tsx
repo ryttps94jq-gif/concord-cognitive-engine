@@ -273,10 +273,6 @@ function VitalGauge({ value, vitalKey, label, unit }: { value: number; vitalKey:
   const circumference = 2 * Math.PI * r;
   const arcLength = (totalArc / 360) * circumference;
   const filledLength = arcLength * pct;
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-  const sx = cx + r * Math.cos(toRad(startAngle));
-  const sy = cy + r * Math.sin(toRad(startAngle));
-
   return (
     <div className="flex flex-col items-center">
       <div className="relative" style={critical ? { animation: 'pulse-critical 2s ease-in-out infinite' } : undefined}>
