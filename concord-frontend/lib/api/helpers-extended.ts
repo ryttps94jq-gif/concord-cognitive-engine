@@ -138,6 +138,9 @@ export const adminApi = {
     history: () => api.get('/api/admin/promotion/history'),
     approve: (id: string) => api.post(`/api/admin/promotion/${id}/approve`),
     reject: (id: string, reason?: string) => api.post(`/api/admin/promotion/${id}/reject`, { reason }),
+    shadowPending: () => api.get('/api/dtus/shadow/pending'),
+    promoteShadow: (id: string, force?: boolean) => api.post(`/api/dtus/${id}/promote`, { force: !!force }),
+    promotionQueue: () => api.get('/api/dtus/promotion/queue'),
   },
 };
 

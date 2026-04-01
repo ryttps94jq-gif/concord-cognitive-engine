@@ -36459,6 +36459,123 @@ app.get("/api/economy/transactions", (req, res) => {
   res.json({ ok: true, transactions: txs, summary: { royaltyTotal, salesTotal, total: royaltyTotal + salesTotal } });
 });
 
+// ── Invoice & Tax DTU Endpoints ──────────────────────────────────────────────
+
+// POST /api/economy/invoice — create an invoice DTU with line items, tax, totals
+app.post("/api/economy/invoice", requireAuth(), asyncHandler(async (req, res) => {
+  ensureEconomicState();
+  const userId = req.user?.id || "default";
+  const { lineItems = [], taxRate = 0, dueDate, payerName, payeeName, notes, currency = "USD" } = req.body;
+
+  const subtotal = lineItems.reduce((sum, li) => sum + ((li.quantity || 1) * (li.unitPrice || 0)), 0);
+  const taxAmount = subtotal * (taxRate / 100);
+  const total = subtotal + taxAmount;
+  const invoiceNumber = `INV-${Date.now().toString(36).toUpperCase()}`;
+
+  const id = `dtu_invoice_${crypto.randomBytes(10).toString("hex")}`;
+  const dtu = {
+    id,
+    title: `Invoice ${invoiceNumber}`,
+    summary: `Invoice from ${payeeName || userId} to ${payerName || "Client"} — ${currency} ${total.toFixed(2)}`,
+    content: JSON.stringify({ invoiceNumber, lineItems, subtotal, taxRate, taxAmount, total, currency, dueDate, payerName, payeeName, notes }, null, 2),
+    tags: ["invoice", "economy", "source:invoice"],
+    source: "invoice",
+    tier: "regular",
+    domain: "economy",
+    ownerId: userId,
+    timestamp: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    meta: {
+      invoiceNumber,
+      lineItems,
+      subtotal,
+      taxRate,
+      taxAmount,
+      total,
+      currency,
+      dueDate: dueDate || null,
+      payerName: payerName || null,
+      payeeName: payeeName || userId,
+      notes: notes || null,
+      creationPath: "invoice",
+    },
+    lineage: { root: id, parents: [] },
+  };
+
+  STATE.dtus.set(id, dtu);
+  saveStateDebounced();
+
+  // Record as economic transaction
+  STATE.economic.transactions.push({
+    id: `tx_${crypto.randomBytes(8).toString("hex")}`,
+    type: "invoice_created",
+    from: payeeName || userId,
+    to: payerName || "client",
+    amount: total,
+    currency,
+    dtuId: id,
+    at: new Date().toISOString(),
+  });
+
+  res.json({ ok: true, dtu: { id, title: dtu.title, invoiceNumber, total, currency }, dtuId: id });
+}));
+
+// POST /api/economy/tax-summary — generate year-end tax summary DTU
+app.post("/api/economy/tax-summary", requireAuth(), asyncHandler(async (req, res) => {
+  ensureEconomicState();
+  const userId = req.user?.id || "default";
+  const { year = new Date().getFullYear() } = req.body;
+
+  // Gather all economy transactions for the user in the given year
+  const allTxs = (STATE.economic.transactions || []).filter(tx => {
+    const txYear = new Date(tx.at || tx.timestamp || 0).getFullYear();
+    return txYear === year && (tx.from === userId || tx.to === userId || tx.seller === userId || tx.buyer === userId);
+  });
+
+  // Categorize by type
+  const categories = {};
+  for (const tx of allTxs) {
+    const cat = tx.type || "other";
+    if (!categories[cat]) categories[cat] = { count: 0, totalAmount: 0, transactions: [] };
+    categories[cat].count++;
+    categories[cat].totalAmount += (tx.amount || 0);
+    categories[cat].transactions.push({ id: tx.id, amount: tx.amount, at: tx.at });
+  }
+
+  const totalIncome = allTxs.filter(tx => tx.to === userId || tx.seller === userId).reduce((s, tx) => s + (tx.amount || 0), 0);
+  const totalExpenses = allTxs.filter(tx => tx.from === userId || tx.buyer === userId).reduce((s, tx) => s + (tx.amount || 0), 0);
+
+  const id = `dtu_tax_${crypto.randomBytes(10).toString("hex")}`;
+  const dtu = {
+    id,
+    title: `Tax Summary ${year} — ${userId}`,
+    summary: `Year-end tax summary: ${allTxs.length} transactions, income ${totalIncome.toFixed(2)} CC, expenses ${totalExpenses.toFixed(2)} CC`,
+    content: JSON.stringify({ year, userId, totalIncome, totalExpenses, net: totalIncome - totalExpenses, categories, transactionCount: allTxs.length }, null, 2),
+    tags: ["tax-summary", "economy", "annual", "source:tax_summary"],
+    source: "tax_summary",
+    tier: "regular",
+    domain: "economy",
+    ownerId: userId,
+    timestamp: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    meta: {
+      year,
+      totalIncome,
+      totalExpenses,
+      net: totalIncome - totalExpenses,
+      transactionCount: allTxs.length,
+      categories: Object.keys(categories),
+      creationPath: "tax_summary",
+    },
+    lineage: { root: id, parents: [] },
+  };
+
+  STATE.dtus.set(id, dtu);
+  saveStateDebounced();
+
+  res.json({ ok: true, dtu: { id, title: dtu.title, year, totalIncome, totalExpenses, net: totalIncome - totalExpenses, transactionCount: allTxs.length }, dtuId: id });
+}));
+
 // Growth/organs
 app.get("/api/growth/status", (req, res) => {
   res.json({ ok: true, status: STATE.growth || { stage: "seed", health: 1.0 }});

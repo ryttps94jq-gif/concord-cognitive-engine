@@ -1152,6 +1152,211 @@ export function registerEconomyRoutes(app, db, opts = {}) {
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // MERIT CREDIT SCORE
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  app.get("/api/economy/merit-score/:userId", (req, res) => {
+    try {
+      const userId = req.params.userId;
+      if (!userId) return res.status(400).json({ ok: false, error: "missing_user_id" });
+
+      // Citations: count DTUs that cite this user's content
+      let citations = 0;
+      try {
+        citations = db.prepare(
+          "SELECT COUNT(*) as c FROM royalty_lineage WHERE parent_creator = ?"
+        ).get(userId)?.c || 0;
+      } catch { /* table may not exist */ }
+
+      // Sales: count completed marketplace purchases as seller
+      let sales = 0;
+      try {
+        sales = db.prepare(`
+          SELECT COUNT(*) as c FROM economy_ledger
+          WHERE from_user_id != ? AND to_user_id = ? AND type = 'MARKETPLACE_PURCHASE' AND status = 'complete'
+        `).get(userId, userId)?.c || 0;
+      } catch { /* no ledger yet */ }
+
+      // Royalties: total royalty income
+      let royalties = 0;
+      try {
+        royalties = db.prepare(
+          "SELECT COALESCE(SUM(amount), 0) as total FROM royalty_payouts WHERE recipient_id = ?"
+        ).get(userId)?.total || 0;
+      } catch { /* table may not exist */ }
+
+      // Community activity: posts, comments, follows (approximate from ledger + social tables)
+      let community = 0;
+      try {
+        // Count transfers initiated by user (indicates activity)
+        const transfers = db.prepare(
+          "SELECT COUNT(*) as c FROM economy_ledger WHERE from_user_id = ? AND type IN ('TRANSFER', 'MARKETPLACE_PURCHASE') AND status = 'complete'"
+        ).get(userId)?.c || 0;
+        community = transfers;
+      } catch { /* */ }
+
+      // Score formula: weighted sum, capped at 1000
+      const citationScore = Math.min(citations * 5, 250);
+      const salesScore = Math.min(sales * 3, 250);
+      const royaltyScore = Math.min(Math.floor(royalties * 2), 250);
+      const communityScore = Math.min(community * 2, 250);
+
+      const totalScore = citationScore + salesScore + royaltyScore + communityScore;
+
+      // Level tiers
+      const level =
+        totalScore >= 800 ? "legendary" :
+        totalScore >= 600 ? "master" :
+        totalScore >= 400 ? "expert" :
+        totalScore >= 200 ? "established" :
+        totalScore >= 50  ? "emerging" :
+        "newcomer";
+
+      res.json({
+        ok: true,
+        userId,
+        score: totalScore,
+        breakdown: {
+          citations: { raw: citations, score: citationScore },
+          sales: { raw: sales, score: salesScore },
+          royalties: { raw: Math.round(royalties * 100) / 100, score: royaltyScore },
+          community: { raw: community, score: communityScore },
+        },
+        level,
+      });
+    } catch (err) {
+      log("error", "merit_score_fetch_failed", { error: err.message });
+      res.status(500).json({ ok: false, error: "merit_score_fetch_failed" });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ROYALTY CASCADE LIVE VISUALIZATION
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  app.get("/api/economy/royalty-cascade/:dtuId", (req, res) => {
+    try {
+      const dtuId = req.params.dtuId;
+      if (!dtuId) return res.status(400).json({ ok: false, error: "missing_dtu_id" });
+
+      // Get ancestor chain (who this DTU pays royalties to)
+      const ancestors = getAncestorChain(db, dtuId);
+
+      // Get descendant chain (who pays royalties because of this DTU)
+      const descendants = getDescendants(db, dtuId);
+
+      // Get all royalty payouts for this content
+      const payouts = getContentRoyalties(db, dtuId, { limit: 200 });
+
+      // Calculate totals
+      const totalEarned = payouts.reduce((sum, p) => sum + (p.amount || 0), 0);
+      const totalTransactions = payouts.length;
+
+      // Build cascade chain with generation info
+      const cascadeChain = ancestors.map(a => ({
+        creatorId: a.creatorId,
+        contentId: a.contentId,
+        generation: a.generation,
+        rate: a.rate,
+        ratePercent: `${(a.rate * 100).toFixed(3)}%`,
+        // Sum up what this creator earned from this specific DTU's royalties
+        totalEarned: payouts
+          .filter(p => p.recipient_id === a.creatorId)
+          .reduce((sum, p) => sum + (p.amount || 0), 0),
+      }));
+
+      res.json({
+        ok: true,
+        dtuId,
+        totalEarned: Math.round(totalEarned * 100) / 100,
+        totalTransactions,
+        ancestors: cascadeChain,
+        descendantCount: descendants.length,
+        descendants: descendants.slice(0, 50),
+      });
+    } catch (err) {
+      log("error", "royalty_cascade_fetch_failed", { error: err.message });
+      res.status(500).json({ ok: false, error: "royalty_cascade_fetch_failed" });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ADMIN TREASURY DASHBOARD
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  app.get("/api/admin/treasury", adminOnly, (_req, res) => {
+    try {
+      // Treasury state
+      const treasuryState = getTreasuryState(db);
+      const totalBalance = treasuryState?.total_usd || 0;
+
+      // Fee split balances (80/10/10)
+      const splitBalances = getFeeSplitBalances(db);
+
+      // Fee distributions history for revenue chart
+      const distributions = getFeeDistributions(db, { limit: 90 });
+
+      // Fee collection rate: total fees collected in last 30 days vs prior 30 days
+      let recentFees = 0;
+      let priorFees = 0;
+      try {
+        const now = new Date();
+        const thirtyDaysAgo = new Date(now - 30 * 86400000).toISOString();
+        const sixtyDaysAgo = new Date(now - 60 * 86400000).toISOString();
+
+        recentFees = db.prepare(`
+          SELECT COALESCE(SUM(total_fee), 0) as total FROM fee_distributions
+          WHERE created_at >= ?
+        `).get(thirtyDaysAgo)?.total || 0;
+
+        priorFees = db.prepare(`
+          SELECT COALESCE(SUM(total_fee), 0) as total FROM fee_distributions
+          WHERE created_at >= ? AND created_at < ?
+        `).get(sixtyDaysAgo, thirtyDaysAgo)?.total || 0;
+      } catch { /* table may not exist */ }
+
+      const feeCollectionRate = priorFees > 0
+        ? Math.round(((recentFees - priorFees) / priorFees) * 10000) / 100
+        : 0;
+
+      // Build revenue history (daily aggregates from fee_distributions)
+      let revenueHistory = [];
+      try {
+        revenueHistory = db.prepare(`
+          SELECT DATE(created_at) as date,
+                 SUM(total_fee) as totalFees,
+                 SUM(reserves_amount) as reserves,
+                 SUM(operating_amount) as operating,
+                 SUM(payroll_amount) as payroll,
+                 COUNT(*) as txCount
+          FROM fee_distributions
+          GROUP BY DATE(created_at)
+          ORDER BY date DESC
+          LIMIT 90
+        `).all().reverse();
+      } catch { /* table may not exist */ }
+
+      res.json({
+        ok: true,
+        totalBalance: Math.round(totalBalance * 100) / 100,
+        reserve80: Math.round(splitBalances.reserves * 100) / 100,
+        operating10: Math.round(splitBalances.operating * 100) / 100,
+        payroll10: Math.round(splitBalances.payroll * 100) / 100,
+        platformBalance: Math.round(splitBalances.platform * 100) / 100,
+        revenueHistory,
+        feeCollectionRate,
+        recentFees: Math.round(recentFees * 100) / 100,
+        priorFees: Math.round(priorFees * 100) / 100,
+        totalDistributed: distributions.totalDistributed,
+        distributionCount: distributions.total,
+      });
+    } catch (err) {
+      log("error", "admin_treasury_fetch_failed", { error: err.message });
+      res.status(500).json({ ok: false, error: "admin_treasury_fetch_failed" });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // MARKETPLACE
   // ═══════════════════════════════════════════════════════════════════════════
 
