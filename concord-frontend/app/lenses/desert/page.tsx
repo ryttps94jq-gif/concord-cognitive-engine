@@ -74,12 +74,13 @@ const MODE_TABS: { key: ModeTab; label: string; icon: typeof Sun }[] = [
   { key: 'Wildlife', label: 'Wildlife', icon: Eye },
   { key: 'Infrastructure', label: 'Infrastructure', icon: Mountain },
   { key: 'Hazards', label: 'Hazards', icon: AlertTriangle },
+  { key: 'Map', label: 'Map', icon: Map },
 ];
 
 function getTypeForTab(tab: ModeTab): string {
   const map: Record<ModeTab, string> = {
     Dashboard: 'Expedition', Expeditions: 'Expedition', Climate: 'Climate',
-    Resources: 'Resource', Wildlife: 'Wildlife', Infrastructure: 'Infrastructure', Hazards: 'Hazard',
+    Resources: 'Resource', Wildlife: 'Wildlife', Infrastructure: 'Infrastructure', Hazards: 'Hazard', Map: 'Expedition',
   };
   return map[tab];
 }
@@ -214,6 +215,18 @@ export default function DesertLensPage() {
           </div>
         )}
       </div>
+
+      {activeMode === 'Map' && (
+        <div className="p-4 bg-zinc-900 rounded-lg border border-zinc-800">
+          <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2"><Map className="w-4 h-4 text-amber-400" /> Expedition Regions</h3>
+          <MapView
+            markers={expeditions.filter(e => (e.data as ExpeditionData).lat && (e.data as ExpeditionData).lng).map(e => { const d = e.data as ExpeditionData; return { lat: d.lat!, lng: d.lng!, label: e.title || d.name, popup: `${d.region || ''} - ${d.terrain || ''} (${d.status})` }; })}
+            className="h-[500px]"
+            center={[25, 30]}
+            zoom={4}
+          />
+        </div>
+      )}
 
       <UniversalActions domain="desert" artifactId={items[0]?.id} />
       <RealtimeDataPanel data={insights} />

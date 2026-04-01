@@ -208,7 +208,7 @@ import { createAtlasDtu, getAtlasDtu, searchAtlasDtus, promoteAtlasDtu, addAtlas
 import { runAntiGamingScan, getAntiGamingMetrics } from "./emergent/atlas-antigaming.js";
 import { runAutogenV2, getAutogenRun, acceptAutogenOutput, mergeAutogenOutput, propagateConfidence, getAutogenV2Metrics } from "./emergent/atlas-autogen-v2.js";
 import { councilResolve, getCouncilQueue, councilRequestSources, councilMerge, getCouncilActions, getCouncilMetrics } from "./emergent/atlas-council.js";
-import { upsertProfile, getProfile, listProfiles, followUser, unfollowUser, getFollowers, getFollowing, publishDtu, unpublishDtu, recordCitation, getCitedBy, getFeed, computeTrending, discoverUsers, getSocialMetrics, createPost, getPost, deletePost, getUserPosts, addReaction as socialAddReaction, getReactions, addComment as socialAddComment, deleteComment as socialDeleteComment, getComments as socialGetComments, sharePost, getShares, bookmarkPost, getUserBookmarks, getForYouFeed, getFollowingFeed, getExploreFeed, sendMessage, getConversations, getMessages, markMessagesRead, createNotification, getNotifications, markNotificationRead, markAllNotificationsRead, getUnreadCount, deleteNotification, getActiveStories, viewStory, votePoll, getPollResults, getTrendingTopics, getPostsByTopic, createGroup, joinGroup, leaveGroup, getGroupFeed, postToGroup, listGroups, getGroupMembers, getCreatorAnalytics, getPostAnalytics, updateStreak as socialUpdateStreak, getStreak, tagListing, getPostSales, getPostEarnings, pinPost, unpinPost, getPinnedPosts, recordWatchTime, schedulePost, getScheduledPosts, cancelScheduledPost, processScheduledPosts } from "./emergent/social-layer.js";
+import { upsertProfile, getProfile, listProfiles, followUser, unfollowUser, getFollowers, getFollowing, publishDtu, unpublishDtu, recordCitation, getCitedBy, getFeed, computeTrending, discoverUsers, getSocialMetrics, createPost, getPost, deletePost, getUserPosts, addReaction as socialAddReaction, getReactions, addComment as socialAddComment, deleteComment as socialDeleteComment, getComments as socialGetComments, sharePost, getShares, bookmarkPost, getUserBookmarks, getForYouFeed, getFollowingFeed, getExploreFeed, sendMessage, getConversations, getMessages, markMessagesRead, createNotification, getNotifications, markNotificationRead, markAllNotificationsRead, getUnreadCount, deleteNotification, getActiveStories, viewStory, votePoll, getPollResults, getTrendingTopics, getPostsByTopic, createGroup, joinGroup, leaveGroup, getGroupFeed, postToGroup, listGroups, getGroupMembers, getCreatorAnalytics, getPostAnalytics, updateStreak as socialUpdateStreak, getStreak, tagListing, getPostSales, getPostEarnings, pinPost, unpinPost, getPinnedPosts, recordWatchTime, schedulePost, getScheduledPosts, cancelScheduledPost, processScheduledPosts, getTrendingContent, getTrendingCreators, getTrendingDomains } from "./emergent/social-layer.js";
 import { createWorkspace as collabCreateWorkspace, getWorkspace as collabGetWorkspace, listWorkspaces as collabListWorkspaces, addWorkspaceMember as collabAddWorkspaceMember, removeWorkspaceMember as collabRemoveWorkspaceMember, addDtuToWorkspace as collabAddDtuToWorkspace, addComment as collabAddComment, getComments as collabGetComments, editComment as collabEditComment, resolveComment as collabResolveComment, proposeRevision, getRevisionProposals, voteOnRevision, applyRevision, startEditSession, recordEdit, endEditSession, getCollabMetrics } from "./emergent/collaboration.js";
 import { createOrgWorkspace, getOrgWorkspace, assignRole, revokeRole, getUserRole, getOrgMembers, checkPermission, getUserPermissions, assignOrgLens, getOrgLenses, exportAuditLog, getRbacMetrics } from "./emergent/rbac.js";
 import { takeSnapshot as takeAnalyticsSnapshot, getPersonalAnalytics, getDtuGrowthTrends, getCitationAnalytics, getMarketplaceAnalytics as getMarketAnalytics, getKnowledgeDensity, getAtlasDomainAnalytics, getDashboardSummary } from "./emergent/analytics-dashboard.js";
@@ -36124,6 +36124,24 @@ app.get("/api/economy/fees", (req, res) => {
   });
 });
 
+// GET /api/economy/transactions — return transaction history for a user
+app.get("/api/economy/transactions", (req, res) => {
+  ensureEconomicState();
+  const userId = req.query.userId || req.user?.id || "default";
+  const limit = Number(req.query.limit || 50);
+  const txs = (STATE.economic.transactions || [])
+    .filter(tx => tx.from === userId || tx.to === userId || tx.seller === userId || tx.buyer === userId)
+    .slice(-limit)
+    .reverse();
+  let royaltyTotal = 0;
+  let salesTotal = 0;
+  for (const tx of txs) {
+    if ((tx.to === userId || tx.seller === userId) && tx.type === 'royalty') royaltyTotal += (tx.amount || 0);
+    if ((tx.to === userId || tx.seller === userId) && tx.type !== 'royalty') salesTotal += (tx.amount || 0);
+  }
+  res.json({ ok: true, transactions: txs, summary: { royaltyTotal, salesTotal, total: royaltyTotal + salesTotal } });
+});
+
 // Growth/organs
 app.get("/api/growth/status", (req, res) => {
   res.json({ ok: true, status: STATE.growth || { stage: "seed", health: 1.0 }});
@@ -36893,6 +36911,18 @@ app.get("/api/social/feed", (req, res) => {
 
 app.get("/api/social/trending", (req, res) => {
   try { res.json(computeTrending(STATE, Number(req.query.limit || 20))); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/trending/content", (req, res) => {
+  try { res.json(getTrendingContent(STATE, { limit: Number(req.query.limit || 20), hours: Number(req.query.hours || 24) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/trending/creators", (req, res) => {
+  try { res.json(getTrendingCreators(STATE, { limit: Number(req.query.limit || 20), days: Number(req.query.days || 7) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/trending/domains", (req, res) => {
+  try { res.json(getTrendingDomains(STATE, { limit: Number(req.query.limit || 10) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.get("/api/social/discover/:userId", (req, res) => {

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -12,15 +13,17 @@ import {
   Hammer as Pickaxe, Plus, Search, Trash2, BarChart3,
   Layers, ChevronDown, MapPin, Users,
   Mountain, Gem, HardHat, Gauge, Truck,
-  Eye, AlertTriangle, Shield,
+  Eye, AlertTriangle, Shield, Map,
 } from 'lucide-react';
+
+const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 
-type ModeTab = 'Dashboard' | 'Sites' | 'Operations' | 'Safety' | 'Geology' | 'Equipment' | 'Environmental';
+type ModeTab = 'Dashboard' | 'Sites' | 'Operations' | 'Safety' | 'Geology' | 'Equipment' | 'Environmental' | 'Map';
 
 interface SiteData {
   name: string;

@@ -320,8 +320,11 @@ export default function EventsLensPage() {
         { key: 'eventType', label: 'Event Type', type: 'select', options: EVENT_TYPES.map(t => t.id) },
         { key: 'date', label: 'Start Date', type: 'date' },
         { key: 'endDate', label: 'End Date', type: 'date' },
+        { key: 'time', label: 'Start Time' },
         { key: 'venue', label: 'Venue' },
+        { key: 'location', label: 'Location / Address' },
         { key: 'capacity', label: 'Capacity' },
+        { key: 'ticketPrice', label: 'Ticket Price in CC (0 = free)' },
         { key: 'description', label: 'Description', type: 'textarea' },
         { key: 'ticketTiers', label: 'Ticket Tiers (comma-separated)' },
       ];

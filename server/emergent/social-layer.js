@@ -1306,3 +1306,105 @@ export function processScheduledPosts(STATE) {
 
   return { ok: true, published, count: published.length };
 }
+
+// ── Trending Engine (velocity-based) ────────────────────────────────────
+
+function getTrendingScore(post) {
+  let reactionCount = 0;
+  for (const users of post.reactions.values()) reactionCount += users.size;
+  const likes = reactionCount;
+  const comments = post.comments.length;
+  const saves = post.bookmarks.size;
+  const shares = post.shares.length;
+  const raw = likes * 3 + comments * 5 + saves * 4 + shares * 8;
+  const hoursOld = (Date.now() - new Date(post.createdAt).getTime()) / 3600000;
+  const recencyBoost = 1 / (hoursOld + 1);
+  return raw * recencyBoost;
+}
+
+export function getTrendingContent(STATE, { limit = 20, hours = 24 } = {}) {
+  const social = getSocialState(STATE);
+  const cutoff = Date.now() - hours * 3600000;
+  const scored = [];
+
+  for (const post of social.posts.values()) {
+    if (new Date(post.createdAt).getTime() < cutoff) continue;
+    if (post.expiresAt && new Date(post.expiresAt).getTime() < Date.now()) continue;
+    scored.push({ post: serializePost(post), score: getTrendingScore(post) });
+  }
+
+  scored.sort((a, b) => b.score - a.score);
+  return { ok: true, content: scored.slice(0, limit).map(s => ({ ...s.post, trendScore: Math.round(s.score * 100) / 100 })) };
+}
+
+export function getTrendingCreators(STATE, { limit = 20, days = 7 } = {}) {
+  const social = getSocialState(STATE);
+  const cutoff = Date.now() - days * 86400000;
+  const creatorStats = new Map();
+
+  for (const post of social.posts.values()) {
+    if (new Date(post.createdAt).getTime() < cutoff) continue;
+    const uid = post.userId;
+    if (!creatorStats.has(uid)) {
+      creatorStats.set(uid, { userId: uid, engagementTotal: 0, postCount: 0, followerGrowth: 0 });
+    }
+    const cs = creatorStats.get(uid);
+    cs.engagementTotal += getTrendingScore(post);
+    cs.postCount++;
+  }
+
+  // Estimate follower growth: followers whose profile was created recently
+  for (const [uid, cs] of creatorStats) {
+    const followerSet = social.followers.get(uid) || new Set();
+    cs.followerCount = followerSet.size;
+    let recentFollowers = 0;
+    for (const fid of followerSet) {
+      const p = social.profiles.get(fid);
+      if (p && new Date(p.createdAt).getTime() > cutoff) recentFollowers++;
+    }
+    cs.followerGrowth = recentFollowers;
+  }
+
+  const scored = Array.from(creatorStats.values()).map(cs => ({
+    ...cs,
+    displayName: social.profiles.get(cs.userId)?.displayName || cs.userId,
+    score: cs.engagementTotal + cs.followerGrowth * 10,
+  }));
+
+  scored.sort((a, b) => b.score - a.score);
+  return { ok: true, creators: scored.slice(0, limit) };
+}
+
+export function getTrendingDomains(STATE, { limit = 10 } = {}) {
+  const social = getSocialState(STATE);
+  const cutoff = Date.now() - 24 * 3600000;
+  const domainScores = new Map();
+
+  for (const post of social.posts.values()) {
+    if (new Date(post.createdAt).getTime() < cutoff) continue;
+    const score = getTrendingScore(post);
+    for (const tag of (post.tags || [])) {
+      domainScores.set(tag, (domainScores.get(tag) || 0) + score);
+    }
+  }
+
+  const sorted = Array.from(domainScores.entries())
+    .map(([domain, score]) => ({ domain, score: Math.round(score * 100) / 100 }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+
+  // For each domain, grab top 3 posts
+  const result = sorted.map(d => {
+    const domainPosts = [];
+    for (const post of social.posts.values()) {
+      if (new Date(post.createdAt).getTime() < cutoff) continue;
+      if ((post.tags || []).includes(d.domain)) {
+        domainPosts.push({ post: serializePost(post), score: getTrendingScore(post) });
+      }
+    }
+    domainPosts.sort((a, b) => b.score - a.score);
+    return { ...d, topPosts: domainPosts.slice(0, 3).map(p => p.post) };
+  });
+
+  return { ok: true, domains: result };
+}
