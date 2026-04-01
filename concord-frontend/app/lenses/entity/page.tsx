@@ -334,6 +334,15 @@ export default function EntityLensPage() {
           </div>
         )}
 
+      {/* Qualia Detail Panel */}
+      {qualiaEntity && (
+        <QualiaEntityPanel
+          entityId={qualiaEntity}
+          entityName={entities.find(e => e.id === qualiaEntity)?.name || qualiaEntity}
+          onClose={() => setQualiaEntity(null)}
+        />
+      )}
+
       {/* Real-time Data Panel */}
       {realtimeData && (
         <RealtimeDataPanel
@@ -346,6 +355,103 @@ export default function EntityLensPage() {
         />
       )}
       </div>
+    </div>
+  );
+}
+
+// ── Qualia Entity Panel ────────────────────────────────────────────────────
+
+function QualiaEntityPanel({ entityId, entityName, onClose }: { entityId: string; entityName: string; onClose: () => void }) {
+  const { data: channelsData } = useQuery({
+    queryKey: ['qualia-channels', entityId],
+    queryFn: () => apiHelpers.qualia.channels(entityId).then(r => r.data),
+    refetchInterval: 5000,
+  });
+
+  const { data: embodimentData } = useQuery({
+    queryKey: ['qualia-embodiment', entityId],
+    queryFn: () => apiHelpers.qualia.embodiment(entityId).then(r => r.data),
+    refetchInterval: 8000,
+  });
+
+  const { data: presenceData } = useQuery({
+    queryKey: ['qualia-presence', entityId],
+    queryFn: () => apiHelpers.qualia.presence(entityId).then(r => r.data),
+    refetchInterval: 8000,
+  });
+
+  const { data: planetaryData } = useQuery({
+    queryKey: ['qualia-planetary', entityId],
+    queryFn: () => apiHelpers.qualia.planetary(entityId).then(r => r.data),
+    refetchInterval: 15000,
+  });
+
+  const [section, setSection] = useState<'sensory' | 'body' | 'presence'>('sensory');
+  const sections = [
+    { id: 'sensory' as const, label: 'Sensory Feed' },
+    { id: 'body' as const, label: 'Body Map' },
+    { id: 'presence' as const, label: 'Presence' },
+  ];
+
+  return (
+    <div className="panel p-4 space-y-4 border-2 border-neon-purple mt-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold flex items-center gap-2">
+          <Brain className="w-4 h-4 text-neon-purple" />
+          Qualia State: {entityName}
+        </h3>
+        <button onClick={onClose} className="text-gray-400 hover:text-white">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Section tabs */}
+      <div className="flex gap-1 bg-zinc-900 rounded-lg p-1">
+        {sections.map(s => (
+          <button
+            key={s.id}
+            onClick={() => setSection(s.id)}
+            className={`flex-1 py-1.5 px-2 rounded-md text-xs font-medium transition-colors ${
+              section === s.id ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'
+            }`}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {section === 'sensory' && channelsData?.channels && (
+        <QualiaSensoryFeed
+          entityId={entityId}
+          channels={channelsData.channels}
+          overloadActive={channelsData.overloadActive}
+        />
+      )}
+
+      {section === 'body' && embodimentData?.embodiment && channelsData?.channels && (
+        <QualiaBodyMap
+          entityId={entityId}
+          embodiment={embodimentData.embodiment}
+          channels={channelsData.channels}
+          overloadActive={channelsData.overloadActive}
+        />
+      )}
+
+      {section === 'presence' && presenceData?.presence && (
+        <PresenceDashboard
+          entityId={entityId}
+          presence={presenceData.presence}
+          existentialPillars={{}}
+          planetary={planetaryData?.planetary}
+        />
+      )}
+
+      {/* Fallback when no data yet */}
+      {!channelsData?.channels && !embodimentData?.embodiment && !presenceData?.presence && (
+        <div className="text-center py-8 text-zinc-500 text-sm">
+          Loading qualia state for {entityName}...
+        </div>
+      )}
     </div>
   );
 }
