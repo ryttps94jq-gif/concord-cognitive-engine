@@ -29,6 +29,7 @@ import {
   HeartHandshake, Building2, Dumbbell, Palette, Factory,
   TreePine, Landmark, Plane, PartyPopper, FlaskRound,
   ShieldCheck, Scissors, Umbrella,
+  Shirt, ChefHat, Baby, PawPrint, Trophy, Hammer, Swords, BadgeCheck,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -299,6 +300,20 @@ export const LENS_REGISTRY: LensEntry[] = [
   { id: 'services', name: 'Services', icon: Scissors, description: 'Personal services', category: 'superlens', showInSidebar: false, showInCommandPalette: true, path: '/lenses/services', order: 221, keywords: ['salon', 'cleaning', 'daycare', 'appointment'] },
   { id: 'insurance', name: 'Insurance', icon: Umbrella, description: 'Insurance & risk management', category: 'superlens', showInSidebar: false, showInCommandPalette: true, path: '/lenses/insurance', order: 222, keywords: ['policy', 'claim', 'premium', 'coverage'] },
 
+  // ── Lifestyle Lenses (61-68) ─────────────────────────────────────
+  { id: 'travel', name: 'Travel', icon: Compass, description: 'Trip planning & travel management', category: 'superlens', showInSidebar: false, showInCommandPalette: true, path: '/lenses/travel', order: 261, keywords: ['trip', 'itinerary', 'flight', 'hotel', 'vacation', 'destination'] },
+  { id: 'fashion', name: 'Fashion', icon: Shirt, description: 'Wardrobe & style management', category: 'superlens', showInSidebar: false, showInCommandPalette: true, path: '/lenses/fashion', order: 262, keywords: ['outfit', 'wardrobe', 'style', 'clothing', 'accessories'] },
+  { id: 'cooking', name: 'Cooking', icon: ChefHat, description: 'Recipes, meal prep & kitchen management', category: 'superlens', showInSidebar: false, showInCommandPalette: true, path: '/lenses/cooking', order: 263, keywords: ['recipe', 'meal', 'ingredient', 'kitchen', 'baking'] },
+  { id: 'home-improvement', name: 'Home Improvement', icon: Hammer, description: 'Home renovation & improvement projects', category: 'superlens', showInSidebar: false, showInCommandPalette: true, path: '/lenses/home-improvement', order: 264, keywords: ['renovation', 'repair', 'project', 'contractor', 'remodel'] },
+  { id: 'parenting', name: 'Parenting', icon: Baby, description: 'Parenting, childcare & family', category: 'superlens', showInSidebar: false, showInCommandPalette: true, path: '/lenses/parenting', order: 265, keywords: ['child', 'baby', 'family', 'milestone', 'school'] },
+  { id: 'pets', name: 'Pets', icon: PawPrint, description: 'Pet care & management', category: 'superlens', showInSidebar: false, showInCommandPalette: true, path: '/lenses/pets', order: 266, keywords: ['pet', 'dog', 'cat', 'vet', 'animal', 'care'] },
+  { id: 'sports', name: 'Sports', icon: Trophy, description: 'Sports tracking & team management', category: 'superlens', showInSidebar: false, showInCommandPalette: true, path: '/lenses/sports', order: 267, keywords: ['team', 'game', 'score', 'fitness', 'league', 'training'] },
+  { id: 'diy', name: 'DIY', icon: Wrench, description: 'DIY projects & crafts', category: 'superlens', showInSidebar: false, showInCommandPalette: true, path: '/lenses/diy', order: 268, keywords: ['project', 'craft', 'build', 'tool', 'maker', 'handmade'] },
+
+  // ── Social & Community Lenses (76-77) ────────────────────────────
+  { id: 'debate', name: 'Debate', icon: Swords, description: 'Structured debates & argumentation', category: 'governance', showInSidebar: false, showInCommandPalette: true, path: '/lenses/debate', order: 276, keywords: ['argument', 'debate', 'pro', 'con', 'discussion', 'position'] },
+  { id: 'mentorship', name: 'Mentorship', icon: BadgeCheck, description: 'Mentorship matching & tracking', category: 'governance', showInSidebar: false, showInCommandPalette: true, path: '/lenses/mentorship', order: 277, keywords: ['mentor', 'mentee', 'coaching', 'guidance', 'learning'] },
+
   // ── New Cognitive System Lenses ──────────────────────────────────
   { id: 'app-maker', name: 'App Maker', icon: Boxes, description: 'Compose apps from existing primitives', category: 'system', showInSidebar: false, showInCommandPalette: true, path: '/lenses/app-maker', order: 231, keywords: ['app', 'maker', 'compose', 'primitives', 'builder'] },
 
@@ -409,9 +424,9 @@ const SOVEREIGN_LENS_SET = new Set<string>(SOVEREIGN_LENSES);
 export const SIDEBAR_CATEGORIES: Record<string, string[]> = {
   Knowledge: ['research', 'hypothesis', 'reasoning', 'metacognition', 'graph', 'education', 'science', 'grounding', 'commonsense', 'inference', 'metalearning', 'reflection', 'meta'],
   Creative: ['art', 'music', 'creative', 'studio', 'whiteboard', 'game', 'sim', 'voice'],
-  Lifestyle: ['food', 'fitness', 'healthcare', 'realestate', 'travel', 'daily', 'calendar', 'household', 'insurance'],
+  Lifestyle: ['food', 'fitness', 'healthcare', 'realestate', 'travel', 'daily', 'calendar', 'household', 'insurance', 'fashion', 'cooking', 'home-improvement', 'parenting', 'pets', 'sports', 'diy'],
   Professional: ['finance', 'legal', 'law', 'code', 'database', 'accounting', 'billing', 'logistics', 'manufacturing', 'retail'],
-  Social: ['feed', 'forum', 'marketplace', 'collab', 'vote', 'global', 'alliance'],
+  Social: ['feed', 'forum', 'marketplace', 'collab', 'vote', 'global', 'alliance', 'debate', 'mentorship'],
   System: ['chat', 'entity', 'council', 'organ', 'tick', 'timeline', 'agents', 'queue'],
   Sovereign: ['admin', 'command-center', 'audit', 'lock'],
 };

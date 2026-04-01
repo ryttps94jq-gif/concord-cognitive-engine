@@ -1241,6 +1241,57 @@ export const apiHelpers = {
     },
   },
 
+  // ---- Film Studio API ----
+  filmStudio: {
+    constants: () => api.get('/api/film-studio/constants'),
+    create: (data: Record<string, unknown>) => api.post('/api/film-studio/films', data),
+    get: (id: string) => api.get(`/api/film-studio/films/${id}`),
+    update: (id: string, data: Record<string, unknown>) => api.put(`/api/film-studio/films/${id}`, data),
+    preview: (id: string) => api.get(`/api/film-studio/films/${id}/preview`),
+    previewAnalytics: (id: string) => api.get(`/api/film-studio/films/${id}/preview/analytics`),
+    components: (id: string) => api.get(`/api/film-studio/films/${id}/components`),
+    createComponent: (id: string, data: Record<string, unknown>) => api.post(`/api/film-studio/films/${id}/components`, data),
+    crew: (id: string) => api.get(`/api/film-studio/films/${id}/crew`),
+    addCrew: (id: string, data: Record<string, unknown>) => api.post(`/api/film-studio/films/${id}/crew`, data),
+    discover: (params?: Record<string, unknown>) => api.get('/api/film-studio/discover', { params }),
+    remixes: (id: string) => api.get(`/api/film-studio/films/${id}/remixes`),
+    createRemix: (id: string, data: Record<string, unknown>) => api.post(`/api/film-studio/films/${id}/remixes`, data),
+    series: (id: string) => api.get(`/api/film-studio/films/${id}/series`),
+    createSeries: (data: Record<string, unknown>) => api.post('/api/film-studio/series', data),
+    watchParty: {
+      create: (data: Record<string, unknown>) => api.post('/api/film-studio/watch-parties', data),
+      join: (id: string) => api.post(`/api/film-studio/watch-parties/${id}/join`),
+    },
+    analytics: (id: string) => api.get(`/api/film-studio/films/${id}/analytics`),
+    gift: (data: Record<string, unknown>) => api.post('/api/film-studio/gift', data),
+  },
+
+  // ---- Media Upload API ----
+  media: {
+    upload: (data: Record<string, unknown>) => api.post('/api/media/upload', data),
+    uploadUrl: (data: Record<string, unknown>) => api.post('/api/media/upload/url', data),
+    get: (id: string) => api.get(`/api/media/${id}`),
+    stream: (id: string) => api.get(`/api/media/${id}/stream`),
+    thumbnail: (id: string) => api.get(`/api/media/${id}/thumbnail`),
+    transcode: (id: string, data: Record<string, unknown>) => api.post(`/api/media/${id}/transcode`, data),
+    feed: (params?: Record<string, unknown>) => api.get('/api/media/feed', { params }),
+    view: (id: string) => api.post(`/api/media/${id}/view`),
+    like: (id: string) => api.post(`/api/media/${id}/like`),
+    comment: (id: string, data: Record<string, unknown>) => api.post(`/api/media/${id}/comment`, data),
+    comments: (id: string) => api.get(`/api/media/${id}/comments`),
+    delete: (id: string) => api.delete(`/api/media/${id}`),
+  },
+
+  // ---- Game API ----
+  game: {
+    profile: () => api.get('/api/game/profile'),
+    achievements: () => api.get('/api/game/achievements'),
+    challenges: () => api.get('/api/game/challenges'),
+    leaderboard: () => api.get('/api/game/leaderboard'),
+    completeQuest: (questId: string, xpReward?: number) =>
+      api.post(`/api/game/quests/${questId}/complete`, { xpReward: xpReward || 100 }),
+  },
+
   // ---- Generic Lens Artifact API + Manifest ----
   lens: {
     list: (domain: string, params?: { type?: string; search?: string; tags?: string; status?: string; limit?: number; offset?: number }) =>

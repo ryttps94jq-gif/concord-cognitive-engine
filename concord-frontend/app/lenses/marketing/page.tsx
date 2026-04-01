@@ -1,0 +1,405 @@
+'use client';
+
+import { useState, useMemo } from 'react';
+import { useLensNav } from '@/hooks/useLensNav';
+import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
+import { ds } from '@/lib/design-system';
+import { cn } from '@/lib/utils';
+import { UniversalActions } from '@/components/lens/UniversalActions';
+import {
+  Megaphone, Target, BarChart3, Users, Mail, Share2,
+  Plus, Search, X, Edit3, Trash2, TrendingUp, DollarSign,
+  Calendar, Eye, MousePointerClick, Globe, Hash,
+  Layers, ChevronDown, CheckCircle2, AlertCircle,
+  PenTool, Zap, Filter,
+} from 'lucide-react';
+import { ErrorState } from '@/components/common/EmptyState';
+import { useRealtimeLens } from '@/hooks/useRealtimeLens';
+import { LiveIndicator } from '@/components/lens/LiveIndicator';
+import { DTUExportButton } from '@/components/lens/DTUExportButton';
+import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
+import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
+
+type ModeTab = 'campaigns' | 'content' | 'analytics' | 'audiences' | 'email' | 'social' | 'seo';
+type ArtifactType = 'Campaign' | 'Content' | 'Analytic' | 'Audience' | 'EmailTemplate' | 'SocialPost' | 'SEOAudit';
+type Status = 'draft' | 'active' | 'paused' | 'completed' | 'scheduled' | 'archived';
+
+interface MarketingArtifact {
+  name: string;
+  type: ArtifactType;
+  status: Status;
+  description: string;
+  notes: string;
+  // Campaign
+  budget?: number;
+  spent?: number;
+  startDate?: string;
+  endDate?: string;
+  channel?: string;
+  impressions?: number;
+  clicks?: number;
+  conversions?: number;
+  roi?: number;
+  targetAudience?: string;
+  // Content
+  contentType?: string;
+  author?: string;
+  publishDate?: string;
+  platform?: string;
+  engagementRate?: number;
+  // Analytics
+  metric?: string;
+  value?: number;
+  period?: string;
+  trend?: 'up' | 'down' | 'flat';
+  // Audience
+  segmentName?: string;
+  segmentSize?: number;
+  demographics?: string;
+  // Email
+  subject?: string;
+  openRate?: number;
+  clickRate?: number;
+  listSize?: number;
+  // Social
+  socialPlatform?: string;
+  likes?: number;
+  shares?: number;
+  comments?: number;
+  // SEO
+  keyword?: string;
+  ranking?: number;
+  searchVolume?: number;
+  difficulty?: number;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
+
+const MODE_TABS: { id: ModeTab; label: string; icon: typeof Megaphone; artifactType: ArtifactType }[] = [
+  { id: 'campaigns', label: 'Campaigns', icon: Megaphone, artifactType: 'Campaign' },
+  { id: 'content', label: 'Content', icon: PenTool, artifactType: 'Content' },
+  { id: 'analytics', label: 'Analytics', icon: BarChart3, artifactType: 'Analytic' },
+  { id: 'audiences', label: 'Audiences', icon: Users, artifactType: 'Audience' },
+  { id: 'email', label: 'Email', icon: Mail, artifactType: 'EmailTemplate' },
+  { id: 'social', label: 'Social', icon: Share2, artifactType: 'SocialPost' },
+  { id: 'seo', label: 'SEO', icon: Globe, artifactType: 'SEOAudit' },
+];
+
+const STATUS_CONFIG: Record<Status, { label: string; color: string }> = {
+  draft: { label: 'Draft', color: 'gray-400' },
+  active: { label: 'Active', color: 'green-400' },
+  paused: { label: 'Paused', color: 'yellow-400' },
+  completed: { label: 'Completed', color: 'blue-400' },
+  scheduled: { label: 'Scheduled', color: 'purple-400' },
+  archived: { label: 'Archived', color: 'gray-500' },
+};
+
+const CHANNELS = ['Email', 'Social Media', 'PPC', 'SEO', 'Content Marketing', 'Influencer', 'Display', 'Video', 'Affiliate'];
+const PLATFORMS = ['Instagram', 'Twitter/X', 'LinkedIn', 'Facebook', 'TikTok', 'YouTube', 'Pinterest'];
+const CONTENT_TYPES = ['Blog Post', 'Video', 'Infographic', 'Whitepaper', 'Case Study', 'Webinar', 'Podcast', 'Newsletter'];
+
+/* ------------------------------------------------------------------ */
+/*  Component                                                          */
+/* ------------------------------------------------------------------ */
+
+export default function MarketingLensPage() {
+  useLensNav('marketing');
+  const { latestData: realtimeData, isLive, lastUpdated, insights } = useRealtimeLens('marketing');
+
+  const [activeTab, setActiveTab] = useState<ModeTab>('campaigns');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterStatus, setFilterStatus] = useState<Status | 'all'>('all');
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<LensItem<MarketingArtifact> | null>(null);
+  const [showDashboard, setShowDashboard] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(false);
+
+  // Form state
+  const [formName, setFormName] = useState('');
+  const [formDescription, setFormDescription] = useState('');
+  const [formStatus, setFormStatus] = useState<Status>('draft');
+  const [formNotes, setFormNotes] = useState('');
+  const [formBudget, setFormBudget] = useState('');
+  const [formChannel, setFormChannel] = useState('Email');
+  const [formStartDate, setFormStartDate] = useState('');
+  const [formEndDate, setFormEndDate] = useState('');
+  const [formTargetAudience, setFormTargetAudience] = useState('');
+  const [formSubject, setFormSubject] = useState('');
+  const [formPlatform, setFormPlatform] = useState('Instagram');
+  const [formKeyword, setFormKeyword] = useState('');
+  const [formContentType, setFormContentType] = useState('Blog Post');
+
+  const activeArtifactType = MODE_TABS.find(t => t.id === activeTab)?.artifactType || 'Campaign';
+
+  const { items, isLoading, isError, error, refetch, create, update, remove } = useLensData<MarketingArtifact>('marketing', activeArtifactType, { seed: [] });
+  const runAction = useRunArtifact('marketing');
+
+  const filtered = useMemo(() => {
+    let result = items;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(i => i.title.toLowerCase().includes(q) || (i.data as unknown as MarketingArtifact).description?.toLowerCase().includes(q));
+    }
+    if (filterStatus !== 'all') {
+      result = result.filter(i => (i.data as unknown as MarketingArtifact).status === filterStatus);
+    }
+    return result;
+  }, [items, searchQuery, filterStatus]);
+
+  const openCreate = () => {
+    setEditingItem(null);
+    setFormName(''); setFormDescription(''); setFormStatus('draft'); setFormNotes('');
+    setFormBudget(''); setFormChannel('Email'); setFormStartDate(''); setFormEndDate('');
+    setFormTargetAudience(''); setFormSubject(''); setFormPlatform('Instagram');
+    setFormKeyword(''); setFormContentType('Blog Post');
+    setEditorOpen(true);
+  };
+
+  const openEdit = (item: LensItem<MarketingArtifact>) => {
+    const d = item.data as unknown as MarketingArtifact;
+    setEditingItem(item);
+    setFormName(d.name || ''); setFormDescription(d.description || ''); setFormStatus(d.status || 'draft'); setFormNotes(d.notes || '');
+    setFormBudget(d.budget?.toString() || ''); setFormChannel(d.channel || 'Email');
+    setFormStartDate(d.startDate || ''); setFormEndDate(d.endDate || '');
+    setFormTargetAudience(d.targetAudience || ''); setFormSubject(d.subject || '');
+    setFormPlatform(d.socialPlatform || d.platform || 'Instagram');
+    setFormKeyword(d.keyword || ''); setFormContentType(d.contentType || 'Blog Post');
+    setEditorOpen(true);
+  };
+
+  const handleSave = async () => {
+    const data: Record<string, unknown> = {
+      name: formName, type: activeArtifactType, status: formStatus, description: formDescription, notes: formNotes,
+      budget: formBudget ? parseFloat(formBudget) : undefined,
+      channel: formChannel, startDate: formStartDate, endDate: formEndDate,
+      targetAudience: formTargetAudience, subject: formSubject,
+      socialPlatform: formPlatform, platform: formPlatform,
+      keyword: formKeyword, contentType: formContentType,
+    };
+    if (editingItem) {
+      await update({ id: editingItem.id, title: formName, data, meta: { tags: [], status: formStatus, visibility: 'private' } });
+    } else {
+      await create({ title: formName, data, meta: { tags: [], status: formStatus, visibility: 'private' } });
+    }
+    setEditorOpen(false);
+  };
+
+  if (isError) return <ErrorState error={error} onRetry={refetch} />;
+
+  /* ------------------------------------------------------------------ */
+  /*  Dashboard                                                          */
+  /* ------------------------------------------------------------------ */
+
+  const renderDashboard = () => {
+    const campaigns = items.map(i => i.data as unknown as MarketingArtifact);
+    const totalBudget = campaigns.reduce((s, c) => s + (c.budget || 0), 0);
+    const totalSpent = campaigns.reduce((s, c) => s + (c.spent || 0), 0);
+    const totalImpressions = campaigns.reduce((s, c) => s + (c.impressions || 0), 0);
+    const totalConversions = campaigns.reduce((s, c) => s + (c.conversions || 0), 0);
+
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className={ds.panel}>
+          <DollarSign className="w-5 h-5 text-green-400 mb-2" />
+          <p className={ds.textMuted}>Total Budget</p>
+          <p className="text-xl font-bold text-white">${totalBudget.toLocaleString()}</p>
+        </div>
+        <div className={ds.panel}>
+          <TrendingUp className="w-5 h-5 text-blue-400 mb-2" />
+          <p className={ds.textMuted}>Spent</p>
+          <p className="text-xl font-bold text-white">${totalSpent.toLocaleString()}</p>
+        </div>
+        <div className={ds.panel}>
+          <Eye className="w-5 h-5 text-purple-400 mb-2" />
+          <p className={ds.textMuted}>Impressions</p>
+          <p className="text-xl font-bold text-white">{totalImpressions.toLocaleString()}</p>
+        </div>
+        <div className={ds.panel}>
+          <MousePointerClick className="w-5 h-5 text-cyan-400 mb-2" />
+          <p className={ds.textMuted}>Conversions</p>
+          <p className="text-xl font-bold text-white">{totalConversions.toLocaleString()}</p>
+        </div>
+      </div>
+    );
+  };
+
+  /* ------------------------------------------------------------------ */
+  /*  Editor                                                             */
+  /* ------------------------------------------------------------------ */
+
+  const renderEditor = () => {
+    if (!editorOpen) return null;
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setEditorOpen(false)}>
+        <div className={cn(ds.panel, 'w-full max-w-lg max-h-[85vh] overflow-y-auto')} onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className={ds.heading3}>{editingItem ? 'Edit' : 'New'} {activeArtifactType}</h3>
+            <button onClick={() => setEditorOpen(false)} className={ds.btnGhost}><X className="w-4 h-4" /></button>
+          </div>
+          <div className="space-y-3">
+            <div><label className={ds.label}>Name</label><input className={ds.input} value={formName} onChange={e => setFormName(e.target.value)} placeholder="Enter name..." /></div>
+            <div><label className={ds.label}>Description</label><textarea className={ds.textarea} rows={2} value={formDescription} onChange={e => setFormDescription(e.target.value)} /></div>
+            <div><label className={ds.label}>Status</label>
+              <select className={ds.select} value={formStatus} onChange={e => setFormStatus(e.target.value as Status)}>
+                {Object.entries(STATUS_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+              </select>
+            </div>
+            {activeArtifactType === 'Campaign' && (
+              <>
+                <div><label className={ds.label}>Budget</label><input type="number" className={ds.input} value={formBudget} onChange={e => setFormBudget(e.target.value)} /></div>
+                <div><label className={ds.label}>Channel</label>
+                  <select className={ds.select} value={formChannel} onChange={e => setFormChannel(e.target.value)}>
+                    {CHANNELS.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><label className={ds.label}>Start Date</label><input type="date" className={ds.input} value={formStartDate} onChange={e => setFormStartDate(e.target.value)} /></div>
+                  <div><label className={ds.label}>End Date</label><input type="date" className={ds.input} value={formEndDate} onChange={e => setFormEndDate(e.target.value)} /></div>
+                </div>
+                <div><label className={ds.label}>Target Audience</label><input className={ds.input} value={formTargetAudience} onChange={e => setFormTargetAudience(e.target.value)} /></div>
+              </>
+            )}
+            {activeArtifactType === 'Content' && (
+              <div><label className={ds.label}>Content Type</label>
+                <select className={ds.select} value={formContentType} onChange={e => setFormContentType(e.target.value)}>
+                  {CONTENT_TYPES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+            )}
+            {activeArtifactType === 'EmailTemplate' && (
+              <div><label className={ds.label}>Subject Line</label><input className={ds.input} value={formSubject} onChange={e => setFormSubject(e.target.value)} /></div>
+            )}
+            {activeArtifactType === 'SocialPost' && (
+              <div><label className={ds.label}>Platform</label>
+                <select className={ds.select} value={formPlatform} onChange={e => setFormPlatform(e.target.value)}>
+                  {PLATFORMS.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+            )}
+            {activeArtifactType === 'SEOAudit' && (
+              <div><label className={ds.label}>Target Keyword</label><input className={ds.input} value={formKeyword} onChange={e => setFormKeyword(e.target.value)} /></div>
+            )}
+            <div><label className={ds.label}>Notes</label><textarea className={ds.textarea} rows={2} value={formNotes} onChange={e => setFormNotes(e.target.value)} /></div>
+          </div>
+          <div className="flex justify-end gap-2 mt-4">
+            <button onClick={() => setEditorOpen(false)} className={ds.btnSecondary}>Cancel</button>
+            <button onClick={handleSave} className={ds.btnPrimary} disabled={!formName.trim()}>Save</button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  /* ------------------------------------------------------------------ */
+  /*  Library                                                            */
+  /* ------------------------------------------------------------------ */
+
+  const renderLibrary = () => (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+          <input className={cn(ds.input, 'pl-10')} placeholder="Search..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+        </div>
+        <select className={cn(ds.select, 'w-auto')} value={filterStatus} onChange={e => setFilterStatus(e.target.value as Status | 'all')}>
+          <option value="all">All Status</option>
+          {Object.entries(STATUS_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+        </select>
+        <button onClick={openCreate} className={ds.btnPrimary}><Plus className="w-4 h-4" /> New</button>
+      </div>
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12"><div className="w-6 h-6 border-2 border-neon-blue border-t-transparent rounded-full animate-spin" /></div>
+      ) : filtered.length === 0 ? (
+        <div className={cn(ds.panel, 'text-center py-12')}>
+          <Megaphone className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+          <p className={ds.textMuted}>No {activeArtifactType} items yet</p>
+          <button onClick={openCreate} className={cn(ds.btnPrimary, 'mt-3')}><Plus className="w-4 h-4" /> Create First</button>
+        </div>
+      ) : (
+        filtered.map(item => {
+          const d = item.data as unknown as MarketingArtifact;
+          const sc = STATUS_CONFIG[d.status] || STATUS_CONFIG.draft;
+          return (
+            <div key={item.id} className={ds.panelHover} onClick={() => openEdit(item)}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Megaphone className="w-5 h-5 text-neon-cyan" />
+                  <div>
+                    <p className="text-white font-medium">{d.name || item.title}</p>
+                    <p className={ds.textMuted}>{d.description?.slice(0, 80)}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {d.budget && <span className="text-xs text-green-400">${d.budget.toLocaleString()}</span>}
+                  <span className={`text-xs px-2 py-0.5 rounded-full bg-${sc.color}/20 text-${sc.color}`}>{sc.label}</span>
+                  <button onClick={e => { e.stopPropagation(); remove(item.id); }} className={ds.btnGhost}><Trash2 className="w-4 h-4 text-red-400" /></button>
+                </div>
+              </div>
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+
+  /* ------------------------------------------------------------------ */
+  /*  Render                                                             */
+  /* ------------------------------------------------------------------ */
+
+  return (
+    <div className="space-y-6 p-6">
+      <header className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center">
+            <Megaphone className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className={ds.heading1}>Marketing</h1>
+              <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} />
+            </div>
+            <p className={ds.textMuted}>Campaigns, content, analytics, audiences, email, social, and SEO</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <DTUExportButton domain="marketing" data={{}} compact />
+          <button onClick={() => setShowDashboard(!showDashboard)} className={cn(showDashboard ? ds.btnPrimary : ds.btnSecondary)}>
+            <BarChart3 className="w-4 h-4" /> Dashboard
+          </button>
+        </div>
+      </header>
+
+      <RealtimeDataPanel domain="marketing" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
+      <UniversalActions domain="marketing" artifactId={items[0]?.id} compact />
+
+      <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 overflow-x-auto">
+        {MODE_TABS.map(tab => (
+          <button key={tab.id} onClick={() => { setActiveTab(tab.id); setShowDashboard(false); }}
+            className={cn('flex items-center gap-2 px-4 py-2 rounded-lg transition-colors whitespace-nowrap',
+              activeTab === tab.id && !showDashboard ? 'bg-neon-blue/20 text-neon-blue' : 'text-gray-400 hover:text-white hover:bg-lattice-elevated')}>
+            <tab.icon className="w-4 h-4" />{tab.label}
+          </button>
+        ))}
+      </nav>
+
+      {showDashboard ? renderDashboard() : renderLibrary()}
+      {renderEditor()}
+
+      <div className="border-t border-white/10">
+        <button onClick={() => setShowFeatures(!showFeatures)}
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors">
+          <span className="flex items-center gap-2"><Layers className="w-4 h-4" />Lens Features & Capabilities</span>
+          <ChevronDown className={`w-4 h-4 transition-transform ${showFeatures ? 'rotate-180' : ''}`} />
+        </button>
+        {showFeatures && <div className="px-4 pb-4"><LensFeaturePanel lensId="marketing" /></div>}
+      </div>
+    </div>
+  );
+}

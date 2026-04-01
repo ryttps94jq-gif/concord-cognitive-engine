@@ -26,6 +26,8 @@ import { ArtistProfile } from '@/components/music/ArtistProfile';
 // AlbumView unused — album support pending
 import { UploadFlow } from '@/components/music/UploadFlow';
 import { PlaylistView } from '@/components/music/PlaylistView';
+import { MediaUpload } from '@/components/media/MediaUpload';
+import { UniversalPlayer } from '@/components/media/UniversalPlayer';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';

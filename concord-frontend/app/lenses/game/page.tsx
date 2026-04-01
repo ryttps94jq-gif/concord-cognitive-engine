@@ -2,7 +2,8 @@
 
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
-import { useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { api } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -252,21 +253,54 @@ export default function GameLensPage() {
   const [unlockAnim, setUnlockAnim] = useState<string | null>(null);
   const [questFilter, setQuestFilter] = useState<'all' | 'daily' | 'weekly' | 'challenge'>('all');
 
-  // Fetch achievements via useLensData (no /api/game/* backend exists)
-  const { items: achievementItems, isLoading, isError: isError, error: error, refetch: refetch } = useLensData<Achievement>('game', 'achievement', { seed: [] });
-  const achievements: Achievement[] = achievementItems.map(i => ({ ...(i.data as unknown as Achievement), id: i.id }));
+  // Fetch achievements from /api/game/achievements
+  const { data: achievementsResp, isLoading, isError: isError, error: error, refetch: refetch } = useQuery({
+    queryKey: ['game', 'achievements'],
+    queryFn: () => api.get('/api/game/achievements').then(r => r.data),
+  });
+  const achievements: Achievement[] = (achievementsResp?.achievements || []).map((a: Record<string, unknown>) => ({
+    id: a.id as string,
+    name: a.name as string || a.id as string,
+    description: a.description as string || '',
+    icon: a.icon as string || '🏆',
+    category: a.category as string || 'general',
+    unlocked: !!(a.earned || a.unlocked),
+    progress: (a.progress as number) || (a.earned ? 1 : 0),
+    maxProgress: (a.maxProgress as number) || 1,
+    xpReward: (a.xpReward as number) || 50,
+    rarity: (a.rarity as Achievement['rarity']) || 'common',
+  }));
 
-  // Fetch challenges/quests via useLensData
-  const { items: questItems, isError: isError2, error: error2, refetch: refetch2, create: createQuest } = useLensData<Quest>('game', 'quest', { seed: [] });
-  const quests: Quest[] = questItems.map(i => ({ ...(i.data as unknown as Quest), id: i.id }));
+  // Fetch challenges/quests from /api/game/challenges
+  const { data: challengesResp, isError: isError2, error: error2, refetch: refetch2 } = useQuery({
+    queryKey: ['game', 'challenges'],
+    queryFn: () => api.get('/api/game/challenges').then(r => r.data),
+  });
+  const { create: createQuest } = useLensData<Quest>('game', 'quest', { noSeed: true });
+  const quests: Quest[] = (challengesResp?.challenges || []).map((c: Record<string, unknown>) => ({
+    id: c.id as string,
+    name: c.name as string,
+    description: c.description as string,
+    icon: '⚡',
+    xpReward: (c.reward as number) || 100,
+    difficulty: 'medium' as Quest['difficulty'],
+    type: 'daily' as Quest['type'],
+    status: 'available' as QuestStatus,
+  }));
 
-  // Fetch profile via useLensData
-  const { items: profileItems, isError: isError3, error: error3, refetch: refetch3 } = useLensData<Record<string, unknown>>('game', 'profile', { seed: [] });
-  const profileData = profileItems.length > 0 ? profileItems[0].data : null;
+  // Fetch profile from /api/game/profile
+  const { data: profileResp, isError: isError3, error: error3, refetch: refetch3 } = useQuery({
+    queryKey: ['game', 'profile'],
+    queryFn: () => api.get('/api/game/profile').then(r => r.data),
+  });
+  const profileData = profileResp?.profile || null;
 
-  // Fetch leaderboard via useLensData
-  const { items: leaderboardItems, isError: isError4, error: error4, refetch: refetch4 } = useLensData<Record<string, unknown>>('game', 'leaderboard', { seed: [] });
-  const leaderboardData = leaderboardItems.map(i => i.data);
+  // Fetch leaderboard from /api/game/leaderboard
+  const { data: leaderboardResp, isError: isError4, error: error4, refetch: refetch4 } = useQuery({
+    queryKey: ['game', 'leaderboard'],
+    queryFn: () => api.get('/api/game/leaderboard').then(r => r.data),
+  });
+  const leaderboardData = (leaderboardResp?.leaderboard || []) as Record<string, unknown>[];
 
   // Sync profile data into local state when available
   useEffect(() => {
@@ -278,7 +312,10 @@ export default function GameLensPage() {
 
   const { update: updateQuest } = useLensData<Quest>('game', 'quest', { noSeed: true });
   const completeQuestMutation = useMutation({
-    mutationFn: (questId: string) => updateQuest(questId, { data: { status: 'completed' } as unknown as Partial<Quest> }),
+    mutationFn: (questId: string) => {
+      const quest = quests.find(q => q.id === questId);
+      return api.post(`/api/game/quests/${questId}/complete`, { xpReward: quest?.xpReward || 100 }).then(r => r.data);
+    },
     onSuccess: () => { refetch2(); refetch3(); },
     onError: (err) => {
       console.error('Failed to complete quest:', err instanceof Error ? err.message : err);

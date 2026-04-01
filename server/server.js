@@ -94,6 +94,7 @@ import { accumulate as accumulateSessionContext, getContextSnapshot, getAccumula
 import { detectForge, runForgePipeline, saveForgedDTU, deleteForgedDTU, saveAndList, iterateForge, recordForgeMetric, getForgeMetrics, recordEmergentContribution } from "./lib/inline-dtu-forge.js";
 import { initializeShield, scanContent as shieldScanContent, scanHashAgainstLattice, runAnalysisPipeline as shieldAnalyze, classifyWithYARA, runProphet as shieldProphet, runSurgeon as shieldSurgeon, runGuardian as shieldGuardian, propagateThreatToLattice, shieldHeartbeatTick, computeSecurityScore, detectShieldIntent, performSweep, processUserReport, getThreatFeed, getFirewallRules, getPredictions, getShieldMetrics, queueScan as shieldQueueScan, createThreatDTU, THREAT_SUBTYPES, SCAN_MODES } from "./lib/concord-shield.js";
 import registerShieldRoutes from "./routes/shield.js";
+import registerCodeEngineRoutes from "./routes/code-engine.js";
 import { initializeMesh, detectChannels as meshDetectChannels, getChannelStatus as meshGetChannelStatus, getNodeId as meshGetNodeId, sendDTU as meshSendDTU, receiveDTU as meshReceiveDTU, initiateTransfer as meshInitiateTransfer, getTransferStatus as meshGetTransferStatus, registerPeer as meshRegisterPeer, getPeers as meshGetPeers, getTopology as meshGetTopology, getMeshMetrics, getTransmissionStats as meshGetTransmissionStats, getPendingQueue as meshGetPendingQueue, configureRelay as meshConfigureRelay, detectMeshIntent, meshHeartbeatTick, planOfflineSync as meshPlanOfflineSync, TRANSPORT_LAYERS, TRANSPORT_LIST, RELAY_PRIORITIES } from "./lib/concord-mesh.js";
 import registerMeshRoutes from "./routes/mesh.js";
 // ── Foundation Sovereignty Modules ────────────────────────────────────────────
@@ -21835,6 +21836,9 @@ registerMeshRoutes(app, {
   STATE, makeCtx, runMacro, uiJson, uid, validate, perEndpointRateLimit,
 });
 
+// ---- Code Engine Routes (extracted to routes/code-engine.js) ----
+registerCodeEngineRoutes(app, { db });
+
 // ---- Foundation Routes (extracted to routes/foundation.js) ----
 registerFoundationRoutes(app, {
   STATE, makeCtx, runMacro, uiJson, uid, validate, perEndpointRateLimit,
@@ -22626,6 +22630,10 @@ app.use("/api/creative-marketplace", createCreativeMarketplaceRouter({ db }));
 // ===== CONCORD FILM STUDIOS =====
 import createFilmStudioRouter from "./routes/film-studio.js";
 app.use("/api/film-studio", createFilmStudioRouter({ db }));
+
+// ===== MEDIA UPLOAD & PIPELINE =====
+import createMediaRouter from "./routes/media.js";
+app.use("/api/media", createMediaRouter({ STATE }));
 
 // ===== LENS & CULTURE SYSTEM =====
 import createLensCultureRouter from "./routes/lens-culture.js";
