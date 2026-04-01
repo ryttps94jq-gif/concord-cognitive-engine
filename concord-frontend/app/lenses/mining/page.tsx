@@ -37,6 +37,8 @@ interface SiteData {
   employees: number;
   productionRate: string;
   startDate: string;
+  lat?: number;
+  lng?: number;
 }
 
 interface SafetyData {
@@ -74,12 +76,13 @@ const MODE_TABS: { key: ModeTab; label: string; icon: typeof Pickaxe }[] = [
   { key: 'Geology', label: 'Geology', icon: Gem },
   { key: 'Equipment', label: 'Equipment', icon: Truck },
   { key: 'Environmental', label: 'Environmental', icon: Eye },
+  { key: 'Map', label: 'Map', icon: Map },
 ];
 
 function getTypeForTab(tab: ModeTab): string {
   const map: Record<ModeTab, string> = {
     Dashboard: 'Site', Sites: 'Site', Operations: 'Operation',
-    Safety: 'Safety', Geology: 'Geology', Equipment: 'Equipment', Environmental: 'Environmental',
+    Safety: 'Safety', Geology: 'Geology', Equipment: 'Equipment', Environmental: 'Environmental', Map: 'Site',
   };
   return map[tab];
 }
@@ -212,6 +215,16 @@ export default function MiningLensPage() {
           </div>
         )}
       </div>
+
+      {activeMode === 'Map' && (
+        <div className="p-4 bg-zinc-900 rounded-lg border border-zinc-800">
+          <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2"><Map className="w-4 h-4 text-yellow-500" /> Mine Sites</h3>
+          <MapView
+            markers={sites.filter(s => (s.data as SiteData).lat && (s.data as SiteData).lng).map(s => { const d = s.data as SiteData; return { lat: d.lat!, lng: d.lng!, label: s.title || d.name, popup: `${d.mineral || ''} - ${d.type} (${d.status})` }; })}
+            className="h-[500px]"
+          />
+        </div>
+      )}
 
       <UniversalActions domain="mining" artifactId={items[0]?.id} />
       <RealtimeDataPanel data={insights} />

@@ -198,6 +198,74 @@ export default function EventsLensPage() {
 
   const runAction = useRunArtifact('events');
 
+  // RSVP / Ticket purchase state
+  const [rsvpLoading, setRsvpLoading] = useState<string | null>(null);
+  const [rsvpSuccess, setRsvpSuccess] = useState<string | null>(null);
+
+  const handleRSVP = async (eventItem: LensItem) => {
+    const d = eventItem.data as Record<string, unknown>;
+    const price = Number(d.ticketPrice || 0);
+    const attendees = parseJsonSafe<string[]>(d.attendees, []);
+    const cap = Number(d.capacity || 0);
+    if (cap > 0 && attendees.length >= cap) {
+      setRsvpSuccess(null);
+      return;
+    }
+    setRsvpLoading(eventItem.id);
+    try {
+      const userId = 'current-user'; // from auth context
+      if (price > 0) {
+        // Paid ticket: call economy transfer endpoint
+        const { api: apiClient } = await import('@/lib/api/client');
+        await apiClient.post('/api/economy/transfer', {
+          to: (d.creatorId as string) || 'platform',
+          amount: price,
+          type: 'EVENT_TICKET',
+          metadata: { eventId: eventItem.id, eventTitle: eventItem.title },
+        });
+      }
+      // Add user to attendees
+      const updatedAttendees = [...attendees, userId];
+      await updateEvent(eventItem.id, {
+        title: eventItem.title,
+        data: { ...d, attendees: updatedAttendees, registered: (Number(d.registered || 0)) + 1 },
+        meta: eventItem.meta,
+      });
+      // Create calendar event via calendar lens
+      try {
+        const { api: apiClient } = await import('@/lib/api/client');
+        await apiClient.post('/api/lens/calendar/event', {
+          title: eventItem.title,
+          data: {
+            description: String(d.description || ''),
+            startDate: d.date,
+            endDate: d.endDate || d.date,
+            location: String(d.location || d.venue || ''),
+            allDay: false,
+            color: '#ec4899',
+            category: 'events',
+            eventType: 'deadline',
+          },
+          meta: { status: 'confirmed' },
+        });
+      } catch { /* calendar sync optional */ }
+      // Announce event RSVP via social post
+      try {
+        const { api: apiClient } = await import('@/lib/api/client');
+        await apiClient.post('/api/social/post', {
+          content: `I'm attending "${eventItem.title}"! ${d.date ? `Date: ${String(d.date)}` : ''} ${d.location || d.venue ? `Location: ${String(d.location || d.venue)}` : ''}`,
+          mediaType: 'text',
+          tags: ['event', 'rsvp'],
+        });
+      } catch { /* social post optional */ }
+      setRsvpSuccess(eventItem.id);
+    } catch (err) {
+      console.error('RSVP failed:', err);
+    } finally {
+      setRsvpLoading(null);
+    }
+  };
+
   // Current items based on mode
   const currentItems = useMemo(() => {
     const map: Record<ModeTab, LensItem[]> = {
