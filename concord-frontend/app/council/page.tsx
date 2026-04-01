@@ -145,119 +145,16 @@ const VOICE_CONFIG: Record<VoiceName, {
 };
 
 // ---------------------------------------------------------------------------
-// Mock data generators (data comes from API in production)
+// Empty-state component
 // ---------------------------------------------------------------------------
 
-function generateMockDecisions(): CouncilDecision[] {
-  const titles = [
-    'Climate Data Integration Pipeline',
-    'User Privacy Enhancement RFC',
-    'Neural Architecture Search v2',
-    'Supply Chain Optimization Model',
-    'Content Moderation Policy Update',
-    'Distributed Caching Strategy',
-    'Federated Learning Framework',
-    'API Rate Limiting Overhaul',
-  ];
-
-  return titles.map((title, i) => {
-    const votes: VoiceVote[] = VOICES.map((voice) => {
-      const roll = Math.random();
-      const config = VOICE_CONFIG[voice];
-      let vote: 'approve' | 'reject' | 'abstain';
-
-      if (config.tendency === 'Conservative') {
-        vote = roll < 0.3 ? 'approve' : roll < 0.85 ? 'reject' : 'abstain';
-      } else if (config.tendency === 'Adversarial') {
-        vote = roll < 0.2 ? 'approve' : roll < 0.9 ? 'reject' : 'abstain';
-      } else if (config.tendency === 'Progressive') {
-        vote = roll < 0.7 ? 'approve' : roll < 0.85 ? 'reject' : 'abstain';
-      } else if (config.tendency === 'Moderate') {
-        vote = roll < 0.5 ? 'approve' : roll < 0.8 ? 'reject' : 'abstain';
-      } else {
-        vote = roll < 0.45 ? 'approve' : roll < 0.75 ? 'reject' : 'abstain';
-      }
-
-      return {
-        voice,
-        vote,
-        confidence: Math.round((0.4 + Math.random() * 0.55) * 100) / 100,
-        reasoning: `${config.label} analysis: ${vote === 'approve' ? 'This aligns with' : vote === 'reject' ? 'Concerns identified regarding' : 'Insufficient data to evaluate'} the proposal\'s ${voice === 'skeptic' ? 'evidentiary basis' : voice === 'socratic' ? 'logical coherence' : voice === 'opposer' ? 'structural integrity' : voice === 'idealist' ? 'transformative potential' : 'practical feasibility'}.`,
-      };
-    });
-
-    const approves = votes.filter((v) => v.vote === 'approve').length;
-    const rejects = votes.filter((v) => v.vote === 'reject').length;
-    const outcome = approves > rejects ? 'approved' : approves === rejects ? 'split' : 'rejected';
-
-    return {
-      id: `dec-${i + 1}`,
-      dtuId: `dtu-${1000 + i}`,
-      dtuTitle: title,
-      timestamp: new Date(Date.now() - i * 3600000 * (2 + Math.random() * 10)).toISOString(),
-      outcome,
-      votes,
-      summary: `Council ${outcome} the proposal with ${approves} in favor and ${rejects} against.`,
-      dissent: outcome !== 'approved' && rejects > 0
-        ? `${votes.find((v) => v.vote === 'reject')?.voice} raised concerns about feasibility and evidence quality.`
-        : null,
-    };
-  });
-}
-
-function generateMockVoiceProfiles(): VoiceProfile[] {
-  return VOICES.map((voice) => {
-    const config = VOICE_CONFIG[voice];
-    const approvalRate =
-      voice === 'idealist' ? 0.72 :
-      voice === 'pragmatist' ? 0.51 :
-      voice === 'socratic' ? 0.44 :
-      voice === 'skeptic' ? 0.28 :
-      0.19;
-
-    return {
-      name: voice,
-      label: config.label,
-      tendency: config.tendency,
-      description: config.description,
-      totalVotes: 40 + Math.floor(Math.random() * 20),
-      approvalRate,
-      avgConfidence: 0.6 + Math.random() * 0.3,
-      recentVotes: Array.from({ length: 5 }, (_, j) => ({
-        dtuId: `dtu-${1000 + j}`,
-        vote: Math.random() < approvalRate ? 'approve' as const : Math.random() < 0.85 ? 'reject' as const : 'abstain' as const,
-        confidence: Math.round((0.5 + Math.random() * 0.45) * 100) / 100,
-      })),
-    };
-  });
-}
-
-function generateMockHeatmap(): AgreementCell[] {
-  const cells: AgreementCell[] = [];
-  for (const a of VOICES) {
-    for (const b of VOICES) {
-      if (a === b) {
-        cells.push({ voiceA: a, voiceB: b, agreementRate: 1.0, sampleSize: 50 });
-      } else {
-        let rate: number;
-        if ((a === 'skeptic' && b === 'opposer') || (a === 'opposer' && b === 'skeptic')) {
-          rate = 0.72;
-        } else if ((a === 'idealist' && b === 'pragmatist') || (a === 'pragmatist' && b === 'idealist')) {
-          rate = 0.61;
-        } else if ((a === 'skeptic' && b === 'idealist') || (a === 'idealist' && b === 'skeptic')) {
-          rate = 0.18;
-        } else if ((a === 'opposer' && b === 'idealist') || (a === 'idealist' && b === 'opposer')) {
-          rate = 0.14;
-        } else if ((a === 'socratic' && b === 'pragmatist') || (a === 'pragmatist' && b === 'socratic')) {
-          rate = 0.55;
-        } else {
-          rate = 0.3 + Math.random() * 0.3;
-        }
-        cells.push({ voiceA: a, voiceB: b, agreementRate: Math.round(rate * 100) / 100, sampleSize: 30 + Math.floor(Math.random() * 20) });
-      }
-    }
-  }
-  return cells;
+function CouncilEmptyState({ message }: { message: string }) {
+  return (
+    <div className={cn(ds.panel, 'flex flex-col items-center justify-center py-12 text-center')}>
+      <Scale className="w-10 h-10 text-gray-600 mb-3" />
+      <p className="text-gray-400 text-sm">{message}</p>
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -469,17 +366,25 @@ function DecisionsTab() {
     queryKey: ['council-decisions'],
     queryFn: async () => {
       try {
-        const res = await api.post('/api/sovereign/decree', { action: 'council-decisions' });
-        return res.data?.decisions as CouncilDecision[] | undefined;
+        const sessionsRes = await api.get('/api/council/sessions', { params: { limit: 50 } });
+        const sessions = sessionsRes.data?.sessions;
+        if (Array.isArray(sessions) && sessions.length > 0) {
+          return sessions as CouncilDecision[];
+        }
+        const actionsRes = await api.get('/api/atlas/council/actions', { params: { limit: 50 } });
+        const actions = actionsRes.data?.actions;
+        if (Array.isArray(actions) && actions.length > 0) {
+          return actions as CouncilDecision[];
+        }
+        return [] as CouncilDecision[];
       } catch {
-        return undefined;
+        return [] as CouncilDecision[];
       }
     },
-    placeholderData: generateMockDecisions,
     refetchInterval: 30000,
   });
 
-  const displayDecisions = decisions ?? generateMockDecisions();
+  const displayDecisions = decisions ?? [];
 
   if (selectedDecision) {
     return <DecisionDetail decision={selectedDecision} onBack={() => setSelectedDecision(null)} />;
@@ -499,9 +404,13 @@ function DecisionsTab() {
         </div>
       )}
 
+      {!isLoading && displayDecisions.length === 0 && (
+        <CouncilEmptyState message="No governance decisions yet" />
+      )}
+
       {displayDecisions.map((decision) => {
-        const approves = decision.votes.filter((v) => v.vote === 'approve').length;
-        const rejects = decision.votes.filter((v) => v.vote === 'reject').length;
+        const approves = decision.votes?.filter((v) => v.vote === 'approve').length ?? 0;
+        const rejects = decision.votes?.filter((v) => v.vote === 'reject').length ?? 0;
 
         return (
           <div
@@ -564,21 +473,24 @@ function DecisionsTab() {
 function VoicesTab() {
   const [expandedVoice, setExpandedVoice] = useState<VoiceName | null>(null);
 
-  const { data: voiceProfiles } = useQuery({
+  const { data: voiceProfiles, isLoading } = useQuery({
     queryKey: ['council-voices'],
     queryFn: async () => {
       try {
-        const res = await api.post('/api/sovereign/decree', { action: 'council-voices' });
-        return res.data?.voices as VoiceProfile[] | undefined;
+        const res = await api.get('/api/council/voices');
+        const voices = res.data?.voices;
+        if (Array.isArray(voices) && voices.length > 0) {
+          return voices as VoiceProfile[];
+        }
+        return [] as VoiceProfile[];
       } catch {
-        return undefined;
+        return [] as VoiceProfile[];
       }
     },
-    placeholderData: generateMockVoiceProfiles,
     refetchInterval: 30000,
   });
 
-  const profiles = voiceProfiles ?? generateMockVoiceProfiles();
+  const profiles = voiceProfiles ?? [];
 
   return (
     <div className="space-y-4">
@@ -587,9 +499,14 @@ function VoicesTab() {
         Five distinct voices deliberate on every DTU. Each brings a unique perspective and voting tendency.
       </p>
 
+      {!isLoading && profiles.length === 0 && (
+        <CouncilEmptyState message="No governance decisions yet" />
+      )}
+
       <div className="space-y-3">
         {profiles.map((profile) => {
           const config = VOICE_CONFIG[profile.name];
+          if (!config) return null;
           const Icon = config.icon;
           const isExpanded = expandedVoice === profile.name;
 
@@ -706,10 +623,9 @@ function HeatmapTab() {
         return undefined;
       }
     },
-    placeholderData: generateMockHeatmap,
   });
 
-  const cells = heatmapData ?? generateMockHeatmap();
+  const cells = heatmapData ?? [];
 
   function getCell(a: VoiceName, b: VoiceName): AgreementCell {
     return cells.find((c) => c.voiceA === a && c.voiceB === b) ?? {
@@ -732,7 +648,11 @@ function HeatmapTab() {
         How often each pair of voices votes the same way. Higher values indicate more frequent agreement.
       </p>
 
-      <div className={ds.panel}>
+      {cells.length === 0 && (
+        <CouncilEmptyState message="No governance decisions yet" />
+      )}
+
+      {cells.length > 0 && <div className={ds.panel}>
         {/* Legend */}
         <div className="flex items-center gap-3 mb-4 text-xs text-gray-400">
           <span>Low Agreement</span>
@@ -823,7 +743,7 @@ function HeatmapTab() {
             </div>
           ))}
         </div>
-      </div>
+      </div>}
     </div>
   );
 }
@@ -848,43 +768,9 @@ function EvaluateTab() {
     onSuccess: (data) => {
       if (data?.decision) {
         setEvaluationResult(data.decision as CouncilDecision);
-      } else {
-        // Build mock result for the submitted DTU
-        const mockVotes: VoiceVote[] = VOICES.map((voice) => {
-          const config = VOICE_CONFIG[voice];
-          const roll = Math.random();
-          let vote: 'approve' | 'reject' | 'abstain';
-          if (config.tendency === 'Conservative') vote = roll < 0.3 ? 'approve' : roll < 0.85 ? 'reject' : 'abstain';
-          else if (config.tendency === 'Adversarial') vote = roll < 0.2 ? 'approve' : roll < 0.9 ? 'reject' : 'abstain';
-          else if (config.tendency === 'Progressive') vote = roll < 0.7 ? 'approve' : roll < 0.85 ? 'reject' : 'abstain';
-          else if (config.tendency === 'Moderate') vote = roll < 0.5 ? 'approve' : roll < 0.8 ? 'reject' : 'abstain';
-          else vote = roll < 0.45 ? 'approve' : roll < 0.75 ? 'reject' : 'abstain';
-
-          return {
-            voice,
-            vote,
-            confidence: Math.round((0.45 + Math.random() * 0.5) * 100) / 100,
-            reasoning: `${config.label} evaluation of DTU ${dtuInput}: ${vote === 'approve' ? 'The proposal meets' : vote === 'reject' ? 'The proposal fails to meet' : 'Insufficient information for'} the ${voice === 'skeptic' ? 'evidentiary threshold' : voice === 'socratic' ? 'logical rigor standard' : voice === 'opposer' ? 'adversarial stress test' : voice === 'idealist' ? 'aspirational criteria' : 'practical viability standard'}.`,
-          };
-        });
-
-        const approves = mockVotes.filter((v) => v.vote === 'approve').length;
-        const rejects = mockVotes.filter((v) => v.vote === 'reject').length;
-        const outcome = approves > rejects ? 'approved' : approves === rejects ? 'split' : 'rejected';
-
-        setEvaluationResult({
-          id: `eval-${Date.now()}`,
-          dtuId: dtuInput,
-          dtuTitle: `Evaluation of ${dtuInput}`,
-          timestamp: new Date().toISOString(),
-          outcome: outcome as 'approved' | 'rejected' | 'split',
-          votes: mockVotes,
-          summary: `Council evaluated DTU ${dtuInput}: ${approves} approve, ${rejects} reject, ${5 - approves - rejects} abstain. Outcome: ${outcome}.`,
-          dissent: rejects > 0
-            ? `${mockVotes.find((v) => v.vote === 'reject')?.voice} raised concerns.`
-            : null,
-        });
       }
+      // If the API returned no decision, the evaluation was not processed --
+      // leave evaluationResult as null so the UI shows the empty state.
       queryClient.invalidateQueries({ queryKey: ['council-decisions'] });
     },
   });
@@ -938,6 +824,16 @@ function EvaluateTab() {
           <p className="text-red-400 text-sm flex items-center gap-2">
             <AlertTriangle className="w-4 h-4" />
             Evaluation failed. The council may be unavailable or the DTU ID is invalid.
+          </p>
+        </div>
+      )}
+
+      {/* No decision returned */}
+      {evaluateMutation.isSuccess && !evaluationResult && (
+        <div className={cn(ds.panel, 'border-yellow-500/30')}>
+          <p className="text-yellow-400 text-sm flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4" />
+            The council did not return a decision for this DTU. It may not exist or may not be eligible for evaluation.
           </p>
         </div>
       )}

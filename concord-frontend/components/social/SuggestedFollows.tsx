@@ -67,7 +67,16 @@ export function SuggestedFollows({
     queryKey: ['suggested-follows', currentUserId],
     queryFn: async () => {
       const res = await api.get(`/api/social/discover/${currentUserId}`);
-      return (res.data.suggestions || []) as SuggestedCreator[];
+      const raw: Record<string, unknown>[] = res.data?.suggestions || [];
+      return raw.map((s): SuggestedCreator => ({
+        userId: (s.userId as string) || '',
+        displayName: (s.displayName as string) || 'User',
+        avatarUrl: s.avatarUrl as string | undefined,
+        bio: (s.bio as string) || undefined,
+        followerCount: (s.followerCount as number) || 0,
+        sharedInterests: Array.isArray(s.sharedInterests) ? s.sharedInterests as string[] : [],
+        matchScore: (s.matchScore as number) || 0,
+      }));
     },
     enabled: !!currentUserId,
   });

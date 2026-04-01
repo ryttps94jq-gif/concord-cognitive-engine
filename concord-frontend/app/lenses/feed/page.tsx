@@ -47,6 +47,8 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
+import { StoriesBar } from '@/components/social/StoriesBar';
+import { SuggestedFollows } from '@/components/social/SuggestedFollows';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -117,15 +119,6 @@ interface TrendingTopic {
   posts: number;
 }
 
-interface SuggestedUser {
-  id: string;
-  name: string;
-  handle: string;
-  gradient: string;
-  role: string;
-  verified: boolean;
-}
-
 interface MiniRelease {
   id: string;
   title: string;
@@ -157,7 +150,6 @@ const _INITIAL_AUTHORS: PostAuthor[] = [];
 const INITIAL_POSTS: FeedPost[] = [];
 const TRENDING_TOPICS: TrendingTopic[] = [];
 
-const SUGGESTED_USERS: SuggestedUser[] = [];
 const NEW_RELEASES: MiniRelease[] = [];
 
 // ── Subcomponents ──────────────────────────────────────────────────────────────
@@ -458,11 +450,6 @@ export default function FeedLensPage() {
     },
   });
 
-  const followMutation = useMutation({
-    mutationFn: (userId: string) => apiHelpers.social.follow(userId),
-    onSuccess: () => useUIStore.getState().addToast({ type: 'success', message: 'Followed!' }),
-  });
-
   const handleComposeHint = useCallback((hint: string) => {
     setNewPost(prev => prev ? `${prev}\n[${hint}]` : `[${hint}]`);
     composeRef.current?.focus();
@@ -622,6 +609,12 @@ export default function FeedLensPage() {
             ))}
           </div>
         </header>
+
+        {/* Stories Bar */}
+        <StoriesBar
+          currentUserId="current-user"
+          className="border-b border-lattice-border"
+        />
 
         {/* Compose Box */}
         <div className="p-4 border-b border-lattice-border">
@@ -900,34 +893,9 @@ export default function FeedLensPage() {
           </button>
         </div>
 
-        {/* Who to Follow */}
-        <div className="bg-lattice-surface rounded-xl border border-lattice-border overflow-hidden">
-          <h2 className="text-base font-bold text-white p-4 pb-2">Who to Follow</h2>
-          {SUGGESTED_USERS.map(user => (
-            <div key={user.id} className="px-4 py-3 hover:bg-lattice-deep transition-colors flex items-center gap-3">
-              <div className={cn('w-10 h-10 rounded-full bg-gradient-to-br flex-shrink-0', user.gradient)} />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1">
-                  <p className="font-semibold text-white text-sm truncate">{user.name}</p>
-                  {user.verified && <Verified className="w-3.5 h-3.5 text-neon-cyan fill-neon-cyan flex-shrink-0" />}
-                </div>
-                <p className="text-gray-500 text-xs truncate">@{user.handle} &middot; {user.role}</p>
-              </div>
-              <button
-                onClick={() => followMutation.mutate(user.id)}
-                disabled={followMutation.isPending}
-                className="px-3.5 py-1.5 bg-white text-black font-bold rounded-full text-xs hover:bg-gray-200 transition-colors flex-shrink-0 disabled:opacity-50"
-              >
-                {followMutation.isPending ? '...' : 'Follow'}
-              </button>
-            </div>
-          ))}
-          <button
-            onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Discover more users in the social lens' })}
-            className="w-full px-4 py-3 text-neon-cyan hover:bg-lattice-deep transition-colors text-left text-sm"
-          >
-            Show more
-          </button>
+        {/* Who to Follow — wired to real discovery data */}
+        <div className="bg-lattice-surface rounded-xl border border-lattice-border overflow-hidden p-4">
+          <SuggestedFollows currentUserId="current-user" />
         </div>
 
         {/* New Releases Mini */}

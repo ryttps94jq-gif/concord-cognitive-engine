@@ -95,7 +95,7 @@ export default function ReposLensPage() {
         updatedAt: (dtu.updatedAt || dtu.createdAt) as string,
         isPrivate: (dtu.isPrivate as boolean) ?? false,
         defaultBranch: (dtu.defaultBranch as string) || 'main'
-      })) || generateMockRepos()
+      })) || []
     ),
   });
 
@@ -239,6 +239,12 @@ export default function ReposLensPage() {
       </div>
 
             <div className="space-y-4">
+              {(!repos || repos.length === 0) && !isLoading && (
+                <div className="p-8 bg-[#161b22] border border-gray-700 rounded-lg text-center">
+                  <GitBranch className="w-10 h-10 text-gray-600 mx-auto mb-3" />
+                  <p className="text-gray-400 text-sm">No repositories yet</p>
+                </div>
+              )}
               {repos?.map((repo: Repository) => (
                 <div
                   key={repo.id}
@@ -516,10 +522,3 @@ export default function ReposLensPage() {
   );
 }
 
-function generateMockRepos(): Repository[] {
-  return [];
-}
-
-function _generateMockCommits(): Commit[] {
-  return [];
-}

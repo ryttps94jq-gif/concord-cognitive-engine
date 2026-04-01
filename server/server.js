@@ -38866,6 +38866,32 @@ app.get("/api/admin/repair/network-status", requireAuth(), requireRole("owner"),
   catch (e) { res.json({ ok: false, error: e.message }); }
 });
 
+// Module Registry
+app.get("/api/admin/modules", async (_req, res) => {
+  try { const m = await import("./emergent/module-registry.js"); res.json({ ok: true, registry: m.MODULE_REGISTRY }); }
+  catch (e) { res.json({ ok: false, error: e.message }); }
+});
+
+// Sectors
+app.get("/api/admin/sectors", async (_req, res) => {
+  try { const m = await import("./emergent/sectors.js"); res.json(m.getSectorMetrics(STATE)); }
+  catch (e) { res.json({ ok: false, error: e.message }); }
+});
+app.get("/api/admin/sectors/:id", async (req, res) => {
+  try {
+    const m = await import("./emergent/sectors.js");
+    const sectorId = parseInt(req.params.id, 10);
+    const sector = m.SECTOR_BY_ID[sectorId];
+    if (!sector) return res.status(404).json({ ok: false, error: "Sector not found" });
+    const dtus = m.getDTUsInSector(STATE, sectorId, { limit: Number(req.query.limit || 100) });
+    res.json({ ok: true, sector, ...dtus });
+  } catch (e) { res.json({ ok: false, error: e.message }); }
+});
+app.get("/api/admin/sectors/distribution", async (_req, res) => {
+  try { const m = await import("./emergent/sectors.js"); res.json(m.getDTUSectorDistribution(STATE)); }
+  catch (e) { res.json({ ok: false, error: e.message }); }
+});
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // WAVE 1: FRESHNESS SCORING, CONFIDENCE, MORNING BRIEF, NLP COMMAND, QUICK CAPTURE
 // ═══════════════════════════════════════════════════════════════════════════════

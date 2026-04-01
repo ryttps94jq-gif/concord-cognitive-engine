@@ -301,7 +301,29 @@ export function StoriesBar({ currentUserId, onCreateStory, className }: StoriesB
       const res = await api.get('/api/social/stories', {
         params: { userId: currentUserId },
       });
-      return (res.data.stories || []) as UserStory[];
+      // Server returns a flat array of story posts; group them by userId into UserStory[]
+      const rawStories: Record<string, unknown>[] = res.data?.stories || [];
+      const grouped = new Map<string, UserStory>();
+      for (const s of rawStories) {
+        const uid = (s.userId as string) || 'unknown';
+        if (!grouped.has(uid)) {
+          grouped.set(uid, {
+            userId: uid,
+            displayName: (s.displayName as string) || (s.userId as string) || 'User',
+            avatarUrl: s.avatarUrl as string | undefined,
+            hasUnwatched: true,
+            stories: [],
+          });
+        }
+        grouped.get(uid)!.stories.push({
+          storyId: (s.id as string) || `story-${Date.now()}`,
+          imageUrl: s.mediaUrl as string | undefined,
+          content: (s.content as string) || (s.title as string) || undefined,
+          createdAt: (s.createdAt as string) || new Date().toISOString(),
+          duration: (s.duration as number) || 5,
+        });
+      }
+      return Array.from(grouped.values());
     },
     enabled: !!currentUserId,
   });
