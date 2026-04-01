@@ -4,13 +4,11 @@ import { useState, useMemo } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
-import { ds } from '@/lib/design-system';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   Clock, Plus, Search, X, Trash2, Eye, Layers, ChevronDown,
-  Globe, BookOpen, Users, Flag, MapPin, Calendar, Hash, Filter,
-  ArrowRight, Milestone,
+  Globe, BookOpen, Users, Flag, MapPin, ArrowRight,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';

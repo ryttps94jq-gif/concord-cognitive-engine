@@ -4,13 +4,12 @@ import { useState, useMemo } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
-import { ds } from '@/lib/design-system';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   BookOpen, Plus, Search, X, Edit3, Trash2,
   Eye, Layers, ChevronDown, Scale, Lightbulb,
-  MessageSquare, Hash, Filter, Sparkles, Target,
+  MessageSquare, Hash, Sparkles, Target,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';

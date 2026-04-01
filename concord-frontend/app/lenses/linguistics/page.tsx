@@ -5,13 +5,12 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { api } from '@/lib/api/client';
-import { ds } from '@/lib/design-system';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   Languages, Plus, Search, X, Trash2, Eye, Layers, ChevronDown,
-  BookOpen, Hash, Filter, Type, MessageSquare, Mic, Globe,
-  ArrowRight, FileText, Sparkles,
+  BookOpen, Hash, Type, Globe,
+  FileText, Sparkles,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
