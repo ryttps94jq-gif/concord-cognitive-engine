@@ -35,6 +35,7 @@ export default function EntityLensPage() {
   const [terminalEntity, setTerminalEntity] = useState<string | null>(null);
   const [terminalCommand, setTerminalCommand] = useState('');
   const [terminalOutput, setTerminalOutput] = useState<string[]>([]);
+  const [qualiaEntity, setQualiaEntity] = useState<string | null>(null);
 
   // Fetch entities from worldmodel backend
   const { data: entitiesData, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
@@ -311,6 +312,13 @@ export default function EntityLensPage() {
                   >
                     <Terminal className="w-3 h-3 mr-1 inline" />
                     Terminal
+                  </button>
+                  <button
+                    onClick={() => setQualiaEntity(entity.id)}
+                    className="btn-neon text-xs flex-1"
+                  >
+                    <Brain className="w-3 h-3 mr-1 inline" />
+                    Qualia
                   </button>
                   <button
                     onClick={() => forkEntity.mutate(entity.id)}

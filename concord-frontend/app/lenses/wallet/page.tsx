@@ -34,6 +34,10 @@ import {
   Sparkles,
   BarChart3,
   Calendar,
+  Send,
+  CheckCircle2,
+  XCircle,
+  Info,
 } from 'lucide-react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { api, apiHelpers } from '@/lib/api/client';
@@ -115,6 +119,7 @@ function WalletPageInner() {
   const [activeTab, setActiveTab] = useState<TabId>('all');
   const [showPurchase, setShowPurchase] = useState(false);
   const [showWithdraw, setShowWithdraw] = useState(false);
+  const [showTransfer, setShowTransfer] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Check for Stripe return params
@@ -375,6 +380,19 @@ function WalletPageInner() {
             >
               <ArrowDownToLine className="w-5 h-5" />
               Withdraw
+            </motion.button>
+
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setShowTransfer(true)}
+              className={cn(
+                ds.btnBase,
+                'px-5 py-3 bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/50 hover:bg-neon-cyan/30 focus:ring-neon-cyan'
+              )}
+            >
+              <Send className="w-5 h-5" />
+              Transfer
             </motion.button>
           </div>
         </div>
@@ -672,6 +690,21 @@ function WalletPageInner() {
               queryClient.invalidateQueries({
                 queryKey: ['wallet-withdrawals'],
               });
+              queryClient.invalidateQueries({ queryKey: ['economy-balance'] });
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Transfer Modal */}
+      <AnimatePresence>
+        {showTransfer && (
+          <TransferFlow
+            balance={balance}
+            onClose={() => setShowTransfer(false)}
+            onSuccess={() => {
+              queryClient.invalidateQueries({ queryKey: ['wallet-balance'] });
+              queryClient.invalidateQueries({ queryKey: ['wallet-transactions'] });
               queryClient.invalidateQueries({ queryKey: ['economy-balance'] });
             }}
           />

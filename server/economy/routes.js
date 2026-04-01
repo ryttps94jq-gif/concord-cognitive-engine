@@ -1512,6 +1512,130 @@ export function registerEconomyRoutes(app, db, opts = {}) {
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // KNOWLEDGE PACKS (bundled DTU collections)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  app.post("/api/marketplace/pack", (req, res) => {
+    try {
+      const sellerId = req.body.seller_id || req.user?.id;
+      const { name, description, dtu_ids, price } = req.body;
+
+      if (!sellerId) return res.status(400).json({ ok: false, error: "missing_seller_id" });
+      if (!name || !name.trim()) return res.status(400).json({ ok: false, error: "missing_pack_name" });
+      if (!Array.isArray(dtu_ids) || dtu_ids.length === 0) return res.status(400).json({ ok: false, error: "missing_dtu_ids" });
+      if (!price || price <= 0) return res.status(400).json({ ok: false, error: "invalid_price" });
+
+      // Create a marketplace listing with type='pack' containing the DTU IDs
+      const contentData = JSON.stringify({ type: "dtu_pack", dtuIds: dtu_ids, name: name.trim() });
+
+      const result = createListing(db, {
+        sellerId,
+        contentId: `pack_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
+        contentType: "dtu",
+        title: name.trim(),
+        description: description || `Knowledge pack with ${dtu_ids.length} DTUs`,
+        price: Math.round(parseFloat(price) * 100) / 100,
+        contentData,
+        licenseType: "standard",
+        royaltyChain: [],
+      });
+
+      if (!result.ok) return res.status(400).json(result);
+
+      // Store pack metadata alongside the listing
+      try {
+        db.prepare(`
+          INSERT OR REPLACE INTO marketplace_pack_meta (listing_id, dtu_ids_json, dtu_count, created_at)
+          VALUES (?, ?, ?, datetime('now'))
+        `).run(result.listing.id, JSON.stringify(dtu_ids), dtu_ids.length);
+      } catch (_e) {
+        // Table may not exist yet — create it and retry
+        try {
+          db.prepare(`
+            CREATE TABLE IF NOT EXISTS marketplace_pack_meta (
+              listing_id TEXT PRIMARY KEY,
+              dtu_ids_json TEXT NOT NULL,
+              dtu_count INTEGER NOT NULL DEFAULT 0,
+              created_at TEXT NOT NULL
+            )
+          `).run();
+          db.prepare(`
+            INSERT OR REPLACE INTO marketplace_pack_meta (listing_id, dtu_ids_json, dtu_count, created_at)
+            VALUES (?, ?, ?, datetime('now'))
+          `).run(result.listing.id, JSON.stringify(dtu_ids), dtu_ids.length);
+        } catch (_e2) { log("error", "pack_meta_store_failed", { error: _e2?.message }); }
+      }
+
+      const ctx = auditCtx(req);
+      economyAudit(db, {
+        action: "knowledge_pack_created",
+        userId: sellerId,
+        amount: Math.round(parseFloat(price) * 100) / 100,
+        details: {
+          listingId: result.listing?.id,
+          packName: name.trim(),
+          dtuCount: dtu_ids.length,
+          dtuIds: dtu_ids.slice(0, 10), // limit audit size
+        },
+        ...ctx,
+      });
+
+      res.json({
+        ok: true,
+        pack: {
+          listingId: result.listing.id,
+          name: name.trim(),
+          description: description || `Knowledge pack with ${dtu_ids.length} DTUs`,
+          dtuCount: dtu_ids.length,
+          dtuIds: dtu_ids,
+          price: result.listing.price,
+          sellerId,
+          createdAt: result.listing.createdAt,
+        },
+      });
+    } catch (err) {
+      log("error", "knowledge_pack_creation_failed", { error: err.message });
+      res.status(500).json({ ok: false, error: "pack_creation_failed" });
+    }
+  });
+
+  app.get("/api/marketplace/packs", (req, res) => {
+    try {
+      const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+      const offset = parseInt(req.query.offset, 10) || 0;
+
+      // Get pack listings — filter by content_data containing dtu_pack
+      const result = searchListings(db, {
+        status: "active",
+        limit,
+        offset,
+      });
+
+      // Enrich with pack metadata
+      const packs = result.items.map(item => {
+        let packMeta = null;
+        try {
+          packMeta = db.prepare("SELECT * FROM marketplace_pack_meta WHERE listing_id = ?").get(item.id);
+        } catch (_e) { /* table may not exist */ }
+
+        return {
+          ...item,
+          isPack: !!packMeta,
+          packMeta: packMeta ? {
+            dtuCount: packMeta.dtu_count,
+            dtuIds: JSON.parse(packMeta.dtu_ids_json || "[]"),
+          } : null,
+        };
+      }).filter(item => item.isPack);
+
+      res.json({ ok: true, packs, total: packs.length });
+    } catch (err) {
+      log("error", "packs_fetch_failed", { error: err.message });
+      res.status(500).json({ ok: false, error: "packs_fetch_failed" });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // FEE SPLIT
   // ═══════════════════════════════════════════════════════════════════════════
 

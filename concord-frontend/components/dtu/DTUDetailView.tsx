@@ -20,10 +20,12 @@ import { ProvenanceBadge } from './ProvenanceBadge';
 import {
   X, Clock, GitBranch, Tag, FileText, Zap, Crown, Ghost,
   Copy, ChevronRight, Download, DollarSign, Users,
-  Music, Image as ImageIcon, Video, Code, FileType,
+  Music, Image as ImageIcon, Video, Code, FileType, ArrowUpCircle,
 } from 'lucide-react';
 import { ArtifactRenderer } from '@/components/artifact/ArtifactRenderer';
 import { TierBadge, TierBadgeDetail, TierPromotionTimeline } from './TierBadge';
+import { ScopeBadge } from '@/components/platform/ScopeControls';
+import { PromoteDialog } from '@/components/scope/PromoteDialog';
 
 interface DTUDetailViewProps {
   dtuId: string;
@@ -99,6 +101,7 @@ const DTU_SOURCE_STYLES: Record<string, { bg: string }> = {
 
 export function DTUDetailView({ dtuId, onClose, onNavigate }: DTUDetailViewProps) {
   const [activeTab, setActiveTab] = useState<'content' | 'lineage' | 'metadata'>('content');
+  const [showPromote, setShowPromote] = useState(false);
 
   // Fetch DTU details
   const { data: dtuData, isLoading, isError } = useQuery({
@@ -247,6 +250,7 @@ export function DTUDetailView({ dtuId, onClose, onNavigate }: DTUDetailViewProps
                     <Copy className="w-3 h-3" />
                   </button>
                   <TierBadge tier={dtu?.tier || 'regular'} showRegular size="sm" />
+                  <ScopeBadge scope={dtu?.scope || 'local'} />
                   {dtu?.domain && (
                     <span className="text-gray-600">{dtu.domain}</span>
                   )}
@@ -435,6 +439,24 @@ export function DTUDetailView({ dtuId, onClose, onNavigate }: DTUDetailViewProps
                       <GitBranch className="w-4 h-4" />
                       <span>{dtu.children.length} citation{dtu.children.length !== 1 ? 's' : ''} (child DTUs)</span>
                     </div>
+                  )}
+
+                  {/* Scope promotion — Push to Marketplace for local DTUs */}
+                  {(!dtu.scope || dtu.scope === 'local') && !showPromote && (
+                    <button
+                      onClick={() => setShowPromote(true)}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-neon-purple/10 text-neon-purple border border-neon-purple/30 hover:bg-neon-purple/20 transition-colors"
+                    >
+                      <ArrowUpCircle className="w-4 h-4" />
+                      Push to Marketplace
+                    </button>
+                  )}
+                  {showPromote && (
+                    <PromoteDialog
+                      dtuId={dtu.id}
+                      onComplete={() => setShowPromote(false)}
+                      onCancel={() => setShowPromote(false)}
+                    />
                   )}
 
                   {/* Integrity badge */}

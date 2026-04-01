@@ -22,6 +22,7 @@ import { ds } from '@/lib/design-system';
 import { ChevronDown, ChevronRight, Zap, Layers, FileText, ExternalLink } from 'lucide-react';
 import type { DTU } from '@/lib/api/generated-types';
 import type { TierDistribution } from '@/hooks/useLensDTUs';
+import { FreshnessIndicator } from '@/components/common/FreshnessIndicator';
 
 // ---- Types ----------------------------------------------------------------
 
@@ -174,6 +175,21 @@ function TierSection({
 }
 
 /**
+ * Compute a 0.0–1.0 freshness score from an updatedAt timestamp.
+ * Uses exponential decay with a 30-day half-life matching context-engine.js weighting.
+ * - <7 days: 0.8–1.0 (green)
+ * - 7–30 days: 0.5–0.8 (cyan/warm)
+ * - 30+ days: decays toward 0 (amber/red/stale)
+ */
+function computeTimeFreshness(updatedAt: string): number {
+  const ageMs = Date.now() - new Date(updatedAt).getTime();
+  const ageDays = ageMs / (1000 * 60 * 60 * 24);
+  // Exponential decay with 30-day half-life
+  const halfLife = 30;
+  return Math.max(0, Math.min(1, Math.exp(-0.693 * ageDays / halfLife)));
+}
+
+/**
  * DTURow — Single DTU row within a tier section.
  */
 function DTURow({
@@ -208,6 +224,14 @@ function DTURow({
       <span className="truncate text-gray-300 group-hover:text-white flex-1">
         {dtu.title || dtu.id.slice(0, 8)}
       </span>
+
+      {/* Freshness indicator — time-based scoring */}
+      {dtu.updatedAt && (
+        <FreshnessIndicator
+          score={computeTimeFreshness(dtu.updatedAt)}
+          size="sm"
+        />
+      )}
 
       {/* Tag chips */}
       {dtu.tags?.length > 0 && (

@@ -978,6 +978,62 @@ export default function CodeLensPage() {
       </header>
 
 
+      {/* Forge App Generator Panel */}
+      <AnimatePresence>
+        {showForge && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden border-b border-purple-500/30"
+          >
+            <div className="p-4 bg-purple-500/5">
+              <div className="flex items-center gap-2 mb-3">
+                <Sparkles className="w-5 h-5 text-purple-400" />
+                <h3 className="text-sm font-semibold text-purple-300">Generate Forge App</h3>
+                <span className="text-[10px] px-2 py-0.5 rounded bg-purple-500/20 text-purple-400">Single-file monolith</span>
+              </div>
+              <div className="flex gap-2">
+                <textarea
+                  value={forgePrompt}
+                  onChange={e => setForgePrompt(e.target.value)}
+                  placeholder="Describe the app you want to generate... (e.g., 'A task tracker with categories, due dates, and a kanban board')"
+                  className="flex-1 bg-lattice-deep border border-purple-500/30 rounded-lg p-3 text-sm text-white placeholder-gray-600 resize-none h-20 focus:outline-none focus:border-purple-400/50"
+                />
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={() => forgeAppMutation.mutate(forgePrompt)}
+                    disabled={!forgePrompt.trim() || forgeAppMutation.isPending}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-purple-600/20 text-purple-400 border border-purple-600/30 hover:bg-purple-600/30 disabled:opacity-40 transition-colors"
+                  >
+                    {forgeAppMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-4 h-4" />
+                    )}
+                    Generate
+                  </button>
+                  <button
+                    onClick={() => setShowForge(false)}
+                    className="px-4 py-2 rounded-lg text-sm text-gray-400 hover:text-white transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+              {forgeResult && !forgeAppMutation.isPending && (
+                <div className="mt-3 p-3 bg-lattice-deep rounded-lg border border-purple-500/20">
+                  <p className="text-xs text-purple-300 mb-2">Generated app opened in new editor tab. Preview:</p>
+                  <pre className="text-xs text-gray-400 font-mono max-h-32 overflow-auto whitespace-pre-wrap">
+                    {forgeResult.slice(0, 500)}{forgeResult.length > 500 ? '...' : ''}
+                  </pre>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* AI Actions */}
       <UniversalActions domain="code" artifactId={savedScripts[0]?.id} compact />
       <div className="flex-1 flex overflow-hidden">

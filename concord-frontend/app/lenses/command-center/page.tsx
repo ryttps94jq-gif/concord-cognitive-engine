@@ -1326,12 +1326,14 @@ export default function CommandCenterPage() {
       case 'brains': return <BrainsPanel />;
       case 'emergents': return <EmergentPanel />;
       case 'lattice': return <LatticePanel />;
+      case 'shield': return <ShieldStatusPanel />;
       case 'attention': return <AttentionPanel />;
       case 'forgetting': return <ForgettingPanel />;
       case 'repair': return <RepairCortexPanel />;
       case 'promotions': return <PromotionPanel />;
       case 'plugins': return <PluginPanel />;
       case 'pipeline': return <PipelinePanel />;
+      case 'federation': return <FederationStatusPanel />;
       case 'users': return <UserPanel />;
       case 'config': return <ConfigPanel />;
       case 'emergency': return <EmergencyPanel />;
