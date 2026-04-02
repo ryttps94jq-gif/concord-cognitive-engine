@@ -13,7 +13,7 @@ import {
   Shield, Plus, Search, Trash2,
   BarChart3, AlertTriangle,
   Layers, ChevronDown, MapPin, Users, Radio,
-  Target, Crosshair, Lock, Eye, ShieldCheck, Activity,
+  Target, Crosshair, Lock, Eye, ShieldCheck, Activity, Zap,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -282,6 +282,12 @@ export default function DefenseLensPage() {
                 )}
               </div>
               <div className="flex items-center gap-1">
+                <button onClick={() => handleAction(item.id)} className="p-1.5 hover:bg-zinc-800 rounded text-gray-500 hover:text-cyan-400" title="Run AI analysis">
+                  <Zap className="w-3.5 h-3.5" />
+                </button>
+                <button onClick={() => handleUpdate(item.id, item.data as ArtifactDataUnion)} className="p-1.5 hover:bg-zinc-800 rounded text-gray-500 hover:text-blue-400" title="Update">
+                  <Eye className="w-3.5 h-3.5" />
+                </button>
                 <button onClick={() => remove(item.id)} className="p-1.5 hover:bg-zinc-800 rounded text-gray-500 hover:text-red-400">
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>

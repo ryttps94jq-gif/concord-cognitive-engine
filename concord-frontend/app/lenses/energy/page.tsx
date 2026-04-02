@@ -3,9 +3,9 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Zap, Sun, Wind, Droplets, Flame, Plus, Trash2, Layers, ChevronDown, TrendingUp, BarChart3, Battery, Gauge, AlertTriangle } from 'lucide-react';
+import { Zap, Sun, Wind, Droplets, Flame, Plus, Trash2, Layers, ChevronDown, TrendingUp, BarChart3, Battery, Gauge, AlertTriangle, Loader2 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -55,6 +55,10 @@ export default function EnergyLensPage() {
   const { items: assetItems, isLoading, isError, error, refetch, create, update, remove } = useLensData<Record<string, unknown>>('energy', 'asset', { seed: [] });
   const { items: consumptionItems, create: createConsumption } = useLensData<Record<string, unknown>>('energy', 'consumption', { seed: [] });
   const runAction = useRunArtifact('energy');
+
+  const handleAction = useCallback((artifactId: string) => {
+    runAction.mutate({ artifactId, action: 'analyze' });
+  }, [runAction]);
 
   const assets = assetItems.map(i => ({ id: i.id, title: i.title, ...(i.data || {}) })) as unknown as (EnergyAsset & { id: string; title: string })[];
   const consumption = consumptionItems.map(i => ({ id: i.id, ...(i.data || {}) })) as unknown as (ConsumptionRecord & { id: string })[];
@@ -116,6 +120,7 @@ export default function EnergyLensPage() {
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-bold">Energy Lens</h1>
               <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} />
+              {runAction.isPending && <Loader2 className="w-4 h-4 animate-spin text-yellow-500" />}
             </div>
             <p className="text-sm text-gray-400">Energy assets, consumption tracking, and grid mix analysis</p>
           </div>
@@ -127,12 +132,13 @@ export default function EnergyLensPage() {
       <DTUExportButton domain="energy" data={{}} compact />
 
       {/* Stat Cards Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {[
           { icon: Battery, label: 'Total Capacity', value: `${totalCapacity.toFixed(1)} MW`, color: 'text-yellow-500' },
           { icon: TrendingUp, label: 'Total Output', value: `${totalOutput.toFixed(0)} MWh`, color: 'text-neon-cyan' },
           { icon: Wind, label: 'CO2 Avoided', value: `${totalCO2.toFixed(0)} t`, color: 'text-green-400' },
           { icon: Gauge, label: 'Renewable Mix', value: `${renewablePct.toFixed(0)}%`, color: 'text-emerald-400' },
+          { icon: Gauge, label: 'Avg Efficiency', value: `${(avgEfficiency * 100).toFixed(1)}%`, color: 'text-orange-400' },
         ].map((stat, i) => (
           <motion.div
             key={stat.label}
@@ -258,7 +264,11 @@ export default function EnergyLensPage() {
                         {asset.location && <span>{asset.location}</span>}
                       </div>
                     </div>
-                    <button onClick={() => remove(asset.id)} className="text-gray-500 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => handleAction(asset.id)} className="text-gray-500 hover:text-neon-cyan" title="Run AI analysis"><Zap className="w-4 h-4" /></button>
+                      <button onClick={() => update({ id: asset.id, data: { ...(asset as Record<string, unknown>), lastUpdated: new Date().toISOString() } })} className="text-gray-500 hover:text-yellow-400" title="Update"><TrendingUp className="w-4 h-4" /></button>
+                      <button onClick={() => remove(asset.id)} className="text-gray-500 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
+                    </div>
                   </motion.div>
                 );
               })
@@ -270,6 +280,9 @@ export default function EnergyLensPage() {
       {activeTab === 'consumption' && (
         <div className="panel p-4">
           <h3 className="font-semibold mb-3 flex items-center gap-2"><BarChart3 className="w-4 h-4 text-neon-cyan" /> Consumption Tracking</h3>
+          <button onClick={() => createConsumption({ title: `Reading ${new Date().toLocaleDateString()}`, data: { date: new Date().toISOString(), usage: 0, cost: 0, source: '' } })} className="mb-3 px-3 py-1.5 bg-yellow-500/20 text-yellow-500 rounded-lg text-sm hover:bg-yellow-500/30 flex items-center gap-1.5">
+            <Plus className="w-4 h-4" /> Add Reading
+          </button>
           {consumption.length === 0 ? (
             <p className="text-gray-500 text-sm text-center py-4">No consumption data yet. Energy assets will generate consumption records over time.</p>
           ) : (

@@ -8,7 +8,7 @@ import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   ChefHat, Plus, Search, Trash2, Clock, Users, Flame,
   Star, UtensilsCrossed, Layers, ChevronDown, Timer,
-  CheckSquare, Square,
+  CheckSquare, Square, Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -268,7 +268,7 @@ export default function CookingLensPage() {
               {/* Title row */}
               <div className="flex items-center justify-between">
                 <h3 className="font-semibold text-white truncate flex-1 mr-2">{r.name}</h3>
-                <button onClick={() => remove(r.id)} className="text-gray-500 hover:text-red-400 shrink-0"><Trash2 className="w-4 h-4" /></button>
+                <button onClick={() => remove(r.id)} disabled={deleteMut.isPending} className="text-gray-500 hover:text-red-400 shrink-0">{deleteMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}</button>
               </div>
 
               {/* Badges row */}

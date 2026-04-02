@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
@@ -12,7 +12,7 @@ import {
   Truck, Package, Warehouse, Globe, BarChart3, Users,
   Plus, Search, X, Trash2, DollarSign,
   AlertTriangle, CheckCircle2,
-  Layers, ChevronDown, Ship, Factory, Route,
+  Layers, ChevronDown, Ship, Factory, Route, Zap,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -85,6 +85,16 @@ export default function SupplyChainLensPage() {
     if (filterStatus !== 'all') result = result.filter(i => (i.data as unknown as SupplyChainArtifact).status === filterStatus);
     return result;
   }, [items, searchQuery, filterStatus]);
+
+  const handleAction = useCallback(async (action: string, artifactId?: string) => {
+    const targetId = artifactId || filtered[0]?.id;
+    if (!targetId) return;
+    try {
+      await runAction.mutateAsync({ id: targetId, action });
+    } catch (err) {
+      console.error('Action failed:', err);
+    }
+  }, [filtered, runAction]);
 
   const openCreate = () => { setEditingItem(null); setFormName(''); setFormDescription(''); setFormStatus('pending'); setFormNotes(''); setFormSupplier(''); setFormQuantity(''); setFormUnitCost(''); setFormOrigin(''); setFormDestination(''); setFormSku(''); setFormTrackingNumber(''); setEditorOpen(true); };
   const openEdit = (item: LensItem<SupplyChainArtifact>) => { const d = item.data as unknown as SupplyChainArtifact; setEditingItem(item); setFormName(d.name || ''); setFormDescription(d.description || ''); setFormStatus(d.status || 'pending'); setFormNotes(d.notes || ''); setFormSupplier(d.supplier || ''); setFormQuantity(d.quantity?.toString() || ''); setFormUnitCost(d.unitCost?.toString() || ''); setFormOrigin(d.origin || ''); setFormDestination(d.destination || ''); setFormSku(d.sku || ''); setFormTrackingNumber(d.trackingNumber || ''); setEditorOpen(true); };
