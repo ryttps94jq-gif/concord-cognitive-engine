@@ -448,10 +448,19 @@ export async function tickRealTimeFeeds(STATE, tickCount, realtimeEmit, callBrai
 }
 
 export function getRealtimeFeedStatus() {
+  // Include feed manager status if available
+  let feedManagerStatus = null;
+  try {
+    if (globalThis._feedManager) {
+      feedManagerStatus = globalThis._feedManager.getFeedHealthDashboard();
+    }
+  } catch (_e) { /* feed manager may not be initialized */ }
+
   return {
     cacheSize: FEED_CACHE.size,
     errors: Object.fromEntries(FEED_ERRORS),
     feeds: ["finance", "crypto", "news", "weather", "research", "economy", "health", "energy"],
+    feedManager: feedManagerStatus,
   };
 }
 

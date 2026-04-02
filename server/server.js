@@ -23116,6 +23116,10 @@ app.locals.verifyToken = verifyToken;
 app.locals.db = db;
 app.use("/", mobileCheckoutRouter);
 
+// ===== FEED MANAGER ADMIN ROUTES =====
+import createFeedRoutes from "./routes/feeds.js";
+app.use("/api/feeds", createFeedRoutes({ requireAuth: requireRole?.("admin") }));
+
 // ===== OPENAPI DOCUMENTATION =====
 import createOpenAPIRouter from "./routes/openapi.js";
 app.use("/api", createOpenAPIRouter());
@@ -45754,6 +45758,70 @@ try { await tryInitWebSockets(server); } catch (e) {
   structuredLog("error", "websocket_init_failed", { error: String(e?.message || e), stack: String(e?.stack || "").slice(0, 500) });
 }
 
+// ── Feed Manager — Centralized real-time feed registry (separate timer, NOT heartbeat) ──
+try {
+  const { initFeedManager, registerFeeds, startFeedManager, getFeedHealthDashboard, listFeeds, setFeedEnabled, setFeedInterval, removeFeed, testFeedConnectivity, forceTick, registerFeed, listFeedsByDomain } = await import("./lib/feed-manager.js");
+  const { ALL_DEFAULT_FEEDS, FEED_DOMAINS } = await import("./lib/feed-sources.js");
+  const { bridgeEventToDTU } = await import("./emergent/event-to-dtu-bridge.js");
+
+  // Build bridge callback for feed DTUs
+  const feedBridge = (event) => bridgeEventToDTU(event, {
+    pipelineCommitDTU,
+    makeInternalCtx,
+    lookupDTU: (id) => STATE.dtus.get(id) || null,
+    updateDTU: (dtu) => { STATE.dtus.set(dtu.id, dtu); },
+    broadcastEvent: (type, data) => { try { realtimeEmit(type, data); } catch (_e) { /* non-critical */ } },
+    STATE,
+  });
+
+  // Initialize with all dependencies
+  initFeedManager({
+    STATE,
+    pipelineCommitDTU,
+    makeInternalCtx,
+    realtimeEmit,
+    bridgeEvent: feedBridge,
+    checkLoad: () => {
+      // Pause feeds during high load
+      try {
+        const mem = process.memoryUsage();
+        if (mem.heapUsed / mem.heapTotal > 0.85) return false;
+      } catch (_e) { /* allow */ }
+      return true;
+    },
+  });
+
+  // Register all default feed sources
+  const regResult = registerFeeds(ALL_DEFAULT_FEEDS);
+  structuredLog("info", "feed_manager_registered", { registered: regResult.registered, errors: regResult.errors.length, domains: FEED_DOMAINS.length });
+
+  // Start feed manager (begins independent polling timers)
+  startFeedManager();
+  structuredLog("info", "feed_manager_started", { feedCount: listFeeds().length });
+
+  // Expose feed manager API on globalThis for route access
+  globalThis._feedManager = {
+    getFeedHealthDashboard,
+    listFeeds,
+    listFeedsByDomain,
+    setFeedEnabled,
+    setFeedInterval,
+    removeFeed,
+    registerFeed,
+    testFeedConnectivity,
+    forceTick,
+    FEED_DOMAINS,
+  };
+
+  // Register shutdown callback to stop feed timers
+  const { stopFeedManager: _stopFeeds } = await import("./lib/feed-manager.js");
+  registerShutdownCallback(() => {
+    try { _stopFeeds(); } catch (_e) { /* shutting down */ }
+  });
+
+} catch (e) {
+  structuredLog("warn", "feed_manager_init_failed", { error: String(e?.message || e) });
+}
 
 // ---- Auto-promotion scheduler (offline-first, deterministic) ----
 try {

@@ -104,6 +104,8 @@ const FORWARDED_EVENTS: SocketEvent[] = [
   'initiative:new',
   // Chat tool execution results
   'chat:tool_result',
+  // Feed Manager real-time DTU events
+  'feed:new-dtu',
 ];
 
 interface UseSocketOptions {
