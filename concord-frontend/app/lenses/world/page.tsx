@@ -292,6 +292,32 @@ function DTUObject({ dtu, position, color, onSelect }: DTUObjectProps) {
           <meshBasicMaterial color={color} transparent opacity={0.7} />
         </mesh>
       )}
+      {/* Persistent landmark label for HYPER DTUs — visible from distance */}
+      {tier === 'hyper' && (
+        <Html
+          position={[0, dims.h / 2 + 3, 0]}
+          center
+          distanceFactor={80}
+          style={{ pointerEvents: 'none', whiteSpace: 'nowrap' }}
+        >
+          <div className="bg-purple-900/80 border border-purple-400/60 px-3 py-1 rounded-lg text-[11px] text-purple-200 font-bold backdrop-blur-sm shadow-[0_0_12px_rgba(168,85,247,0.4)]">
+            {dtu.title || dtu.id}
+          </div>
+        </Html>
+      )}
+      {/* Persistent label for MEGA DTUs — visible at medium distance */}
+      {tier === 'mega' && !hovered && (
+        <Html
+          position={[0, dims.h / 2 + 2, 0]}
+          center
+          distanceFactor={50}
+          style={{ pointerEvents: 'none', whiteSpace: 'nowrap' }}
+        >
+          <div className="bg-cyan-900/60 border border-cyan-500/30 px-2 py-0.5 rounded text-[9px] text-cyan-300/80 backdrop-blur-sm">
+            {dtu.title || dtu.id}
+          </div>
+        </Html>
+      )}
       {/* Hover label */}
       {hovered && (
         <Html
@@ -411,7 +437,11 @@ function AmbientParticles() {
 // WASD Movement Controller
 // ---------------------------------------------------------------------------
 
-function WASDControls() {
+function WASDControls({ onCameraMove, teleportTo, onTeleportDone }: {
+  onCameraMove?: (pos: [number, number, number]) => void;
+  teleportTo?: [number, number, number] | null;
+  onTeleportDone?: () => void;
+}) {
   const { camera } = useThree();
   const keys = useRef<Set<string>>(new Set());
   const velocity = useRef(new THREE.Vector3());
@@ -458,6 +488,17 @@ function WASDControls() {
 
     // Clamp minimum height
     if (camera.position.y < 2) camera.position.y = 2;
+
+    // Report camera position for minimap (throttled)
+    if (onCameraMove) {
+      onCameraMove([camera.position.x, camera.position.y, camera.position.z]);
+    }
+
+    // Handle teleport
+    if (teleportTo) {
+      camera.position.set(teleportTo[0], 40, teleportTo[2]);
+      if (onTeleportDone) onTeleportDone();
+    }
   });
 
   return null;
@@ -472,9 +513,12 @@ interface SceneProps {
   onSelect: (dtu: DTU) => void;
   isNight: boolean;
   sunPosition: [number, number, number];
+  onCameraMove?: (pos: [number, number, number]) => void;
+  teleportTo?: [number, number, number] | null;
+  onTeleportDone?: () => void;
 }
 
-function Scene({ districts, onSelect, isNight, sunPosition }: SceneProps) {
+function Scene({ districts, onSelect, isNight, sunPosition, onCameraMove, teleportTo, onTeleportDone }: SceneProps) {
   return (
     <>
       {/* Lighting */}
@@ -511,7 +555,7 @@ function Scene({ districts, onSelect, isNight, sunPosition }: SceneProps) {
       ))}
 
       {/* Controls */}
-      <WASDControls />
+      <WASDControls onCameraMove={onCameraMove} teleportTo={teleportTo} onTeleportDone={onTeleportDone} />
       <PointerLockControls />
     </>
   );
@@ -665,34 +709,60 @@ function HUD({
         </div>
       </div>
 
-      {/* Minimap placeholder */}
-      <div className="absolute bottom-4 left-4 hidden md:block">
-        <div className="w-40 h-40 border border-cyan-900/50 bg-black/60 backdrop-blur-sm rounded-lg overflow-hidden">
+      {/* Minimap — click to teleport */}
+      <div className="absolute bottom-4 left-4 hidden md:block pointer-events-auto">
+        <div className="w-48 h-48 border border-cyan-900/50 bg-black/70 backdrop-blur-sm rounded-lg overflow-hidden">
           <div className="p-2">
-            <div className="text-cyan-700 text-[9px] font-mono mb-1">MINIMAP</div>
-            <div className="relative w-full h-28">
+            <div className="text-cyan-700 text-[9px] font-mono mb-1">MINIMAP <span className="text-cyan-900">(click to teleport)</span></div>
+            <div className="relative w-full h-36">
               {districts.map((d) => {
                 const [cx, , cz] = d.center;
-                const scale = 0.15;
+                const scale = 0.12;
                 return (
-                  <div
+                  <button
                     key={d.domain}
-                    className="absolute w-3 h-3 rounded-sm"
+                    className="absolute w-4 h-4 rounded-sm border border-white/10 hover:border-white/40 hover:scale-150 transition-transform cursor-pointer"
                     style={{
                       backgroundColor: d.color,
-                      opacity: 0.6,
+                      opacity: 0.7,
                       left: `${50 + cx * scale}%`,
                       top: `${50 + cz * scale}%`,
                       transform: 'translate(-50%, -50%)',
                     }}
-                    title={d.domain}
+                    title={`Teleport to ${d.domain}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setTeleportTarget(d.center);
+                    }}
                   />
                 );
               })}
-              {/* Camera indicator */}
-              <div className="absolute w-2 h-2 bg-white rounded-full"
-                style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }}
+              {/* Camera position indicator (real-time) */}
+              <div
+                className="absolute w-2.5 h-2.5 bg-white rounded-full border border-cyan-400 shadow-[0_0_6px_rgba(0,255,247,0.8)] z-10 pointer-events-none"
+                style={{
+                  left: `${50 + cameraPos[0] * 0.12}%`,
+                  top: `${50 + cameraPos[2] * 0.12}%`,
+                  transform: 'translate(-50%, -50%)',
+                }}
               />
+              {/* District labels on minimap */}
+              {districts.map((d) => {
+                const [cx, , cz] = d.center;
+                return (
+                  <span
+                    key={`label-${d.domain}`}
+                    className="absolute text-[7px] text-white/40 font-mono pointer-events-none whitespace-nowrap"
+                    style={{
+                      left: `${50 + cx * 0.12}%`,
+                      top: `${50 + cz * 0.12 + 3}%`,
+                      transform: 'translate(-50%, 0)',
+                    }}
+                  >
+                    {d.domain}
+                  </span>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -703,11 +773,16 @@ function HUD({
         <div className="bg-black/50 backdrop-blur-sm border border-cyan-900/30 rounded-lg p-3 max-h-[60vh] overflow-y-auto pointer-events-auto scrollbar-thin scrollbar-thumb-cyan-900">
           <div className="text-cyan-700 text-[9px] font-mono mb-2 tracking-widest">DISTRICTS</div>
           {districts.map((d) => (
-            <div key={d.domain} className="flex items-center gap-2 py-0.5">
+            <button
+              key={d.domain}
+              className="flex items-center gap-2 py-0.5 w-full text-left hover:bg-white/5 rounded px-1 -mx-1 transition-colors"
+              onClick={() => setTeleportTarget(d.center)}
+              title={`Teleport to ${d.domain}`}
+            >
               <div className="w-2 h-2 rounded-sm flex-shrink-0" style={{ backgroundColor: d.color }} />
               <span className="text-cyan-500 text-[10px] font-mono truncate">{d.domain}</span>
               <span className="text-cyan-800 text-[9px] font-mono ml-auto">{d.dtus.length}</span>
-            </div>
+            </button>
           ))}
         </div>
       </div>
@@ -783,6 +858,8 @@ export default function WorldLensPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedDTU, setSelectedDTU] = useState<SelectedDTU | null>(null);
   const [locked, setLocked] = useState(false);
+  const [cameraPos, setCameraPos] = useState<[number, number, number]>([0, 80, 0]);
+  const [teleportTarget, setTeleportTarget] = useState<[number, number, number] | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const { sunPosition, isNight } = useDayNight();
@@ -891,6 +968,9 @@ export default function WorldLensPage() {
           onSelect={handleSelect}
           isNight={isNight}
           sunPosition={sunPosition}
+          onCameraMove={setCameraPos}
+          teleportTo={teleportTarget}
+          onTeleportDone={() => setTeleportTarget(null)}
         />
       </Canvas>
 

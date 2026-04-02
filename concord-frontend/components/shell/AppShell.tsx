@@ -13,6 +13,8 @@ import { SystemGuidePanel } from '@/components/guidance/SystemGuidePanel';
 import { FirstWinWizard } from '@/components/guidance/FirstWinWizard';
 import { LensErrorBoundary } from '@/components/common/LensErrorBoundary';
 import { InstallPrompt } from '@/components/pwa/InstallPrompt';
+import { CookieConsent } from '@/components/common/CookieConsent';
+import { ThemeToggle } from '@/components/common/ThemeToggle';
 import { OfflineFallback } from '@/components/pwa/OfflineFallback';
 import SyncIndicator from '@/components/pwa/SyncIndicator';
 import { ConnectionStatus } from '@/components/common/ConnectionStatus';
@@ -116,10 +118,11 @@ export function AppShell({ children }: AppShellProps) {
         <div className="flex items-center">
           <Topbar />
           {/* Session toggle in topbar row */}
+          <ThemeToggle />
           <button
             onClick={() => setSessionSidebarOpen(!sessionSidebarOpen)}
             className="flex-shrink-0 flex items-center gap-2 px-3 py-2 mr-2 rounded hover:bg-white/5 text-sm text-white/50 hover:text-white/80 transition-colors border-l border-white/10"
-            title="Open sessions"
+            title="Open sessions (Ctrl+Shift+S)"
           >
             <span className="text-xs leading-none">&#9776;</span>
             {activeSessionTitle && (
@@ -151,6 +154,7 @@ export function AppShell({ children }: AppShellProps) {
       <OfflineFallback />
       <InstallPrompt />
       <SyncIndicator />
+      <CookieConsent />
       <QuickCapture isOpen={quickCapture.isOpen} onClose={quickCapture.close} />
       <NowPlayingBar />
     </div>
