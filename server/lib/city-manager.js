@@ -21,11 +21,69 @@ import logger from "../logger.js";
 
 const VALID_THEMES = new Set([
   "modern", "cyberpunk", "medieval", "fantasy", "minimal", "industrial", "nature",
+  "sci-fi", "post-apocalyptic", "steampunk", "tropical", "arctic", "desert",
+  "underwater", "space-station", "western", "noir", "custom",
 ]);
 
 const VALID_DOMAINS = new Set([
+  // Original
   "legal", "healthcare", "finance", "trades", "music", "food",
+  // Creative
+  "art", "design", "photography", "filmmaking", "writing", "animation",
+  "fashion", "architecture", "graphic-design", "interior-design",
+  // Knowledge
+  "research", "education", "science", "philosophy", "history", "linguistics",
+  "mathematics", "psychology", "sociology", "anthropology",
+  // Technology
+  "engineering", "programming", "cybersecurity", "data-science", "ai-ml",
+  "robotics", "electronics", "networking", "game-dev", "web-dev",
+  // Professional
+  "business", "marketing", "consulting", "real-estate", "accounting",
+  "insurance", "logistics", "hr", "management", "entrepreneurship",
+  // Lifestyle
+  "fitness", "wellness", "nutrition", "sports", "travel", "gardening",
+  "cooking", "automotive", "home-improvement", "pets",
+  // Entertainment
+  "gaming", "streaming", "podcasting", "comedy", "theater", "dance",
+  // Community
+  "government", "politics", "journalism", "nonprofit", "volunteering",
+  "religion", "community-organizing", "social-work",
+  // Nature & Environment
+  "ecology", "agriculture", "marine-biology", "astronomy", "geology",
+  "meteorology", "conservation", "sustainability",
+  // Marketplace
+  "marketplace", "e-commerce", "crafts", "collectibles", "auctions",
+  // General
+  "general", "security", "logistics",
 ]);
+
+/** Full rules configuration schema for user cities */
+const CITY_RULES_SCHEMA = {
+  combat:           { type: "enum",    options: [false, true, "pve_only", "duels_only"], default: false },
+  pvp:              { type: "boolean", default: false },
+  crime:            { type: "boolean", default: false },
+  vehicles:         { type: "boolean", default: true },
+  building:         { type: "enum",    options: ["disabled", "limited", "full", "unlimited"], default: "limited" },
+  economy:          { type: "enum",    options: ["disabled", "barter", "full"], default: "full" },
+  entityProtection: { type: "boolean", default: true },
+  contentFilter:    { type: "enum",    options: ["strict", "moderate", "relaxed"], default: "moderate" },
+  maxPlayers:       { type: "number",  min: 2, max: 500, default: 100 },
+  respawnTime:      { type: "number",  min: 0, max: 600, default: 10 },
+  dayNightCycle:    { type: "boolean", default: true },
+  weatherSystem:    { type: "boolean", default: true },
+  voiceChat:        { type: "boolean", default: false },
+  flyMode:          { type: "boolean", default: false },
+  buildLimit:       { type: "number",  min: 0, max: 10000, default: 500 },
+  npcDensity:       { type: "enum",    options: ["none", "low", "medium", "high"], default: "medium" },
+  questSystem:      { type: "boolean", default: false },
+  guildHalls:       { type: "boolean", default: false },
+  wantedSystem:     { type: "boolean", default: false },
+  gangTerritories:  { type: "boolean", default: false },
+  housing:          { type: "boolean", default: false },
+  careers:          { type: "boolean", default: true },
+  rpRequired:       { type: "boolean", default: false },
+  scriptingEnabled: { type: "boolean", default: false },
+};
 
 const VALID_ENTITY_MODES = new Set(["interactive", "passive", "none"]);
 const VALID_VISIBILITY = new Set(["public", "private"]);
@@ -126,6 +184,46 @@ function _validateTax(tax) {
   }
 }
 
+function _validateRules(rules) {
+  if (!rules || typeof rules !== "object") return;
+  for (const [key, value] of Object.entries(rules)) {
+    const schema = CITY_RULES_SCHEMA[key];
+    if (!schema) continue; // Ignore unknown rules
+    if (schema.type === "boolean" && typeof value !== "boolean") {
+      throw new Error(`Rule "${key}" must be a boolean`);
+    }
+    if (schema.type === "enum" && !schema.options.includes(value)) {
+      throw new Error(`Rule "${key}" must be one of: ${schema.options.join(", ")}`);
+    }
+    if (schema.type === "number") {
+      if (typeof value !== "number") throw new Error(`Rule "${key}" must be a number`);
+      if (schema.min !== undefined && value < schema.min) throw new Error(`Rule "${key}" min is ${schema.min}`);
+      if (schema.max !== undefined && value > schema.max) throw new Error(`Rule "${key}" max is ${schema.max}`);
+    }
+  }
+}
+
+/**
+ * Get the full rules schema for city creation UI.
+ */
+export function getCityRulesSchema() {
+  return { ...CITY_RULES_SCHEMA };
+}
+
+/**
+ * Get all valid themes.
+ */
+export function getValidThemes() {
+  return [...VALID_THEMES];
+}
+
+/**
+ * Get all valid domains.
+ */
+export function getValidDomains() {
+  return [...VALID_DOMAINS];
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 // CORE FUNCTIONS
 // ══════════════════════════════════════════════════════════════════════════════
@@ -158,6 +256,11 @@ export function createCity(opts = {}) {
     mapSeed = `city-${Date.now().toString(36)}`,
     entityMode = "interactive",
     visibility = "public",
+    rules = {},
+    districts = [],
+    templateId = null,
+    joinMode = "open",
+    ageRating = "E",
   } = opts;
 
   if (!name || typeof name !== "string") throw new Error("City name is required");
@@ -168,6 +271,13 @@ export function createCity(opts = {}) {
   _validateEntityMode(entityMode);
   _validateVisibility(visibility);
   if (economy?.cityTax != null) _validateTax(economy.cityTax);
+  _validateRules(rules);
+
+  // Build full rules with defaults
+  const fullRules = {};
+  for (const [key, schema] of Object.entries(CITY_RULES_SCHEMA)) {
+    fullRules[key] = rules[key] !== undefined ? rules[key] : schema.default;
+  }
 
   const now = _nowISO();
   const city = {
@@ -185,6 +295,11 @@ export function createCity(opts = {}) {
       jobs: roleplay.jobs ? { ...roleplay.jobs } : {},
       factions: Array.isArray(roleplay.factions) ? [...roleplay.factions] : ["Citizens"],
     },
+    rules: fullRules,
+    districts: Array.isArray(districts) ? [...districts] : [],
+    templateId,
+    joinMode,
+    ageRating,
     mapSeed,
     entityMode,
     visibility,
