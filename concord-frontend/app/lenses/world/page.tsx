@@ -1,137 +1,306 @@
 'use client';
 
-import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { PointerLockControls, Text, Sky, Html } from '@react-three/drei';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Canvas, useFrame, useThree, ThreeEvent } from '@react-three/fiber';
+import { PointerLockControls, Text, Sky, Stars, Html } from '@react-three/drei';
 import * as THREE from 'three';
-import { subscribe, emit } from '@/lib/realtime/socket';
 
-// ── Domain color mapping ──────────────────────────────────
-const DOMAIN_COLORS: Record<string, string> = {
-  finance: '#4ade80', music: '#a855f7', trades: '#f59e0b',
-  science: '#06b6d4', art: '#ec4899', healthcare: '#f0f0f0',
-  code: '#22d3ee', news: '#ef4444', sports: '#10b981',
-  legal: '#6366f1', education: '#8b5cf6', space: '#1e1b4b',
-  food: '#fb923c', history: '#a3a3a3', mathematics: '#3b82f6',
-  physics: '#0ea5e9', bio: '#22c55e', chem: '#eab308',
-  astronomy: '#6366f1', consulting: '#64748b', hr: '#f43f5e',
-  marketing: '#f97316', marketplace: '#14b8a6', accounting: '#84cc16',
-  'mental-health': '#c084fc', global: '#94a3b8',
-};
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
-const DEFAULT_COLOR = '#64748b';
-const CHUNK_SIZE = 100; // 100m chunks
-const DISTRICT_SIZE = 60; // 60m per district zone
-const DISTRICT_GAP = 20; // gap between districts
-
-// ── Types ─────────────────────────────────────────────────
 interface DTU {
   id: string;
   title: string;
-  tier?: 'regular' | 'mega' | 'hyper' | 'shadow';
+  tier?: string;
   scope?: string;
   tags?: string[];
-  domain?: string;
+  source?: Record<string, unknown> | string[];
+  core?: { summary?: string; [key: string]: unknown };
   meta?: Record<string, unknown>;
+  createdAt?: string;
 }
 
 interface District {
   domain: string;
   color: string;
   dtus: DTU[];
-  position: [number, number, number];
+  center: [number, number, number];
 }
 
-interface PlayerPosition {
-  userId: string;
-  username: string;
-  x: number;
-  y: number;
-  z: number;
-  ry: number;
+interface SelectedDTU extends DTU {
+  full?: DTU;
 }
 
-// ── Hash DTU id to local position within district ─────────
-function hashPosition(id: string, size: number): [number, number] {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) {
-    h = ((h << 5) - h + id.charCodeAt(i)) | 0;
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const DOMAIN_COLORS: Record<string, string> = {
+  finance: '#4ade80',
+  music: '#a855f7',
+  trades: '#f59e0b',
+  science: '#06b6d4',
+  art: '#ec4899',
+  healthcare: '#f0f0f0',
+  code: '#22d3ee',
+  news: '#ef4444',
+  sports: '#10b981',
+  legal: '#6366f1',
+  education: '#8b5cf6',
+  space: '#1e1b4b',
+};
+
+const DEFAULT_COLOR = '#64748b';
+
+function getDomainColor(domain: string): string {
+  return DOMAIN_COLORS[domain.toLowerCase()] || DEFAULT_COLOR;
+}
+
+function hashString(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash |= 0;
   }
-  const x = ((h & 0xffff) / 0xffff) * size - size / 2;
-  const z = (((h >> 16) & 0xffff) / 0xffff) * size - size / 2;
-  return [x, z];
+  return Math.abs(hash);
 }
 
-// ── DTU 3D Object ─────────────────────────────────────────
-function DTUObject({ dtu, districtPos }: { dtu: DTU; districtPos: [number, number, number] }) {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const tier = dtu.tier || 'regular';
-  const [lx, lz] = hashPosition(dtu.id, DISTRICT_SIZE * 0.8);
+function getDomain(dtu: DTU): string {
+  if (dtu.scope) return dtu.scope;
+  if (dtu.tags && dtu.tags.length > 0) return dtu.tags[0];
+  return 'general';
+}
 
-  const { geometry, color, emissive, y } = useMemo(() => {
+function getTier(dtu: DTU): string {
+  return (dtu.tier || 'base').toLowerCase();
+}
+
+function getSourceCount(dtu: DTU): number {
+  if (Array.isArray(dtu.source)) return dtu.source.length;
+  if (dtu.source && typeof dtu.source === 'object') return Object.keys(dtu.source).length;
+  return 1;
+}
+
+// ---------------------------------------------------------------------------
+// Build districts from DTU data
+// ---------------------------------------------------------------------------
+
+function buildDistricts(dtus: DTU[]): District[] {
+  const grouped: Record<string, DTU[]> = {};
+  for (const dtu of dtus) {
+    const domain = getDomain(dtu);
+    if (!grouped[domain]) grouped[domain] = [];
+    grouped[domain].push(dtu);
+  }
+
+  const domains = Object.keys(grouped).sort();
+  const cols = Math.ceil(Math.sqrt(domains.length));
+  const districtSize = 60;
+  const gap = 10;
+
+  return domains.map((domain, i) => {
+    const row = Math.floor(i / cols);
+    const col = i % cols;
+    const cx = (col - cols / 2) * (districtSize + gap);
+    const cz = (row - Math.floor(domains.length / cols) / 2) * (districtSize + gap);
+    return {
+      domain,
+      color: getDomainColor(domain),
+      dtus: grouped[domain],
+      center: [cx, 0, cz],
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Day/Night cycle — uses real time
+// ---------------------------------------------------------------------------
+
+function useDayNight() {
+  const [sunPosition, setSunPosition] = useState<[number, number, number]>([100, 50, 0]);
+  const [isNight, setIsNight] = useState(false);
+
+  useEffect(() => {
+    function update() {
+      const now = new Date();
+      const hours = now.getHours() + now.getMinutes() / 60;
+      // Sun arc: rise at 6, peak at 12, set at 18
+      const angle = ((hours - 6) / 12) * Math.PI;
+      const y = Math.sin(angle) * 100;
+      const x = Math.cos(angle) * 100;
+      setSunPosition([x, Math.max(y, -30), 0]);
+      setIsNight(hours < 6 || hours > 19);
+    }
+    update();
+    const iv = setInterval(update, 60_000);
+    return () => clearInterval(iv);
+  }, []);
+
+  return { sunPosition, isNight };
+}
+
+// ---------------------------------------------------------------------------
+// Ground Plane for a district
+// ---------------------------------------------------------------------------
+
+function DistrictGround({ district }: { district: District }) {
+  const [cx, , cz] = district.center;
+  const color = new THREE.Color(district.color);
+
+  return (
+    <group position={[cx, -0.01, cz]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <planeGeometry args={[56, 56]} />
+        <meshStandardMaterial
+          color={color}
+          transparent
+          opacity={0.15}
+          roughness={0.9}
+        />
+      </mesh>
+      {/* Border glow */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.005, 0]}>
+        <ringGeometry args={[27, 28.5, 4]} />
+        <meshBasicMaterial color={district.color} transparent opacity={0.3} side={THREE.DoubleSide} />
+      </mesh>
+      {/* District label */}
+      <Text
+        position={[0, 0.1, -26]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        fontSize={3}
+        color={district.color}
+        anchorX="center"
+        anchorY="middle"
+        font={undefined}
+      >
+        {district.domain.toUpperCase()}
+      </Text>
+    </group>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// DTU Building Object
+// ---------------------------------------------------------------------------
+
+interface DTUObjectProps {
+  dtu: DTU;
+  position: [number, number, number];
+  color: string;
+  onSelect: (dtu: DTU) => void;
+}
+
+function DTUObject({ dtu, position, color, onSelect }: DTUObjectProps) {
+  const meshRef = useRef<THREE.Mesh>(null);
+  const [hovered, setHovered] = useState(false);
+  const tier = getTier(dtu);
+  const sourceCount = getSourceCount(dtu);
+
+  // Dimensions based on tier
+  const dims = useMemo(() => {
     switch (tier) {
       case 'hyper':
-        return {
-          geometry: new THREE.CylinderGeometry(2, 3, 20, 8),
-          color: '#fbbf24',
-          emissive: '#f59e0b',
-          y: 10,
-        };
+        return { w: 3, h: 14 + sourceCount * 0.5, d: 3, emissiveIntensity: 1.5 };
       case 'mega':
-        return {
-          geometry: new THREE.BoxGeometry(3, 12, 3),
-          color: '#60a5fa',
-          emissive: '#3b82f6',
-          y: 6,
-        };
+        return { w: 2.5, h: 6 + sourceCount * 0.8, d: 2.5, emissiveIntensity: 0.6 };
       case 'shadow':
-        return {
-          geometry: new THREE.SphereGeometry(1, 8, 8),
-          color: '#1e1b4b',
-          emissive: '#4338ca',
-          y: 2,
-        };
-      default:
-        return {
-          geometry: new THREE.BoxGeometry(2, 4, 2),
-          color: '#94a3b8',
-          emissive: '#000000',
-          y: 2,
-        };
+        return { w: 1, h: 2, d: 1, emissiveIntensity: 0.1 };
+      default: // base / regular
+        return { w: 1.5, h: 3, d: 1.5, emissiveIntensity: 0.3 };
     }
-  }, [tier]);
+  }, [tier, sourceCount]);
 
-  // Gentle float for hyper DTUs
-  useFrame(({ clock }) => {
-    if (meshRef.current && tier === 'hyper') {
-      meshRef.current.position.y = y + Math.sin(clock.elapsedTime * 0.8) * 0.5;
+  const threeColor = useMemo(() => new THREE.Color(color), [color]);
+
+  // Animate hyper DTUs with a glow pulse
+  useFrame((state) => {
+    if (!meshRef.current) return;
+    if (tier === 'hyper') {
+      const mat = meshRef.current.material as THREE.MeshStandardMaterial;
+      mat.emissiveIntensity = 0.8 + Math.sin(state.clock.elapsedTime * 2) * 0.7;
+    }
+    if (hovered && meshRef.current) {
+      meshRef.current.scale.setScalar(1.05 + Math.sin(state.clock.elapsedTime * 4) * 0.02);
+    } else if (meshRef.current) {
+      meshRef.current.scale.setScalar(1);
     }
   });
 
-  const [hovered, setHovered] = useState(false);
+  const handleClick = useCallback((e: ThreeEvent<MouseEvent>) => {
+    e.stopPropagation();
+    onSelect(dtu);
+  }, [dtu, onSelect]);
+
+  // Shadow DTUs are particles
+  if (tier === 'shadow') {
+    return (
+      <group position={[position[0], position[1] + 1, position[2]]}>
+        <mesh ref={meshRef}>
+          <sphereGeometry args={[0.5, 8, 8]} />
+          <meshStandardMaterial
+            color={threeColor}
+            transparent
+            opacity={0.4}
+            emissive={threeColor}
+            emissiveIntensity={0.3}
+            wireframe
+          />
+        </mesh>
+        {/* Shimmer particles */}
+        <points>
+          <bufferGeometry>
+            <bufferAttribute
+              attach="attributes-position"
+              count={20}
+              array={new Float32Array(60).map(() => (Math.random() - 0.5) * 3)}
+              itemSize={3}
+            />
+          </bufferGeometry>
+          <pointsMaterial size={0.15} color={color} transparent opacity={0.6} sizeAttenuation />
+        </points>
+      </group>
+    );
+  }
 
   return (
-    <group position={[districtPos[0] + lx, 0, districtPos[2] + lz]}>
+    <group position={[position[0], position[1] + dims.h / 2, position[2]]}>
       <mesh
         ref={meshRef}
-        position={[0, y, 0]}
-        geometry={geometry}
+        onClick={handleClick}
         onPointerOver={() => setHovered(true)}
         onPointerOut={() => setHovered(false)}
+        castShadow
+        receiveShadow
       >
+        <boxGeometry args={[dims.w, dims.h, dims.d]} />
         <meshStandardMaterial
-          color={hovered ? '#ffffff' : color}
-          emissive={emissive}
-          emissiveIntensity={tier === 'shadow' ? 0.8 : tier === 'hyper' ? 0.5 : 0.1}
-          transparent={tier === 'shadow'}
-          opacity={tier === 'shadow' ? 0.6 : 1}
+          color={threeColor}
+          emissive={threeColor}
+          emissiveIntensity={hovered ? dims.emissiveIntensity + 0.5 : dims.emissiveIntensity}
+          metalness={0.7}
+          roughness={0.3}
+          transparent={tier === 'hyper'}
+          opacity={tier === 'hyper' ? 0.85 : 1}
         />
       </mesh>
+      {/* Top accent for mega/hyper */}
+      {(tier === 'mega' || tier === 'hyper') && (
+        <mesh position={[0, dims.h / 2 + 0.15, 0]}>
+          <boxGeometry args={[dims.w + 0.3, 0.3, dims.d + 0.3]} />
+          <meshBasicMaterial color={color} transparent opacity={0.7} />
+        </mesh>
+      )}
+      {/* Hover label */}
       {hovered && (
-        <Html position={[0, y + (tier === 'hyper' ? 12 : tier === 'mega' ? 8 : 4), 0]} center>
-          <div className="bg-black/80 text-white px-3 py-2 rounded-lg text-sm whitespace-nowrap pointer-events-none">
-            <div className="font-bold">{dtu.title}</div>
-            <div className="text-xs text-gray-400">{tier.toUpperCase()} · {dtu.domain || dtu.tags?.[0] || 'unknown'}</div>
+        <Html
+          position={[0, dims.h / 2 + 1.5, 0]}
+          center
+          style={{ pointerEvents: 'none', whiteSpace: 'nowrap' }}
+        >
+          <div className="bg-black/80 border border-cyan-500/50 px-3 py-1.5 rounded text-xs text-cyan-300 backdrop-blur-sm max-w-[200px] truncate">
+            {dtu.title || dtu.id}
           </div>
         </Html>
       )}
@@ -139,440 +308,601 @@ function DTUObject({ dtu, districtPos }: { dtu: DTU; districtPos: [number, numbe
   );
 }
 
-// ── District ground zone ──────────────────────────────────
-function DistrictZone({ district }: { district: District }) {
+// ---------------------------------------------------------------------------
+// District group — positions DTUs within district bounds
+// ---------------------------------------------------------------------------
+
+function DistrictGroup({
+  district,
+  onSelect,
+}: {
+  district: District;
+  onSelect: (dtu: DTU) => void;
+}) {
+  const [cx, , cz] = district.center;
+  const bounds = 24; // half-width of the placeable area within district
+
   return (
-    <group position={district.position}>
-      {/* Ground plane */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]} receiveShadow>
-        <planeGeometry args={[DISTRICT_SIZE, DISTRICT_SIZE]} />
-        <meshStandardMaterial
-          color={district.color}
-          transparent
-          opacity={0.25}
-          side={THREE.DoubleSide}
-        />
-      </mesh>
-      {/* Border */}
-      <lineSegments position={[0, 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <edgesGeometry args={[new THREE.PlaneGeometry(DISTRICT_SIZE, DISTRICT_SIZE)]} />
-        <lineBasicMaterial color={district.color} transparent opacity={0.5} />
-      </lineSegments>
-      {/* District label */}
-      <Text
-        position={[0, 0.5, -DISTRICT_SIZE / 2 + 3]}
-        fontSize={3}
-        color={district.color}
-        anchorX="center"
-        anchorY="middle"
-      >
-        {district.domain.toUpperCase()}
-      </Text>
-      {/* DTU objects */}
-      {district.dtus.map((dtu) => (
-        <DTUObject key={dtu.id} dtu={dtu} districtPos={district.position} />
-      ))}
+    <group>
+      <DistrictGround district={district} />
+      {district.dtus.map((dtu) => {
+        const h = hashString(dtu.id);
+        const x = cx + ((h % 100) / 100) * bounds * 2 - bounds;
+        const z = cz + (((h >> 8) % 100) / 100) * bounds * 2 - bounds;
+        return (
+          <DTUObject
+            key={dtu.id}
+            dtu={dtu}
+            position={[x, 0, z]}
+            color={district.color}
+            onSelect={onSelect}
+          />
+        );
+      })}
     </group>
   );
 }
 
-// ── Other players ─────────────────────────────────────────
-function OtherPlayer({ player }: { player: PlayerPosition }) {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const targetPos = useRef(new THREE.Vector3(player.x, player.y, player.z));
+// ---------------------------------------------------------------------------
+// Infinite ground
+// ---------------------------------------------------------------------------
 
-  useEffect(() => {
-    targetPos.current.set(player.x, player.y, player.z);
-  }, [player.x, player.y, player.z]);
+function InfiniteGround() {
+  return (
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, 0]} receiveShadow>
+      <planeGeometry args={[2000, 2000]} />
+      <meshStandardMaterial color="#0a0a0f" roughness={1} metalness={0} />
+    </mesh>
+  );
+}
 
-  useFrame(() => {
-    if (meshRef.current) {
-      meshRef.current.position.lerp(targetPos.current, 0.1);
-      meshRef.current.rotation.y = player.ry;
+// ---------------------------------------------------------------------------
+// Grid overlay
+// ---------------------------------------------------------------------------
+
+function GridOverlay() {
+  return (
+    <gridHelper
+      args={[1000, 200, '#1a1a2e', '#1a1a2e']}
+      position={[0, 0.01, 0]}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Ambient particles
+// ---------------------------------------------------------------------------
+
+function AmbientParticles() {
+  const count = 500;
+  const positions = useMemo(() => {
+    const arr = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      arr[i * 3] = (Math.random() - 0.5) * 400;
+      arr[i * 3 + 1] = Math.random() * 80 + 5;
+      arr[i * 3 + 2] = (Math.random() - 0.5) * 400;
+    }
+    return arr;
+  }, []);
+
+  const ref = useRef<THREE.Points>(null);
+  useFrame((state) => {
+    if (ref.current) {
+      ref.current.rotation.y = state.clock.elapsedTime * 0.005;
     }
   });
 
   return (
-    <group>
-      <mesh ref={meshRef} position={[player.x, player.y, player.z]}>
-        <capsuleGeometry args={[0.4, 1.2, 4, 8]} />
-        <meshStandardMaterial color="#60a5fa" />
-      </mesh>
-      <Text
-        position={[player.x, player.y + 2.2, player.z]}
-        fontSize={0.5}
-        color="white"
-        anchorX="center"
-      >
-        {player.username}
-      </Text>
-    </group>
+    <points ref={ref}>
+      <bufferGeometry>
+        <bufferAttribute
+          attach="attributes-position"
+          count={count}
+          array={positions}
+          itemSize={3}
+        />
+      </bufferGeometry>
+      <pointsMaterial size={0.3} color="#22d3ee" transparent opacity={0.4} sizeAttenuation />
+    </points>
   );
 }
 
-// ── WASD movement controller ──────────────────────────────
-function WASDController() {
+// ---------------------------------------------------------------------------
+// WASD Movement Controller
+// ---------------------------------------------------------------------------
+
+function WASDControls() {
   const { camera } = useThree();
   const keys = useRef<Set<string>>(new Set());
   const velocity = useRef(new THREE.Vector3());
-  const SPEED = 30;
-  const DAMPING = 0.85;
+  const direction = useRef(new THREE.Vector3());
 
   useEffect(() => {
-    const onDown = (e: KeyboardEvent) => keys.current.add(e.code);
-    const onUp = (e: KeyboardEvent) => keys.current.delete(e.code);
-    window.addEventListener('keydown', onDown);
-    window.addEventListener('keyup', onUp);
+    const onKeyDown = (e: KeyboardEvent) => keys.current.add(e.code);
+    const onKeyUp = (e: KeyboardEvent) => keys.current.delete(e.code);
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
     return () => {
-      window.removeEventListener('keydown', onDown);
-      window.removeEventListener('keyup', onUp);
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
     };
   }, []);
 
   useFrame((_, delta) => {
-    const dir = new THREE.Vector3();
+    const speed = 60;
     const k = keys.current;
+    direction.current.set(0, 0, 0);
 
-    if (k.has('KeyW') || k.has('ArrowUp')) dir.z -= 1;
-    if (k.has('KeyS') || k.has('ArrowDown')) dir.z += 1;
-    if (k.has('KeyA') || k.has('ArrowLeft')) dir.x -= 1;
-    if (k.has('KeyD') || k.has('ArrowRight')) dir.x += 1;
-    if (k.has('Space')) dir.y += 1;
-    if (k.has('ShiftLeft') || k.has('ShiftRight')) dir.y -= 1;
+    if (k.has('KeyW') || k.has('ArrowUp')) direction.current.z -= 1;
+    if (k.has('KeyS') || k.has('ArrowDown')) direction.current.z += 1;
+    if (k.has('KeyA') || k.has('ArrowLeft')) direction.current.x -= 1;
+    if (k.has('KeyD') || k.has('ArrowRight')) direction.current.x += 1;
+    if (k.has('Space')) direction.current.y += 1;
+    if (k.has('ShiftLeft') || k.has('ShiftRight')) direction.current.y -= 1;
 
-    if (dir.length() > 0) {
-      dir.normalize();
-      // Apply camera rotation to movement direction (xz only)
-      const euler = new THREE.Euler(0, camera.rotation.y, 0, 'YXZ');
-      const forward = new THREE.Vector3(0, 0, -1).applyEuler(euler);
-      const right = new THREE.Vector3(1, 0, 0).applyEuler(euler);
+    if (direction.current.length() > 0) {
+      direction.current.normalize();
+      // Get camera forward/right vectors projected onto XZ plane
+      const forward = new THREE.Vector3();
+      camera.getWorldDirection(forward);
+      const right = new THREE.Vector3();
+      right.crossVectors(forward, camera.up).normalize();
 
-      velocity.current.x += (right.x * dir.x + forward.x * -dir.z) * SPEED * delta;
-      velocity.current.z += (right.z * dir.x + forward.z * -dir.z) * SPEED * delta;
-      velocity.current.y += dir.y * SPEED * delta;
+      velocity.current.set(0, 0, 0);
+      velocity.current.addScaledVector(right, direction.current.x);
+      velocity.current.addScaledVector(forward, -direction.current.z);
+      velocity.current.y += direction.current.y;
+      velocity.current.normalize().multiplyScalar(speed * delta);
+      camera.position.add(velocity.current);
     }
 
-    velocity.current.multiplyScalar(DAMPING);
-    camera.position.add(velocity.current.clone().multiplyScalar(delta * 10));
-
-    // Floor clamp
+    // Clamp minimum height
     if (camera.position.y < 2) camera.position.y = 2;
   });
 
   return null;
 }
 
-// ── Position broadcaster ──────────────────────────────────
-function PositionBroadcaster({ cityId }: { cityId: string }) {
-  const { camera } = useThree();
-  const lastSent = useRef(0);
+// ---------------------------------------------------------------------------
+// Scene content
+// ---------------------------------------------------------------------------
 
-  useFrame(() => {
-    const now = Date.now();
-    if (now - lastSent.current > 100) { // 10Hz
-      lastSent.current = now;
-      emit('city:position', {
-        cityId,
-        x: camera.position.x,
-        y: camera.position.y,
-        z: camera.position.z,
-        ry: camera.rotation.y,
-      });
-    }
-  });
-
-  return null;
-}
-
-// ── Ground grid ───────────────────────────────────────────
-function Ground() {
-  return (
-    <group>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[2000, 2000]} />
-        <meshStandardMaterial color="#0f172a" />
-      </mesh>
-      <gridHelper args={[2000, 200, '#1e293b', '#1e293b']} position={[0, 0.02, 0]} />
-    </group>
-  );
-}
-
-// ── HUD overlay ───────────────────────────────────────────
-function HUD({
-  districts,
-  playerCount,
-  fps,
-  locked,
-}: {
+interface SceneProps {
   districts: District[];
-  playerCount: number;
-  fps: number;
-  locked: boolean;
-}) {
-  const totalDTUs = districts.reduce((sum, d) => sum + d.dtus.length, 0);
-
-  return (
-    <div className="absolute top-0 left-0 w-full h-full pointer-events-none z-10">
-      {/* Top-left: Stats */}
-      <div className="absolute top-4 left-4 bg-black/70 text-white px-4 py-3 rounded-lg text-sm font-mono">
-        <div className="text-cyan-400 font-bold text-lg mb-1">CONCORD CITY</div>
-        <div>Districts: {districts.length}</div>
-        <div>DTUs: {totalDTUs}</div>
-        <div>Players: {playerCount}</div>
-        <div className={fps < 30 ? 'text-red-400' : 'text-green-400'}>FPS: {fps}</div>
-      </div>
-
-      {/* Crosshair */}
-      {locked && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-          <div className="w-1 h-1 bg-white rounded-full opacity-50" />
-        </div>
-      )}
-
-      {/* Bottom: Controls hint */}
-      {!locked && (
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-black/80 text-white px-6 py-3 rounded-lg text-center pointer-events-auto">
-          <div className="text-lg font-bold mb-1">Click to Enter World</div>
-          <div className="text-sm text-gray-400">WASD to move · Mouse to look · Space/Shift for up/down</div>
-        </div>
-      )}
-
-      {/* Bottom-left: Minimap placeholder */}
-      <div className="absolute bottom-4 left-4 w-40 h-40 bg-black/60 border border-gray-700 rounded-lg overflow-hidden">
-        <div className="p-2 text-xs text-gray-400 font-mono">MINIMAP</div>
-        <div className="flex flex-wrap gap-1 p-2">
-          {districts.slice(0, 12).map((d) => (
-            <div
-              key={d.domain}
-              className="w-4 h-4 rounded-sm"
-              style={{ backgroundColor: d.color }}
-              title={d.domain}
-            />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
+  onSelect: (dtu: DTU) => void;
+  isNight: boolean;
+  sunPosition: [number, number, number];
 }
 
-// ── Scene content ─────────────────────────────────────────
-function SceneContent({
-  districts,
-  otherPlayers,
-  cityId,
-}: {
-  districts: District[];
-  otherPlayers: PlayerPosition[];
-  cityId: string;
-}) {
+function Scene({ districts, onSelect, isNight, sunPosition }: SceneProps) {
   return (
     <>
       {/* Lighting */}
-      <ambientLight intensity={0.3} />
+      <ambientLight intensity={isNight ? 0.15 : 0.4} />
       <directionalLight
-        position={[100, 80, 50]}
-        intensity={0.8}
+        position={sunPosition}
+        intensity={isNight ? 0.2 : 1}
         castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
+        shadow-mapSize={[1024, 1024]}
+        shadow-camera-far={500}
+        shadow-camera-left={-200}
+        shadow-camera-right={200}
+        shadow-camera-top={200}
+        shadow-camera-bottom={-200}
       />
-      <pointLight position={[0, 50, 0]} intensity={0.3} color="#60a5fa" />
+      <pointLight position={[0, 50, 0]} intensity={0.3} color="#22d3ee" />
 
       {/* Sky */}
-      <Sky sunPosition={[100, 20, 100]} turbidity={8} rayleigh={2} />
-
-      {/* Fog */}
-      <fog attach="fog" args={['#0f172a', 100, 800]} />
+      {isNight ? (
+        <Stars radius={300} depth={60} count={2000} factor={4} fade speed={1} />
+      ) : (
+        <Sky sunPosition={sunPosition} turbidity={8} rayleigh={2} />
+      )}
+      <fog attach="fog" args={[isNight ? '#05050f' : '#0d1117', 50, 400]} />
 
       {/* Ground */}
-      <Ground />
+      <InfiniteGround />
+      <GridOverlay />
+      <AmbientParticles />
 
       {/* Districts */}
-      {districts.map((district) => (
-        <DistrictZone key={district.domain} district={district} />
-      ))}
-
-      {/* Other players */}
-      {otherPlayers.map((p) => (
-        <OtherPlayer key={p.userId} player={p} />
+      {districts.map((d) => (
+        <DistrictGroup key={d.domain} district={d} onSelect={onSelect} />
       ))}
 
       {/* Controls */}
+      <WASDControls />
       <PointerLockControls />
-      <WASDController />
-      <PositionBroadcaster cityId={cityId} />
     </>
   );
 }
 
-// ── Main page component ───────────────────────────────────
-export default function WorldLensPage() {
-  const [districts, setDistricts] = useState<District[]>([]);
-  const [otherPlayers, setOtherPlayers] = useState<PlayerPosition[]>([]);
-  const [locked, setLocked] = useState(false);
-  const [fps, setFps] = useState(60);
-  const [cityId] = useState('concord-main');
-  const frameCount = useRef(0);
-  const lastFpsUpdate = useRef(Date.now());
+// ---------------------------------------------------------------------------
+// Mobile Joystick overlay
+// ---------------------------------------------------------------------------
 
-  // Fetch DTUs and build districts
-  useEffect(() => {
-    async function loadDTUs() {
-      try {
-        const res = await fetch('/api/dtus?limit=500');
-        if (!res.ok) throw new Error('Failed to fetch DTUs');
-        const data = await res.json();
-        const dtus: DTU[] = Array.isArray(data) ? data : data.dtus || data.data || [];
+function MobileJoystick({ onMove }: { onMove: (dx: number, dz: number) => void }) {
+  const stickRef = useRef<HTMLDivElement>(null);
+  const [active, setActive] = useState(false);
+  const origin = useRef({ x: 0, y: 0 });
 
-        // Group by domain
-        const byDomain = new Map<string, DTU[]>();
-        for (const dtu of dtus) {
-          const domain = dtu.domain || dtu.tags?.[0] || 'global';
-          if (!byDomain.has(domain)) byDomain.set(domain, []);
-          byDomain.get(domain)!.push(dtu);
-        }
+  const handleStart = useCallback((e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    origin.current = { x: touch.clientX, y: touch.clientY };
+    setActive(true);
+  }, []);
 
-        // Layout districts in a grid
-        const cols = Math.ceil(Math.sqrt(byDomain.size));
-        const built: District[] = [];
-        let i = 0;
-        for (const [domain, domainDtus] of byDomain) {
-          const row = Math.floor(i / cols);
-          const col = i % cols;
-          const x = (col - cols / 2) * (DISTRICT_SIZE + DISTRICT_GAP);
-          const z = (row - Math.floor(byDomain.size / cols) / 2) * (DISTRICT_SIZE + DISTRICT_GAP);
-          built.push({
-            domain,
-            color: DOMAIN_COLORS[domain] || DEFAULT_COLOR,
-            dtus: domainDtus,
-            position: [x, 0, z],
-          });
-          i++;
-        }
-
-        setDistricts(built);
-      } catch (err) {
-        console.error('[World] Failed to load DTUs:', err);
-        // Generate demo districts
-        const demoDomains = ['finance', 'science', 'music', 'art', 'code', 'news', 'space', 'education', 'healthcare'];
-        const demo: District[] = demoDomains.map((domain, idx) => {
-          const cols = 3;
-          const row = Math.floor(idx / cols);
-          const col = idx % cols;
-          return {
-            domain,
-            color: DOMAIN_COLORS[domain] || DEFAULT_COLOR,
-            dtus: Array.from({ length: 5 + Math.floor(Math.random() * 10) }, (_, j) => ({
-              id: `demo-${domain}-${j}`,
-              title: `${domain} DTU #${j + 1}`,
-              tier: j === 0 ? 'hyper' as const : j < 3 ? 'mega' as const : 'regular' as const,
-              domain,
-              tags: [domain],
-            })),
-            position: [
-              (col - 1) * (DISTRICT_SIZE + DISTRICT_GAP),
-              0,
-              (row - 1) * (DISTRICT_SIZE + DISTRICT_GAP),
-            ],
-          };
-        });
-        setDistricts(demo);
-      }
+  const handleMove = useCallback((e: React.TouchEvent) => {
+    if (!active) return;
+    const touch = e.touches[0];
+    const dx = (touch.clientX - origin.current.x) / 50;
+    const dz = (touch.clientY - origin.current.y) / 50;
+    onMove(
+      Math.max(-1, Math.min(1, dx)),
+      Math.max(-1, Math.min(1, dz))
+    );
+    if (stickRef.current) {
+      const clampedX = Math.max(-30, Math.min(30, touch.clientX - origin.current.x));
+      const clampedY = Math.max(-30, Math.min(30, touch.clientY - origin.current.y));
+      stickRef.current.style.transform = `translate(${clampedX}px, ${clampedY}px)`;
     }
-    loadDTUs();
-  }, []);
+  }, [active, onMove]);
 
-  // Subscribe to player positions
-  useEffect(() => {
-    const unsub = subscribe<{ players: PlayerPosition[] }>('city:positions', (data) => {
-      setOtherPlayers(data.players || []);
-    });
-    return unsub;
-  }, []);
-
-  // Subscribe to new DTUs from feed
-  useEffect(() => {
-    const unsub = subscribe<DTU>('feed:new-dtu', (dtu) => {
-      setDistricts((prev) => {
-        const domain = dtu.domain || dtu.tags?.[0] || 'global';
-        const existing = prev.find((d) => d.domain === domain);
-        if (existing) {
-          return prev.map((d) =>
-            d.domain === domain ? { ...d, dtus: [...d.dtus, dtu] } : d
-          );
-        }
-        // New domain — add a district
-        const cols = Math.ceil(Math.sqrt(prev.length + 1));
-        return [
-          ...prev,
-          {
-            domain,
-            color: DOMAIN_COLORS[domain] || DEFAULT_COLOR,
-            dtus: [dtu],
-            position: [
-              (prev.length % cols - cols / 2) * (DISTRICT_SIZE + DISTRICT_GAP),
-              0,
-              (Math.floor(prev.length / cols)) * (DISTRICT_SIZE + DISTRICT_GAP),
-            ],
-          },
-        ];
-      });
-    });
-    return unsub;
-  }, []);
-
-  // FPS counter
-  const onCreated = useCallback(() => {
-    const tick = () => {
-      frameCount.current++;
-      const now = Date.now();
-      if (now - lastFpsUpdate.current >= 1000) {
-        setFps(frameCount.current);
-        frameCount.current = 0;
-        lastFpsUpdate.current = now;
-      }
-      requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
-  }, []);
-
-  // Pointer lock state tracking
-  useEffect(() => {
-    const onLock = () => setLocked(true);
-    const onUnlock = () => setLocked(false);
-    document.addEventListener('pointerlockchange', () => {
-      if (document.pointerLockElement) onLock();
-      else onUnlock();
-    });
-    return () => {
-      document.removeEventListener('pointerlockchange', onLock);
-    };
-  }, []);
+  const handleEnd = useCallback(() => {
+    setActive(false);
+    onMove(0, 0);
+    if (stickRef.current) {
+      stickRef.current.style.transform = 'translate(0px, 0px)';
+    }
+  }, [onMove]);
 
   return (
-    <div className="w-full h-screen bg-[#0f172a] relative overflow-hidden">
+    <div
+      className="fixed bottom-8 left-8 w-24 h-24 rounded-full border-2 border-cyan-500/40 bg-black/30 backdrop-blur-sm flex items-center justify-center md:hidden z-50"
+      onTouchStart={handleStart}
+      onTouchMove={handleMove}
+      onTouchEnd={handleEnd}
+    >
+      <div
+        ref={stickRef}
+        className={`w-10 h-10 rounded-full transition-colors ${
+          active ? 'bg-cyan-400/70' : 'bg-cyan-500/30'
+        }`}
+      />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Loading Screen
+// ---------------------------------------------------------------------------
+
+function LoadingScreen() {
+  return (
+    <div className="fixed inset-0 bg-[#05050f] flex flex-col items-center justify-center z-[100]">
+      <div className="relative w-32 h-32 mb-8">
+        <div className="absolute inset-0 rounded-full border-2 border-cyan-500/20 animate-ping" />
+        <div className="absolute inset-4 rounded-full border-2 border-cyan-400/40 animate-spin" />
+        <div className="absolute inset-8 rounded-full border-2 border-cyan-300/60 animate-pulse" />
+        <div className="absolute inset-0 flex items-center justify-center">
+          <svg viewBox="0 0 24 24" className="w-10 h-10 text-cyan-400" fill="none" stroke="currentColor" strokeWidth={1.5}>
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+          </svg>
+        </div>
+      </div>
+      <h2 className="text-cyan-400 text-xl font-mono tracking-widest mb-2">INITIALIZING WORLD</h2>
+      <p className="text-cyan-600 text-sm font-mono">Loading domain topology...</p>
+      <div className="mt-6 w-48 h-1 bg-cyan-900/50 rounded-full overflow-hidden">
+        <div className="h-full bg-cyan-400 rounded-full animate-[loading_2s_ease-in-out_infinite]"
+          style={{ width: '60%', animation: 'loading 2s ease-in-out infinite' }}
+        />
+      </div>
+      <style>{`
+        @keyframes loading {
+          0% { width: 0%; margin-left: 0; }
+          50% { width: 60%; margin-left: 20%; }
+          100% { width: 0%; margin-left: 100%; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// HUD Overlay
+// ---------------------------------------------------------------------------
+
+function HUD({
+  districts,
+  selectedDTU,
+  onClose,
+  locked,
+  onLock,
+}: {
+  districts: District[];
+  selectedDTU: SelectedDTU | null;
+  onClose: () => void;
+  locked: boolean;
+  onLock: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 pointer-events-none z-40">
+      {/* Top bar */}
+      <div className="absolute top-0 left-0 right-0 p-4 flex items-center justify-between">
+        <div className="pointer-events-auto">
+          <h1 className="text-cyan-400 font-mono text-lg tracking-widest flex items-center gap-2">
+            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5}>
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+            </svg>
+            CONCORD WORLD
+          </h1>
+          <p className="text-cyan-700 text-xs font-mono mt-0.5">
+            {districts.length} districts | {districts.reduce((s, d) => s + d.dtus.length, 0)} objects
+          </p>
+        </div>
+        <div className="pointer-events-auto flex items-center gap-3">
+          {!locked && (
+            <button
+              onClick={onLock}
+              className="bg-cyan-500/20 border border-cyan-500/40 text-cyan-400 px-3 py-1.5 rounded text-xs font-mono hover:bg-cyan-500/30 transition-colors"
+            >
+              Click to Explore (WASD + Mouse)
+            </button>
+          )}
+          {locked && (
+            <span className="text-cyan-600 text-xs font-mono">ESC to unlock cursor</span>
+          )}
+        </div>
+      </div>
+
+      {/* Controls hint */}
+      <div className="absolute bottom-4 right-4 text-right">
+        <div className="text-cyan-800 text-[10px] font-mono space-y-0.5 hidden md:block">
+          <div>WASD — Move</div>
+          <div>SPACE — Up | SHIFT — Down</div>
+          <div>MOUSE — Look | CLICK — Select</div>
+          <div>ESC — Release cursor</div>
+        </div>
+      </div>
+
+      {/* Minimap placeholder */}
+      <div className="absolute bottom-4 left-4 hidden md:block">
+        <div className="w-40 h-40 border border-cyan-900/50 bg-black/60 backdrop-blur-sm rounded-lg overflow-hidden">
+          <div className="p-2">
+            <div className="text-cyan-700 text-[9px] font-mono mb-1">MINIMAP</div>
+            <div className="relative w-full h-28">
+              {districts.map((d) => {
+                const [cx, , cz] = d.center;
+                const scale = 0.15;
+                return (
+                  <div
+                    key={d.domain}
+                    className="absolute w-3 h-3 rounded-sm"
+                    style={{
+                      backgroundColor: d.color,
+                      opacity: 0.6,
+                      left: `${50 + cx * scale}%`,
+                      top: `${50 + cz * scale}%`,
+                      transform: 'translate(-50%, -50%)',
+                    }}
+                    title={d.domain}
+                  />
+                );
+              })}
+              {/* Camera indicator */}
+              <div className="absolute w-2 h-2 bg-white rounded-full"
+                style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* District labels (sidebar) */}
+      <div className="absolute top-20 left-4 hidden lg:block">
+        <div className="bg-black/50 backdrop-blur-sm border border-cyan-900/30 rounded-lg p-3 max-h-[60vh] overflow-y-auto pointer-events-auto scrollbar-thin scrollbar-thumb-cyan-900">
+          <div className="text-cyan-700 text-[9px] font-mono mb-2 tracking-widest">DISTRICTS</div>
+          {districts.map((d) => (
+            <div key={d.domain} className="flex items-center gap-2 py-0.5">
+              <div className="w-2 h-2 rounded-sm flex-shrink-0" style={{ backgroundColor: d.color }} />
+              <span className="text-cyan-500 text-[10px] font-mono truncate">{d.domain}</span>
+              <span className="text-cyan-800 text-[9px] font-mono ml-auto">{d.dtus.length}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Selected DTU Info Panel */}
+      {selectedDTU && (
+        <div className="absolute top-20 right-4 w-80 max-w-[calc(100vw-2rem)] pointer-events-auto">
+          <div className="bg-black/80 backdrop-blur-md border border-cyan-500/30 rounded-lg overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-cyan-900/30">
+              <h3 className="text-cyan-400 font-mono text-sm truncate flex-1">
+                {selectedDTU.title || selectedDTU.id}
+              </h3>
+              <button
+                onClick={onClose}
+                className="text-cyan-700 hover:text-cyan-400 ml-2 text-lg leading-none"
+              >
+                x
+              </button>
+            </div>
+            <div className="p-4 space-y-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                {selectedDTU.tier && (
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider ${
+                    selectedDTU.tier === 'HYPER' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' :
+                    selectedDTU.tier === 'MEGA' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' :
+                    selectedDTU.tier === 'SHADOW' ? 'bg-gray-500/20 text-gray-300 border border-gray-500/30' :
+                    'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                  }`}>
+                    {selectedDTU.tier}
+                  </span>
+                )}
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-700/50 text-slate-300">
+                  {getDomain(selectedDTU)}
+                </span>
+              </div>
+              {selectedDTU.tags && selectedDTU.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {selectedDTU.tags.slice(0, 6).map((tag) => (
+                    <span key={tag} className="text-[9px] font-mono px-1.5 py-0.5 bg-cyan-900/20 text-cyan-600 rounded">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {(selectedDTU.full?.core?.summary || selectedDTU.core?.summary) && (
+                <p className="text-cyan-300/70 text-xs font-mono leading-relaxed line-clamp-4">
+                  {selectedDTU.full?.core?.summary || selectedDTU.core?.summary}
+                </p>
+              )}
+              <div className="text-cyan-800 text-[9px] font-mono">
+                ID: {selectedDTU.id}
+              </div>
+              {selectedDTU.createdAt && (
+                <div className="text-cyan-800 text-[9px] font-mono">
+                  Created: {new Date(selectedDTU.createdAt).toLocaleString()}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main Page Component
+// ---------------------------------------------------------------------------
+
+export default function WorldLensPage() {
+  const [dtus, setDtus] = useState<DTU[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedDTU, setSelectedDTU] = useState<SelectedDTU | null>(null);
+  const [locked, setLocked] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const { sunPosition, isNight } = useDayNight();
+
+  // Fetch DTUs
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const res = await fetch('/api/dtus');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        const items: DTU[] = json.dtus || json.results || [];
+        if (!cancelled) {
+          setDtus(items);
+          setLoading(false);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Failed to load');
+          setLoading(false);
+        }
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Build districts
+  const districts = useMemo(() => buildDistricts(dtus), [dtus]);
+
+  // Handle DTU selection — fetch full DTU data
+  const handleSelect = useCallback(async (dtu: DTU) => {
+    setSelectedDTU({ ...dtu });
+    try {
+      const res = await fetch(`/api/dtus/${dtu.id}`);
+      if (res.ok) {
+        const json = await res.json();
+        const full = json.dtu || json;
+        setSelectedDTU((prev) => prev && prev.id === dtu.id ? { ...prev, full } : prev);
+      }
+    } catch {
+      // Keep partial data
+    }
+  }, []);
+
+  const handleClose = useCallback(() => setSelectedDTU(null), []);
+
+  // Pointer lock tracking
+  useEffect(() => {
+    const onChange = () => setLocked(!!document.pointerLockElement);
+    document.addEventListener('pointerlockchange', onChange);
+    return () => document.removeEventListener('pointerlockchange', onChange);
+  }, []);
+
+  const handleLock = useCallback(() => {
+    canvasRef.current?.requestPointerLock();
+  }, []);
+
+  // Mobile joystick movement (dispatches synthetic key events)
+  const handleMobileMove = useCallback((dx: number, dz: number) => {
+    const dispatchKey = (code: string, down: boolean) => {
+      window.dispatchEvent(new KeyboardEvent(down ? 'keydown' : 'keyup', { code }));
+    };
+    dispatchKey('KeyA', dx < -0.3);
+    dispatchKey('KeyD', dx > 0.3);
+    dispatchKey('KeyW', dz < -0.3);
+    dispatchKey('KeyS', dz > 0.3);
+  }, []);
+
+  if (loading) return <LoadingScreen />;
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-[#05050f] flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-red-400 font-mono text-lg mb-2">WORLD LOAD FAILED</div>
+          <div className="text-red-600 font-mono text-sm mb-4">{error}</div>
+          <button
+            onClick={() => window.location.reload()}
+            className="bg-red-500/20 border border-red-500/40 text-red-400 px-4 py-2 rounded font-mono text-sm hover:bg-red-500/30"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full h-screen bg-[#05050f] relative overflow-hidden">
+      <Canvas
+        ref={canvasRef}
+        camera={{ position: [0, 80, 120], fov: 60, near: 0.5, far: 1000 }}
+        shadows
+        gl={{ antialias: true, alpha: false, powerPreference: 'high-performance' }}
+        dpr={[1, 1.5]}
+        style={{ background: isNight ? '#05050f' : '#0d1117' }}
+        onCreated={({ gl }) => {
+          gl.toneMapping = THREE.ACESFilmicToneMapping;
+          gl.toneMappingExposure = isNight ? 0.6 : 1;
+        }}
+      >
+        <Scene
+          districts={districts}
+          onSelect={handleSelect}
+          isNight={isNight}
+          sunPosition={sunPosition}
+        />
+      </Canvas>
+
       <HUD
         districts={districts}
-        playerCount={otherPlayers.length}
-        fps={fps}
+        selectedDTU={selectedDTU}
+        onClose={handleClose}
         locked={locked}
+        onLock={handleLock}
       />
 
-      <Canvas
-        camera={{ position: [0, 80, 120], fov: 60, near: 0.1, far: 2000 }}
-        shadows
-        onCreated={onCreated}
-        gl={{ antialias: true, powerPreference: 'high-performance' }}
-        dpr={[1, 1.5]}
-      >
-        <Suspense fallback={null}>
-          <SceneContent
-            districts={districts}
-            otherPlayers={otherPlayers}
-            cityId={cityId}
-          />
-        </Suspense>
-      </Canvas>
+      <MobileJoystick onMove={handleMobileMove} />
     </div>
   );
 }
