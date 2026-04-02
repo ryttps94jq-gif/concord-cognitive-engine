@@ -10683,10 +10683,19 @@ async function chatWithLattice(query, { contextLimit = 5, sessionId: _sessionId 
   if (EMBEDDINGS.enabled) {
     const searchResult = await embeddingSearch(query, { limit: contextLimit, minScore: 0.3 });
     if (searchResult.ok) {
-      context = searchResult.results.map(d => ({
+      // Re-rank by freshness-weighted relevance
+      let results = searchResult.results;
+      try {
+        const { applyFreshnessToRelevance } = await import("./lib/freshness-engine.js");
+        results = applyFreshnessToRelevance(results, { freshnessWeight: 0.2 });
+      } catch (_e) { /* freshness engine optional */ }
+
+      context = results.map(d => ({
         title: d.title,
         content: d.content?.slice(0, 1000) || "",
-        tags: d.tags
+        tags: d.tags,
+        score: d.score,
+        freshness: d._freshnessScore,
       }));
     }
   }
@@ -16104,6 +16113,24 @@ if (intentInfo.intent === INTENT.GREETING) {
     sess.messages.push({ role:"assistant", content: reply, ts: nowISO() });
     saveStateDebounced();
     return { ok:true, reply, mode, llmUsed:false, intent: intentInfo.intent };
+  }
+}
+
+// --- Council mode detection (trigger 4-brain deliberation) ---
+{
+  const _councilTriggers = /\b(council\s*mode|deliberate|convene\s*council|brain\s*council|ask\s*the\s*council)\b/i;
+  if (_councilTriggers.test(prompt) && typeof conveneCouncil === "function") {
+    try {
+      const _councilQ = prompt.replace(_councilTriggers, "").trim() || prompt;
+      const _councilSession = await conveneCouncil(_councilQ, { domain: currentLens, context: (sess.messages || []).slice(-4).map(m => m.content).join("\n").slice(0, 500) });
+      const _opinions = Object.values(_councilSession.opinions || {}).map(o =>
+        `**${o.brain}** (${o.vote}): ${o.opinion}`
+      ).join("\n\n");
+      const reply = `## Brain Council Deliberation\n\n${_opinions}\n\n---\n**Consensus: ${(_councilSession.consensus || "split").toUpperCase()}** (confidence: ${Math.round((_councilSession.confidence || 0) * 100)}%)`;
+      sess.messages.push({ role: "assistant", content: reply, ts: nowISO(), meta: { source: "council", sessionId: _councilSession.id } });
+      saveStateDebounced();
+      return { ok: true, reply, sessionId, mode: "council", llmUsed: true, meta: { source: "council", councilSessionId: _councilSession.id } };
+    } catch (_e) { structuredLog("warn", "council_mode_failed", { error: String(_e?.message || _e) }); }
   }
 }
 
@@ -23205,6 +23232,19 @@ try {
   initErrorAlerting();
 } catch (e) {
   structuredLog("warn", "error_alerting_init_failed", { error: String(e?.message || e) });
+}
+
+// ===== FRESHNESS ENGINE (domain-aware decay, velocity API) =====
+try {
+  const { getDomainVelocity, DOMAIN_HALF_LIVES } = await import("./lib/freshness-engine.js");
+  app.get("/api/freshness/velocity/:domain", (req, res) => {
+    res.json({ ok: true, ...getDomainVelocity(req.params.domain) });
+  });
+  app.get("/api/freshness/domains", (_req, res) => {
+    res.json({ ok: true, domains: Object.entries(DOMAIN_HALF_LIVES).map(([d, hl]) => ({ domain: d, halfLifeDays: hl, velocity: hl <= 7 ? "high" : hl <= 30 ? "medium" : "low" })) });
+  });
+} catch (e) {
+  structuredLog("warn", "freshness_engine_init_failed", { error: String(e?.message || e) });
 }
 
 // ===== OPENAPI DOCUMENTATION =====
@@ -33604,6 +33644,15 @@ function initChatSocketHandlers(io) {
           lensRecommendation = detectLensRecommendation(prompt, result?.reply || "", lens);
         } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
+        // Compute confidence score for the response
+        let _chatConfidence = null;
+        try {
+          const { attachConfidence } = await import("./lib/confidence-attacher.js");
+          const _confResult = { response: result?.reply || "", context: result?.relevant || [], method: result?.llmUsed ? "rag" : "context_only" };
+          attachConfidence(_confResult);
+          _chatConfidence = _confResult.confidence || null;
+        } catch (_e) { /* confidence optional */ }
+
         // Emit complete
         socket.emit("chat:complete", {
           sessionId,
@@ -33623,6 +33672,7 @@ function initChatSocketHandlers(io) {
           brain: result?.llmUsed ? "conscious" : "local",
           route: result?.route || null,
           forge: result?.forge || null,
+          confidence: _chatConfidence,
         });
 
         ack?.({ ok: true });
@@ -34391,8 +34441,44 @@ app.delete("/api/webhooks/:id", asyncHandler(async (req, res) => res.json(await 
 app.post("/api/webhooks/:id/toggle", asyncHandler(async (req, res) => res.json(await runMacro("webhook", "toggle", { webhookId: req.params.id, ...req.body }, makeCtx(req)))));
 
 // ── Webhook Ingest — external systems POST JSON to create DTUs ─────────────
+// Webhook secret management endpoints
+app.post("/api/webhook-secrets/:domain", asyncHandler(async (req, res) => {
+  try {
+    const { getOrCreateWebhookSecret } = await import("./lib/webhook-auth.js");
+    const result = getOrCreateWebhookSecret(STATE, req.params.domain);
+    saveStateDebounced();
+    res.json({ ok: true, domain: req.params.domain, ...result });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+}));
+app.get("/api/webhook-secrets", asyncHandler(async (req, res) => {
+  try {
+    const { listWebhookDomains } = await import("./lib/webhook-auth.js");
+    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    res.json({ ok: true, domains: listWebhookDomains(STATE, { baseUrl }) });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+}));
+app.delete("/api/webhook-secrets/:domain", asyncHandler(async (req, res) => {
+  try {
+    const { revokeWebhookSecret } = await import("./lib/webhook-auth.js");
+    const revoked = revokeWebhookSecret(STATE, req.params.domain);
+    if (revoked) saveStateDebounced();
+    res.json({ ok: true, revoked });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+}));
+
 app.post("/api/webhook/:domain", asyncHandler(async (req, res) => {
   const domain = req.params.domain;
+
+  // Verify webhook authentication
+  try {
+    const { verifyWebhook } = await import("./lib/webhook-auth.js");
+    const auth = verifyWebhook(req, STATE, domain);
+    if (!auth.authenticated) {
+      structuredLog("warn", "webhook_auth_failed", { domain, method: auth.method, ip: req.ip });
+      return res.status(401).json({ ok: false, error: "Webhook authentication failed", method: auth.method });
+    }
+  } catch (_e) { /* if auth module fails, allow (graceful degradation) */ }
+
   const body = req.body || {};
   const title = normalizeText(body.title || body.subject || body.name || `Webhook ingest: ${domain}`) || `Webhook: ${domain}`;
   const content = body.content || body.text || body.body || body.data || JSON.stringify(body);
@@ -40486,26 +40572,56 @@ const FRESHNESS_HALF_LIFE_DAYS = Number(process.env.FRESHNESS_HALF_LIFE || 30);
 
 function calculateFreshness(dtu) {
   if (!dtu) return 0;
+  // Use domain-aware freshness engine (async import, cached after first call)
+  try {
+    if (!calculateFreshness._engine) {
+      // Lazy-load the engine; fall back to inline calculation if unavailable
+      import("./lib/freshness-engine.js").then(mod => {
+        calculateFreshness._engine = mod.computeFreshness;
+      }).catch(() => {});
+    }
+    if (calculateFreshness._engine) {
+      const result = calculateFreshness._engine(dtu);
+      return result.score;
+    }
+  } catch (_e) { /* fall through to inline */ }
+
+  // Inline fallback (domain-aware)
   const now = Date.now();
   const created = new Date(dtu.createdAt || dtu.created || now).getTime();
   const updated = new Date(dtu.updatedAt || dtu.updated || created).getTime();
   const lastTouched = Math.max(created, updated, dtu.meta?.lastAccessedAt ? new Date(dtu.meta.lastAccessedAt).getTime() : 0);
 
+  // Domain-specific half-life
+  const _domainHL = { finance: 7, crypto: 5, news: 3, stocks: 7, trading: 7, weather: 1, history: 365, mathematics: 730, philosophy: 365, literature: 365 };
+  let halfLife = FRESHNESS_HALF_LIFE_DAYS;
+  for (const tag of (dtu.tags || [])) {
+    const hl = _domainHL[tag.toLowerCase()];
+    if (hl != null) halfLife = Math.min(halfLife, hl);
+  }
+
   const ageDays = (now - lastTouched) / (1000 * 60 * 60 * 24);
-  const baseFreshness = Math.exp(-ageDays / FRESHNESS_HALF_LIFE_DAYS);
+  const baseFreshness = Math.exp(-ageDays * Math.LN2 / halfLife);
 
   // Access boost: frequently accessed items stay fresh
   const accessCount = dtu.meta?.accessCount || 0;
   const accessBoost = 1 + 0.1 * Math.min(accessCount, 10);
 
   // Tier boost: higher-tier DTUs decay slower
-  const tierMultiplier = dtu.tier === "hyper" ? 1.5 : dtu.tier === "mega" ? 1.3 : 1.0;
+  const tierMultiplier = dtu.tier === "hyper" ? 1.5 : dtu.tier === "mega" ? 1.3 : dtu.tier === "crystal" ? 1.4 : 1.0;
 
   // Connection boost: well-connected DTUs decay slower
-  const connectionCount = (dtu.lineage?.parentIds?.length || 0) + (dtu.lineage?.childIds?.length || 0);
-  const connectionBoost = 1 + 0.05 * Math.min(connectionCount, 10);
+  const connectionCount = (dtu.lineage?.parentIds?.length || 0) + (dtu.lineage?.childIds?.length || 0) + (dtu.meta?.citationCount || 0);
+  const connectionBoost = 1 + 0.05 * Math.min(connectionCount, 20);
 
-  const raw = baseFreshness * accessBoost * tierMultiplier * connectionBoost;
+  // Validation boost
+  let validationBoost = 1.0;
+  if (dtu.meta?.lastValidatedAt) {
+    const daysSinceVal = (now - new Date(dtu.meta.lastValidatedAt).getTime()) / 86_400_000;
+    validationBoost = daysSinceVal < 7 ? 1.3 : daysSinceVal < 30 ? 1.15 : 1.0;
+  }
+
+  const raw = baseFreshness * accessBoost * tierMultiplier * connectionBoost * validationBoost;
   return Math.min(1.0, Math.max(0.0, raw));
 }
 
@@ -40530,17 +40646,29 @@ app.get("/api/dtus/:id/freshness", (req, res) => {
   dtu.meta.lastAccessedAt = nowISO();
 
   const score = calculateFreshness(dtu);
+  // Try to get detailed factors from freshness engine
+  let detailedFactors = null;
+  let domainVelocity = null;
+  try {
+    const fe = await import("./lib/freshness-engine.js");
+    const detailed = fe.computeFreshness(dtu);
+    detailedFactors = detailed.factors;
+    const primaryDomain = (dtu.tags || [])[0];
+    if (primaryDomain) domainVelocity = fe.getDomainVelocity(primaryDomain);
+  } catch (_e) { /* optional */ }
+
   res.json({
     ok: true,
     id: dtu.id,
     freshness: score,
     label: freshnessLabel(score),
-    factors: {
+    factors: detailedFactors || {
       ageDays: Math.floor((Date.now() - new Date(dtu.updatedAt || dtu.createdAt || Date.now()).getTime()) / 86400000),
       accessCount: dtu.meta.accessCount,
       tier: dtu.tier || "regular",
       connections: (dtu.lineage?.parentIds?.length || 0) + (dtu.lineage?.childIds?.length || 0),
     },
+    domainVelocity,
   });
 });
 
@@ -41135,6 +41263,32 @@ app.post("/api/xp/award", (req, res) => {
   const result = awardXP(userId, action, XP_TABLE[action] || 5, meta || {});
   res.json({ ok: true, ...result });
 });
+
+// ── XP Hooks: auto-award on real activity ──────────────────────────────────
+try {
+  const { installXPHooks, getDomainLeaderboard, generateQuests, awardMarketplaceSaleXP, awardCitationXP } = await import("./lib/xp-hooks.js");
+  installXPHooks({ awardXP, getXPProfile, STATE, saveStateDebounced });
+
+  // Domain-filtered leaderboard
+  app.get("/api/xp/leaderboard/domain/:domain", (req, res) => {
+    const { domain } = req.params;
+    const limit = Math.min(Number(req.query.limit) || 50, 100);
+    const result = getDomainLeaderboard(STATE, { domain, limit });
+    res.json({ ok: true, ...result });
+  });
+
+  // Daily/weekly quests
+  app.get("/api/xp/quests", (req, res) => {
+    const userId = req.actor?.userId || "sovereign";
+    const quests = generateQuests(userId);
+    res.json({ ok: true, ...quests });
+  });
+
+  // Expose helpers for marketplace/citation hooks
+  STATE._xpHelpers = { awardMarketplaceSaleXP: (opts) => awardMarketplaceSaleXP(awardXP, opts), awardCitationXP: (opts) => awardCitationXP(awardXP, opts) };
+} catch (e) {
+  structuredLog("warn", "xp_hooks_init_failed", { error: String(e?.message || e) });
+}
 
 // ── 2. Context Resurrection — Perfect memory across sessions ────────────────
 

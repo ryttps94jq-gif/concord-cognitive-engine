@@ -68,6 +68,7 @@ import { InitiativeList } from './InitiativeChip';
 import type { Initiative } from './InitiativeChip';
 import ChatRouteOverlay from './ChatRouteOverlay';
 import ForgeCard from './ForgeCard';
+import { ConfidenceBadge } from '@/components/common/ConfidenceBadge';
 
 // ── Types ──────────────────────────────────────────────────────
 
@@ -136,6 +137,8 @@ interface ChatMessage {
   route?: RouteMeta | null;
   // Inline forge artifact (when CREATE action produces deliverable)
   forge?: ForgeEnvelope | null;
+  // AI confidence score for this response
+  confidence?: { score: number; level: string; factors?: Record<string, { score: number }> } | null;
 }
 
 interface LensRecommendation {
@@ -439,6 +442,7 @@ export function PersistentChatRail({
         brain?: string;
         route?: RouteMeta | null;
         forge?: ForgeEnvelope | null;
+        confidence?: { score: number; level: string; factors?: Record<string, { score: number }> } | null;
       };
       if (d.sessionId === sessionId) {
         const msg: ChatMessage = {
@@ -455,6 +459,7 @@ export function PersistentChatRail({
           brain: d.brain || undefined,
           route: d.route || null,
           forge: d.forge || null,
+          confidence: d.confidence || null,
         };
         setMessages(prev => [...prev, msg]);
         setStreamingText('');
@@ -554,6 +559,7 @@ export function PersistentChatRail({
           dtuCount: data?.dtuCount ?? 0,
           route: data?.route || null,
           forge: data?.forge || null,
+          confidence: data?.confidence || null,
         };
         setMessages(prev => [...prev, assistantMsg]);
         if (data?.dtuCount != null) setLastDtuCount(data.dtuCount);
@@ -954,6 +960,21 @@ export function PersistentChatRail({
                       <Zap className="w-3 h-3" />
                       Generate {msg.lensRecommendation.suggestedAction.replace(/-/g, ' ')}
                     </button>
+                  )}
+
+                  {/* Confidence score indicator */}
+                  {msg.role === 'assistant' && msg.confidence && msg.confidence.score > 0 && (
+                    <div className="mt-1.5 flex justify-end">
+                      <ConfidenceBadge
+                        score={msg.confidence.score}
+                        label={msg.confidence.level}
+                        factors={msg.confidence.factors
+                          ? Object.fromEntries(Object.entries(msg.confidence.factors).map(([k, v]) => [k, typeof v === 'object' && v !== null && 'score' in v ? (v as { score: number }).score : (v as number)]))
+                          : undefined}
+                        showFactors
+                        size="sm"
+                      />
+                    </div>
                   )}
 
                   {/* Action buttons on assistant messages */}
