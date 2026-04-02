@@ -57004,6 +57004,487 @@ structuredLog("info", "completion_init", { detail: "Completion layer: search, ba
 // END COMPLETION LAYER
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// FEATURE LAYER: Block/Mute, Drafts, Quiz, Course Builder, Creator Verification
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ---- Block / Mute Users (Safety) ----
+// STATE.blockedUsers: Map<userId, Set<targetUserId>>
+// STATE.mutedUsers:   Map<userId, Set<targetUserId>>
+STATE.blockedUsers = STATE.blockedUsers || new Map();
+STATE.mutedUsers   = STATE.mutedUsers   || new Map();
+
+app.post("/api/social/block", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id;
+    const { targetUserId } = req.body || {};
+    if (!userId || !targetUserId) return res.status(400).json({ ok: false, error: "userId and targetUserId required" });
+    if (!STATE.blockedUsers.has(userId)) STATE.blockedUsers.set(userId, new Set());
+    STATE.blockedUsers.get(userId).add(targetUserId);
+    res.json({ ok: true, userId, targetUserId, blocked: true });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.delete("/api/social/block", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id;
+    const { targetUserId } = req.body || {};
+    if (!userId || !targetUserId) return res.status(400).json({ ok: false, error: "userId and targetUserId required" });
+    STATE.blockedUsers.get(userId)?.delete(targetUserId);
+    res.json({ ok: true, userId, targetUserId, blocked: false });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/social/mute", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id;
+    const { targetUserId } = req.body || {};
+    if (!userId || !targetUserId) return res.status(400).json({ ok: false, error: "userId and targetUserId required" });
+    if (!STATE.mutedUsers.has(userId)) STATE.mutedUsers.set(userId, new Set());
+    STATE.mutedUsers.get(userId).add(targetUserId);
+    res.json({ ok: true, userId, targetUserId, muted: true });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.delete("/api/social/mute", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id;
+    const { targetUserId } = req.body || {};
+    if (!userId || !targetUserId) return res.status(400).json({ ok: false, error: "userId and targetUserId required" });
+    STATE.mutedUsers.get(userId)?.delete(targetUserId);
+    res.json({ ok: true, userId, targetUserId, muted: false });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/blocked", (req, res) => {
+  try {
+    const userId = req.query.userId || req.user?.id;
+    if (!userId) return res.status(400).json({ ok: false, error: "userId required" });
+    const blocked = Array.from(STATE.blockedUsers.get(userId) || []);
+    res.json({ ok: true, userId, blocked });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/muted", (req, res) => {
+  try {
+    const userId = req.query.userId || req.user?.id;
+    if (!userId) return res.status(400).json({ ok: false, error: "userId required" });
+    const muted = Array.from(STATE.mutedUsers.get(userId) || []);
+    res.json({ ok: true, userId, muted });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- Draft System ----
+const DRAFTS = new BoundedMap(10000, "DRAFTS"); // draftId -> draft object
+STATE.drafts = STATE.drafts || DRAFTS;
+
+app.post("/api/drafts", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id;
+    if (!userId) return res.status(400).json({ ok: false, error: "userId required" });
+    const { title = "", content = "", contentType = "text", tags = [], lensId, metadata = {} } = req.body || {};
+    const id = uid("draft");
+    const now = nowISO();
+    const draft = { id, userId, title, content, contentType, tags, lensId, metadata, createdAt: now, updatedAt: now, status: "draft" };
+    STATE.drafts.set(id, draft);
+    res.json({ ok: true, draft });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.put("/api/drafts/:id", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id;
+    const draft = STATE.drafts.get(req.params.id);
+    if (!draft) return res.status(404).json({ ok: false, error: "Draft not found" });
+    if (draft.userId !== userId) return res.status(403).json({ ok: false, error: "Forbidden" });
+    const { title, content, contentType, tags, lensId, metadata } = req.body || {};
+    if (title !== undefined) draft.title = title;
+    if (content !== undefined) draft.content = content;
+    if (contentType !== undefined) draft.contentType = contentType;
+    if (tags !== undefined) draft.tags = tags;
+    if (lensId !== undefined) draft.lensId = lensId;
+    if (metadata !== undefined) draft.metadata = metadata;
+    draft.updatedAt = nowISO();
+    STATE.drafts.set(draft.id, draft);
+    res.json({ ok: true, draft });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/drafts", (req, res) => {
+  try {
+    const userId = req.query.userId || req.user?.id;
+    if (!userId) return res.status(400).json({ ok: false, error: "userId required" });
+    const drafts = Array.from(STATE.drafts.values()).filter(d => d.userId === userId && d.status === "draft");
+    drafts.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+    res.json({ ok: true, drafts, total: drafts.length });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/drafts/:id", (req, res) => {
+  try {
+    const userId = req.query.userId || req.user?.id;
+    const draft = STATE.drafts.get(req.params.id);
+    if (!draft) return res.status(404).json({ ok: false, error: "Draft not found" });
+    if (draft.userId !== userId) return res.status(403).json({ ok: false, error: "Forbidden" });
+    res.json({ ok: true, draft });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.delete("/api/drafts/:id", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id;
+    const draft = STATE.drafts.get(req.params.id);
+    if (!draft) return res.status(404).json({ ok: false, error: "Draft not found" });
+    if (draft.userId !== userId) return res.status(403).json({ ok: false, error: "Forbidden" });
+    STATE.drafts.delete(req.params.id);
+    res.json({ ok: true, deleted: true, id: req.params.id });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/drafts/:id/publish", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id;
+    const draft = STATE.drafts.get(req.params.id);
+    if (!draft) return res.status(404).json({ ok: false, error: "Draft not found" });
+    if (draft.userId !== userId) return res.status(403).json({ ok: false, error: "Forbidden" });
+    // Convert draft into a DTU using existing patterns
+    const dtuId = uid("dtu");
+    const now = nowISO();
+    const dtu = {
+      id: dtuId,
+      title: draft.title,
+      human: { summary: draft.content },
+      cretiHuman: draft.content,
+      contentType: draft.contentType,
+      tags: draft.tags || [],
+      lensId: draft.lensId,
+      meta: draft.metadata || {},
+      source: "draft",
+      status: "active",
+      tier: "user",
+      createdAt: now,
+      updatedAt: now,
+      ownerId: userId,
+      draftId: draft.id,
+    };
+    STATE.dtus.set(dtuId, dtu);
+    draft.status = "published";
+    draft.publishedDtuId = dtuId;
+    draft.updatedAt = now;
+    STATE.drafts.set(draft.id, draft);
+    res.json({ ok: true, dtu, draftId: draft.id });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- Quiz System (Education) ----
+const QUIZZES = new BoundedMap(5000, "QUIZZES"); // quizId -> quiz object
+STATE.quizzes = STATE.quizzes || QUIZZES;
+
+app.post("/api/education/quiz", (req, res) => {
+  try {
+    const creatorId = req.body?.userId || req.user?.id;
+    if (!creatorId) return res.status(400).json({ ok: false, error: "userId required" });
+    const { title, dtuId, questions = [] } = req.body || {};
+    if (!title) return res.status(400).json({ ok: false, error: "title required" });
+    const id = uid("quiz");
+    const now = nowISO();
+    const quiz = { id, creatorId, title, dtuId, questions, createdAt: now, updatedAt: now, submissions: [] };
+    STATE.quizzes.set(id, quiz);
+    res.json({ ok: true, quiz });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/education/quiz/:id", (req, res) => {
+  try {
+    const quiz = STATE.quizzes.get(req.params.id);
+    if (!quiz) return res.status(404).json({ ok: false, error: "Quiz not found" });
+    // Return quiz without exposing correctIndex in questions for non-creators
+    const userId = req.query.userId || req.user?.id;
+    const isCreator = quiz.creatorId === userId;
+    const questions = isCreator
+      ? quiz.questions
+      : quiz.questions.map(({ question, options, explanation }) => ({ question, options, explanation }));
+    res.json({ ok: true, quiz: { ...quiz, questions, submissions: undefined } });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/education/quizzes", (req, res) => {
+  try {
+    const { dtuId, limit = 50, offset = 0 } = req.query;
+    let quizzes = Array.from(STATE.quizzes.values());
+    if (dtuId) quizzes = quizzes.filter(q => q.dtuId === dtuId);
+    quizzes.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+    const page = quizzes.slice(Number(offset), Number(offset) + Number(limit));
+    res.json({ ok: true, quizzes: page.map(q => ({ id: q.id, title: q.title, dtuId: q.dtuId, creatorId: q.creatorId, questionCount: q.questions.length, createdAt: q.createdAt })), total: quizzes.length });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/education/quiz/:id/submit", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id;
+    if (!userId) return res.status(400).json({ ok: false, error: "userId required" });
+    const quiz = STATE.quizzes.get(req.params.id);
+    if (!quiz) return res.status(404).json({ ok: false, error: "Quiz not found" });
+    const { answers = [] } = req.body || {};
+    let score = 0;
+    const results = quiz.questions.map((q, i) => {
+      const selected = answers[i];
+      const correct = selected === q.correctIndex;
+      if (correct) score++;
+      return { question: q.question, selectedIndex: selected, correctIndex: q.correctIndex, correct, explanation: q.explanation };
+    });
+    const total = quiz.questions.length;
+    const pct = total > 0 ? Math.round((score / total) * 100) : 0;
+    const submission = { submissionId: uid("qsub"), userId, answers, score, total, pct, submittedAt: nowISO() };
+    quiz.submissions.push(submission);
+    STATE.quizzes.set(quiz.id, quiz);
+    res.json({ ok: true, score, total, pct, results, submissionId: submission.submissionId });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/education/quiz/:id/stats", (req, res) => {
+  try {
+    const quiz = STATE.quizzes.get(req.params.id);
+    if (!quiz) return res.status(404).json({ ok: false, error: "Quiz not found" });
+    const subs = quiz.submissions || [];
+    const totalSubmissions = subs.length;
+    const avgScore = totalSubmissions > 0 ? (subs.reduce((sum, s) => sum + s.pct, 0) / totalSubmissions) : 0;
+    const questionStats = quiz.questions.map((q, i) => {
+      const correct = subs.filter(s => s.answers[i] === q.correctIndex).length;
+      return { question: q.question, correctCount: correct, totalCount: totalSubmissions, pct: totalSubmissions > 0 ? Math.round((correct / totalSubmissions) * 100) : 0 };
+    });
+    res.json({ ok: true, quizId: quiz.id, title: quiz.title, totalSubmissions, avgScore: Math.round(avgScore), questionStats });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.delete("/api/education/quiz/:id", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id;
+    const quiz = STATE.quizzes.get(req.params.id);
+    if (!quiz) return res.status(404).json({ ok: false, error: "Quiz not found" });
+    if (quiz.creatorId !== userId) return res.status(403).json({ ok: false, error: "Forbidden" });
+    STATE.quizzes.delete(req.params.id);
+    res.json({ ok: true, deleted: true, id: req.params.id });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- Course Builder (Education) ----
+const COURSES = new BoundedMap(2000, "COURSES"); // courseId -> course object
+STATE.courses = STATE.courses || COURSES;
+
+app.post("/api/education/course", (req, res) => {
+  try {
+    const creatorId = req.body?.userId || req.user?.id;
+    if (!creatorId) return res.status(400).json({ ok: false, error: "userId required" });
+    const { title, description = "", tags = [], lessons = [] } = req.body || {};
+    if (!title) return res.status(400).json({ ok: false, error: "title required" });
+    const id = uid("course");
+    const now = nowISO();
+    const course = { id, creatorId, title, description, tags, lessons, enrollments: new Map(), createdAt: now, updatedAt: now };
+    STATE.courses.set(id, course);
+    res.json({ ok: true, course: { ...course, enrollments: undefined, enrollmentCount: 0 } });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.put("/api/education/course/:id", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id;
+    const course = STATE.courses.get(req.params.id);
+    if (!course) return res.status(404).json({ ok: false, error: "Course not found" });
+    if (course.creatorId !== userId) return res.status(403).json({ ok: false, error: "Forbidden" });
+    const { title, description, tags, lessons } = req.body || {};
+    if (title !== undefined) course.title = title;
+    if (description !== undefined) course.description = description;
+    if (tags !== undefined) course.tags = tags;
+    if (lessons !== undefined) course.lessons = lessons;
+    course.updatedAt = nowISO();
+    STATE.courses.set(course.id, course);
+    res.json({ ok: true, course: { ...course, enrollments: undefined, enrollmentCount: course.enrollments.size } });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/education/course/:id", (req, res) => {
+  try {
+    const course = STATE.courses.get(req.params.id);
+    if (!course) return res.status(404).json({ ok: false, error: "Course not found" });
+    // Hydrate lessons with DTU data where available
+    const lessons = (course.lessons || []).map(lesson => {
+      const dtu = lesson.dtuId ? STATE.dtus.get(lesson.dtuId) : null;
+      return { ...lesson, dtuTitle: dtu?.title, dtuPreview: (dtu?.cretiHuman || dtu?.human?.summary || "").slice(0, 200) };
+    });
+    res.json({ ok: true, course: { ...course, lessons, enrollments: undefined, enrollmentCount: course.enrollments.size } });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/education/courses", (req, res) => {
+  try {
+    const { limit = 50, offset = 0, creatorId } = req.query;
+    let courses = Array.from(STATE.courses.values());
+    if (creatorId) courses = courses.filter(c => c.creatorId === creatorId);
+    courses.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+    const page = courses.slice(Number(offset), Number(offset) + Number(limit));
+    res.json({ ok: true, courses: page.map(c => ({ id: c.id, title: c.title, description: c.description, tags: c.tags, creatorId: c.creatorId, lessonCount: (c.lessons || []).length, enrollmentCount: c.enrollments.size, createdAt: c.createdAt })), total: courses.length });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/education/course/:id/enroll", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id;
+    if (!userId) return res.status(400).json({ ok: false, error: "userId required" });
+    const course = STATE.courses.get(req.params.id);
+    if (!course) return res.status(404).json({ ok: false, error: "Course not found" });
+    if (!course.enrollments.has(userId)) {
+      course.enrollments.set(userId, { enrolledAt: nowISO(), progress: [] });
+      STATE.courses.set(course.id, course);
+    }
+    res.json({ ok: true, courseId: course.id, userId, enrolled: true, enrolledAt: course.enrollments.get(userId).enrolledAt });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/education/course/:id/progress", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id;
+    if (!userId) return res.status(400).json({ ok: false, error: "userId required" });
+    const course = STATE.courses.get(req.params.id);
+    if (!course) return res.status(404).json({ ok: false, error: "Course not found" });
+    if (!course.enrollments.has(userId)) return res.status(400).json({ ok: false, error: "Not enrolled" });
+    const { lessonIndex, completed } = req.body || {};
+    if (lessonIndex === undefined) return res.status(400).json({ ok: false, error: "lessonIndex required" });
+    const enrollment = course.enrollments.get(userId);
+    const existing = enrollment.progress.findIndex(p => p.lessonIndex === lessonIndex);
+    const entry = { lessonIndex, completed: !!completed, updatedAt: nowISO() };
+    if (existing >= 0) enrollment.progress[existing] = entry;
+    else enrollment.progress.push(entry);
+    course.enrollments.set(userId, enrollment);
+    STATE.courses.set(course.id, course);
+    res.json({ ok: true, courseId: course.id, userId, progress: enrollment.progress });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/education/course/:id/progress", (req, res) => {
+  try {
+    const userId = req.query.userId || req.user?.id;
+    if (!userId) return res.status(400).json({ ok: false, error: "userId required" });
+    const course = STATE.courses.get(req.params.id);
+    if (!course) return res.status(404).json({ ok: false, error: "Course not found" });
+    const enrollment = course.enrollments.get(userId);
+    if (!enrollment) return res.status(404).json({ ok: false, error: "Not enrolled" });
+    const completedCount = enrollment.progress.filter(p => p.completed).length;
+    const totalLessons = (course.lessons || []).length;
+    res.json({ ok: true, courseId: course.id, userId, enrolledAt: enrollment.enrolledAt, progress: enrollment.progress, completedCount, totalLessons, pct: totalLessons > 0 ? Math.round((completedCount / totalLessons) * 100) : 0 });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.delete("/api/education/course/:id", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id;
+    const course = STATE.courses.get(req.params.id);
+    if (!course) return res.status(404).json({ ok: false, error: "Course not found" });
+    if (course.creatorId !== userId) return res.status(403).json({ ok: false, error: "Forbidden" });
+    STATE.courses.delete(req.params.id);
+    res.json({ ok: true, deleted: true, id: req.params.id });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- Creator Verification + Portfolio ----
+// STATE.creatorVerifications: Map<userId, { status, badge, verifiedAt, evidence, socialLinks, requestedAt }>
+// STATE.creatorPortfolios:    Map<userId, [{ dtuId, displayOrder, featured, addedAt }]>
+STATE.creatorVerifications = STATE.creatorVerifications || new Map();
+STATE.creatorPortfolios    = STATE.creatorPortfolios    || new Map();
+
+app.post("/api/creator/verify", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id;
+    if (!userId) return res.status(400).json({ ok: false, error: "userId required" });
+    const { evidence, socialLinks } = req.body || {};
+    const existing = STATE.creatorVerifications.get(userId);
+    if (existing?.status === "approved") return res.status(400).json({ ok: false, error: "Already verified" });
+    STATE.creatorVerifications.set(userId, { userId, status: "pending", badge: null, verifiedAt: null, evidence, socialLinks, requestedAt: nowISO() });
+    res.json({ ok: true, userId, status: "pending" });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/creator/verification-status", (req, res) => {
+  try {
+    const userId = req.query.userId || req.user?.id;
+    if (!userId) return res.status(400).json({ ok: false, error: "userId required" });
+    const v = STATE.creatorVerifications.get(userId);
+    if (!v) return res.json({ ok: true, userId, status: "not_requested" });
+    res.json({ ok: true, userId, status: v.status, badge: v.badge, verifiedAt: v.verifiedAt, requestedAt: v.requestedAt });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/admin/verify-creator", (req, res) => {
+  try {
+    const adminId = req.body?.adminId || req.user?.id;
+    const { userId, approved, badge } = req.body || {};
+    if (!userId) return res.status(400).json({ ok: false, error: "userId required" });
+    const v = STATE.creatorVerifications.get(userId);
+    if (!v) return res.status(404).json({ ok: false, error: "No verification request found" });
+    v.status = approved ? "approved" : "rejected";
+    v.badge = approved ? (badge || "verified") : null;
+    v.verifiedAt = approved ? nowISO() : null;
+    v.reviewedBy = adminId;
+    v.reviewedAt = nowISO();
+    STATE.creatorVerifications.set(userId, v);
+    res.json({ ok: true, userId, status: v.status, badge: v.badge, verifiedAt: v.verifiedAt });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/creator/:userId/portfolio", (req, res) => {
+  try {
+    const { userId } = req.params;
+    const items = STATE.creatorPortfolios.get(userId) || [];
+    const hydrated = items.map(item => {
+      const dtu = STATE.dtus.get(item.dtuId);
+      return { ...item, dtuTitle: dtu?.title, dtuPreview: (dtu?.cretiHuman || dtu?.human?.summary || "").slice(0, 200), dtuTags: dtu?.tags };
+    });
+    hydrated.sort((a, b) => (a.displayOrder ?? 999) - (b.displayOrder ?? 999));
+    res.json({ ok: true, userId, portfolio: hydrated });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/creator/portfolio", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id;
+    if (!userId) return res.status(400).json({ ok: false, error: "userId required" });
+    const { dtuId, displayOrder = 0, featured = false } = req.body || {};
+    if (!dtuId) return res.status(400).json({ ok: false, error: "dtuId required" });
+    const items = STATE.creatorPortfolios.get(userId) || [];
+    if (items.find(i => i.dtuId === dtuId)) return res.status(400).json({ ok: false, error: "Already in portfolio" });
+    items.push({ dtuId, displayOrder, featured, addedAt: nowISO() });
+    STATE.creatorPortfolios.set(userId, items);
+    res.json({ ok: true, userId, dtuId, added: true });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.delete("/api/creator/portfolio/:dtuId", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id;
+    if (!userId) return res.status(400).json({ ok: false, error: "userId required" });
+    const items = STATE.creatorPortfolios.get(userId) || [];
+    const filtered = items.filter(i => i.dtuId !== req.params.dtuId);
+    STATE.creatorPortfolios.set(userId, filtered);
+    res.json({ ok: true, userId, dtuId: req.params.dtuId, removed: true });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.put("/api/creator/portfolio/reorder", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id;
+    if (!userId) return res.status(400).json({ ok: false, error: "userId required" });
+    const { items: reorderItems = [] } = req.body || {};
+    const items = STATE.creatorPortfolios.get(userId) || [];
+    for (const { dtuId, displayOrder } of reorderItems) {
+      const item = items.find(i => i.dtuId === dtuId);
+      if (item) item.displayOrder = displayOrder;
+    }
+    items.sort((a, b) => (a.displayOrder ?? 999) - (b.displayOrder ?? 999));
+    STATE.creatorPortfolios.set(userId, items);
+    res.json({ ok: true, userId, portfolio: items });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 // ---- test surface (safe exports; no side effects) ----
 export const __TEST__ = Object.freeze({
   VERSION,
