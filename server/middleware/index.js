@@ -52,6 +52,7 @@ export default function configureMiddleware(app, deps) {
     csrfMiddleware,
     writeRateLimitMiddleware,
     readRateLimitMiddleware,
+    contentGuardMiddleware,
     securityScanMiddleware,
     NODE_ENV,
   } = deps;
@@ -217,6 +218,11 @@ export default function configureMiddleware(app, deps) {
   // ---- Pre-Launch Rate Limiting (per-route) ----
   if (writeRateLimitMiddleware) app.use(writeRateLimitMiddleware);  // Write rate limits per endpoint
   if (readRateLimitMiddleware) app.use(readRateLimitMiddleware);    // Read rate limits for open GETs
+
+  // ---- Content Guard — Illegal Content Blocking ----
+  // MUST run BEFORE security scanner. Blocks Categories 1-5 (CSAM, threats,
+  // terrorism, NCII, drug sales) and prevents content from being stored.
+  if (contentGuardMiddleware) app.use(contentGuardMiddleware);
 
   // ---- Security Intelligence Scanner ----
   // Scans POST/PUT body content through layers 1-3 (hash, regex, token-overlap).

@@ -97,6 +97,8 @@ import { initializeShield, scanContent as shieldScanContent, scanHashAgainstLatt
 import registerShieldRoutes from "./routes/shield.js";
 import registerCodeEngineRoutes from "./routes/code-engine.js";
 import { submitReport as moderationSubmitReport, getModerationQueue, resolveReport as moderationResolveReport, scanContent as moderationScanContent, getModerationMetrics, REPORT_CATEGORIES, MODERATION_ACTIONS } from "./lib/content-moderation.js";
+import { scanText as contentGuardScan, scanUsername as contentGuardScanUsername, banAccount, isEmailBanned, createModerationDTU, queueNcmecReport, buildImageModerationPrompt, parseImageModerationResponse, trackDrugSalesOffense, BLOCK_CATEGORIES } from "./lib/content-guard.js";
+import { createModerationRouter } from "./routes/moderation.js";
 import { initializeMesh, detectChannels as meshDetectChannels, getChannelStatus as meshGetChannelStatus, getNodeId as meshGetNodeId, sendDTU as meshSendDTU, receiveDTU as meshReceiveDTU, initiateTransfer as meshInitiateTransfer, getTransferStatus as meshGetTransferStatus, registerPeer as meshRegisterPeer, getPeers as meshGetPeers, getTopology as meshGetTopology, getMeshMetrics, getTransmissionStats as meshGetTransmissionStats, getPendingQueue as meshGetPendingQueue, configureRelay as meshConfigureRelay, detectMeshIntent, meshHeartbeatTick, planOfflineSync as meshPlanOfflineSync, TRANSPORT_LAYERS, TRANSPORT_LIST, RELAY_PRIORITIES } from "./lib/concord-mesh.js";
 import registerMeshRoutes from "./routes/mesh.js";
 // ── Foundation Sovereignty Modules ────────────────────────────────────────────
@@ -734,6 +736,136 @@ function _deepStripDangerous(obj) {
       _deepStripDangerous(val);
     }
   }
+}
+
+// ---- Content Guard — Illegal Content Blocking (Pre-Storage) ----
+// Scans ALL user-generated content (POST/PUT bodies) for Categories 1-5 illegal material.
+// MUST run BEFORE any content is stored. Returns 403 and does not persist anything.
+function contentGuardMiddleware(req, res, next) {
+  const method = req.method.toUpperCase();
+  if (method !== "POST" && method !== "PUT" && method !== "PATCH") return next();
+  if (!req.body) return next();
+
+  try {
+    // Extract text content from body to scan
+    const textsToScan = [];
+    const body = req.body;
+    if (typeof body === "string") {
+      textsToScan.push(body);
+    } else if (typeof body === "object") {
+      // Scan all string fields that could contain user content
+      for (const key of ["content", "text", "message", "title", "description", "bio", "reason", "body", "comment", "name", "username"]) {
+        if (body[key] && typeof body[key] === "string") textsToScan.push(body[key]);
+      }
+      // Deep scan tags array
+      if (Array.isArray(body.tags)) {
+        for (const tag of body.tags) {
+          if (typeof tag === "string") textsToScan.push(tag);
+        }
+      }
+    }
+
+    if (textsToScan.length === 0) return next();
+
+    const combined = textsToScan.join(" ");
+    const scanResult = contentGuardScan(combined);
+
+    if (scanResult.blocked) {
+      const userId = req.user?.id || req.entityId || "anonymous";
+
+      // Log the block
+      structuredLog("warn", "content_guard_blocked", {
+        path: req.path,
+        method,
+        category: scanResult.category,
+        severity: scanResult.severity,
+        ip: req.ip,
+        userId,
+      });
+
+      // Create security DTU (metadata only, never the content)
+      try {
+        createModerationDTU(globalThis._concordSTATE, {
+          action: "blocked",
+          category: scanResult.category,
+          userId,
+          ip: req.ip,
+          path: req.path,
+          contentType: "text",
+          severity: scanResult.severity,
+          content: combined, // only used for hashing, not stored
+          matches: scanResult.matches,
+        });
+      } catch (_) { /* non-critical */ }
+
+      // Category-specific actions
+      if (scanResult.category === BLOCK_CATEGORIES.CSAM) {
+        // CSAM: instant ban + NCMEC report
+        if (db && userId !== "anonymous") {
+          try {
+            banAccount(db, tokenBlacklist, userId, "CSAM content detected", "csam");
+            queueNcmecReport(db, globalThis._concordSTATE, {
+              userId,
+              contentType: "text",
+              detectionMethod: "keyword_pattern",
+            });
+          } catch (_) { /* non-critical */ }
+        }
+        return res.status(403).json({
+          ok: false,
+          error: "Content blocked — illegal material detected",
+          code: "CONTENT_BLOCKED_CSAM",
+        });
+      }
+
+      if (scanResult.category === BLOCK_CATEGORIES.VIOLENCE_THREAT || scanResult.category === BLOCK_CATEGORIES.TERRORISM || scanResult.category === BLOCK_CATEGORIES.NCII) {
+        // Threats, terrorism, NCII: block + ban
+        if (db && userId !== "anonymous") {
+          try { banAccount(db, tokenBlacklist, userId, `${scanResult.category} content`, scanResult.category); } catch (_) {}
+        }
+        return res.status(403).json({
+          ok: false,
+          error: "Content blocked — prohibited material detected",
+          code: "CONTENT_BLOCKED",
+        });
+      }
+
+      if (scanResult.category === BLOCK_CATEGORIES.DRUG_SALES) {
+        // Drug sales: warning on first, ban on second
+        const offense = trackDrugSalesOffense(globalThis._concordSTATE, userId);
+        if (offense.action === "ban" && db && userId !== "anonymous") {
+          try { banAccount(db, tokenBlacklist, userId, "Repeated drug sales solicitation", "illegal_drug_sales"); } catch (_) {}
+        }
+        return res.status(403).json({
+          ok: false,
+          error: "Content blocked — prohibited material detected",
+          code: "CONTENT_BLOCKED_DRUGS",
+        });
+      }
+
+      // Generic block
+      return res.status(403).json({
+        ok: false,
+        error: "Content blocked — prohibited material detected",
+        code: "CONTENT_BLOCKED",
+      });
+    }
+
+    // Flagged content: attach flag for downstream handlers but don't block
+    if (scanResult.flagged) {
+      req.contentFlag = scanResult;
+
+      // Run existing content-moderation.js auto-scan for flagged content
+      try {
+        moderationScanContent(globalThis._concordSTATE, combined, req.body?.id || "pending", "text");
+      } catch (_) { /* non-critical */ }
+    }
+
+  } catch (_) {
+    // Content guard NEVER blocks the request pipeline on its own errors
+  }
+
+  next();
 }
 
 // ---- Security Intelligence Request Scanner ----
@@ -21426,6 +21558,7 @@ configureMiddleware(app, {
   csrfMiddleware,
   writeRateLimitMiddleware,
   readRateLimitMiddleware,
+  contentGuardMiddleware,
   securityScanMiddleware,
   NODE_ENV,
 });
@@ -22940,6 +23073,14 @@ app.use("/api/film-studio", createFilmStudioRouter({ db }));
 // ===== MEDIA UPLOAD & PIPELINE =====
 import createMediaRouter from "./routes/media.js";
 app.use("/api/media", createMediaRouter({ STATE }));
+
+// ===== CONTENT MODERATION =====
+app.use("/api/moderation", createModerationRouter({
+  STATE,
+  requireAuth: requireAuth,
+  requireRole: requireRole,
+  asyncHandler: (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next),
+}));
 
 // ===== LENS & CULTURE SYSTEM =====
 import createLensCultureRouter from "./routes/lens-culture.js";

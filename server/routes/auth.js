@@ -5,6 +5,7 @@
 import express from "express";
 import crypto from "crypto";
 import logger from '../logger.js';
+import { isEmailBanned, scanUsername as scanUsernameGuard } from "../lib/content-guard.js";
 
 export default function createAuthRouter({
   AuthDB,
@@ -46,6 +47,17 @@ export default function createAuthRouter({
     if (String(process.env.ALLOW_REGISTRATION || "true").toLowerCase() !== "true") {
       return res.status(403).json({ ok: false, error: "Registration disabled" });
     }
+
+    // Check for banned email (re-registration prevention) and prohibited usernames
+    try {
+      if (isEmailBanned(db, email)) {
+        return res.status(403).json({ ok: false, error: "Registration not permitted" });
+      }
+      const usernameScan = scanUsernameGuard(username);
+      if (usernameScan.blocked) {
+        return res.status(400).json({ ok: false, error: "Username not permitted" });
+      }
+    } catch (_) { /* content-guard may not be available yet */ }
 
     // Check for existing user
     if (AuthDB.getUserByUsername(username)) {
