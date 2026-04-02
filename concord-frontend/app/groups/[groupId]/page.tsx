@@ -19,7 +19,6 @@ import {
   UserCircle,
   PenSquare,
   X,
-  Eye,
 } from 'lucide-react';
 import { cn, formatNumber, formatRelativeTime } from '@/lib/utils';
 import { api } from '@/lib/api/client';

@@ -8,9 +8,8 @@ import { useUIStore } from '@/store/ui';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   BookOpen, Plus, Search, FileText, Edit2, Trash2,
-  Clock, Eye, TrendingUp, Sparkles, X, Save,
-  ChevronRight, Layers, BarChart3, Globe, Filter,
-  AlignLeft, Type, PenTool, Check, Zap, Users, Star,
+  Clock, Sparkles, Save, BarChart3, Globe,
+  AlignLeft, PenTool, Check, Zap, Users, Star,
   Maximize2, Minimize2, Shuffle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';

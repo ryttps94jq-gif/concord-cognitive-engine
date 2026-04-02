@@ -3,13 +3,12 @@
 import { useState, useMemo, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { useLensNav } from '@/hooks/useLensNav';
-import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
+import { useLensData } from '@/lib/hooks/use-lens-data';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Compass, MapPin, Plane, Hotel, Calendar, Plus, Search, X,
-  Edit2, Trash2, DollarSign, Clock, Star, Globe, Layers, ChevronDown, Map,
-  Users, CheckSquare, Square, Luggage, ArrowRight,
+  Compass, MapPin, Plane, Hotel, Calendar, Plus, Search, X, Trash2, DollarSign, Clock, Star, Globe, Layers, ChevronDown, Map,
+  Users, CheckSquare, Square, Luggage,
 } from 'lucide-react';
 
 const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });

@@ -12,9 +12,8 @@ import { UniversalActions } from '@/components/lens/UniversalActions';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import {
   Building2, Plus, Search, Trash2, BarChart3,
-  Layers, ChevronDown, MapPin, Users,
-  TreePine, Landmark, Route, Home, Ruler,
-  Eye, AlertTriangle, Map,
+  Layers, ChevronDown, MapPin,
+  TreePine, Landmark, Route, Ruler, AlertTriangle, Map,
 } from 'lucide-react';
 
 const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });

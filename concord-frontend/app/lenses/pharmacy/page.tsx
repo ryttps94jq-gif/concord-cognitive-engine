@@ -5,7 +5,7 @@ import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Pill, AlertTriangle, Search, Plus, Trash2, ClipboardList, Clock, ShieldCheck, Layers, ChevronDown, X, AlertCircle, Package, Activity } from 'lucide-react';
+import { Pill, AlertTriangle, Plus, Trash2, Clock, ShieldCheck, Layers, ChevronDown, AlertCircle, Package } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';

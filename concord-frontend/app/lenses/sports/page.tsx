@@ -6,9 +6,9 @@ import { useLensData } from '@/lib/hooks/use-lens-data';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Trophy, Plus, Search, Trash2, Calendar, Users,
+  Trophy, Plus, Search, Trash2, Calendar,
   Target, Clock, TrendingUp, Layers, ChevronDown, Zap,
-  Medal, Swords, MapPin, X, Edit2, BarChart3,
+  Medal, Swords, MapPin, X, BarChart3,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -68,7 +68,7 @@ export default function SportsLensPage() {
   // Training state
   const [trainingLogs, setTrainingLogs] = useState<TrainingLog[]>([]);
   const [showAddTraining, setShowAddTraining] = useState(false);
-  const [newTraining, setNewTraining] = useState({ name: '', type: '', duration: 60, intensity: 'moderate' as const, date: '', notes: '' });
+  const [newTraining, setNewTraining] = useState({ name: '', type: '', duration: 60, intensity: 'moderate' as 'light' | 'moderate' | 'intense', date: '', notes: '' });
 
   const {
     items, isLoading, isError, error, refetch,

@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useMutation } from '@tanstack/react-query';
-import { api, apiHelpers } from '@/lib/api/client';
+import { api } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -26,7 +26,6 @@ import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
-import { CodeEngineStatus } from '@/components/admin/CodeEngineStatus';
 
 interface FileNode {
   id: string;

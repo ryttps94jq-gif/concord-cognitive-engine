@@ -3,16 +3,15 @@
 import { useState, useCallback, useMemo, useRef } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, apiHelpers } from '@/lib/api/client';
+import { api } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useLensDTUs } from '@/hooks/useLensDTUs';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Clapperboard, Plus, Search, Play, Pause, Layers,
-  Clock, Eye, X, Save, Upload, Film,
-  BarChart3, Sparkles, Grid, Settings,
-  ChevronRight, RotateCcw, Zap,
+  Clapperboard, Plus, Play, Pause, Layers,
+  Clock, X, Upload, Film,
+  BarChart3, Sparkles, RotateCcw, Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';

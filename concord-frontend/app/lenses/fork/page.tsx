@@ -2,7 +2,7 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { useState, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { GitFork, GitBranch, GitMerge, Layers, Loader2, ChevronDown, ArrowLeftRight, Eye, GitPullRequest, Network, Scale, Diff, RefreshCw } from 'lucide-react';
 import { ConnectiveTissueBar } from '@/components/lens/ConnectiveTissueBar';
 import { useLensData } from '@/lib/hooks/use-lens-data';

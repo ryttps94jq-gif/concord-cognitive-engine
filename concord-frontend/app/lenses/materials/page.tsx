@@ -3,7 +3,7 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Box, Layers, Plus, Trash2, Search, ChevronDown, Thermometer, Zap, Shield, FlaskConical, Microscope } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';

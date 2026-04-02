@@ -1,6 +1,6 @@
 'use client';
 
-import { ExternalLink, Shield, BookOpen, Rss, Search, Upload, Globe } from 'lucide-react';
+import { ExternalLink, BookOpen, Rss, Search, Upload, Globe } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface SourceInfo {

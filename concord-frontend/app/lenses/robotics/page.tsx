@@ -5,7 +5,7 @@ import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, Cpu, Cog, Wifi, Plus, Trash2, Search, Layers, ChevronDown, Activity, Shield, Settings, Power, Thermometer, Radio, Zap, AlertCircle, CheckCircle2, WifiOff, Clock } from 'lucide-react';
+import { Bot, Plus, Trash2, Layers, ChevronDown, Activity, Power, Radio, Zap, AlertCircle, CheckCircle2, WifiOff, Clock } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import { useLensNav } from '@/hooks/useLensNav';
@@ -10,10 +10,9 @@ import { ds } from '@/lib/design-system';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
-  Droplets, Wrench, ClipboardList, DollarSign, Camera, Users,
-  Plus, Search, X, Trash2, BarChart3, CheckCircle2,
-  AlertTriangle, MapPin, FileText, Shield, Award,
-  Layers, ChevronDown, Calculator, Phone, Receipt, Map, Gauge, Siren,
+  Droplets, Wrench, ClipboardList, DollarSign, Users,
+  Plus, Search, X, Trash2, BarChart3, CheckCircle2, FileText, Award,
+  Layers, ChevronDown, Calculator, Receipt, Map, Gauge, Siren,
 } from 'lucide-react';
 
 const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });

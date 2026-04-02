@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import { useLensNav } from '@/hooks/useLensNav';
@@ -12,10 +12,8 @@ import { UniversalActions } from '@/components/lens/UniversalActions';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import {
   Siren, Plus, Search, Trash2, BarChart3,
-  Layers, ChevronDown, MapPin, Users,
-  Flame, Phone, Heart, Truck,
-  Eye, AlertTriangle, Clock, Radio, Map,
-  Shield, Activity,
+  Layers, ChevronDown, MapPin,
+  Flame, Phone, Heart, Truck, AlertTriangle, Clock, Radio, Map, Activity, Zap,
 } from 'lucide-react';
 
 const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });
@@ -125,6 +123,16 @@ export default function EmergencyServicesLensPage() {
   const { items: units } = useLensData<UnitData>('emergency-services', 'Unit', { seed: [] });
 
   const runAction = useRunArtifact('emergency-services');
+
+  const handleAction = useCallback(async (action: string, artifactId?: string) => {
+    const targetId = artifactId || items[0]?.id;
+    if (!targetId) return;
+    try {
+      await runAction.mutateAsync({ id: targetId, action });
+    } catch (err) {
+      console.error('Action failed:', err);
+    }
+  }, [items, runAction]);
 
   const stats = useMemo(() => ({
     activeCalls: calls.filter(c => ['dispatched', 'en_route', 'on_scene', 'transporting'].includes((c.data as CallData).status)).length,

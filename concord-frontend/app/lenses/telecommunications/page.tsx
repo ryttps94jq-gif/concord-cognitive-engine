@@ -11,9 +11,8 @@ import { UniversalActions } from '@/components/lens/UniversalActions';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import {
   Radio, Plus, Search, Trash2, BarChart3,
-  Layers, ChevronDown, MapPin, Users,
-  Wifi, Signal, Globe, Server, Cable,
-  Eye, AlertTriangle, Activity, Zap, Gauge, Antenna,
+  Layers, ChevronDown, Users,
+  Wifi, Signal, Globe, Cable, AlertTriangle, Activity, Gauge, Antenna,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';

@@ -3,9 +3,9 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Star, Moon, Sun, Orbit as Telescope, Plus, Trash2, Search, Layers, ChevronDown, Globe, Target, Eye, EyeOff } from 'lucide-react';
+import { Star, Orbit as Telescope, Plus, Trash2, Search, Layers, ChevronDown, Globe, Target, Eye, EyeOff, Zap, Loader2 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -97,9 +97,11 @@ function CelestialCard({
           </div>
         </div>
       </div>
-      <button onClick={onRemove} className="text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
-        <Trash2 className="w-4 h-4" />
-      </button>
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
+        <button onClick={onRemove} className="text-gray-600 hover:text-red-400">
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
     </motion.div>
   );
 }
@@ -116,6 +118,10 @@ export default function AstronomyLensPage() {
   const { items: objectItems, isLoading, isError, error, refetch, create, update, remove } = useLensData<Record<string, unknown>>('astronomy', 'object', { seed: [] });
   const { items: obsItems, create: createObs, remove: removeObs } = useLensData<Record<string, unknown>>('astronomy', 'observation', { seed: [] });
   const runAction = useRunArtifact('astronomy');
+
+  const handleAction = useCallback((artifactId: string) => {
+    runAction.mutate({ artifactId, action: 'analyze' });
+  }, [runAction]);
 
   const objects = objectItems.map(i => ({ id: i.id, title: i.title, ...(i.data || {}) })) as unknown as (CelestialObject & { id: string; title: string })[];
   const observations = obsItems.map(i => ({ id: i.id, title: i.title, ...(i.data || {}) })) as unknown as (Observation & { id: string; title: string })[];
@@ -185,6 +191,7 @@ export default function AstronomyLensPage() {
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-bold">Astronomy Lens</h1>
               <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} />
+              {runAction.isPending && <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />}
             </div>
             <p className="text-sm text-gray-400">Celestial catalog, observation logging, and session planning</p>
           </div>
@@ -291,7 +298,10 @@ export default function AstronomyLensPage() {
               <div key={obs.id} className="panel p-3">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-sm font-medium">{obs.target || obs.title}</span>
-                  <span className="text-xs text-gray-500">{obs.date ? new Date(obs.date).toLocaleDateString() : ''}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-500">{obs.date ? new Date(obs.date).toLocaleDateString() : ''}</span>
+                    <button onClick={() => removeObs(obs.id)} className="text-gray-600 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
+                  </div>
                 </div>
                 <p className="text-xs text-gray-400">{obs.telescope} - {obs.conditions}</p>
                 {obs.notes && <p className="text-xs text-gray-300 mt-1">{obs.notes}</p>}
@@ -325,6 +335,12 @@ export default function AstronomyLensPage() {
                       <span className={`text-sm ${typeInfo.color}`}>{typeInfo.emoji}</span>
                       <span className="text-sm">{obj.name || obj.title}</span>
                       <span className="text-xs text-gray-500">{obj.constellation || obj.type}</span>
+                      <button onClick={() => handleAction(obj.id)} className="text-gray-500 hover:text-indigo-400 ml-2" title="Run AI analysis">
+                        <Zap className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => update({ id: obj.id, data: { ...obj, notes: `Updated ${new Date().toLocaleDateString()}` } })} className="text-gray-500 hover:text-yellow-400" title="Mark updated">
+                        <Star className="w-3.5 h-3.5" />
+                      </button>
                       <span className={`ml-auto flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded ${
                         visible
                           ? 'bg-green-400/15 text-green-400'

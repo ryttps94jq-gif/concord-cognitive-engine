@@ -14,7 +14,7 @@ import {
   Users, UserPlus, Eye, Quote, Heart,
   Video, FileText, Image as ImageIcon, Music,
   Bookmark, BarChart2, Pin, Loader2,
-  Calendar, Link2, Award, DollarSign, Star,
+  Calendar, Link2, Award, DollarSign,
 } from 'lucide-react';
 import type { DTU } from '@/lib/api/generated-types';
 import { DTUDetailView } from '@/components/dtu/DTUDetailView';

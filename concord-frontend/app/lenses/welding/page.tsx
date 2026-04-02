@@ -9,9 +9,8 @@ import { ds } from '@/lib/design-system';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
-  Flame, Wrench, ClipboardList, DollarSign, Camera, Users,
-  Plus, Search, X, Trash2, BarChart3, CheckCircle2,
-  AlertTriangle, FileText, Shield, Award, Calculator,
+  Flame, Wrench, ClipboardList, DollarSign, Users,
+  Plus, Search, X, Trash2, BarChart3, CheckCircle2, FileText, Award, Calculator,
   Layers, ChevronDown, Receipt, Gauge, Sparkles,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';

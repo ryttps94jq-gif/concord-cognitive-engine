@@ -8,9 +8,8 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
-  BadgeCheck, Plus, Search, Trash2, Users, MessageSquare,
-  Star, Calendar, Target, Clock, Layers, ChevronDown,
-  UserPlus, Send,
+  BadgeCheck, Plus, Search, Users, MessageSquare,
+  Star, Calendar, Target, Clock, Layers, ChevronDown, Send,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';

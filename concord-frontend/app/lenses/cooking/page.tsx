@@ -8,7 +8,7 @@ import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   ChefHat, Plus, Search, Trash2, Clock, Users, Flame,
   Star, UtensilsCrossed, Layers, ChevronDown, Timer,
-  CheckSquare, Square, Minus, Check,
+  CheckSquare, Square,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';

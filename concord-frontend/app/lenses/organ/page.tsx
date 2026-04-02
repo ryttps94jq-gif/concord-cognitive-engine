@@ -9,7 +9,7 @@ import {
   AlertTriangle, Clock, Shield, Wrench,
   ChevronDown, Search, BarChart3, Layers, GitBranch,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';

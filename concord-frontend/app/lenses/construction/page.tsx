@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import { useLensNav } from '@/hooks/useLensNav';
@@ -10,10 +10,10 @@ import { ds } from '@/lib/design-system';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
-  HardHat, Ruler, ClipboardList, DollarSign, Calendar, Users,
-  Plus, Search, X, Trash2, BarChart3, CheckCircle2,
-  AlertTriangle, MapPin, Truck, FileText, Camera,
-  Layers, ChevronDown, Shield, Wrench, Building2, Map, Percent, Hammer,
+  HardHat, ClipboardList, DollarSign, Users,
+  Plus, Search, X, Trash2, BarChart3,
+  AlertTriangle, Truck, FileText,
+  Layers, ChevronDown, Shield, Building2, Map, Percent, Hammer, Zap,
 } from 'lucide-react';
 
 const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });
@@ -102,6 +102,16 @@ export default function ConstructionLensPage() {
   const activeArtifactType = MODE_TABS.find(t => t.id === activeTab)?.artifactType || 'Job';
   const { items, isLoading, isError, error, refetch, create, update, remove } = useLensData<ConstructionArtifact>('construction', activeArtifactType, { seed: [] });
   const runAction = useRunArtifact('construction');
+
+  const handleAction = useCallback(async (action: string, artifactId?: string) => {
+    const targetId = artifactId || filtered[0]?.id;
+    if (!targetId) return;
+    try {
+      await runAction.mutateAsync({ id: targetId, action });
+    } catch (err) {
+      console.error('Action failed:', err);
+    }
+  }, [filtered, runAction]);
 
   const filtered = useMemo(() => {
     let result = items;

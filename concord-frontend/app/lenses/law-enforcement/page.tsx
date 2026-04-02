@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
@@ -11,9 +11,9 @@ import { UniversalActions } from '@/components/lens/UniversalActions';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import {
   Shield, Plus, Search, Trash2, BarChart3,
-  Layers, ChevronDown, MapPin, Users,
+  Layers, ChevronDown, MapPin,
   Siren, FileText, Scale, BadgeCheck,
-  Eye, AlertTriangle, Clock, Target, Fingerprint, Gavel,
+  Eye, Fingerprint, Gavel, Zap,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -114,6 +114,16 @@ export default function LawEnforcementLensPage() {
   const { items: officers } = useLensData<OfficerData>('law-enforcement', 'Officer', { seed: [] });
 
   const runAction = useRunArtifact('law-enforcement');
+
+  const handleAction = useCallback(async (action: string, artifactId?: string) => {
+    const targetId = artifactId || items[0]?.id;
+    if (!targetId) return;
+    try {
+      await runAction.mutateAsync({ id: targetId, action });
+    } catch (err) {
+      console.error('Action failed:', err);
+    }
+  }, [items, runAction]);
 
   const stats = useMemo(() => ({
     openCases: cases.filter(c => ['open', 'active'].includes((c.data as CaseData).status)).length,

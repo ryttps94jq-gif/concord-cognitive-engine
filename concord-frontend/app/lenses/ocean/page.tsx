@@ -12,9 +12,9 @@ import { UniversalActions } from '@/components/lens/UniversalActions';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import {
   Waves, Plus, Search, Trash2, BarChart3,
-  Layers, ChevronDown, MapPin, Users,
-  Anchor, Ship, Fish, Thermometer, Droplets,
-  Eye, AlertTriangle, Navigation, Map,
+  Layers, ChevronDown,
+  Anchor, Ship, Fish, Droplets,
+  Eye, Map,
 } from 'lucide-react';
 
 const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });

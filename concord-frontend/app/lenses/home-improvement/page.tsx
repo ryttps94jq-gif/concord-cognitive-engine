@@ -6,8 +6,8 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
-  Hammer, Plus, Search, Trash2, DollarSign, Clock,
-  CheckCircle2, AlertTriangle, Wrench, Layers, ChevronDown,
+  Hammer, Plus, Search, Trash2, DollarSign,
+  CheckCircle2, Wrench, Layers, ChevronDown,
   Home, ToggleLeft, ToggleRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';

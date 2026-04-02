@@ -6,8 +6,7 @@ import { useLensData } from '@/lib/hooks/use-lens-data';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Shirt, Plus, Search, Trash2, Star, Tag, Palette,
-  Calendar, DollarSign, Layers, ChevronDown, X,
+  Shirt, Plus, Search, Trash2, Star, Tag, Palette, DollarSign, Layers, ChevronDown, X,
   Heart, Eye, Sparkles, Grid3X3, List,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';

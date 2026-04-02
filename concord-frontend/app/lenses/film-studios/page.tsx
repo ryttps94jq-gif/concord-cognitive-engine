@@ -3,16 +3,15 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, apiHelpers } from '@/lib/api/client';
+import { apiHelpers } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useLensDTUs } from '@/hooks/useLensDTUs';
 import { useUIStore } from '@/store/ui';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Film, Plus, Search, Play, Users, Star, Clock, Eye,
-  DollarSign, TrendingUp, Clapperboard, Camera, Mic,
-  Music, Layers, BarChart3, Share2, Gift, X, ChevronRight,
-  Monitor, Globe, Award, Sparkles,
+  Film, Plus, Search, Play, Users, Clock, Eye, TrendingUp, Clapperboard, Camera, Mic,
+  Music, Layers, BarChart3, Share2, X, ChevronRight,
+  Monitor, Globe, Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';

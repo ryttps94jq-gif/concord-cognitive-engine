@@ -662,12 +662,16 @@ function HUD({
   onClose,
   locked,
   onLock,
+  cameraPos,
+  setTeleportTarget,
 }: {
   districts: District[];
   selectedDTU: SelectedDTU | null;
   onClose: () => void;
   locked: boolean;
   onLock: () => void;
+  cameraPos: [number, number, number];
+  setTeleportTarget: (target: [number, number, number]) => void;
 }) {
   return (
     <div className="fixed inset-0 pointer-events-none z-40">
@@ -980,6 +984,8 @@ export default function WorldLensPage() {
         onClose={handleClose}
         locked={locked}
         onLock={handleLock}
+        cameraPos={cameraPos}
+        setTeleportTarget={setTeleportTarget}
       />
 
       <MobileJoystick onMove={handleMobileMove} />

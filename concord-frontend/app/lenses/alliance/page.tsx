@@ -5,7 +5,7 @@ import { useLensData } from '@/lib/hooks/use-lens-data';
 import { Loading } from '@/components/common/Loading';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users, Plus, MessageSquare, Target, Shield, Zap, Layers, ChevronDown, HeartHandshake as Handshake, Crown } from 'lucide-react';
+import { Users, Plus, MessageSquare, Target, Zap, Layers, ChevronDown, HeartHandshake as Handshake, Crown } from 'lucide-react';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';

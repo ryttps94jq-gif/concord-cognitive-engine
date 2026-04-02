@@ -47,8 +47,6 @@ import { LensContextPanel } from '@/components/lens/LensContextPanel';
 
 import { ArtifactRenderer } from '@/components/artifact/ArtifactRenderer';
 import { ArtifactUploader } from '@/components/artifact/ArtifactUploader';
-import { MediaUpload } from '@/components/media/MediaUpload';
-import { UniversalPlayer } from '@/components/media/UniversalPlayer';
 import { FeedbackWidget } from '@/components/feedback/FeedbackWidget';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';

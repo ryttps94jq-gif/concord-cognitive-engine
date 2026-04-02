@@ -6,7 +6,7 @@ import { api } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
 import { useState } from 'react';
 import { Inbox, Play, Trash2, Clock, Zap, Globe, FileText, Layers, ChevronDown, Activity, Bot, Coins, CheckCircle2, AlertCircle, RefreshCw, BarChart3, ListOrdered, Timer } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { ConnectiveTissueBar } from '@/components/lens/ConnectiveTissueBar';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';

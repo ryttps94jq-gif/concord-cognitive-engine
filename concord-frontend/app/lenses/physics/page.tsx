@@ -20,8 +20,7 @@ import {
   Move,
   Target,
   Magnet,
-  Layers,
-  Save
+  Layers
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useLensData } from '@/lib/hooks/use-lens-data';

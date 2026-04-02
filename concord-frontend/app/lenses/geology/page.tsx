@@ -6,7 +6,7 @@ import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Mountain, MapPin, Plus, Trash2, Search, Layers, ChevronDown, Droplets, Gem, Map } from 'lucide-react';
+import { Mountain, MapPin, Plus, Trash2, Search, Layers, ChevronDown, Gem, Map } from 'lucide-react';
 
 const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });
 import { ErrorState } from '@/components/common/EmptyState';

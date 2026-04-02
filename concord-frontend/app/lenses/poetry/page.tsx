@@ -1,15 +1,14 @@
 'use client';
 
-import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useLensDTUs } from '@/hooks/useLensDTUs';
 import { api } from '@/lib/api/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Feather, Plus, Search, Edit2, Trash2, BookOpen,
-  Heart, Share2, Eye, X, Save, Sparkles,
-  AlignLeft, Type, BarChart3, Globe, Clock,
+  Feather, Plus, Search, Edit2, Trash2, BookOpen, X, Save, Sparkles,
+  AlignLeft, Globe,
   Hash, Music, Layers, Moon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';

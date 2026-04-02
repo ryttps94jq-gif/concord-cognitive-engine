@@ -8,9 +8,8 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
-  Scale, Plus, Search, Trash2, Users, MessageSquare,
-  ThumbsUp, ThumbsDown, Clock, Layers, ChevronDown, Zap,
-  ChevronUp, Send, Timer, Trophy, BarChart2, TrendingUp,
+  Scale, Plus, Search, Users, MessageSquare,
+  ThumbsUp, ThumbsDown, Layers, ChevronDown, Zap, Send, Timer, Trophy, TrendingUp,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';

@@ -16,8 +16,7 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback, Suspense } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
-  Sky, Environment, Text, Html, OrbitControls,
-  useTexture, Plane, Box, Sphere,
+  Sky, Text, OrbitControls,
 } from "@react-three/drei";
 import * as THREE from "three";
 

@@ -13,7 +13,6 @@ import {
   Heart, Plus, Search, Trash2, BarChart3,
   Layers, ChevronDown, Users, Calendar,
   Stethoscope, Syringe, Pill, ClipboardList,
-  Eye, AlertTriangle, FileText, Clock, Activity,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';

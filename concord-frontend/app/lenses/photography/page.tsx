@@ -2,17 +2,17 @@
 
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, apiHelpers } from '@/lib/api/client';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { api } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useLensDTUs } from '@/hooks/useLensDTUs';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Camera, Plus, Search, Upload, Grid, Image as ImageIcon,
-  Heart, Share2, Filter, Eye, Download, X,
-  Aperture, Sun, Contrast, Sliders, BarChart3,
-  Layers, MapPin, Clock, Star, ChevronLeft, ChevronRight, Focus,
+  Camera, Search, Upload, Grid, Image as ImageIcon,
+  Heart, Eye, X,
+  Aperture, Sliders, BarChart3,
+  Layers, ChevronLeft, ChevronRight, Focus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';

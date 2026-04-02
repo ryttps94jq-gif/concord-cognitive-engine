@@ -12,9 +12,9 @@ import { UniversalActions } from '@/components/lens/UniversalActions';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import {
   Hammer as Pickaxe, Plus, Search, Trash2, BarChart3,
-  Layers, ChevronDown, MapPin, Users,
-  Mountain, Gem, HardHat, Gauge, Truck,
-  Eye, AlertTriangle, Shield, Map, Drill, Weight,
+  Layers, ChevronDown,
+  Mountain, Gem, HardHat, Truck,
+  Eye, Map, Drill,
 } from 'lucide-react';
 
 const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });

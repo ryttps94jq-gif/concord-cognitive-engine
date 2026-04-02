@@ -9,10 +9,10 @@ import { ds } from '@/lib/design-system';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
-  FolderKanban, ListTodo, Calendar, Users, Clock, DollarSign,
-  Plus, Search, X, Trash2, BarChart3, CheckCircle2,
-  AlertTriangle, Target, TrendingUp, Flag, Milestone,
-  Layers, ChevronDown, GitBranch, Gauge, Timer, Activity, CircleDot,
+  FolderKanban, ListTodo, Calendar, Users, DollarSign,
+  Plus, Search, X, Trash2, BarChart3,
+  AlertTriangle, Milestone,
+  Layers, ChevronDown, Gauge, Activity, CircleDot,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';

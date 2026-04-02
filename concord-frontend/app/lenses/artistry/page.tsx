@@ -1,23 +1,20 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, apiHelpers } from '@/lib/api/client';
+import { apiHelpers } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
-import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useLensDTUs } from '@/hooks/useLensDTUs';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Palette, Plus, Search, Upload, Heart, Share2, Filter,
-  Eye, ShoppingBag, DollarSign, TrendingUp, Sparkles,
-  Music, Image as ImageIcon, Video, Mic2, X,
-  BarChart3, Users, Globe, Layers,
+  Palette, Search, Upload,
+  Eye, ShoppingBag, DollarSign, Sparkles,
+  Music, X,
+  BarChart3, Globe, Layers,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
-import { ArtistryFeed } from '@/components/artistry/ArtistryFeed';
-import { PreviewCard } from '@/components/artistry/PreviewCard';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';

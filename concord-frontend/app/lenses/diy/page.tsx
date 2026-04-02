@@ -7,7 +7,7 @@ import { useLensData } from '@/lib/hooks/use-lens-data';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   Wrench, Plus, Search, Trash2, DollarSign, Clock,
-  CheckCircle2, Hammer, Package, Layers, ChevronDown, Zap, Ruler,
+  CheckCircle2, Hammer, Package, Layers, ChevronDown, Ruler,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';

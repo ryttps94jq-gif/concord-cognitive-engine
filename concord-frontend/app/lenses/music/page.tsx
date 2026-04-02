@@ -27,8 +27,6 @@ import { ArtistProfile } from '@/components/music/ArtistProfile';
 // AlbumView unused — album support pending
 import { UploadFlow } from '@/components/music/UploadFlow';
 import { PlaylistView } from '@/components/music/PlaylistView';
-import { MediaUpload } from '@/components/media/MediaUpload';
-import { UniversalPlayer } from '@/components/media/UniversalPlayer';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
@@ -165,9 +163,10 @@ export default function MusicLensPage() {
 
   // ---- Album MEGA DTUs ----
   const albumMegaDTUs = useMemo(() => {
-    return (_megaDTUs || []).filter((d: Record<string, unknown>) =>
-      (d as Record<string, unknown>).domain === 'music' || ((d as Record<string, unknown>).tags as string[] || []).some((t: string) => t === 'album' || t === 'music')
-    );
+    return (_megaDTUs || []).filter((d) => {
+      const rec = d as unknown as Record<string, unknown>;
+      return rec.domain === 'music' || ((rec.tags as string[] || []).some((t: string) => t === 'album' || t === 'music'));
+    });
   }, [_megaDTUs]);
 
   // ---- Like toggle ----
@@ -666,7 +665,7 @@ export default function MusicLensPage() {
                 {/* Results */}
                 <div className="space-y-1">
                   {(browseGenre ? tracks.filter(t => t.genre === browseGenre) : tracks)
-                    .filter(t => !filterByBpm || (t.bpm >= bpmRange[0] && t.bpm <= bpmRange[1]))
+                    .filter(t => !filterByBpm || ((t.bpm ?? 0) >= bpmRange[0] && (t.bpm ?? 0) <= bpmRange[1]))
                     .filter(t => !filterTag || t.tags.includes(filterTag))
                     .map(track => (
                     <TrackCard
@@ -1055,16 +1054,16 @@ export default function MusicLensPage() {
                       <section>
                         <h2 className="text-xs font-semibold text-gray-400 uppercase mb-3">MEGA DTU Albums</h2>
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                          {albumMegaDTUs.map((mega: Record<string, unknown>) => (
-                            <div key={mega.id as string} className="p-4 rounded-xl bg-gradient-to-br from-neon-purple/5 to-neon-cyan/5 border border-neon-purple/20 hover:border-neon-purple/40 transition-colors">
+                          {albumMegaDTUs.map((mega) => { const m = mega as unknown as Record<string, unknown>; return (
+                            <div key={m.id as string} className="p-4 rounded-xl bg-gradient-to-br from-neon-purple/5 to-neon-cyan/5 border border-neon-purple/20 hover:border-neon-purple/40 transition-colors">
                               <div className="w-full aspect-square rounded-lg bg-neon-purple/10 flex items-center justify-center mb-3">
                                 <Disc3 className="w-12 h-12 text-neon-purple/40" />
                               </div>
-                              <p className="text-sm font-medium truncate">{mega.title as string || 'Untitled Album'}</p>
-                              <p className="text-xs text-neon-purple mt-0.5">MEGA DTU · {((mega.sourceCount as number) || 0)} tracks consolidated</p>
+                              <p className="text-sm font-medium truncate">{(m.title as string) || 'Untitled Album'}</p>
+                              <p className="text-xs text-neon-purple mt-0.5">MEGA DTU · {((m.sourceCount as number) || 0)} tracks consolidated</p>
                               <p className="text-[10px] text-gray-500 mt-1">1.5x relevance boost</p>
                             </div>
-                          ))}
+                          )})}
                         </div>
                       </section>
                     )}

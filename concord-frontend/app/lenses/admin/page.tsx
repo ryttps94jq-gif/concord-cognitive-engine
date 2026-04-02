@@ -31,7 +31,7 @@ import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { NervousSystem } from '@/components/nervous/NervousSystem';
 import { MonitoringPanel } from '@/components/admin/MonitoringPanel';
-import { Download, Globe, DollarSign, PieChart, BarChart3, Search, Power, Trash2 } from 'lucide-react';
+import { Download, Globe, DollarSign, PieChart, BarChart3, Search, Power } from 'lucide-react';
 
 interface DashboardData {
   ok: boolean;

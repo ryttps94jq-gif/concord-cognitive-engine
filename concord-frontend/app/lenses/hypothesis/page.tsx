@@ -8,7 +8,7 @@ import { motion } from 'framer-motion';
 import { useLensBridge } from '@/lib/hooks/use-lens-bridge';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
-  FlaskConical, Plus, CheckCircle2, XCircle, Beaker,
+  FlaskConical, Plus, CheckCircle2, Beaker,
   FileText, TrendingUp, ArrowRight, Layers, ChevronDown, Target, Percent,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';

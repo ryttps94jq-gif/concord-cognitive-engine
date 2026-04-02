@@ -1,14 +1,14 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
-import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
+import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
-  Clock, Plus, Search, X, Trash2, Eye, Layers, ChevronDown,
+  Clock, Plus, Search, Trash2, Eye, Layers, ChevronDown,
   Globe, BookOpen, Users, Flag, MapPin, ArrowRight, Scroll, Calendar,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';

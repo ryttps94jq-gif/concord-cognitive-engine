@@ -493,12 +493,12 @@ export default function SpaceLensPage() {
                 {/* Mission badges */}
                 {isMission && (
                   <div className="flex flex-wrap items-center gap-2 mt-2">
-                    {d.launchVehicle && (
+                    {!!d.launchVehicle && (
                       <span className="inline-flex items-center gap-1 text-[11px] bg-indigo-500/10 text-indigo-300 px-2 py-0.5 rounded-full">
                         <Rocket className="w-3 h-3" /> {String(d.launchVehicle)}
                       </span>
                     )}
-                    {d.payload && (
+                    {!!d.payload && (
                       <span className="inline-flex items-center gap-1 text-[11px] bg-zinc-800 text-gray-300 px-2 py-0.5 rounded-full">
                         <Database className="w-3 h-3" /> {String(d.payload)}
                       </span>
@@ -519,12 +519,12 @@ export default function SpaceLensPage() {
                         <MapPin className="w-3 h-3" /> {d.altitude} km · {getOrbitalZone(d.altitude)}
                       </span>
                     )}
-                    {d.orbit && (
+                    {!!d.orbit && (
                       <span className="inline-flex items-center gap-1 text-[11px] bg-indigo-500/10 text-indigo-300 px-2 py-0.5 rounded-full">
                         <Orbit className="w-3 h-3" /> {String(d.orbit)}
                       </span>
                     )}
-                    {d.operator && (
+                    {!!d.operator && (
                       <span className="inline-flex items-center gap-1 text-[11px] bg-zinc-800 text-gray-400 px-2 py-0.5 rounded-full">
                         <Eye className="w-3 h-3" /> {String(d.operator)}
                       </span>
@@ -547,7 +547,7 @@ export default function SpaceLensPage() {
                         </span>
                       </div>
                     )}
-                    {d.dataRate && (
+                    {!!d.dataRate && (
                       <span className="inline-flex items-center gap-1 text-[11px] bg-zinc-800 text-gray-300 px-2 py-0.5 rounded-full">
                         <Zap className="w-3 h-3 text-yellow-400" /> {String(d.dataRate)}
                       </span>

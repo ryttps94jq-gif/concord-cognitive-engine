@@ -10,9 +10,9 @@ import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   Truck, Package, Warehouse, Globe, BarChart3, Users,
-  Plus, Search, X, Trash2, Clock, DollarSign,
-  AlertTriangle, CheckCircle2, MapPin, ArrowRight,
-  Layers, ChevronDown, Ship, Factory, Route, Timer,
+  Plus, Search, X, Trash2, DollarSign,
+  AlertTriangle, CheckCircle2,
+  Layers, ChevronDown, Ship, Factory, Route,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';

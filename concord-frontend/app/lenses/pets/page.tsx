@@ -6,8 +6,7 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
-  PawPrint, Plus, Search, Trash2, Calendar, Heart,
-  Stethoscope, Clock, Star, Layers, ChevronDown, Syringe, ShieldCheck,
+  PawPrint, Plus, Search, Trash2, Calendar, Heart, Layers, ChevronDown, Syringe, ShieldCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';

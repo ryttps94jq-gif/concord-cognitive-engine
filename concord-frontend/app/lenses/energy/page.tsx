@@ -3,9 +3,9 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
-import { useState, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Zap, Sun, Wind, Droplets, Flame, Plus, Trash2, Search, Layers, ChevronDown, TrendingUp, BarChart3, Battery, Gauge, AlertTriangle } from 'lucide-react';
+import { useState } from 'react';
+import { motion } from 'framer-motion';
+import { Zap, Sun, Wind, Droplets, Flame, Plus, Trash2, Layers, ChevronDown, TrendingUp, BarChart3, Battery, Gauge, AlertTriangle } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';

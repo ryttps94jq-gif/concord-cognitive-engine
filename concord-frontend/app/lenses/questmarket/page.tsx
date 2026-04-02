@@ -3,7 +3,7 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useMutation } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Target, Trophy, Coins, Clock, Users, Layers, ChevronDown, Swords, Award } from 'lucide-react';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';

@@ -2,22 +2,16 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Activity,
   RefreshCw,
   CheckCircle,
   AlertCircle,
   XCircle,
-  Clock,
-  Rss,
-  Zap,
   Pause,
   Play,
-  Settings,
   ChevronDown,
   ChevronRight,
   Globe,
   Wifi,
-  WifiOff,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 

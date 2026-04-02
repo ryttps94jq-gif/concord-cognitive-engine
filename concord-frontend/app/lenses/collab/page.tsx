@@ -42,7 +42,6 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
-import { SharedSessionChat } from '@/components/social/SharedSessionChat';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';

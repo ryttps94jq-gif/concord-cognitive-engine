@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import { useLensNav } from '@/hooks/useLensNav';
@@ -12,9 +12,9 @@ import { UniversalActions } from '@/components/lens/UniversalActions';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import {
   Sun, Plus, Search, Trash2, BarChart3,
-  Layers, ChevronDown, MapPin, Users,
-  Thermometer, Wind, Droplets, Mountain,
-  Eye, AlertTriangle, Navigation, Compass, Map, ScanSearch as Binoculars, TreePine as Cactus,
+  Layers, ChevronDown,
+  Thermometer, Droplets, Mountain,
+  Eye, AlertTriangle, Compass, Map, ScanSearch as Binoculars, Zap,
 } from 'lucide-react';
 
 const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });
@@ -112,6 +112,16 @@ export default function DesertLensPage() {
   const { items: resources } = useLensData<ResourceData>('desert', 'Resource', { seed: [] });
 
   const runAction = useRunArtifact('desert');
+
+  const handleAction = useCallback(async (action: string, artifactId?: string) => {
+    const targetId = artifactId || items[0]?.id;
+    if (!targetId) return;
+    try {
+      await runAction.mutateAsync({ id: targetId, action });
+    } catch (err) {
+      console.error('Action failed:', err);
+    }
+  }, [items, runAction]);
 
   const stats = useMemo(() => ({
     activeExpeditions: expeditions.filter(e => (e.data as ExpeditionData).status === 'active').length,

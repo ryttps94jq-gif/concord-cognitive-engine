@@ -6,7 +6,7 @@ import { apiHelpers } from '@/lib/api/client';
 import { useLensNav } from '@/hooks/useLensNav';
 import { motion } from 'framer-motion';
 import {
-  Map, Layers, Radio, AlertTriangle, Activity, RefreshCw,
+  Map, Layers, Radio, AlertTriangle, RefreshCw,
   ChevronDown, Compass, Globe, Radar,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';

@@ -1,20 +1,19 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
-import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
+import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { ds } from '@/lib/design-system';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import {
-  Shield, Plus, Search, X, Edit3, Trash2, Filter,
-  BarChart3, AlertTriangle, CheckCircle2, ChevronRight,
+  Shield, Plus, Search, Trash2,
+  BarChart3, AlertTriangle,
   Layers, ChevronDown, MapPin, Users, Radio,
-  Target, Crosshair, Radar, Siren, Lock,
-  FileText, Clock, Eye, ShieldCheck, Activity,
+  Target, Crosshair, Lock, Eye, ShieldCheck, Activity,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -136,6 +135,19 @@ export default function DefenseLensPage() {
 
   const runAction = useRunArtifact('defense');
 
+  const handleAction = useCallback((artifactId: string) => {
+    runAction.mutate({ artifactId, action: 'analyze' });
+  }, [runAction]);
+
+  const handleCreate = useCallback(() => {
+    create({ title: `New ${currentType}`, data: {} as ArtifactDataUnion });
+    setShowEditor(false);
+  }, [create, currentType]);
+
+  const handleUpdate = useCallback((id: string, data: ArtifactDataUnion) => {
+    update({ id, data });
+  }, [update]);
+
   // Dashboard stats
   const stats = useMemo(() => ({
     totalOps: operations.length,
@@ -228,6 +240,18 @@ export default function DefenseLensPage() {
           <Plus className="w-4 h-4" /> New {currentType}
         </button>
       </div>
+
+      {/* Editor Panel */}
+      {showEditor && (
+        <div className="p-4 bg-zinc-900 rounded-lg border border-zinc-800 space-y-3">
+          <h3 className="text-sm font-semibold text-white">Create {currentType}</h3>
+          <p className="text-xs text-gray-400">This will create a new {currentType.toLowerCase()} entry.</p>
+          <div className="flex gap-2">
+            <button onClick={handleCreate} className="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded-lg text-sm">Create</button>
+            <button onClick={() => setShowEditor(false)} className="px-3 py-1.5 text-gray-400 hover:text-white text-sm">Cancel</button>
+          </div>
+        </div>
+      )}
 
       {/* Dashboard */}
       {activeMode === 'Dashboard' && (

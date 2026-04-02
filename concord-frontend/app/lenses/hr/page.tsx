@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
@@ -9,11 +9,11 @@ import { ds } from '@/lib/design-system';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
-  Users, UserPlus, Briefcase, Award, Calendar, FileText,
-  Plus, Search, X, Edit3, Trash2, Clock, DollarSign,
-  BarChart3, CheckCircle2, AlertCircle, Star, GraduationCap,
+  Users, UserPlus, Briefcase, Award,
+  Plus, Search, X, Trash2, DollarSign,
+  BarChart3, GraduationCap,
   Layers, ChevronDown, Building2, Heart, Shield, ClipboardList,
-  UserCheck, UserMinus, Target,
+  UserCheck, UserMinus, Zap,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -131,6 +131,16 @@ export default function HRLensPage() {
   const activeArtifactType = MODE_TABS.find(t => t.id === activeTab)?.artifactType || 'Employee';
   const { items, isLoading, isError, error, refetch, create, update, remove } = useLensData<HRArtifact>('hr', activeArtifactType, { seed: [] });
   const runAction = useRunArtifact('hr');
+
+  const handleAction = useCallback(async (action: string, artifactId?: string) => {
+    const targetId = artifactId || filtered[0]?.id;
+    if (!targetId) return;
+    try {
+      await runAction.mutateAsync({ id: targetId, action });
+    } catch (err) {
+      console.error('Action failed:', err);
+    }
+  }, [filtered, runAction]);
 
   const filtered = useMemo(() => {
     let result = items;

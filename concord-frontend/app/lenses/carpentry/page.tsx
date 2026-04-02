@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -9,10 +9,9 @@ import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
-  Hammer, Wrench, ClipboardList, DollarSign, Camera, Users,
-  Plus, Search, X, Trash2, BarChart3, CheckCircle2,
-  AlertTriangle, FileText, Shield, Award, Calculator,
-  Layers, ChevronDown, Receipt, TreePine, Ruler, HardHat,
+  Hammer, Wrench, ClipboardList, DollarSign, Users,
+  Plus, Search, X, Trash2, BarChart3, CheckCircle2, FileText, Award, Calculator,
+  Layers, ChevronDown, Receipt, TreePine, Ruler, HardHat, Zap,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -89,6 +88,16 @@ export default function CarpentryLensPage() {
   const activeArtifactType = MODE_TABS.find(t => t.id === activeTab)?.artifactType || 'Job';
   const { items, isLoading, isError, error, refetch, create, update, remove } = useLensData<TradeArtifact>('carpentry', activeArtifactType, { seed: [] });
   const runAction = useRunArtifact('carpentry');
+
+  const handleAction = useCallback(async (action: string, artifactId?: string) => {
+    const targetId = artifactId || filtered[0]?.id;
+    if (!targetId) return;
+    try {
+      await runAction.mutateAsync({ id: targetId, action });
+    } catch (err) {
+      console.error('Action failed:', err);
+    }
+  }, [filtered, runAction]);
 
   const filtered = useMemo(() => {
     let result = items;

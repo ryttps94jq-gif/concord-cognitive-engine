@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import { useLensNav } from '@/hooks/useLensNav';
@@ -12,9 +12,8 @@ import { UniversalActions } from '@/components/lens/UniversalActions';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import {
   TreePine, Plus, Search, Trash2, BarChart3,
-  Layers, ChevronDown, MapPin, Users,
-  Leaf, Flame, Droplets, Bug,
-  Eye, AlertTriangle, Mountain, Ruler, Map, Sprout, HeartPulse,
+  Layers, ChevronDown,
+  Leaf, Flame, Bug, Mountain, Ruler, Map, Sprout, HeartPulse, Zap,
 } from 'lucide-react';
 
 const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });
@@ -121,6 +120,16 @@ export default function ForestryLensPage() {
   const { items: harvests } = useLensData<HarvestData>('forestry', 'Harvest', { seed: [] });
 
   const runAction = useRunArtifact('forestry');
+
+  const handleAction = useCallback(async (action: string, artifactId?: string) => {
+    const targetId = artifactId || items[0]?.id;
+    if (!targetId) return;
+    try {
+      await runAction.mutateAsync({ id: targetId, action });
+    } catch (err) {
+      console.error('Action failed:', err);
+    }
+  }, [items, runAction]);
 
   const stats = useMemo(() => ({
     totalStands: stands.length,

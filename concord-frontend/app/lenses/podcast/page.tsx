@@ -2,15 +2,13 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
-import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
+import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useLensDTUs } from '@/hooks/useLensDTUs';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Mic2, Play, Pause, Plus, Search, Rss, BarChart3,
-  Clock, Upload, Users, X, Headphones, ListMusic,
-  Image as ImageIcon, Hash, TrendingUp, Edit3, Trash2,
-  ExternalLink, Copy, Check,
+  Clock, Users, X, Headphones, ListMusic, Trash2, Check,
 } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';

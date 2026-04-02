@@ -8,10 +8,10 @@ import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useLensDTUs } from '@/hooks/useLensDTUs';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Gamepad2, Plus, Search, Edit2, Trash2, X, Save,
-  BookOpen, Target, Users, Swords, Map, Layers,
-  BarChart3, Globe, Sparkles, Cpu, GitBranch,
-  FileText, Zap, Settings, Award,
+  Gamepad2, Plus, Trash2, X, Save,
+  BookOpen, Users, Map,
+  BarChart3,
+  FileText, Settings,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
