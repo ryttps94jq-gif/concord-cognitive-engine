@@ -23124,6 +23124,14 @@ app.use("/api/feeds", createFeedRoutes({ requireAuth: requireRole?.("admin") }))
 import createAttributionRoutes from "./routes/attribution.js";
 app.use("/api/attribution", createAttributionRoutes({ requireAuth: requireRole?.("admin") }));
 
+// ===== CITY / WORLD LENS ROUTES =====
+try {
+  const { default: createCityRoutes } = await import("./routes/city.js");
+  app.use("/api/cities", createCityRoutes({ requireAuth: authenticateRequest }));
+} catch (e) {
+  structuredLog("warn", "city_routes_init_failed", { error: String(e?.message || e) });
+}
+
 // ===== OPENAPI DOCUMENTATION =====
 import createOpenAPIRouter from "./routes/openapi.js";
 app.use("/api", createOpenAPIRouter());
@@ -45825,6 +45833,16 @@ try {
 
 } catch (e) {
   structuredLog("warn", "feed_manager_init_failed", { error: String(e?.message || e) });
+}
+
+// ── City Presence — Live co-presence broadcasting for World lens ──
+try {
+  const { startPresenceBroadcast } = await import("./lib/city-presence.js");
+  const stopPresence = startPresenceBroadcast(realtimeEmit, 100);
+  registerShutdownCallback(() => { try { stopPresence(); } catch (_e) { /* shutting down */ } });
+  structuredLog("info", "city_presence_started");
+} catch (e) {
+  structuredLog("warn", "city_presence_init_failed", { error: String(e?.message || e) });
 }
 
 // ---- Auto-promotion scheduler (offline-first, deterministic) ----

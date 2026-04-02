@@ -52,6 +52,20 @@ export interface LensManifest {
 export const LENS_MANIFESTS: LensManifest[] = [
 
   // ═══════════════════════════════════════════════════════════════
+  // WORLD LENS (3D City)
+  // ═══════════════════════════════════════════════════════════════
+
+  {
+    domain: 'world',
+    label: 'World',
+    artifacts: ['city', 'building', 'character', 'asset', 'stream', 'theme'],
+    macros: { list: 'lens.world.list', get: 'lens.world.get', create: 'lens.world.create', update: 'lens.world.update', delete: 'lens.world.delete', run: 'lens.world.run', export: 'lens.world.export' },
+    exports: ['json', 'glb', 'gltf'],
+    actions: ['explore', 'create_city', 'customize_character', 'stream', 'teleport', 'build', 'browse_assets'],
+    category: 'social',
+  },
+
+  // ═══════════════════════════════════════════════════════════════
   // CORE PRODUCT LENSES
   // ═══════════════════════════════════════════════════════════════
 
