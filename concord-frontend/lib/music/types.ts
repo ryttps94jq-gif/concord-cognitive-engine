@@ -395,7 +395,57 @@ export type MusicLensView =
   | 'track'
   | 'search'
   | 'queue'
-  | 'revenue';
+  | 'revenue'
+  | 'marketplace';
+
+// ---------- Marketplace types ----------
+
+export interface BeatListing {
+  listingId: string;
+  title: string;
+  assetId: string;
+  bpm: number;
+  key: string;
+  genre: string;
+  tags: string[];
+  licenses: { tier: ArtifactTier; price: number; currency: string }[];
+  ownerId: string;
+  ownerName?: string;
+  previewAssetId?: string;
+  totalSales: number;
+  totalPlays: number;
+  createdAt: string;
+  status: string;
+}
+
+export interface SamplePackListing {
+  listingId: string;
+  title: string;
+  assetIds: string[];
+  sampleCount: number;
+  genre: string;
+  tags: string[];
+  price: number;
+  description: string;
+  ownerId: string;
+  ownerName?: string;
+  createdAt: string;
+  status: string;
+}
+
+export interface StemPackListing {
+  listingId: string;
+  title: string;
+  assetIds: string[];
+  parentTrackId: string;
+  genre: string;
+  tags: string[];
+  price: number;
+  ownerId: string;
+  ownerName?: string;
+  createdAt: string;
+  status: string;
+}
 
 export interface MusicLensState {
   view: MusicLensView;

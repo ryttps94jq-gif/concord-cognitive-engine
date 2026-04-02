@@ -54584,6 +54584,55 @@ app.get('/api/artistry/marketplace/samples', (req, res) => {
   res.json({ ok: true, samples, total: samples.length });
 });
 
+// Album as MEGA DTU — group tracks into an album, commit as MEGA tier
+app.post('/api/music/album', asyncHandler(async (req, res) => {
+  const { title, artistId, artistName, trackIds, coverArtUrl, description, releaseDate, genre, tags } = req.body;
+  if (!title || !trackIds?.length) return res.status(400).json({ error: 'title and trackIds required' });
+
+  // Gather track DTUs
+  const trackDTUs = (trackIds || []).map(id => STATE.dtu?.items?.get?.(id) || STATE.dtus?.get?.(id)).filter(Boolean);
+  const trackTitles = trackDTUs.map(d => d?.title || d?.content?.title || 'Untitled');
+
+  // Build MEGA DTU for the album
+  const megaDTU = {
+    id: `album_mega_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    title: title,
+    type: 'mega',
+    tier: 'mega',
+    domain: 'music',
+    tags: ['album', 'music', ...(tags || [])],
+    content: {
+      title,
+      artistId: artistId || 'unknown',
+      artistName: artistName || 'Unknown Artist',
+      description: description || '',
+      coverArtUrl: coverArtUrl || null,
+      releaseDate: releaseDate || new Date().toISOString(),
+      genre: genre || 'unknown',
+      trackIds: trackIds,
+      trackTitles: trackTitles,
+      trackCount: trackIds.length,
+    },
+    sourceCount: trackIds.length,
+    sourceDTUs: trackIds,
+    relevanceBoost: 1.5,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    author: artistName || 'system',
+  };
+
+  // Commit through pipeline
+  try {
+    const ctx = { state: STATE, log: logger.debug ? (...a) => logger.debug('album-mega', ...a) : () => {} };
+    const result = await pipelineCommitDTU(ctx, megaDTU, { op: 'music.album.mega', allowRewrite: false });
+    realtimeEmit('dtu:created', { dtu: megaDTU, domain: 'music', tier: 'mega' });
+    res.json({ ok: true, albumId: megaDTU.id, megaDTU: result?.dtu || megaDTU });
+  } catch (err) {
+    console.error('[Music] Album MEGA creation error:', err.message);
+    res.status(500).json({ error: 'album_creation_failed', detail: err.message });
+  }
+}));
+
 app.post('/api/artistry/marketplace/art', (req, res) => {
   try {
     const art = ensureArtistryState();
