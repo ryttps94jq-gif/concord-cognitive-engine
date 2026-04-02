@@ -157,6 +157,76 @@ export async function pullFixes() {
   }
 }
 
+// ── Security Pattern Sharing ────────────────────────────────────────────────
+// Security signatures are inherently safe to share (public threat intelligence).
+// They don't contain user code, file paths, or instance-specific data.
+
+/**
+ * Push security-related repair fixes to the global network.
+ * Security fixes are filtered separately — they're always shareable
+ * because they contain no proprietary code (just vulnerability type + fix pattern).
+ *
+ * @returns {Promise<{ok: boolean, pushed?: number, error?: string}>}
+ */
+export async function pushSecurityFixes() {
+  if (!ENABLED || !INSTANCE_TOKEN) return { ok: false, error: "Network not enabled" };
+  if (TIERS[_tier]?.pushToGlobal === false) return { ok: false, error: "Tier does not allow push" };
+
+  try {
+    const repairMem = globalThis._concordRepairMemory;
+    if (!(repairMem instanceof Map)) return { ok: true, pushed: 0 };
+
+    const securityFixes = [];
+    for (const [pattern, data] of repairMem.entries()) {
+      if (data.securityRelated && data.successRate > 0.5 && data.occurrences >= 2) {
+        securityFixes.push({
+          errorPattern: hashPattern(pattern),
+          category: "security",
+          vulnerabilityType: data.vulnerabilityType || data.fix?.vulnerabilityType || "unknown",
+          cveId: data.cveId || data.fix?.cveId || null,
+          executor: data.executor || data.fix?.executor || "unknown",
+          successRate: data.successRate || 0,
+          occurrences: data.occurrences || 0,
+          // NO file paths, NO stack traces, NO code content
+        });
+      }
+    }
+
+    if (!securityFixes.length) return { ok: true, pushed: 0 };
+
+    const resp = await fetch(`${GLOBAL_REGISTRY_URL}/api/repair/contribute`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Instance-Token": INSTANCE_TOKEN,
+      },
+      body: JSON.stringify({ fixes: securityFixes, type: "security" }),
+    });
+
+    return { ok: resp.ok, pushed: securityFixes.length, type: "security" };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
+/**
+ * Get count of security-tagged fixes in repair memory.
+ * @returns {{ count: number, withCve: number }}
+ */
+export function getSecurityFixCount() {
+  const repairMem = globalThis._concordRepairMemory;
+  if (!(repairMem instanceof Map)) return { count: 0, withCve: 0 };
+
+  let count = 0, withCve = 0;
+  for (const data of repairMem.values()) {
+    if (data.securityRelated) {
+      count++;
+      if (data.cveId || data.fix?.cveId) withCve++;
+    }
+  }
+  return { count, withCve };
+}
+
 // ── Query Helpers ───────────────────────────────────────────────────────────
 
 export function getStatus() {
@@ -191,6 +261,10 @@ export function handleRepairNetworkCommand(parts) {
       return pullFixes();
     case "repair-network-disconnect":
       return disconnect();
+    case "repair-network-security-push":
+      return pushSecurityFixes();
+    case "repair-network-security-count":
+      return getSecurityFixCount();
     default:
       return { ok: false, error: `Unknown repair-network command: ${sub}` };
   }

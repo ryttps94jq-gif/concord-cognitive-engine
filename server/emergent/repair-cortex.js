@@ -37,6 +37,28 @@ import logger from '../logger.js';
 
 const execAsync = promisify(execCb);
 
+// ── Security Intelligence Integration ──────────────────────────────────────
+// Injected at runtime by server.js when security tables exist.
+// The matcher is optional — repair cortex works fine without it.
+let _securityMatcher = null;
+
+/**
+ * Wire the security matcher into the repair cortex.
+ * Called once during startup when the security intelligence system is available.
+ *
+ * @param {Object} matcher - Security matcher instance from createSecurityMatcher()
+ */
+export function setSecurityMatcher(matcher) {
+  _securityMatcher = matcher;
+}
+
+/**
+ * Get the current security matcher (for external modules to check availability).
+ */
+export function getSecurityMatcher() {
+  return _securityMatcher;
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 function uid(prefix = "repair") {
@@ -111,6 +133,8 @@ const GUARDIAN_INTERVALS = Object.freeze({
   ssl_certificate:       3600000, // 1 hour — stays same
   database_connection:   120000,  // 2 minutes — stays same
   lockfile_integrity:    600000,  // 10 minutes — stays same
+  security_signature_freshness: 3600000, // 1 hour — check signature staleness
+  security_scan_backlog:        300000,  // 5 minutes — check security scan queue
 });
 
 // ── Repair Memory ───────────────────────────────────────────────────────────
@@ -151,6 +175,22 @@ export function addToRepairMemory(errorPattern, fix) {
       existing.lastSeen = nowISO();
       existing.successRate = existing.successes / existing.occurrences;
     } else {
+      // Check if error matches known security vulnerability (CVE tagging)
+      let securityRelated = false;
+      let cveId = null;
+      if (_securityMatcher) {
+        try {
+          const secCheck = _securityMatcher.quickScan({ content: errorPattern });
+          if (secCheck.matched) {
+            securityRelated = true;
+            cveId = secCheck.cveId || null;
+          }
+        } catch (_) { /* non-critical */ }
+      }
+      // Also check if the fix itself is security-tagged
+      if (fix?.securityRelated) securityRelated = true;
+      if (fix?.cveId) cveId = fix.cveId;
+
       _repairMemory.set(key, {
         pattern: errorPattern,
         fix,
@@ -161,6 +201,8 @@ export function addToRepairMemory(errorPattern, fix) {
         firstSeen: nowISO(),
         lastSeen: nowISO(),
         deprecated: false,
+        securityRelated,
+        cveId,
       });
     }
     _syncRepairMemoryToSTATE();
@@ -294,6 +336,27 @@ export function observe(error, context = "unknown") {
     const diagnosis = matchErrorPattern(String(error?.message || error));
     if (diagnosis) {
       addToRepairMemory(String(error?.message || error), diagnosis.fixes?.[0]);
+    }
+
+    // Security intelligence layer — check if error matches known vulnerability
+    if (_securityMatcher) {
+      try {
+        const secResult = _securityMatcher.quickScan({
+          content: String(error?.message || error),
+          target: context,
+        });
+        if (secResult.matched && secResult.severity && (secResult.severity === "critical" || secResult.severity === "high")) {
+          // High-severity security match — create sovereign alert + tag in repair memory
+          logRepairDTU(REPAIR_PHASES.POST_BUILD, "security_threat_in_error", {
+            context,
+            severity: secResult.severity,
+            signatureId: secResult.signatureId,
+            fixId: secResult.fixId,
+            action: secResult.action,
+            layer: secResult.layer,
+          });
+        }
+      } catch (_secErr) { /* security layer never blocks observe() */ }
     }
   } catch (_e) { logger.debug('emergent:repair-cortex', 'observe() itself NEVER throws', { error: _e?.message }); }
 }
@@ -3159,6 +3222,102 @@ const GUARDIAN_MONITORS = {
       } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
     },
   },
+
+  // ── Security Intelligence Monitors ─────────────────────────────────────
+  security_signature_freshness: {
+    interval: GUARDIAN_INTERVALS.security_signature_freshness,
+    check: async () => {
+      try {
+        const S = _getSTATE();
+        const db = S?.db;
+        if (!db) return { healthy: true, reason: "no_db" };
+        const stats = db.prepare(`
+          SELECT source,
+                 MAX(updated_at) as last_update,
+                 COUNT(*) as count
+          FROM security_signatures
+          WHERE deprecated = 0
+          GROUP BY source
+        `).all();
+
+        const now = Date.now();
+        const staleThresholds = {
+          clamav: 48 * 3600 * 1000,    // 48 hours
+          yara: 7 * 24 * 3600 * 1000,  // 7 days
+          cve_feed: 48 * 3600 * 1000,  // 48 hours
+        };
+
+        const stale = [];
+        for (const row of stats) {
+          const threshold = staleThresholds[row.source];
+          if (threshold && row.last_update) {
+            const age = now - new Date(row.last_update).getTime();
+            if (age > threshold) {
+              stale.push({ source: row.source, ageHours: Math.round(age / 3600000), count: row.count });
+            }
+          }
+        }
+
+        return {
+          healthy: stale.length === 0,
+          sources: stats.map(s => ({ source: s.source, count: s.count, lastUpdate: s.last_update })),
+          stale,
+        };
+      } catch {
+        return { healthy: true, sources: [] };
+      }
+    },
+    repair: async (result) => {
+      try {
+        if (!result.healthy && result.stale?.length > 0) {
+          for (const s of result.stale) {
+            logRepairDTU(REPAIR_PHASES.POST_BUILD, "security_signatures_stale", {
+              source: s.source,
+              ageHours: s.ageHours,
+              count: s.count,
+              message: `Security signatures from ${s.source} are ${s.ageHours}h stale — refresh recommended`,
+            });
+          }
+        }
+      } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
+    },
+  },
+
+  security_scan_backlog: {
+    interval: GUARDIAN_INTERVALS.security_scan_backlog,
+    check: async () => {
+      try {
+        const S = _getSTATE();
+        const db = S?.db;
+        if (!db) return { healthy: true, reason: "no_db" };
+
+        // Count recent unresolved security events
+        const recent = db.prepare(`
+          SELECT COUNT(*) as count FROM security_events
+          WHERE event_type = 'scan_detection' AND result = 'logged'
+            AND created_at >= datetime('now', '-1 hour')
+        `).get();
+
+        const backlogCount = recent?.count || 0;
+        const healthy = backlogCount < 100;
+
+        return { healthy, backlogCount, threshold: 100 };
+      } catch {
+        return { healthy: true, backlogCount: 0 };
+      }
+    },
+    repair: async (result) => {
+      try {
+        if (!result.healthy) {
+          logRepairDTU(REPAIR_PHASES.POST_BUILD, "security_scan_backlog_high", {
+            backlogCount: result.backlogCount,
+            threshold: result.threshold,
+            message: `Security scan backlog at ${result.backlogCount} (threshold: ${result.threshold}) — may need scaling`,
+          });
+        }
+      } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
+    },
+  },
 };
 
 /**
@@ -4275,6 +4434,36 @@ const REPAIR_STRATEGIES = [
         } catch (_e) { logger.debug('emergent:repair-cortex', 'silent catch', { error: _e?.message }); }
       }
       return { fixed: false };
+    },
+  },
+  {
+    // Security intelligence pattern match — deterministic, no LLM.
+    // Queries security_fixes table for matching vulnerability type using token-overlap.
+    name: "security_pattern_match",
+    match: () => Boolean(_securityMatcher),
+    apply: async (errorEntry) => {
+      try {
+        if (!_securityMatcher) return { fixed: false };
+        const errorMsg = String(errorEntry.error?.message || errorEntry.error || "");
+        const result = _securityMatcher.quickScan({ content: errorMsg, target: "repair_strategy" });
+        if (result.matched && result.fixId) {
+          const fix = _securityMatcher.findFix(result.vulnerabilityType, errorMsg);
+          if (fix && fix.after_pattern) {
+            addToRepairMemory(errorMsg, {
+              executor: "security_fix",
+              securityRelated: true,
+              fixId: fix.id,
+              cveId: fix.cve_id,
+              vulnerabilityType: fix.vulnerability_type,
+            });
+            return { fixed: true, method: "security_pattern_match", fixId: fix.id, vulnerabilityType: fix.vulnerability_type };
+          }
+        }
+        return { fixed: false };
+      } catch (_e) {
+        logger.debug('emergent:repair-cortex', 'security_pattern_match error', { error: _e?.message });
+        return { fixed: false };
+      }
     },
   },
   {
