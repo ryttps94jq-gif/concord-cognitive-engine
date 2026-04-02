@@ -44,7 +44,10 @@ export default function PharmacyLensPage() {
   const { items: interactionItems, create: createInteraction } = useLensData<Record<string, unknown>>('pharmacy', 'interaction', { seed: [] });
   const runAction = useRunArtifact('pharmacy');
 
-  const medications = medItems.map(i => ({ id: i.id, title: i.title, ...(i.data || {}) })) as unknown as (Medication & { id: string; title: string })[];
+  const allMedications = medItems.map(i => ({ id: i.id, title: i.title, ...(i.data || {}) })) as unknown as (Medication & { id: string; title: string })[];
+  const medications = searchQuery.trim()
+    ? allMedications.filter(m => (m.name || m.title || '').toLowerCase().includes(searchQuery.toLowerCase()))
+    : allMedications;
   const interactions = interactionItems.map(i => ({ id: i.id, ...(i.data || {}) })) as unknown as (InteractionCheck & { id: string })[];
 
   const [newMed, setNewMed] = useState({ name: '', dosage: '', frequency: 'daily', route: 'oral' });
@@ -198,6 +201,12 @@ export default function PharmacyLensPage() {
       <UniversalActions domain="pharmacy" artifactId={undefined} compact />
       <DTUExportButton domain="pharmacy" data={{}} compact />
 
+      {/* Search */}
+      <div className="relative">
+        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+        <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search medications..." className="w-full bg-black/30 border border-white/10 rounded-lg pl-9 pr-3 py-2 text-sm" />
+      </div>
+
       {/* Tab Navigation */}
       <div className="flex gap-2 border-b border-white/10 pb-2">
         {(['medications', 'interactions', 'refills'] as const).map(tab => (
@@ -254,6 +263,7 @@ export default function PharmacyLensPage() {
                     </div>
                     <p className="text-xs text-gray-400 mt-1">{med.dosage} - {med.frequency} - {med.route}</p>
                   </div>
+                  <button onClick={() => update(med.id, { data: { status: med.status === 'active' ? 'discontinued' : 'active' } })} className="text-xs px-2 py-0.5 rounded bg-white/5 hover:bg-white/10 text-gray-400 mr-2">{med.status === 'active' ? 'Discontinue' : 'Reactivate'}</button>
                   <button onClick={() => remove(med.id)} className="text-gray-500 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
                 </motion.div>
               ))}

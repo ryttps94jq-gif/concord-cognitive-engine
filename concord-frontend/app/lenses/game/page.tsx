@@ -258,7 +258,7 @@ export default function GameLensPage() {
     queryKey: ['game', 'achievements'],
     queryFn: () => api.get('/api/game/achievements').then(r => r.data),
   });
-  const achievements: Achievement[] = (achievementsResp?.achievements || []).map((a: Record<string, unknown>) => ({
+  const achievements: Achievement[] = (achievementsResp?.achievements || INITIAL_ACHIEVEMENTS).map((a: Record<string, unknown>) => ({
     id: a.id as string,
     name: a.name as string || a.id as string,
     description: a.description as string || '',
@@ -393,8 +393,8 @@ export default function GameLensPage() {
     return [...apiPlayers].sort((a: LeaderboardPlayer, b: LeaderboardPlayer) => b.xp - a.xp);
   }, [leaderboardData]);
 
-  const profile = (profileData || { level: 1, xp: 0, nextLevelXp: 1000, totalXpEarned: 0, achievements: 0, totalAchievements: 0, streak: 0, longestStreak: 0, questsCompleted: 0, challengesWon: 0, completionRate: 0, rank: 0, xpHistory: [] }) as unknown as GameProfile;
-  const xpHistory: XpHistoryEntry[] = (profile.xpHistory || []) as XpHistoryEntry[];
+  const profile = (profileData || INITIAL_PROFILE) as unknown as GameProfile;
+  const xpHistory: XpHistoryEntry[] = (profile.xpHistory || INITIAL_XP_HISTORY) as XpHistoryEntry[];
   const xpMax = Math.max(1, ...xpHistory.map((d: { xp: number }) => d.xp));
   const level = profile.level || 1;
   const progressPct = ((playerXp) / ((profile.nextLevelXp as number) || 1000)) * 100;
