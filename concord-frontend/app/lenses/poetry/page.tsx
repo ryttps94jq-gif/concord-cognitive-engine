@@ -154,7 +154,7 @@ function SyllableRhymePanel({ content, form }: { content: string; form: string }
             const isHaikuTarget = form === 'haiku' && [5, 7, 5][nonEmptyLines.indexOf(line)] !== undefined;
             const target = form === 'haiku' ? [5, 7, 5][nonEmptyLines.indexOf(line)] : null;
             return (
-              <div key={i} className="flex items-center gap-2">
+              <div key={i} className={cn("flex items-center gap-2", isHaikuTarget && "bg-rose-500/5 rounded px-1 -mx-1")}>
                 <span className="text-xs text-gray-600 w-16 truncate">{line.slice(0, 12)}…</span>
                 <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
                   <div className={cn('h-full rounded-full transition-all', count > 0 ? 'bg-rose-400/60' : '')}
@@ -355,6 +355,12 @@ export default function PoetryPage() {
           <div className="flex items-center gap-3">
             <Feather className="w-6 h-6 text-rose-400" />
             <h1 className="text-2xl font-bold">Poetry</h1>
+            {isLoading && (
+              <div className="flex items-center gap-1.5 text-xs text-rose-400">
+                <div className="w-3 h-3 border-2 border-rose-400 border-t-transparent rounded-full animate-spin" />
+                Loading...
+              </div>
+            )}
             <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} />
           </div>
           <div className="flex items-center gap-2">

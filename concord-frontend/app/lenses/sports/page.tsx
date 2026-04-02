@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Trophy, Plus, Search, Trash2, Calendar,
   Target, Clock, TrendingUp, Layers, ChevronDown, Zap,
-  Medal, Swords, MapPin, X, BarChart3,
+  Medal, Swords, MapPin, X, BarChart3, Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -287,7 +287,7 @@ export default function SportsLensPage() {
                         </p>
                       </div>
                     )}
-                    <button onClick={() => remove(g.id)} className="text-gray-500 hover:text-red-400 p-1"><Trash2 className="w-4 h-4" /></button>
+                    <button onClick={() => remove(g.id)} disabled={deleteMut.isPending} className="text-gray-500 hover:text-red-400 p-1">{deleteMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}</button>
                   </div>
                 </div>
               </motion.div>

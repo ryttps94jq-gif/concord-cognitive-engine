@@ -208,6 +208,13 @@ export default function LawLensPage() {
           Case Files
         </h2>
 
+        {/* Status filter */}
+        <div className="flex items-center gap-2 mb-4">
+          {CASE_STATUSES.map(s => (
+            <button key={s} onClick={() => setExpandedCase(null)} className={`text-[10px] px-2 py-1 rounded border font-medium ${STATUS_COLORS[s] || 'bg-gray-500/15 border-gray-500/30 text-gray-400'}`}>{s}</button>
+          ))}
+        </div>
+
         {/* New case form */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-4">
           <input
