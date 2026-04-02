@@ -216,6 +216,7 @@ export default function ConsultingLensPage() {
             { icon: Clock, label: 'Billed Hours', value: totalHours.toLocaleString(), color: 'text-blue-400' },
             { icon: Briefcase, label: 'Active Engagements', value: activeCount, color: 'text-purple-400' },
             { icon: Star, label: 'Utilization Rate', value: `${utilRate.toFixed(0)}%`, color: 'text-amber-400' },
+            { icon: DollarSign, label: 'Avg Rate', value: `$${avgRate.toFixed(0)}/hr`, color: 'text-cyan-400' },
           ].map((stat, i) => (
             <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }} className={ds.panel}>
               <stat.icon className={`w-5 h-5 ${stat.color} mb-2`} />

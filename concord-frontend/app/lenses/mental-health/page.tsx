@@ -166,7 +166,7 @@ export default function MentalHealthLensPage() {
             { icon: Activity, label: 'Mood Entries', value: totalEntries, color: 'text-purple-400', bg: 'bg-purple-400/10' },
             { icon: Heart, label: 'Journal Entries', value: journalCount, color: 'text-pink-400', bg: 'bg-pink-400/10' },
             { icon: recentMood.icon, label: 'Recent Mood', value: recentMood.label, color: recentMood.color, bg: 'bg-cyan-400/10' },
-            { icon: Calendar, label: 'Streak', value: `${Math.min(totalEntries, 7)}d`, color: 'text-green-400', bg: 'bg-green-400/10' },
+            { icon: Calendar, label: 'Avg Score', value: avgScore > 0 ? avgScore.toFixed(1) : '—', color: 'text-green-400', bg: 'bg-green-400/10' },
           ].map((stat, i) => (
             <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08, duration: 0.35 }}
               className="panel p-3 flex items-center gap-3">

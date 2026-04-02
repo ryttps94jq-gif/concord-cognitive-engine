@@ -120,7 +120,7 @@ function CookingTimer() {
 // ── Ingredient Checklist ────────────────────────────────────────
 function IngredientChecklist({ ingredients }: { ingredients: string[] }) {
   const [checked, setChecked] = useState<Set<number>>(new Set());
-  const toggle = (i: number) => setChecked(prev => { const s = new Set(prev); s.has(i) ? s.delete(i) : s.add(i); return s; });
+  const toggle = (i: number) => setChecked(prev => { const s = new Set(prev); if (s.has(i)) s.delete(i); else s.add(i); return s; });
   if (!ingredients || ingredients.length === 0) return <p className="text-xs text-gray-500 italic">No ingredients listed.</p>;
   return (
     <ul className="space-y-1.5">
