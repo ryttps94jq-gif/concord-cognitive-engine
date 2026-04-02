@@ -23162,6 +23162,38 @@ try {
   structuredLog("warn", "city_routes_init_failed", { error: String(e?.message || e) });
 }
 
+// ===== WORLD LENS ROUTES (districts, workstations, jobs, orgs, events, mechanics) =====
+try {
+  const { default: createWorldRoutes } = await import("./routes/world.js");
+  app.use("/api/world", createWorldRoutes({ requireAuth: authenticateRequest }));
+} catch (e) {
+  structuredLog("warn", "world_routes_init_failed", { error: String(e?.message || e) });
+}
+
+// ===== EMERGENT FEATURES (ghost threads, user constitution, scenarios, fingerprint, pipelines, dream cycle) =====
+try {
+  const { default: createEmergentFeaturesRouter } = await import("./routes/emergent-features.js");
+  app.use("/api/emergent", createEmergentFeaturesRouter({ STATE, requireAuth: authenticateRequest }));
+} catch (e) {
+  structuredLog("warn", "emergent_features_routes_init_failed", { error: String(e?.message || e) });
+}
+
+// ===== PASSWORD RESET & EMAIL VERIFICATION =====
+try {
+  const { default: createPasswordResetRouter } = await import("./routes/password-reset.js");
+  app.use("/api/auth", createPasswordResetRouter({ AuthDB, hashPassword, authRateLimiter }));
+} catch (e) {
+  structuredLog("warn", "password_reset_routes_init_failed", { error: String(e?.message || e) });
+}
+
+// ===== ERROR ALERTING (production crash detection) =====
+try {
+  const { initErrorAlerting } = await import("./lib/error-alerting.js");
+  initErrorAlerting();
+} catch (e) {
+  structuredLog("warn", "error_alerting_init_failed", { error: String(e?.message || e) });
+}
+
 // ===== OPENAPI DOCUMENTATION =====
 import createOpenAPIRouter from "./routes/openapi.js";
 app.use("/api", createOpenAPIRouter());
