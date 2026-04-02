@@ -206,6 +206,12 @@ export default function PhotographyPage() {
           <div className="flex items-center gap-3">
             <Camera className="w-6 h-6 text-sky-400" />
             <h1 className="text-2xl font-bold">Photography</h1>
+            {(isLoading || dtusLoading) && (
+              <div className="flex items-center gap-1.5 text-xs text-sky-400">
+                <div className="w-3 h-3 border-2 border-sky-400 border-t-transparent rounded-full animate-spin" />
+                Loading...
+              </div>
+            )}
             <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} />
           </div>
           <div className="flex items-center gap-2">
