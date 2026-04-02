@@ -89,6 +89,13 @@ export default function LandscapingLensPage() {
   const { items, isLoading, isError, error, refetch, create, update, remove } = useLensData<TradeArtifact>('landscaping', activeArtifactType, { seed: [] });
   const runAction = useRunArtifact('landscaping');
 
+  const filtered = useMemo(() => {
+    let result = items;
+    if (searchQuery) { const q = searchQuery.toLowerCase(); result = result.filter(i => i.title.toLowerCase().includes(q) || (i.data as unknown as TradeArtifact).description?.toLowerCase().includes(q)); }
+    if (filterStatus !== 'all') result = result.filter(i => (i.data as unknown as TradeArtifact).status === filterStatus);
+    return result;
+  }, [items, searchQuery, filterStatus]);
+
   const handleAction = useCallback(async (action: string, artifactId?: string) => {
     const targetId = artifactId || filtered[0]?.id;
     if (!targetId) return;
@@ -98,13 +105,6 @@ export default function LandscapingLensPage() {
       console.error('Action failed:', err);
     }
   }, [filtered, runAction]);
-
-  const filtered = useMemo(() => {
-    let result = items;
-    if (searchQuery) { const q = searchQuery.toLowerCase(); result = result.filter(i => i.title.toLowerCase().includes(q) || (i.data as unknown as TradeArtifact).description?.toLowerCase().includes(q)); }
-    if (filterStatus !== 'all') result = result.filter(i => (i.data as unknown as TradeArtifact).status === filterStatus);
-    return result;
-  }, [items, searchQuery, filterStatus]);
 
   const openCreate = () => { setEditingItem(null); setFormName(''); setFormDescription(''); setFormStatus('scheduled'); setFormNotes(''); setFormClient(''); setFormAddress(''); setFormPhone(''); setFormScheduledDate(''); setFormLaborHours(''); setFormLaborRate(''); setFormMaterialCost(''); setFormMaterial(TRADE_MATERIALS[0] || ''); setFormQuantity(''); setFormCertType(TRADE_CERTS[0] || ''); setFormAmount(''); setEditorOpen(true); };
   const openEdit = (item: LensItem<TradeArtifact>) => { const d = item.data as unknown as TradeArtifact; setEditingItem(item); setFormName(d.name || ''); setFormDescription(d.description || ''); setFormStatus(d.status || 'scheduled'); setFormNotes(d.notes || ''); setFormClient(d.client || ''); setFormAddress(d.address || ''); setFormPhone(d.phone || ''); setFormScheduledDate(d.scheduledDate || ''); setFormLaborHours(d.laborHours?.toString() || ''); setFormLaborRate(d.laborRate?.toString() || ''); setFormMaterialCost(d.materialCost?.toString() || ''); setFormMaterial(d.material || TRADE_MATERIALS[0] || ''); setFormQuantity(d.quantity?.toString() || ''); setFormCertType(d.certType || TRADE_CERTS[0] || ''); setFormAmount(d.amount?.toString() || ''); setEditorOpen(true); };
@@ -186,7 +186,7 @@ export default function LandscapingLensPage() {
       : filtered.length === 0 ? <div className={cn(ds.panel, 'text-center py-12')}><TreePine className="w-12 h-12 text-gray-600 mx-auto mb-3" /><p className={ds.textMuted}>No {activeArtifactType} items yet</p><button onClick={openCreate} className={cn(ds.btnPrimary, 'mt-3')}><Plus className="w-4 h-4" /> Create First</button></div>
       : filtered.map((item, index) => {
         const d = item.data as unknown as TradeArtifact; const sc = STATUS_CONFIG[d.status] || STATUS_CONFIG.pending;
-        return (<motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className={ds.panelHover} onClick={() => openEdit(item)}><div className="flex items-center justify-between"><div className="flex items-center gap-3"><TreePine className="w-5 h-5 text-neon-cyan" /><div><p className="text-white font-medium">{d.name || item.title}</p><p className={ds.textMuted}>{d.client || ''} {d.address ? `- ${d.address}` : ''}</p></div></div><div className="flex items-center gap-2">{(d.totalCost || d.amount) && <span className="text-xs text-green-400">${(d.totalCost || d.amount || 0).toLocaleString()}</span>}<span className={`text-xs px-2 py-0.5 rounded-full bg-${sc.color}/20 text-${sc.color}`}>{sc.label}</span><button onClick={e => { e.stopPropagation(); remove(item.id); }} className={ds.btnGhost}><Trash2 className="w-4 h-4 text-red-400" /></button></div></div></motion.div>);
+        return (<motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className={ds.panelHover} onClick={() => openEdit(item)}><div className="flex items-center justify-between"><div className="flex items-center gap-3"><TreePine className="w-5 h-5 text-neon-cyan" /><div><p className="text-white font-medium">{d.name || item.title}</p><p className={ds.textMuted}>{d.client || ''} {d.address ? `- ${d.address}` : ''}</p></div></div><div className="flex items-center gap-2">{(d.totalCost || d.amount) && <span className="text-xs text-green-400">${(d.totalCost || d.amount || 0).toLocaleString()}</span>}<span className={`text-xs px-2 py-0.5 rounded-full bg-${sc.color}/20 text-${sc.color}`}>{sc.label}</span><button onClick={e => { e.stopPropagation(); handleAction('analyze', item.id); }} className={ds.btnGhost}><Zap className="w-4 h-4 text-neon-cyan" /></button><button onClick={e => { e.stopPropagation(); remove(item.id); }} className={ds.btnGhost}><Trash2 className="w-4 h-4 text-red-400" /></button></div></div></motion.div>);
       })}
     </div>
   );
@@ -198,7 +198,7 @@ export default function LandscapingLensPage() {
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500 to-emerald-700 flex items-center justify-center"><TreePine className="w-5 h-5 text-white" /></div>
           <div><div className="flex items-center gap-2"><h1 className={ds.heading1}>Landscaping</h1><LiveIndicator isLive={isLive} lastUpdated={lastUpdated} /></div><p className={ds.textMuted}>Jobs, estimates, codes, materials, CRM, invoicing, inspections, and certifications</p></div>
         </div>
-        <div className="flex items-center gap-2"><DTUExportButton domain="landscaping" data={{}} compact /><button onClick={() => setShowDashboard(!showDashboard)} className={cn(showDashboard ? ds.btnPrimary : ds.btnSecondary)}><BarChart3 className="w-4 h-4" /> Dashboard</button></div>
+        <div className="flex items-center gap-2">{runAction.isPending && <span className="text-xs text-neon-cyan animate-pulse">AI processing...</span>}<DTUExportButton domain="landscaping" data={{}} compact /><button onClick={() => setShowDashboard(!showDashboard)} className={cn(showDashboard ? ds.btnPrimary : ds.btnSecondary)}><BarChart3 className="w-4 h-4" /> Dashboard</button></div>
       </header>
       <RealtimeDataPanel domain="landscaping" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
 

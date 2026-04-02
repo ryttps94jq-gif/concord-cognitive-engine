@@ -3,9 +3,9 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Wrench, Cog, FileText, Plus, Trash2, Layers, ChevronDown, CheckCircle, ArrowRight, HardHat } from 'lucide-react';
+import { Wrench, Cog, FileText, Plus, Trash2, Layers, ChevronDown, CheckCircle, ArrowRight, HardHat, Zap, Loader2 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -45,6 +45,10 @@ export default function EngineeringLensPage() {
   const { items: projectItems, isLoading, isError, error, refetch, create, update, remove } = useLensData<Record<string, unknown>>('engineering', 'project', { seed: [] });
   const { items: specItems, create: createSpec } = useLensData<Record<string, unknown>>('engineering', 'specification', { seed: [] });
   const runAction = useRunArtifact('engineering');
+
+  const handleAction = useCallback((artifactId: string) => {
+    runAction.mutate({ id: artifactId, action: 'analyze' });
+  }, [runAction]);
 
   const projects = projectItems.map(i => ({ id: i.id, title: i.title, ...(i.data || {}) })) as unknown as (EngineeringProject & { id: string; title: string })[];
 
@@ -102,6 +106,7 @@ export default function EngineeringLensPage() {
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-bold">Engineering Lens</h1>
               <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} />
+              {runAction.isPending && <Loader2 className="w-4 h-4 animate-spin text-neon-cyan" />}
             </div>
             <p className="text-sm text-gray-400">Project management, specifications, and engineering standards</p>
           </div>
@@ -204,7 +209,11 @@ export default function EngineeringLensPage() {
                     </div>
                     <p className="text-xs text-gray-400 mt-1">{proj.discipline} engineering</p>
                   </div>
-                  <button onClick={() => remove(proj.id)} className="text-gray-500 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => handleAction(proj.id)} className="text-gray-500 hover:text-neon-cyan" title="Run AI analysis"><Zap className="w-4 h-4" /></button>
+                    <button onClick={() => update(proj.id, { data: { ...proj, lastUpdated: new Date().toISOString() } as unknown as Partial<Record<string, unknown>> })} className="text-gray-500 hover:text-yellow-400" title="Update"><Cog className="w-4 h-4" /></button>
+                    <button onClick={() => remove(proj.id)} className="text-gray-500 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
+                  </div>
                 </motion.div>
               ))
             )}
@@ -213,9 +222,24 @@ export default function EngineeringLensPage() {
       )}
 
       {activeTab === 'specs' && (
-        <div className="panel p-4">
-          <h3 className="font-semibold mb-3 flex items-center gap-2"><FileText className="w-4 h-4 text-neon-cyan" /> Specifications Library</h3>
-          <p className="text-gray-500 text-sm text-center py-4">Create projects to generate specifications.</p>
+        <div className="space-y-4">
+          <div className="panel p-4">
+            <h3 className="font-semibold mb-3 flex items-center gap-2"><FileText className="w-4 h-4 text-neon-cyan" /> Specifications Library</h3>
+            <button onClick={() => createSpec({ title: 'New Specification', data: { type: 'specification', content: '' } })} className="px-3 py-1.5 bg-neon-cyan/20 text-neon-cyan rounded-lg text-sm hover:bg-neon-cyan/30 flex items-center gap-1.5">
+              <Plus className="w-4 h-4" /> New Spec
+            </button>
+            {specItems.length === 0 ? (
+              <p className="text-gray-500 text-sm text-center py-4">No specifications yet.</p>
+            ) : (
+              <div className="space-y-2 mt-3">
+                {specItems.map(spec => (
+                  <div key={spec.id} className="flex items-center justify-between p-2 rounded-lg bg-white/5">
+                    <span className="text-sm">{spec.title}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

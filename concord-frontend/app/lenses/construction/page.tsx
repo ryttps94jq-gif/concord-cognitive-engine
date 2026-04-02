@@ -103,6 +103,13 @@ export default function ConstructionLensPage() {
   const { items, isLoading, isError, error, refetch, create, update, remove } = useLensData<ConstructionArtifact>('construction', activeArtifactType, { seed: [] });
   const runAction = useRunArtifact('construction');
 
+  const filtered = useMemo(() => {
+    let result = items;
+    if (searchQuery) { const q = searchQuery.toLowerCase(); result = result.filter(i => i.title.toLowerCase().includes(q) || (i.data as unknown as ConstructionArtifact).description?.toLowerCase().includes(q)); }
+    if (filterStatus !== 'all') result = result.filter(i => (i.data as unknown as ConstructionArtifact).status === filterStatus);
+    return result;
+  }, [items, searchQuery, filterStatus]);
+
   const handleAction = useCallback(async (action: string, artifactId?: string) => {
     const targetId = artifactId || filtered[0]?.id;
     if (!targetId) return;
@@ -112,13 +119,6 @@ export default function ConstructionLensPage() {
       console.error('Action failed:', err);
     }
   }, [filtered, runAction]);
-
-  const filtered = useMemo(() => {
-    let result = items;
-    if (searchQuery) { const q = searchQuery.toLowerCase(); result = result.filter(i => i.title.toLowerCase().includes(q) || (i.data as unknown as ConstructionArtifact).description?.toLowerCase().includes(q)); }
-    if (filterStatus !== 'all') result = result.filter(i => (i.data as unknown as ConstructionArtifact).status === filterStatus);
-    return result;
-  }, [items, searchQuery, filterStatus]);
 
   const openCreate = () => { setEditingItem(null); setFormName(''); setFormDescription(''); setFormStatus('planned'); setFormNotes(''); setFormClient(''); setFormAddress(''); setFormStartDate(''); setFormEndDate(''); setFormContractValue(''); setFormProjectType('Residential New'); setFormLaborCost(''); setFormMaterialCost(''); setFormTrade('General'); setFormInspectionType('Foundation'); setFormForeman(''); setFormCrewSize(''); setEditorOpen(true); };
   const openEdit = (item: LensItem<ConstructionArtifact>) => { const d = item.data as unknown as ConstructionArtifact; setEditingItem(item); setFormName(d.name || ''); setFormDescription(d.description || ''); setFormStatus(d.status || 'planned'); setFormNotes(d.notes || ''); setFormClient(d.client || ''); setFormAddress(d.address || ''); setFormStartDate(d.startDate || ''); setFormEndDate(d.endDate || ''); setFormContractValue(d.contractValue?.toString() || ''); setFormProjectType(d.projectType || 'Residential New'); setFormLaborCost(d.laborCost?.toString() || ''); setFormMaterialCost(d.materialCost?.toString() || ''); setFormTrade(d.trade || 'General'); setFormInspectionType(d.inspectionType || 'Foundation'); setFormForeman(d.foreman || ''); setFormCrewSize(d.crewSize?.toString() || ''); setEditorOpen(true); };

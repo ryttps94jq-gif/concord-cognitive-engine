@@ -7,7 +7,7 @@ import { UniversalActions } from '@/components/lens/UniversalActions';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Shirt, Plus, Search, Trash2, Star, Tag, Palette, DollarSign, Layers, ChevronDown, X,
-  Heart, Eye, Sparkles, Grid3X3, List,
+  Heart, Eye, Sparkles, Grid3X3, List, Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -268,7 +268,7 @@ export default function FashionLensPage() {
                       <button onClick={() => toggleFavorite(g.id)} className="p-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <Heart className={cn('w-4 h-4', favorites.has(g.id) ? 'fill-pink-500 text-pink-500' : 'text-gray-500')} />
                       </button>
-                      <button onClick={() => remove(g.id)} className="p-1 opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
+                      <button onClick={() => remove(g.id)} disabled={deleteMut.isPending} className="p-1 opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 hover:text-red-400">{deleteMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}</button>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-1.5 text-xs mb-2">
@@ -311,7 +311,7 @@ export default function FashionLensPage() {
                   <div className="flex items-center gap-3">
                     {g.condition && <span className={cn('text-[10px] px-2 py-0.5 rounded border', CONDITION_COLORS[g.condition])}>{g.condition}</span>}
                     {g.price > 0 && <span className="text-sm font-medium text-neon-green">${g.price}</span>}
-                    <button onClick={() => remove(g.id)} className="p-1 opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => remove(g.id)} disabled={deleteMut.isPending} className="p-1 opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400">{deleteMut.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}</button>
                   </div>
                 </motion.div>
               ))}

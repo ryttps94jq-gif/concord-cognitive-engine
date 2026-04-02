@@ -4,9 +4,9 @@ import dynamic from 'next/dynamic';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Mountain, MapPin, Plus, Trash2, Search, Layers, ChevronDown, Gem, Map } from 'lucide-react';
+import { Mountain, MapPin, Plus, Trash2, Search, Layers, ChevronDown, Gem, Map, Zap, Loader2 } from 'lucide-react';
 
 const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });
 import { ErrorState } from '@/components/common/EmptyState';
@@ -57,6 +57,10 @@ export default function GeologyLensPage() {
   const { items: sampleItems, isLoading, isError, error, refetch, create, update, remove } = useLensData<Record<string, unknown>>('geology', 'sample', { seed: [] });
   const { items: siteItems, create: createSite, remove: removeSite } = useLensData<Record<string, unknown>>('geology', 'site', { seed: [] });
   const runAction = useRunArtifact('geology');
+
+  const handleAction = useCallback((artifactId: string) => {
+    runAction.mutate({ id: artifactId, action: 'analyze' });
+  }, [runAction]);
 
   const samples = sampleItems.map(i => ({ id: i.id, title: i.title, ...(i.data || {}) })) as unknown as (Sample & { id: string; title: string })[];
   const sites = siteItems.map(i => ({ id: i.id, title: i.title, ...(i.data || {}) })) as unknown as (FieldSite & { id: string; title: string })[];
@@ -110,6 +114,7 @@ export default function GeologyLensPage() {
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-bold">Geology Lens</h1>
               <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} />
+              {runAction.isPending && <Loader2 className="w-4 h-4 animate-spin text-orange-400" />}
             </div>
             <p className="text-sm text-gray-400">Rock samples, field sites, and stratigraphic analysis</p>
           </div>
@@ -208,7 +213,11 @@ export default function GeologyLensPage() {
                       {sample.age && <span>Age: {sample.age}</span>}
                     </div>
                   </div>
-                  <button onClick={() => remove(sample.id)} className="text-gray-500 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => handleAction(sample.id)} className="text-gray-500 hover:text-neon-cyan" title="Run AI analysis"><Zap className="w-4 h-4" /></button>
+                    <button onClick={() => update(sample.id, { data: { ...sample, lastUpdated: new Date().toISOString() } as unknown as Partial<Record<string, unknown>> })} className="text-gray-500 hover:text-yellow-400" title="Update"><Gem className="w-4 h-4" /></button>
+                    <button onClick={() => remove(sample.id)} className="text-gray-500 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
+                  </div>
                 </div>
               ))
             )}

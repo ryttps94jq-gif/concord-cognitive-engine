@@ -103,7 +103,7 @@ export default function MusicLensPage() {
   const [marketplaceKey, setMarketplaceKey] = useState('');
   const [marketplaceSearch, setMarketplaceSearch] = useState('');
 
-  const { playTrack, addToQueue, nowPlaying } = useMusicStore();
+  const { playTrack: _playTrack, addToQueue, nowPlaying } = useMusicStore();
 
   // ---- Navigation ----
   const navigateToArtist = useCallback((artistId: string) => {
@@ -1055,7 +1055,7 @@ export default function MusicLensPage() {
                         <h2 className="text-xs font-semibold text-gray-400 uppercase mb-3">MEGA DTU Albums</h2>
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                           {albumMegaDTUs.map((mega) => { const m = mega as unknown as Record<string, unknown>; return (
-                            <div key={m.id as string} className="p-4 rounded-xl bg-gradient-to-br from-neon-purple/5 to-neon-cyan/5 border border-neon-purple/20 hover:border-neon-purple/40 transition-colors">
+                            <div key={m.id as string} className={cn("p-4 rounded-xl bg-gradient-to-br from-neon-purple/5 to-neon-cyan/5 border transition-colors", selectedAlbumId === (m.id as string) ? "border-neon-cyan ring-1 ring-neon-cyan" : "border-neon-purple/20 hover:border-neon-purple/40")}>
                               <div className="w-full aspect-square rounded-lg bg-neon-purple/10 flex items-center justify-center mb-3">
                                 <Disc3 className="w-12 h-12 text-neon-purple/40" />
                               </div>

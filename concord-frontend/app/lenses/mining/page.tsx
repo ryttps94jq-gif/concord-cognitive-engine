@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import { useLensNav } from '@/hooks/useLensNav';
@@ -14,7 +14,7 @@ import {
   Hammer as Pickaxe, Plus, Search, Trash2, BarChart3,
   Layers, ChevronDown,
   Mountain, Gem, HardHat, Truck,
-  Eye, Map, Drill,
+  Eye, Map, Drill, Zap,
 } from 'lucide-react';
 
 const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });
@@ -114,6 +114,16 @@ export default function MiningLensPage() {
 
   const runAction = useRunArtifact('mining');
 
+  const handleAction = useCallback(async (action: string, artifactId?: string) => {
+    const targetId = artifactId || items[0]?.id;
+    if (!targetId) return;
+    try {
+      await runAction.mutateAsync({ id: targetId, action });
+    } catch (err) {
+      console.error('Action failed:', err);
+    }
+  }, [items, runAction]);
+
   const stats = useMemo(() => ({
     activeSites: sites.filter(s => (s.data as SiteData).status === 'active').length,
     totalSites: sites.length,
@@ -149,6 +159,7 @@ export default function MiningLensPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {runAction.isPending && <span className="text-xs text-neon-cyan animate-pulse">AI processing...</span>}
           <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} compact />
           <DTUExportButton domain="mining" data={realtimeData || {}} compact />
         </div>
@@ -227,9 +238,14 @@ export default function MiningLensPage() {
                   </span>
                 )}
               </div>
-              <button onClick={() => remove(item.id)} className="p-1.5 hover:bg-zinc-800 rounded text-gray-500 hover:text-red-400">
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
+              <div className="flex items-center gap-1">
+                <button onClick={() => handleAction('analyze', item.id)} className="p-1.5 hover:bg-zinc-800 rounded text-gray-500 hover:text-neon-cyan">
+                  <Zap className="w-3.5 h-3.5" />
+                </button>
+                <button onClick={() => remove(item.id)} className="p-1.5 hover:bg-zinc-800 rounded text-gray-500 hover:text-red-400">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           </motion.div>
         ))}

@@ -79,6 +79,13 @@ export default function ConsultingLensPage() {
   const { items, isLoading, isError, error, refetch, create, update, remove } = useLensData<ConsultingArtifact>('consulting', activeArtifactType, { seed: [] });
   const runAction = useRunArtifact('consulting');
 
+  const filtered = useMemo(() => {
+    let result = items;
+    if (searchQuery) { const q = searchQuery.toLowerCase(); result = result.filter(i => i.title.toLowerCase().includes(q) || (i.data as unknown as ConsultingArtifact).description?.toLowerCase().includes(q)); }
+    if (filterStatus !== 'all') result = result.filter(i => (i.data as unknown as ConsultingArtifact).status === filterStatus);
+    return result;
+  }, [items, searchQuery, filterStatus]);
+
   const handleAction = useCallback(async (action: string, artifactId?: string) => {
     const targetId = artifactId || filtered[0]?.id;
     if (!targetId) return;
@@ -88,13 +95,6 @@ export default function ConsultingLensPage() {
       console.error('Action failed:', err);
     }
   }, [filtered, runAction]);
-
-  const filtered = useMemo(() => {
-    let result = items;
-    if (searchQuery) { const q = searchQuery.toLowerCase(); result = result.filter(i => i.title.toLowerCase().includes(q) || (i.data as unknown as ConsultingArtifact).description?.toLowerCase().includes(q)); }
-    if (filterStatus !== 'all') result = result.filter(i => (i.data as unknown as ConsultingArtifact).status === filterStatus);
-    return result;
-  }, [items, searchQuery, filterStatus]);
 
   const openCreate = () => { setEditingItem(null); setFormName(''); setFormDescription(''); setFormStatus('draft'); setFormNotes(''); setFormClient(''); setFormEngType('Strategy'); setFormFee(''); setFormRate(''); setFormStartDate(''); setFormEndDate(''); setFormScope(''); setEditorOpen(true); };
 
@@ -180,6 +180,7 @@ export default function ConsultingLensPage() {
               <div className="flex items-center gap-2">
                 {d.totalFee && <span className="text-xs text-green-400">${d.totalFee.toLocaleString()}</span>}
                 <span className={`text-xs px-2 py-0.5 rounded-full bg-${sc.color}/20 text-${sc.color}`}>{sc.label}</span>
+                <button onClick={e => { e.stopPropagation(); handleAction('analyze', item.id); }} className={ds.btnGhost}><Zap className="w-4 h-4 text-neon-cyan" /></button>
                 <button onClick={e => { e.stopPropagation(); remove(item.id); }} className={ds.btnGhost}><Trash2 className="w-4 h-4 text-red-400" /></button>
               </div>
             </div>
@@ -196,7 +197,7 @@ export default function ConsultingLensPage() {
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center"><Lightbulb className="w-5 h-5 text-white" /></div>
           <div><div className="flex items-center gap-2"><h1 className={ds.heading1}>Consulting</h1><LiveIndicator isLive={isLive} lastUpdated={lastUpdated} /></div><p className={ds.textMuted}>Engagements, proposals, deliverables, clients, and frameworks</p></div>
         </div>
-        <div className="flex items-center gap-2"><DTUExportButton domain="consulting" data={{}} compact /><button onClick={() => setShowDashboard(!showDashboard)} className={cn(showDashboard ? ds.btnPrimary : ds.btnSecondary)}><BarChart3 className="w-4 h-4" /> Dashboard</button></div>
+        <div className="flex items-center gap-2">{runAction.isPending && <span className="text-xs text-neon-cyan animate-pulse">AI processing...</span>}<DTUExportButton domain="consulting" data={{}} compact /><button onClick={() => setShowDashboard(!showDashboard)} className={cn(showDashboard ? ds.btnPrimary : ds.btnSecondary)}><BarChart3 className="w-4 h-4" /> Dashboard</button></div>
       </header>
       <RealtimeDataPanel domain="consulting" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <UniversalActions domain="consulting" artifactId={items[0]?.id} compact />

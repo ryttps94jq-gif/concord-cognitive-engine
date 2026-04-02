@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
@@ -12,7 +12,7 @@ import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import {
   Heart, Plus, Search, Trash2, BarChart3,
   Layers, ChevronDown, Users, Calendar,
-  Stethoscope, Syringe, Pill, ClipboardList,
+  Stethoscope, Syringe, Pill, ClipboardList, Zap,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -109,6 +109,16 @@ export default function VeterinaryLensPage() {
 
   const runAction = useRunArtifact('veterinary');
 
+  const handleAction = useCallback(async (action: string, artifactId?: string) => {
+    const targetId = artifactId || items[0]?.id;
+    if (!targetId) return;
+    try {
+      await runAction.mutateAsync({ id: targetId, action });
+    } catch (err) {
+      console.error('Action failed:', err);
+    }
+  }, [items, runAction]);
+
   const stats = useMemo(() => ({
     activePatients: patients.filter(p => (p.data as PatientData).status === 'active').length,
     totalPatients: patients.length,
@@ -147,6 +157,7 @@ export default function VeterinaryLensPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {runAction.isPending && <span className="text-xs text-neon-cyan animate-pulse">AI processing...</span>}
           <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} compact />
           <DTUExportButton domain="veterinary" data={realtimeData || {}} compact />
         </div>
@@ -274,9 +285,14 @@ export default function VeterinaryLensPage() {
                   </span>
                 )}
               </div>
-              <button onClick={() => remove(item.id)} className="p-1.5 hover:bg-zinc-800 rounded text-gray-500 hover:text-red-400">
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
+              <div className="flex items-center gap-1">
+                <button onClick={() => handleAction('analyze', item.id)} className="p-1.5 hover:bg-zinc-800 rounded text-gray-500 hover:text-neon-cyan">
+                  <Zap className="w-3.5 h-3.5" />
+                </button>
+                <button onClick={() => remove(item.id)} className="p-1.5 hover:bg-zinc-800 rounded text-gray-500 hover:text-red-400">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           </motion.div>
           );

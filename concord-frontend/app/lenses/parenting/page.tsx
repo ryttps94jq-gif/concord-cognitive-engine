@@ -6,7 +6,7 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
-  Baby, Plus, Search, Trash2, Calendar, Heart, Clock, Layers, ChevronDown, Milestone, NotebookPen,
+  Baby, Plus, Search, Trash2, Calendar, Heart, Clock, Layers, ChevronDown, Milestone, NotebookPen, Loader2, BookOpen,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -130,6 +130,22 @@ export default function ParentingLensPage() {
         <div className="lens-card"><Clock className="w-5 h-5 text-neon-cyan mb-2" /><p className="text-2xl font-bold">{stats.thisMonth}</p><p className="text-sm text-gray-400">Routines</p></div>
         <div className="lens-card"><NotebookPen className="w-5 h-5 text-neon-green mb-2" /><p className="text-2xl font-bold">{stats.children}</p><p className="text-sm text-gray-400">Resources Saved</p></div>
         <div className="lens-card"><Heart className="w-5 h-5 text-red-400 mb-2" /><p className="text-2xl font-bold">{stats.categories}</p><p className="text-sm text-gray-400">Categories</p></div>
+      </div>
+
+      {/* Tab Navigation */}
+      <div className="flex gap-1 bg-lattice-surface p-1 rounded-lg border border-lattice-border">
+        {([
+          { key: 'milestones' as Tab, label: 'Milestones', icon: Milestone },
+          { key: 'schedules' as Tab, label: 'Schedules', icon: Clock },
+          { key: 'health' as Tab, label: 'Health', icon: Heart },
+          { key: 'activities' as Tab, label: 'Activities', icon: BookOpen },
+        ]).map(t => (
+          <button key={t.key} onClick={() => setTab(t.key)}
+            className={cn('flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors flex-1 justify-center',
+              tab === t.key ? 'bg-pink-500/20 text-pink-400' : 'text-gray-400 hover:text-white hover:bg-white/5')}>
+            <t.icon className="w-4 h-4" /> {t.label}
+          </button>
+        ))}
       </div>
 
       <div className="relative">

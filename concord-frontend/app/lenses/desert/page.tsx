@@ -158,6 +158,7 @@ export default function DesertLensPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {runAction.isPending && <span className="text-xs text-neon-cyan animate-pulse">AI processing...</span>}
           <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} compact />
           <DTUExportButton domain="desert" data={realtimeData || {}} compact />
         </div>
@@ -229,6 +230,9 @@ export default function DesertLensPage() {
                   </span>
                 )}
               </div>
+              <button onClick={e => { e.stopPropagation(); handleAction('analyze', item.id); }} className="p-1.5 hover:bg-zinc-800 rounded text-gray-500 hover:text-neon-cyan">
+                <Zap className="w-3.5 h-3.5" />
+              </button>
               <button onClick={() => remove(item.id)} className="p-1.5 hover:bg-zinc-800 rounded text-gray-500 hover:text-red-400">
                 <Trash2 className="w-3.5 h-3.5" />
               </button>

@@ -38,11 +38,11 @@ export default function BioLensPage() {
   const runAction = useRunArtifact('bio');
 
   const handleAction = useCallback((artifactId: string) => {
-    runAction.mutate({ artifactId, action: 'analyze' });
+    runAction.mutate({ id: artifactId, action: 'analyze' });
   }, [runAction]);
 
   const handleSave = useCallback((id: string, data: Record<string, unknown>) => {
-    update({ id, data });
+    update(id, { data });
   }, [update]);
 
   const handleCreate = useCallback(() => {

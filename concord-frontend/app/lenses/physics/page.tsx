@@ -975,12 +975,12 @@ export default function PhysicsLensPage() {
           { label: 'Constraints', value: constraints.length, color: 'text-cyan-400', bg: 'bg-cyan-500/10', icon: Link2 },
           { label: 'Force Fields', value: forceFields.filter(f => f.active).length, color: 'text-amber-400', bg: 'bg-amber-500/10', icon: Magnet },
           { label: 'Time Scale', value: `${settings.timeScale}x`, color: 'text-emerald-400', bg: 'bg-emerald-500/10', icon: Gauge },
-        ].map((s, i) => (
+        ].map((s, _i) => (
           <motion.div
             key={s.label}
             initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: i * 0.06 }}
+            transition={{ delay: _i * 0.06 }}
             className={`${s.bg} border border-white/5 rounded-lg p-3 flex items-center gap-3`}
           >
             <s.icon className={`w-4 h-4 ${s.color}`} />
@@ -1005,7 +1005,7 @@ export default function PhysicsLensPage() {
           { sym: '\u03BC', val: settings.airFriction.toFixed(3), label: 'Air Friction' },
           { sym: 'F', val: `F = ma`, label: 'Newton 2' },
           { sym: 'E', val: `\u00BD mv\u00B2`, label: 'Kinetic Energy' },
-        ].map((eq, i) => (
+        ].map((eq, _i) => (
           <div key={eq.label} className="flex items-center gap-2 flex-shrink-0 px-2 py-1 bg-white/[0.03] rounded">
             <span className="text-sm font-mono font-bold text-violet-400">{eq.sym}</span>
             <span className="text-xs text-gray-400 font-mono">{eq.val}</span>

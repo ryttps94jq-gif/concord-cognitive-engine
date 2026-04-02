@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
@@ -164,6 +164,16 @@ export default function SpaceLensPage() {
 
   const runAction = useRunArtifact('space');
 
+  const handleAction = useCallback(async (action: string, artifactId?: string) => {
+    const targetId = artifactId || items[0]?.id;
+    if (!targetId) return;
+    try {
+      await runAction.mutateAsync({ id: targetId, action });
+    } catch (err) {
+      console.error('Action failed:', err);
+    }
+  }, [items, runAction]);
+
   const stats = useMemo(() => {
     const activeMissions = missions.filter(m => ['active', 'orbit'].includes((m.data as MissionData).status)).length;
     const totalMissions = missions.length;
@@ -242,6 +252,7 @@ export default function SpaceLensPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {runAction.isPending && <span className="text-xs text-neon-cyan animate-pulse">AI processing...</span>}
           <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} compact />
           <DTUExportButton domain="space" data={realtimeData || {}} compact />
         </div>
@@ -480,9 +491,14 @@ export default function SpaceLensPage() {
                       </span>
                     )}
                   </div>
-                  <button onClick={() => remove(item.id)} className="p-1.5 hover:bg-zinc-800 rounded text-gray-500 hover:text-red-400 shrink-0">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button onClick={() => handleAction('analyze', item.id)} className="p-1.5 hover:bg-zinc-800 rounded text-gray-500 hover:text-neon-cyan">
+                      <Zap className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => remove(item.id)} className="p-1.5 hover:bg-zinc-800 rounded text-gray-500 hover:text-red-400">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Objective / description */}

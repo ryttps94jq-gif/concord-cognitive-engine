@@ -1124,6 +1124,9 @@ export default function ChatLensPage() {
                 : 'bg-lattice-surface border border-lattice-border text-gray-200 rounded-bl-md hover:border-lattice-border/80 transition-colors'
           )}>
             <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
+            {timeStr && (
+              <p className="text-[10px] text-gray-500 mt-1 select-none">{timeStr}</p>
+            )}
 
             {/* Attachment chips on user messages */}
             {message.attachments && message.attachments.length > 0 && (

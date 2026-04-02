@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
@@ -10,7 +10,7 @@ import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   BookOpen, Plus, Search, Trash2,
   Eye, Layers, ChevronDown, Scale, Lightbulb,
-  MessageSquare, Sparkles, Target, Brain,
+  MessageSquare, Sparkles, Target, Brain, Zap, Loader2,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -105,6 +105,10 @@ export default function PhilosophyLensPage() {
 
   const runArtifact = useRunArtifact('philosophy');
 
+  const handleAction = useCallback((artifactId: string) => {
+    runArtifact.mutate({ id: artifactId, action: 'analyze' });
+  }, [runArtifact]);
+
   // Filtering
   const filtered = useMemo(() => {
     let list = [...items];
@@ -158,6 +162,7 @@ export default function PhilosophyLensPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap ml-auto">
+          {runArtifact.isPending && <Loader2 className="w-4 h-4 animate-spin text-neon-purple" />}
           <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} compact />
           <DTUExportButton domain="philosophy" data={realtimeData || {}} compact />
           {realtimeAlerts.length > 0 && (
@@ -425,9 +430,13 @@ export default function PhilosophyLensPage() {
                 <>
                   <div className="flex items-center justify-between">
                     <h2 className="font-semibold text-white">{selected.title}</h2>
-                    <button onClick={() => remove(selected.id)} className="text-red-400 hover:text-red-300">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => handleAction(selected.id)} className="text-gray-500 hover:text-neon-purple" title="Run AI analysis"><Zap className="w-4 h-4" /></button>
+                      <button onClick={() => update({ id: selected.id, data: { ...selected.data, lastReviewed: new Date().toISOString() } })} className="text-gray-500 hover:text-blue-400" title="Update"><Eye className="w-4 h-4" /></button>
+                      <button onClick={() => remove(selected.id)} className="text-red-400 hover:text-red-300">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                   <p className={cn('text-xs font-medium', BRANCH_COLORS[selected.data.branch] || 'text-gray-400')}>
                     {selected.data.branch?.replace(/_/g, ' ')}

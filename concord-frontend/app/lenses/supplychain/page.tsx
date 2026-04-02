@@ -169,6 +169,7 @@ export default function SupplyChainLensPage() {
               <div className="flex items-center gap-2">
                 {d.totalCost && <span className="text-xs text-green-400">${d.totalCost.toLocaleString()}</span>}
                 <span className={`text-xs px-2 py-0.5 rounded-full bg-${sc.color}/20 text-${sc.color}`}>{sc.label}</span>
+                <button onClick={e => { e.stopPropagation(); handleAction('analyze', item.id); }} className={ds.btnGhost}><Zap className="w-4 h-4 text-neon-cyan" /></button>
                 <button onClick={e => { e.stopPropagation(); remove(item.id); }} className={ds.btnGhost}><Trash2 className="w-4 h-4 text-red-400" /></button>
               </div>
             </div>
@@ -185,7 +186,7 @@ export default function SupplyChainLensPage() {
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-500 to-cyan-600 flex items-center justify-center"><Truck className="w-5 h-5 text-white" /></div>
           <div><div className="flex items-center gap-2"><h1 className={ds.heading1}>Supply Chain</h1><LiveIndicator isLive={isLive} lastUpdated={lastUpdated} /></div><p className={ds.textMuted}>Orders, suppliers, inventory, shipments, and procurement</p></div>
         </div>
-        <div className="flex items-center gap-2"><DTUExportButton domain="supplychain" data={{}} compact /><button onClick={() => setShowDashboard(!showDashboard)} className={cn(showDashboard ? ds.btnPrimary : ds.btnSecondary)}><BarChart3 className="w-4 h-4" /> Dashboard</button></div>
+        <div className="flex items-center gap-2">{runAction.isPending && <span className="text-xs text-neon-cyan animate-pulse">AI processing...</span>}<DTUExportButton domain="supplychain" data={{}} compact /><button onClick={() => setShowDashboard(!showDashboard)} className={cn(showDashboard ? ds.btnPrimary : ds.btnSecondary)}><BarChart3 className="w-4 h-4" /> Dashboard</button></div>
       </header>
       <RealtimeDataPanel domain="supplychain" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <UniversalActions domain="supplychain" artifactId={items[0]?.id} compact />

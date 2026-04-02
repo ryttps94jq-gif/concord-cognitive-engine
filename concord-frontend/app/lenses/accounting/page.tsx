@@ -2197,7 +2197,7 @@ export default function AccountingLensPage() {
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className={ds.panel}>
                 <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2"><Clock className="w-4 h-4 text-neon-cyan" /> Recent Journal Entries</h3>
                 <div className="space-y-0">
-                  {transactionData.items.slice(0, 5).map((t, i) => {
+                  {transactionData.items.slice(0, 5).map((t, _i) => {
                     const d = t.data as unknown as Transaction;
                     return (
                       <div key={t.id} className="flex items-center gap-3 py-2 border-b border-white/5 last:border-0">

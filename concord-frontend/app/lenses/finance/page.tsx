@@ -202,7 +202,7 @@ export default function FinanceLensPage() {
   const [showFeatures, setShowFeatures] = useState(false);
 
   // Chart tooltip state
-  const [chartTooltip, setChartTooltip] = useState<{ x: number; y: number; value: number; index: number } | null>(null);
+  const [chartTooltip, setChartTooltip] = useState<{ x: number; y: number; value: number; index: number; min?: number } | null>(null);
   const chartDataRef = useRef<number[]>([]);
   const chartMetaRef = useRef<{ padding: number; width: number; height: number; minVal: number; maxVal: number; range: number }>({ padding: 40, width: 1000, height: 320, minVal: 0, maxVal: 1, range: 1 });
 
@@ -422,7 +422,7 @@ export default function FinanceLensPage() {
     const tooltipX = e.clientX - rect.left;
     const tooltipY = e.clientY - rect.top;
 
-    setChartTooltip({ x: tooltipX, y: tooltipY, value: val, index: clampedIndex });
+    setChartTooltip({ x: tooltipX, y: tooltipY, value: val, index: clampedIndex, min: minVal });
 
     // Redraw crosshair on canvas — trigger a re-render of chart + crosshair
     const ctx = canvas.getContext('2d');
@@ -708,6 +708,11 @@ export default function FinanceLensPage() {
                 <p className="text-sm font-bold font-mono text-white">
                   {formatCurrency(chartTooltip.value)}
                 </p>
+                {chartTooltip.min !== undefined && (
+                  <p className="text-[10px] text-gray-500 font-mono">
+                    Min: {formatCurrency(chartTooltip.min)}
+                  </p>
+                )}
               </div>
             </div>
           )}

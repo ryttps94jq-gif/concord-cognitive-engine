@@ -8,7 +8,7 @@ import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   Hammer, Plus, Search, Trash2, DollarSign,
   CheckCircle2, Wrench, Layers, ChevronDown,
-  Home, ToggleLeft, ToggleRight,
+  Home, ToggleLeft, ToggleRight, Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -289,7 +289,7 @@ export default function HomeImprovementLensPage() {
                           </div>
                         )}
                       </div>
-                      <button onClick={() => remove(p.id)} className="text-gray-500 hover:text-red-400 p-1 ml-3"><Trash2 className="w-4 h-4" /></button>
+                      <button onClick={() => remove(p.id)} disabled={deleteMut.isPending} className="text-gray-500 hover:text-red-400 p-1 ml-3">{deleteMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}</button>
                     </motion.div>
                   ))}
                 </div>

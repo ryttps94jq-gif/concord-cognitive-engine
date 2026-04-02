@@ -89,6 +89,13 @@ export default function CarpentryLensPage() {
   const { items, isLoading, isError, error, refetch, create, update, remove } = useLensData<TradeArtifact>('carpentry', activeArtifactType, { seed: [] });
   const runAction = useRunArtifact('carpentry');
 
+  const filtered = useMemo(() => {
+    let result = items;
+    if (searchQuery) { const q = searchQuery.toLowerCase(); result = result.filter(i => i.title.toLowerCase().includes(q) || (i.data as unknown as TradeArtifact).description?.toLowerCase().includes(q)); }
+    if (filterStatus !== 'all') result = result.filter(i => (i.data as unknown as TradeArtifact).status === filterStatus);
+    return result;
+  }, [items, searchQuery, filterStatus]);
+
   const handleAction = useCallback(async (action: string, artifactId?: string) => {
     const targetId = artifactId || filtered[0]?.id;
     if (!targetId) return;
@@ -98,13 +105,6 @@ export default function CarpentryLensPage() {
       console.error('Action failed:', err);
     }
   }, [filtered, runAction]);
-
-  const filtered = useMemo(() => {
-    let result = items;
-    if (searchQuery) { const q = searchQuery.toLowerCase(); result = result.filter(i => i.title.toLowerCase().includes(q) || (i.data as unknown as TradeArtifact).description?.toLowerCase().includes(q)); }
-    if (filterStatus !== 'all') result = result.filter(i => (i.data as unknown as TradeArtifact).status === filterStatus);
-    return result;
-  }, [items, searchQuery, filterStatus]);
 
   const openCreate = () => { setEditingItem(null); setFormName(''); setFormDescription(''); setFormStatus('scheduled'); setFormNotes(''); setFormClient(''); setFormAddress(''); setFormPhone(''); setFormScheduledDate(''); setFormLaborHours(''); setFormLaborRate(''); setFormMaterialCost(''); setFormMaterial(TRADE_MATERIALS[0] || ''); setFormQuantity(''); setFormCertType(TRADE_CERTS[0] || ''); setFormAmount(''); setEditorOpen(true); };
   const openEdit = (item: LensItem<TradeArtifact>) => { const d = item.data as unknown as TradeArtifact; setEditingItem(item); setFormName(d.name || ''); setFormDescription(d.description || ''); setFormStatus(d.status || 'scheduled'); setFormNotes(d.notes || ''); setFormClient(d.client || ''); setFormAddress(d.address || ''); setFormPhone(d.phone || ''); setFormScheduledDate(d.scheduledDate || ''); setFormLaborHours(d.laborHours?.toString() || ''); setFormLaborRate(d.laborRate?.toString() || ''); setFormMaterialCost(d.materialCost?.toString() || ''); setFormMaterial(d.material || TRADE_MATERIALS[0] || ''); setFormQuantity(d.quantity?.toString() || ''); setFormCertType(d.certType || TRADE_CERTS[0] || ''); setFormAmount(d.amount?.toString() || ''); setEditorOpen(true); };

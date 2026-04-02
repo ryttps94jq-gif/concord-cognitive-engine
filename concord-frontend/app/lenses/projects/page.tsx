@@ -116,7 +116,7 @@ export default function ProjectsLensPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className={ds.panel}><FolderKanban className="w-5 h-5 text-blue-400 mb-2" /><p className={ds.textMuted}>Total Projects</p><p className="text-xl font-bold text-white">{items.length}</p></div>
         <div className={ds.panel}><Gauge className="w-5 h-5 text-green-400 mb-2" /><p className={ds.textMuted}>Avg Progress</p><p className="text-xl font-bold text-white">{avgProgress.toFixed(0)}%</p></div>
-        <div className={ds.panel}><DollarSign className="w-5 h-5 text-yellow-400 mb-2" /><p className={ds.textMuted}>Budget</p><p className="text-xl font-bold text-white">${totalBudget.toLocaleString()}</p></div>
+        <div className={ds.panel}><DollarSign className="w-5 h-5 text-yellow-400 mb-2" /><p className={ds.textMuted}>Budget</p><p className="text-xl font-bold text-white">${totalBudget.toLocaleString()}</p><p className={ds.textMuted}>${totalSpent.toLocaleString()} spent</p></div>
         <div className={ds.panel}><AlertTriangle className="w-5 h-5 text-red-400 mb-2" /><p className={ds.textMuted}>At Risk</p><p className="text-xl font-bold text-white">{all.filter(p => p.status === 'at_risk' || p.status === 'overdue').length}</p></div>
       </div>
     );
@@ -191,7 +191,7 @@ export default function ProjectsLensPage() {
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center"><FolderKanban className="w-5 h-5 text-white" /></div>
           <div><div className="flex items-center gap-2"><h1 className={ds.heading1}>Projects</h1><LiveIndicator isLive={isLive} lastUpdated={lastUpdated} /></div><p className={ds.textMuted}>Projects, tasks, milestones, resources, timeline, and risk management</p></div>
         </div>
-        <div className="flex items-center gap-2"><DTUExportButton domain="projects" data={{}} compact /><button onClick={() => setShowDashboard(!showDashboard)} className={cn(showDashboard ? ds.btnPrimary : ds.btnSecondary)}><BarChart3 className="w-4 h-4" /> Dashboard</button></div>
+        <div className="flex items-center gap-2"><DTUExportButton domain="projects" data={{}} compact /><button onClick={() => runAction('analyze-risks', {})} className={ds.btnSecondary} title="Run risk analysis"><Zap className="w-4 h-4" /> Analyze</button><button onClick={() => setShowDashboard(!showDashboard)} className={cn(showDashboard ? ds.btnPrimary : ds.btnSecondary)}><BarChart3 className="w-4 h-4" /> Dashboard</button></div>
       </header>
       <RealtimeDataPanel domain="projects" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <UniversalActions domain="projects" artifactId={items[0]?.id} compact />

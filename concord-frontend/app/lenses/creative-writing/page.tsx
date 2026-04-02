@@ -278,6 +278,13 @@ export default function CreativeWritingPage() {
           </>
         )}
 
+        {(isLoading || dtusLoading) && (
+          <div className="flex items-center justify-center py-4">
+            <div className="w-5 h-5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+            <span className="ml-2 text-xs text-gray-400">Loading...</span>
+          </div>
+        )}
+
         {isError && <ErrorState error={error?.message} onRetry={refetch} />}
 
         {/* Works list */}

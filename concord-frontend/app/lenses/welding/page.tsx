@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
@@ -11,7 +11,7 @@ import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   Flame, Wrench, ClipboardList, DollarSign, Users,
   Plus, Search, X, Trash2, BarChart3, CheckCircle2, FileText, Award, Calculator,
-  Layers, ChevronDown, Receipt, Gauge, Sparkles,
+  Layers, ChevronDown, Receipt, Gauge, Sparkles, Zap,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -96,6 +96,16 @@ export default function WeldingLensPage() {
     return result;
   }, [items, searchQuery, filterStatus]);
 
+  const handleAction = useCallback(async (action: string, artifactId?: string) => {
+    const targetId = artifactId || filtered[0]?.id;
+    if (!targetId) return;
+    try {
+      await runAction.mutateAsync({ id: targetId, action });
+    } catch (err) {
+      console.error('Action failed:', err);
+    }
+  }, [filtered, runAction]);
+
   const openCreate = () => { setEditingItem(null); setFormName(''); setFormDescription(''); setFormStatus('scheduled'); setFormNotes(''); setFormClient(''); setFormAddress(''); setFormPhone(''); setFormScheduledDate(''); setFormLaborHours(''); setFormLaborRate(''); setFormMaterialCost(''); setFormMaterial(TRADE_MATERIALS[0] || ''); setFormQuantity(''); setFormCertType(TRADE_CERTS[0] || ''); setFormAmount(''); setEditorOpen(true); };
   const openEdit = (item: LensItem<TradeArtifact>) => { const d = item.data as unknown as TradeArtifact; setEditingItem(item); setFormName(d.name || ''); setFormDescription(d.description || ''); setFormStatus(d.status || 'scheduled'); setFormNotes(d.notes || ''); setFormClient(d.client || ''); setFormAddress(d.address || ''); setFormPhone(d.phone || ''); setFormScheduledDate(d.scheduledDate || ''); setFormLaborHours(d.laborHours?.toString() || ''); setFormLaborRate(d.laborRate?.toString() || ''); setFormMaterialCost(d.materialCost?.toString() || ''); setFormMaterial(d.material || TRADE_MATERIALS[0] || ''); setFormQuantity(d.quantity?.toString() || ''); setFormCertType(d.certType || TRADE_CERTS[0] || ''); setFormAmount(d.amount?.toString() || ''); setEditorOpen(true); };
 
@@ -176,7 +186,7 @@ export default function WeldingLensPage() {
       : filtered.length === 0 ? <div className={cn(ds.panel, 'text-center py-12')}><Flame className="w-12 h-12 text-gray-600 mx-auto mb-3" /><p className={ds.textMuted}>No {activeArtifactType} items yet</p><button onClick={openCreate} className={cn(ds.btnPrimary, 'mt-3')}><Plus className="w-4 h-4" /> Create First</button></div>
       : filtered.map((item, index) => {
         const d = item.data as unknown as TradeArtifact; const sc = STATUS_CONFIG[d.status] || STATUS_CONFIG.pending;
-        return (<motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className={ds.panelHover} onClick={() => openEdit(item)}><div className="flex items-center justify-between"><div className="flex items-center gap-3"><Flame className="w-5 h-5 text-neon-cyan" /><div><p className="text-white font-medium">{d.name || item.title}</p><p className={ds.textMuted}>{d.client || ''} {d.address ? `- ${d.address}` : ''}</p></div></div><div className="flex items-center gap-2">{(d.totalCost || d.amount) && <span className="text-xs text-green-400">${(d.totalCost || d.amount || 0).toLocaleString()}</span>}<span className={`text-xs px-2 py-0.5 rounded-full bg-${sc.color}/20 text-${sc.color}`}>{sc.label}</span><button onClick={e => { e.stopPropagation(); remove(item.id); }} className={ds.btnGhost}><Trash2 className="w-4 h-4 text-red-400" /></button></div></div></motion.div>);
+        return (<motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className={ds.panelHover} onClick={() => openEdit(item)}><div className="flex items-center justify-between"><div className="flex items-center gap-3"><Flame className="w-5 h-5 text-neon-cyan" /><div><p className="text-white font-medium">{d.name || item.title}</p><p className={ds.textMuted}>{d.client || ''} {d.address ? `- ${d.address}` : ''}</p></div></div><div className="flex items-center gap-2">{(d.totalCost || d.amount) && <span className="text-xs text-green-400">${(d.totalCost || d.amount || 0).toLocaleString()}</span>}<span className={`text-xs px-2 py-0.5 rounded-full bg-${sc.color}/20 text-${sc.color}`}>{sc.label}</span><button onClick={e => { e.stopPropagation(); handleAction('analyze', item.id); }} className={ds.btnGhost}><Zap className="w-4 h-4 text-neon-cyan" /></button><button onClick={e => { e.stopPropagation(); remove(item.id); }} className={ds.btnGhost}><Trash2 className="w-4 h-4 text-red-400" /></button></div></div></motion.div>);
       })}
     </div>
   );
@@ -188,7 +198,7 @@ export default function WeldingLensPage() {
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center"><Flame className="w-5 h-5 text-white" /></div>
           <div><div className="flex items-center gap-2"><h1 className={ds.heading1}>Welding</h1><LiveIndicator isLive={isLive} lastUpdated={lastUpdated} /></div><p className={ds.textMuted}>Jobs, estimates, codes, materials, CRM, invoicing, inspections, and certifications</p></div>
         </div>
-        <div className="flex items-center gap-2"><DTUExportButton domain="welding" data={{}} compact /><button onClick={() => setShowDashboard(!showDashboard)} className={cn(showDashboard ? ds.btnPrimary : ds.btnSecondary)}><BarChart3 className="w-4 h-4" /> Dashboard</button></div>
+        <div className="flex items-center gap-2">{runAction.isPending && <span className="text-xs text-neon-cyan animate-pulse">AI processing...</span>}<DTUExportButton domain="welding" data={{}} compact /><button onClick={() => setShowDashboard(!showDashboard)} className={cn(showDashboard ? ds.btnPrimary : ds.btnSecondary)}><BarChart3 className="w-4 h-4" /> Dashboard</button></div>
       </header>
       <RealtimeDataPanel domain="welding" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <UniversalActions domain="welding" artifactId={items[0]?.id} compact />

@@ -136,7 +136,7 @@ export default function DefenseLensPage() {
   const runAction = useRunArtifact('defense');
 
   const handleAction = useCallback((artifactId: string) => {
-    runAction.mutate({ artifactId, action: 'analyze' });
+    runAction.mutate({ id: artifactId, action: 'analyze' });
   }, [runAction]);
 
   const handleCreate = useCallback(() => {
@@ -145,7 +145,7 @@ export default function DefenseLensPage() {
   }, [create, currentType]);
 
   const handleUpdate = useCallback((id: string, data: ArtifactDataUnion) => {
-    update({ id, data });
+    update(id, { data });
   }, [update]);
 
   // Dashboard stats

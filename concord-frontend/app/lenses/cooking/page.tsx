@@ -275,7 +275,7 @@ export default function CookingLensPage() {
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 {r.cuisine && <span className="px-2 py-0.5 rounded bg-lattice-elevated text-orange-300">{r.cuisine}</span>}
                 {badge && (
-                  <span className={cn('px-2 py-0.5 rounded font-semibold flex items-center gap-1', badge.color)}>
+                  <span className={cn('px-2 py-0.5 rounded font-semibold flex items-center gap-1', badge.color, DIFFICULTY_COLORS[r.difficulty])}>
                     <span className="tracking-tighter">{badge.icon}</span> {badge.label}
                   </span>
                 )}

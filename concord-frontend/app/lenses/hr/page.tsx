@@ -132,16 +132,6 @@ export default function HRLensPage() {
   const { items, isLoading, isError, error, refetch, create, update, remove } = useLensData<HRArtifact>('hr', activeArtifactType, { seed: [] });
   const runAction = useRunArtifact('hr');
 
-  const handleAction = useCallback(async (action: string, artifactId?: string) => {
-    const targetId = artifactId || filtered[0]?.id;
-    if (!targetId) return;
-    try {
-      await runAction.mutateAsync({ id: targetId, action });
-    } catch (err) {
-      console.error('Action failed:', err);
-    }
-  }, [filtered, runAction]);
-
   const filtered = useMemo(() => {
     let result = items;
     if (searchQuery) {
@@ -151,6 +141,16 @@ export default function HRLensPage() {
     if (filterStatus !== 'all') result = result.filter(i => (i.data as unknown as HRArtifact).status === filterStatus);
     return result;
   }, [items, searchQuery, filterStatus]);
+
+  const handleAction = useCallback(async (action: string, artifactId?: string) => {
+    const targetId = artifactId || filtered[0]?.id;
+    if (!targetId) return;
+    try {
+      await runAction.mutateAsync({ id: targetId, action });
+    } catch (err) {
+      console.error('Action failed:', err);
+    }
+  }, [filtered, runAction]);
 
   const openCreate = () => {
     setEditingItem(null); setFormName(''); setFormDescription(''); setFormStatus('active'); setFormNotes('');
@@ -294,6 +294,7 @@ export default function HRLensPage() {
                 <div className="flex items-center gap-2">
                   {d.salary && <span className="text-xs text-green-400">${d.salary.toLocaleString()}</span>}
                   <span className={`text-xs px-2 py-0.5 rounded-full bg-${sc.color}/20 text-${sc.color}`}>{sc.label}</span>
+                  <button onClick={e => { e.stopPropagation(); handleAction('analyze', item.id); }} className={ds.btnGhost}><Zap className="w-4 h-4 text-neon-cyan" /></button>
                   <button onClick={e => { e.stopPropagation(); remove(item.id); }} className={ds.btnGhost}><Trash2 className="w-4 h-4 text-red-400" /></button>
                 </div>
               </div>
@@ -330,6 +331,7 @@ export default function HRLensPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {runAction.isPending && <span className="text-xs text-neon-cyan animate-pulse">AI processing...</span>}
           <DTUExportButton domain="hr" data={{}} compact />
           <button onClick={() => setShowDashboard(!showDashboard)} className={cn(showDashboard ? ds.btnPrimary : ds.btnSecondary)}><BarChart3 className="w-4 h-4" /> Dashboard</button>
         </div>

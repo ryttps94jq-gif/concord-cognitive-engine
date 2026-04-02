@@ -120,7 +120,7 @@ export default function AstronomyLensPage() {
   const runAction = useRunArtifact('astronomy');
 
   const handleAction = useCallback((artifactId: string) => {
-    runAction.mutate({ artifactId, action: 'analyze' });
+    runAction.mutate({ id: artifactId, action: 'analyze' });
   }, [runAction]);
 
   const objects = objectItems.map(i => ({ id: i.id, title: i.title, ...(i.data || {}) })) as unknown as (CelestialObject & { id: string; title: string })[];
@@ -338,7 +338,7 @@ export default function AstronomyLensPage() {
                       <button onClick={() => handleAction(obj.id)} className="text-gray-500 hover:text-indigo-400 ml-2" title="Run AI analysis">
                         <Zap className="w-3.5 h-3.5" />
                       </button>
-                      <button onClick={() => update({ id: obj.id, data: { ...obj, notes: `Updated ${new Date().toLocaleDateString()}` } })} className="text-gray-500 hover:text-yellow-400" title="Mark updated">
+                      <button onClick={() => update(obj.id, { data: { ...obj, notes: `Updated ${new Date().toLocaleDateString()}` } })} className="text-gray-500 hover:text-yellow-400" title="Mark updated">
                         <Star className="w-3.5 h-3.5" />
                       </button>
                       <span className={`ml-auto flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded ${

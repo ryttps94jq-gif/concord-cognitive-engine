@@ -3,9 +3,9 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, Plus, Trash2, Layers, ChevronDown, Activity, Power, Radio, Zap, AlertCircle, CheckCircle2, WifiOff, Clock } from 'lucide-react';
+import { Bot, Plus, Trash2, Layers, ChevronDown, Activity, Power, Radio, Zap, AlertCircle, CheckCircle2, WifiOff, Clock, Loader2 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -142,6 +142,10 @@ export default function RoboticsLensPage() {
   const { items: taskItems, create: createTask, remove: removeTask } = useLensData<Record<string, unknown>>('robotics', 'task', { seed: [] });
   const runAction = useRunArtifact('robotics');
 
+  const handleAction = useCallback((artifactId: string) => {
+    runAction.mutate({ id: artifactId, action: 'analyze' });
+  }, [runAction]);
+
   const robots = robotItems.map(i => ({ id: i.id, title: i.title, ...(i.data || {}) })) as unknown as (RobotUnit & { id: string; title: string })[];
   const tasks = taskItems.map(i => ({ id: i.id, title: i.title, ...(i.data || {}) })) as unknown as (TaskQueue & { id: string; title: string })[];
 
@@ -209,6 +213,7 @@ export default function RoboticsLensPage() {
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-bold">Robotics Lens</h1>
               <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} />
+              {runAction.isPending && <Loader2 className="w-4 h-4 animate-spin text-neon-cyan" />}
             </div>
             <p className="text-sm text-gray-400">Fleet management, task queues, and diagnostics</p>
           </div>
@@ -320,6 +325,12 @@ export default function RoboticsLensPage() {
                           <span>{robot.battery ?? 100}%</span>
                         </div>
                         <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                        <button onClick={e => { e.stopPropagation(); handleAction(robot.id); }} className="text-gray-500 hover:text-neon-cyan ml-1" title="Run AI analysis">
+                          <Zap className="w-4 h-4" />
+                        </button>
+                        <button onClick={e => { e.stopPropagation(); update(robot.id, { data: { ...robot, lastUpdated: new Date().toISOString() } as unknown as Partial<Record<string, unknown>> }); }} className="text-gray-500 hover:text-yellow-400 ml-1" title="Update">
+                          <Activity className="w-4 h-4" />
+                        </button>
                         <button onClick={e => { e.stopPropagation(); remove(robot.id); }} className="text-gray-500 hover:text-red-400 ml-1">
                           <Trash2 className="w-4 h-4" />
                         </button>

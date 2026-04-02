@@ -57,7 +57,7 @@ export default function EnergyLensPage() {
   const runAction = useRunArtifact('energy');
 
   const handleAction = useCallback((artifactId: string) => {
-    runAction.mutate({ artifactId, action: 'analyze' });
+    runAction.mutate({ id: artifactId, action: 'analyze' });
   }, [runAction]);
 
   const assets = assetItems.map(i => ({ id: i.id, title: i.title, ...(i.data || {}) })) as unknown as (EnergyAsset & { id: string; title: string })[];
@@ -266,7 +266,7 @@ export default function EnergyLensPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <button onClick={() => handleAction(asset.id)} className="text-gray-500 hover:text-neon-cyan" title="Run AI analysis"><Zap className="w-4 h-4" /></button>
-                      <button onClick={() => update({ id: asset.id, data: { ...(asset as Record<string, unknown>), lastUpdated: new Date().toISOString() } })} className="text-gray-500 hover:text-yellow-400" title="Update"><TrendingUp className="w-4 h-4" /></button>
+                      <button onClick={() => update(asset.id, { data: { ...asset, lastUpdated: new Date().toISOString() } as unknown as Partial<Record<string, unknown>> })} className="text-gray-500 hover:text-yellow-400" title="Update"><TrendingUp className="w-4 h-4" /></button>
                       <button onClick={() => remove(asset.id)} className="text-gray-500 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
                     </div>
                   </motion.div>
