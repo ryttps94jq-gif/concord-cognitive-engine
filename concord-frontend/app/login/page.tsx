@@ -73,6 +73,18 @@ function LoginForm() {
         {/* Form card */}
         <div className="bg-lattice-surface border border-lattice-border rounded-2xl p-8">
           <form onSubmit={handleSubmit} className="space-y-5" aria-describedby={error ? "login-error" : undefined}>
+            {searchParams.get('verified') === 'true' && (
+              <div role="status" className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg text-green-400 text-sm">
+                Email verified! You can now sign in.
+              </div>
+            )}
+
+            {searchParams.get('reset') === 'true' && (
+              <div role="status" className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg text-green-400 text-sm">
+                Password reset! Sign in with your new password.
+              </div>
+            )}
+
             {error && (
               <div id="login-error" role="alert" aria-live="assertive" className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
                 {error}
@@ -122,6 +134,12 @@ function LoginForm() {
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
+            </div>
+
+            <div className="text-right">
+              <Link href="/forgot-password" className="text-sm text-gray-400 hover:text-neon-cyan transition-colors">
+                Forgot password?
+              </Link>
             </div>
 
             <button
