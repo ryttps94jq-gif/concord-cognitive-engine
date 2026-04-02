@@ -14,6 +14,7 @@ import { FirstWinWizard } from '@/components/guidance/FirstWinWizard';
 import { LensErrorBoundary } from '@/components/common/LensErrorBoundary';
 import { InstallPrompt } from '@/components/pwa/InstallPrompt';
 import { OfflineFallback } from '@/components/pwa/OfflineFallback';
+import SyncIndicator from '@/components/pwa/SyncIndicator';
 import { ConnectionStatus } from '@/components/common/ConnectionStatus';
 import { QuickCapture, useQuickCapture } from '@/components/capture/QuickCapture';
 import { NowPlayingBar } from '@/components/music/NowPlayingBar';
@@ -45,6 +46,11 @@ export function AppShell({ children }: AppShellProps) {
         // SW registration failed — offline caching won't work
       });
     }
+
+    // Start auto-flush for offline queue
+    import('@/lib/offline/offline-queue').then(({ startAutoFlush }) => {
+      startAutoFlush();
+    });
   }, []);
 
   useEffect(() => {
@@ -115,6 +121,7 @@ export function AppShell({ children }: AppShellProps) {
       <FirstWinWizard />
       <OfflineFallback />
       <InstallPrompt />
+      <SyncIndicator />
       <QuickCapture isOpen={quickCapture.isOpen} onClose={quickCapture.close} />
       <NowPlayingBar />
     </div>
