@@ -284,9 +284,14 @@ export default function TravelLensPage() {
                         {trip.activities?.length > 0 && <span className="flex items-center gap-1"><Star className="w-3 h-3" />{trip.activities.length} activities</span>}
                       </div>
                     </div>
-                    <button onClick={() => remove(trip.id)} disabled={deleteMut.isPending} className="text-gray-500 hover:text-red-400 p-1 ml-2">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-1 ml-2">
+                      <button onClick={() => { const nextStatus = trip.status === 'planning' ? 'booked' : trip.status === 'booked' ? 'in-progress' : trip.status === 'in-progress' ? 'completed' : 'planning'; update(trip.id, { data: { ...trip, status: nextStatus } as unknown as Partial<TripData> }); }} className="text-gray-500 hover:text-neon-cyan p-1" title="Advance status">
+                        <CheckSquare className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => remove(trip.id)} disabled={deleteMut.isPending} className="text-gray-500 hover:text-red-400 p-1">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                   {/* Budget progress bar */}
                   {trip.budget > 0 && (
