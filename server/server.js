@@ -229,6 +229,7 @@ import { runContextHarvest, harvestEntityState, formatEntityStateBlock } from ".
 import { assembleWithTokenBudget, computeBudgetBreakdown } from "./lib/token-budget-assembler.js";
 import { createInputDTU, createOutputDTU, isConsolidationDue, consolidationCheck, forgeFromMessage } from "./lib/conversation-enrichment.js";
 import { runParallelBrains, recordParallelMetrics } from "./lib/chat-parallel-brains.js";
+import { needsWindowCompression, compressRollingWindow, getSessionMemoryStats, MEMORY_CONSTANTS } from "./lib/conversation-memory.js";
 
 // ---- Entity Growth, Web Exploration & Hive Communication ----
 import {
@@ -15656,6 +15657,13 @@ sess.messages.push({ role: "user", content: prompt, ts: nowISO() });
   try {
     if (isSummaryDue(STATE.sessions, sessionId)) {
       compressConversation(STATE, sessionId, { structuredLog: ctx.log }).catch(e => logger.debug?.('server', 'async op failed (non-blocking)', { error: e?.message }));
+    }
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+  // Rolling window compression: when messages exceed threshold, compress oldest batch into conversation memory DTUs
+  try {
+    const sess_rw = STATE.sessions.get(sessionId);
+    if (needsWindowCompression(sess_rw)) {
+      compressRollingWindow(STATE, sessionId, { structuredLog: ctx.log, userId: ctx?.actor?.userId }).catch(e => logger.debug?.('server', 'rolling window compression (non-blocking)', { error: e?.message }));
     }
   } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   // ===== END DTU ENRICHMENT =====
@@ -39397,6 +39405,25 @@ app.post("/api/brain/conscious/chat", asyncHandler(async (req, res) => {
 app.get("/api/chat/web-metrics", asyncHandler(async (_req, res) => {
   res.json({ ok: true, metrics: getChatWebMetrics() });
 }));
+
+// ── Conversation Memory Endpoints ───────────────────────────────────────────
+
+app.get("/api/chat/memory/:sessionId", asyncHandler(async (req, res) => {
+  const stats = getSessionMemoryStats(STATE, req.params.sessionId);
+  res.json(stats);
+}));
+
+app.post("/api/chat/memory/:sessionId/compress", requireAuth(), asyncHandler(async (req, res) => {
+  const result = await compressRollingWindow(STATE, req.params.sessionId, {
+    structuredLog: structuredLog,
+    userId: req.user?.id,
+  });
+  res.json(result);
+}));
+
+app.get("/api/chat/memory/constants", (_req, res) => {
+  res.json({ ok: true, constants: MEMORY_CONSTANTS });
+});
 
 // Subconscious brain endpoint — trigger specific subconscious tasks
 app.post("/api/brain/subconscious/task", requireAuth(), requireRole("owner"), asyncHandler(async (req, res) => {

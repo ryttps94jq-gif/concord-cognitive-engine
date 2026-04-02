@@ -18,6 +18,8 @@ import SyncIndicator from '@/components/pwa/SyncIndicator';
 import { ConnectionStatus } from '@/components/common/ConnectionStatus';
 import { QuickCapture, useQuickCapture } from '@/components/capture/QuickCapture';
 import { NowPlayingBar } from '@/components/music/NowPlayingBar';
+import { SessionSidebar } from '@/components/chat/SessionSidebar';
+import { useSessionStore } from '@/store/sessions';
 
 /** Routes that render their own chrome and should skip the AppShell layout. */
 const STANDALONE_PREFIXES = ['/legal/'];
@@ -33,7 +35,12 @@ export function AppShell({ children }: AppShellProps) {
   const fullPageMode = useUIStore((s) => s.fullPageMode);
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
+  const [sessionSidebarOpen, setSessionSidebarOpen] = useState(false);
   const quickCapture = useQuickCapture();
+  const activeSessionTitle = useSessionStore((s) => {
+    const active = s.sessions.find(sess => sess.id === s.activeSessionId);
+    return active?.title || null;
+  });
 
   useEffect(() => {
     setMounted(true);
@@ -51,6 +58,9 @@ export function AppShell({ children }: AppShellProps) {
     import('@/lib/offline/offline-queue').then(({ startAutoFlush }) => {
       startAutoFlush();
     });
+
+    // Initialize session store from IndexedDB
+    useSessionStore.getState().init();
   }, []);
 
   useEffect(() => {
@@ -61,6 +71,11 @@ export function AppShell({ children }: AppShellProps) {
       }
       if (e.key === 'Escape' && commandPaletteOpen) {
         setCommandPaletteOpen(false);
+      }
+      // Ctrl/Cmd+Shift+S: toggle session sidebar
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'S') {
+        e.preventDefault();
+        setSessionSidebarOpen(prev => !prev);
       }
     };
 
@@ -95,9 +110,23 @@ export function AppShell({ children }: AppShellProps) {
       </a>
 
       <Sidebar />
+      <SessionSidebar isOpen={sessionSidebarOpen} onClose={() => setSessionSidebarOpen(false)} />
 
       <div className="flex-1 flex flex-col min-w-0">
-        <Topbar />
+        <div className="flex items-center">
+          <Topbar />
+          {/* Session toggle in topbar row */}
+          <button
+            onClick={() => setSessionSidebarOpen(!sessionSidebarOpen)}
+            className="flex-shrink-0 flex items-center gap-2 px-3 py-2 mr-2 rounded hover:bg-white/5 text-sm text-white/50 hover:text-white/80 transition-colors border-l border-white/10"
+            title="Open sessions"
+          >
+            <span className="text-xs leading-none">&#9776;</span>
+            {activeSessionTitle && (
+              <span className="hidden sm:inline truncate max-w-[160px] text-xs">{activeSessionTitle}</span>
+            )}
+          </button>
+        </div>
         <OperatorErrorBanner />
 
         <main
