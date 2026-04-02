@@ -73,7 +73,7 @@ import createSovereignEmergentRouter from "./routes/sovereign-emergent.js";
 import createFederationRouter from "./routes/federation.js";
 import registerOAuthRoutes from "./routes/oauth.js";
 import { QualiaEngine, hooks as qualiaHooks } from "./existential/index.js";
-import { rateLimitMiddleware as perEndpointRateLimit } from "./rateLimit.js";
+import { rateLimitMiddleware as perEndpointRateLimit, writeRateLimitMiddleware, readRateLimitMiddleware } from "./rateLimit.js";
 import { detectVulnerability, chooseDeliveryMode, hookVulnerability, assessAndAdapt } from "./emergent/vulnerability-engine.js";
 import { runCouncilVoices, getAllVoices as getAllCouncilVoices } from "./emergent/council-voices.js";
 
@@ -684,6 +684,120 @@ function sanitizationMiddleware(req, res, next) {
   // Sanitize query params
   if (req.query && typeof req.query === "object") {
     req.query = sanitizeObject(req.query, { maxLength: 1000 });
+  }
+
+  // Enhanced write-endpoint validation: strip script tags and SQL injection patterns
+  const method = req.method.toUpperCase();
+  if ((method === "POST" || method === "PUT" || method === "PATCH") && req.body) {
+    _deepStripDangerous(req.body);
+  }
+
+  next();
+}
+
+/**
+ * Recursively strip dangerous patterns from request body values.
+ * Targets script tags, event handlers, and obvious SQL injection payloads.
+ * Does not reject — just neutralizes the dangerous parts.
+ */
+function _deepStripDangerous(obj) {
+  if (!obj || typeof obj !== "object") return;
+  for (const key of Object.keys(obj)) {
+    const val = obj[key];
+    if (typeof val === "string") {
+      // Strip script tags (including attributes)
+      let cleaned = val.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "");
+      // Strip event handler attributes (onclick, onerror, onload, etc.)
+      cleaned = cleaned.replace(/\bon\w+\s*=\s*["'][^"']*["']/gi, "");
+      // Strip javascript: protocol URLs
+      cleaned = cleaned.replace(/javascript\s*:/gi, "");
+      // Neutralize obvious SQL injection (DROP TABLE, UNION SELECT, etc.) — keep for logging context
+      cleaned = cleaned.replace(/(\b(?:DROP|ALTER|TRUNCATE)\s+(?:TABLE|DATABASE|INDEX)\b)/gi, "[$1]");
+      cleaned = cleaned.replace(/(\bUNION\s+(?:ALL\s+)?SELECT\b)/gi, "[$1]");
+      // Strip SQL comment sequences that are used for injection
+      cleaned = cleaned.replace(/--\s*$/gm, "");
+      cleaned = cleaned.replace(/\/\*[\s\S]*?\*\//g, "");
+      if (cleaned !== val) obj[key] = cleaned;
+    } else if (Array.isArray(val)) {
+      for (let i = 0; i < val.length; i++) {
+        if (typeof val[i] === "string") {
+          const c = val[i]
+            .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+            .replace(/\bon\w+\s*=\s*["'][^"']*["']/gi, "")
+            .replace(/javascript\s*:/gi, "");
+          if (c !== val[i]) val[i] = c;
+        } else if (typeof val[i] === "object") {
+          _deepStripDangerous(val[i]);
+        }
+      }
+    } else if (typeof val === "object") {
+      _deepStripDangerous(val);
+    }
+  }
+}
+
+// ---- Security Intelligence Request Scanner ----
+// Scans incoming POST/PUT bodies through the security matcher (layers 1-3, synchronous).
+// Flags and logs hits, only blocks when action is "blocked" (critical/high severity).
+// Full async scan (layer 4 embedding) runs in background on flagged content.
+function securityScanMiddleware(req, res, next) {
+  const method = req.method.toUpperCase();
+  if (method !== "POST" && method !== "PUT" && method !== "PATCH") return next();
+  if (!req.body) return next();
+
+  // Get security matcher from global state (set up during server init)
+  const matcher = globalThis._concordSecurityMatcher;
+  if (!matcher) return next();
+
+  try {
+    // Build scan content from body
+    const bodyStr = typeof req.body === "string" ? req.body : JSON.stringify(req.body);
+    if (!bodyStr || bodyStr.length < 5) return next();
+
+    // Quick scan: layers 1-3 (synchronous, no embedding)
+    const result = matcher.quickScan({
+      content: bodyStr.slice(0, 50000), // Cap at 50KB for scanning
+      target: req.path,
+      sessionId: req.headers["x-session-id"] || undefined,
+    });
+
+    if (result.matched) {
+      // Attach scan result to request for downstream handlers
+      req.securityScan = result;
+
+      // Log the detection
+      structuredLog("warn", "security_scan_hit", {
+        path: req.path,
+        method,
+        severity: result.severity,
+        action: result.action,
+        layer: result.layer,
+        ip: req.ip,
+        userId: req.user?.id || "anonymous",
+      });
+
+      // Block only if action is "blocked" (critical/high severity)
+      if (result.action === "blocked") {
+        return res.status(403).json({
+          ok: false,
+          error: "Request blocked by security scanner",
+          code: "SECURITY_BLOCKED",
+          severity: result.severity,
+        });
+      }
+
+      // For non-blocking matches, trigger async deep scan (layer 4) in background
+      if (result.severity === "medium" || result.severity === "high") {
+        matcher.scan({
+          content: bodyStr.slice(0, 50000),
+          deepScan: true,
+          target: req.path,
+          sessionId: req.headers["x-session-id"] || undefined,
+        }).catch(() => {}); // fire-and-forget
+      }
+    }
+  } catch (_) {
+    // Security scanner NEVER blocks the request pipeline on errors
   }
 
   next();
@@ -4228,15 +4342,94 @@ function cookieParserMiddleware(req, res, next) {
   next();
 }
 
-// Auth middleware
+/**
+ * Opportunistic auth resolution — populates req.user if credentials are present,
+ * but does NOT reject the request if auth fails. Used for open routes where we
+ * want session/identity tracking but don't require login.
+ */
+function _tryResolveUser(req) {
+  try {
+    // Try JWT cookie
+    if (AUTH_USES_JWT) {
+      const cookieToken = req.cookies?.concord_auth;
+      if (cookieToken) {
+        const decoded = verifyToken(cookieToken);
+        if (decoded?.userId) {
+          const user = AuthDB.getUser(decoded.userId);
+          if (user) { req.user = user; req.authMethod = "cookie"; return; }
+        }
+      }
+      // Try Bearer token
+      const authHeader = req.headers.authorization || "";
+      if (authHeader.startsWith("Bearer ")) {
+        const decoded = verifyToken(authHeader.slice(7));
+        if (decoded?.userId) {
+          const user = AuthDB.getUser(decoded.userId);
+          if (user) { req.user = user; req.authMethod = "jwt"; return; }
+        }
+      }
+    }
+    // Try API key
+    if (AUTH_USES_APIKEY) {
+      const apiKey = req.headers["x-api-key"];
+      if (apiKey) {
+        const incomingHash = hashApiKey(apiKey);
+        const allKeys = AuthDB.getAllApiKeys();
+        for (const key of allKeys) {
+          if (key.keyHash && key.keyHash === incomingHash) {
+            const user = AuthDB.getUser(key.userId);
+            if (user) { req.user = user; req.apiKeyData = key; req.authMethod = "apiKey"; return; }
+            break;
+          }
+        }
+      }
+    }
+    // Try entity header (emergents/entities acting on their own behalf)
+    const entityId = req.headers["x-entity-id"];
+    if (entityId) {
+      req.entityId = entityId;
+      req.authMethod = "entity";
+    }
+  } catch (_) { /* opportunistic — failures are silent */ }
+}
+
+// Auth middleware — Selective route protection for pre-launch
+// Logic: Protected routes REQUIRE auth. Everything else is open (with rate limiting applied separately).
 function authMiddleware(req, res, next) {
   if (AUTH_MODE === "public") return next();
 
-  // Skip auth for always-public endpoints (any method)
-  const alwaysPublic = ["/health", "/ready", "/metrics", "/api/auth/login", "/api/auth/register", "/api/auth/refresh", "/api/auth/csrf-token", "/api/auth/google", "/api/auth/apple", "/api/auth/providers", "/api/docs", "/api/status", "/api/chat", "/api/brain/conscious"];
-  if (alwaysPublic.some(p => req.path.startsWith(p))) return next();
+  // ── ALWAYS OPEN (no auth, no rate limit) ──────────────────────────────
+  const ALWAYS_OPEN = [
+    "/api/status", "/api/health", "/health", "/ready", "/metrics",
+    "/api/auth/csrf-token", "/api/auth/login", "/api/auth/register",
+    "/api/auth/refresh", "/api/auth/google", "/api/auth/apple", "/api/auth/providers",
+    "/api/docs",
+  ];
+  if (ALWAYS_OPEN.some(p => req.path.startsWith(p))) return next();
 
-  // Sovereign-only route protection
+  // ── PROTECTED ROUTES — require authentication ─────────────────────────
+  // These are admin, destructive, or financial operations that non-users must never access.
+  const PROTECTED_ROUTES = [
+    "/api/admin",
+    "/api/sovereign",
+    "/api/economy/withdraw",
+    "/api/economy/transfer",
+    "/api/economy/mint",
+    "/api/economy/redistribute",
+    "/api/auth/delete",
+    "/api/system/shutdown",
+    "/api/system/reset",
+    "/api/emergent/kill",
+    "/api/emergent/reproduce",
+    "/api/repair/execute",
+    "/api/backup",
+    "/api/migration",
+    "/api/reproduction/enable",
+    "/api/reproduction/disable",
+    "/api/entity/kill",
+  ];
+
+  // Sovereign-only subset — must be sovereign role after auth
   const SOVEREIGN_ROUTES = [
     "/api/sovereign",
     "/api/admin/sovereign",
@@ -4244,123 +4437,23 @@ function authMiddleware(req, res, next) {
     "/api/reproduction/disable",
     "/api/entity/kill",
     "/api/system/shutdown",
+    "/api/system/reset",
     "/api/economy/mint",
     "/api/economy/redistribute",
   ];
 
-  // If this is a sovereign route, do NOT allow the publicReadPaths bypass below.
-  // Force authentication first, then check role after auth resolves.
-  const _isSovereignRoute = SOVEREIGN_ROUTES.some(route => req.path.startsWith(route));
+  const isProtected = PROTECTED_ROUTES.some(r => req.path.startsWith(r));
+  const _isSovereignRoute = SOVEREIGN_ROUTES.some(r => req.path.startsWith(r));
 
-  // Skip auth for public-read endpoints (GET only)
-  // CRITICAL: Every frontend GET route must be listed here (Gate 1 of 3)
-  const publicReadPaths = [
-    // Core data
-    "/api/dtus", "/api/dtu", "/api/lenses", "/api/lens", "/api/emergent", "/api/knowledge",
-    "/api/search", "/api/species", "/api/events", "/api/schema",
-    // Podcast RSS feeds (public distribution)
-    "/api/podcast",
-    // Newsletter public view
-    "/api/newsletter",
-    // Settings, metrics & context
-    "/api/settings", "/api/growth", "/api/metrics", "/api/context",
-    // System
-    "/api/brain", "/api/system", "/api/cognitive", "/api/status", "/api/loaf",
-    "/api/backpressure", "/api/embeddings", "/api/pwa",
-    // Governance & lattice
-    "/api/lattice", "/api/guidance", "/api/graph", "/api/scope",
-    "/api/inspect", "/api/worldmodel", "/api/council", "/api/resonance",
-    // Chat & AI
-    "/api/chat", "/api/ask", "/api/forge",
-    // Atlas & Signal Cortex
-    "/api/atlas",
-    "/api/atlas/signals", "/api/atlas/privacy",
-    // Plugins & extensions
-    "/api/plugins", "/api/macros",
-    // Growth & entities
-    "/api/entity-growth", "/api/entity-exploration", "/api/goals",
-    "/api/hypothesis",
-    // Analytics & metrics
-    "/api/analytics", "/api/intelligence", "/api/precompute",
-    "/api/perf", "/api/distillation",
-    // Collaboration
-    "/api/collab", "/api/social",
-    // Content pipelines
-    "/api/autogen", "/api/dream", "/api/evolution", "/api/synthesize",
-    "/api/ingest", "/api/digest", "/api/daily",
-    // Economy & marketplace
-    "/api/economy", "/api/marketplace", "/api/credits",
-    "/api/distribution", "/api/stripe",
-    // Agent systems
-    "/api/agents", "/api/personas", "/api/automations",
-    // Specialized domains
-    "/api/affect", "/api/attention", "/api/commonsense",
-    "/api/explanation", "/api/grounding", "/api/hive",
-    "/api/inference", "/api/metacognition", "/api/metalearning",
-    "/api/reasoning", "/api/reflection", "/api/temporal",
-    "/api/voice", "/api/visual",
-    // Content management
-    "/api/artifacts", "/api/notifications", "/api/reminders",
-    "/api/webhooks", "/api/webhooks-metrics", "/api/whiteboard",
-    "/api/whiteboards", "/api/queue", "/api/jobs",
-    // Learning & review
-    "/api/srs", "/api/skill", "/api/onboarding",
-    // Import/export
-    "/api/obsidian", "/api/notion",
-    // RBAC & compliance
-    "/api/rbac", "/api/compliance",
-    // Studio & artistry
-    "/api/studio", "/api/artistry",
-    // Film, Media & Game (Creative lenses 12-22)
-    "/api/film-studio", "/api/media", "/api/game",
-    // Misc
-    "/api/heal", "/api/cache", "/api/redis", "/api/efficiency",
-    "/api/model-optimizer", "/api/lens-items", "/api/mobile",
-    "/api/global", "/api/sovereign", "/api/autotag",
-    "/api/ml", "/api/db", "/api/preview-action", "/api/undo",
-    "/api/autocrawl", "/api/reseed", "/api/integrations",
-    "/api/swarm", "/api/utility",
-    // Extended domains (three-gate audit)
-    "/api/ai", "/api/federation", "/api/quests", "/api/physics",
-    "/api/admin", "/api/heartbeat", "/api/entity-economy",
-    "/api/culture", "/api/research", "/api/quest",
-    "/api/reproduction", "/api/lineage", "/api/teaching",
-    "/api/trust", "/api/creative", "/api/rights",
-    "/api/resonance", "/api/sse",
-    // Artifact & feedback
-    "/api/artifact", "/api/feedback",
-    // Export (GET only)
-    "/api/export",
-    // Repair cortex v3.1 (frontend error reporting must work without auth)
-    "/api/repair",
-    // Dual Global & Creative Registry (public discovery)
-    "/api/scope", "/api/creative",
-    // Missing frontend routes (three-gate audit scan)
-    "/api/bridge", "/api/brief", "/api/experience", "/api/explore",
-    "/api/flywheel", "/api/freshness", "/api/global",
-    "/api/inheritance", "/api/org", "/api/pipeline",
-    "/api/quality", "/api/shared-session", "/api/sovereignty",
-    "/api/substrate", "/api/transfer", "/api/v1",
-    "/api/economics", "/api/agent",
-    // Real-time data feeds + universal export
-    "/api/realtime", "/api/convert",
-    "/api/apps",
-    // Concord Shield security module
-    "/api/shield",
-    // Concord Mesh network transport
-    "/api/mesh",
-    // Foundation Sovereignty modules
-    "/api/foundation",
-    // Foundation Atlas signal tomography
-    "/api/atlas",
-    // Frontend route scan: missing prefixes (cdn info, health, organism, connective-tissue)
-    "/api/cdn", "/api/health", "/api/organism", "/api/connective-tissue",
-  ];
-  if (req.method === "GET" && !_isSovereignRoute && publicReadPaths.some(p => req.path.startsWith(p))) return next();
-  // Gate 1 POST bypass: allow /api/repair POST without auth (frontend error fallback path)
-  if (req.method === "POST" && req.path.startsWith("/api/repair")) return next();
-  // Gate 1 POST bypass: allow creative registry POST without auth (public discovery)
-  if (req.method === "POST" && req.path.startsWith("/api/creative/registry")) return next();
+  // If the route is NOT protected, allow through (open for pre-launch).
+  // Auth is still attempted opportunistically below so req.user is populated
+  // for session tracking, but failure doesn't block access.
+  if (req.path.startsWith("/api/") && !isProtected) {
+    // Opportunistic auth: try to resolve user identity for session tracking
+    // but don't block if auth fails — user can still use the app
+    _tryResolveUser(req);
+    return next();
+  }
 
   // Check Authorization header
   const authHeader = req.headers.authorization || "";
@@ -21331,6 +21424,9 @@ configureMiddleware(app, {
   authMiddleware,
   productionWriteAuthMiddleware,
   csrfMiddleware,
+  writeRateLimitMiddleware,
+  readRateLimitMiddleware,
+  securityScanMiddleware,
   NODE_ENV,
 });
 
