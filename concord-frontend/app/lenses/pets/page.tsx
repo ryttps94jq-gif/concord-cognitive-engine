@@ -6,7 +6,7 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
-  PawPrint, Plus, Search, Trash2, Calendar, Heart, Layers, ChevronDown, Syringe, ShieldCheck,
+  PawPrint, Plus, Search, Trash2, Calendar, Heart, Layers, ChevronDown, Syringe, ShieldCheck, Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -146,7 +146,7 @@ export default function PetsLensPage() {
           <motion.div key={pet.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="panel p-4">
             <div className="flex items-center justify-between mb-2">
               <h3 className="font-semibold text-white truncate">{pet.name}</h3>
-              <button onClick={() => remove(pet.id)} className="text-gray-500 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
+              <button onClick={() => remove(pet.id)} disabled={deleteMut.isPending} className="text-gray-500 hover:text-red-400">{deleteMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}</button>
             </div>
             <div className="flex flex-wrap gap-2 text-xs mb-2">
               <span className={cn('px-2 py-0.5 rounded capitalize', SPECIES_ICONS[pet.species] || 'bg-gray-400/10 text-gray-400')}>{pet.species}</span>

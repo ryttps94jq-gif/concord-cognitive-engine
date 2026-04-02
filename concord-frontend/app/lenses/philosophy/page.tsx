@@ -432,7 +432,7 @@ export default function PhilosophyLensPage() {
                     <h2 className="font-semibold text-white">{selected.title}</h2>
                     <div className="flex items-center gap-2">
                       <button onClick={() => handleAction(selected.id)} className="text-gray-500 hover:text-neon-purple" title="Run AI analysis"><Zap className="w-4 h-4" /></button>
-                      <button onClick={() => update({ id: selected.id, data: { ...selected.data, lastReviewed: new Date().toISOString() } })} className="text-gray-500 hover:text-blue-400" title="Update"><Eye className="w-4 h-4" /></button>
+                      <button onClick={() => update(selected.id, { data: { ...selected.data, lastReviewed: new Date().toISOString() } })} className="text-gray-500 hover:text-blue-400" title="Update"><Eye className="w-4 h-4" /></button>
                       <button onClick={() => remove(selected.id)} className="text-red-400 hover:text-red-300">
                         <Trash2 className="w-4 h-4" />
                       </button>

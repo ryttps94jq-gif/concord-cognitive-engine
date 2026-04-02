@@ -12,7 +12,7 @@ import {
   FolderKanban, ListTodo, Calendar, Users, DollarSign,
   Plus, Search, X, Trash2, BarChart3,
   AlertTriangle, Milestone,
-  Layers, ChevronDown, Gauge, Activity, CircleDot,
+  Layers, ChevronDown, Gauge, Activity, CircleDot, Zap,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';

@@ -33,7 +33,7 @@ export default function SufferingLensPage() {
   }, [create]);
 
   const handleUpdate = useCallback((id: string, data: Record<string, unknown>) => {
-    update({ id, data });
+    update(id, { data });
   }, [update]);
 
   const handleRemove = useCallback((id: string) => {

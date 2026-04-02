@@ -170,7 +170,7 @@ export default function ParentingLensPage() {
                 {m.date && <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{m.date}</span>}
               </div>
             </div>
-            <button onClick={() => remove(m.id)} className="text-gray-500 hover:text-red-400 p-1"><Trash2 className="w-4 h-4" /></button>
+            <button onClick={() => remove(m.id)} disabled={deleteMut.isPending} className="text-gray-500 hover:text-red-400 p-1">{deleteMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}</button>
           </motion.div>
         ))}
       </div>
