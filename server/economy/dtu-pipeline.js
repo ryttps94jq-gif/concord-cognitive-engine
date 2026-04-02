@@ -433,11 +433,25 @@ export function forkDTU(db, {
       original.content_type, lensId || original.lens_id,
       original.tier, original.tags_json || "[]",
       Math.max((original.creti_score || 0) - 5, 10),
-      JSON.stringify({
-        ...safeJsonParse(original.metadata_json),
-        forkedFrom: originalDtuId,
-        forkPolicy: "open",
-      }),
+      JSON.stringify((() => {
+        const origMeta = safeJsonParse(original.metadata_json);
+        const forkMeta = {
+          ...origMeta,
+          forkedFrom: originalDtuId,
+          forkPolicy: "open",
+        };
+        // Preserve source attribution through forks — attribution cannot be removed
+        if (origMeta.source || origMeta.via) {
+          forkMeta.lineage = {
+            ...(origMeta.lineage || {}),
+            originalSource: origMeta.source || origMeta.lineage?.originalSource || null,
+            originalVia: origMeta.via || origMeta.lineage?.originalVia || null,
+            forkParent: originalDtuId,
+            forkedAt: now,
+          };
+        }
+        return forkMeta;
+      })()),
       now, now,
     );
 

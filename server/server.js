@@ -23120,6 +23120,10 @@ app.use("/", mobileCheckoutRouter);
 import createFeedRoutes from "./routes/feeds.js";
 app.use("/api/feeds", createFeedRoutes({ requireAuth: requireRole?.("admin") }));
 
+// ===== ATTRIBUTION & DMCA ADMIN ROUTES =====
+import createAttributionRoutes from "./routes/attribution.js";
+app.use("/api/attribution", createAttributionRoutes({ requireAuth: requireRole?.("admin") }));
+
 // ===== OPENAPI DOCUMENTATION =====
 import createOpenAPIRouter from "./routes/openapi.js";
 app.use("/api", createOpenAPIRouter());

@@ -17,6 +17,7 @@
 
 import { createHash, randomUUID } from "crypto";
 import logger from "../logger.js";
+import { feedAttribution } from "./source-attribution.js";
 
 // ══════════════════════════════════════════════════════════════════════════════
 // CONSTANTS & LIMITS
@@ -473,13 +474,16 @@ async function commitFeedDTU(item, feedSource) {
   ].map(t => String(t).toLowerCase().trim()).filter(Boolean);
   const uniqueTags = [...new Set(tags)].slice(0, 15);
 
+  // Build universal source attribution
+  const attribution = feedAttribution(feedSource, item);
+
   const dtu = {
     id: dtuId,
     title: (item.title || "Untitled Feed Item").slice(0, 200),
     tier: "regular",
-    scope: feedSource.domain || "general",
+    scope: "global", // Feed DTUs are public data, always global scope
     tags: uniqueTags,
-    source: feedSource.domain || "feed",
+    source: attribution, // Universal source attribution object
     core: {
       definitions: [item.summary || item.title || ""],
       assertions: [],
@@ -492,6 +496,7 @@ async function commitFeedDTU(item, feedSource) {
       sourceUrl: item.sourceUrl || "",
       sourceName: feedSource.name || feedSource.id,
       publishedAt: item.publishedAt || now,
+      source: attribution, // Also stored in meta for backward compat
     },
     createdAt: now,
     updatedAt: now,
