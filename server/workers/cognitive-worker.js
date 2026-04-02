@@ -26,7 +26,19 @@
  */
 
 import { parentPort } from "node:worker_threads";
+import { execSync } from "node:child_process";
 import { runPipeline, ensurePipelineState } from "../emergent/autogen-pipeline.js";
+
+// ── CPU Pinning (when CONCORD_WORKER_CORES is set) ─────────────────────────────
+// The startup script sets this so the cognitive worker stays on its dedicated core.
+const workerCores = process.env.CONCORD_WORKER_CORES;
+if (workerCores) {
+  try {
+    execSync(`taskset -p -c ${workerCores} ${process.pid}`, { stdio: "ignore" });
+  } catch {
+    // taskset not available (e.g. macOS) — no-op, OS scheduler handles it
+  }
+}
 
 // ── LLM callback for Ollama (runs fetch from worker thread) ──────────────────
 
