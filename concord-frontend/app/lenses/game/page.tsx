@@ -277,7 +277,7 @@ export default function GameLensPage() {
     queryFn: () => api.get('/api/game/challenges').then(r => r.data),
   });
   const { create: createQuest } = useLensData<Quest>('game', 'quest', { noSeed: true });
-  const quests: Quest[] = (challengesResp?.challenges || []).map((c: Record<string, unknown>) => ({
+  const quests: Quest[] = (challengesResp?.challenges || INITIAL_QUESTS).map((c: Record<string, unknown>) => ({
     id: c.id as string,
     name: c.name as string,
     description: c.description as string,
@@ -300,7 +300,7 @@ export default function GameLensPage() {
     queryKey: ['game', 'leaderboard'],
     queryFn: () => api.get('/api/game/leaderboard').then(r => r.data),
   });
-  const leaderboardData = (leaderboardResp?.leaderboard || []) as Record<string, unknown>[];
+  const leaderboardData = (leaderboardResp?.leaderboard || INITIAL_LEADERBOARD) as Record<string, unknown>[];
 
   // Sync profile data into local state when available
   useEffect(() => {

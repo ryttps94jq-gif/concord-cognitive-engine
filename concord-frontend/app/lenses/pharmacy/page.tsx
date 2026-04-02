@@ -276,9 +276,19 @@ export default function PharmacyLensPage() {
       {/* Interactions Tab */}
       {activeTab === 'interactions' && (
         <div className="space-y-4">
-          <button onClick={checkInteractions} className="px-4 py-2 bg-amber-500/20 text-amber-400 rounded-lg text-sm hover:bg-amber-500/30">
-            <AlertTriangle className="w-4 h-4 inline mr-1" /> Check Interactions
-          </button>
+          <div className="flex gap-2">
+            <button onClick={checkInteractions} className="px-4 py-2 bg-amber-500/20 text-amber-400 rounded-lg text-sm hover:bg-amber-500/30">
+              <AlertTriangle className="w-4 h-4 inline mr-1" /> Check Interactions
+            </button>
+            <button onClick={() => {
+              const activeNames = medications.filter(m => m.status === 'active').map(m => m.name || m.title);
+              if (activeNames.length >= 2) {
+                createInteraction({ title: activeNames.join(' + '), data: { drugs: activeNames, severity: 'unknown', description: 'Manual interaction note - please verify with pharmacist' } });
+              }
+            }} className="px-4 py-2 bg-white/5 text-gray-400 rounded-lg text-sm hover:bg-white/10">
+              <Plus className="w-4 h-4 inline mr-1" /> Add Note
+            </button>
+          </div>
           <div className="panel p-4">
             <h3 className="font-semibold mb-3">Known Interactions</h3>
             {interactions.length === 0 ? (
