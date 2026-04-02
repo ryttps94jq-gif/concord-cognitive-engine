@@ -10710,12 +10710,17 @@ async function chatWithLattice(query, { contextLimit = 5, sessionId: _sessionId 
 
   if (!LLM_READY) {
     // Return context without LLM synthesis
-    return {
+    const fallbackResult = {
       ok: true,
       response: `Found ${context.length} relevant DTUs. LLM not available for synthesis.`,
       context,
       method: "context_only"
     };
+    try {
+      const { attachConfidence } = await import("./lib/confidence-attacher.js");
+      attachConfidence(fallbackResult);
+    } catch (_e) { /* confidence attacher optional */ }
+    return fallbackResult;
   }
 
   // Build prompt with context
@@ -10744,12 +10749,20 @@ async function chatWithLattice(query, { contextLimit = 5, sessionId: _sessionId 
 
     const answer = response?.choices?.[0]?.message?.content || "Unable to generate response";
 
-    return {
+    const result = {
       ok: true,
       response: answer,
       context,
       method: "rag"
     };
+
+    // Attach confidence score to response
+    try {
+      const { attachConfidence } = await import("./lib/confidence-attacher.js");
+      attachConfidence(result);
+    } catch (_e) { /* confidence attacher optional */ }
+
+    return result;
   } catch (e) {
     return { ok: false, error: String(e.message || e), context };
   }
