@@ -43,7 +43,7 @@ function StatusDot({ status }: { status: 'green' | 'yellow' | 'red' | 'gray' }) 
   );
 }
 
-function Stat({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
+function Stat({ label, value, sub }: { label: string; value: string | number; sub?: React.ReactNode }) {
   return (
     <div className="bg-[#0d1219] rounded-xl p-3 border border-cyan-900/15 shadow-sm hover:border-cyan-800/25 transition-colors">
       <p className="text-lg font-mono font-bold text-cyan-50">{value}</p>

@@ -1474,6 +1474,48 @@ export default function PhysicsLensPage() {
               )}
             </div>
           </div>
+
+          {/* Saved Simulations */}
+          <div className="panel p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">Saved Simulations ({savedSims.length})</h3>
+              <button
+                onClick={() => saveSim({ title: `Sim ${new Date().toLocaleTimeString()}`, data: { bodies, constraints, forceFields, settings } as unknown as Record<string, unknown> })}
+                className="text-xs px-2 py-1 bg-neon-purple/20 text-neon-purple rounded hover:bg-neon-purple/30 flex items-center gap-1"
+                disabled={bodies.length === 0}
+              >
+                <Download className="w-3 h-3" /> Save
+              </button>
+            </div>
+            <div className="space-y-1 max-h-48 overflow-auto">
+              {savedSims.map(sim => (
+                <div
+                  key={sim.id}
+                  className="flex items-center justify-between text-sm py-1.5 px-2 rounded hover:bg-white/5 cursor-pointer group"
+                  onClick={() => {
+                    const d = sim.data as Record<string, unknown>;
+                    if (d.bodies) setBodies(d.bodies as Body[]);
+                    if (d.constraints) setConstraints(d.constraints as Constraint[]);
+                    if (d.forceFields) setForceFields(d.forceFields as ForceField[]);
+                    if (d.settings) setSettings(d.settings as SimSettings);
+                  }}
+                >
+                  <span className="text-gray-300 truncate">{sim.title}</span>
+                  <button
+                    onClick={e => { e.stopPropagation(); removeSim(sim.id); }}
+                    className="text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+              {savedSims.length === 0 && (
+                <p className="text-gray-500 text-sm text-center py-4">
+                  No saved simulations yet.
+                </p>
+              )}
+            </div>
+          </div>
         </div>
 
       {/* Real-time Data Panel */}
