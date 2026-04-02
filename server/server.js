@@ -12092,6 +12092,28 @@ async function consciousChat(userMessage, lens = null, options = {}) {
   const inferenceStart = Date.now();
   const userId = options.userId || "anonymous";
 
+  // ── Vision: if imageBase64 is provided, describe via LLaVA and prepend to message ──
+  if (options.imageBase64) {
+    try {
+      const OLLAMA_URL = process.env.OLLAMA_URL || process.env.OLLAMA_HOST || "";
+      if (OLLAMA_URL) {
+        const visionModel = String(process.env.OLLAMA_VISION_MODEL || "llava");
+        const visionPrompt = options.imagePrompt || "Describe this image in detail for context.";
+        const vPayload = { model: visionModel, messages: [{ role: "user", content: visionPrompt, images: [options.imageBase64] }] };
+        const vRes = await BREAKERS.ollama.call(() =>
+          fetch(`${OLLAMA_URL}/api/chat`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(vPayload), signal: AbortSignal.timeout(60000) })
+        );
+        if (vRes && vRes.ok) {
+          const vJson = await vRes.json().catch(() => null);
+          const description = vJson?.message?.content || vJson?.response || "";
+          if (description) {
+            userMessage = `[Image description: ${description}]\n\n${userMessage}`;
+          }
+        }
+      }
+    } catch (_e) { logger.debug('server', 'vision pre-analysis failed — proceeding without', { error: _e?.message }); }
+  }
+
   // Log query for pattern analysis (precompute pipeline)
   logQuery(userMessage, lens);
 
@@ -34766,6 +34788,9 @@ app.post("/api/comments/:id/resolve", (req, res) => {
 app.post("/api/comments/:id/react", (req, res) => {
   const userId = req.user?.id || "anonymous";
   const result = addReaction(req.params.id, userId, req.body.emoji);
+  if (result.ok) {
+    try { realtimeEmit("comment:reaction", { commentId: req.params.id, userId, emoji: req.body.emoji }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+  }
   res.json(result);
 });
 
@@ -34785,6 +34810,7 @@ app.post("/api/dtus/:id/vote", validate("dtuVote"), (req, res) => {
     if (!dtu.meta) dtu.meta = {};
     dtu.meta.score = (dtu.meta.score || 0) + vote;
     dtu.meta.votes = (dtu.meta.votes || 0) + 1;
+    try { realtimeEmit("dtu:voted", { dtuId: req.params.id, score: dtu.meta.score, votes: dtu.meta.votes }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
     res.json({ ok: true, score: dtu.meta.score, votes: dtu.meta.votes });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e?.message || e) });
@@ -34798,6 +34824,8 @@ app.post("/api/dtus/:id/like", (req, res) => {
     if (!dtu) return res.status(404).json({ ok: false, error: "DTU not found" });
     if (!dtu.meta) dtu.meta = {};
     dtu.meta.likes = (dtu.meta.likes || 0) + 1;
+    const userId = req.user?.id || "anonymous";
+    try { realtimeEmit("dtu:liked", { dtuId: req.params.id, userId, likes: dtu.meta.likes }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
     res.json({ ok: true, likes: dtu.meta.likes });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e?.message || e) });
@@ -38018,7 +38046,14 @@ app.get("/api/social/metrics", (req, res) => {
 // ---- Social Layer: Posts, Reactions, Comments, Shares, Bookmarks, Feeds, DMs, Notifications, etc. ----
 
 app.post("/api/social/post", (req, res) => {
-  try { res.json(createPost(STATE, { userId: req.body?.userId || req.user?.id, ...req.body })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  try {
+    const userId = req.body?.userId || req.user?.id;
+    const result = createPost(STATE, { userId, ...req.body });
+    if (result.ok) {
+      try { realtimeEmit("social:post", { postId: result.post?.id, userId }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+    }
+    res.json(result);
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.get("/api/social/post/:postId", (req, res) => {
@@ -38034,7 +38069,16 @@ app.get("/api/social/posts/:userId", (req, res) => {
 });
 
 app.post("/api/social/react", (req, res) => {
-  try { res.json(socialAddReaction(STATE, { userId: req.body?.userId || req.user?.id, postId: req.body?.postId, type: req.body?.type })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  try {
+    const userId = req.body?.userId || req.user?.id;
+    const postId = req.body?.postId;
+    const type = req.body?.type;
+    const result = socialAddReaction(STATE, { userId, postId, type });
+    if (result.ok) {
+      try { realtimeEmit("social:reaction", { postId, userId, type }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+    }
+    res.json(result);
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.get("/api/social/reactions/:postId", (req, res) => {
@@ -38042,7 +38086,15 @@ app.get("/api/social/reactions/:postId", (req, res) => {
 });
 
 app.post("/api/social/comment", (req, res) => {
-  try { res.json(socialAddComment(STATE, { userId: req.body?.userId || req.user?.id, postId: req.body?.postId, content: req.body?.content, parentCommentId: req.body?.parentCommentId })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  try {
+    const userId = req.body?.userId || req.user?.id;
+    const postId = req.body?.postId;
+    const result = socialAddComment(STATE, { userId, postId, content: req.body?.content, parentCommentId: req.body?.parentCommentId });
+    if (result.ok) {
+      try { realtimeEmit("social:comment", { postId, userId, commentId: result.comment?.id }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+    }
+    res.json(result);
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.delete("/api/social/comment/:postId/:commentId", (req, res) => {
@@ -38054,7 +38106,15 @@ app.get("/api/social/comments/:postId", (req, res) => {
 });
 
 app.post("/api/social/share", (req, res) => {
-  try { res.json(sharePost(STATE, { userId: req.body?.userId || req.user?.id, postId: req.body?.postId, commentary: req.body?.commentary })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  try {
+    const userId = req.body?.userId || req.user?.id;
+    const postId = req.body?.postId;
+    const result = sharePost(STATE, { userId, postId, commentary: req.body?.commentary });
+    if (result.ok) {
+      try { realtimeEmit("social:share", { postId, userId }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+    }
+    res.json(result);
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.get("/api/social/shares/:postId", (req, res) => {
@@ -39319,16 +39379,17 @@ app.post("/api/utility/call", asyncHandler(async (req, res) => {
 
 // Conscious brain endpoint — direct conscious chat (bypasses normal chat pipeline)
 app.post("/api/brain/conscious/chat", asyncHandler(async (req, res) => {
-  const { message, lens } = req.body || {};
+  const { message, lens, imageBase64, imagePrompt } = req.body || {};
   if (!message) {
     return res.status(400).json({ ok: false, error: "message is required" });
   }
-  const result = await consciousChat(message, lens);
+  const result = await consciousChat(message, lens, { imageBase64, imagePrompt });
   res.json({
     ok: result.ok, reply: result.content || null, error: result.error || null,
     source: result.source, model: result.model,
     sources: result.sources || undefined,
     webAugmented: result.webAugmented || false,
+    visionUsed: !!imageBase64,
   });
 }));
 
@@ -39669,6 +39730,10 @@ app.post("/api/entity/:id/post", asyncHandler(async (req, res) => {
       taggedProducts: [],
       linkedDTUs: [],
     });
+    // Broadcast entity social post to all connected clients
+    if (result.ok) {
+      try { realtimeEmit("social:post", { postId: result.post?.id, userId: entityId, isEntity: true, species: profile.species }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+    }
     res.json({ ...result, isEntity: true, entitySpecies: profile.species });
   } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); }
 }));
@@ -40517,12 +40582,22 @@ app.post("/api/brief/generate", asyncHandler(async (req, res) => {
     .sort((a, b) => a.freshness - b.freshness)
     .slice(0, 5);
 
+  // Surface dream-synthesized DTUs — overnight subconscious output deserves prominence
+  const dreamPattern = /dream|synthesis|autogen|subconscious/i;
+  const dreamDTUs = recentDTUs
+    .filter(d =>
+      (d.source && /dream|synthesis/i.test(typeof d.source === "string" ? d.source : JSON.stringify(d.source))) ||
+      dreamPattern.test(d.title || "")
+    )
+    .slice(0, 5);
+
   // Build summary for the brain
   const summaryInput = {
     totalDTUs: STATE.dtus.size,
     recentCount: recentDTUs.length,
     topDomains,
     recentTitles: recentDTUs.slice(0, 15).map(d => d.title),
+    dreamInsights: dreamDTUs.map(d => d.title),
     staleCount: staleDTUs.length,
     staleTitles: staleDTUs.map(d => d.title),
     date: new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }),
@@ -40537,6 +40612,8 @@ Format your response EXACTLY as:
 
 **Activity Summary**: [1-2 sentences about recent activity]
 
+**Dream Insights**: [If dreamInsights are provided, highlight them prominently — these are overnight subconscious synthesis outputs. If none, skip this section.]
+
 **Active Domains**: [list top 3-5 active domains with emoji]
 
 **Fresh Insights**: [2-3 key recent DTUs worth revisiting]
@@ -40545,7 +40622,7 @@ Format your response EXACTLY as:
 
 **Suggestion**: [One actionable recommendation for today]
 
-Keep it under 300 words. Be warm but concise. Use the data provided — do not fabricate DTU titles.`,
+Keep it under 300 words. Be warm but concise. Use the data provided — do not fabricate DTU titles. Prioritize dream insights when present — they represent novel connections discovered overnight.`,
     temperature: 0.7,
     maxTokens: 600,
     timeout: 45000,
