@@ -971,7 +971,7 @@ function MeritScoreCard({
           </div>
           <div>
             <h3 className="text-sm font-semibold text-gray-300">Merit Credit Score</h3>
-            <span className={cn('text-xs font-medium capitalize', LEVEL_COLORS[level] || 'text-gray-400')}>
+            <span className={cn('text-xs font-medium capitalize px-2 py-0.5 rounded', LEVEL_COLORS[level] || 'text-gray-400', LEVEL_BG[level] || 'bg-gray-400/10')}>
               {level}
             </span>
           </div>

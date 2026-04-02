@@ -79,10 +79,12 @@ interface PlayerState {
 function PlayerController({
   onDistrictChange,
   onWorkstationNear,
+  onPositionChange,
   districts,
 }: {
   onDistrictChange: (districtId: string | null) => void;
   onWorkstationNear: (workstation: string | null) => void;
+  onPositionChange?: (pos: { x: number; z: number }) => void;
   districts: District[];
 }) {
   const { camera } = useThree();
@@ -128,6 +130,7 @@ function PlayerController({
       positionRef.current.y = PLAYER_HEIGHT;
 
       camera.position.copy(positionRef.current);
+      onPositionChange?.({ x: positionRef.current.x, z: positionRef.current.z });
     }
 
     // Check current district
@@ -145,6 +148,25 @@ function PlayerController({
     }
 
     onDistrictChange(foundDistrict);
+
+    // Check nearest workstation
+    let nearest: string | null = null;
+    const WORKSTATION_INTERACT_RANGE = 15;
+    for (const d of districts) {
+      for (let i = 0; i < d.workstations.length; i++) {
+        const angle = ((i + 0.5) / d.workstations.length) * Math.PI * 2;
+        const r = d.radius * 0.4;
+        const wx = d.position.x + Math.cos(angle) * r;
+        const wz = d.position.z + Math.sin(angle) * r;
+        const dist = Math.sqrt((px - wx) ** 2 + (pz - wz) ** 2);
+        if (dist <= WORKSTATION_INTERACT_RANGE) {
+          nearest = d.workstations[i];
+          break;
+        }
+      }
+      if (nearest) break;
+    }
+    onWorkstationNear(nearest);
   });
 
   return null;
@@ -250,7 +272,7 @@ function DistrictZone({ district, lodLevel }: { district: District; lodLevel: "h
 
 // ── World Object ─────────────────────────────────────────────────────────────
 
-function WorldObjectMesh({ obj }: { obj: WorldObject }) {
+function WorldObjectMesh({ obj, onClick }: { obj: WorldObject; onClick?: (obj: WorldObject) => void }) {
   const scale = obj.scale || 1;
   const color = obj.color || "#3498db";
 
@@ -271,7 +293,7 @@ function WorldObjectMesh({ obj }: { obj: WorldObject }) {
 
   return (
     <group position={[obj.position.x, obj.position.y, obj.position.z]}>
-      <mesh castShadow>
+      <mesh castShadow onClick={() => onClick?.(obj)}>
         {geometry}
         <meshStandardMaterial color={color} />
       </mesh>
@@ -609,7 +631,7 @@ export default function WorldRenderer({
 
           {/* World Objects */}
           {objects.map((obj) => (
-            <WorldObjectMesh key={obj.id} obj={obj} />
+            <WorldObjectMesh key={obj.id} obj={obj} onClick={onObjectClick} />
           ))}
 
           {/* Player Controller */}
@@ -617,6 +639,7 @@ export default function WorldRenderer({
             districts={districts}
             onDistrictChange={handleDistrictChange}
             onWorkstationNear={setNearestWorkstation}
+            onPositionChange={setPlayerPos}
           />
 
           {/* Camera Controls (orbit for now, WASD overrides) */}
