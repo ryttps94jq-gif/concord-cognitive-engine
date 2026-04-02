@@ -58,7 +58,7 @@ import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
 
 type ViewMode = 'gallery' | 'canvas' | 'marketplace' | 'my-art';
-type CanvasTool = 'brush' | 'eraser' | 'fill' | 'text' | 'shape-rect' | 'shape-circle' | 'eyedropper' | 'move' | 'pen';
+type CanvasTool = 'brush' | 'eraser' | 'fill' | 'text' | 'shape-rect' | 'shape-circle' | 'eyedropper' | 'move' | 'pen' | 'rectangle' | 'circle' | 'line';
 
 interface ArtAsset {
   id: string;
@@ -744,7 +744,7 @@ export default function ArtLensPage() {
                   }
                 }}
                 onMouseUp={handleCanvasMouseUp}
-                onMouseLeave={(e) => { handleCanvasMouseUp(e); setCursorPos(null); }}
+                onMouseLeave={() => { handleCanvasMouseUp(); setCursorPos(null); }}
                 onMouseEnter={() => setCursorPos({ x: 0, y: 0 })}
               />
               {/* Dynamic brush cursor */}

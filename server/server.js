@@ -23234,6 +23234,29 @@ try {
   structuredLog("warn", "error_alerting_init_failed", { error: String(e?.message || e) });
 }
 
+// ===== ANALOGY ENGINE (cross-domain structural similarity) =====
+try {
+  const { findAnalogies } = await import("./lib/analogy-engine.js");
+  app.post("/api/analogy", asyncHandler(async (req, res) => {
+    const { dtuId, targetDomains, minScore, limit, explain } = req.body || {};
+    if (!dtuId) return res.status(400).json({ ok: false, error: "dtuId required" });
+    const result = await findAnalogies(dtuId, {
+      STATE, EMBEDDINGS, cosineSimilarity,
+      callBrain: typeof callBrain === "function" ? callBrain : null,
+    }, { targetDomains, minScore, limit, explain });
+    res.json(result);
+  }));
+  app.get("/api/dtus/:id/analogies", asyncHandler(async (req, res) => {
+    const result = await findAnalogies(req.params.id, {
+      STATE, EMBEDDINGS, cosineSimilarity,
+      callBrain: typeof callBrain === "function" ? callBrain : null,
+    }, { limit: Number(req.query.limit) || 5, explain: req.query.explain !== "false" });
+    res.json(result);
+  }));
+} catch (e) {
+  structuredLog("warn", "analogy_engine_init_failed", { error: String(e?.message || e) });
+}
+
 // ===== FRESHNESS ENGINE (domain-aware decay, velocity API) =====
 try {
   const { getDomainVelocity, DOMAIN_HALF_LIVES } = await import("./lib/freshness-engine.js");

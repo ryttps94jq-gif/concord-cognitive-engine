@@ -14,7 +14,7 @@ import {
   Sun, Plus, Search, Trash2, BarChart3,
   Layers, ChevronDown, MapPin, Users,
   Thermometer, Wind, Droplets, Mountain,
-  Eye, AlertTriangle, Navigation, Compass, Map, Binoculars, Cactus,
+  Eye, AlertTriangle, Navigation, Compass, Map, ScanSearch as Binoculars, TreePine as Cactus,
 } from 'lucide-react';
 
 const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });

@@ -6,6 +6,7 @@ import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Brain, Heart, Shield, Activity, Smile, Frown, Meh, AlertTriangle, Plus, Search, X, Trash2, Layers, ChevronDown, Calendar, Clock } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';

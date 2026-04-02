@@ -110,6 +110,15 @@ export default function CarpentryLensPage() {
     setEditorOpen(false);
   };
 
+  // Carpentry stat calculations (must be before early returns per Rules of Hooks)
+  const carpentryStats = useMemo(() => {
+    const all = items.map(i => i.data as unknown as TradeArtifact);
+    const activeJobs = all.filter(j => j.status === 'in_progress' || j.status === 'scheduled').length;
+    const totalRevenue = all.reduce((s, j) => s + (j.totalCost || j.amount || 0), 0);
+    const completedCount = all.filter(j => j.status === 'completed' || j.status === 'paid').length;
+    return { activeJobs, totalRevenue, completedCount, total: all.length };
+  }, [items]);
+
   if (isError) return <ErrorState error={error?.message} onRetry={refetch} />;
 
   const renderDashboard = () => {
@@ -181,15 +190,6 @@ export default function CarpentryLensPage() {
       })}
     </div>
   );
-
-  // Carpentry stat calculations
-  const carpentryStats = useMemo(() => {
-    const all = items.map(i => i.data as unknown as TradeArtifact);
-    const activeJobs = all.filter(j => j.status === 'in_progress' || j.status === 'scheduled').length;
-    const totalRevenue = all.reduce((s, j) => s + (j.totalCost || j.amount || 0), 0);
-    const completedCount = all.filter(j => j.status === 'completed' || j.status === 'paid').length;
-    return { activeJobs, totalRevenue, completedCount, total: all.length };
-  }, [items]);
 
   return (
     <div data-lens-theme="carpentry" className="space-y-6 p-6">

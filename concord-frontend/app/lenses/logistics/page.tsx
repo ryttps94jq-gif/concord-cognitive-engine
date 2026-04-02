@@ -1344,12 +1344,12 @@ export default function LogisticsLensPage() {
 
       {/* Quick Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: 'Shipments', value: allShipments.length, icon: Package },
-          { label: 'On-Time Rate', value: `${Math.round(dashMetrics.onTimeRate)}%`, icon: CheckCircle },
-          { label: 'Warehouses', value: allWarehouse.length, icon: Warehouse },
-          { label: 'Active Fleet', value: dashMetrics.activeVehicles, icon: Truck },
-        ].map((stat) => (
+        {([
+          { label: 'Shipments', value: String(allShipments.length), icon: Package },
+          { label: 'On-Time Rate', value: `${Math.round(Number(dashMetrics.onTimeRate))}%`, icon: CheckCircle },
+          { label: 'Warehouses', value: String(allWarehouse.length), icon: Warehouse },
+          { label: 'Active Fleet', value: String(dashMetrics.activeVehicles), icon: Truck },
+        ]).map((stat) => (
           <div key={stat.label} className={ds.panel + ' flex items-center gap-3 p-3'}>
             <stat.icon className="w-5 h-5 text-neon-cyan shrink-0" />
             <div>
