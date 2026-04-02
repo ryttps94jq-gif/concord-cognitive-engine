@@ -39,7 +39,7 @@ const INITIAL_ENTRIES: JournalEntry[] = [];
 
 const INITIAL_SESSIONS: SessionLog[] = [];
 
-const INITIAL_CLIPS: AudioClip[] = [];
+const _INITIAL_CLIPS: AudioClip[] = [];
 
 const INITIAL_REMINDERS: Reminder[] = [];
 

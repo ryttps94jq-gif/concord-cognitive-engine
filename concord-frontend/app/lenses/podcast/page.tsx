@@ -346,6 +346,15 @@ export default function PodcastLensPage() {
                           </span>
                         </div>
 
+                        {/* Publish / Edit */}
+                        <button
+                          onClick={() => { const nextStatus = episode.status === 'draft' ? 'published' : episode.status === 'published' ? 'draft' : 'published'; updateEpisode(episode.id, { data: { ...episode, status: nextStatus } as unknown as Record<string, unknown> }); }}
+                          className="p-1.5 rounded-lg text-gray-600 hover:text-green-400 hover:bg-green-500/10 opacity-0 group-hover:opacity-100 transition-all"
+                          title={episode.status === 'published' ? 'Unpublish' : 'Publish'}
+                        >
+                          <Check className="w-4 h-4" />
+                        </button>
+
                         {/* Delete */}
                         <button
                           onClick={() => removeEpisode(episode.id)}
