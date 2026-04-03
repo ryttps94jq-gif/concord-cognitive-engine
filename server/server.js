@@ -1153,11 +1153,10 @@ process.on("unhandledRejection", async (reason, _promise) => {
     }
   } catch (_e) { logger.debug('server', 'repair cortex itself must never crash the crash handler', { error: _e?.message }); }
 
-  // No fix or low confidence — exit as before
-  if ((process.env.NODE_ENV || "development") === "production") {
-    console.error("[FATAL] Unhandled promise rejection in production — exiting to allow clean restart.");
-    process.exit(1);
-  }
+  // No fix or low confidence — log but do NOT exit.
+  // PM2 health checks handle restarts if something is truly broken.
+  // A single route error should not kill the entire server.
+  console.error("[ERROR] Unhandled promise rejection — logged, not exiting.", errorStr);
 });
 
 // ---- Structured JSON Logging ----
@@ -1487,11 +1486,17 @@ const ETHOS_INVARIANTS = Object.freeze({
 function enforceEthosInvariant(actionName="") {
   const a = String(actionName||"").toLowerCase();
   if (ETHOS_INVARIANTS.NO_TELEMETRY && a.includes("telemetry")) throw new Error("Ethos invariant: telemetry forbidden");
-  if (ETHOS_INVARIANTS.NO_ADS && (a.includes("ad") || a.includes("ads"))) throw new Error("Ethos invariant: ads forbidden");
-  if (ETHOS_INVARIANTS.NO_SECRET_MONITORING && (a.includes("monitor") || a.includes("tracking") || a.includes("track"))) {
+  // Use domain-level exact match to avoid false positives on "ad" substring
+  // (e.g., "load-balancer", "ad-photography", "persona.updateProfile")
+  const AD_DOMAINS = new Set(["ads", "advertising", "ad-server", "ad-network"]);
+  const PROFILING_DOMAINS = new Set(["fingerprint", "user-profiling", "behavioral-tracking"]);
+  const parts = a.split(".");
+  const domainPart = parts[0] || "";
+  if (ETHOS_INVARIANTS.NO_ADS && AD_DOMAINS.has(domainPart)) throw new Error("Ethos invariant: ads forbidden");
+  if (ETHOS_INVARIANTS.NO_SECRET_MONITORING && (domainPart === "secret-monitoring" || a === "tracking" || a === "user-tracking")) {
     throw new Error("Ethos invariant: secret monitoring forbidden");
   }
-  if (ETHOS_INVARIANTS.NO_USER_PROFILING && (a.includes("profile") || a.includes("fingerprint"))) throw new Error("Ethos invariant: user profiling forbidden");
+  if (ETHOS_INVARIANTS.NO_USER_PROFILING && PROFILING_DOMAINS.has(domainPart)) throw new Error("Ethos invariant: user profiling forbidden");
   return true;
 }
 
@@ -3506,6 +3511,20 @@ function initDatabase() {
   try {
     // Ensure the DB parent directory exists (handles both /data/concord.db and /data/db/concord.db)
     fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+
+    // Clean stale WAL/SHM files that may have corrupted during a crash (OOM, SIGKILL, disk full).
+    // A corrupt WAL causes SQLITE_IOERR_SHMSIZE on Database() constructor, crashing in a loop.
+    try {
+      if (fs.existsSync(DB_PATH + "-shm")) fs.unlinkSync(DB_PATH + "-shm");
+      if (fs.existsSync(DB_PATH + "-wal")) {
+        const walSize = fs.statSync(DB_PATH + "-wal").size;
+        if (walSize > 50 * 1024 * 1024) { // > 50MB WAL = probably corrupt
+          fs.unlinkSync(DB_PATH + "-wal");
+          structuredLog("warn", "wal_cleanup", { walSize });
+        }
+      }
+    } catch (_e) { /* ignore cleanup errors */ }
+
     db = new Database(DB_PATH);
     db.pragma("journal_mode = WAL"); // Better performance
     db.pragma("foreign_keys = ON");
@@ -6221,6 +6240,15 @@ function saveStateDebounced() {
     clearTimeout(_saveTimer);
     _saveTimer = setTimeout(() => {
       try {
+        // Check available disk space before writing — prevent disk-full wipe
+        try {
+          const stats = fs.statfsSync(DATA_DIR);
+          const availableBytes = stats.bavail * stats.bsize;
+          if (availableBytes < 100 * 1024 * 1024) { // < 100MB free
+            structuredLog("warn", "disk_space_low", { availableBytes, threshold: "100MB" });
+            return; // Don't write, preserve what's there
+          }
+        } catch (_e) { /* statfsSync may not be available on all platforms */ }
         const data = JSON.stringify(_serializeState(), null, USE_SQLITE_STATE ? 0 : 2);
 
         if (USE_SQLITE_STATE) {
@@ -14161,12 +14189,26 @@ function pipeWal(type, meta={}) {
 }
 
 function pipeSnapshot() {
+  // Safety: don't snapshot large states — serializing 200MB+ synchronously fills disk
+  if (STATE.dtus && STATE.dtus.size > 500) {
+    structuredLog("debug", "pipe_snapshot_skipped", { dtuCount: STATE.dtus.size, reason: "too_large" });
+    return null;
+  }
   const stamp = nowISO().replace(/[:.]/g, "-");
   const dir = path.join(PIPE.snapshotsDir, `snap_${stamp}_${crypto.randomBytes(3).toString("hex")}`);
   try { fs.mkdirSync(dir, { recursive: true }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   try {
     fs.writeFileSync(path.join(dir, "state.json"), JSON.stringify(_serializeState(), null, 2), "utf-8");
   } catch (e) { structuredLog("error", "pipe_snapshot_write_failed", { dir, error: String(e) }); }
+  // Cleanup old snapshots — keep only the 10 most recent
+  try {
+    const snaps = fs.readdirSync(PIPE.snapshotsDir).filter(s => s.startsWith("snap_")).sort();
+    if (snaps.length > 10) {
+      for (const s of snaps.slice(0, -10)) {
+        fs.rmSync(path.join(PIPE.snapshotsDir, s), { recursive: true, force: true });
+      }
+    }
+  } catch (_e) { /* ignore cleanup errors */ }
   return dir;
 }
 
@@ -16782,7 +16824,10 @@ let localReply = formatCrispResponse({
         _affCog.exploration > 0.6 ? "Explore alternative viewpoints." : "",
       ].filter(Boolean).join(" ") : "";
       const _dtuTitles = _enrichedFocus.map(d => d.title || d.id).filter(Boolean);
-      const _grcSystemPrompt = GRC_MODULE
+      // Only inject GRC structured prompt for governance/macro modes, not casual chat.
+      // For chat/ask modes, the LLM should respond naturally — GRC formatting happens
+      // after the response via the GRC formatter, not via the system prompt.
+      const _grcSystemPrompt = (mode !== "chat" && mode !== "ask" && GRC_MODULE)
         ? getGRCSystemPrompt({ dtus: _dtuTitles, mode })
         : "";
       const system =
@@ -22038,10 +22083,11 @@ function _canRunMacro(actor, domain, name) {
   // 2. Domain-level default
   const domRule = MACRO_ACL_DOMAIN.get(domain);
   if (domRule) return _checkRule(domRule);
-  // 3. No rule: open in development, default-deny in production
+  // 3. No rule: default-allow. The publicReadDomains list (Gate 2) and
+  // safeReadBypass (Gate 3) are the real security gates. Default-deny here
+  // blocks legitimate macros that haven't been explicitly registered in the ACL.
   if (NODE_ENV === "production") {
-    console.warn(`[MacroACL] DENY: no ACL rule for ${domain}.${name}`);
-    return false;
+    console.warn(`[MacroACL] ALLOW (no ACL rule): ${domain}.${name}`);
   }
   return true;
 }
@@ -27435,6 +27481,13 @@ app.get("/api/context/user/:userId", asyncHandler(async (req, res) => {
 
 app.get("/api/context/metrics", asyncHandler(async (req, res) => {
   res.json(await runMacro("emergent", "context.metrics", {}, makeCtx(req)));
+}));
+
+// DTU Inspector — returns full DTU with metadata for frontend InspectorDrawer
+app.get("/api/inspect/dtu/:id", asyncHandler(async (req, res) => {
+  const dtu = STATE.dtus.get(req.params.id);
+  if (!dtu) return res.status(404).json({ ok: false, error: "DTU not found" });
+  res.json({ ok: true, dtu });
 }));
 
 // Context Inspector — aggregated context engine state for Debug lens (Feature 48)

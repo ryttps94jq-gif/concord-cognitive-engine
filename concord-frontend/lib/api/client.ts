@@ -356,10 +356,10 @@ export const apiHelpers = {
   // Chat operations
   chat: {
     send: (message: string, mode: string = 'overview') =>
-      api.post('/api/chat', { message, mode }),
+      api.post('/api/chat?full=1', { message, mode }),
 
     ask: (message: string, mode: string = 'overview') =>
-      api.post('/api/ask', { message, mode }),
+      api.post('/api/ask?full=1', { message, mode }),
 
     feedback: (data: { sessionId: string; rating: 'up' | 'down' | number; messageIndex?: number; comment?: string }) =>
       api.post('/api/chat/feedback', data),

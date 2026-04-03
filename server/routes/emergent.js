@@ -44,6 +44,12 @@ export default function createEmergentRouter({ makeCtx, runMacro }) {
     return res.json(out);
   }));
 
+  // Status MUST come before /:id catch-all or /status matches id="status"
+  router.get("/status", asyncHandler(async (req, res) => {
+    const out = await runMacro("emergent", "status", {}, makeCtx(req));
+    return res.json(out);
+  }));
+
   router.get("/:id", asyncHandler(async (req, res) => {
     const out = await runMacro("emergent", "get", { id: req.params.id }, makeCtx(req));
     return res.json(out);
@@ -112,12 +118,7 @@ export default function createEmergentRouter({ makeCtx, runMacro }) {
     return res.json(out);
   }));
 
-  // Audit / status
-  router.get("/status", asyncHandler(async (req, res) => {
-    const out = await runMacro("emergent", "status", {}, makeCtx(req));
-    return res.json(out);
-  }));
-
+  // Audit (status route moved above /:id catch-all to prevent route shadowing)
   router.get("/gate/trace", asyncHandler(async (req, res) => {
     const out = await runMacro("emergent", "gate.trace", req.query || {}, makeCtx(req));
     return res.json(out);

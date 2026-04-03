@@ -108,7 +108,7 @@ export function useLensDTUs(options: LensDTUOptions) {
 
   // ---- Context DTUs query (regular + MEGA + HYPER) ----
   const contextBody = useMemo(
-    () => ({ lens, tags, limit }),
+    () => ({ query: lens, primaryDomain: lens, lens, tags, limit }),
     [lens, tags, limit],
   );
 
