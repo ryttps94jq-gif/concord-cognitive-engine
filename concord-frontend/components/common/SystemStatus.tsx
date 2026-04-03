@@ -46,7 +46,21 @@ export function SystemStatus() {
   });
 
   const isHealthy = status?.ok && !isBackendDown;
-  const recentErrors = requestErrors.slice(-5);
+
+  // Filter errors: only show critical ones (500+, timeouts, network errors)
+  // Suppress: 404 resource lookups, 401 auth checks, WebSocket reconnects
+  const criticalErrors = requestErrors.filter((err) => {
+    if (!err.status) return true; // network errors are critical
+    if (err.status >= 500) return true; // server errors are critical
+    if (err.status === 408 || err.status === 504) return true; // timeouts
+    // Suppress expected errors
+    if (err.status === 404) return false; // resource not found = expected
+    if (err.status === 401) return false; // auth check = expected
+    if (err.status === 403) return false; // permission = handled by toast
+    if (err.status === 429) return false; // rate limit = handled by toast
+    return true; // show anything else
+  });
+  const recentErrors = criticalErrors.slice(-5);
   const hasErrors = recentErrors.length > 0;
 
   // Don't show if everything is fine and no errors

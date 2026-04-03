@@ -168,10 +168,10 @@ describe('useLensDTUs', () => {
       });
 
       await waitFor(() => {
-        expect(mockedApi.post).toHaveBeenCalledWith('/api/macro/context/query', {
-          lens: 'research',
-          tags: ['physics'],
-          limit: 50,
+        expect(mockedApi.post).toHaveBeenCalledWith('/api/macros/run', {
+          domain: 'context',
+          name: 'query',
+          input: { lens: 'research', tags: ['physics'], limit: 50 },
         });
       });
     });
@@ -185,7 +185,7 @@ describe('useLensDTUs', () => {
       });
 
       await waitFor(() => {
-        expect(mockedApi.get).toHaveBeenCalledWith('/api/dtu/list', {
+        expect(mockedApi.get).toHaveBeenCalledWith('/api/dtus', {
           params: { scope: 'science', limit: 100 },
         });
       });
@@ -200,7 +200,7 @@ describe('useLensDTUs', () => {
       });
 
       await waitFor(() => {
-        expect(mockedApi.get).toHaveBeenCalledWith('/api/dtu/list', {
+        expect(mockedApi.get).toHaveBeenCalledWith('/api/dtus', {
           params: { scope: 'research', limit: 100 },
         });
       });

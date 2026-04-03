@@ -204,16 +204,28 @@ api.interceptors.response.use(
         (error.response?.headers?.['X-Request-ID'] as string | undefined);
       const reason = data?.reason || data?.error || (error.response?.status === 401 ? 'Login required' : error.message);
 
-      // Record error in store (deduplication handled by store)
-      useUIStore.getState().addRequestError({
-        path: error.config?.url,
-        method: error.config?.method?.toUpperCase(),
-        status: error.response?.status,
-        code: data?.code,
-        requestId,
-        message: data?.error || error.message,
-        reason,
-      });
+      // Filter out expected errors that are not system failures:
+      // - 404 on resource lookups (DTU, entity, inspect) = expected for missing resources
+      // - 401 on /api/auth/me = expected when not logged in
+      // - Failed WebSocket connections = expected during reconnection
+      const requestPath = error.config?.url || '';
+      const requestStatus = error.response?.status;
+      const isExpected404 = requestStatus === 404 && /\/(dtus|entity|inspect|dtu_view)\//.test(requestPath);
+      const isExpectedAuth = requestStatus === 401 && /\/api\/auth\/me/.test(requestPath);
+      const isExpectedError = isExpected404 || isExpectedAuth;
+
+      // Only record unexpected errors in the store
+      if (!isExpectedError) {
+        useUIStore.getState().addRequestError({
+          path: error.config?.url,
+          method: error.config?.method?.toUpperCase(),
+          status: error.response?.status,
+          code: data?.code,
+          requestId,
+          message: data?.error || error.message,
+          reason,
+        });
+      }
 
       // Surface API errors as toasts — but throttle to avoid flooding the UI.
       // Only show toasts for user-facing errors, not background fetch failures.
