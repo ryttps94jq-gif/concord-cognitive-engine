@@ -2682,9 +2682,20 @@ function init({ register, STATE, helpers }) {
     try {
       const now = Date.now();
       const sevenDays = 7 * 24 * 60 * 60 * 1000;
-      const allIds = new Set(STATE.dtus.keys());
 
-      for (const [id, dtu] of STATE.dtus) {
+      // Safe iteration: STATE.dtus may be a Map, Array, or plain Object
+      const dtusIterable = STATE.dtus instanceof Map
+        ? STATE.dtus
+        : Array.isArray(STATE.dtus)
+          ? new Map(STATE.dtus.map(d => [d.id, d]))
+          : typeof STATE.dtus === 'object' && STATE.dtus
+            ? new Map(Object.entries(STATE.dtus))
+            : new Map();
+
+      const allIds = new Set(dtusIterable.keys());
+
+      for (const [id, dtu] of dtusIterable) {
+        if (!dtu || typeof dtu !== 'object') continue;
         // Stale: 7+ days old with no lineage connections
         const updatedAt = dtu.updatedAt ? new Date(dtu.updatedAt).getTime() : 0;
         const createdAt = dtu.createdAt ? new Date(dtu.createdAt).getTime() : 0;
@@ -2714,7 +2725,8 @@ function init({ register, STATE, helpers }) {
 
       // Contradiction detection: DTUs with directly opposing claims (simple keyword heuristic)
       const claimMap = [];
-      for (const [id, dtu] of STATE.dtus) {
+      for (const [id, dtu] of dtusIterable) {
+        if (!dtu || typeof dtu !== 'object') continue;
         for (const claim of (dtu.core?.claims || [])) {
           if (typeof claim === "string" && claim.length > 10) {
             claimMap.push({ id, title: dtu.title, claim: claim.toLowerCase() });

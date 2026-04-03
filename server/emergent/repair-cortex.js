@@ -34,6 +34,7 @@ import { promisify } from "util";
 import fs from "fs";
 import path from "path";
 import logger from '../logger.js';
+import { queues, PRIORITIES } from '../requestQueue.js';
 
 const execAsync = promisify(execCb);
 
@@ -2808,18 +2809,26 @@ const GUARDIAN_MONITORS = {
 
   frontend_health: {
     interval: GUARDIAN_INTERVALS.frontend_health,
-    check: async () => {
+    _failCount: 0,
+    _backoffUntil: 0,
+    check: async function() {
+      // Back off for 5 minutes after 3 consecutive failures
+      if (this._backoffUntil > Date.now()) {
+        return { healthy: true, backingOff: true }; // suppress during backoff
+      }
+
       try {
         const FRONTEND_PORT = process.env.FRONTEND_PORT || 3000;
         const frontendHost = process.env.FRONTEND_HOST || "concord-frontend";
 
-        // Try internal Docker network first, then localhost
+        // Try internal Docker network first, then localhost (max 2 attempts)
         const hosts = [`http://${frontendHost}:${FRONTEND_PORT}`, `http://localhost:${FRONTEND_PORT}`];
 
         for (const base of hosts) {
           try {
             const start = Date.now();
             const res = await fetch(base, { signal: AbortSignal.timeout(5000) });
+            this._failCount = 0; // reset on success
             return {
               healthy: res.status < 500,
               statusCode: res.status,
@@ -2829,14 +2838,21 @@ const GUARDIAN_MONITORS = {
           } catch (_e) { logger.debug('emergent:repair-cortex', 'try next host', { error: _e?.message }); }
         }
 
-        return { healthy: false, error: "Frontend unreachable on all hosts" };
+        // All hosts failed
+        this._failCount++;
+        if (this._failCount >= 3) {
+          this._backoffUntil = Date.now() + 300_000; // back off 5 minutes
+          logger.info('emergent:repair-cortex', `Frontend unreachable ${this._failCount}x, backing off 5 minutes`);
+        }
+
+        return { healthy: false, error: "Frontend unreachable on all hosts", failCount: this._failCount };
       } catch {
         return { healthy: true }; // Can't check — assume OK
       }
     },
-    repair: async (result) => {
+    repair: async function(result) {
       try {
-        if (!result.healthy) {
+        if (!result.healthy && !result.backingOff) {
           // Try restarting the frontend container
           const res = await safeDockerExec("docker restart concord-frontend 2>/dev/null");
           logRepairDTU(REPAIR_PHASES.POST_BUILD, res.skipped ? "frontend_restart_skipped_no_docker" : "frontend_restart", result);
@@ -3325,27 +3341,33 @@ const GUARDIAN_MONITORS = {
  */
 export function startGuardian() {
   try {
-    for (const [name, monitor] of Object.entries(GUARDIAN_MONITORS)) {
-      if (_guardianTimers.has(name)) continue; // Already running
+    // Delay guardian activation to match repair loop startup delay
+    const delayTimer = setTimeout(() => {
+      for (const [name, monitor] of Object.entries(GUARDIAN_MONITORS)) {
+        if (_guardianTimers.has(name)) continue; // Already running
 
-      const timer = setInterval(async () => {
-        try {
-          const result = await monitor.check();
-          _guardianStatuses.set(name, {
-            ...result,
-            lastChecked: nowISO(),
-          });
+        const timer = setInterval(async () => {
+          try {
+            const result = await monitor.check();
+            _guardianStatuses.set(name, {
+              ...result,
+              lastChecked: nowISO(),
+            });
 
-          if (!result.healthy) {
-            await monitor.repair(result);
-          }
-        } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
-      }, monitor.interval);
+            if (!result.healthy) {
+              await monitor.repair(result);
+            }
+          } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
+        }, monitor.interval);
 
-      // Unref so it doesn't prevent process exit
-      if (timer.unref) timer.unref();
-      _guardianTimers.set(name, timer);
-    }
+        // Unref so it doesn't prevent process exit
+        if (timer.unref) timer.unref();
+        _guardianTimers.set(name, timer);
+      }
+
+      logger.info('emergent:repair-cortex', 'Guardian monitors activated after startup delay');
+    }, REPAIR_STARTUP_DELAY);
+    if (delayTimer.unref) delayTimer.unref();
 
     logRepairDTU(REPAIR_PHASES.POST_BUILD, "guardian_started", {
       monitors: Object.keys(GUARDIAN_MONITORS),
@@ -3738,6 +3760,12 @@ CONFIDENCE: 0.0
 REASONING: <why>`;
 
   try {
+    // Serialize repair brain calls so they don't compete with chat
+    // Wait for any active chat queue to drain before proceeding
+    if (queues.conscious?.active > 0 || queues.utility?.active > 0) {
+      await new Promise(r => setTimeout(r, 2000)); // yield to active chat
+    }
+
     const resp = await fetch(`${BRAIN.repair.url}/api/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -3977,21 +4005,32 @@ Artifact data (first 500 chars): ${JSON.stringify(artifact.data).slice(0, 500)}`
 
 // ── Loop Management ─────────────────────────────────────────────────────────
 
+const REPAIR_STARTUP_DELAY = 180_000; // 3 minutes — match ghost fleet, let server fully boot
+
 export function startRepairLoop() {
   if (_repairLoopTimer) return { ok: true, status: "already_running" };
 
-  _repairLoopTimer = setInterval(async () => {
-    try {
-      await runRepairCycle();
-    } catch (e) {
-      try { observe(e, "repair_loop_tick"); } catch (_e) { logger.debug('emergent:repair-cortex', 'absolute last resort', { error: _e?.message }); }
-    }
-  }, RUNTIME_REPAIR_INTERVAL);
+  // Delay activation so the server is fully booted before repair systems fire
+  const delayTimer = setTimeout(() => {
+    _repairLoopTimer = setInterval(async () => {
+      try {
+        await runRepairCycle();
+      } catch (e) {
+        try { observe(e, "repair_loop_tick"); } catch (_e) { logger.debug('emergent:repair-cortex', 'absolute last resort', { error: _e?.message }); }
+      }
+    }, RUNTIME_REPAIR_INTERVAL);
 
-  // Unref so it doesn't prevent process exit
-  if (_repairLoopTimer.unref) _repairLoopTimer.unref();
+    // Unref so it doesn't prevent process exit
+    if (_repairLoopTimer.unref) _repairLoopTimer.unref();
 
-  // Also start Guardian monitors
+    logger.info('emergent:repair-cortex', 'Repair loop activated after startup delay');
+  }, REPAIR_STARTUP_DELAY);
+  if (delayTimer.unref) delayTimer.unref();
+
+  // Mark as "pending" so we don't double-start
+  _repairLoopTimer = delayTimer;
+
+  // Also start Guardian monitors (with same delay)
   startGuardian();
 
   logRepairDTU(REPAIR_PHASES.POST_BUILD, "repair_loop_started", {

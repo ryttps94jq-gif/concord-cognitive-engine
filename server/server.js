@@ -11139,7 +11139,8 @@ globalThis._concordMACROS = MACROS;
 globalThis._concordBRAIN = BRAIN;
 globalThis._concordSTATE = STATE;
 globalThis._repairObserve = observe;
-setTimeout(() => startRepairLoop(), 10000);
+// Repair loop + guardian monitors now self-delay 3 minutes internally
+startRepairLoop();
 
 // ── Ghost Fleet: Wire 18 Dormant Emergent Modules ─────────────────────────
 // Every module lazy-loaded, macros registered, ticks wired. Silent failure everywhere.
