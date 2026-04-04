@@ -1,5 +1,4 @@
 import { Metadata } from 'next';
-import { redirect } from 'next/navigation';
 
 /**
  * Public Lens Artifact Page — /lens/[domain]/[id]

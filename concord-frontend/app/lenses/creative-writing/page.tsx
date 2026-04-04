@@ -218,7 +218,7 @@ export default function CreativeWritingPage() {
   const pickRandomPrompt = useCallback(() => {
     const idx = Math.floor(Math.random() * WRITING_PROMPTS.length);
     setHighlightedPrompt(idx);
-  }, []);
+  }, [WRITING_PROMPTS.length]);
 
   const totalWordsWritten = useMemo(() => works.reduce((sum, w) => sum + (w.wordCount || 0), 0), [works]);
   const avgWordCount = works.length > 0 ? Math.round(totalWordsWritten / works.length) : 0;

@@ -141,7 +141,7 @@ function DebateRoundTimer() {
   const [finished, setFinished] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => { if (!running) setRemaining(minutes * 60); }, [minutes]);
+  useEffect(() => { if (!running) setRemaining(minutes * 60); }, [minutes, running]);
 
   useEffect(() => {
     if (running) {

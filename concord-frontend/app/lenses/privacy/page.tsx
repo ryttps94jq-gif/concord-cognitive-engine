@@ -6,8 +6,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Shield,
   Eye,
-  Globe,
-  Users,
   Brain,
   AlertTriangle,
   Loader2,
@@ -632,7 +630,7 @@ export default function PrivacySharingPage() {
 
             {/* Toggles */}
             <div className="space-y-1">
-              {category.toggles.map((toggle, ti) => {
+              {category.toggles.map((toggle, _ti) => {
                 const isNonRevocable = NON_REVOCABLE.includes(toggle.key);
                 const isSocial = SOCIAL_KEYS.includes(toggle.key);
                 const checked = localConsent[toggle.key];

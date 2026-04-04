@@ -44,7 +44,6 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { api, apiHelpers } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
 import { ds } from '@/lib/design-system';
-import { UniversalActions } from '@/components/lens/UniversalActions';
 import { PurchaseFlow } from '@/components/wallet/PurchaseFlow';
 import { WithdrawFlow } from '@/components/wallet/WithdrawFlow';
 

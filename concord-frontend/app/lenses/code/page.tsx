@@ -495,7 +495,7 @@ macro.run(async ({ genre, bpm, swing, bars }) => {
   },
 ];
 
-const DEFAULT_CODE = `// MIDI Chord Generator Script
+const _DEFAULT_CODE = `// MIDI Chord Generator Script
 // This script generates chord progressions
 
 const SCALES = {

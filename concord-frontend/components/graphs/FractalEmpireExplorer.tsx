@@ -190,8 +190,8 @@ export function FractalEmpireExplorer({
       if (!canvas) return;
 
       const rect = canvas.getBoundingClientRect();
-      const x = (e.clientX - rect.left - dimensions.width / 2 - offset.x) / zoom;
-      const y = (e.clientY - rect.top - dimensions.height / 2 - offset.y) / zoom;
+      const _x = (e.clientX - rect.left - dimensions.width / 2 - offset.x) / zoom;
+      const _y = (e.clientY - rect.top - dimensions.height / 2 - offset.y) / zoom;
 
       // Would implement proper hit testing here
     }

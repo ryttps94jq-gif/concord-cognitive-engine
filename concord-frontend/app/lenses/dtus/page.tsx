@@ -69,7 +69,7 @@ export default function DTUBrowserPage() {
     staleTime: 15_000,
   });
 
-  const dtus: DTU[] = data?.dtus || data?.items || [];
+  const dtus: DTU[] = useMemo(() => data?.dtus || data?.items || [], [data?.dtus, data?.items]);
   const total = data?.total || 0;
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const hasMore = data?.hasMore ?? (page + 1) < totalPages;

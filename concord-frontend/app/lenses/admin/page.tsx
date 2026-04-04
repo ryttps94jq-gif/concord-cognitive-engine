@@ -1000,7 +1000,7 @@ function MacroExplorerPanel() {
     queryFn: () => apiHelpers.adminMacros.all().then(r => r.data),
   });
 
-  const macros = macroData?.macros || [];
+  const macros = useMemo(() => macroData?.macros || [], [macroData?.macros]);
   const domainCount = macroData?.domainCount || 0;
   const totalMacros = macroData?.totalMacros || macros.length;
 

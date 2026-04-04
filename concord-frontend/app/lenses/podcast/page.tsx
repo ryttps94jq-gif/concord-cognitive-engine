@@ -173,7 +173,7 @@ export default function PodcastLensPage() {
     } catch (err) {
       console.error('Failed to create episode:', err instanceof Error ? err.message : err);
     }
-  }, [formTitle, formDescription, formEpisodeNum, formSeasonNum, formCoverArt, formMediaId, createEpisode]);
+  }, [formTitle, formDescription, formEpisodeNum, formSeasonNum, formCoverArt, formMediaId, formDuration, createEpisode]);
 
   // ---- RSS link ----
   const handleCopyRss = useCallback(async () => {
