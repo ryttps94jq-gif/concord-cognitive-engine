@@ -37,6 +37,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
+import { ReportButton } from '@/components/common/ReportButton';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
@@ -508,6 +509,7 @@ export default function ForumLensPage() {
               <button onClick={() => openPostDetail(post.id)} className="flex items-center gap-1.5 text-xs hover:bg-lattice-bg px-2 py-1 rounded transition-colors"><MessageSquare className="w-4 h-4" />{post.commentCount} Comments</button>
               <button onClick={() => setShowAwardModal({ type: 'post', id: post.id })} className="flex items-center gap-1.5 text-xs hover:bg-lattice-bg px-2 py-1 rounded transition-colors hover:text-yellow-400"><Award className="w-4 h-4" />Award</button>
               <button onClick={() => setShowShareModal(post.id)} className="flex items-center gap-1.5 text-xs hover:bg-lattice-bg px-2 py-1 rounded transition-colors"><Share2 className="w-4 h-4" />Share</button>
+              <ReportButton contentId={post.id} contentType="post" compact />
               <button onClick={() => handleToggleSave(post.id)} className={cn('flex items-center gap-1.5 text-xs hover:bg-lattice-bg px-2 py-1 rounded transition-colors', post.saved && 'text-neon-cyan')}>{post.saved ? <BookmarkCheck className="w-4 h-4" /> : <Bookmark className="w-4 h-4" />}{post.saved ? 'Saved' : 'Save'}</button>
               <div className="flex items-center gap-1.5 text-xs px-2 py-1 text-gray-500"><Eye className="w-3.5 h-3.5" />{post.views.toLocaleString()}</div>
               {/* Mod tools */}
@@ -572,6 +574,7 @@ export default function ForumLensPage() {
                 <span className="text-xs flex items-center gap-1"><MessageSquare className="w-4 h-4" />{selectedPost.commentCount} Comments</span>
                 <button onClick={() => setShowAwardModal({ type: 'post', id: selectedPost.id })} className="flex items-center gap-1 text-xs hover:text-yellow-400 transition-colors"><Award className="w-4 h-4" />Award</button>
                 <button onClick={() => setShowShareModal(selectedPost.id)} className="flex items-center gap-1 text-xs hover:text-white transition-colors"><Share2 className="w-4 h-4" />Share</button>
+                <ReportButton contentId={selectedPost.id} contentType="post" compact />
                 <button onClick={() => handleToggleSave(selectedPost.id)} className={cn('flex items-center gap-1 text-xs transition-colors', selectedPost.saved ? 'text-neon-cyan' : 'hover:text-white')}>{selectedPost.saved ? <BookmarkCheck className="w-4 h-4" /> : <Bookmark className="w-4 h-4" />}{selectedPost.saved ? 'Saved' : 'Save'}</button>
                 <span className="text-xs flex items-center gap-1 text-gray-500"><Eye className="w-3.5 h-3.5" />{selectedPost.views.toLocaleString()} views</span>
               </div>

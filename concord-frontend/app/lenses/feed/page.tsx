@@ -48,6 +48,7 @@ import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
 import { ProvenanceBadge } from '@/components/dtu/ProvenanceBadge';
+import { ReportButton } from '@/components/common/ReportButton';
 import { StoriesBar } from '@/components/social/StoriesBar';
 import { SuggestedFollows } from '@/components/social/SuggestedFollows';
 import { SocialCommerceTag } from '@/components/social/SocialCommerceTag';
@@ -1012,6 +1013,7 @@ export default function FeedLensPage() {
                           >
                             <Share className="w-4 h-4" />
                           </button>
+                          <ReportButton contentId={post.id} contentType="post" compact />
                         </div>
                       </div>
                     </div>

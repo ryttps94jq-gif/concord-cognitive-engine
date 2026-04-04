@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { ErrorState } from '@/components/common/EmptyState';
+import { ReportButton } from '@/components/common/ReportButton';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { useBookmarks } from '@/hooks/useBookmarks';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -469,6 +470,7 @@ export default function NewsLensPage() {
                           >
                             <Share2 className="w-4 h-4" />
                           </button>
+                          <ReportButton contentId={article.id} contentType="artifact" compact />
                         </div>
                       </div>
 
