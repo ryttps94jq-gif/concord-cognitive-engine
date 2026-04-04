@@ -27989,6 +27989,29 @@ app.get("/api/guidance/suggestions", asyncHandler(async (req, res) => {
   res.json({ ok: true, suggestions });
 }));
 
+// Guidance first-win wizard — tracks onboarding progress
+app.get("/api/guidance/first-win", asyncHandler(async (req, res) => {
+  const dtuCount = STATE.dtus?.size || 0;
+  const hasArtifact = dtuCount > 0 && Array.from(STATE.dtus.values()).some(d => d.meta?.artifact || d.meta?.fileHash);
+  const steps = [
+    { id: "create_dtu", label: "Create your first DTU", completed: dtuCount > 0 },
+    { id: "create_artifact", label: "Generate or upload an artifact", completed: hasArtifact },
+    { id: "view_global", label: "View it in Global", completed: dtuCount >= 3 },
+  ];
+  const completedCount = steps.filter(s => s.completed).length;
+  res.json({ ok: true, steps, allDone: completedCount === steps.length, completedCount });
+}));
+
+// Lens artifacts — list artifacts across lens domains
+app.get("/api/lens/artifacts", asyncHandler(async (req, res) => {
+  const domain = req.query.domain || null;
+  const limit = Math.min(Number(req.query.limit) || 50, 200);
+  let artifacts = dtusArray().filter(d => d.meta?.artifact || d.meta?.fileHash);
+  if (domain) artifacts = artifacts.filter(d => (d.tags || []).includes(domain) || d.scope === domain);
+  artifacts = artifacts.slice(0, limit);
+  res.json({ ok: true, artifacts, total: artifacts.length });
+}));
+
 // Circuit breaker status
 app.get("/api/system/circuit-breakers", asyncHandler(async (req, res) => {
   res.json({ ok: true, breakers: _breakers.getAllStatus() });
@@ -38275,6 +38298,20 @@ app.get("/api/social/profile/:userId", (req, res) => {
 
 app.get("/api/social/profiles", (req, res) => {
   try { res.json(listProfiles(STATE, { sortBy: req.query.sortBy, limit: Number(req.query.limit || 50) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/users/search", (req, res) => {
+  try {
+    const q = String(req.query.q || "").toLowerCase().trim();
+    if (!q) return res.json({ ok: true, users: [] });
+    const profiles = listProfiles(STATE, { limit: 100 });
+    const users = (profiles.profiles || []).filter(p =>
+      (p.displayName || "").toLowerCase().includes(q) ||
+      (p.username || "").toLowerCase().includes(q) ||
+      (p.userId || "").toLowerCase().includes(q)
+    ).slice(0, 20);
+    res.json({ ok: true, users });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.post("/api/social/follow", (req, res) => {
