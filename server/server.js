@@ -6092,6 +6092,19 @@ function _serializeState() {
       discoveryLog: (u.discoveryLog || []).slice(-500),
     })),
     globalThread: STATE.globalThread || { councilQueue: [], acceptedContributions: [] },
+    // v5: Social layer persistence — posts, DMs, profiles, follows survive restarts
+    _social: STATE._social ? {
+      profiles: Array.from(STATE._social.profiles.values()),
+      follows: Array.from(STATE._social.follows.entries()).map(([uid, set]) => ({ userId: uid, following: Array.from(set) })),
+      followers: Array.from(STATE._social.followers.entries()).map(([uid, set]) => ({ userId: uid, followers: Array.from(set) })),
+      publicDtus: Array.from(STATE._social.publicDtus),
+      posts: Array.from(STATE._social.posts.values()),
+      messages: Array.from(STATE._social.messages.entries()).map(([cid, msgs]) => ({ conversationId: cid, messages: (msgs || []).slice(-500) })),
+      notifications: Array.from(STATE._social.notifications.entries()).map(([uid, notifs]) => ({ userId: uid, notifications: (notifs || []).slice(-100) })),
+      groups: Array.from(STATE._social.groups.values()),
+      streaks: Array.from(STATE._social.streaks.entries()).map(([uid, s]) => ({ userId: uid, ...s })),
+      metrics: STATE._social.metrics || {},
+    } : null,
   };
 }
 
@@ -6243,6 +6256,52 @@ function _hydrateState(obj) {
       councilQueue: Array.isArray(obj.globalThread.councilQueue) ? obj.globalThread.councilQueue : [],
       acceptedContributions: Array.isArray(obj.globalThread.acceptedContributions) ? obj.globalThread.acceptedContributions : [],
     };
+  }
+
+  // v5: Social layer hydration — restore posts, DMs, profiles, follows
+  if (obj._social && typeof obj._social === "object") {
+    const s = obj._social;
+    // Lazy-init _social via social-layer.js getSocialState if not yet present
+    if (!STATE._social) {
+      STATE._social = {
+        profiles: new Map(), follows: new Map(), followers: new Map(),
+        publicDtus: new Set(), citedBy: new Map(), feedCache: new Map(),
+        trending: [], trendingComputedAt: 0,
+        posts: new Map(), messages: new Map(), notifications: new Map(),
+        groups: new Map(), streaks: new Map(), scheduledPosts: new Map(),
+        postListings: new Map(), postClicks: new Map(), postEarnings: new Map(),
+        metrics: { totalProfiles: 0, totalFollows: 0, publicDtuCount: 0, feedRequests: 0, trendingComputations: 0 },
+      };
+    }
+    const soc = STATE._social;
+    // Profiles
+    soc.profiles.clear();
+    if (Array.isArray(s.profiles)) for (const p of s.profiles) if (p && p.userId) soc.profiles.set(p.userId, p);
+    // Follows
+    soc.follows.clear();
+    if (Array.isArray(s.follows)) for (const f of s.follows) if (f && f.userId) soc.follows.set(f.userId, new Set(f.following || []));
+    // Followers
+    soc.followers.clear();
+    if (Array.isArray(s.followers)) for (const f of s.followers) if (f && f.userId) soc.followers.set(f.userId, new Set(f.followers || []));
+    // Public DTUs
+    soc.publicDtus = new Set(Array.isArray(s.publicDtus) ? s.publicDtus : []);
+    // Posts
+    soc.posts.clear();
+    if (Array.isArray(s.posts)) for (const p of s.posts) if (p && p.id) soc.posts.set(p.id, p);
+    // Messages (conversations)
+    soc.messages.clear();
+    if (Array.isArray(s.messages)) for (const m of s.messages) if (m && m.conversationId) soc.messages.set(m.conversationId, m.messages || []);
+    // Notifications
+    soc.notifications.clear();
+    if (Array.isArray(s.notifications)) for (const n of s.notifications) if (n && n.userId) soc.notifications.set(n.userId, n.notifications || []);
+    // Groups
+    soc.groups.clear();
+    if (Array.isArray(s.groups)) for (const g of s.groups) if (g && g.id) soc.groups.set(g.id, g);
+    // Streaks
+    soc.streaks.clear();
+    if (Array.isArray(s.streaks)) for (const st of s.streaks) if (st && st.userId) soc.streaks.set(st.userId, { current: st.current || 0, longest: st.longest || 0, lastPostDate: st.lastPostDate || null });
+    // Metrics
+    if (s.metrics && typeof s.metrics === "object") soc.metrics = { ...soc.metrics, ...s.metrics };
   }
 }
 

@@ -14,6 +14,7 @@ import DomainAssistant from '@/components/common/DomainAssistant';
 import { CrossDomainConnections } from '@/components/common/CrossDomainConnections';
 import { BrainMonitor } from '@/components/common/BrainMonitor';
 import { SkeletonCard } from '@/components/common/Skeleton';
+import { ContentPublisher } from '@/components/lens/ContentPublisher';
 import {
   isCoreLens,
   getParentCoreLens,
@@ -107,6 +108,11 @@ function UniversalLensFeatures({ children }: { children: React.ReactNode }) {
       <QuickCapture domain={slug} />
       <DomainAssistant domain={slug} domainLabel={label} />
       <CrossDomainConnections domain={slug} domainLabel={label} />
+
+      {/* Universal Share — floating button (bottom-right) */}
+      <div className="fixed bottom-20 right-4 z-40">
+        <ContentPublisher domain={slug} compact />
+      </div>
 
       {/* Brain status monitor (top-left floating) */}
       <div className="fixed top-20 left-4 z-40">
