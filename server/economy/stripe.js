@@ -198,6 +198,29 @@ export async function handleWebhook(db, { rawBody, signature, requestId, ip }) {
             return { ok: false, error: "token_credit_failed", detail: result.error };
           }
 
+          // Mint coins in treasury — keeps treasury.total_usd and total_coins in sync with ledger
+          const mintResult = mintCoins(db, {
+            amount: tokenCount,
+            userId,
+            refId: `stripe_mint:${event.id}`,
+            requestId,
+            ip,
+          });
+
+          if (!mintResult.ok) {
+            console.error(`[Stripe Webhook] mintCoins failed for session ${session.id}:`, mintResult.error);
+            // Purchase already credited — log critical alert but don't fail the webhook
+            // (treasury reconciliation will catch this)
+            economyAudit(db, {
+              action: "mint_coins_failed_after_purchase",
+              userId,
+              amount: tokenCount,
+              details: { stripeSessionId: session.id, error: mintResult.error },
+              requestId,
+              ip,
+            });
+          }
+
           console.log(`[ECONOMY] Checkout complete: ${tokenCount} tokens for user ${userId} via ${purchaseSource}`);
 
           economyAudit(db, {

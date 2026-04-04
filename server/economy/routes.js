@@ -131,6 +131,26 @@ export function registerEconomyRoutes(app, db, opts = {}) {
 
       if (!result.ok) return res.status(400).json(result);
 
+      // Mint coins in treasury to maintain 1:1 USD peg
+      const mintResult = mintCoins(db, {
+        amount,
+        userId,
+        refId: `admin_mint:${result.batchId}`,
+        requestId: ctx.requestId,
+        ip: ctx.ip,
+      });
+
+      if (!mintResult.ok) {
+        console.error("[economy] admin mintCoins failed:", mintResult.error);
+        economyAudit(db, {
+          action: "mint_coins_failed_after_admin_purchase",
+          userId,
+          amount,
+          details: { error: mintResult.error, batchId: result.batchId },
+          ...ctx,
+        });
+      }
+
       economyAudit(db, {
         action: "admin_token_mint",
         userId,
