@@ -21,6 +21,7 @@ import { VirtualDTUList } from '@/components/lists/VirtualDTUList';
 import { DTUDetailView } from '@/components/dtu/DTUDetailView';
 import { DTUQuickCreate } from '@/components/dtu/DTUQuickCreate';
 import { LiveDTUFeed } from '@/components/live/LiveDTUFeed';
+import { useLatticeStore, selectDTUsByTier } from '@/store/lattice';
 import { cn } from '@/lib/utils';
 import {
   Database, Plus, RefreshCw, ChevronLeft, ChevronRight,
@@ -68,6 +69,9 @@ export default function DTUBrowserPage() {
     },
     staleTime: 15_000,
   });
+
+  // Real-time tier counts from the lattice store (populated by socket events)
+  const tierCounts = useLatticeStore(selectDTUsByTier);
 
   const dtus: DTU[] = useMemo(() => data?.dtus || data?.items || [], [data?.dtus, data?.items]);
   const total = data?.total || 0;
