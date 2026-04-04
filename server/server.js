@@ -27193,6 +27193,52 @@ function _lensDomainArtifacts(domain) {
   return result;
 }
 
+/**
+ * _feedDTUsForLens — Pull event-bridge DTUs scoped to a lens domain.
+ * Converts feed DTUs into artifact-compatible format so lens.list can merge them.
+ * This bridges the gap between realtime-feeds (which create DTUs) and lens pages
+ * (which read from lensArtifacts). Without this, lenses like News show empty
+ * despite Reuters/BBC/NPR data flowing through the event bridge.
+ */
+function _feedDTUsForLens(domain, maxItems = 200) {
+  const results = [];
+  for (const dtu of STATE.dtus.values()) {
+    if (dtu.source !== "event_bridge" && dtu.source !== "event_bridge_compression") continue;
+    const lenses = dtu.scope?.lenses;
+    if (!Array.isArray(lenses) || !lenses.includes(domain)) continue;
+    // Convert DTU → artifact-compatible shape
+    results.push({
+      id: dtu.id,
+      domain: domain,
+      type: dtu.meta?.sourceEventType?.split(":")[0] || "article",
+      ownerId: "system",
+      title: (dtu.title || "").replace(/^[^—]*—\s*/, ""), // strip "event:type — " prefix
+      data: {
+        ...(dtu.meta?.rawEvent || {}),
+        summary: dtu.human?.summary || "",
+        source: dtu.meta?.rawEvent?.source || dtu.source || "feed",
+        url: dtu.meta?.rawEvent?.link || dtu.meta?.rawEvent?.url || null,
+        eventType: dtu.meta?.sourceEventType || null,
+        stance: dtu.tags?.find(t => t.startsWith("stance:"))?.replace("stance:", "") || "reported",
+      },
+      meta: {
+        tags: dtu.tags || [],
+        status: "published",
+        visibility: "public",
+        scope: "feed",
+        feedSource: true,
+        confidence: dtu.meta?.confidence || 0.7,
+        creti: dtu.creti || null,
+      },
+      createdAt: dtu.createdAt || dtu.meta?.bridgedAt,
+      updatedAt: dtu.updatedAt || dtu.createdAt || dtu.meta?.bridgedAt,
+      version: 1,
+    });
+    if (results.length >= maxItems) break;
+  }
+  return results;
+}
+
 function _lensEmitDTU(ctx, domain, action, artifactType, artifact, extra={}) {
   try {
     const dtuId = uid("dtu");
@@ -27249,7 +27295,19 @@ function _lensEmitDTU(ctx, domain, action, artifactType, artifact, extra={}) {
 register("lens", "list", (ctx, input={}) => {
   const { domain, type, search, tags, status, limit=100, offset=0 } = input;
   if (!domain) return { ok: false, error: "domain required" };
-  let artifacts = _lensDomainArtifacts(domain);
+
+  // Merge user-created lens artifacts with feed-bridged DTUs
+  const userArtifacts = _lensDomainArtifacts(domain);
+  const feedArtifacts = _feedDTUsForLens(domain, limit * 2);
+  const seenIds = new Set(userArtifacts.map(a => a.id));
+  let artifacts = [...userArtifacts];
+  for (const fa of feedArtifacts) {
+    if (!seenIds.has(fa.id)) {
+      artifacts.push(fa);
+      seenIds.add(fa.id);
+    }
+  }
+
   if (type) artifacts = artifacts.filter(a => a.type === type);
   if (search) {
     const q = String(search).toLowerCase();

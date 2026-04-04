@@ -282,7 +282,7 @@ export default function RoboticsLensPage() {
                 const robotType = (robot.type as RobotType) || 'custom';
                 const sensors = DEFAULT_SENSORS[robotType] || DEFAULT_SENSORS.custom;
                 const isExpanded = expandedRobot === robot.id;
-                const mockCommands = [
+                const recentCommands = [
                   robot.lastCommand || 'INIT_SEQUENCE',
                   'CALIBRATE_SENSORS',
                   'STATUS_CHECK',
@@ -371,7 +371,7 @@ export default function RoboticsLensPage() {
                                 <Clock className="w-3 h-3" /> Command History
                               </p>
                               <div className="space-y-1.5">
-                                {mockCommands.map((cmd, idx) => (
+                                {recentCommands.map((cmd, idx) => (
                                   <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-black/30">
                                     <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${idx === 0 ? 'bg-neon-cyan' : 'bg-gray-600'}`} />
                                     <span className="font-mono text-xs text-gray-300">{cmd}</span>

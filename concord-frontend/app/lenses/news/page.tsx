@@ -59,7 +59,6 @@ export default function NewsLensPage() {
     queryKey: ['news', selectedCategory],
     queryFn: () =>
       apiHelpers.lens.list('news', {
-        type: 'article',
         tags: selectedCategory !== 'all' ? selectedCategory : undefined,
       }).then((r) => r.data),
     refetchInterval: 60_000,
@@ -80,7 +79,27 @@ export default function NewsLensPage() {
     { id: 'community', name: 'Community', icon: Eye },
   ];
 
-  const articles: NewsArticle[] = useMemo(() => news?.artifacts || news?.articles || news?.items || [], [news]);
+  const articles: NewsArticle[] = useMemo(() => {
+    const raw = news?.artifacts || news?.articles || news?.items || [];
+    return raw.map((item: Record<string, unknown>) => {
+      const data = (item.data || {}) as Record<string, unknown>;
+      return {
+        id: String(item.id || ''),
+        title: String(data.title || item.title || ''),
+        summary: String(data.summary || data.description || ''),
+        source: String(data.source || ''),
+        category: String(data.eventType?.toString().split(':')[1] || item.type || 'general'),
+        timestamp: String(item.createdAt || item.updatedAt || ''),
+        imageUrl: (data.imageUrl as string) || undefined,
+        trending: Boolean(data.trending),
+        bookmarked: false,
+        url: (data.url as string) || (data.link as string) || undefined,
+        readTime: (data.readTime as number) || undefined,
+        views: (data.views as number) || undefined,
+        importance: (data.importance as 'low' | 'medium' | 'high' | 'critical') || undefined,
+      };
+    });
+  }, [news]);
 
   // Extract unique sources for filtering
   const sources = useMemo(() => {
