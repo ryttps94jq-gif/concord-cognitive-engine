@@ -23530,6 +23530,93 @@ app.use("/api/federation", createFederationRouter({ db }));
 import createConsentRouter from "./routes/consent.js";
 app.use("/api/consent", createConsentRouter({ db, requireAuth }));
 
+// ── Simplified consent endpoints for frontend settings page ──
+import { getUserConsents, updateConsents } from "./lib/consent.js";
+
+app.get("/api/user/consent", (req, res) => {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ ok: false, error: "unauthorized" });
+  const result = getUserConsents(db, userId);
+  // Map to simplified ConsentState shape for frontend
+  const c = result.consents || {};
+  res.json({
+    ok: true,
+    consent: {
+      marketplace: c.publish_to_marketplace?.granted || false,
+      regional: c.publish_to_regional?.granted || false,
+      regionalProfile: c.show_profile_regional?.granted || false,
+      national: c.promote_to_national?.granted || false,
+      nationalProfile: c.show_profile_national?.granted || false,
+      global: c.promote_to_global?.granted || false,
+      globalProfile: c.show_profile_global?.granted || false,
+      emergentAccess: c.allow_emergent_learning?.granted || false,
+      globalDTUCreation: c.allow_global_dtu_creation?.granted || false,
+      feedPosts: c.publish_to_feed?.granted || false,
+      dmFollowers: req.user?.dmFollowers ?? true,
+      dmAnyone: req.user?.dmAnyone ?? false,
+    },
+    stats: result.stats || {},
+    raw: result.consents,
+  });
+});
+
+app.put("/api/user/consent", (req, res) => {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ ok: false, error: "unauthorized" });
+  const body = req.body || {};
+
+  // Map simplified keys back to consent action names
+  const keyMap = {
+    marketplace: "publish_to_marketplace",
+    regional: "publish_to_regional",
+    regionalProfile: "show_profile_regional",
+    national: "promote_to_national",
+    nationalProfile: "show_profile_national",
+    global: "promote_to_global",
+    globalProfile: "show_profile_global",
+    emergentAccess: "allow_emergent_learning",
+    globalDTUCreation: "allow_global_dtu_creation",
+    feedPosts: "publish_to_feed",
+  };
+
+  const consentUpdates = {};
+  for (const [simpleKey, actionKey] of Object.entries(keyMap)) {
+    if (simpleKey in body) {
+      consentUpdates[actionKey] = Boolean(body[simpleKey]);
+    }
+  }
+
+  // Handle social DM settings (stored on user profile, not consent table)
+  if ("dmFollowers" in body || "dmAnyone" in body) {
+    const user = STATE.users.get(userId);
+    if (user) {
+      if ("dmFollowers" in body) user.dmFollowers = Boolean(body.dmFollowers);
+      if ("dmAnyone" in body) user.dmAnyone = Boolean(body.dmAnyone);
+    }
+  }
+
+  const result = updateConsents(db, userId, consentUpdates, {
+    ip: req.ip,
+    userAgent: req.headers?.["user-agent"],
+  });
+
+  res.json(result);
+});
+
+// ===== DISPUTE RESOLUTION =====
+import createDisputeRouter from "./routes/disputes.js";
+app.use("/api/disputes", createDisputeRouter({ db, requireAuth, adminOnly: (req, res, next) => {
+  if (req.user?.role === "admin" || req.user?.isOwner) return next();
+  return res.status(403).json({ ok: false, error: "admin_only" });
+} }));
+
+// ===== TRANSPARENCY REPORT =====
+import createTransparencyRouter from "./routes/transparency.js";
+app.use("/api", createTransparencyRouter({ db, adminOnly: (req, res, next) => {
+  if (req.user?.role === "admin" || req.user?.isOwner) return next();
+  return res.status(403).json({ ok: false, error: "admin_only" });
+} }));
+
 // ===== ACCOUNT LIFECYCLE — Deletion, Export, Disputes, Legal =====
 import createAccountLifecycleRouter from "./routes/account-lifecycle.js";
 app.use("/api", createAccountLifecycleRouter({ db, requireAuth }));
@@ -28200,9 +28287,20 @@ app.get("/api/artifact/:dtuId/stream", async (req, res) => {
     const stream = artifactMod.retrieveArtifactStream(dtu.artifact);
     if (!stream) return res.status(404).json({ ok: false, error: "file_not_found" });
 
-    res.setHeader("Content-Type", dtu.artifact.type);
+    // CDN cache headers — content-addressed artifacts are immutable
+    const etag = dtu.artifact.hash || dtu.artifact.checksum || req.params.dtuId;
+    res.set({
+      "Cache-Control": "public, max-age=31536000, immutable",
+      "ETag": etag,
+      "Content-Type": dtu.artifact.type,
+      "Content-Disposition": `inline; filename="${dtu.artifact.filename}"`,
+    });
     if (dtu.artifact.sizeBytes) res.setHeader("Content-Length", dtu.artifact.sizeBytes);
-    res.setHeader("Content-Disposition", `inline; filename="${dtu.artifact.filename}"`);
+
+    // 304 Not Modified — client already has this version
+    if (req.headers["if-none-match"] === etag) {
+      return res.status(304).end();
+    }
 
     // Range request support for audio/video seeking
     const range = req.headers.range;
@@ -28235,8 +28333,19 @@ app.get("/api/artifact/:dtuId/download", async (req, res) => {
     const buffer = artifactMod.retrieveArtifact(req.params.dtuId, dtu.artifact);
     if (!buffer) return res.status(404).json({ ok: false, error: "file_not_found" });
 
-    res.setHeader("Content-Type", dtu.artifact.type);
-    res.setHeader("Content-Disposition", `attachment; filename="${dtu.artifact.filename}"`);
+    // CDN cache headers for downloads
+    const etag = dtu.artifact.hash || dtu.artifact.checksum || req.params.dtuId;
+    res.set({
+      "Cache-Control": "public, max-age=31536000, immutable",
+      "ETag": etag,
+      "Content-Type": dtu.artifact.type,
+      "Content-Disposition": `attachment; filename="${dtu.artifact.filename}"`,
+    });
+
+    if (req.headers["if-none-match"] === etag) {
+      return res.status(304).end();
+    }
+
     res.send(buffer);
   } catch (err) {
     res.status(500).json({ ok: false, error: String(err?.message || err) });
@@ -46836,6 +46945,29 @@ app.use(validateRequestSize);
 // ═══════════════════════════════════════════════════════════════════════════════
 // END SPEC V + SPEC VII
 // ═══════════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INTERVAL REGISTRY — Prime-based stagger, no collisions
+// ═══════════════════════════════════════════════════════════════════════════
+import { INTERVALS, registerTask, startAllIntervals, stopAllIntervals, getIntervalStatus, verifyNoCollisions } from "./lib/interval-registry.js";
+import { recordLoadMetrics, scaleCheck, getScalingStatus } from "./lib/horizontal-scaling.js";
+
+// ── Admin: interval status ──
+app.get("/api/admin/intervals", (req, res) => {
+  const status = getIntervalStatus();
+  const collisions = verifyNoCollisions();
+  res.json({ ok: true, ...status, collisions });
+});
+
+// ── Admin: scaling status ──
+app.get("/api/admin/scaling", (req, res) => {
+  res.json({ ok: true, ...getScalingStatus() });
+});
+
+// ── Register shutdown callback for interval cleanup ──
+registerShutdownCallback(() => {
+  stopAllIntervals();
+});
 
 const SHOULD_LISTEN = (String(process.env.CONCORD_NO_LISTEN || "").toLowerCase() !== "true") && (String(process.env.NODE_ENV || "").toLowerCase() !== "test");
 
