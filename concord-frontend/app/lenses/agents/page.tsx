@@ -14,7 +14,7 @@ import {
   Code, Brain, Shield, Cpu,
   CheckCircle, XCircle,
   Workflow, Database,
-  Layers, TrendingUp, ChevronDown,
+  Layers, TrendingUp, ChevronDown, Trash2,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -92,7 +92,7 @@ export default function AgentsLensPage() {
   const [showFeatures, setShowFeatures] = useState(true);
 
   // Persist agents via lens data (auto-seeds on first use)
-  const { items: lensAgentItems, isLoading, isError, error, isSeeding: _isSeeding, refetch, create: createLensAgent, update: updateLensAgent, remove: _removeLensAgent } = useLensData<Record<string, unknown>>('agents', 'agent', {
+  const { items: lensAgentItems, isLoading, isError, error, isSeeding: _isSeeding, refetch, create: createLensAgent, update: updateLensAgent, remove: removeLensAgent } = useLensData<Record<string, unknown>>('agents', 'agent', {
     seed: INITIAL_AGENTS.map(a => ({ title: a.name, data: a as unknown as Record<string, unknown> })),
   });
   const isError2 = isError; const error2 = error; const refetch2 = refetch;
@@ -404,6 +404,13 @@ export default function AgentsLensPage() {
                             className="flex items-center justify-center gap-1 px-3 py-1.5 rounded text-xs font-medium bg-lattice-bg text-gray-400 hover:text-white transition-colors"
                           >
                             <Terminal className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); removeLensAgent(agent.id); }}
+                            className="flex items-center justify-center gap-1 px-3 py-1.5 rounded text-xs font-medium bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
+                            title="Delete agent"
+                          >
+                            <Trash2 className="w-3 h-3" />
                           </button>
                         </div>
                       </div>

@@ -141,7 +141,7 @@ export default function WhiteboardLensPage() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Lens artifact persistence layer
-  const { isError: isError, error: error, refetch: refetch, items: _boardArtifacts, create: _createBoardArtifact } = useLensData('whiteboard', 'board', { noSeed: true });
+  const { isError: isError, error: error, refetch: refetch, items: boardArtifacts, create: createBoardArtifact } = useLensData('whiteboard', 'board', { noSeed: true });
 
   /* board list state */
   const [showCreate, setShowCreate] = useState(false);
@@ -214,7 +214,11 @@ export default function WhiteboardLensPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: { title: string; linkedDtus: string[] }) => apiHelpers.whiteboard.create(data),
+    mutationFn: async (data: { title: string; linkedDtus: string[] }) => {
+      const res = await apiHelpers.whiteboard.create(data);
+      await createBoardArtifact({ title: data.title, data: { linkedDtus: data.linkedDtus, createdAt: new Date().toISOString() } as Record<string, unknown> });
+      return res;
+    },
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['whiteboards'] });
       setSelectedWbId(res.data.dtuId);
@@ -832,7 +836,7 @@ export default function WhiteboardLensPage() {
           {isLoading ? (
             <div className="text-gray-500 text-sm">Loading...</div>
           ) : (
-            whiteboards?.whiteboards?.map((wb: Record<string, unknown>) => (
+            (whiteboards?.whiteboards && whiteboards.whiteboards.length > 0 ? whiteboards.whiteboards : boardArtifacts.map(a => ({ id: a.id, title: a.title, elementCount: 0 }))).map((wb: Record<string, unknown>) => (
               <button key={wb.id as string} onClick={() => setSelectedWbId(wb.id as string)}
                 className={`w-full text-left p-3 rounded-lg border transition-colors ${selectedWbId === wb.id ? 'border-neon-pink bg-lattice-elevated' : 'border-lattice-border hover:border-neon-pink/50'}`}>
                 <p className="font-medium truncate">{wb.title as string}</p>

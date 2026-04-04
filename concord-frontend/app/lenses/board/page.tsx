@@ -35,6 +35,7 @@ import {
   Activity,
   Upload,
   Layers,
+  Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { generateId } from '@/lib/utils';

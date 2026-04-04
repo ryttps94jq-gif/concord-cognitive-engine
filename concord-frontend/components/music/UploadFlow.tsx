@@ -297,7 +297,7 @@ export function UploadFlow({ onUpload, onCancel, progress }: UploadFlowProps) {
               </div>
             ))}
             <button
-              onClick={() => setCredits([...credits, { name: '', role: '', userId: null, share: 0 }])}
+              onClick={() => setCredits([...credits, { name: '', role: '', userId: null }])}
               className="flex items-center gap-1 text-xs text-gray-400 hover:text-white mt-1"
             >
               <Plus className="w-3 h-3" /> Add Credit

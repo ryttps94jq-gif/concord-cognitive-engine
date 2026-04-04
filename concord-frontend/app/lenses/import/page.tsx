@@ -48,7 +48,7 @@ export default function ImportLens() {
     items: importJobItems,
     isLoading: jobsLoading, isError: isError, error: error, refetch: refetch,
     create: createJob,
-    update: _updateJob,
+    update: updateJob,
   } = useLensData<ImportJob>('import', 'import-job', { seed: [] });
 
   const importJobs: ImportJob[] = importJobItems.map(item => ({
@@ -623,10 +623,20 @@ export default function ImportLens() {
                   </div>
                 )}
 
-                <p className="text-void-500 text-xs mt-2">
-                  Started: {new Date(job.started_at).toLocaleString()}
-                  {job.completed_at && ` | Completed: ${new Date(job.completed_at).toLocaleString()}`}
-                </p>
+                <div className="flex items-center justify-between mt-2">
+                  <p className="text-void-500 text-xs">
+                    Started: {new Date(job.started_at).toLocaleString()}
+                    {job.completed_at && ` | Completed: ${new Date(job.completed_at).toLocaleString()}`}
+                  </p>
+                  {(job.status === 'importing' || job.status === 'pending') && (
+                    <button
+                      onClick={() => updateJob(job.id, { data: { ...job, status: 'completed', progress: 100, completed_at: new Date().toISOString() } as unknown as Record<string, unknown> })}
+                      className="text-xs px-2 py-1 bg-neon-green/10 text-neon-green rounded hover:bg-neon-green/20 transition-colors"
+                    >
+                      Mark Complete
+                    </button>
+                  )}
+                </div>
               </motion.div>
             ))}
           </div>

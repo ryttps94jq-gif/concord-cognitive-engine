@@ -119,7 +119,7 @@ export default function SRSLensPage() {
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('srs');
 
   const queryClient = useQueryClient();
-  const { isError: isError, error: error, refetch: refetch, items: cardItems, create: _createCard, remove: removeCard } = useLensData<SRSItem>('srs', 'card', {
+  const { isError: isError, error: error, refetch: refetch, items: cardItems, create: createCard, remove: removeCard } = useLensData<SRSItem>('srs', 'card', {
     seed: INITIAL_CARDS.map(c => ({ title: c.front, data: c as unknown as Record<string, unknown> })),
   });
   const { isError: isError3, error: error3, refetch: refetch3, items: deckItems } = useLensData<Deck>('srs', 'deck', {
@@ -262,6 +262,11 @@ export default function SRSLensPage() {
 
   const handleCreateCard = useCallback(() => {
     if (!newFront.trim() || !newBack.trim()) return;
+    const tags = newTags.split(',').map(t => t.trim()).filter(Boolean);
+    createCard({
+      title: newFront,
+      data: { front: newFront, back: newBack, deck: newDeck, tags, interval: 0, easeFactor: 2.5, repetitions: 0, nextReview: new Date().toISOString() } as unknown as Record<string, unknown>,
+    });
     addToSrs.mutate(newFront, {
       onSuccess: () => {
         setNewFront('');
@@ -273,7 +278,7 @@ export default function SRSLensPage() {
         setShowCreateCard(false);
       }
     });
-  }, [newFront, newBack, addToSrs]);
+  }, [newFront, newBack, newTags, newDeck, addToSrs, createCard]);
 
   const qualityButtons = [
     { label: 'Again', sublabel: '< 1m', quality: 0, color: 'bg-red-500/20 text-red-400 border-red-500/30 hover:bg-red-500/30' },

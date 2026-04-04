@@ -128,7 +128,7 @@ export default function VoiceLensPage() {
 
   // Takes
   const [takes, setTakes] = useState<Take[]>([]);
-  const { isLoading, isError: isError, error: error, refetch: refetch, items: _takeItems, create: _createTake } = useLensData<Take>('voice', 'take', {
+  const { isLoading, isError: isError, error: error, refetch: refetch, items: takeItems, create: createTake } = useLensData<Take>('voice', 'take', {
     seed: INITIAL_TAKES.map(t => ({ title: t.name, data: t as unknown as Record<string, unknown> })),
   });
   const [activeTakeId, setActiveTakeId] = useState<string | null>(null);
@@ -162,6 +162,13 @@ export default function VoiceLensPage() {
   const recordedChunksRef = useRef<Blob[]>([]);
   const takeBlobsRef = useRef<Map<string, Blob>>(new Map());
   const playbackAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Sync backend take items into local state
+  useEffect(() => {
+    if (takeItems.length > 0 && takes.length === 0) {
+      setTakes(takeItems.map(i => ({ ...(i.data as unknown as Take), id: i.id })));
+    }
+  }, [takeItems, takes.length]);
 
   const activeTake = takes.find((t) => t.id === activeTakeId) || null;
 
@@ -286,6 +293,7 @@ export default function VoiceLensPage() {
         };
         setTakes((prev) => [...prev, newTake]);
         setActiveTakeId(takeId);
+        createTake({ title: `Take ${takeNum}`, data: newTake as unknown as Record<string, unknown> });
         setStatus('ready');
       };
       recorder.stop();
