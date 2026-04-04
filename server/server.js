@@ -58,6 +58,7 @@ import "./lib/validators/healthcare-validator.js";
 import "./lib/validators/legal-validator.js";
 import "./lib/validators/music-validator.js";
 import { runIntegrityCheck } from "./lib/integrity-check.js";
+import { fullRecoverySequence } from "./lib/cascade-recovery.js";
 
 // ---- Route modules (ESM) ----
 import registerSystemRoutes from "./routes/system.js";
@@ -27046,6 +27047,27 @@ app.get("/api/admin/integrity", requireOwner, asyncHandler(async (req, res) => {
   });
 }));
 
+// ── Admin Cascade Recovery Endpoint ──────────────────────────────────────────
+app.get("/api/admin/cascade-recovery", requireOwner, asyncHandler(async (req, res) => {
+  const runFresh = req.query.run === "true";
+  let report = STATE._lastCascadeRecovery || null;
+
+  if (runFresh) {
+    try {
+      report = await fullRecoverySequence(STATE, app, (msg) => structuredLog("info", "cascade_recovery", { detail: msg }));
+      STATE._lastCascadeRecovery = report;
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: "cascade_recovery_failed", detail: String(e?.message || e) });
+    }
+  }
+
+  if (!report) {
+    return res.json({ ok: true, message: "No cascade recovery has run yet. Use ?run=true to trigger one." });
+  }
+
+  res.json({ ok: true, report });
+}));
+
 // Lens action registry for domain-specific engines
 const LENS_ACTIONS = new Map(); // `${domain}.${action}` → async (ctx, artifact, params) => result
 function registerLensAction(domain, action, handler) {
@@ -43854,7 +43876,7 @@ function recoverPendingTransactions() {
 recoverPendingTransactions();
 globalThis._txLog = { begin: beginTransaction, complete: completeTransaction, rollback: rollbackTransaction };
 
-// ── Startup Integrity Check ──────────────────────────────────────────────────
+// ── Startup Integrity Check + Cascade Recovery ──────────────────────────────
 try {
   const integrityResults = runIntegrityCheck(STATE, log, { fix: true, verbose: true });
   STATE._lastIntegrityCheck = { ...integrityResults, timestamp: Date.now() };
@@ -43866,6 +43888,20 @@ try {
   });
 } catch (e) {
   structuredLog("warn", "startup_integrity_check_failed", { error: String(e?.message || e) });
+}
+
+// Full cascade recovery: verify inits, routes, pipelines, flags, build missing
+try {
+  const cascadeReport = await fullRecoverySequence(STATE, app, (msg) => structuredLog("info", "cascade_recovery", { detail: msg }));
+  STATE._lastCascadeRecovery = cascadeReport;
+  structuredLog("info", "cascade_recovery_complete", {
+    ok: cascadeReport.ok,
+    issues: cascadeReport.totalIssues,
+    fixed: cascadeReport.totalFixed,
+    durationMs: cascadeReport.durationMs,
+  });
+} catch (e) {
+  structuredLog("warn", "cascade_recovery_failed", { error: String(e?.message || e) });
 }
 
 const SHOULD_LISTEN = (String(process.env.CONCORD_NO_LISTEN || "").toLowerCase() !== "true") && (String(process.env.NODE_ENV || "").toLowerCase() !== "test");
