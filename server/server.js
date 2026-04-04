@@ -27754,8 +27754,12 @@ app.post("/api/artifact/upload", async (req, res) => {
       meta: { createdBy: req.user?.id || "anonymous", lens: domain, type: artifactMod.inferKindFromType(contentType), tags: [domain], createdAt: new Date().toISOString() },
     };
 
+    // Strip base64 data from DTU — file lives on disk, no need to keep blob in heap
+    if (typeof artifactMod.stripArtifactData === "function") artifactMod.stripArtifactData(dtu);
+
     STATE.dtus.set(dtuId, dtu);
-    res.json({ ok: true, dtuId, artifact: { type: artifactRef.type, sizeBytes: artifactRef.sizeBytes } });
+    saveStateDebounced();
+    res.json({ ok: true, dtuId, artifact: { type: artifactRef.type, sizeBytes: artifactRef.sizeBytes, deduplicated: artifactRef.deduplicated } });
   } catch (err) {
     res.status(500).json({ ok: false, error: String(err?.message || err) });
   }

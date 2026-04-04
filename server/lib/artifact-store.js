@@ -5,7 +5,10 @@ import zlib from "zlib";
 import logger from '../logger.js';
 
 const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), "data");
-const ARTIFACT_ROOT = process.env.ARTIFACT_DIR || path.join(DATA_DIR, "artifacts");
+// Prefer network volume (/workspace/concord-data) over root disk for artifact storage.
+// Network volume survives pod restarts and has far more space than the root overlay.
+const ARTIFACT_ROOT = process.env.ARTIFACT_DIR
+  || (fs.existsSync("/workspace/concord-data") ? "/workspace/concord-data/artifacts" : path.join(DATA_DIR, "artifacts"));
 const MAX_ARTIFACT_SIZE = 100 * 1024 * 1024; // 100MB per artifact
 const GZIP_LEVEL = 6; // balanced speed/ratio
 
@@ -76,20 +79,38 @@ export async function storeArtifact(dtuId, buffer, mimeType, filename) {
   const typeInfo = SUPPORTED_TYPES[mimeType];
   if (!typeInfo) throw new Error(`Unsupported artifact type: ${mimeType}`);
 
-  const dtuDir = path.join(ARTIFACT_ROOT, dtuId);
-  fs.mkdirSync(dtuDir, { recursive: true });
+  // Content-addressed storage: hash determines file path for automatic dedup.
+  // Two DTUs referencing the same audio file = one copy on disk.
+  const hashHex = crypto.createHash("sha256").update(buffer).digest("hex");
+  const hash = "sha256:" + hashHex;
+  const contentFile = `${hashHex}.${typeInfo.ext}`;
+  const diskPath = path.join(ARTIFACT_ROOT, contentFile);
 
-  const hash = "sha256:" + crypto.createHash("sha256").update(buffer).digest("hex");
-  const sanitizedFilename = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const diskPath = path.join(dtuDir, sanitizedFilename);
-  fs.writeFileSync(diskPath, buffer);
+  fs.mkdirSync(ARTIFACT_ROOT, { recursive: true });
 
-  // Always compress compressible types at level 6
+  // Dedup: skip writing if this exact content already exists on disk
+  const alreadyExists = fs.existsSync(diskPath);
+  if (!alreadyExists) {
+    fs.writeFileSync(diskPath, buffer);
+  }
+
+  // Compress compressible types (text, SVG, MIDI, etc.)
   let compressedPath = null;
   if (typeInfo.compressible) {
-    const compressed = zlib.gzipSync(buffer, { level: GZIP_LEVEL });
     compressedPath = diskPath + ".gz";
-    fs.writeFileSync(compressedPath, compressed);
+    if (!fs.existsSync(compressedPath)) {
+      const compressed = zlib.gzipSync(buffer, { level: GZIP_LEVEL });
+      fs.writeFileSync(compressedPath, compressed);
+    }
+  }
+
+  // Also store in legacy DTU-based directory for backwards compat
+  const dtuDir = path.join(ARTIFACT_ROOT, dtuId);
+  fs.mkdirSync(dtuDir, { recursive: true });
+  const sanitizedFilename = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const legacyPath = path.join(dtuDir, sanitizedFilename);
+  if (!fs.existsSync(legacyPath)) {
+    try { fs.symlinkSync(diskPath, legacyPath); } catch { fs.copyFileSync(diskPath, legacyPath); }
   }
 
   const thumbnail = generateThumbnail(dtuDir, diskPath, mimeType);
@@ -109,7 +130,24 @@ export async function storeArtifact(dtuId, buffer, mimeType, filename) {
     parts: null,
     createdAt: new Date().toISOString(),
     lastAccessedAt: null,
+    deduplicated: alreadyExists,
   };
+}
+
+/**
+ * Strip base64 artifact data from a DTU object in-place.
+ * After calling storeArtifact, the file lives on disk — keeping the base64
+ * blob in the DTU wastes ~1.3x the file size in the JS heap.
+ * Call this after storeArtifact() returns successfully.
+ */
+export function stripArtifactData(dtu) {
+  if (!dtu) return;
+  if (dtu.artifact?.data) {
+    delete dtu.artifact.data;
+  }
+  // Also strip from nested structures
+  if (dtu.meta?.artifactData) delete dtu.meta.artifactData;
+  if (dtu.core?.binaryData) delete dtu.core.binaryData;
 }
 
 export async function storeMultipartArtifact(dtuId, files) {
