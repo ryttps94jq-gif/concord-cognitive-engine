@@ -39,7 +39,7 @@ export function HeartbeatBar() {
   });
 
   // Fetch scope metrics
-  const { data: _scopeData } = useQuery({
+  const { data: scopeData } = useQuery({
     queryKey: ['scope-metrics'],
     queryFn: () => apiHelpers.scope.metrics().then(r => r.data),
     refetchInterval: 30000,
@@ -151,6 +151,17 @@ export function HeartbeatBar() {
         <Shield className="w-3.5 h-3.5" />
         <span className="font-mono font-medium">{lockPercentage}%</span>
       </div>
+
+      {/* Scope Metrics */}
+      {scopeData && (
+        <div
+          className="hidden lg:flex items-center gap-1.5 px-2 py-1 rounded-md bg-lattice-deep text-gray-300"
+          title={`Scope: ${(scopeData as Record<string, unknown>).local ?? 0} local · ${(scopeData as Record<string, unknown>).marketplace ?? 0} market · ${(scopeData as Record<string, unknown>).global ?? 0} global`}
+        >
+          <span className="font-mono text-xs">{(scopeData as Record<string, unknown>).total ?? 0}</span>
+          <span className="text-gray-500 text-xs">scope</span>
+        </div>
+      )}
 
       {/* Live Pulse */}
       <div

@@ -976,12 +976,12 @@ export default function PhysicsLensPage() {
           { label: 'Constraints', value: constraints.length, color: 'text-cyan-400', bg: 'bg-cyan-500/10', icon: Link2 },
           { label: 'Force Fields', value: forceFields.filter(f => f.active).length, color: 'text-amber-400', bg: 'bg-amber-500/10', icon: Magnet },
           { label: 'Time Scale', value: `${settings.timeScale}x`, color: 'text-emerald-400', bg: 'bg-emerald-500/10', icon: Gauge },
-        ].map((s, _i) => (
+        ].map((s, i) => (
           <motion.div
             key={s.label}
             initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: _i * 0.06 }}
+            transition={{ delay: i * 0.06 }}
             className={`${s.bg} border border-white/5 rounded-lg p-3 flex items-center gap-3`}
           >
             <s.icon className={`w-4 h-4 ${s.color}`} />

@@ -150,10 +150,11 @@ export function AIAssistPanel({
       const fullResponse = response.data?.answer || response.data?.response || response.data?.content || response.data?.text || 'No response from the cognitive engine.';
       let currentText = '';
 
-      // Stream the response character by character for UX
-      for (let i = 0; i < fullResponse.length; i++) {
-        await new Promise(resolve => setTimeout(resolve, 8));
-        currentText += fullResponse[i];
+      // Stream the response in chunks for UX without excessive state updates
+      const chunkSize = 25;
+      for (let i = 0; i < fullResponse.length; i += chunkSize) {
+        await new Promise(resolve => setTimeout(resolve, 8 * chunkSize));
+        currentText += fullResponse.slice(i, i + chunkSize);
 
         setMessages(prev => prev.map(msg =>
           msg.id === assistantMessage.id

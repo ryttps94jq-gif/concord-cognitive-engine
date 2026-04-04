@@ -302,7 +302,7 @@ interface WorkspaceLayoutProps {
   className?: string;
 }
 
-export function WorkspaceLayout({ panes, onClosePane, onSplitPane: _onSplitPane, className }: WorkspaceLayoutProps) {
+export function WorkspaceLayout({ panes, onClosePane, onSplitPane, className }: WorkspaceLayoutProps) {
   const [activePaneId, setActivePaneId] = useState(panes[0]?.id);
   const [_layout, _setLayout] = useState<'single' | 'split-h' | 'split-v'>('single');
 
@@ -332,6 +332,30 @@ export function WorkspaceLayout({ panes, onClosePane, onSplitPane: _onSplitPane,
             )}
           >
             <span className="truncate max-w-[120px]">{pane.title}</span>
+            {onSplitPane && pane.id === activePaneId && (
+              <>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSplitPane(pane.id, 'horizontal');
+                  }}
+                  className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-lattice-border rounded transition-all"
+                  title="Split horizontally"
+                >
+                  <Columns className="w-3 h-3" />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSplitPane(pane.id, 'vertical');
+                  }}
+                  className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-lattice-border rounded transition-all"
+                  title="Split vertically"
+                >
+                  <Rows className="w-3 h-3" />
+                </button>
+              </>
+            )}
             {pane.closable !== false && (
               <button
                 onClick={(e) => {

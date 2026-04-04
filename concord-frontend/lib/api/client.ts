@@ -65,7 +65,7 @@ const RETRY_STATUS_CODES = new Set([502, 503, 504]);
 const RETRY_BASE_DELAY_MS = 1000;
 
 api.interceptors.response.use(undefined, async (error: AxiosError) => {
-  const config = error.config as InternalAxiosRequestConfig & { _retryCount?: number };
+  const config = error.config as InternalAxiosRequestConfig & { _retryCount?: number; _retried?: boolean };
   if (!config) return Promise.reject(error);
 
   const status = error.response?.status;
@@ -74,6 +74,7 @@ api.interceptors.response.use(undefined, async (error: AxiosError) => {
 
   if (isRetryable && retryCount < MAX_RETRIES) {
     config._retryCount = retryCount + 1;
+    config._retried = true; // Signal to downstream interceptors that this request was already retried
     const delay = RETRY_BASE_DELAY_MS * Math.pow(2, retryCount); // 1s, 2s, 4s
     console.warn(`[API] Retrying ${config.method?.toUpperCase()} ${config.url} (attempt ${config._retryCount}/${MAX_RETRIES}) after ${delay}ms`);
     await new Promise(resolve => setTimeout(resolve, delay));
@@ -157,12 +158,13 @@ api.interceptors.response.use(
 
       // SECURITY: Handle CSRF token expiration
       // Guard against infinite 403 retry loops with _csrfRetried flag
+      // Also skip CSRF retry if the request was already retried by the transient-error interceptor
       if (status === 403) {
-        const config = error.config as InternalAxiosRequestConfig & { _csrfRetried?: boolean };
+        const config = error.config as InternalAxiosRequestConfig & { _csrfRetried?: boolean; _retried?: boolean };
         const data = error.response.data as { code?: string };
         const isStateChanging = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(config?.method?.toUpperCase() || '');
 
-        if (data?.code === 'CSRF_FAILED' && isStateChanging && !config?._csrfRetried) {
+        if (data?.code === 'CSRF_FAILED' && isStateChanging && !config?._csrfRetried && !config?._retried) {
           // Refresh CSRF token and retry once
           try {
             await api.get('/api/auth/csrf-token');

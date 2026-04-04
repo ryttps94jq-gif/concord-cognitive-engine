@@ -56,7 +56,16 @@ export function GlobalSearch({ isOpen, onClose, onSelect }: GlobalSearchProps) {
   useEffect(() => {
     const stored = localStorage.getItem('concord-recent-searches');
     if (stored) {
-      setRecentSearches(JSON.parse(stored).slice(0, 5));
+      try {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          setRecentSearches(parsed.slice(0, 5));
+        } else {
+          localStorage.removeItem('concord-recent-searches');
+        }
+      } catch {
+        localStorage.removeItem('concord-recent-searches');
+      }
     }
   }, []);
 

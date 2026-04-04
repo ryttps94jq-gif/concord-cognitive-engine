@@ -176,22 +176,22 @@ function DTUBarChart({ cris }: { cris: CRISummary[] }) {
   );
 }
 
+const STATUS_BADGE_CLASSES: Record<string, string> = {
+  active: 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-neon-green/20 text-neon-green',
+  completed: 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-neon-blue/20 text-neon-blue',
+  paused: 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-400/20 text-yellow-400',
+  proposed: 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-400/20 text-gray-400',
+  scheduled: 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-neon-purple/20 text-neon-purple',
+  cancelled: 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-400/20 text-red-400',
+  testing: 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-neon-cyan/20 text-neon-cyan',
+  confirmed: 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-neon-green/20 text-neon-green',
+  refuted: 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-400/20 text-red-400',
+  forming: 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-400/20 text-yellow-400',
+};
+
 function StatusBadge({ status }: { status: string }) {
-  const colorMap: Record<string, string> = {
-    active: 'neon-green',
-    completed: 'neon-blue',
-    paused: 'yellow-400',
-    proposed: 'gray-400',
-    scheduled: 'neon-purple',
-    cancelled: 'red-400',
-    testing: 'neon-cyan',
-    confirmed: 'neon-green',
-    refuted: 'red-400',
-    forming: 'yellow-400',
-  };
-  const color = colorMap[status] ?? 'gray-400';
   return (
-    <span className={ds.badge(color)}>
+    <span className={STATUS_BADGE_CLASSES[status] ?? 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-400/20 text-gray-400'}>
       {status}
     </span>
   );

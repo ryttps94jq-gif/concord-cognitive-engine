@@ -125,6 +125,14 @@ export const DTU_TIER_CONFIG: Record<
     minResonance: 0,
     maxChildren: 5,
   },
+  archive: {
+    label: 'Archive',
+    color: 'text-gray-500',
+    bgColor: 'bg-gray-600/10',
+    borderColor: 'border-gray-600/30',
+    minResonance: 0,
+    maxChildren: 0,
+  },
 };
 
 export function canPromote(currentTier: DTUTier, targetTier: DTUTier): boolean {

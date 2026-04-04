@@ -50,7 +50,7 @@ export function DatabaseTable({
   onAddRow,
   onUpdateRow,
   onDeleteRow,
-  onAddColumn: _onAddColumn,
+  onAddColumn,
   className
 }: DatabaseTableProps) {
   const [viewType, setViewType] = useState<ViewType>('table');
@@ -60,6 +60,21 @@ export function DatabaseTable({
   const [editingCell, setEditingCell] = useState<{ rowId: string; colId: string } | null>(null);
   const [newRowData, setNewRowData] = useState<Record<string, unknown>>({});
   const [showNewRow, setShowNewRow] = useState(false);
+  const [showAddColumn, setShowAddColumn] = useState(false);
+  const [newColumnName, setNewColumnName] = useState('');
+  const [newColumnType, setNewColumnType] = useState<Column['type']>('text');
+
+  const handleAddColumn = () => {
+    if (newColumnName.trim() && onAddColumn) {
+      onAddColumn({
+        name: newColumnName.trim(),
+        type: newColumnType,
+      });
+      setNewColumnName('');
+      setNewColumnType('text');
+      setShowAddColumn(false);
+    }
+  };
 
   const filteredAndSortedRows = useMemo(() => {
     let result = [...rows];
@@ -257,6 +272,47 @@ export function DatabaseTable({
                   </th>
                 ))}
                 <th className="w-10"></th>
+                {onAddColumn && (
+                  <th className="px-2 py-2 border-b border-lattice-border">
+                    {showAddColumn ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="text"
+                          value={newColumnName}
+                          onChange={(e) => setNewColumnName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleAddColumn();
+                            if (e.key === 'Escape') setShowAddColumn(false);
+                          }}
+                          placeholder="Name"
+                          className="w-20 px-1 py-0.5 bg-lattice-surface border border-lattice-border rounded text-xs text-white focus:outline-none focus:border-neon-cyan"
+                          autoFocus
+                        />
+                        <select
+                          value={newColumnType}
+                          onChange={(e) => setNewColumnType(e.target.value as Column['type'])}
+                          className="px-1 py-0.5 bg-lattice-surface border border-lattice-border rounded text-xs text-white"
+                        >
+                          <option value="text">Text</option>
+                          <option value="number">Number</option>
+                          <option value="date">Date</option>
+                          <option value="checkbox">Checkbox</option>
+                          <option value="url">URL</option>
+                          <option value="select">Select</option>
+                        </select>
+                        <button onClick={handleAddColumn} className="text-neon-cyan text-xs">Add</button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setShowAddColumn(true)}
+                        className="p-1 text-gray-500 hover:text-neon-cyan transition-colors"
+                        title="Add column"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
+                    )}
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>

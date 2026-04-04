@@ -59,7 +59,7 @@ export default function MusicLensPage() {
     seed: SEED_PLAYLISTS.map(p => ({ title: p.name, data: p as unknown as Record<string, unknown> })),
   });
   const {
-    contextDTUs: _contextDTUs, hyperDTUs: _hyperDTUs, megaDTUs: _megaDTUs, regularDTUs: _regularDTUs,
+    contextDTUs: _contextDTUs, hyperDTUs: _hyperDTUs, megaDTUs, regularDTUs: _regularDTUs,
     publishToMarketplace: _publishToMarketplace,
     isLoading: _dtusLoading,
   } = useLensDTUs({ lens: 'music' });
@@ -163,11 +163,11 @@ export default function MusicLensPage() {
 
   // ---- Album MEGA DTUs ----
   const albumMegaDTUs = useMemo(() => {
-    return (_megaDTUs || []).filter((d) => {
+    return (megaDTUs || []).filter((d) => {
       const rec = d as unknown as Record<string, unknown>;
       return rec.domain === 'music' || ((rec.tags as string[] || []).some((t: string) => t === 'album' || t === 'music'));
     });
-  }, [_megaDTUs]);
+  }, [megaDTUs]);
 
   // ---- Like toggle ----
   const toggleLike = useCallback((trackId: string) => {
@@ -236,16 +236,16 @@ export default function MusicLensPage() {
   const allGenres = useMemo(() => Object.keys(genreGroups).sort(), [genreGroups]);
 
   // ---- Upload handler ----
-  const handleUpload = useCallback(async (data: unknown, _file: File) => {
+  const handleUpload = useCallback(async (data: unknown, file: File) => {
     const uploadData = data as Record<string, unknown>;
-    const trackTitle = (uploadData?.title as string) || _file.name.replace(/\.[^.]+$/, '');
+    const trackTitle = (uploadData?.title as string) || file.name.replace(/\.[^.]+$/, '');
     setUploadProgress({ stage: 'uploading', progress: 0, audioAnalysis: null, error: null });
 
     try {
       // Convert file to base64 for upload
       setUploadProgress({ stage: 'uploading', progress: 10, audioAnalysis: null, error: null });
       const { api: apiClient } = await import('@/lib/api/client');
-      const arrayBuffer = await _file.arrayBuffer();
+      const arrayBuffer = await file.arrayBuffer();
       const base64Data = btoa(
         new Uint8Array(arrayBuffer).reduce((d, byte) => d + String.fromCharCode(byte), '')
       );
@@ -254,9 +254,9 @@ export default function MusicLensPage() {
       const mediaResp = await apiClient.post('/api/media/upload', {
         title: trackTitle,
         mediaType: 'audio',
-        mimeType: _file.type || 'audio/mpeg',
-        fileSize: _file.size,
-        originalFilename: _file.name,
+        mimeType: file.type || 'audio/mpeg',
+        fileSize: file.size,
+        originalFilename: file.name,
         duration: (uploadData?.duration as number) || 240,
         tags: (uploadData?.tags as string[]) || [],
         data: base64Data,
