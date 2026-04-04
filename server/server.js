@@ -7112,8 +7112,8 @@ async function runMacro(domain, name, input, ctx) {
     // Frontend route scan: missing prefixes (cdn info, health, organism, connective-tissue)
     "/api/cdn", "/api/health", "/api/organism", "/api/connective-tissue",
   ];
-  // Safe POST paths: chat and brain endpoints that must bypass Chicken2 for unauthenticated users
-  const _safePostPaths = ["/api/chat", "/api/brain/conscious", "/api/repair", "/api/creative/registry"];
+  // Safe POST paths: chat, brain, lens, and macro endpoints that must bypass Chicken2
+  const _safePostPaths = ["/api/chat", "/api/brain/conscious", "/api/repair", "/api/creative/registry", "/api/macros/run", "/api/lens/", "/api/forge/", "/api/ask"];
   const safeReadBypass =
     (_method === "GET" && (
       _safeReadPaths.some(p => _path.startsWith(p)) ||
