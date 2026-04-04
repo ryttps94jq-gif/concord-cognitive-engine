@@ -22970,20 +22970,25 @@ function startHeartbeat() {
       }
     }
 
-    // v3: local self-upgrade (abstraction governor) at fixed cadence
-    try { await maybeRunLocalUpgrade(); } catch (err) { console.error('[system] Local self-upgrade error:', err); }
+    // ── Staggered auxiliary systems ──────────────────────────────────────
+    // These used to ALL fire every tick. Now each gets its own slot in
+    // a 4-tick rotation so only ONE auxiliary fires per heartbeat.
+    // At 120s/tick, each auxiliary runs every ~8 minutes.
+    const auxPhase = _heartbeatCount % 4;
 
-    // v5.5: capability bridge tick — beacon check + dedup scan + auto-hypothesis
-    try { await runMacro("emergent","bridge.heartbeatTick", {}, ctx).catch((err) => { console.error('[system] Emergent bridge heartbeat tick error:', err); }); } catch (err) { console.error('[system] Heartbeat tick error:', err); }
-
-    // v5.6: repair agent tick — lattice health audit (stale DTUs, orphaned lineage, contradictions)
-    try { await runMacro("emergent","repair.agent.tick", {}, ctx).catch((err) => { console.error('[system] Repair agent tick error:', err); }); } catch (err) { console.error('[system] Repair agent tick error:', err); }
-
-    // v5.7: analogize engine — minimal delay on GPU (let main pipelines settle)
-    try {
-      await new Promise((resolve) => { setTimeout(resolve, 1000); });
-      await runMacro("system","analogize", {}, ctx).catch((err) => { console.error('[system] Analogize error:', err); });
-    } catch (err) { console.error('[system] Analogize error:', err); }
+    if (auxPhase === 0) {
+      // v3: local self-upgrade (abstraction governor)
+      try { await maybeRunLocalUpgrade(); } catch (err) { console.error('[system] Local self-upgrade error:', err); }
+    } else if (auxPhase === 1) {
+      // v5.5: capability bridge tick — beacon check + dedup scan + auto-hypothesis
+      try { await runMacro("emergent","bridge.heartbeatTick", {}, ctx); } catch (err) { console.error('[system] Bridge tick error:', err); }
+    } else if (auxPhase === 2) {
+      // v5.6: repair agent tick — lattice health audit (stale DTUs, orphaned lineage, contradictions)
+      try { await runMacro("emergent","repair.agent.tick", {}, ctx); } catch (err) { console.error('[system] Repair agent tick error:', err); }
+    } else if (auxPhase === 3) {
+      // v5.7: analogize engine
+      try { await runMacro("system","analogize", {}, ctx); } catch (err) { console.error('[system] Analogize error:', err); }
+    }
 
     // ── v5.8: Biological Systems Tick ──────────────────────────────────────
     // STAGGERED: Only process ONE entity per tick (round-robin).

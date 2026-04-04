@@ -117,25 +117,29 @@ export const REPAIR_PHASES = Object.freeze({
 const MAX_BUILD_RETRIES = 3;
 const GENESIS_OVERLAP_THRESHOLD = 0.95;
 
+// Guardian intervals slowed significantly. The old 15-30s intervals meant 17
+// separate timers all hammering concurrently, clogging the event loop.
+// Nothing in a guardian monitor needs sub-minute detection — if the system is
+// down for 5 minutes, the guardian catching it at 4:59 vs 0:15 doesn't matter.
 const GUARDIAN_INTERVALS = Object.freeze({
-  process_health:        15000,   // GPU: 15 seconds — catch problems earlier
-  database_integrity:    300000,  // 5 minutes — stays same
-  state_consistency:     30000,   // GPU: 30 seconds — faster state checks
-  disk_space:            600000,  // 10 minutes — stays same
-  endpoint_health:       30000,   // GPU: 30 seconds — faster endpoint checks
-  ollama_connectivity:   60000,   // GPU: 1 minute — catch GPU brain issues faster
-  autogen_health:        120000,  // GPU: 2 minutes — monitor autogen throughput
-  emergent_vitals:       30000,   // GPU: 30 seconds — entities are active now
-  frontend_health:       60000,   // 1 minute — stays same
-  container_health:      120000,  // 2 minutes — stays same
-  nginx_health:          60000,   // 1 minute — stays same
-  websocket_health:      60000,   // 1 minute — stays same
-  event_loop_lag:        10000,   // GPU: 10 seconds — tighter lag detection
+  process_health:        300000,  // 5 minutes (was 15s)
+  database_integrity:    600000,  // 10 minutes (was 5 min)
+  state_consistency:     300000,  // 5 minutes (was 30s)
+  disk_space:            1800000, // 30 minutes (was 10 min)
+  endpoint_health:       300000,  // 5 minutes (was 30s)
+  ollama_connectivity:   300000,  // 5 minutes (was 1 min)
+  autogen_health:        600000,  // 10 minutes (was 2 min)
+  emergent_vitals:       300000,  // 5 minutes (was 30s)
+  frontend_health:       300000,  // 5 minutes (was 1 min)
+  container_health:      600000,  // 10 minutes (was 2 min)
+  nginx_health:          300000,  // 5 minutes (was 1 min)
+  websocket_health:      300000,  // 5 minutes (was 1 min)
+  event_loop_lag:        120000,  // 2 minutes (was 10s)
   ssl_certificate:       3600000, // 1 hour — stays same
-  database_connection:   120000,  // 2 minutes — stays same
-  lockfile_integrity:    600000,  // 10 minutes — stays same
-  security_signature_freshness: 3600000, // 1 hour — check signature staleness
-  security_scan_backlog:        300000,  // 5 minutes — check security scan queue
+  database_connection:   600000,  // 10 minutes (was 2 min)
+  lockfile_integrity:    1800000, // 30 minutes (was 10 min)
+  security_signature_freshness: 3600000, // 1 hour — stays same
+  security_scan_backlog:        600000,  // 10 minutes (was 5 min)
 });
 
 // ── Repair Memory ───────────────────────────────────────────────────────────
@@ -3445,7 +3449,10 @@ export async function runGuardianCheck(name) {
 // Every fix attempt is tracked. Success rate determines
 // whether a pattern gets reused or deprecated.
 
-const RUNTIME_REPAIR_INTERVAL = 15000; // GPU: 15 seconds — 1.5B repair brain runs diagnostics faster
+const RUNTIME_REPAIR_INTERVAL = 300000; // 5 minutes — repair doesn't need real-time cadence.
+// Was 15s which clogged the event loop with LLM repair brain calls on top of
+// 12 guardian monitors + cognitive pipeline + biological ticks. 5 min gives
+// each repair cycle time to complete and errors time to accumulate into patterns.
 let _repairLoopTimer = null;
 let _repairLoopRunning = false;
 
