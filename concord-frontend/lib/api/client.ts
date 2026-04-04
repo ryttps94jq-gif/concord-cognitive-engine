@@ -1727,7 +1727,7 @@ export const apiHelpers = {
   },
 
   webhooks: {
-    register: (data: Record<string, unknown>) => api.post('/api/webhooks', data),
+    register: (data: CreateWebhookRequest) => api.post('/api/webhooks', data),
     list: () => api.get('/api/webhooks'),
     get: (id: string) => api.get(`/api/webhooks/${id}`),
     delete: (id: string) => api.delete(`/api/webhooks/${id}`),

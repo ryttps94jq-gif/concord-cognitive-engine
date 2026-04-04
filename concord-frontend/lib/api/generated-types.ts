@@ -213,7 +213,7 @@ export interface ForgeResponse {
 
 export interface ChatRequest {
   message: string;
-  mode?: 'overview' | 'deep' | 'creative' | 'critical';
+  mode?: 'overview' | 'deep' | 'creative' | 'critical' | 'ethics';
 }
 
 export interface ChatResponse {
