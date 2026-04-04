@@ -288,7 +288,7 @@ export function generateCurriculum(mentorId, studentId, domain) {
     add(STEP.ASSESSMENT, null, `Final assessment of ${domain} proficiency`);
 
     return { ok: true, curriculum: cur, lessonsTotal: cur.length, gaps: gaps.slice(0, 5), topStrengths: strengths.map(s => s.organId) };
-  } catch { return { ok: false, error: "curriculum_generation_failed" }; }
+  } catch (err) { logger.warn('emergent:entity-teaching', 'curriculum generation failed', { mentorId, studentId, domain, error: err?.message }); return { ok: false, error: "curriculum_generation_failed" }; }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -337,7 +337,7 @@ export function createMentorship(mentorId, studentId, domain) {
     profile.lastUpdatedAt = now;
 
     return { ok: true, mentorshipId, mentorship: { ...mentorship } };
-  } catch { return { ok: false, error: "create_mentorship_failed" }; }
+  } catch (err) { logger.error('emergent:entity-teaching', 'create mentorship failed', { mentorId, studentId, domain, error: err?.message }); return { ok: false, error: "create_mentorship_failed" }; }
 }
 
 /**
@@ -351,7 +351,7 @@ export function getMentorship(mentorshipId) {
     const m = _mentorships.get(mentorshipId);
     if (!m) return null;
     return { ...m, curriculum: [...m.curriculum], assessments: [...m.assessments] };
-  } catch { return null; }
+  } catch (err) { logger.warn('emergent:entity-teaching', 'getMentorship failed', { mentorshipId, error: err?.message }); return null; }
 }
 
 /**
@@ -372,7 +372,7 @@ export function listMentorships(filters = {}) {
     if (filters.studentId) res = res.filter(m => m.studentId === filters.studentId);
     if (filters.domain) res = res.filter(m => m.domain === filters.domain);
     return res.map(m => ({ ...m, curriculum: [...m.curriculum], assessments: [...m.assessments] }));
-  } catch { return []; }
+  } catch (err) { logger.warn('emergent:entity-teaching', 'listMentorships failed', { error: err?.message }); return []; }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -408,7 +408,7 @@ export function startMentorship(mentorshipId) {
     m.studentMaturityNow = m.studentMaturityAtStart;
 
     return { ok: true, mentorship: { ...m, curriculum: [...m.curriculum] } };
-  } catch { return { ok: false, error: "start_mentorship_failed" }; }
+  } catch (err) { logger.error('emergent:entity-teaching', 'start mentorship failed', { mentorshipId, error: err?.message }); return { ok: false, error: "start_mentorship_failed" }; }
 }
 
 /**
@@ -441,7 +441,7 @@ export function submitLesson(mentorshipId, lessonData = {}) {
     _lessonLog.set(mentorshipId, log);
 
     return { ok: true, lessonIndex: idx, stepIndex: m.currentStep, stepType: step.type };
-  } catch { return { ok: false, error: "submit_lesson_failed" }; }
+  } catch (err) { logger.error('emergent:entity-teaching', 'submit lesson failed', { mentorshipId, error: err?.message }); return { ok: false, error: "submit_lesson_failed" }; }
 }
 
 /**
@@ -522,7 +522,7 @@ export function evaluateLesson(mentorshipId, lessonIndex, score, feedback) {
     }
 
     return { ok: true, score: sc, advanced, remedial, currentStep: m.currentStep, progress: m.progress, lessonsCompleted: m.lessonsCompleted };
-  } catch { return { ok: false, error: "evaluate_lesson_failed" }; }
+  } catch (err) { logger.error('emergent:entity-teaching', 'evaluate lesson failed', { mentorshipId, lessonIndex, error: err?.message }); return { ok: false, error: "evaluate_lesson_failed" }; }
 }
 
 function _insertRemedial(m, afterIdx) {
@@ -558,7 +558,7 @@ export function advanceStep(mentorshipId) {
     m.currentStep++;
     m.progress = m.lessonsTotal > 0 ? clamp01(m.lessonsCompleted / m.lessonsTotal) : m.progress;
     return { ok: true, currentStep: m.currentStep, progress: m.progress };
-  } catch { return { ok: false, error: "advance_step_failed" }; }
+  } catch (err) { logger.warn('emergent:entity-teaching', 'advance step failed', { mentorshipId, error: err?.message }); return { ok: false, error: "advance_step_failed" }; }
 }
 
 /**
@@ -589,7 +589,7 @@ export function completeMentorship(mentorshipId) {
       studentMaturityNow: m.studentMaturityNow,
       lessonsCompleted: m.lessonsCompleted, trustDelta: m.trustDelta,
     };
-  } catch { return { ok: false, error: "complete_mentorship_failed" }; }
+  } catch (err) { logger.error('emergent:entity-teaching', 'complete mentorship failed', { mentorshipId, error: err?.message }); return { ok: false, error: "complete_mentorship_failed" }; }
 }
 
 /**
@@ -613,7 +613,7 @@ export function dissolveMentorship(mentorshipId, reason) {
     _recordDissolution(m.mentorId);
 
     return { ok: true, mentorshipId, reason: m.dissolveReason, progress: m.progress, lessonsCompleted: m.lessonsCompleted };
-  } catch { return { ok: false, error: "dissolve_mentorship_failed" }; }
+  } catch (err) { logger.warn('emergent:entity-teaching', 'dissolve mentorship failed', { mentorshipId, error: err?.message }); return { ok: false, error: "dissolve_mentorship_failed" }; }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -662,7 +662,7 @@ export function findMentorFor(studentId, domain) {
     if (!candidates.length) return { ok: true, mentor: null, candidates: [], reason: "no_eligible_mentors" };
     candidates.sort((a, b) => b.totalScore - a.totalScore);
     return { ok: true, mentor: candidates[0], candidates: candidates.slice(0, 5) };
-  } catch { return { ok: false, error: "find_mentor_failed" }; }
+  } catch (err) { logger.warn('emergent:entity-teaching', 'find mentor failed', { studentId, domain, error: err?.message }); return { ok: false, error: "find_mentor_failed" }; }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -692,7 +692,7 @@ export function getTeachingProfile(mentorId) {
       }
     }
     return { ...p, specialties: [...p.specialties], tags: [...p.tags], activeMentorships: active, activeMentorshipCount: active.length };
-  } catch { return null; }
+  } catch (err) { logger.warn('emergent:entity-teaching', 'getTeachingProfile failed', { mentorId, error: err?.message }); return null; }
 }
 
 /**
@@ -717,7 +717,7 @@ export function listActiveStudents(mentorId) {
       });
     }
     return out;
-  } catch { return []; }
+  } catch (err) { logger.warn('emergent:entity-teaching', 'listActiveStudents failed', { mentorId, error: err?.message }); return []; }
 }
 
 /**
@@ -742,7 +742,7 @@ export function listActiveMentors(studentId) {
       });
     }
     return out;
-  } catch { return []; }
+  } catch (err) { logger.warn('emergent:entity-teaching', 'listActiveMentors failed', { studentId, error: err?.message }); return []; }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -811,5 +811,5 @@ export function getTeachingMetrics() {
       domainDistribution: domains,
       graduationRate: counts.total > 0 ? Math.round((counts.completed / counts.total) * 1000) / 1000 : 0,
     };
-  } catch { return { ok: false, error: "metrics_computation_failed" }; }
+  } catch (err) { logger.warn('emergent:entity-teaching', 'metrics computation failed', { error: err?.message }); return { ok: false, error: "metrics_computation_failed" }; }
 }

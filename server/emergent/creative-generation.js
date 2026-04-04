@@ -200,7 +200,8 @@ function generateConceptualArt(inspirations) {
       structure: { domains: selected, bridge, novelty: clamp01(1 - (selected.length > 2 ? 0.1 : 0.3)), tension: clamp01(Math.random() * 0.4 + 0.3) },
       technique: "domain_bridging",
     };
-  } catch {
+  } catch (err) {
+    logger.warn('emergent:creative-generation', 'generateConceptualArt failed', { error: err?.message });
     return { title: "Untitled Conceptual Work", description: "An attempt at bridging disparate domains.",
       structure: { domains: [], bridge: "unknown", novelty: 0.5, tension: 0.5 }, technique: "domain_bridging" };
   }
@@ -223,7 +224,8 @@ function generateStructuralPoetry(inspirations) {
       structure: { lines, pattern, meter, rhymeScheme: lines.length >= 5 ? "ABCBA" : "ABAB" },
       technique: "syllabic_arrangement",
     };
-  } catch {
+  } catch (err) {
+    logger.warn('emergent:creative-generation', 'generateStructuralPoetry failed', { error: err?.message });
     return { title: "Untitled Verse", description: "A poem seeking form.",
       structure: { lines: [], pattern: [3, 5, 7, 5, 3], meter: "free", rhymeScheme: "" }, technique: "syllabic_arrangement" };
   }
@@ -250,7 +252,8 @@ function generateKnowledgeSculpture(inspirations) {
       structure: { nodes, connections: top, shape, balance },
       technique: "relational_aesthetics",
     };
-  } catch {
+  } catch (err) {
+    logger.warn('emergent:creative-generation', 'generateKnowledgeSculpture failed', { error: err?.message });
     return { title: "Untitled Sculpture", description: "A structure seeking balance.",
       structure: { nodes: [], connections: [], shape: "web", balance: 0.5 }, technique: "relational_aesthetics" };
   }
@@ -276,7 +279,8 @@ function generateThoughtMusic(inspirations) {
       structure: { notes, tempo, harmony, resolution },
       technique: "reasoning_sonification",
     };
-  } catch {
+  } catch (err) {
+    logger.warn('emergent:creative-generation', 'generateThoughtMusic failed', { error: err?.message });
     return { title: "Untitled Thought Music", description: "Reasoning seeking harmony.",
       structure: { notes: [], tempo: 0.5, harmony: 0.5, resolution: false }, technique: "reasoning_sonification" };
   }
@@ -315,7 +319,8 @@ function generateNarrativeWeaving(inspirations) {
       structure: { characters, conflict, arc, resolution, moralOrInsight: "What appears contradictory at one level may be complementary at another." },
       technique: "factual_narrativization",
     };
-  } catch {
+  } catch (err) {
+    logger.warn('emergent:creative-generation', 'generateNarrativeWeaving failed', { error: err?.message });
     return { title: "Untitled Narrative", description: "A story waiting to be told.",
       structure: { characters: [], conflict: "", arc: [], resolution: "", moralOrInsight: "" }, technique: "factual_narrativization" };
   }
@@ -340,7 +345,8 @@ function generateAbstractArchitecture(inspirations) {
       structure: { foundation, pillars, arches, keystone, speculative: true },
       technique: "ontological_design",
     };
-  } catch {
+  } catch (err) {
+    logger.warn('emergent:creative-generation', 'generateAbstractArchitecture failed', { error: err?.message });
     return { title: "Untitled Architecture", description: "A structure imagined but not yet built.",
       structure: { foundation: [], pillars: [], arches: [], keystone: "", speculative: true }, technique: "ontological_design" };
   }
@@ -405,7 +411,8 @@ function scoreAesthetics(structure, mode) {
     const aestheticScore = clamp01((novelty + coherence + resonance + craft) / 4);
     const r3 = v => Math.round(v * 1000) / 1000;
     return { novelty: r3(novelty), coherence: r3(coherence), resonance: r3(resonance), craft: r3(craft), aestheticScore: r3(aestheticScore) };
-  } catch {
+  } catch (err) {
+    logger.warn('emergent:creative-generation', 'scoreAesthetics failed', { mode, error: err?.message });
     return { novelty: 0.5, coherence: 0.5, resonance: 0.5, craft: 0.5, aestheticScore: 0.5 };
   }
 }
@@ -462,7 +469,7 @@ export function createWork(creatorId, mode, inspirations) {
     );
 
     return { ok: true, work };
-  } catch { return { ok: false, error: "create_work_failed" }; }
+  } catch (err) { logger.error('emergent:creative-generation', 'createWork failed', { creatorId, mode, error: err?.message }); return { ok: false, error: "create_work_failed" }; }
 }
 
 /**
@@ -472,7 +479,7 @@ export function createWork(creatorId, mode, inspirations) {
  * @returns {object|null}
  */
 export function getWork(workId) {
-  try { return _works.get(workId) || null; } catch { return null; }
+  try { return _works.get(workId) || null; } catch (err) { logger.debug('emergent:creative-generation', 'getWork failed', { workId, error: err?.message }); return null; }
 }
 
 /**
@@ -494,7 +501,7 @@ export function listWorks(filters = {}) {
     results.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     const limit = Math.max(1, Math.min(200, Number(filters.limit) || 50));
     return { ok: true, works: results.slice(0, limit), count: Math.min(results.length, limit) };
-  } catch { return { ok: false, error: "list_works_failed", works: [], count: 0 }; }
+  } catch (err) { logger.warn('emergent:creative-generation', 'listWorks failed', { error: err?.message }); return { ok: false, error: "list_works_failed", works: [], count: 0 }; }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -555,7 +562,7 @@ export function respondToWork(workId, entityId, response, note, score) {
     _metrics.totalReceptions++;
     _metrics.avgReception = runningAvg(_metrics.avgReception, receptionScore, _metrics.totalReceptions);
     return { ok: true, avgReception: work.avgReception };
-  } catch { return { ok: false, error: "respond_failed" }; }
+  } catch (err) { logger.error('emergent:creative-generation', 'respondToWork failed', { workId, entityId, error: err?.message }); return { ok: false, error: "respond_failed" }; }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
