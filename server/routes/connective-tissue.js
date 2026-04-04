@@ -25,12 +25,12 @@ import {
 } from "../economy/emergent-auth.js";
 import { validateBody, tipSchema, bountyCreateSchema, bountyClaimSchema, purchaseSchema } from "../lib/validators/mutation-schemas.js";
 
-export default function connectiveTissueRoutes(db) {
+export default function connectiveTissueRoutes({ db, requireAuth }) {
   const router = Router();
 
   // ── TIPPING ────────────────────────────────────────────────────────
 
-  router.post("/tip", validateBody(tipSchema), (req, res) => {
+  router.post("/tip", requireAuth(), validateBody(tipSchema), (req, res) => {
     const { tipperId, creatorId, contentId, contentType, lensId, amount } = req.body;
     const result = tipContent(db, {
       tipperId, creatorId, contentId, contentType, lensId, amount,
@@ -41,7 +41,7 @@ export default function connectiveTissueRoutes(db) {
 
   // ── BOUNTIES ───────────────────────────────────────────────────────
 
-  router.post("/bounties", validateBody(bountyCreateSchema), (req, res) => {
+  router.post("/bounties", requireAuth(), validateBody(bountyCreateSchema), (req, res) => {
     const { posterId, title, description, lensId, amount, tags, expiresAt } = req.body;
     const result = postBounty(db, {
       posterId, title, description, lensId, amount, tags, expiresAt,
@@ -50,7 +50,7 @@ export default function connectiveTissueRoutes(db) {
     res.json(result);
   });
 
-  router.post("/bounties/:bountyId/claim", validateBody(bountyClaimSchema), (req, res) => {
+  router.post("/bounties/:bountyId/claim", requireAuth(), validateBody(bountyClaimSchema), (req, res) => {
     const { claimerId, posterId, solutionDtuId } = req.body;
     const result = claimBounty(db, {
       bountyId: req.params.bountyId, claimerId, posterId, solutionDtuId,
@@ -86,17 +86,17 @@ export default function connectiveTissueRoutes(db) {
 
   // ── DTU CREATION & PUBLICATION ─────────────────────────────────────
 
-  router.post("/dtu/create", (req, res) => {
+  router.post("/dtu/create", requireAuth(), (req, res) => {
     const result = createDTU(db, req.body);
     res.json(result);
   });
 
-  router.post("/dtu/list", (req, res) => {
+  router.post("/dtu/list", requireAuth(), (req, res) => {
     const result = listDTU(db, req.body);
     res.json(result);
   });
 
-  router.post("/dtu/purchase", validateBody(purchaseSchema), (req, res) => {
+  router.post("/dtu/purchase", requireAuth(), validateBody(purchaseSchema), (req, res) => {
     const { buyerId, dtuId, sellerId, amount, lensId } = req.body;
     const result = purchaseDTU(db, {
       buyerId, dtuId, sellerId, amount, lensId,
@@ -112,26 +112,26 @@ export default function connectiveTissueRoutes(db) {
     res.json(result);
   });
 
-  router.post("/dtu/:dtuId/creti/recalculate", (req, res) => {
+  router.post("/dtu/:dtuId/creti/recalculate", requireAuth(), (req, res) => {
     const result = recalculateCRETI(db, req.params.dtuId);
     res.json(result);
   });
 
   // ── DTU COMPRESSION ────────────────────────────────────────────────
 
-  router.post("/dtu/compress/mega", (req, res) => {
+  router.post("/dtu/compress/mega", requireAuth(), (req, res) => {
     const result = compressToDMega(db, req.body);
     res.json(result);
   });
 
-  router.post("/dtu/compress/hyper", (req, res) => {
+  router.post("/dtu/compress/hyper", requireAuth(), (req, res) => {
     const result = compressToHyper(db, req.body);
     res.json(result);
   });
 
   // ── FORK MECHANISM ─────────────────────────────────────────────────
 
-  router.post("/dtu/fork", (req, res) => {
+  router.post("/dtu/fork", requireAuth(), (req, res) => {
     const result = forkDTU(db, req.body);
     res.json(result);
   });
@@ -165,17 +165,17 @@ export default function connectiveTissueRoutes(db) {
 
   // ── EMERGENT / BOT AUTH ────────────────────────────────────────────
 
-  router.post("/emergent/register", (req, res) => {
+  router.post("/emergent/register", requireAuth(), (req, res) => {
     const result = registerEmergent(db, req.body);
     res.json(result);
   });
 
-  router.post("/bot/register", (req, res) => {
+  router.post("/bot/register", requireAuth(), (req, res) => {
     const result = registerBot(db, req.body);
     res.json(result);
   });
 
-  router.post("/bot/auth", (req, res) => {
+  router.post("/bot/auth", requireAuth(), (req, res) => {
     const result = authenticateBot(db, req.body.apiKey);
     res.json(result);
   });
