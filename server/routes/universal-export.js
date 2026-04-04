@@ -4,7 +4,7 @@
 // universal export (DTU → any format).
 
 import { Router } from "express";
-import { lensDataToDTU, wrapFormatAsDTU, exportDTUAs, inspectDTU, DOMAIN_TYPE_MAP } from "../lib/universal-dtu-bridge.js";
+import { lensDataToDTU, wrapFormatAsDTU, exportDTUAs, inspectDTU } from "../lib/universal-dtu-bridge.js";
 import { asyncHandler } from "../lib/async-handler.js";
 
 // ── MIME → media category mapping ────────────────────────────────────────

@@ -15,7 +15,7 @@
 
 import { Router } from "express";
 import { asyncHandler } from "../lib/async-handler.js";
-import { ValidationError, NotFoundError, AuthorizationError } from "../lib/errors.js";
+import { ValidationError, AuthorizationError } from "../lib/errors.js";
 
 /**
  * Create the CDN routes router.
