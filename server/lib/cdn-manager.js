@@ -391,7 +391,8 @@ function createAWSProvider(config) {
       // return signer.getSignedUrl({ url, dateLessThan: expiresAt });
 
       // Simplified HMAC-based signing for development
-      const secret = process.env.CONCORD_CDN_SIGNING_SECRET || "dev-signing-secret";
+      const secret = process.env.CONCORD_CDN_SIGNING_SECRET || (process.env.NODE_ENV === "production" ? undefined : "dev-signing-secret");
+      if (!secret) return { ok: false, error: "CONCORD_CDN_SIGNING_SECRET not set" };
       const token = createHmac("sha256", secret)
         .update(`${artifactHash}:${expires}`)
         .digest("hex");

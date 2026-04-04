@@ -134,19 +134,23 @@ function AudioPreviewRender({ preview }: { preview: AudioPreview }) {
 
   useEffect(() => {
     return () => {
-      audioRef.current?.pause();
+      const audio = audioRef.current;
+      if (audio) {
+        audio.pause();
+        audio.src = '';
+        audio.load();
+      }
     };
   }, []);
 
   const togglePlay = () => {
     if (!audioRef.current) {
-      audioRef.current = new Audio(preview.previewUrl);
-      audioRef.current.addEventListener('timeupdate', () => {
-        if (audioRef.current) {
-          setProgress(audioRef.current.currentTime / audioRef.current.duration);
-        }
-      });
-      audioRef.current.addEventListener('ended', () => setPlaying(false));
+      const audio = new Audio(preview.previewUrl);
+      audio.ontimeupdate = () => {
+        setProgress(audio.currentTime / (audio.duration || 1));
+      };
+      audio.onended = () => setPlaying(false);
+      audioRef.current = audio;
     }
 
     if (playing) {
