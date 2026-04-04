@@ -395,6 +395,15 @@ export function purchaseArtifact(db, { buyerId, artifactId, requestId, ip }) {
     const txBalanceCheck = validateBalance(db, buyerId, price);
     if (!txBalanceCheck.ok) throw new Error(`insufficient_balance:${txBalanceCheck.balance}:${price}`);
 
+    // Re-check exclusive availability inside transaction (race condition guard)
+    // Two users clicking "Buy" at the same millisecond: second one gets "already sold"
+    if (artifact.license_type === "exclusive") {
+      const exclusiveHeld = db.prepare(
+        "SELECT id FROM creative_usage_licenses WHERE artifact_id = ? AND license_type = 'exclusive' AND status = 'active'"
+      ).get(artifactId);
+      if (exclusiveHeld) throw new Error("exclusive_already_sold");
+    }
+
     const batchId = generateTxId();
     const now = nowISO();
     const entries = [];
@@ -567,6 +576,13 @@ export function purchaseArtifact(db, { buyerId, artifactId, requestId, ip }) {
       batchId,
     };
   } catch (err) {
+    // Surface specific race-condition errors to callers
+    if (err.message?.startsWith("insufficient_balance:")) {
+      return { ok: false, error: "insufficient_balance" };
+    }
+    if (err.message === "exclusive_already_sold") {
+      return { ok: false, error: "exclusive_license_already_held" };
+    }
     console.error("[economy] purchase_failed:", err.message);
     return { ok: false, error: "purchase_failed" };
   }
