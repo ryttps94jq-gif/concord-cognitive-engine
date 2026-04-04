@@ -6932,7 +6932,12 @@ async function runMacro(domain, name, input, ctx) {
   // CRITICAL: Every frontend macro call domain must be listed here
   // Also exposed as _publicReadDomainsACL for the macro ACL viewer bypass
   const publicReadDomains = {
-    emergent: new Set(["status", "get", "list", "schema", "patterns", "reputation", "scope.metrics", "bridge.heartbeatTick"]),
+    emergent: new Set(["status", "get", "list", "schema", "patterns", "reputation", "scope.metrics",
+      "bridge.heartbeatTick", "bridge.beacon", "bridge.dedupGate", "bridge.dedupScan", "bridge.info",
+      "bridge.lensScope", "bridge.lensValidate", "bridge.strategyHints",
+      "empirical.info", "empirical.math", "empirical.parseUnits", "empirical.convertUnits",
+      "empirical.checkUnits", "empirical.constants", "empirical.scanText",
+      "pipeline.run", "pipeline.metrics", "pipeline.selectIntent"]),
     dtu: new Set(["list", "get", "search", "recent", "stats", "count", "export", "paginated"]),
     lens: new Set(["list", "get", "export", "run"]),
     system: new Set(["status", "getStatus", "health", "analogize"]),
