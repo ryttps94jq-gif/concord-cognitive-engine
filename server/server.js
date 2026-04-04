@@ -27795,6 +27795,74 @@ app.post("/api/artifact/upload", async (req, res) => {
   }
 });
 
+// Multi-file artifact upload — used by ArtifactUploader for batch uploads
+app.post("/api/artifact/upload-multi", async (req, res) => {
+  try {
+    const artifactMod = await import("./lib/artifact-store.js").catch(() => null);
+    if (!artifactMod) return res.status(500).json({ ok: false, error: "artifact_store_unavailable" });
+
+    // Parse multipart form data (files[] + domain + title)
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const buffer = Buffer.concat(chunks);
+
+    const contentType = req.headers["content-type"] || "";
+    const domain = req.headers["x-domain"] || "general";
+
+    // If it's a proper multipart form, delegate to storeMultipartArtifact
+    const dtuId = uid("artifact");
+    const files = [];
+
+    if (contentType.includes("multipart/form-data")) {
+      // Simple boundary parse for multipart
+      const boundary = contentType.split("boundary=")[1];
+      if (boundary) {
+        const parts = buffer.toString("binary").split("--" + boundary).filter(p => p.includes("filename="));
+        for (const part of parts) {
+          const filenameMatch = part.match(/filename="([^"]+)"/);
+          const ctMatch = part.match(/Content-Type:\s*(.+)/i);
+          const bodyStart = part.indexOf("\r\n\r\n") + 4;
+          const bodyEnd = part.lastIndexOf("\r\n");
+          if (filenameMatch && bodyStart > 3 && bodyEnd > bodyStart) {
+            files.push({
+              filename: filenameMatch[1],
+              mimeType: ctMatch ? ctMatch[1].trim() : "application/octet-stream",
+              buffer: Buffer.from(part.slice(bodyStart, bodyEnd), "binary"),
+            });
+          }
+        }
+      }
+    }
+
+    if (files.length === 0) {
+      // Fallback: treat entire body as single file
+      files.push({ filename: `upload_${Date.now()}`, mimeType: "application/octet-stream", buffer });
+    }
+
+    const artifactRef = await artifactMod.storeMultipartArtifact(dtuId, files);
+
+    const dtu = {
+      id: dtuId,
+      tier: "regular",
+      scope: "local",
+      domain: domain,
+      human: { summary: `Multi-upload: ${files.length} files`, bullets: files.map(f => f.filename) },
+      core: { definitions: [], claims: [], examples: [] },
+      machine: { kind: "collection", verifier: { fileCount: files.length, totalBytes: artifactRef.sizeBytes, hash: artifactRef.hash } },
+      artifact: artifactRef,
+      lineage: { parents: [], children: [] },
+      authority: { score: 0.5 },
+      meta: { createdBy: req.user?.id || "anonymous", lens: domain, type: "collection", tags: [domain], createdAt: new Date().toISOString() },
+    };
+
+    STATE.dtus.set(dtuId, dtu);
+    saveStateDebounced();
+    res.json({ ok: true, dtuId, fileCount: files.length, artifact: { type: artifactRef.type, sizeBytes: artifactRef.sizeBytes } });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err?.message || err) });
+  }
+});
+
 app.get("/api/artifact/:dtuId/stream", async (req, res) => {
   try {
     const dtu = STATE.dtus.get(req.params.dtuId);
@@ -39426,6 +39494,51 @@ app.get("/api/dtus/:id/connections", asyncHandler(async (req, res) => {
 
   const connections = await findCrossDomainConnections(id, all, limit);
   res.json({ ok: true, dtuId: id, connections });
+}));
+
+// Graph neighbors — bidirectional link fetching for BacklinksPanel
+app.get("/api/graph/neighbors/:dtuId", asyncHandler(async (req, res) => {
+  const { dtuId } = req.params;
+  const direction = req.query.direction || "both"; // incoming, outgoing, both
+  const limit = Math.min(Number(req.query.limit) || 20, 100);
+  const dtu = STATE.dtus.get(dtuId);
+  if (!dtu) return res.status(404).json({ ok: false, error: "DTU not found" });
+
+  const neighbors = [];
+
+  if (direction === "incoming" || direction === "both") {
+    // Find DTUs that reference this one in their lineage.children or connections
+    for (const [id, d] of STATE.dtus) {
+      if (id === dtuId) continue;
+      const linksTo = (d.lineage?.children || []).includes(dtuId)
+        || (d.connections || []).some(c => c.targetId === dtuId || c === dtuId);
+      if (linksTo) {
+        neighbors.push({ id, title: d.title, direction: "incoming", domain: d.domain || d.scope, tier: d.tier });
+      }
+      if (neighbors.length >= limit) break;
+    }
+  }
+
+  if (direction === "outgoing" || direction === "both") {
+    // This DTU's parents and connections
+    for (const parentId of (dtu.lineage?.parents || [])) {
+      const p = STATE.dtus.get(parentId);
+      if (p) neighbors.push({ id: parentId, title: p.title, direction: "outgoing", domain: p.domain || p.scope, tier: p.tier });
+    }
+    for (const childId of (dtu.lineage?.children || [])) {
+      const c = STATE.dtus.get(childId);
+      if (c) neighbors.push({ id: childId, title: c.title, direction: "outgoing", domain: c.domain || c.scope, tier: c.tier });
+    }
+    for (const conn of (dtu.connections || [])) {
+      const targetId = typeof conn === "string" ? conn : conn.targetId;
+      if (targetId && !neighbors.some(n => n.id === targetId)) {
+        const t = STATE.dtus.get(targetId);
+        if (t) neighbors.push({ id: targetId, title: t.title, direction: "outgoing", domain: t.domain || t.scope, tier: t.tier });
+      }
+    }
+  }
+
+  res.json({ ok: true, dtuId, neighbors: neighbors.slice(0, limit), total: neighbors.length });
 }));
 
 // Semantic cache stats
