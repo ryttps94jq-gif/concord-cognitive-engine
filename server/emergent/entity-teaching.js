@@ -100,30 +100,30 @@ function _body(id) {
   try {
     if (typeof globalThis._bodyStore?.get === "function") return globalThis._bodyStore.get(id) || null;
     return null;
-  } catch { return null; }
+  } catch (err) { logger.debug('emergent:entity-teaching', '_body lookup failed', { id, error: err?.message }); return null; }
 }
 function _organMat(entityId, organId) {
   try {
     const b = _body(entityId);
     return b?.organs?.get(organId)?.maturity?.score ?? 0;
-  } catch { return 0; }
+  } catch (err) { logger.debug('emergent:entity-teaching', '_organMat lookup failed', { entityId, organId, error: err?.message }); return 0; }
 }
 function _domainMat(entityId, domain) {
   try {
     const organs = DOMAIN_ORGANS[domain] || DOMAIN_ORGANS.general;
     let t = 0; for (const o of organs) t += _organMat(entityId, o);
     return organs.length > 0 ? t / organs.length : 0;
-  } catch { return 0; }
+  } catch (err) { logger.debug('emergent:entity-teaching', '_domainMat failed', { entityId, domain, error: err?.message }); return 0; }
 }
 function _maxOrganMat(entityId, domain) {
   try {
     const organs = DOMAIN_ORGANS[domain] || DOMAIN_ORGANS.general;
     let mx = 0; for (const o of organs) { const s = _organMat(entityId, o); if (s > mx) mx = s; }
     return mx;
-  } catch { return 0; }
+  } catch (err) { logger.debug('emergent:entity-teaching', '_maxOrganMat failed', { entityId, domain, error: err?.message }); return 0; }
 }
 function _ticks(entityId) {
-  try { return _body(entityId)?.tickCount ?? 0; } catch { return 0; }
+  try { return _body(entityId)?.tickCount ?? 0; } catch (err) { logger.debug('emergent:entity-teaching', '_ticks failed', { entityId, error: err?.message }); return 0; }
 }
 function _trust(a, b) {
   try {
