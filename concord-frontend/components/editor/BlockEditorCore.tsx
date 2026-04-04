@@ -494,7 +494,7 @@ export function SlashCommandMenu({
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [items, selectedIndex, onSelect]);
+  }, [items, selectedIndex, onSelect, editor]);
 
   return (
     <div className="w-72 bg-lattice-surface border border-lattice-border rounded-lg shadow-xl overflow-hidden">

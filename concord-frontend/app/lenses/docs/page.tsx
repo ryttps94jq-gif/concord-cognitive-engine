@@ -342,8 +342,8 @@ export default function DocsLensPage() {
               <FileJson className="w-4 h-4 text-neon-cyan" />
               <span className="text-sm font-semibold text-white">REST Endpoints</span>
             </div>
-            <p className="text-2xl font-bold text-neon-cyan">47</p>
-            <p className="text-xs text-gray-500">Across 12 domains</p>
+            <p className="text-2xl font-bold text-neon-cyan">{liveApiDocs?.endpoints?.length ?? 47}</p>
+            <p className="text-xs text-gray-500">Across {liveApiDocs?.domainCount ?? 12} domains</p>
             <div className="flex items-center gap-1 text-xs text-neon-green">
               <CheckCircle2 className="w-3 h-3" />
               <span>All documented</span>
@@ -354,7 +354,7 @@ export default function DocsLensPage() {
               <GitBranch className="w-4 h-4 text-neon-purple" />
               <span className="text-sm font-semibold text-white">API Version</span>
             </div>
-            <p className="text-2xl font-bold text-neon-purple">v2.4.1</p>
+            <p className="text-2xl font-bold text-neon-purple">{liveApiDocs?.version ?? 'v2.4.1'}</p>
             <p className="text-xs text-gray-500">Released 3 days ago</p>
             <div className="flex items-center gap-1 text-xs text-yellow-400">
               <AlertCircle className="w-3 h-3" />
@@ -388,16 +388,27 @@ export default function DocsLensPage() {
             </div>
           </div>
           <div className="divide-y divide-white/5">
-            {[
-              { method: 'GET', path: '/api/dtus', desc: 'List all DTUs with pagination', status: 'stable' },
-              { method: 'POST', path: '/api/dtus', desc: 'Create a new DTU', status: 'stable' },
-              { method: 'POST', path: '/api/forge/auto', desc: 'AI-generated DTU creation', status: 'stable' },
-              { method: 'GET', path: '/api/graph/nodes', desc: 'Fetch knowledge graph nodes', status: 'stable' },
-              { method: 'POST', path: '/api/chat', desc: 'Natural language query interface', status: 'beta' },
-              { method: 'GET', path: '/api/council/queue', desc: 'Pending governance proposals', status: 'stable' },
-              { method: 'POST', path: '/api/economy/tip', desc: 'Send CC tip to a creator', status: 'beta' },
-              { method: 'GET', path: '/api/reflection/status', desc: 'Self-model reflection status', status: 'stable' },
-            ].map((endpoint, idx) => (
+            {(() => {
+              const fallbackEndpoints = [
+                { method: 'GET', path: '/api/dtus', desc: 'List all DTUs with pagination', status: 'stable' },
+                { method: 'POST', path: '/api/dtus', desc: 'Create a new DTU', status: 'stable' },
+                { method: 'POST', path: '/api/forge/auto', desc: 'AI-generated DTU creation', status: 'stable' },
+                { method: 'GET', path: '/api/graph/nodes', desc: 'Fetch knowledge graph nodes', status: 'stable' },
+                { method: 'POST', path: '/api/chat', desc: 'Natural language query interface', status: 'beta' },
+                { method: 'GET', path: '/api/council/queue', desc: 'Pending governance proposals', status: 'stable' },
+                { method: 'POST', path: '/api/economy/tip', desc: 'Send CC tip to a creator', status: 'beta' },
+                { method: 'GET', path: '/api/reflection/status', desc: 'Self-model reflection status', status: 'stable' },
+              ];
+              const endpoints = liveApiDocs?.endpoints?.length > 0
+                ? liveApiDocs.endpoints.map((ep: { method?: string; path?: string; description?: string; status?: string }) => ({
+                    method: ep.method ?? 'GET',
+                    path: ep.path ?? '',
+                    desc: ep.description ?? '',
+                    status: ep.status ?? 'stable',
+                  }))
+                : fallbackEndpoints;
+              return endpoints;
+            })().map((endpoint: { method: string; path: string; desc: string; status: string }, idx: number) => (
               <div key={idx} className="flex items-center gap-3 px-4 py-2.5 hover:bg-white/5 transition-colors">
                 <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded ${
                   endpoint.method === 'GET' ? 'bg-neon-green/20 text-neon-green' : 'bg-neon-cyan/20 text-neon-cyan'

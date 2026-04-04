@@ -353,7 +353,74 @@ export function SharedSessionChat({ sessionId, currentUserId, onEnd }: SharedSes
 
         {/* Input */}
         {sessionStatus === 'active' ? (
-          <div className="border-t border-zinc-800 p-4">
+          <div className="border-t border-zinc-800 p-4 space-y-2">
+            {/* Share DTU inline form */}
+            {showShareInput && (
+              <div className="flex gap-2">
+                <input
+                  value={shareDtuId}
+                  onChange={e => setShareDtuId(e.target.value)}
+                  className="flex-1 bg-zinc-800 rounded-lg px-3 py-1.5 text-xs
+                    text-zinc-200 border border-zinc-700
+                    focus:border-cyan-500/50 outline-none placeholder-zinc-600"
+                  placeholder="Enter DTU ID to share..."
+                />
+                <button
+                  onClick={() => {
+                    if (shareDtuId.trim()) {
+                      handleShareDTU(shareDtuId.trim());
+                      setShareDtuId('');
+                      setShowShareInput(false);
+                    }
+                  }}
+                  disabled={!shareDtuId.trim()}
+                  className="px-3 py-1.5 rounded-lg bg-cyan-500/10 text-cyan-400
+                    border border-cyan-500/30 text-xs disabled:opacity-30
+                    hover:bg-cyan-500/20 transition-colors"
+                >
+                  Share
+                </button>
+              </div>
+            )}
+
+            {/* Run Action inline form */}
+            {showActionMenu && (
+              <div className="flex gap-2">
+                <input
+                  value={actionLens}
+                  onChange={e => setActionLens(e.target.value)}
+                  className="flex-1 bg-zinc-800 rounded-lg px-3 py-1.5 text-xs
+                    text-zinc-200 border border-zinc-700
+                    focus:border-cyan-500/50 outline-none placeholder-zinc-600"
+                  placeholder="Lens (e.g. health)"
+                />
+                <input
+                  value={actionName}
+                  onChange={e => setActionName(e.target.value)}
+                  className="flex-1 bg-zinc-800 rounded-lg px-3 py-1.5 text-xs
+                    text-zinc-200 border border-zinc-700
+                    focus:border-cyan-500/50 outline-none placeholder-zinc-600"
+                  placeholder="Action name"
+                />
+                <button
+                  onClick={() => {
+                    if (actionLens.trim() && actionName.trim()) {
+                      handleRunAction(actionLens.trim(), actionName.trim());
+                      setActionLens('');
+                      setActionName('');
+                      setShowActionMenu(false);
+                    }
+                  }}
+                  disabled={!actionLens.trim() || !actionName.trim()}
+                  className="px-3 py-1.5 rounded-lg bg-purple-500/10 text-purple-400
+                    border border-purple-500/30 text-xs disabled:opacity-30
+                    hover:bg-purple-500/20 transition-colors"
+                >
+                  Run
+                </button>
+              </div>
+            )}
+
             <div className="flex gap-2">
               <input
                 ref={inputRef}
@@ -366,6 +433,30 @@ export function SharedSessionChat({ sessionId, currentUserId, onEnd }: SharedSes
                 placeholder="Message the group..."
                 disabled={isSending}
               />
+              <button
+                onClick={() => setShowShareInput(prev => !prev)}
+                className={cn(
+                  'px-3 py-2 rounded-lg border text-sm transition-colors',
+                  showShareInput
+                    ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/50'
+                    : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:text-cyan-400 hover:border-cyan-500/30'
+                )}
+                title="Share DTU"
+              >
+                <Share2 className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setShowActionMenu(prev => !prev)}
+                className={cn(
+                  'px-3 py-2 rounded-lg border text-sm transition-colors',
+                  showActionMenu
+                    ? 'bg-purple-500/20 text-purple-400 border-purple-500/50'
+                    : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:text-purple-400 hover:border-purple-500/30'
+                )}
+                title="Run Action"
+              >
+                <Zap className="w-4 h-4" />
+              </button>
               <button
                 onClick={sendMessage}
                 disabled={isSending || !input.trim()}

@@ -53,16 +53,14 @@ export function AgentPersonas({ className }: { className?: string }) {
   });
 
   const createAgentMutation = useMutation({
-    mutationFn: ({ name, brain, domains }: { name: string; brain: string; domains: string[] }) =>
-      createAgent(name, brain, domains),
+    mutationFn: () => createAgent(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['personas'] });
     },
   });
 
   const configureAgentMutation = useMutation({
-    mutationFn: ({ personaId, config }: { personaId: string; config: Record<string, unknown> }) =>
-      configureAgent(personaId, config),
+    mutationFn: (config: Record<string, unknown>) => configureAgent(config),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['personas'] });
     },
@@ -107,7 +105,7 @@ export function AgentPersonas({ className }: { className?: string }) {
         </div>
         <div className="flex items-center gap-1">
           <button
-            onClick={() => createAgentMutation.mutate({ name: 'New Agent', brain: 'general', domains: [] })}
+            onClick={() => createAgentMutation.mutate()}
             disabled={createAgentMutation.isPending}
             className="p-1.5 rounded-lg hover:bg-lattice-deep text-gray-400 hover:text-neon-cyan transition-colors disabled:opacity-50"
             title="Create new agent"
@@ -219,7 +217,7 @@ export function AgentPersonas({ className }: { className?: string }) {
                       <p className="text-[10px] text-gray-500">{persona.brain} brain</p>
                     </div>
                     <button
-                      onClick={() => configureAgentMutation.mutate({ personaId: persona.id, config: { active: !persona.active } })}
+                      onClick={() => configureAgentMutation.mutate({ personaId: persona.id, active: !persona.active })}
                       disabled={configureAgentMutation.isPending}
                       className="p-1 rounded hover:bg-lattice-surface text-gray-500 hover:text-neon-cyan transition-colors disabled:opacity-50"
                       title={`Configure ${persona.name}`}

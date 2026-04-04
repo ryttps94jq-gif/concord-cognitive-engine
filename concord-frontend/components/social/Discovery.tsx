@@ -609,7 +609,7 @@ export function Discovery({
               <span className="text-xs text-gray-500">({sharedSessionsQuery.data.length})</span>
             </h4>
             <button
-              onClick={() => createSharedSession(currentUserId || 'anonymous', [])}
+              onClick={() => createSharedSession([])}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/20 transition-colors"
             >
               <Sparkles className="w-3.5 h-3.5" />

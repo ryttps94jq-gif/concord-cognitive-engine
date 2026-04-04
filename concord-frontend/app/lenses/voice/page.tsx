@@ -310,7 +310,7 @@ export default function VoiceLensPage() {
       }
       setIsPlaying(false);
     }
-  }, [status, recordingTime, takes.length]);
+  }, [status, recordingTime, takes.length, createTake]);
 
   const handlePlayPause = useCallback(() => {
     if (status === 'recording') return;

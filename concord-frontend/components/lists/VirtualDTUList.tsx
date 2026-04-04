@@ -288,7 +288,7 @@ export function VirtualDTUList({
                   sortField === 'updatedAt' ? 'text-neon-cyan' : 'text-gray-400 hover:text-white'
                 )}
               >
-                Updated {sortField === 'updatedAt' && (sortOrder === 'asc' ? '\u2191' : '\u2193')}
+                Updated {sortField === 'updatedAt' && (sortOrder === 'asc' ? <SortAsc className="w-3 h-3 inline" /> : <SortDesc className="w-3 h-3 inline" />)}
               </button>
               <button
                 onClick={() => toggleSort('createdAt')}
@@ -297,7 +297,7 @@ export function VirtualDTUList({
                   sortField === 'createdAt' ? 'text-neon-cyan' : 'text-gray-400 hover:text-white'
                 )}
               >
-                Created {sortField === 'createdAt' && (sortOrder === 'asc' ? '\u2191' : '\u2193')}
+                Created {sortField === 'createdAt' && (sortOrder === 'asc' ? <SortAsc className="w-3 h-3 inline" /> : <SortDesc className="w-3 h-3 inline" />)}
               </button>
               <button
                 onClick={() => toggleSort('title')}
@@ -306,7 +306,7 @@ export function VirtualDTUList({
                   sortField === 'title' ? 'text-neon-cyan' : 'text-gray-400 hover:text-white'
                 )}
               >
-                Title {sortField === 'title' && (sortOrder === 'asc' ? '\u2191' : '\u2193')}
+                Title {sortField === 'title' && (sortOrder === 'asc' ? <SortAsc className="w-3 h-3 inline" /> : <SortDesc className="w-3 h-3 inline" />)}
               </button>
               <button
                 onClick={() => toggleSort('resonance')}
@@ -315,7 +315,7 @@ export function VirtualDTUList({
                   sortField === 'resonance' ? 'text-neon-cyan' : 'text-gray-400 hover:text-white'
                 )}
               >
-                Resonance {sortField === 'resonance' && (sortOrder === 'asc' ? '\u2191' : '\u2193')}
+                Resonance {sortField === 'resonance' && (sortOrder === 'asc' ? <SortAsc className="w-3 h-3 inline" /> : <SortDesc className="w-3 h-3 inline" />)}
               </button>
             </div>
           </div>

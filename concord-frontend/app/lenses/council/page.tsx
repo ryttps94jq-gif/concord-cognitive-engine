@@ -360,7 +360,7 @@ export default function CouncilLensPage() {
   const runArtifact = useRunArtifact('council');
 
   const personas: Persona[] = personasData?.personas || [];
-  const dtus: DTU[] = dtusData?.dtus?.slice(0, 50) || [];
+  const dtus: DTU[] = useMemo(() => dtusData?.dtus?.slice(0, 50) || [], [dtusData]);
 
   // ----- Computed -----
   const selectedProposal = selectedProposalId ? proposals.find(p => p.id === selectedProposalId) || null : null;
@@ -1152,6 +1152,7 @@ export default function CouncilLensPage() {
                       <button onClick={() => handleApproveBudgetItem(b.id, false)} className="p-1 text-red-400 hover:bg-red-500/20 rounded"><XCircle className="w-4 h-4" /></button>
                     </div>
                   )}
+                  <button onClick={() => { removeBudgetItem(b.id); addAuditEntry({ actor: 'Council Chair', action: 'Removed budget item', target: b.id, details: b.description, category: 'budget' }); }} className="p-1 text-red-400 hover:bg-red-500/20 rounded" title="Remove item"><Minus className="w-4 h-4" /></button>
                 </div>
               </div>
             ))}
@@ -1181,6 +1182,7 @@ export default function CouncilLensPage() {
                       <button onClick={() => handleApproveBudgetItem(b.id, false)} className="p-1 text-red-400 hover:bg-red-500/20 rounded"><XCircle className="w-4 h-4" /></button>
                     </div>
                   )}
+                  <button onClick={() => { removeBudgetItem(b.id); addAuditEntry({ actor: 'Council Chair', action: 'Removed budget item', target: b.id, details: b.description, category: 'budget' }); }} className="p-1 text-red-400 hover:bg-red-500/20 rounded" title="Remove item"><Minus className="w-4 h-4" /></button>
                 </div>
               </div>
             ))}
@@ -1250,6 +1252,7 @@ export default function CouncilLensPage() {
                     {entry.details && <p className="text-xs text-gray-500 mt-0.5">{entry.details}</p>}
                   </div>
                   <span className={cn('px-1.5 py-0.5 rounded text-[9px] capitalize', catColors[entry.category] || 'text-gray-500', 'bg-lattice-surface flex-shrink-0')}>{entry.category}</span>
+                  <button onClick={(e) => { e.stopPropagation(); const newDetails = window.prompt('Update audit details:', entry.details || ''); if (newDetails !== null) { updateAuditItem(entry.id, { data: { ...entry, details: newDetails } as unknown as Record<string, unknown> }); } }} className="text-gray-400 hover:text-white flex-shrink-0 ml-1" title="Edit details"><PenLine className="w-3 h-3" /></button>
                   <button onClick={(e) => { e.stopPropagation(); removeAuditItem(entry.id); }} className="text-red-400 hover:text-red-300 flex-shrink-0 ml-1"><X className="w-3 h-3" /></button>
                 </div>
               );

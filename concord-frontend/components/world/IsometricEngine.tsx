@@ -535,7 +535,6 @@ export default function IsometricEngine({
     };
     // All frequently-changing values are read via refs inside the animation loop,
     // so this effect only needs to run once on mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [toScreen, toTile]);
 
   return (

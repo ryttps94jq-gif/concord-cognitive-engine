@@ -159,7 +159,7 @@ export default function MusicLensPage() {
   }, [marketplaceTab, marketplaceBpmMin, marketplaceBpmMax, marketplaceGenre, marketplaceKey, marketplaceSearch]);
 
   // Fetch when marketplace view opens or filters change
-  useEffect(() => { if (view === 'marketplace') fetchMarketplace(); }, [view, marketplaceTab, fetchMarketplace]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (view === 'marketplace') fetchMarketplace(); }, [view, marketplaceTab, fetchMarketplace]);
 
   // ---- Album MEGA DTUs ----
   const albumMegaDTUs = useMemo(() => {

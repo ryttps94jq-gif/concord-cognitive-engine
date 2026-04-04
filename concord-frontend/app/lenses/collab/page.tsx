@@ -513,6 +513,39 @@ export default function CollabLensPage() {
         )}
       </AnimatePresence>
 
+      {/* Active Collaborations from API */}
+      {activeCollabsData?.collabs?.length > 0 && (
+        <div className="panel p-4 space-y-3">
+          <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+            <Users className="w-4 h-4 text-neon-blue" />
+            Active Collaborations ({activeCollabsData.collabs.length})
+          </h3>
+          <div className="space-y-2 max-h-64 overflow-y-auto">
+            {activeCollabsData.collabs.map((collab: { id: string; name?: string; description?: string; domains?: string[]; participants?: number; status?: string }) => (
+              <div key={collab.id} className="flex items-center justify-between p-3 bg-black/30 rounded-lg border border-white/5">
+                <div className="min-w-0">
+                  <p className="text-sm text-white font-medium truncate">{collab.name ?? collab.id}</p>
+                  {collab.description && <p className="text-xs text-gray-500 truncate">{collab.description}</p>}
+                  {collab.domains && (
+                    <div className="flex gap-1 mt-1">
+                      {collab.domains.map((d: string) => (
+                        <span key={d} className="text-[10px] px-1.5 py-0.5 rounded bg-neon-blue/10 text-neon-blue">{d}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={() => closeCollab(collab.id).catch(() => {})}
+                  className="text-xs px-3 py-1.5 rounded-md bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors font-medium shrink-0 ml-3"
+                >
+                  Close
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <RealtimeDataPanel data={realtimeInsights} />
       <UniversalActions domain="collab" artifactId={null} compact />
 
@@ -697,7 +730,10 @@ function ActiveSessionView({ session, onLeave }: { session: CollabSession; onLea
           </div>
         </div>
         <button
-          onClick={onLeave}
+          onClick={() => {
+            closeCollab(session.id).catch(() => {});
+            onLeave();
+          }}
           className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors font-medium"
         >
           <LogOut className="w-3.5 h-3.5" />
@@ -924,13 +960,19 @@ function InvitationCard({ invitation }: { invitation: Invitation }) {
       </div>
       <div className="flex items-center gap-2 shrink-0">
         <button
-          onClick={() => setResponded('declined')}
+          onClick={() => {
+            closeCollab(invitation.id).catch(() => {});
+            setResponded('declined');
+          }}
           className="text-xs px-3 py-1.5 rounded-md bg-lattice-surface border border-lattice-border text-gray-400 hover:text-red-400 hover:border-red-500/30 transition-colors"
         >
           Decline
         </button>
         <button
-          onClick={() => setResponded('accepted')}
+          onClick={() => {
+            acceptCollab(invitation.id).catch(() => {});
+            setResponded('accepted');
+          }}
           className="text-xs px-3 py-1.5 rounded-md bg-neon-blue/20 text-neon-blue hover:bg-neon-blue/30 font-medium transition-colors"
         >
           Accept
@@ -1010,6 +1052,9 @@ function CreateSessionModal({ onClose }: { onClose: () => void }) {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['artistry-collab-sessions'] });
+      queryClient.invalidateQueries({ queryKey: ['active-collabs'] });
+      // Also register the collaboration via the createCollab API
+      createCollab('', [data.type], data.description || data.name).catch(() => {});
       onClose();
     },
     onError: (err) => {

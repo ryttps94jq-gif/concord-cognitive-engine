@@ -849,9 +849,54 @@ export default function AdminDashboardPage() {
                 <p className="text-lg font-bold text-white">{Math.round((flywheelData.velocity ?? flywheelData.metrics?.velocity ?? 0) * 100)}%</p>
               </div>
             )}
+            {flywheelHistoryData?.history?.length > 0 && (
+              <div className="p-3 bg-black/30 rounded-lg border border-white/5 space-y-2">
+                <p className="text-xs text-gray-400 font-medium">Flywheel History</p>
+                <div className="space-y-1 max-h-48 overflow-y-auto">
+                  {flywheelHistoryData.history.map((entry: { timestamp?: string; date?: string; velocity?: number; score?: number }, idx: number) => (
+                    <div key={idx} className="flex items-center justify-between text-xs">
+                      <span className="text-gray-500">{entry.timestamp ?? entry.date ?? `Entry ${idx + 1}`}</span>
+                      <span className="text-white font-medium">{Math.round((entry.velocity ?? entry.score ?? 0) * 100)}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
+
+      {/* Pipeline Executions */}
+      {pipelineExecsData?.executions?.length > 0 && (
+        <div className="border-t border-white/10 px-4 py-4 space-y-3">
+          <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+            <Cpu className="w-4 h-4" />
+            Pipeline Executions
+          </h3>
+          <div className="space-y-2 max-h-64 overflow-y-auto">
+            {pipelineExecsData.executions.map((exec: { id: string; name?: string; status?: string; startedAt?: string; duration?: number }, idx: number) => (
+              <div key={exec.id ?? idx} className="flex items-center justify-between p-3 bg-black/30 rounded-lg border border-white/5">
+                <div>
+                  <p className="text-sm text-white font-medium">{exec.name ?? exec.id}</p>
+                  {exec.startedAt && <p className="text-xs text-gray-500">{exec.startedAt}</p>}
+                </div>
+                <div className="flex items-center gap-2">
+                  {exec.duration !== undefined && (
+                    <span className="text-xs text-gray-500">{exec.duration}ms</span>
+                  )}
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${
+                    exec.status === 'success' ? 'bg-emerald-500/20 text-emerald-400'
+                      : exec.status === 'failed' ? 'bg-red-500/20 text-red-400'
+                      : 'bg-yellow-500/20 text-yellow-400'
+                  }`}>
+                    {exec.status ?? 'unknown'}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Lens Features */}
       <div className="border-t border-white/10">
