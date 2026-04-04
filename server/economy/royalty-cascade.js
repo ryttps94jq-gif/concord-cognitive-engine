@@ -8,6 +8,7 @@
 import { randomUUID } from "crypto";
 import { recordTransactionBatch, generateTxId } from "./ledger.js";
 import { PLATFORM_ACCOUNT_ID } from "./fees.js";
+import { canCiteDtu } from "../lib/consent.js";
 
 function uid(prefix = "roy") {
   return `${prefix}_` + randomUUID().replace(/-/g, "").slice(0, 16);
@@ -56,6 +57,11 @@ export function registerCitation(db, { childId, parentId, creatorId, parentCreat
   if (!childId || !parentId) return { ok: false, error: "missing_content_ids" };
   if (childId === parentId) return { ok: false, error: "self_citation_not_allowed" };
   if (!creatorId || !parentCreatorId) return { ok: false, error: "missing_creator_ids" };
+
+  // Consent gate: parent creator must have opted into citations
+  if (!canCiteDtu(db, parentCreatorId)) {
+    return { ok: false, error: "citation_consent_not_granted" };
+  }
 
   // Check for cycles — prevent A→B→C→A
   if (wouldCreateCycle(db, childId, parentId)) {

@@ -6,6 +6,7 @@
 import { randomUUID } from "crypto";
 import { registerCitation } from "./royalty-cascade.js";
 import { awardMeritCredit } from "./lens-economy-wiring.js";
+import { canEmergentCiteUser } from "../lib/consent.js";
 
 function uid(prefix = "dtu") {
   return `${prefix}_` + randomUUID().replace(/-/g, "").slice(0, 16);
@@ -37,10 +38,14 @@ const DTU_TIERS = {
  * @param {Array} contextDTUs - DTUs that were fed to the brain call
  * @returns {object} params with correct citationMode and citations
  */
-export function enforceEmergentCitations(params, contextDTUs = []) {
-  const userContextDTUs = (contextDTUs || []).filter(d =>
-    d && d.id && d.creator && d.creator !== "__CONCORD__" && d.creator !== "system"
-  );
+export function enforceEmergentCitations(params, contextDTUs = [], db = null) {
+  const userContextDTUs = (contextDTUs || []).filter(d => {
+    if (!d || !d.id || !d.creator) return false;
+    if (d.creator === "__CONCORD__" || d.creator === "system") return false;
+    // Consent gate: only include DTUs from users who opted into emergent learning
+    if (db && !canEmergentCiteUser(db, d.creator)) return false;
+    return true;
+  });
 
   if (userContextDTUs.length === 0) {
     // No user content referenced — system-generated original

@@ -51,6 +51,7 @@ import {
   LICENSE_TYPES,
 } from "../economy/creative-marketplace.js";
 import { QUEST_REWARD_POLICY } from "../lib/creative-marketplace-constants.js";
+import { requireConsent } from "../lib/consent.js";
 
 /**
  * Create the creative marketplace router.
@@ -95,11 +96,24 @@ export default function createCreativeMarketplaceRouter({ db, requireAuth }) {
   // ── Publish Artifact ────────────────────────────────────────────────
 
   router.post("/artifacts", (req, res) => {
+    // Consent gate: nothing leaves personal universe without permission
+    const creatorId = req.body?.creatorId || req.user?.id;
+    if (creatorId) {
+      const consent = requireConsent(db, creatorId, "publish_to_marketplace");
+      if (!consent.allowed) return res.status(403).json(consent);
+    }
+
     const result = publishArtifact(db, req.body || {});
     res.status(result.ok ? 201 : 400).json(result);
   });
 
   router.post("/artifacts/derivative", (req, res) => {
+    const creatorId = req.body?.creatorId || req.user?.id;
+    if (creatorId) {
+      const consent = requireConsent(db, creatorId, "publish_to_marketplace");
+      if (!consent.allowed) return res.status(403).json(consent);
+    }
+
     const result = publishDerivativeArtifact(db, req.body || {});
     res.status(result.ok ? 201 : 400).json(result);
   });
@@ -197,9 +211,20 @@ export default function createCreativeMarketplaceRouter({ db, requireAuth }) {
   });
 
   router.post("/artifacts/:id/promote", (req, res) => {
+    // Consent gate: each scope escalation requires separate consent
+    const promotedBy = req.body.promotedBy || req.user?.id;
+    if (promotedBy) {
+      // Determine target tier from the artifact's current tier
+      const artifact = getArtifact(db, req.params.id);
+      const targetTier = artifact?.federation_tier === "regional" ? "national" : "global";
+      const consentAction = targetTier === "national" ? "promote_to_national" : "promote_to_global";
+      const consent = requireConsent(db, promotedBy, consentAction);
+      if (!consent.allowed) return res.status(403).json(consent);
+    }
+
     const result = promoteArtifact(db, {
       artifactId: req.params.id,
-      promotedBy: req.body.promotedBy,
+      promotedBy,
     });
     res.status(result.ok ? 200 : 400).json(result);
   });

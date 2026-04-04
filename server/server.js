@@ -23485,6 +23485,10 @@ app.use("/api/sovereign", createSovereignRouter({ STATE, makeCtx, runMacro, save
 app.use("/api/sovereign-emergent", createSovereignEmergentRouter({ STATE }));
 app.use("/api/federation", createFederationRouter({ db }));
 
+// ===== CONSENT LAYER — Nothing Leaves Without Permission =====
+import createConsentRouter from "./routes/consent.js";
+app.use("/api/consent", createConsentRouter({ db, requireAuth }));
+
 // ===== CREATIVE ARTIFACT MARKETPLACE =====
 import createCreativeMarketplaceRouter from "./routes/creative-marketplace.js";
 app.use("/api/creative-marketplace", createCreativeMarketplaceRouter({ db }));
