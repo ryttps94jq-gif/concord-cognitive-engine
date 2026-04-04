@@ -88,7 +88,7 @@ function makeLog(externalLog) {
  *
  * Returns { negativeBalances: [], circulatingSupply, treasury, vaultDeficit }
  */
-export function auditEconomy(STATE) {
+function auditEconomy(STATE) {
   const findings = {
     negativeBalances: [],       // { source, id, balance }
     circulatingSupply: 0,
@@ -145,7 +145,7 @@ export function auditEconomy(STATE) {
  *   brokenCitations: [{ citedDtuId, citingDtuId, missing: "cited"|"citing" }]
  * }
  */
-export function auditLineage(STATE) {
+function auditLineage(STATE) {
   const findings = {
     orphanedLineage: [],
     brokenCitations: [],
@@ -195,7 +195,7 @@ export function auditLineage(STATE) {
  *
  * Returns { unsynced: [{ dtuId, domain, expectedArtifactId }] }
  */
-export function auditLensSync(STATE) {
+function auditLensSync(STATE) {
   const findings = {
     unsynced: [],
     ok: true,
@@ -228,7 +228,7 @@ export function auditLensSync(STATE) {
  *   ghostFollows: [{ followerId, followedId, reason }]
  * }
  */
-export function auditSocial(STATE) {
+function auditSocial(STATE) {
   const findings = {
     asymmetric: [],
     ghostFollows: [],
@@ -296,7 +296,7 @@ export function auditSocial(STATE) {
 /**
  * 5. fixNegativeBalances — set negative wallet balances to 0.
  */
-export function fixNegativeBalances(STATE, log) {
+function fixNegativeBalances(STATE, log) {
   const emit = makeLog(log);
   let fixed = 0;
 
@@ -336,7 +336,7 @@ export function fixNegativeBalances(STATE, log) {
 /**
  * 6. fixOrphanedLineage — remove references to non-existent parent DTUs.
  */
-export function fixOrphanedLineage(STATE, orphans, log) {
+function fixOrphanedLineage(STATE, orphans, log) {
   const emit = makeLog(log);
   let fixed = 0;
   const dtus = STATE.dtus;
@@ -384,7 +384,7 @@ export function fixOrphanedLineage(STATE, orphans, log) {
  * 7. fixBrokenCitations — remove dead citation entries from _social.citedBy.
  *    If all citations for a given DTU are removed, it is effectively "original" now.
  */
-export function fixBrokenCitations(STATE, broken, log) {
+function fixBrokenCitations(STATE, broken, log) {
   const emit = makeLog(log);
   let fixed = 0;
   let entriesCleared = 0;
@@ -432,7 +432,7 @@ export function fixBrokenCitations(STATE, broken, log) {
 /**
  * 8. fixUnsyncedLens — create missing lens artifacts for DTUs that have domain tags.
  */
-export function fixUnsyncedLens(STATE, unsynced, log) {
+function fixUnsyncedLens(STATE, unsynced, log) {
   const emit = makeLog(log);
   let fixed = 0;
 
@@ -495,7 +495,7 @@ export function fixUnsyncedLens(STATE, unsynced, log) {
 /**
  * 9. fixAsymmetricFollows — repair bidirectional follow index + remove ghosts.
  */
-export function fixAsymmetricFollows(STATE, issues, log) {
+function fixAsymmetricFollows(STATE, issues, log) {
   const emit = makeLog(log);
   let symmetryFixed = 0;
   let ghostsRemoved = 0;

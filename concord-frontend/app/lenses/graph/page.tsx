@@ -1024,12 +1024,16 @@ export default function GraphLensPage() {
     const edges = graphData.edges;
     const typeCounts: Record<string, number> = {};
     Object.keys(NODE_COLORS).forEach(k => { typeCounts[k] = nodes.filter(n => n.tier === k).length; });
+    // Prefer real-time topology stats from the lattice store when available
+    const nodeCount = topologyStats.nodes || nodes.length;
+    const edgeCount = topologyStats.edges || edges.length;
     return {
       avgConnections: nodes.length > 0 ? nodes.reduce((sum, n) => sum + n.connections, 0) / nodes.length : 0,
-      density: nodes.length > 1 ? (edges.length / (nodes.length * (nodes.length - 1) / 2)) * 100 : 0,
-      typeCounts, nodeCount: nodes.length, edgeCount: edges.length,
+      density: nodeCount > 1 ? (edgeCount / (nodeCount * (nodeCount - 1) / 2)) * 100 : 0,
+      typeCounts, nodeCount, edgeCount,
+      clusterCount: topologyStats.clusters || 0,
     };
-  }, [graphData]);
+  }, [graphData, topologyStats]);
 
   // --- Detail panel helpers ---
 
@@ -1066,6 +1070,7 @@ export default function GraphLensPage() {
         {[
           { label: 'Nodes', value: stats.nodeCount, color: 'text-cyan-400', bg: 'bg-cyan-400/10' },
           { label: 'Edges', value: stats.edgeCount, color: 'text-purple-400', bg: 'bg-purple-400/10' },
+          ...(stats.clusterCount > 0 ? [{ label: 'Clusters', value: stats.clusterCount, color: 'text-pink-400', bg: 'bg-pink-400/10' }] : []),
           { label: 'Density', value: `${stats.density.toFixed(1)}%`, color: 'text-emerald-400', bg: 'bg-emerald-400/10' },
           { label: 'Avg Connections', value: stats.avgConnections.toFixed(1), color: 'text-amber-400', bg: 'bg-amber-400/10' },
         ].map((s, i) => (

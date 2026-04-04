@@ -300,9 +300,24 @@ export function TypewriterFocus({
   className
 }: TypewriterFocusProps) {
   const [isFocused, setIsFocused] = useState(false);
+  const [scrollProgress, setScrollProgress] = useState(0);
+
+  useEffect(() => {
+    const handleScroll = () => setScrollProgress(getScrollPercentage());
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   return (
     <div className={cn('relative', className)}>
+      {/* Reading progress bar */}
+      <div className="fixed top-0 left-0 right-0 z-50 h-0.5 bg-gray-800">
+        <div
+          className="h-full bg-neon-cyan/60 transition-[width] duration-150"
+          style={{ width: `${scrollProgress}%` }}
+        />
+      </div>
+
       <textarea
         value={content}
         onChange={(e) => onChange(e.target.value)}
@@ -320,9 +335,10 @@ export function TypewriterFocus({
         }}
       />
 
-      {/* Word count */}
+      {/* Word count and scroll progress */}
       <div className="fixed bottom-8 right-8 text-sm text-gray-700">
         {content.split(/\s+/).filter(Boolean).length} words
+        {scrollProgress > 0 && <span className="ml-3">{Math.round(scrollProgress)}%</span>}
       </div>
     </div>
   );

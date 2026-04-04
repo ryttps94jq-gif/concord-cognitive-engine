@@ -73,8 +73,7 @@ export function SharedSessionChat({ sessionId, currentUserId, onEnd }: SharedSes
 
   // Load session details
   useEffect(() => {
-    api.get(`/api/shared-session/${sessionId}`).then(res => {
-      const data = res.data;
+    sharedSessionDetails(sessionId).then(data => {
       if (data.ok) {
         setParticipants(data.session.participants);
         setSessionStatus(data.session.status);
@@ -187,7 +186,7 @@ export function SharedSessionChat({ sessionId, currentUserId, onEnd }: SharedSes
     }]);
 
     try {
-      await api.post(`/api/shared-session/${sessionId}/chat`, { message: content });
+      await sharedSessionChat(sessionId, content);
     } catch {
       setIsSending(false);
     }

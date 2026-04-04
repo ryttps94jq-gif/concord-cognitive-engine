@@ -34,7 +34,8 @@ import {
   Highlighter
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
+import { createUndoableAction, batchUndoable } from '@/store/history';
 
 interface BlockEditorProps {
   content?: string;
