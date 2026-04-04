@@ -32,6 +32,7 @@ import {
   Layers,
   Sprout,
   ChevronDown,
+  Zap,
   Map,
   Sun,
   CloudRain,
@@ -316,7 +317,7 @@ export default function AgricultureLensPage() {
     setEditorOpen(false);
   };
 
-  const _handleAction = async (action: string, artifactId?: string) => {
+  const handleAction = async (action: string, artifactId?: string) => {
     const targetId = artifactId || editingItem?.id || filtered[0]?.id;
     if (!targetId) return;
     try {
@@ -468,6 +469,7 @@ export default function AgricultureLensPage() {
 
                 <div className="flex items-center gap-2 mt-3 pt-3 border-t border-lattice-border">
                   <button onClick={e => { e.stopPropagation(); openEdit(item); }} className={cn(ds.btnSmall, 'text-gray-400 hover:text-white')}><Edit2 className="w-3 h-3" /> Edit</button>
+                  <button onClick={e => { e.stopPropagation(); handleAction('analyze', item.id); }} className={cn(ds.btnSmall, 'text-neon-cyan hover:text-neon-cyan/80')}><Zap className="w-3 h-3" /> Analyze</button>
                   <button onClick={e => { e.stopPropagation(); remove(item.id); }} className={cn(ds.btnSmall, 'text-red-400 hover:text-red-300')}><Trash2 className="w-3 h-3" /> Delete</button>
                 </div>
               </div>

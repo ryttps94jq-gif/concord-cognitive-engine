@@ -60,6 +60,7 @@ export function DrumMachine({
       {/* Toolbar */}
       <div className="h-8 bg-black/40 border-b border-white/10 flex items-center px-3 gap-3 flex-shrink-0">
         <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Drum Machine</span>
+        <span className="text-[10px] text-gray-500 ml-1">{stepCount} steps</span>
         <div className="w-px h-4 bg-white/10" />
 
         <div className="flex items-center gap-1 text-[10px]">

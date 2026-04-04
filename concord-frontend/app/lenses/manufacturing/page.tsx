@@ -183,7 +183,7 @@ function OEEGauge({ value, label, size = 'md' }: { value: number; label: string;
 
   return (
     <div className="flex flex-col items-center gap-1">
-      <div className={cn('relative rounded-full flex items-center justify-center', dim)}>
+      <div className={cn('relative rounded-full flex items-center justify-center', dim, bgColor + '/10')}>
         <svg className="absolute inset-0" viewBox="0 0 36 36">
           <path
             d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"

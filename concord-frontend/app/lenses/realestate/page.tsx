@@ -819,7 +819,7 @@ export default function RealEstateLensPage() {
               {items.filter(i => (i.data as unknown as RealEstateArtifact).artifactType === 'Listing').slice(0, 5).map(item => {
                 const d = item.data as unknown as RealEstateArtifact;
                 return (
-                  <div key={item.id} className="flex items-center justify-between py-2 border-b border-lattice-border last:border-0 cursor-pointer hover:bg-lattice-elevated/50 px-2 rounded" onClick={() => { setActiveTab('Listings'); openEditEditor(item); }}>
+                  <div key={item.id} className="flex items-center justify-between py-2 border-b border-lattice-border last:border-0 cursor-pointer hover:bg-lattice-elevated/50 px-2 rounded" onClick={() => { setSelectedActionItem(item.id); setActiveTab('Listings'); openEditEditor(item); }}>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-white truncate">{item.title}</p>
                       <p className="text-xs text-gray-500 truncate">{d.address}</p>
@@ -840,7 +840,7 @@ export default function RealEstateLensPage() {
               {items.filter(i => (i.data as unknown as RealEstateArtifact).artifactType === 'Transaction' && !['closed', 'fell_through'].includes((i.data as unknown as RealEstateArtifact).status)).slice(0, 5).map(item => {
                 const d = item.data as unknown as RealEstateArtifact;
                 return (
-                  <div key={item.id} className="flex items-center justify-between py-2 border-b border-lattice-border last:border-0 cursor-pointer hover:bg-lattice-elevated/50 px-2 rounded" onClick={() => { setActiveTab('Transactions'); openEditEditor(item); }}>
+                  <div key={item.id} className="flex items-center justify-between py-2 border-b border-lattice-border last:border-0 cursor-pointer hover:bg-lattice-elevated/50 px-2 rounded" onClick={() => { setSelectedActionItem(item.id); setActiveTab('Transactions'); openEditEditor(item); }}>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-white truncate">{item.title}</p>
                       <p className="text-xs text-gray-500">{d.closingDate ? `Closing: ${d.closingDate}` : 'No closing date'}</p>

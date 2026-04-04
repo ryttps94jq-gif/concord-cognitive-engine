@@ -344,7 +344,7 @@ export default function CouncilLensPage() {
     queryFn: () => api.get('/api/dtus').then(r => r.data),
   });
 
-  const _debateMutation = useMutation({
+  const debateMutation = useMutation({
     mutationFn: async (_params: { dtuA: string; dtuB: string; topic: string }) => {
       const res = await apiHelpers.council.reviewGlobal();
       return res.data;
@@ -360,7 +360,7 @@ export default function CouncilLensPage() {
   const runArtifact = useRunArtifact('council');
 
   const personas: Persona[] = personasData?.personas || [];
-  const _dtus: DTU[] = dtusData?.dtus?.slice(0, 50) || [];
+  const dtus: DTU[] = dtusData?.dtus?.slice(0, 50) || [];
 
   // ----- Computed -----
   const selectedProposal = selectedProposalId ? proposals.find(p => p.id === selectedProposalId) || null : null;
@@ -537,9 +537,13 @@ export default function CouncilLensPage() {
     };
     createDebateItem({ title: d.topic, data: d as unknown as Record<string, unknown> });
     addAuditEntry({ actor: 'Council Chair', action: 'Started debate', target: d.id, details: d.topic, category: 'debate' });
+    // Trigger AI council review for the debate
+    if (dtus.length >= 2) {
+      debateMutation.mutate({ dtuA: dtus[0].id, dtuB: dtus[1].id, topic: d.topic });
+    }
     setShowCreateDebate(false);
     setNewDebate({ topic: '', timePerSpeaker: 300 });
-  }, [newDebate, addAuditEntry, createDebateItem]);
+  }, [newDebate, addAuditEntry, createDebateItem, debateMutation, dtus]);
 
   const handleAddDebatePoint = useCallback((debateId: string, type: 'point' | 'counterpoint' | 'motion') => {
     if (!debatePointText.trim()) return;

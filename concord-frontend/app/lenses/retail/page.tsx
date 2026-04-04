@@ -770,7 +770,7 @@ export default function RetailLensPage() {
         <div className={ds.grid4}>
           <MetricCard icon={ShieldCheck} label="SLA Compliance" value={`${slaCompliance}%`} color="green-400" subtext={`${breachedCount} breached`} />
           <MetricCard icon={AlertTriangle} label="Urgent" value={String(urgentCount)} color="yellow-400" subtext="Approaching deadline" />
-          <MetricCard icon={AlertCircle} label="Breached" value={String(breachedCount)} color="red-400" subtext="Past SLA deadline" />
+          <MetricCard icon={AlertCircle} label="On Track" value={String(onTrackCount)} color="green-400" subtext={`${resolvedCount} resolved`} />
           <MetricCard icon={ThumbsUp} label="Avg Satisfaction" value={avgSatisfaction.toFixed(1)} color="neon-cyan" subtext="out of 5.0" />
         </div>
 
@@ -892,7 +892,7 @@ export default function RetailLensPage() {
       <div className="space-y-4">
         <div className={ds.grid4}>
           <MetricCard icon={Gauge} label="Inventory Health" value={`${inventoryHealthScore}%`} color={inventoryHealthScore >= 80 ? 'green-400' : inventoryHealthScore >= 50 ? 'yellow-400' : 'red-400'} />
-          <MetricCard icon={PackageX} label="Stockout Risk" value={String(criticalProducts.length + highRiskProducts.length)} color="red-400" subtext="products at risk" />
+          <MetricCard icon={PackageX} label="Stockout Risk" value={String(criticalProducts.length + highRiskProducts.length)} color="red-400" subtext={`${mediumRiskProducts.length} medium risk`} />
           <MetricCard icon={RefreshCw} label="Avg Turnover" value={(products.reduce((s, p) => s + (p.data.turnoverRate || 0), 0) / (products.length || 1)).toFixed(1) + 'x'} color="neon-cyan" subtext="monthly" />
           <MetricCard icon={AlertTriangle} label="Below Reorder" value={String(lowStockProducts.length)} color="yellow-400" subtext="need reordering" />
         </div>

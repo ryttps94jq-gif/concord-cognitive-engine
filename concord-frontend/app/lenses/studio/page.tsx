@@ -194,7 +194,7 @@ function createDefaultDrumPads(): DrumPad[] {
 
 export default function StudioLensPage() {
   useLensNav('studio');
-  const { latestData: realtimeData, alerts: _realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('studio');
+  const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('studio');
   const { isLoading: _isLoading, isError: _isError, error: _error, refetch: _refetch, create: createLensItem, update: updateLensItem } = useLensData('studio', 'project', { noSeed: true });
   const queryClient = useQueryClient();
 
@@ -789,6 +789,11 @@ export default function StudioLensPage() {
           <div className="flex items-center gap-2">
             <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} compact />
             <DTUExportButton domain="studio" data={realtimeData || {}} compact />
+            {realtimeAlerts.length > 0 && (
+              <span className="text-xs px-2 py-0.5 rounded bg-yellow-500/10 text-yellow-400">
+                {realtimeAlerts.length} alert{realtimeAlerts.length !== 1 ? 's' : ''}
+              </span>
+            )}
             <button
               onClick={() => setShowNewProject(true)}
               className="flex items-center gap-2 px-4 py-2 bg-neon-cyan/20 text-neon-cyan rounded-lg text-sm hover:bg-neon-cyan/30"

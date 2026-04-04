@@ -48,7 +48,7 @@ const SEED_PLAYLISTS: Playlist[] = [];
 
 export default function MusicLensPage() {
   useLensNav('music');
-  const { latestData: realtimeData, alerts: _realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('music');
+  const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('music');
   const { isLoading: _trackLoading, items: trackItems, create: createTrackItem } = useLensData<Record<string, unknown>>('music', 'track', {
     seed: SEED_TRACKS.map(t => ({ title: t.title, data: t as unknown as Record<string, unknown> })),
   });
@@ -351,6 +351,11 @@ export default function MusicLensPage() {
 
         <div className="flex items-center gap-3">
           {isLive && <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} />}
+          {realtimeAlerts.length > 0 && (
+            <span className="text-xs px-2 py-0.5 rounded bg-yellow-500/10 text-yellow-400">
+              {realtimeAlerts.length} alert{realtimeAlerts.length !== 1 ? 's' : ''}
+            </span>
+          )}
           <VisionAnalyzeButton
             domain="music"
             prompt="Analyze this image related to music (album cover, concert photo, instrument, etc.). Describe what you see and suggest relevant genre tags, mood, and metadata for music cataloging."

@@ -777,6 +777,7 @@ export default function TradesLensPage() {
                     <div className="w-48 shrink-0 flex items-center gap-2">
                       {phase.isMilestone && <Milestone className="w-3 h-3 text-yellow-400" />}
                       <span className="text-sm text-white truncate">{phase.name}</span>
+                      {renderPhaseStatusBadge(phase.status)}
                     </div>
                     <div className="w-24 shrink-0">
                       <select

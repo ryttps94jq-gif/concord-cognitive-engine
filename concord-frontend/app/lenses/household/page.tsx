@@ -1034,8 +1034,9 @@ export default function HouseholdLensPage() {
             <p className={cn(ds.heading2, 'text-green-400')}>{formatCurrency(totalIncome)}</p>
           </div>
           <div className={cn(ds.panel, 'border-l-4 border-l-red-400')}>
-            <p className={ds.textMuted}>Total Budgeted</p>
-            <p className={cn(ds.heading2, 'text-red-400')}>{formatCurrency(totalBudgeted)}</p>
+            <p className={ds.textMuted}>Total Spent</p>
+            <p className={cn(ds.heading2, 'text-red-400')}>{formatCurrency(totalSpent)}</p>
+            <p className="text-xs text-gray-500 mt-1">{formatCurrency(totalBudgeted)} budgeted</p>
           </div>
           <div className={cn(ds.panel, 'border-l-4 border-l-neon-cyan')}>
             <p className={ds.textMuted}>Remaining</p>

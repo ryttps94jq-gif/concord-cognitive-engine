@@ -202,7 +202,7 @@ export default function ProfilePage() {
   }, []);
 
   const personality = personalityData?.personality;
-  const _stats = statsData?.universe || statsData;
+  const stats = statsData?.universe || statsData;
   const profile = profileData;
   const pinnedPosts = pinnedData || [];
 
@@ -447,6 +447,39 @@ export default function ProfilePage() {
         {activeTab === 'analytics' && profile && (
           <div className="space-y-6">
             {personality && <CognitiveCard personality={personality} />}
+            {stats && (
+              <div className={cn(ds.panel, 'space-y-3')}>
+                <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                  <BarChart2 className="w-4 h-4 text-neon-purple" /> Universe Stats
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {stats.totalDTUs !== undefined && (
+                    <div className="text-center p-3 rounded-lg bg-lattice-deep/50 border border-lattice-border/50">
+                      <p className="text-lg font-bold text-white">{formatNumber(stats.totalDTUs)}</p>
+                      <p className="text-xs text-gray-400">Total DTUs</p>
+                    </div>
+                  )}
+                  {stats.totalPersonas !== undefined && (
+                    <div className="text-center p-3 rounded-lg bg-lattice-deep/50 border border-lattice-border/50">
+                      <p className="text-lg font-bold text-white">{formatNumber(stats.totalPersonas)}</p>
+                      <p className="text-xs text-gray-400">Personas</p>
+                    </div>
+                  )}
+                  {stats.totalLenses !== undefined && (
+                    <div className="text-center p-3 rounded-lg bg-lattice-deep/50 border border-lattice-border/50">
+                      <p className="text-lg font-bold text-white">{formatNumber(stats.totalLenses)}</p>
+                      <p className="text-xs text-gray-400">Lenses</p>
+                    </div>
+                  )}
+                  {stats.totalUsers !== undefined && (
+                    <div className="text-center p-3 rounded-lg bg-lattice-deep/50 border border-lattice-border/50">
+                      <p className="text-lg font-bold text-white">{formatNumber(stats.totalUsers)}</p>
+                      <p className="text-xs text-gray-400">Users</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
             <div className="flex justify-end">
               <a
                 href="/lenses/analytics"

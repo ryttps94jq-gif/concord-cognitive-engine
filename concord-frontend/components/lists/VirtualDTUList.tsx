@@ -126,7 +126,7 @@ export function VirtualDTUList({
     setContextMenu(null);
   }, []);
 
-  const _toggleSort = (field: SortField) => {
+  const toggleSort = (field: SortField) => {
     if (sortField === field) {
       setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
     } else {
@@ -281,25 +281,41 @@ export function VirtualDTUList({
             </div>
 
             <div className="flex items-center gap-2">
-              <select
-                value={sortField}
-                onChange={(e) => setSortField(e.target.value as SortField)}
-                className="bg-lattice-surface border border-lattice-border rounded px-2 py-1 text-xs text-white"
-              >
-                <option value="updatedAt">Updated</option>
-                <option value="createdAt">Created</option>
-                <option value="title">Title</option>
-                <option value="resonance">Resonance</option>
-              </select>
               <button
-                onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
-                className="p-1 text-gray-400 hover:text-white transition-colors"
-              >
-                {sortOrder === 'asc' ? (
-                  <SortAsc className="w-4 h-4" />
-                ) : (
-                  <SortDesc className="w-4 h-4" />
+                onClick={() => toggleSort('updatedAt')}
+                className={cn(
+                  'px-2 py-1 text-xs rounded transition-colors',
+                  sortField === 'updatedAt' ? 'text-neon-cyan' : 'text-gray-400 hover:text-white'
                 )}
+              >
+                Updated {sortField === 'updatedAt' && (sortOrder === 'asc' ? '\u2191' : '\u2193')}
+              </button>
+              <button
+                onClick={() => toggleSort('createdAt')}
+                className={cn(
+                  'px-2 py-1 text-xs rounded transition-colors',
+                  sortField === 'createdAt' ? 'text-neon-cyan' : 'text-gray-400 hover:text-white'
+                )}
+              >
+                Created {sortField === 'createdAt' && (sortOrder === 'asc' ? '\u2191' : '\u2193')}
+              </button>
+              <button
+                onClick={() => toggleSort('title')}
+                className={cn(
+                  'px-2 py-1 text-xs rounded transition-colors',
+                  sortField === 'title' ? 'text-neon-cyan' : 'text-gray-400 hover:text-white'
+                )}
+              >
+                Title {sortField === 'title' && (sortOrder === 'asc' ? '\u2191' : '\u2193')}
+              </button>
+              <button
+                onClick={() => toggleSort('resonance')}
+                className={cn(
+                  'px-2 py-1 text-xs rounded transition-colors',
+                  sortField === 'resonance' ? 'text-neon-cyan' : 'text-gray-400 hover:text-white'
+                )}
+              >
+                Resonance {sortField === 'resonance' && (sortOrder === 'asc' ? '\u2191' : '\u2193')}
               </button>
             </div>
           </div>

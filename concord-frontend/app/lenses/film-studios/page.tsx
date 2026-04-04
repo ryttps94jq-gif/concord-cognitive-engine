@@ -39,7 +39,7 @@ interface FilmProject {
 export default function FilmStudiosPage() {
   useLensNav('film-studios');
   const queryClient = useQueryClient();
-  const { latestData: realtimeData, alerts: _alerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('film-studios');
+  const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('film-studios');
   const { contextDTUs, isLoading: dtusLoading } = useLensDTUs({ lens: 'film-studios' });
 
   const [tab, setTab] = useState<FilmTab>('discover');
