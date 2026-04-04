@@ -504,6 +504,53 @@ export default function PodcastLensPage() {
                   ))}
               </div>
 
+              {/* DTU Overview */}
+              {!dtusLoading && (contextDTUs.length > 0 || regularDTUs.length > 0 || hyperDTUs.length > 0 || megaDTUs.length > 0) && (
+                <div className="mt-6">
+                  <h3 className="text-sm font-semibold text-gray-400 uppercase mb-3">Data Transfer Units</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {contextDTUs.length > 0 && (
+                      <div className="p-3 bg-white/5 rounded-xl border border-white/5">
+                        <p className="text-xs text-gray-500">Context DTUs</p>
+                        <p className="text-xl font-bold text-neon-cyan">{contextDTUs.length}</p>
+                      </div>
+                    )}
+                    {regularDTUs.length > 0 && (
+                      <div className="p-3 bg-white/5 rounded-xl border border-white/5">
+                        <p className="text-xs text-gray-500">Regular DTUs</p>
+                        <p className="text-xl font-bold text-purple-400">{regularDTUs.length}</p>
+                      </div>
+                    )}
+                    {hyperDTUs.length > 0 && (
+                      <div className="p-3 bg-white/5 rounded-xl border border-white/5">
+                        <p className="text-xs text-gray-500">Hyper DTUs</p>
+                        <p className="text-xl font-bold text-neon-pink">{hyperDTUs.length}</p>
+                      </div>
+                    )}
+                    {megaDTUs.length > 0 && (
+                      <div className="p-3 bg-white/5 rounded-xl border border-white/5">
+                        <p className="text-xs text-gray-500">Mega DTUs</p>
+                        <p className="text-xl font-bold text-neon-green">{megaDTUs.length}</p>
+                      </div>
+                    )}
+                  </div>
+                  {episodes.length > 0 && (
+                    <button
+                      onClick={() => publishToMarketplace({ dtuId: episodes[0].id })}
+                      className="mt-3 flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-400/10 text-purple-400 text-sm hover:bg-purple-400/20 transition-colors"
+                    >
+                      <Rss className="w-4 h-4" /> Publish to Marketplace
+                    </button>
+                  )}
+                </div>
+              )}
+              {dtusLoading && (
+                <div className="mt-6 flex items-center gap-2 text-gray-500 text-sm">
+                  <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+                  Loading DTUs...
+                </div>
+              )}
+
               {realtimeInsights.length > 0 && (
                 <>
                   <UniversalActions domain="podcast" artifactId={null} compact />
