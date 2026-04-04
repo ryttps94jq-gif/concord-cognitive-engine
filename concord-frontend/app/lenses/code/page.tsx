@@ -495,7 +495,7 @@ macro.run(async ({ genre, bpm, swing, bars }) => {
   },
 ];
 
-const _DEFAULT_CODE = `// MIDI Chord Generator Script
+const DEFAULT_CODE = `// MIDI Chord Generator Script
 // This script generates chord progressions
 
 const SCALES = {
@@ -605,7 +605,7 @@ export default function CodeLensPage() {
 
   const [files, setFiles] = useState<FileNode[]>([]);
   const [tabs, setTabs] = useState<Tab[]>([
-    { id: 'main', name: 'untitled.js', language: 'javascript', content: '// Start writing your script here\n', isDirty: false, scriptType: 'midi' },
+    { id: 'main', name: 'untitled.js', language: 'javascript', content: DEFAULT_CODE, isDirty: false, scriptType: 'midi' },
   ]);
   const [activeTabId, setActiveTabId] = useState('main');
   const [scriptOutput, setScriptOutput] = useState<{ log: string; visualization: string } | null>(null);
