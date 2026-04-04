@@ -368,7 +368,7 @@ export function submitForGlobal(db, { dtuId, submitterId }) {
         return { ok: false, error: "already_global" };
       }
     }
-  } catch { /* */ }
+  } catch (err) { console.warn('[global-gates] submitForGlobal: could not check if already global', { dtuId, err: err.message }); }
 
   // Run automatic gates
   const gateResults = runAllGates(db, dtuId, submitterId);
@@ -544,7 +544,7 @@ export function demoteFromGlobal(db, { dtuId, reason }) {
       dtu.meta.demotionReason = reason;
       db.prepare("UPDATE dtu_store SET data = ? WHERE id = ?").run(JSON.stringify(dtu), dtuId);
     }
-  } catch { /* */ }
+  } catch (err) { console.error('[global-gates] demoteFromGlobal failed', { dtuId, err: err.message }); }
 
   return { ok: true, dtuId, reason };
 }
@@ -561,7 +561,7 @@ export function runHealthCheck(db, dtuId) {
       "SELECT COUNT(*) as count FROM royalty_citations WHERE source_dtu_id = ?"
     ).get(dtuId);
     citationCount = row?.count || 0;
-  } catch { /* */ }
+  } catch (err) { console.warn('[global-gates] healthCheck: could not count citations', { dtuId, err: err.message }); }
 
   if (citationCount === 0) {
     issues.push({ type: "citation_decay", severity: "warning", detail: "Zero citations" });
@@ -572,7 +572,7 @@ export function runHealthCheck(db, dtuId) {
   try {
     const row = db.prepare("SELECT data FROM dtu_store WHERE id = ?").get(dtuId);
     if (row) dtu = JSON.parse(row.data);
-  } catch { /* */ }
+  } catch (err) { console.warn('[global-gates] healthCheck: could not load DTU', { dtuId, err: err.message }); }
 
   if (dtu) {
     const age = Date.now() - new Date(dtu.timestamp || dtu.created_at).getTime();
@@ -635,7 +635,7 @@ export function getGlobalFeed(db, { limit = 20, offset = 0 } = {}) {
       ORDER BY citation_count DESC
       LIMIT 10
     `).all();
-  } catch { /* */ }
+  } catch (err) { console.warn('[global-gates] globalFeed: could not fetch top cited DTUs', { err: err.message }); }
 
   return {
     recentPromotions,
@@ -653,7 +653,7 @@ export function getGlobalStats(db) {
       "SELECT COUNT(*) as count FROM dtu_store WHERE json_extract(data, '$.scope') = 'global'"
     ).get();
     totalGlobal = row?.count || 0;
-  } catch { /* */ }
+  } catch (err) { console.warn('[global-gates] globalStats: could not count global DTUs', { err: err.message }); }
 
   const pendingSubmissions = db.prepare(
     "SELECT COUNT(*) as count FROM global_submissions WHERE status = 'reviewing'"
