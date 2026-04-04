@@ -480,7 +480,7 @@ export function requestRefund(db, { purchaseId, buyerId, reason }) {
   let metadata;
   try {
     metadata = purchase.metadata_json ? JSON.parse(purchase.metadata_json) : {};
-  } catch { metadata = {}; }
+  } catch (err) { console.warn('[account-lifecycle] refund: failed to parse purchase metadata', { purchaseId, err: err.message }); metadata = {}; }
 
   const sellerId = metadata.sellerId || purchase.to_user_id;
   const amount = purchase.amount;
@@ -582,7 +582,8 @@ export function getUserDisputes(db, userId, { limit = 50, offset = 0 } = {}) {
     `).all(userId, userId, limit, offset);
 
     return { ok: true, disputes };
-  } catch {
+  } catch (err) {
+    console.warn('[account-lifecycle] failed to fetch user disputes', { userId, err: err.message });
     return { ok: true, disputes: [] };
   }
 }

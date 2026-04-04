@@ -88,13 +88,13 @@ const DOMAIN_ORGANS = {
 // trust network stores. Each wraps access in try/catch for silent failure.
 
 function _es() {
-  try { const S = getSTATE(); return S?.__emergent || null; } catch { return null; }
+  try { const S = getSTATE(); return S?.__emergent || null; } catch (err) { logger.debug('emergent:entity-teaching', '_es lookup failed', { error: err?.message }); return null; }
 }
 function _entity(id) {
-  try { return _es()?.emergents.get(id) || null; } catch { return null; }
+  try { return _es()?.emergents.get(id) || null; } catch (err) { logger.debug('emergent:entity-teaching', '_entity lookup failed', { id, error: err?.message }); return null; }
 }
 function _rep(id) {
-  try { return _es()?.reputations.get(id) || null; } catch { return null; }
+  try { return _es()?.reputations.get(id) || null; } catch (err) { logger.debug('emergent:entity-teaching', '_rep lookup failed', { id, error: err?.message }); return null; }
 }
 function _body(id) {
   try {
