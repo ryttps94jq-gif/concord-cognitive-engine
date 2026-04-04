@@ -167,6 +167,95 @@ export default function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuFo
     }
   }));
 
+  // ── DTU Stats ─────────────────────────────────────────────────────────
+  app.get("/api/dtus/stats", (req, res) => {
+    try {
+      const all = dtusArray();
+      const tierCounts = {};
+      const kindCounts = {};
+      let totalRichness = 0;
+      for (const d of all) {
+        tierCounts[d.tier || "unknown"] = (tierCounts[d.tier || "unknown"] || 0) + 1;
+        kindCounts[d.kind || "unknown"] = (kindCounts[d.kind || "unknown"] || 0) + 1;
+        totalRichness += d.richness || 0;
+      }
+      const shadowCount = STATE.shadowDtus ? STATE.shadowDtus.size : 0;
+      res.json({
+        ok: true,
+        total: all.length,
+        shadowCount,
+        tierCounts,
+        kindCounts,
+        averageRichness: all.length > 0 ? totalRichness / all.length : 0,
+      });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  // ── Shadow DTU Pending ───────────────────────────────────────────────
+  app.get("/api/dtus/shadow/pending", (req, res) => {
+    try {
+      const shadows = STATE.shadowDtus ? Array.from(STATE.shadowDtus.values()) : [];
+      // Candidates: shadow DTUs with enough momentum/richness to potentially promote
+      const candidates = shadows
+        .filter(d => (d.momentum || 0) > 0 || (d.richness || 0) > 0.3)
+        .map(d => ({
+          dtuId: d.id,
+          title: d.title || d.id,
+          momentum: d.momentum || 0,
+          richness: d.richness || 0,
+          uniqueUsers: d.uniqueUsers || 0,
+          interactionCount: d.interactionCount || d.interactions || 0,
+        }))
+        .sort((a, b) => b.momentum - a.momentum)
+        .slice(0, 100);
+      // Pending shadows: all shadow DTUs
+      const pendingShadows = shadows
+        .map(d => ({
+          id: d.id,
+          title: d.title || d.id,
+          tier: d.tier || "shadow",
+          kind: d.kind || "unknown",
+          richness: d.richness || 0,
+          ttlDays: d.ttlDays || 0,
+          tags: d.tags || [],
+          createdAt: d.createdAt || null,
+        }))
+        .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""))
+        .slice(0, 200);
+      res.json({ ok: true, candidates, pendingShadows });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  // ── DTU Promotion Queue ──────────────────────────────────────────────
+  app.get("/api/dtus/promotion/queue", asyncHandler(async (req, res) => {
+    try {
+      const m = await import("../emergent/promotion-pipeline.js").catch(() => null);
+      if (m && typeof m.getQueue === "function") {
+        return res.json(m.getQueue());
+      }
+      // Fallback: derive queue from shadow DTUs with high momentum
+      const shadows = STATE.shadowDtus ? Array.from(STATE.shadowDtus.values()) : [];
+      const queue = shadows
+        .filter(d => (d.momentum || 0) > 0.5 || (d.richness || 0) > 0.6)
+        .map(d => ({
+          id: d.id,
+          artifactName: d.title || d.id,
+          fromStage: d.tier || "shadow",
+          toStage: "micro",
+          status: "pending",
+          requestedAt: d.updatedAt || d.createdAt || new Date().toISOString(),
+        }))
+        .slice(0, 50);
+      res.json({ ok: true, queue });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  }));
+
   app.get("/api/definitions", (req, res) => {
     const { limit, offset } = parsePagination(req.query);
     const all = dtusArray().filter(d =>
