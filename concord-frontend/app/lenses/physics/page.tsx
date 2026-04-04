@@ -266,7 +266,7 @@ export default function PhysicsLensPage() {
   // UI state
   const [tool, setTool] = useState<Tool>('select');
   const [selectedBody, setSelectedBody] = useState<string | null>(null);
-  const [selectedConstraint, _setSelectedConstraint] = useState<string | null>(null);
+  const [selectedConstraint, setSelectedConstraint] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showPresets, setShowPresets] = useState(false);
   const [showFeatures, setShowFeatures] = useState(true);
@@ -292,7 +292,7 @@ export default function PhysicsLensPage() {
     return mag > 0 ? { x: v.x / mag, y: v.y / mag } : { x: 0, y: 0 };
   };
 
-  const _dot = (a: Vector2D, b: Vector2D) => a.x * b.x + a.y * b.y;
+  const dot = (a: Vector2D, b: Vector2D) => a.x * b.x + a.y * b.y;
 
   // Physics simulation step
   const simulate = useCallback(() => {

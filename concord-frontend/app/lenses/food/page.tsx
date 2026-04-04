@@ -235,7 +235,7 @@ export default function FoodLensPage() {
   const [wasteLog, setWasteLog] = useState<WasteEntry[]>([]);
   const [wasteItemName, setWasteItemName] = useState('');
   const [wasteQty, setWasteQty] = useState('');
-  const [wasteUnit, _setWasteUnit] = useState('lb');
+  const [wasteUnit, setWasteUnit] = useState('lb');
   const [wasteReason, setWasteReason] = useState<WasteReason>('expired');
   const [wasteCost, setWasteCost] = useState('');
   const [wasteNotes, setWasteNotes] = useState('');

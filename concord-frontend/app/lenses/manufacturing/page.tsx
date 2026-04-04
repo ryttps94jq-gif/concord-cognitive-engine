@@ -178,7 +178,7 @@ function BOMTreeNode({ node, depth = 0 }: { node: BOMNode; depth?: number }) {
 // ---------------------------------------------------------------------------
 function OEEGauge({ value, label, size = 'md' }: { value: number; label: string; size?: 'sm' | 'md' }) {
   const color = value >= 85 ? 'text-green-400' : value >= 65 ? 'text-amber-400' : 'text-red-400';
-  const _bgColor = value >= 85 ? 'bg-green-400' : value >= 65 ? 'bg-amber-400' : 'bg-red-400';
+  const bgColor = value >= 85 ? 'bg-green-400' : value >= 65 ? 'bg-amber-400' : 'bg-red-400';
   const dim = size === 'sm' ? 'w-16 h-16' : 'w-20 h-20';
 
   return (

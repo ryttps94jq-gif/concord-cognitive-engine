@@ -59,9 +59,9 @@ export default function MusicLensPage() {
     seed: SEED_PLAYLISTS.map(p => ({ title: p.name, data: p as unknown as Record<string, unknown> })),
   });
   const {
-    contextDTUs: _contextDTUs, hyperDTUs: _hyperDTUs, megaDTUs, regularDTUs: _regularDTUs,
-    publishToMarketplace: _publishToMarketplace,
-    isLoading: _dtusLoading,
+    contextDTUs, hyperDTUs, megaDTUs, regularDTUs,
+    publishToMarketplace,
+    isLoading: dtusLoading,
   } = useLensDTUs({ lens: 'music' });
 
   // ---- Transform lens items to domain types ----

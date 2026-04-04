@@ -65,8 +65,8 @@ export default function PodcastLensPage() {
     create: createEpisode, update: updateEpisode, remove: removeEpisode,
   } = useLensData<Record<string, unknown>>('podcast', 'episode');
   const {
-    contextDTUs: _contextDTUs, hyperDTUs: _hyperDTUs, megaDTUs: _megaDTUs, regularDTUs: _regularDTUs,
-    publishToMarketplace: _publishToMarketplace, isLoading: _dtusLoading,
+    contextDTUs, hyperDTUs, megaDTUs, regularDTUs,
+    publishToMarketplace, isLoading: dtusLoading,
   } = useLensDTUs({ lens: 'podcast' });
 
   const { items: subscriberItems } = useLensData<Record<string, unknown>>('podcast', 'subscriber');

@@ -332,6 +332,7 @@ function OrganismsTab({ organisms, onRefresh }: { organisms: Organism[]; onRefre
         </div>
       ))}
     </div>
+    </div>
   );
 }
 

@@ -202,7 +202,7 @@ export default function RealEstateLensPage() {
   const [editingItem, setEditingItem] = useState<LensItem<RealEstateArtifact> | null>(null);
   const [showActionPanel, setShowActionPanel] = useState(false);
   const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
-  const [selectedActionItem, _setSelectedActionItem] = useState<string | null>(null);
+  const [selectedActionItem, setSelectedActionItem] = useState<string | null>(null);
   const [expandedTxn, setExpandedTxn] = useState<string | null>(null);
   const [showInvestCalc, setShowInvestCalc] = useState(false);
 

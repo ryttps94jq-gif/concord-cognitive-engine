@@ -760,8 +760,8 @@ export default function RetailLensPage() {
 
     const breachedCount = tickets.filter(t => t.sla.breached).length;
     const urgentCount = tickets.filter(t => t.sla.urgent && !t.sla.breached).length;
-    const _onTrackCount = tickets.filter(t => !t.sla.urgent && !t.sla.breached).length;
-    const _resolvedCount = tickets.filter(t => t.status === 'resolved' || t.status === 'closed').length;
+    const onTrackCount = tickets.filter(t => !t.sla.urgent && !t.sla.breached).length;
+    const resolvedCount = tickets.filter(t => t.status === 'resolved' || t.status === 'closed').length;
     const slaCompliance = tickets.length > 0 ? Math.round(((tickets.length - breachedCount) / tickets.length) * 100) : 100;
     const avgSatisfaction = tickets.reduce((s, t) => s + (t.data.satisfactionScore || 0), 0) / (tickets.length || 1);
 
@@ -886,7 +886,7 @@ export default function RetailLensPage() {
 
     const criticalProducts = products.filter(p => p.stockoutRisk === 'critical');
     const highRiskProducts = products.filter(p => p.stockoutRisk === 'high');
-    const _mediumRiskProducts = products.filter(p => p.stockoutRisk === 'medium');
+    const mediumRiskProducts = products.filter(p => p.stockoutRisk === 'medium');
 
     return (
       <div className="space-y-4">

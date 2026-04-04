@@ -1012,7 +1012,7 @@ export default function HouseholdLensPage() {
   /*  BUDGET / EXPENSE TAB                                             */
   /* ================================================================ */
   const renderBudget = () => {
-    const { byCategory, totalBudgeted, totalSpent: _totalSpent } = monthlyBudget;
+    const { byCategory, totalBudgeted, totalSpent } = monthlyBudget;
     const savingsItems = budgetItems.filter(i => (i.data as unknown as BudgetEntry).category === 'Savings');
     const incomeItems = budgetItems.filter(i => (i.data as unknown as BudgetEntry).entryType === 'income');
     const totalIncome = incomeItems.reduce((sum, i) => sum + ((i.data as unknown as BudgetEntry).amount || 0), 0);

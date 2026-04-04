@@ -314,11 +314,11 @@ export default function ArtLensPage() {
   // Listing form
   const [listingTitle, setListingTitle] = useState('');
   const [listingType, setListingType] = useState('cover-art');
-  const [listingStyle, _setListingStyle] = useState('digital');
+  const [listingStyle, setListingStyle] = useState('digital');
   const [listingPrice, setListingPrice] = useState('50');
   const [listingTags, setListingTags] = useState('');
 
-  const { data: artAssets, isLoading: _assetsLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
+  const { data: artAssets, isLoading: assetsLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
     queryKey: ['art-assets', selectedStyle, searchQuery],
     queryFn: () => apiHelpers.artistry.assets.list({ type: 'artwork', search: searchQuery || undefined })
     .then(r => r.data?.assets || []).catch((err) => { console.error('Failed to fetch art assets:', err instanceof Error ? err.message : err); return []; }),
