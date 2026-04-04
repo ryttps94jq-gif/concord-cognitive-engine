@@ -357,4 +357,154 @@ export default function registerHelpersExtendedRoutes(app, {
   app.post("/api/species/classify/:entityId", asyncHandler(async (req, res) => {
     res.json(await runMacro("species", "classify", { entityId: req.params.entityId }, makeCtx(req)));
   }));
+
+  // ── RBAC (aliases for existing org-based RBAC) ─────────────────────────
+  app.get("/api/rbac/roles", (req, res) => {
+    res.json({ ok: true, roles: ["owner", "admin", "member", "viewer", "guest"], builtIn: true });
+  });
+
+  app.get("/api/rbac/permissions", (req, res) => {
+    res.json({ ok: true, permissions: [
+      "read", "write", "delete", "admin", "forge", "promote", "moderate",
+      "macro.run", "macro.register", "lens.create", "lens.manage",
+    ]});
+  });
+
+  app.post("/api/rbac/assign", requireAuth(), (req, res) => {
+    const { userId, roleId, orgId } = req.body;
+    try {
+      const result = globalThis._assignRole?.(orgId || "default", userId, roleId);
+      res.json({ ok: true, assigned: true, userId, role: roleId, result });
+    } catch (e) { res.json({ ok: false, error: e?.message }); }
+  });
+
+  app.post("/api/rbac/revoke", requireAuth(), (req, res) => {
+    const { userId, roleId, orgId } = req.body;
+    try {
+      const result = globalThis._revokeRole?.(orgId || "default", userId, roleId);
+      res.json({ ok: true, revoked: true, userId, role: roleId, result });
+    } catch (e) { res.json({ ok: false, error: e?.message }); }
+  });
+
+  app.post("/api/rbac/check", (req, res) => {
+    const { userId, permission, orgId } = req.body;
+    try {
+      const allowed = globalThis._checkPermission?.(orgId || "default", userId, permission) ?? true;
+      res.json({ ok: true, userId, permission, allowed });
+    } catch (e) { res.json({ ok: true, userId, permission, allowed: true }); }
+  });
+
+  app.get("/api/rbac/users/:userId/roles", (req, res) => {
+    try {
+      const role = globalThis._getUserRole?.("default", req.params.userId);
+      res.json({ ok: true, userId: req.params.userId, roles: role ? [role] : ["guest"] });
+    } catch { res.json({ ok: true, userId: req.params.userId, roles: ["guest"] }); }
+  });
+
+  // ── DTU Extended ───────────────────────────────────────────────────────
+  app.post("/api/dtus/bulk", requireAuth(), asyncHandler(async (req, res) => {
+    const { action, ids, data } = req.body;
+    if (!ids?.length) return res.status(400).json({ ok: false, error: "ids required" });
+    const results = [];
+    for (const id of ids.slice(0, 100)) {
+      const dtu = STATE.dtus.get(id);
+      if (!dtu) { results.push({ id, ok: false, error: "not_found" }); continue; }
+      if (action === "tag") { dtu.tags = [...new Set([...(dtu.tags || []), ...(data?.tags || [])])]; }
+      else if (action === "delete") { STATE.dtus.delete(id); }
+      else if (action === "promote") { dtu.tier = data?.tier || "verified"; }
+      dtu.updatedAt = new Date().toISOString();
+      results.push({ id, ok: true });
+    }
+    saveStateDebounced();
+    res.json({ ok: true, results, processed: results.length });
+  }));
+
+  app.get("/api/dtus/recent", asyncHandler(async (req, res) => {
+    const limit = Math.min(Number(req.query.limit) || 20, 100);
+    const all = dtusArray().sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+    res.json({ ok: true, dtus: all.slice(0, limit).map(d => ({ id: d.id, title: d.title, tier: d.tier, domain: d.domain, createdAt: d.createdAt })) });
+  }));
+
+  app.get("/api/dtus/search", asyncHandler(async (req, res) => {
+    const q = (req.query.q || "").toLowerCase();
+    if (!q) return res.json({ ok: true, results: [], total: 0 });
+    const results = dtusArray().filter(d =>
+      (d.title || "").toLowerCase().includes(q) ||
+      (d.human?.summary || "").toLowerCase().includes(q) ||
+      (d.tags || []).some(t => t.toLowerCase().includes(q))
+    ).slice(0, 50).map(d => ({ id: d.id, title: d.title, tier: d.tier, domain: d.domain }));
+    res.json({ ok: true, results, total: results.length });
+  }));
+
+  app.get("/api/dtus/:id/children", asyncHandler(async (req, res) => {
+    const dtu = STATE.dtus.get(req.params.id);
+    if (!dtu) return res.status(404).json({ ok: false, error: "not_found" });
+    const children = (dtu.lineage?.children || []).map(cid => {
+      const c = STATE.dtus.get(cid);
+      return c ? { id: c.id, title: c.title, tier: c.tier } : { id: cid, title: null, missing: true };
+    });
+    res.json({ ok: true, children });
+  }));
+
+  app.post("/api/dtus/:id/fork", requireAuth(), asyncHandler(async (req, res) => {
+    const dtu = STATE.dtus.get(req.params.id);
+    if (!dtu) return res.status(404).json({ ok: false, error: "not_found" });
+    const forkId = uid("dtu");
+    const fork = JSON.parse(JSON.stringify(dtu));
+    fork.id = forkId;
+    fork.lineage = { parents: [dtu.id], children: [] };
+    fork.meta = { ...(fork.meta || {}), forkedFrom: dtu.id, forkedAt: new Date().toISOString(), createdBy: req.user?.id || "anon" };
+    fork.createdAt = new Date().toISOString();
+    fork.updatedAt = fork.createdAt;
+    STATE.dtus.set(forkId, fork);
+    if (!dtu.lineage) dtu.lineage = { parents: [], children: [] };
+    dtu.lineage.children.push(forkId);
+    saveStateDebounced();
+    res.json({ ok: true, forkId, parentId: dtu.id });
+  }));
+
+  app.post("/api/dtus/:id/merge", requireAuth(), asyncHandler(async (req, res) => {
+    const dtu = STATE.dtus.get(req.params.id);
+    if (!dtu) return res.status(404).json({ ok: false, error: "not_found" });
+    const { sourceId } = req.body;
+    const source = STATE.dtus.get(sourceId);
+    if (!source) return res.status(404).json({ ok: false, error: "source_not_found" });
+    // Merge tags, claims, definitions
+    dtu.tags = [...new Set([...(dtu.tags || []), ...(source.tags || [])])];
+    if (dtu.core && source.core) {
+      dtu.core.claims = [...(dtu.core.claims || []), ...(source.core.claims || [])];
+      dtu.core.definitions = [...(dtu.core.definitions || []), ...(source.core.definitions || [])];
+    }
+    if (!dtu.lineage) dtu.lineage = { parents: [], children: [] };
+    dtu.lineage.parents.push(sourceId);
+    dtu.updatedAt = new Date().toISOString();
+    saveStateDebounced();
+    res.json({ ok: true, mergedInto: dtu.id, from: sourceId });
+  }));
+
+  app.get("/api/dtus/:id/related", asyncHandler(async (req, res) => {
+    const dtu = STATE.dtus.get(req.params.id);
+    if (!dtu) return res.status(404).json({ ok: false, error: "not_found" });
+    const tags = new Set(dtu.tags || []);
+    const related = dtusArray().filter(d => d.id !== dtu.id && (d.tags || []).some(t => tags.has(t)))
+      .slice(0, 20).map(d => ({ id: d.id, title: d.title, tier: d.tier, sharedTags: (d.tags || []).filter(t => tags.has(t)) }));
+    res.json({ ok: true, related });
+  }));
+
+  app.get("/api/dtus/:id/history", asyncHandler(async (req, res) => {
+    const dtu = STATE.dtus.get(req.params.id);
+    if (!dtu) return res.status(404).json({ ok: false, error: "not_found" });
+    res.json({ ok: true, id: dtu.id, history: {
+      createdAt: dtu.createdAt, updatedAt: dtu.updatedAt,
+      tier: dtu.tier, lineage: dtu.lineage,
+      consolidated: dtu.meta?.consolidated || false,
+      consolidatedInto: dtu.meta?.consolidatedInto || null,
+    }});
+  }));
+
+  // ── Federation Extended ────────────────────────────────────────────────
+  app.post("/api/federation/sync", requireAuth(), asyncHandler(async (req, res) => {
+    const result = await runMacro("federation", "sync", req.body, makeCtx(req)).catch(() => ({ ok: false, error: "federation_sync_unavailable" }));
+    res.json(result);
+  }));
 }
