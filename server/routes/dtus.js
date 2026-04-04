@@ -3,7 +3,16 @@
  * Registered directly on app (mixed prefixes)
  */
 import { asyncHandler } from "../lib/async-handler.js";
+import logger from '../logger.js';
+
 export default function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuForClient, dtusArray, _withAck, _saveStateDebounced, validate }) {
+
+  /** Parse limit/offset query params with sensible defaults and bounds. */
+  function parsePagination(query, defaultLimit = 50, maxLimit = 200) {
+    const limit = Math.max(1, Math.min(Number(query.limit) || defaultLimit, maxLimit));
+    const offset = Math.max(0, Number(query.offset) || 0);
+    return { limit, offset };
+  }
 
   // CRETI-first DTU view (no raw JSON by default)
   app.get("/api/dtu_view/:id", (req, res) => {
@@ -15,14 +24,23 @@ export default function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuFo
 
 
   // DTUs
+  /** Sanitize macro errors: log full details server-side, return generic message to client. */
+  function sanitizeMacroError(e, context) {
+    const msg = String(e?.message || e);
+    const isForbidden = msg.startsWith("forbidden");
+    logger.error("macro_error", { context, error: msg, stack: e?.stack });
+    const clientMsg = isForbidden ? "forbidden" : "An internal error occurred";
+    return { status: isForbidden ? 403 : 500, clientMsg };
+  }
+
   app.get("/api/dtus", asyncHandler(async (req, res) => {
     try {
       const ctx = makeCtx(req);
       const out = await runMacro("dtu","list",{ q:req.query.q, tier:req.query.tier || "any", limit:req.query.limit, offset:req.query.offset, scope: req.query.scope || null }, ctx);
       res.json(out);
     } catch (e) {
-      const msg = String(e?.message || e);
-      res.status(msg.startsWith("forbidden") ? 403 : 500).json({ ok: false, error: msg });
+      const { status, clientMsg } = sanitizeMacroError(e, "dtu.list");
+      res.status(status).json({ ok: false, error: clientMsg });
     }
   }));
   app.get("/api/dtus/:id", asyncHandler(async (req, res) => {
@@ -32,8 +50,8 @@ export default function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuFo
       if (!out.ok) return res.status(404).json(out);
       res.json(out);
     } catch (e) {
-      const msg = String(e?.message || e);
-      res.status(msg.startsWith("forbidden") ? 403 : 500).json({ ok: false, error: msg });
+      const { status, clientMsg } = sanitizeMacroError(e, "dtu.get");
+      res.status(status).json({ ok: false, error: clientMsg });
     }
   }));
   app.post("/api/dtus", validate("dtuCreate"), asyncHandler(async (req, res) => {
@@ -59,8 +77,8 @@ export default function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuFo
 
       res.json(out);
     } catch (e) {
-      const msg = String(e?.message || e);
-      res.status(msg.startsWith("forbidden") ? 403 : 500).json({ ok: false, error: msg });
+      const { status, clientMsg } = sanitizeMacroError(e, "dtu.create");
+      res.status(status).json({ ok: false, error: clientMsg });
     }
   }));
   app.post("/api/dtus/saveSuggested", asyncHandler(async (req, res) => {
@@ -69,8 +87,8 @@ export default function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuFo
       const out = await runMacro("dtu","saveSuggested", req.body || {}, ctx);
       res.json(out);
     } catch (e) {
-      const msg = String(e?.message || e);
-      res.status(msg.startsWith("forbidden") ? 403 : 500).json({ ok: false, error: msg });
+      const { status, clientMsg } = sanitizeMacroError(e, "dtu.saveSuggested");
+      res.status(status).json({ ok: false, error: clientMsg });
     }
   }));
 
@@ -80,13 +98,17 @@ export default function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuFo
     return res.json(_withAck(out, req, ["dtus","state","logs"], ["/api/dtus","/api/state/latest","/api/logs"], null, { panel: "dtus_dedupe" }));
   }));
   app.get("/api/megas", (req,res)=> {
+    const { limit, offset } = parsePagination(req.query);
     const tier = "mega";
-    const out = dtusArray().filter(d => d.tier===tier).sort((a,b)=> (b.updatedAt||b.createdAt||"").localeCompare(a.updatedAt||a.createdAt||""));
-    res.json({ ok:true, megas: out });
+    const all = dtusArray().filter(d => d.tier===tier).sort((a,b)=> (b.updatedAt||b.createdAt||"").localeCompare(a.updatedAt||a.createdAt||""));
+    const out = all.slice(offset, offset + limit);
+    res.json({ ok:true, megas: out, total: all.length, limit, offset });
   });
   app.get("/api/hypers", (req,res)=> {
-    const out = dtusArray().filter(d => d.tier==="hyper").sort((a,b)=> (b.updatedAt||b.createdAt||"").localeCompare(a.updatedAt||a.createdAt||""));
-    res.json({ ok:true, hypers: out });
+    const { limit, offset } = parsePagination(req.query);
+    const all = dtusArray().filter(d => d.tier==="hyper").sort((a,b)=> (b.updatedAt||b.createdAt||"").localeCompare(a.updatedAt||a.createdAt||""));
+    const out = all.slice(offset, offset + limit);
+    res.json({ ok:true, hypers: out, total: all.length, limit, offset });
   });
 
   // Extended DTU endpoints
@@ -146,11 +168,13 @@ export default function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuFo
   }));
 
   app.get("/api/definitions", (req, res) => {
-    const dtus = dtusArray().filter(d =>
+    const { limit, offset } = parsePagination(req.query);
+    const all = dtusArray().filter(d =>
       (d.tags || []).includes("definition") ||
       /^def(inition)?:/i.test(d.title || "")
     );
-    return res.json({ ok: true, definitions: dtus });
+    const dtus = all.slice(offset, offset + limit);
+    return res.json({ ok: true, definitions: dtus, total: all.length, limit, offset });
   });
 
   app.get("/api/definitions/:term", (req, res) => {

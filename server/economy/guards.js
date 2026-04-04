@@ -16,8 +16,8 @@ export function requireAdmin(req) {
   // Public auth mode — allow (global middleware handles this)
   if (process.env.AUTH_MODE === "public") return { ok: true };
 
-  // Check FOUNDER_SECRET header (ops backdoor) — timing-safe comparison
-  if (FOUNDER_SECRET) {
+  // FOUNDER_SECRET header — restricted to non-production for initial setup only
+  if (FOUNDER_SECRET && process.env.NODE_ENV !== "production") {
     const provided = req.headers["x-founder-secret"] || "";
     if (provided && provided.length === FOUNDER_SECRET.length) {
       try {

@@ -198,6 +198,34 @@ export default function registerChatRoutes(app, {
     }
   });
 
+  // ── Session size management ───────────────────────────────────────────
+  const MAX_SESSIONS = 10_000;
+
+  /** Evict oldest sessions when the map exceeds MAX_SESSIONS. */
+  function evictOldestSessions() {
+    if (STATE.sessions.size <= MAX_SESSIONS) return;
+    // Map iteration order is insertion order; delete from the front
+    const toRemove = STATE.sessions.size - MAX_SESSIONS;
+    let removed = 0;
+    for (const key of STATE.sessions.keys()) {
+      if (removed >= toRemove) break;
+      STATE.sessions.delete(key);
+      removed++;
+    }
+    logger.info("sessions", `evicted ${removed} oldest sessions (cap: ${MAX_SESSIONS})`);
+  }
+
+  // Periodic cleanup: remove sessions older than 24 hours with no messages
+  setInterval(() => {
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+    for (const [sid, sess] of STATE.sessions) {
+      const created = sess.createdAt ? new Date(sess.createdAt).getTime() : 0;
+      if (created < cutoff && (!sess.messages || sess.messages.length === 0)) {
+        STATE.sessions.delete(sid);
+      }
+    }
+  }, 10 * 60 * 1000).unref();
+
   app.post("/api/session/optin", auth, (req, res) => {
     try {
       enforceEthosInvariant("optin");
@@ -210,6 +238,7 @@ export default function registerChatRoutes(app, {
       if (typeof b.multimodalOptIn === "boolean") s.multimodalOptIn = b.multimodalOptIn;
       if (typeof b.voiceOptIn === "boolean") s.voiceOptIn = b.voiceOptIn;
       STATE.sessions.set(sid, s);
+      evictOldestSessions();
       saveStateDebounced();
       return uiJson(res, { ok:true, sessionId: sid, flags: { cloudOptIn: !!s.cloudOptIn, toolsOptIn: !!s.toolsOptIn, multimodalOptIn: !!s.multimodalOptIn, voiceOptIn: !!s.voiceOptIn } }, req, { panel:"optin" });
     } catch (e) {

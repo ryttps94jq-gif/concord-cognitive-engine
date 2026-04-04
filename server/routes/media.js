@@ -101,6 +101,49 @@ function validateMediaMimeType(mimeType, dataOrBuffer) {
   return { ok: true };
 }
 
+/**
+ * Validate a URL to prevent SSRF attacks.
+ * Rejects private IPs, localhost, and non-http(s) schemes.
+ */
+function validateUrl(urlString) {
+  let parsed;
+  try {
+    parsed = new URL(urlString);
+  } catch {
+    return { ok: false, error: "Invalid URL" };
+  }
+
+  // Only allow http and https schemes
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return { ok: false, error: `Disallowed URL scheme: ${parsed.protocol}` };
+  }
+
+  // Reject localhost
+  const hostname = parsed.hostname.toLowerCase();
+  if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]" || hostname === "0.0.0.0") {
+    return { ok: false, error: "URLs pointing to localhost are not allowed" };
+  }
+
+  // Reject private/reserved IP ranges
+  // IPv4 pattern check
+  const ipv4Match = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipv4Match) {
+    const [, a, b, c] = ipv4Match.map(Number);
+    if (
+      a === 10 ||                              // 10.0.0.0/8
+      a === 127 ||                             // 127.0.0.0/8
+      (a === 172 && b >= 16 && b <= 31) ||     // 172.16.0.0/12
+      (a === 192 && b === 168) ||              // 192.168.0.0/16
+      (a === 169 && b === 254) ||              // 169.254.0.0/16 (link-local)
+      a === 0                                  // 0.0.0.0/8
+    ) {
+      return { ok: false, error: "URLs pointing to private/reserved IP addresses are not allowed" };
+    }
+  }
+
+  return { ok: true };
+}
+
 export default function createMediaRouter({ STATE }) {
   const router = Router();
 
@@ -226,6 +269,10 @@ export default function createMediaRouter({ STATE }) {
 
     if (!url) throw new ValidationError("url is required");
     if (!title) throw new ValidationError("title is required");
+
+    // SSRF protection: validate the URL before storing
+    const urlCheck = validateUrl(url);
+    if (!urlCheck.ok) throw new ValidationError(urlCheck.error);
 
     // In production, we would fetch the URL, determine MIME type, file size, etc.
     // Here we create the media DTU with the URL as a storage reference.

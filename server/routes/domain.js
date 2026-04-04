@@ -9,6 +9,7 @@
  *         metacognition, explanation, metalearning, multimodal, voice, tools,
  *         entity, sessions, search, stats, cognitive/status
  */
+import path from "path";
 import { asyncHandler } from "../lib/async-handler.js";
 export default function registerDomainRoutes(app, {
   STATE,
@@ -382,8 +383,15 @@ export default function registerDomainRoutes(app, {
     const out = await runMacro("paper", "export", { paperId: req.params.id, format: req.query.format || "md" }, makeCtx(req));
     if (!out.ok) return res.status(500).json(out);
     const fpath = out.file?.path;
-    if (fpath && fs.existsSync(fpath)) {
-      return res.sendFile(fpath);
+    if (!fpath) return res.status(404).json({ ok: false, error: "Export file not found" });
+    // Path traversal protection: ensure resolved path is within allowed exports directory
+    const allowedBase = path.resolve(process.cwd(), "data", "exports");
+    const resolved = path.resolve(fpath);
+    if (!resolved.startsWith(allowedBase + path.sep) && resolved !== allowedBase) {
+      return res.status(403).json({ ok: false, error: "Access denied: path outside allowed directory" });
+    }
+    if (fs.existsSync(resolved)) {
+      return res.sendFile(resolved);
     }
     return res.status(404).json({ ok: false, error: "Export file not found" });
   }));
