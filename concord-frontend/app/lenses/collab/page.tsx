@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
-import { apiHelpers } from '@/lib/api/client';
+import { apiHelpers, activeCollabs, createCollab, acceptCollab, closeCollab } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
@@ -229,6 +229,13 @@ export default function CollabLensPage() {
   });
   const { isLoading: isLoadingHistory, isError: isError3, error: error3, refetch: refetch3, items: historyItems } = useLensData('collab', 'history', {
     seed: INITIAL_HISTORY.map(h => ({ title: h.sessionName, data: h as unknown as Record<string, unknown> })),
+  });
+
+  // Fetch active collaborations from the API
+  const { data: activeCollabsData } = useQuery({
+    queryKey: ['active-collabs'],
+    queryFn: () => activeCollabs(),
+    refetchInterval: 30000,
   });
 
   const [activeTab, setActiveTab] = useState<MainTab>('active');

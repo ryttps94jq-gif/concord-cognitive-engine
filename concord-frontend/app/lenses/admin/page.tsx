@@ -2,8 +2,8 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
-import { apiHelpers } from '@/lib/api/client';
-import { useState, useMemo } from 'react';
+import { apiHelpers, qualityThresholds, flywheelMetrics, flywheelHistory, listOrgs, orgPromote, createApiKey, listApiKeys, revokeApiKey, pipelineExecutions } from '@/lib/api/client';
+import { useState, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import {
   Activity,
@@ -31,7 +31,7 @@ import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { NervousSystem } from '@/components/nervous/NervousSystem';
 import { MonitoringPanel } from '@/components/admin/MonitoringPanel';
-import { Download, Globe, DollarSign, PieChart, BarChart3, Search, Power } from 'lucide-react';
+import { Download, Globe, DollarSign, PieChart, BarChart3, Search, Power, Key, Building, Shield } from 'lucide-react';
 
 interface DashboardData {
   ok: boolean;
@@ -228,6 +228,9 @@ export default function AdminDashboardPage() {
   const [showTreasury, setShowTreasury] = useState(false);
   const [showPlugins, setShowPlugins] = useState(false);
   const [showMacros, setShowMacros] = useState(false);
+  const [showApiKeys, setShowApiKeys] = useState(false);
+  const [showOrgs, setShowOrgs] = useState(false);
+  const [showQuality, setShowQuality] = useState(false);
 
   const {
     data: dashboard,
@@ -248,6 +251,40 @@ export default function AdminDashboardPage() {
     queryKey: ['admin-logs'],
     queryFn: () => apiHelpers.eventsLog.list({ limit: 20 }).then((r) => r.data),
     refetchInterval: autoRefresh ? 10000 : false,
+  });
+
+  // Quality thresholds
+  const { data: qualityData } = useQuery({
+    queryKey: ['admin-quality-thresholds'],
+    queryFn: () => qualityThresholds(),
+    refetchInterval: autoRefresh ? 30000 : false,
+  });
+
+  // Flywheel metrics & history
+  const { data: flywheelData } = useQuery({
+    queryKey: ['admin-flywheel'],
+    queryFn: () => flywheelMetrics(),
+    refetchInterval: autoRefresh ? 30000 : false,
+  });
+
+  const { data: flywheelHistoryData } = useQuery({
+    queryKey: ['admin-flywheel-history'],
+    queryFn: () => flywheelHistory(),
+    refetchInterval: autoRefresh ? 60000 : false,
+  });
+
+  // Organizations
+  const { data: orgsData } = useQuery({
+    queryKey: ['admin-orgs'],
+    queryFn: () => listOrgs(),
+    refetchInterval: autoRefresh ? 60000 : false,
+  });
+
+  // Pipeline executions
+  const { data: pipelineExecsData } = useQuery({
+    queryKey: ['admin-pipeline-executions'],
+    queryFn: () => pipelineExecutions(),
+    refetchInterval: autoRefresh ? 30000 : false,
   });
 
   // Treasury dashboard data (admin only)
@@ -732,6 +769,84 @@ export default function AdminDashboardPage() {
         {showMacros && <MacroExplorerPanel />}
       </div>
 
+      {/* API Keys Management */}
+      <div className="border-t border-white/10">
+        <button
+          onClick={() => setShowApiKeys(!showApiKeys)}
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
+        >
+          <span className="flex items-center gap-2">
+            <Key className="w-4 h-4" />
+            API Keys
+          </span>
+          <ChevronDown className={`w-4 h-4 transition-transform ${showApiKeys ? 'rotate-180' : ''}`} />
+        </button>
+        {showApiKeys && <ApiKeysPanel />}
+      </div>
+
+      {/* Organizations */}
+      <div className="border-t border-white/10">
+        <button
+          onClick={() => setShowOrgs(!showOrgs)}
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
+        >
+          <span className="flex items-center gap-2">
+            <Building className="w-4 h-4" />
+            Organizations
+          </span>
+          <ChevronDown className={`w-4 h-4 transition-transform ${showOrgs ? 'rotate-180' : ''}`} />
+        </button>
+        {showOrgs && (
+          <div className="px-4 pb-4 space-y-3">
+            {orgsData?.orgs?.length > 0 ? (
+              orgsData.orgs.map((org: { id: string; name: string; memberCount?: number }) => (
+                <div key={org.id} className="flex items-center justify-between p-3 bg-black/30 rounded-lg border border-white/5">
+                  <div>
+                    <p className="text-sm text-white font-medium">{org.name}</p>
+                    {org.memberCount !== undefined && (
+                      <p className="text-xs text-gray-500">{org.memberCount} members</p>
+                    )}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-gray-500 p-3">No organizations found.</p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Quality Thresholds */}
+      <div className="border-t border-white/10">
+        <button
+          onClick={() => setShowQuality(!showQuality)}
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
+        >
+          <span className="flex items-center gap-2">
+            <Shield className="w-4 h-4" />
+            Quality Thresholds
+          </span>
+          <ChevronDown className={`w-4 h-4 transition-transform ${showQuality ? 'rotate-180' : ''}`} />
+        </button>
+        {showQuality && (
+          <div className="px-4 pb-4 space-y-3">
+            {qualityData ? (
+              <pre className="text-xs text-gray-300 p-3 bg-black/30 rounded-lg border border-white/5 overflow-x-auto whitespace-pre-wrap">
+                {JSON.stringify(qualityData, null, 2)}
+              </pre>
+            ) : (
+              <p className="text-sm text-gray-500 p-3">Loading quality thresholds...</p>
+            )}
+            {flywheelData && (
+              <div className="p-3 bg-black/30 rounded-lg border border-white/5">
+                <p className="text-xs text-gray-400 mb-1">Flywheel Velocity</p>
+                <p className="text-lg font-bold text-white">{Math.round((flywheelData.velocity ?? flywheelData.metrics?.velocity ?? 0) * 100)}%</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Lens Features */}
       <div className="border-t border-white/10">
         <button
@@ -1071,6 +1186,86 @@ function MacroExplorerPanel() {
           ))
         )}
       </div>
+    </div>
+  );
+}
+
+function ApiKeysPanel() {
+  const [newKeyName, setNewKeyName] = useState('');
+  const [createdKey, setCreatedKey] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  const { data: keysData, refetch } = useQuery({
+    queryKey: ['admin-api-keys'],
+    queryFn: () => listApiKeys(),
+  });
+
+  const handleCreate = useCallback(async () => {
+    if (!newKeyName.trim()) return;
+    setCreating(true);
+    try {
+      const data = await createApiKey(newKeyName.trim());
+      setCreatedKey(data?.key || data?.apiKey || null);
+      setNewKeyName('');
+      refetch();
+    } catch { /* silent */ }
+    finally { setCreating(false); }
+  }, [newKeyName, refetch]);
+
+  const handleRevoke = useCallback(async (keyId: string) => {
+    await revokeApiKey(keyId);
+    refetch();
+  }, [refetch]);
+
+  const keys = keysData?.keys || [];
+
+  return (
+    <div className="px-4 pb-4 space-y-3">
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={newKeyName}
+          onChange={e => setNewKeyName(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && handleCreate()}
+          placeholder="Key name..."
+          className="flex-1 px-3 py-2 text-sm bg-black/30 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-neon-cyan/50"
+        />
+        <button
+          onClick={handleCreate}
+          disabled={creating || !newKeyName.trim()}
+          className="px-4 py-2 text-sm bg-neon-cyan/20 text-neon-cyan rounded-lg hover:bg-neon-cyan/30 disabled:opacity-50 transition-colors"
+        >
+          Create
+        </button>
+      </div>
+
+      {createdKey && (
+        <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+          <p className="text-xs text-green-400 mb-1">New API key (copy now):</p>
+          <code className="text-sm text-white break-all">{createdKey}</code>
+        </div>
+      )}
+
+      {keys.length > 0 ? (
+        <div className="space-y-2">
+          {keys.map((k: { id: string; name: string; prefix?: string }) => (
+            <div key={k.id} className="flex items-center justify-between p-3 bg-black/30 rounded-lg border border-white/5">
+              <div>
+                <p className="text-sm text-white font-medium">{k.name}</p>
+                <p className="text-xs text-gray-500">{k.prefix ? `${k.prefix}...` : k.id.slice(0, 8)}</p>
+              </div>
+              <button
+                onClick={() => handleRevoke(k.id)}
+                className="text-xs px-2 py-1 bg-red-500/10 text-red-400 rounded hover:bg-red-500/20 transition-colors"
+              >
+                Revoke
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-gray-500">No API keys yet.</p>
+      )}
     </div>
   );
 }

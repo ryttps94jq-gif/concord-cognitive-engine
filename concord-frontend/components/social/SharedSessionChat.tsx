@@ -13,6 +13,8 @@ import {
   sharedSessionChat,
   saveSharedArtifact,
   endSharedSession,
+  shareSessionDTU,
+  sharedSessionRunAction,
 } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
 import {
@@ -201,6 +203,20 @@ export function SharedSessionChat({ sessionId, currentUserId, onEnd }: SharedSes
         content: 'Artifact saved to your substrate.',
         ts: new Date().toISOString(),
       }]);
+    } catch { /* silent */ }
+  };
+
+  // Share a DTU into the session
+  const handleShareDTU = async (dtuId: string) => {
+    try {
+      await shareSessionDTU(sessionId, dtuId);
+    } catch { /* silent */ }
+  };
+
+  // Run a lens action in the shared session
+  const handleRunAction = async (lens: string, action: string, primarySubstrate?: string) => {
+    try {
+      await sharedSessionRunAction(sessionId, lens, action, primarySubstrate);
     } catch { /* silent */ }
   };
 

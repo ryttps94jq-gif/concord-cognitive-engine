@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { api, createAgent, configureAgent } from '@/lib/api/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   BarChart3, Palette, Wrench, Shield, Compass, BookOpen,

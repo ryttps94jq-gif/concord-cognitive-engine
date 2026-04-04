@@ -7,11 +7,11 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { api, exportSubstrate } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
 import {
   Shield, Lock, Globe, Trash2, Settings,
-  Database, RefreshCw, AlertTriangle,
+  Database, RefreshCw, AlertTriangle, Download,
 } from 'lucide-react';
 
 type ConsentMode = 'ask' | 'always_temp' | 'always_permanent' | 'never';
@@ -57,6 +57,22 @@ export function SovereigntyDashboard() {
   });
 
   const [confirmUnsyncAll, setConfirmUnsyncAll] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportSubstrate = async () => {
+    setExporting(true);
+    try {
+      const response = await exportSubstrate();
+      const blob = new Blob([response.data], { type: 'application/gzip' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `substrate-export-${new Date().toISOString().slice(0, 10)}.gz`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch { /* silent */ }
+    finally { setExporting(false); }
+  };
 
   if (isLoading || !status) {
     return (
@@ -77,13 +93,24 @@ export function SovereigntyDashboard() {
           <Shield className="w-5 h-5 text-neon-cyan" />
           Sovereignty
         </h2>
-        <div className={cn(
-          'px-3 py-1 rounded-full text-sm font-medium',
-          pct >= 80 ? 'bg-neon-green/20 text-neon-green' :
-          pct >= 50 ? 'bg-neon-cyan/20 text-neon-cyan' :
-          'bg-amber-400/20 text-amber-400'
-        )}>
-          {pct}% sovereign
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExportSubstrate}
+            disabled={exporting}
+            className="flex items-center gap-1 px-2 py-1 text-xs rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-600 transition-colors disabled:opacity-50"
+            title="Export substrate backup"
+          >
+            <Download className={cn('w-3.5 h-3.5', exporting && 'animate-pulse')} />
+            Export
+          </button>
+          <div className={cn(
+            'px-3 py-1 rounded-full text-sm font-medium',
+            pct >= 80 ? 'bg-neon-green/20 text-neon-green' :
+            pct >= 50 ? 'bg-neon-cyan/20 text-neon-cyan' :
+            'bg-amber-400/20 text-amber-400'
+          )}>
+            {pct}% sovereign
+          </div>
         </div>
       </div>
 

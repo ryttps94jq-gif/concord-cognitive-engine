@@ -27,7 +27,7 @@ import {
   X,
 } from 'lucide-react';
 import { cn, formatNumber, formatRelativeTime, debounce } from '@/lib/utils';
-import { api } from '@/lib/api/client';
+import { api, createSharedSession, activeSharedSessions } from '@/lib/api/client';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -350,6 +350,13 @@ export function Discovery({
   const [showFilters, setShowFilters] = useState(false);
 
   // ── Data fetching ────────────────────────────────────────────────────
+
+  // Active shared sessions for potential discovery
+  const sharedSessionsQuery = useQuery({
+    queryKey: ['active-shared-sessions'],
+    queryFn: () => activeSharedSessions(),
+    refetchInterval: 30000,
+  });
 
   const trendingQuery = useQuery({
     queryKey: ['trending-dtus', categoryFilter],

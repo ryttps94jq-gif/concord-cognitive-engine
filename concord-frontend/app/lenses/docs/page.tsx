@@ -1,6 +1,8 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
+import { useQuery } from '@tanstack/react-query';
+import { apiDocs } from '@/lib/api/client';
 import { useState, useMemo } from 'react';
 import { Book, ChevronRight, Search, Layers, ChevronDown, Code2, GitBranch, FileJson, Shield, RefreshCw, CheckCircle2, AlertCircle, FileText, Clock } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -152,6 +154,13 @@ const sections = [
 export default function DocsLensPage() {
   useLensNav('docs');
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('docs');
+
+  // Fetch live API documentation from the server
+  const { data: liveApiDocs } = useQuery({
+    queryKey: ['api-docs'],
+    queryFn: () => apiDocs(),
+    staleTime: 5 * 60 * 1000,
+  });
 
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
