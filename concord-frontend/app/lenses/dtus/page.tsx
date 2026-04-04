@@ -232,7 +232,7 @@ export default function DTUBrowserPage() {
         </div>
       </header>
 
-      {/* Stats Row */}
+      {/* Stats Row — uses real-time tier counts from lattice store when available, falls back to page counts */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4">
         <div className="grid grid-cols-4 gap-4">
           <div className="p-3 bg-lattice-surface rounded-lg border border-lattice-border flex items-center gap-3">
@@ -242,17 +242,17 @@ export default function DTUBrowserPage() {
           <div className="p-3 bg-lattice-surface rounded-lg border border-lattice-border flex items-center gap-3">
             <Tag className="w-5 h-5 text-neon-purple" />
             <div>
-              <p className="text-lg font-bold">{dtus.filter(d => d.tier === 'mega' || d.tier === 'hyper').length}</p>
+              <p className="text-lg font-bold">{(tierCounts.mega + tierCounts.hyper) || dtus.filter(d => d.tier === 'mega' || d.tier === 'hyper').length}</p>
               <p className="text-xs text-gray-400">Mega/Hyper</p>
             </div>
           </div>
           <div className="p-3 bg-lattice-surface rounded-lg border border-lattice-border flex items-center gap-3">
             <Zap className="w-5 h-5 text-neon-cyan" />
-            <div><p className="text-lg font-bold">{dtus.filter(d => d.tier === 'regular').length}</p><p className="text-xs text-gray-400">Regular</p></div>
+            <div><p className="text-lg font-bold">{tierCounts.regular || dtus.filter(d => d.tier === 'regular').length}</p><p className="text-xs text-gray-400">Regular</p></div>
           </div>
           <div className="p-3 bg-lattice-surface rounded-lg border border-lattice-border flex items-center gap-3">
             <Clock className="w-5 h-5 text-gray-400" />
-            <div><p className="text-lg font-bold">{dtus.filter(d => d.tier === 'shadow').length}</p><p className="text-xs text-gray-400">Shadow</p></div>
+            <div><p className="text-lg font-bold">{tierCounts.shadow || dtus.filter(d => d.tier === 'shadow').length}</p><p className="text-xs text-gray-400">Shadow</p></div>
           </div>
         </div>
       </div>

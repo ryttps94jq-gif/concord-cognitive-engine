@@ -37,6 +37,18 @@ vi.mock('@/components/chat/useChatProactive', () => ({
   }),
 }));
 
+// Mock useConversationMemory
+vi.mock('@/hooks/useConversationMemory', () => ({
+  useConversationMemory: () => ({
+    stats: null,
+    isCompressing: false,
+    error: null,
+    sendMessage: vi.fn().mockResolvedValue(null),
+    forceCompress: vi.fn().mockResolvedValue(undefined),
+    refreshStats: vi.fn().mockResolvedValue(undefined),
+  }),
+}));
+
 // Mock useCrossLensMemory
 vi.mock('@/components/chat/useCrossLensMemory', () => ({
   useCrossLensMemory: () => ({
