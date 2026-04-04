@@ -280,6 +280,51 @@ export async function handleWebhook(db, { rawBody, signature, requestId, ip }) {
       }
       break;
     }
+
+    case "transfer.paid": {
+      // Stripe Connect payout landed — mark withdrawal as complete
+      const transfer = event.data.object;
+      const { concordUserId, withdrawalId } = transfer.metadata || {};
+      if (withdrawalId) {
+        db.prepare("UPDATE economy_withdrawals SET status = 'complete', processed_at = ? WHERE id = ?")
+          .run(nowISO(), withdrawalId);
+        economyAudit(db, {
+          action: "withdrawal_payout_complete",
+          userId: concordUserId || "unknown",
+          details: { stripeTransferId: transfer.id, withdrawalId, amount: transfer.amount },
+          requestId, ip,
+        });
+      }
+      break;
+    }
+
+    case "transfer.failed": {
+      // Stripe Connect payout failed — refund CC to user
+      const transfer = event.data.object;
+      const { concordUserId, withdrawalId, ccAmount } = transfer.metadata || {};
+      if (withdrawalId && concordUserId) {
+        // Restore withdrawal to approved so admin can retry or user can cancel
+        db.prepare("UPDATE economy_withdrawals SET status = 'approved' WHERE id = ? AND status = 'processing'")
+          .run(withdrawalId);
+        // Reverse the ledger debit
+        const amount = ccAmount ? parseInt(ccAmount, 10) : 0;
+        if (amount > 0) {
+          const txId = generateTxId();
+          recordTransactionBatch(db, [{
+            id: txId, type: "REVERSAL", from_user_id: PLATFORM_ACCOUNT_ID,
+            to_user_id: concordUserId, amount, fee: 0, net: amount,
+            status: "complete", metadata_json: JSON.stringify({ reason: "transfer_failed", withdrawalId, stripeTransferId: transfer.id }),
+          }]);
+        }
+        economyAudit(db, {
+          action: "withdrawal_payout_failed",
+          userId: concordUserId,
+          details: { stripeTransferId: transfer.id, withdrawalId, failureMessage: transfer.failure_message || "unknown" },
+          requestId, ip,
+        });
+      }
+      break;
+    }
     }
 
     // Mark event processed (idempotency)
@@ -458,6 +503,8 @@ export async function processStripeWithdrawal(db, { withdrawalId, requestId, ip 
       metadata: {
         withdrawalId,
         userId: wd.user_id,
+        concordUserId: wd.user_id,
+        ccAmount: String(wd.amount),
         tokens: String(wd.amount),
       },
     });
