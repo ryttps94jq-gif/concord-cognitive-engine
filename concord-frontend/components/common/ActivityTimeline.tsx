@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { Clock, ChevronDown, ChevronUp, User, Bot, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { SkeletonTimeline } from '@/components/common/Skeleton';
 
 interface ActivityTimelineProps {
   domain: string;

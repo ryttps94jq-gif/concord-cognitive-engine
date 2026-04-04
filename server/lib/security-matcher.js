@@ -22,7 +22,7 @@ import { createHash } from "crypto";
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
-export const MATCH_ACTIONS = Object.freeze({
+const MATCH_ACTIONS = Object.freeze({
   BLOCK:      "blocked",
   QUARANTINE: "quarantined",
   REPAIR:     "repaired",

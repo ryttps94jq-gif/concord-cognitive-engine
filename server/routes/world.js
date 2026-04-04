@@ -88,6 +88,15 @@ import {
   getDistrict,
   getDistrictByLens,
   DISTRICTS,
+  DISTRICT_CATEGORIES,
+  CONTROL_MODES,
+  listDistricts,
+  getDistrictCategories,
+  getDistrictAtPosition,
+  getActiveWorkstations,
+  getDistrictObjects,
+  removeWorldObject,
+  getWorldStats,
   startWorkstationSession,
   endWorkstationSession,
 } from "../lib/world-engine.js";
@@ -109,10 +118,17 @@ import {
   listJobTemplates,
   assignJob,
   quitJob,
+  promoteEmployee,
+  getUserJob,
   recordJobActivity,
   createBusiness,
+  stockBusiness,
+  hireToBusiness,
+  rateBusiness,
+  getBusiness,
   listBusinesses,
   recordBusinessSale,
+  getJobStats,
 } from "../lib/world-jobs.js";
 
 // Progression

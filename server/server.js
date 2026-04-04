@@ -38528,6 +38528,24 @@ app.get("/api/admin/repair/network-status", requireAuth(), requireRole("owner"),
   catch (e) { res.json({ ok: false, error: e.message }); }
 });
 
+// ── System Infrastructure Status Endpoints ──────────────────────────────────
+
+app.get("/api/admin/scaling/status", requireAuth(), requireRole("owner"), (_req, res) => {
+  res.json(getScalingStatus());
+});
+
+app.get("/api/admin/intervals/status", requireAuth(), requireRole("owner"), (_req, res) => {
+  res.json(getIntervalStatus());
+});
+
+app.get("/api/admin/memory/pressure", requireAuth(), requireRole("owner"), (_req, res) => {
+  res.json({ level: getMemoryPressureLevel() });
+});
+
+app.get("/api/admin/sync/status", requireAuth(), requireRole("owner"), (_req, res) => {
+  res.json(getSyncStatus());
+});
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // WAVE 1: FRESHNESS SCORING, CONFIDENCE, MORNING BRIEF, NLP COMMAND, QUICK CAPTURE
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -44014,6 +44032,13 @@ try {
 } catch (e) {
   structuredLog("warn", "cascade_recovery_failed", { error: String(e?.message || e) });
 }
+
+// ── Initialize infrastructure subsystems ────────────────────────────────────
+const _memoryWatchdog = initMemoryWatchdog(STATE);
+try { await initStateSync(STATE); } catch (e) {
+  structuredLog("warn", "state_sync_init_failed", { error: String(e?.message || e) });
+}
+startAllIntervals(structuredLog);
 
 const SHOULD_LISTEN = (String(process.env.CONCORD_NO_LISTEN || "").toLowerCase() !== "true") && (String(process.env.NODE_ENV || "").toLowerCase() !== "test");
 

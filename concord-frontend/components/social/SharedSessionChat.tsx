@@ -286,7 +286,7 @@ export function SharedSessionChat({ sessionId, currentUserId, onEnd }: SharedSes
                   </div>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => msg.dtuId && saveArtifact(msg.dtuId)}
+                      onClick={() => msg.dtuId && handleSaveArtifact(msg.dtuId)}
                       className="text-xs px-2 py-1 rounded bg-cyan-500/10
                         text-cyan-400 border border-cyan-500/30 flex items-center gap-1
                         hover:bg-cyan-500/20 transition-colors"

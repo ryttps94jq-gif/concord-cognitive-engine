@@ -713,7 +713,7 @@ export function registerFeed(source) {
  * @param {object[]} sources
  * @returns {{ registered: number, errors: string[] }}
  */
-export function registerFeeds(sources) {
+function registerFeeds(sources) {
   let registered = 0;
   const errors = [];
   for (const src of sources) {

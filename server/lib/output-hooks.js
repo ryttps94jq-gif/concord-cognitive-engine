@@ -27,7 +27,7 @@ import logger from "../logger.js";
  * @param {string[]} [context.tags]
  * @returns {{ text: string, flags: object[], blocked: boolean, ghostInsights: object[] }}
  */
-export async function processOutput(userId, text, context = {}) {
+async function processOutput(userId, text, context = {}) {
   const flags = [];
   let blocked = false;
   let processedText = text;
@@ -90,7 +90,7 @@ export async function processOutput(userId, text, context = {}) {
  * Quick check — just constitution, no fingerprint or ghost threads.
  * For use in streaming responses where you need a fast check.
  */
-export function quickConstitutionCheck(userId, text, context = {}) {
+function quickConstitutionCheck(userId, text, context = {}) {
   try {
     return checkOutput(userId, text, context);
   } catch (_) {

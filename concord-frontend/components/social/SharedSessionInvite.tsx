@@ -7,7 +7,7 @@
 
 import { useState, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { sharedSessionInviteDetails, joinSharedSession } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
 import { Users, Shield, Eye, MessageSquare, Loader } from 'lucide-react';
 
@@ -46,7 +46,7 @@ export function SharedSessionInvite({ sessionId, onJoined, onDeclined }: SharedS
 
   const { data, isLoading } = useQuery<{ ok: boolean } & InviteDetails>({
     queryKey: ['shared-session-invite', sessionId],
-    queryFn: () => api.get(`/api/shared-session/${sessionId}/invite-details`).then(r => r.data),
+    queryFn: () => sharedSessionInviteDetails(sessionId),
   });
 
   const toggleDomain = useCallback((domain: string) => {

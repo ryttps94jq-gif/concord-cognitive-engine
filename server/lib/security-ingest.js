@@ -745,7 +745,7 @@ function recordFixOutcome(db, fixId, success = true) {
  * @param {Object} db - Database handle
  * @returns {Object} Statistics summary
  */
-export function getSecurityStats(db) {
+function getSecurityStats(db) {
   const s = stmts(db);
   return {
     signatures: {
