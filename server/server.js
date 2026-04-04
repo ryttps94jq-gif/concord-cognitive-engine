@@ -52,6 +52,7 @@ import { getExemplarArtifact } from "./lib/exemplar-artifacts.js";
 import { buildConsolidatedArtifacts, budgetAwareStore, ARTIFACT_ROOT as _ARTIFACT_ROOT } from "./lib/artifact-store.js";
 import { initBudgetTimer } from "./lib/artifact-budget.js";
 import { initGarbageCollectionTimer } from "./lib/artifact-gc.js";
+import { initMemoryWatchdog, getMemoryPressureLevel } from "./lib/memory-pressure.js";
 import "./lib/vocabularies.js";
 import { BoundedMap } from "./lib/bounded-map.js";
 import { httpMetricsMiddleware, getActiveRequests, installGlobalMetrics } from "./lib/http-metrics.js";
@@ -6229,6 +6230,38 @@ function _normalizeSettingsDefaults() {
   }
 }
 
+function _verifyStateIntegrity() {
+  let repaired = 0;
+  // Ensure critical state collections are Maps (not corrupted to plain objects/null)
+  const mapFields = ["dtus", "shadowDtus", "sessions", "wrappers", "layers", "personas",
+    "organs", "styleVectors", "userUniverses", "lensArtifacts"];
+  for (const f of mapFields) {
+    if (!(STATE[f] instanceof Map)) {
+      structuredLog("warn", "state_integrity_repair", { field: f, was: typeof STATE[f] });
+      STATE[f] = new Map();
+      repaired++;
+    }
+  }
+  // Ensure settings object exists
+  if (!STATE.settings || typeof STATE.settings !== "object") {
+    structuredLog("warn", "state_integrity_repair", { field: "settings", was: typeof STATE.settings });
+    STATE.settings = {};
+    repaired++;
+  }
+  // Ensure queues exist
+  if (!STATE.queues || typeof STATE.queues !== "object") {
+    STATE.queues = { maintenance: [], macroProposals: [], notifications: [] };
+    repaired++;
+  }
+  STATE._lastVerifiedAt = new Date().toISOString();
+  if (repaired > 0) {
+    structuredLog("warn", "state_integrity_repaired", { repaired });
+  } else {
+    structuredLog("info", "state_integrity_ok", { maps: mapFields.length });
+  }
+  return repaired;
+}
+
 function loadStateFromDisk() {
   // Try SQLite first in production
   if (USE_SQLITE_STATE) {
@@ -6238,6 +6271,7 @@ function loadStateFromDisk() {
         const obj = JSON.parse(row.data);
         _hydrateState(obj);
         _normalizeSettingsDefaults();
+        _verifyStateIntegrity();
         structuredLog("info", "state_loaded", { source: "sqlite" });
         return { ok: true, loaded: true, backend: "sqlite", savedAt: row.saved_at };
       }
@@ -6255,6 +6289,7 @@ function loadStateFromDisk() {
     const obj = JSON.parse(raw);
     _hydrateState(obj);
     _normalizeSettingsDefaults();
+    _verifyStateIntegrity();
 
     // If SQLite is available and we loaded from JSON, migrate data to SQLite
     if (USE_SQLITE_STATE) {
@@ -10290,6 +10325,13 @@ try {
   initGarbageCollectionTimer(STATE, db);
   structuredLog("info", "artifact_gc_timer_started", { interval: "weekly" });
 } catch (e) { structuredLog("warn", "artifact_gc_timer_fail", { error: e?.message }); }
+
+// ── Memory pressure watchdog ──
+try {
+  const _memWatchdog = initMemoryWatchdog(STATE);
+  if (STATE._activeTimers) STATE._activeTimers.add(_memWatchdog);
+  structuredLog("info", "memory_watchdog_initialized", {});
+} catch (e) { structuredLog("warn", "memory_watchdog_init_fail", { error: e?.message }); }
 
 function _saveAttachment(dtuId, filename, buffer, mimeType) {
   ensureAttachmentsDir();
@@ -22677,6 +22719,9 @@ function startHeartbeat() {
   const ms = clamp(Number(STATE.settings.heartbeatMs || 10000), 2000, 120000);
   heartbeatTimer = setInterval(async () => {
     if (!STATE.settings.heartbeatEnabled) return;
+    // Memory pressure gate: skip heartbeat under critical pressure
+    if (typeof getMemoryPressureLevel === "function" && getMemoryPressureLevel() === "critical") return;
+    try { // Domain isolation — entire heartbeat wrapped so one crash never kills the server
     const ctx = makeInternalCtx("heartbeat");
 
     // process crawl queue once (Local scope only — ingest is local activity)
@@ -22848,6 +22893,10 @@ function startHeartbeat() {
 
     // Qualia hook: emergent heartbeat tick (system-level)
     try { globalThis.qualiaHooks?.hookEmergentTick("system", { growthRate: STATE.dtus?.size ? 0.5 : 0 }); } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
+    } catch (heartbeatErr) {
+      // Domain isolation: log but never crash the process
+      structuredLog("error", "heartbeat_tick_crash", { error: heartbeatErr?.message, stack: heartbeatErr?.stack?.slice(0, 500) });
+    }
   }, ms);
   log("heartbeat", "Local scope tick started", { ms, workerEnabled: !!cognitiveWorker });
 
