@@ -52,6 +52,7 @@ import {
 } from "../economy/creative-marketplace.js";
 import { QUEST_REWARD_POLICY } from "../lib/creative-marketplace-constants.js";
 import { requireConsent } from "../lib/consent.js";
+import { requireSellerEligibility } from "../lib/account-lifecycle.js";
 
 /**
  * Create the creative marketplace router.
@@ -96,9 +97,13 @@ export default function createCreativeMarketplaceRouter({ db, requireAuth }) {
   // ── Publish Artifact ────────────────────────────────────────────────
 
   router.post("/artifacts", (req, res) => {
-    // Consent gate: nothing leaves personal universe without permission
     const creatorId = req.body?.creatorId || req.user?.id;
     if (creatorId) {
+      // Seller verification: account age + email verified + ToS accepted
+      const sellerCheck = requireSellerEligibility(db, creatorId);
+      if (!sellerCheck.allowed) return res.status(403).json(sellerCheck);
+
+      // Consent gate: nothing leaves personal universe without permission
       const consent = requireConsent(db, creatorId, "publish_to_marketplace");
       if (!consent.allowed) return res.status(403).json(consent);
     }
@@ -110,6 +115,9 @@ export default function createCreativeMarketplaceRouter({ db, requireAuth }) {
   router.post("/artifacts/derivative", (req, res) => {
     const creatorId = req.body?.creatorId || req.user?.id;
     if (creatorId) {
+      const sellerCheck = requireSellerEligibility(db, creatorId);
+      if (!sellerCheck.allowed) return res.status(403).json(sellerCheck);
+
       const consent = requireConsent(db, creatorId, "publish_to_marketplace");
       if (!consent.allowed) return res.status(403).json(consent);
     }

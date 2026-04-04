@@ -645,6 +645,19 @@ const _MARKETPLACE_ABUSE = {
 // Cleanup marketplace abuse tracking hourly
 setInterval(() => _MARKETPLACE_ABUSE.cleanup(), 3600000);
 
+// Process scheduled account deletions daily (90-day forfeit window)
+import { processScheduledDeletions } from "./lib/account-lifecycle.js";
+setInterval(() => {
+  try {
+    const result = processScheduledDeletions(db);
+    if (result.processed > 0) {
+      console.log(`[account-lifecycle] Processed ${result.processed} scheduled account deletions.`);
+    }
+  } catch (err) {
+    console.error("[account-lifecycle] scheduled_deletion_check_failed:", err.message);
+  }
+}, 24 * 60 * 60 * 1000); // daily
+
 function sanitizeString(str, options = {}) {
   if (typeof str !== "string") return str;
   let result = str;
@@ -23488,6 +23501,10 @@ app.use("/api/federation", createFederationRouter({ db }));
 // ===== CONSENT LAYER — Nothing Leaves Without Permission =====
 import createConsentRouter from "./routes/consent.js";
 app.use("/api/consent", createConsentRouter({ db, requireAuth }));
+
+// ===== ACCOUNT LIFECYCLE — Deletion, Export, Disputes, Legal =====
+import createAccountLifecycleRouter from "./routes/account-lifecycle.js";
+app.use("/api", createAccountLifecycleRouter({ db, requireAuth }));
 
 // ===== CREATIVE ARTIFACT MARKETPLACE =====
 import createCreativeMarketplaceRouter from "./routes/creative-marketplace.js";
