@@ -6,7 +6,7 @@ import { Upload, FileJson, Database, Check, AlertTriangle, Loader2, FileText, Ar
 import { motion } from 'framer-motion';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { UniversalActions } from '@/components/lens/UniversalActions';
-import { apiHelpers } from '@/lib/api/client';
+import { apiHelpers, exportSubstrate, importSubstrate } from '@/lib/api/client';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -258,6 +258,65 @@ export default function ImportLens() {
     } finally {
       setImporting(false);
     }
+  };
+
+  const handleExportSubstrate = async () => {
+    setImporting(true);
+    try {
+      const response = await exportSubstrate();
+      const blob = new Blob([response.data], { type: 'application/gzip' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `substrate-export-${new Date().toISOString().slice(0, 10)}.gz`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch { /* silent */ }
+    finally { setImporting(false); }
+  };
+
+  const handleImportSubstrate = async (file: File) => {
+    setImporting(true);
+    try {
+      const buffer = await file.arrayBuffer();
+      await importSubstrate(buffer);
+      await createJob({
+        title: file.name,
+        data: {
+          filename: file.name,
+          type: 'full_backup',
+          status: 'completed',
+          progress: 100,
+          records_total: 1,
+          records_imported: 1,
+          records_skipped: 0,
+          records_failed: 0,
+          errors: [],
+          started_at: new Date().toISOString(),
+          completed_at: new Date().toISOString(),
+        } as unknown as Partial<ImportJob>,
+        meta: { tags: ['import', 'substrate'], status: 'completed' },
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Substrate import failed';
+      await createJob({
+        title: file.name,
+        data: {
+          filename: file.name,
+          type: 'full_backup',
+          status: 'failed',
+          progress: 0,
+          records_total: 0,
+          records_imported: 0,
+          records_skipped: 0,
+          records_failed: 1,
+          errors: [message],
+          started_at: new Date().toISOString(),
+          completed_at: new Date().toISOString(),
+        } as unknown as Partial<ImportJob>,
+        meta: { tags: ['import', 'substrate', 'failed'], status: 'failed' },
+      });
+    } finally { setImporting(false); }
   };
 
   const getStatusColor = (status: ImportJob['status']) => {
@@ -513,6 +572,39 @@ export default function ImportLens() {
                 </div>
               </div>
             </button>
+
+            <button
+              onClick={handleExportSubstrate}
+              disabled={importing}
+              className="w-full p-4 bg-void-800 rounded-lg hover:bg-void-700 transition-colors text-left disabled:opacity-50"
+            >
+              <div className="flex items-center gap-3">
+                <Download className="w-8 h-8 text-neon-cyan" />
+                <div>
+                  <p className="text-white font-medium">Export Substrate</p>
+                  <p className="text-void-400 text-sm">Download full substrate as compressed archive</p>
+                </div>
+              </div>
+            </button>
+
+            <label className="w-full p-4 bg-void-800 rounded-lg hover:bg-void-700 transition-colors text-left disabled:opacity-50 cursor-pointer block">
+              <div className="flex items-center gap-3">
+                <Upload className="w-8 h-8 text-neon-yellow" />
+                <div>
+                  <p className="text-white font-medium">Import Substrate</p>
+                  <p className="text-void-400 text-sm">Restore from a substrate archive (.gz)</p>
+                </div>
+              </div>
+              <input
+                type="file"
+                className="hidden"
+                accept=".gz,.gzip"
+                disabled={importing}
+                onChange={(e) => {
+                  if (e.target.files?.[0]) handleImportSubstrate(e.target.files[0]);
+                }}
+              />
+            </label>
           </div>
 
           {/* Supported Formats */}
