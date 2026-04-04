@@ -11,7 +11,7 @@
  *   critical (>90%) — aggressive eviction, prepare for graceful restart
  */
 
-import { structuredLog } from "./logger.js";
+import logger from "../logger.js";
 
 const POLL_INTERVAL_MS = 15_000;
 const HEAP_LIMIT_MB = Number(process.env.MAX_OLD_SPACE_SIZE || 3584);
@@ -45,14 +45,14 @@ export function initMemoryWatchdog(STATE) {
     try {
       _tick(STATE);
     } catch (e) {
-      structuredLog("warn", "memory_watchdog_error", { error: e?.message });
+      logger.log("warn", "lib", "memory_watchdog_error", { error: e?.message });
     }
   }, POLL_INTERVAL_MS);
 
   // Don't block process exit
   if (_timer.unref) _timer.unref();
 
-  structuredLog("info", "memory_watchdog_started", { heapLimitMB: HEAP_LIMIT_MB });
+  logger.log("info", "lib", "memory_watchdog_started", { heapLimitMB: HEAP_LIMIT_MB });
 
   return {
     stop() {
@@ -115,7 +115,7 @@ function _tryGC() {
   if (typeof global.gc === "function") {
     global.gc();
     _lastGcAt = now;
-    structuredLog("info", "memory_watchdog_gc", { forced: true });
+    logger.log("info", "lib", "memory_watchdog_gc", { forced: true });
   }
 }
 
@@ -134,7 +134,7 @@ function _evictOldSessions(STATE) {
   });
 
   if (evicted > 0) {
-    structuredLog("info", "memory_watchdog_session_evict", { evicted });
+    logger.log("info", "lib", "memory_watchdog_session_evict", { evicted });
   }
 }
 
@@ -150,7 +150,7 @@ function _pauseBackgroundWork(STATE) {
       }
     }
     if (Object.keys(STATE._memoryPausedFeatures).length > 0) {
-      structuredLog("warn", "memory_watchdog_paused_background", {
+      logger.log("warn", "lib", "memory_watchdog_paused_background", {
         paused: Object.keys(STATE._memoryPausedFeatures),
       });
     }
@@ -162,7 +162,7 @@ function _resumeBackgroundWork(STATE) {
   for (const [f, was] of Object.entries(STATE._memoryPausedFeatures)) {
     if (was) STATE.settings[f] = true;
   }
-  structuredLog("info", "memory_watchdog_resumed_background", {
+  logger.log("info", "lib", "memory_watchdog_resumed_background", {
     resumed: Object.keys(STATE._memoryPausedFeatures),
   });
   delete STATE._memoryPausedFeatures;
@@ -188,7 +188,7 @@ function _aggressiveEviction(STATE) {
   if (STATE.crawlQueue?.length > 0) {
     const trimmed = STATE.crawlQueue.length;
     STATE.crawlQueue.length = 0;
-    structuredLog("warn", "memory_watchdog_crawl_queue_cleared", { trimmed });
+    logger.log("warn", "lib", "memory_watchdog_crawl_queue_cleared", { trimmed });
   }
 
   // Trim logs
@@ -197,6 +197,6 @@ function _aggressiveEviction(STATE) {
   }
 
   if (evicted > 0) {
-    structuredLog("warn", "memory_watchdog_aggressive_evict", { evicted });
+    logger.log("warn", "lib", "memory_watchdog_aggressive_evict", { evicted });
   }
 }

@@ -4,7 +4,7 @@
  * Three-tier storage strategy: in-memory Map (primary) → Redis (optional) → SQLite (persistent).
  * When REDIS_URL is not set, all methods are no-ops (local-only mode).
  */
-import { structuredLog } from "./logger.js";
+import logger from "../logger.js";
 
 const REDIS_URL = process.env.REDIS_URL || null;
 let _client = null;
@@ -18,7 +18,7 @@ const _subscriptions = new Map(); // channel -> Set<callback>
  */
 export async function initRedis() {
   if (!REDIS_URL) {
-    structuredLog("info", "redis_skipped", { reason: "REDIS_URL not set, local-only mode" });
+    logger.log("info", "lib", "redis_skipped", { reason: "REDIS_URL not set, local-only mode" });
     return { connected: false, mode: "local" };
   }
 
@@ -39,14 +39,14 @@ export async function initRedis() {
 
     _client.on("connect", () => {
       _connected = true;
-      structuredLog("info", "redis_connected", { url: REDIS_URL.replace(/\/\/.*@/, "//***@") });
+      logger.log("info", "lib", "redis_connected", { url: REDIS_URL.replace(/\/\/.*@/, "//***@") });
     });
     _client.on("error", (err) => {
-      structuredLog("warn", "redis_error", { error: err?.message });
+      logger.log("warn", "lib", "redis_error", { error: err?.message });
     });
     _client.on("close", () => {
       _connected = false;
-      structuredLog("info", "redis_disconnected", {});
+      logger.log("info", "lib", "redis_disconnected", {});
     });
 
     await _client.connect();
@@ -60,14 +60,14 @@ export async function initRedis() {
         let parsed;
         try { parsed = JSON.parse(message); } catch { parsed = message; }
         for (const cb of cbs) {
-          try { cb(parsed); } catch (e) { structuredLog("warn", "redis_sub_callback_error", { channel, error: e?.message }); }
+          try { cb(parsed); } catch (e) { logger.log("warn", "lib", "redis_sub_callback_error", { channel, error: e?.message }); }
         }
       }
     });
 
     return { connected: true, mode: "redis" };
   } catch (e) {
-    structuredLog("warn", "redis_init_failed", { error: e?.message, reason: "ioredis may not be installed" });
+    logger.log("warn", "lib", "redis_init_failed", { error: e?.message, reason: "ioredis may not be installed" });
     return { connected: false, mode: "local", error: e?.message };
   }
 }
@@ -83,7 +83,7 @@ export async function sessionGet(sessionId) {
     const raw = await _client.get(`concord:session:${sessionId}`);
     return raw ? JSON.parse(raw) : null;
   } catch (e) {
-    structuredLog("debug", "redis_session_get_error", { sessionId, error: e?.message });
+    logger.log("debug", "lib", "redis_session_get_error", { sessionId, error: e?.message });
     return null;
   }
 }
@@ -94,7 +94,7 @@ export async function sessionSet(sessionId, data, ttlSeconds = 86400) {
     await _client.set(`concord:session:${sessionId}`, JSON.stringify(data), "EX", ttlSeconds);
     return true;
   } catch (e) {
-    structuredLog("debug", "redis_session_set_error", { sessionId, error: e?.message });
+    logger.log("debug", "lib", "redis_session_set_error", { sessionId, error: e?.message });
     return false;
   }
 }

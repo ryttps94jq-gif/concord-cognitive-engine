@@ -5,7 +5,7 @@
  * Without Redis, this module is a no-op (single-instance behavior preserved).
  */
 import { publish, subscribe, isConnected, lockAcquire, lockRelease } from "./redis-adapter.js";
-import { structuredLog } from "./logger.js";
+import logger from "../logger.js";
 
 const CHANNELS = {
   DTU_CHANGE: "concord:dtu:change",
@@ -27,7 +27,7 @@ let _initialized = false;
 export async function initStateSync(STATE) {
   _STATE = STATE;
   if (!isConnected()) {
-    structuredLog("info", "state_sync_skipped", { reason: "redis not connected" });
+    logger.log("info", "lib", "state_sync_skipped", { reason: "redis not connected" });
     return;
   }
 
@@ -37,7 +37,7 @@ export async function initStateSync(STATE) {
   await subscribe(CHANNELS.INVALIDATE, (msg) => _handleInvalidation(msg));
 
   _initialized = true;
-  structuredLog("info", "state_sync_initialized", { instanceId: INSTANCE_ID, channels: Object.values(CHANNELS) });
+  logger.log("info", "lib", "state_sync_initialized", { instanceId: INSTANCE_ID, channels: Object.values(CHANNELS) });
 }
 
 // ── Publishers (call from main code when state changes) ──
@@ -87,7 +87,7 @@ function startEmergentSync() {
       }
       await lockRelease("emergent-sync");
     } catch (e) {
-      structuredLog("debug", "emergent_sync_error", { error: e?.message });
+      logger.log("debug", "lib", "emergent_sync_error", { error: e?.message });
     }
   }, EMERGENT_SYNC_INTERVAL_MS);
 
@@ -104,29 +104,29 @@ function _handleDTUChange(msg) {
     if (action === "create" || action === "update") {
       if (dtu && dtuId && _STATE?.dtus) {
         _STATE.dtus.set(dtuId, dtu);
-        structuredLog("debug", "state_sync_dtu_applied", { dtuId, action });
+        logger.log("debug", "lib", "state_sync_dtu_applied", { dtuId, action });
       }
     } else if (action === "delete") {
       if (dtuId && _STATE?.dtus) {
         _STATE.dtus.delete(dtuId);
-        structuredLog("debug", "state_sync_dtu_deleted", { dtuId });
+        logger.log("debug", "lib", "state_sync_dtu_deleted", { dtuId });
       }
     }
   } catch (e) {
-    structuredLog("debug", "state_sync_dtu_handler_error", { error: e?.message });
+    logger.log("debug", "lib", "state_sync_dtu_handler_error", { error: e?.message });
   }
 }
 
 function _handleSessionChange(msg) {
   if (msg.instanceId === INSTANCE_ID) return;
   // Session changes are informational — sessions are loaded from Redis on-demand
-  structuredLog("debug", "state_sync_session_change", { sessionId: msg.sessionId, action: msg.action });
+  logger.log("debug", "lib", "state_sync_session_change", { sessionId: msg.sessionId, action: msg.action });
 }
 
 function _handleInvalidation(msg) {
   if (msg.instanceId === INSTANCE_ID) return;
   // Cache invalidation signal — clear local caches for specified keys
-  structuredLog("debug", "state_sync_invalidation", { keys: msg.keys });
+  logger.log("debug", "lib", "state_sync_invalidation", { keys: msg.keys });
 }
 
 export function stopSync() {
