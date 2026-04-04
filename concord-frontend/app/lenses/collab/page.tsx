@@ -1054,7 +1054,7 @@ function CreateSessionModal({ onClose }: { onClose: () => void }) {
       queryClient.invalidateQueries({ queryKey: ['artistry-collab-sessions'] });
       queryClient.invalidateQueries({ queryKey: ['active-collabs'] });
       // Also register the collaboration via the createCollab API
-      createCollab('', [data.type], data.description || data.name).catch(() => {});
+      createCollab('', [form.type], form.description || form.name).catch(() => {});
       onClose();
     },
     onError: (err) => {
