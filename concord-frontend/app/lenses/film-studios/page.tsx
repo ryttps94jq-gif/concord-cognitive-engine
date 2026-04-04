@@ -182,6 +182,11 @@ export default function FilmStudiosPage() {
           </div>
           <div className="flex items-center gap-2">
             <DTUExportButton domain="film-studios" data={{}} compact />
+            {realtimeAlerts.length > 0 && (
+              <span className="text-xs px-2 py-0.5 rounded bg-yellow-500/10 text-yellow-400">
+                {realtimeAlerts.length} alert{realtimeAlerts.length !== 1 ? 's' : ''}
+              </span>
+            )}
             <button onClick={() => setShowFeatures(!showFeatures)} className="px-3 py-1.5 text-xs bg-white/5 border border-white/10 rounded-lg hover:bg-white/10">
               Features
             </button>

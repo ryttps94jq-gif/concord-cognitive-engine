@@ -428,7 +428,7 @@ export default function PhysicsLensPage() {
                 // Elastic collision
                 const dvx = a.velocity.x - b.velocity.x;
                 const dvy = a.velocity.y - b.velocity.y;
-                const dvn = dvx * nx + dvy * ny;
+                const dvn = dot({ x: dvx, y: dvy }, { x: nx, y: ny });
 
                 if (dvn > 0) continue; // Moving apart
 
@@ -754,9 +754,26 @@ export default function PhysicsLensPage() {
       const body = findBodyAt(pos);
       if (body) {
         setSelectedBody(body.id);
+        setSelectedConstraint(null);
         setDraggingBody(body.id);
       } else {
         setSelectedBody(null);
+        // Check if clicking near a constraint line
+        const clickedConstraint = constraints.find(c => {
+          const bA = bodies.find(b => b.id === c.bodyA || b.name === c.bodyA);
+          const bB = bodies.find(b => b.id === c.bodyB || b.name === c.bodyB);
+          if (!bA || !bB) return false;
+          const dx = bB.position.x - bA.position.x;
+          const dy = bB.position.y - bA.position.y;
+          const lenSq = dx * dx + dy * dy;
+          if (lenSq === 0) return false;
+          const t = Math.max(0, Math.min(1, dot({ x: pos.x - bA.position.x, y: pos.y - bA.position.y }, { x: dx, y: dy }) / lenSq));
+          const projX = bA.position.x + t * dx;
+          const projY = bA.position.y + t * dy;
+          const distSq = (pos.x - projX) ** 2 + (pos.y - projY) ** 2;
+          return distSq < 64; // 8px threshold
+        });
+        setSelectedConstraint(clickedConstraint?.id || null);
       }
     } else if (tool === 'spring') {
       const body = findBodyAt(pos);

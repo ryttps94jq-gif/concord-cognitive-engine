@@ -377,7 +377,7 @@ export default function AccountingLensPage() {
     }, { gross: 0, deductions: 0, net: 0 });
   }, [payrollData.items]);
 
-  const _rentRoll = useMemo(() => {
+  const rentRoll = useMemo(() => {
     return items.reduce((s, p) => {
       if (currentType !== 'Property') return s;
       return s + ((p.data as unknown as Property).monthlyRent || 0);
@@ -1611,6 +1611,15 @@ export default function AccountingLensPage() {
           </div>
         </div>
       </div>
+
+      {/* Rent Roll */}
+      {currentType === 'Property' && rentRoll > 0 && (
+        <div className={ds.panel}>
+          <div className="flex items-center gap-2 mb-2"><Building2 className="w-4 h-4 text-neon-purple" /><span className={ds.textMuted}>Monthly Rent Roll</span></div>
+          <p className={cn(ds.heading2, 'text-neon-purple')}>{fmt(rentRoll)}</p>
+          <p className={ds.textMuted}>Total monthly rental income from properties</p>
+        </div>
+      )}
 
       {/* Invoice Aging */}
       <div className={ds.panel}>
