@@ -147,18 +147,33 @@ export function distributeRoyalties(db, { contentId, transactionAmount, sourceTx
     }
   }
 
-  // Calculate payout amounts
+  // Calculate payout amounts with 30% cap
+  // Seller protection: royalties never exceed 30% of sale price
+  // Seller always keeps at least 64.54% (100% - 5.46% fees - 30% max royalties)
+  const MAX_ROYALTY_RATE = 0.30;
+  const maxRoyaltyPool = Math.round(transactionAmount * MAX_ROYALTY_RATE * 100) / 100;
   const payouts = [];
   let totalRoyalties = 0;
 
-  for (const [creatorId, ancestor] of creatorPayouts) {
+  // Sort by generation (closest ancestors first, they get priority)
+  const sortedCreators = [...creatorPayouts.entries()].sort(
+    ([, a], [, b]) => a.generation - b.generation
+  );
+
+  for (const [creatorId, ancestor] of sortedCreators) {
     // Don't pay royalties to the seller (they already got paid)
     if (creatorId === sellerId) continue;
     // Don't pay royalties to the buyer
     if (creatorId === buyerId) continue;
 
-    const royaltyAmount = Math.round(transactionAmount * ancestor.rate * 100) / 100;
+    let royaltyAmount = Math.round(transactionAmount * ancestor.rate * 100) / 100;
     if (royaltyAmount < 0.01) continue; // Skip sub-penny royalties
+
+    // Cap check: would this payment exceed 30%?
+    if (totalRoyalties + royaltyAmount > maxRoyaltyPool) {
+      royaltyAmount = Math.round((maxRoyaltyPool - totalRoyalties) * 100) / 100;
+      if (royaltyAmount < 0.01) break; // nothing left to pay
+    }
 
     payouts.push({
       recipientId: creatorId,
@@ -169,6 +184,7 @@ export function distributeRoyalties(db, { contentId, transactionAmount, sourceTx
     });
 
     totalRoyalties += royaltyAmount;
+    if (totalRoyalties >= maxRoyaltyPool) break; // cap reached
   }
 
   if (payouts.length === 0) {

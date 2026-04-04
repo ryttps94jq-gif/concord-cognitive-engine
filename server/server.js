@@ -12135,6 +12135,19 @@ setTimeout(async () => {
     initEconomics({ structuredLog });
     initSelfHealing({ structuredLog });
 
+    // Hourly treasury reconciliation — verify vault invariant
+    setInterval(async () => {
+      try {
+        const { verifyTreasuryInvariant } = await import("./economy/coin-service.js");
+        const result = verifyTreasuryInvariant(db);
+        if (result && !result.invariantHolds) {
+          structuredLog("error", "treasury_invariant_violation", result);
+        } else {
+          structuredLog("debug", "treasury_audit_ok", { timestamp: new Date().toISOString() });
+        }
+      } catch (e) { structuredLog("warn", "treasury_audit_error", { error: String(e?.message || e) }); }
+    }, 60 * 60 * 1000); // every hour
+
     structuredLog("info", "semantic_intelligence_init", { embeddingsAvailable: isEmbeddingAvailable() });
 
     // Background backfill: embed existing DTUs that don't have embeddings

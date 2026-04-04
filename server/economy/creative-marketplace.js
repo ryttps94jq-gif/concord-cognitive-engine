@@ -333,10 +333,33 @@ export function purchaseArtifact(db, { buyerId, artifactId, requestId, ip }) {
   let cascadePayments = [];
   let totalCascade = 0;
 
+  // Seller protection: royalties never exceed 30% of sale price
+  // Seller always keeps at least 64.54% (100% - 5.46% fees - 30% max royalties)
+  const MAX_ROYALTY_RATE = 0.30;
+  const maxRoyaltyPool = Math.round(price * MAX_ROYALTY_RATE * 100) / 100;
+
   if (artifact.is_derivative) {
     cascadePayments = calculateCascadePayments(db, artifactId, remainingAfterFees);
     // Anti-gaming: filter out self-citing (creator earning royalties on their own chain)
     cascadePayments = cascadePayments.filter(p => p.recipientId !== artifact.creator_id && p.recipientId !== buyerId);
+
+    // Apply 30% cap — trim payments from deepest generation first
+    cascadePayments.sort((a, b) => a.generation - b.generation); // pay closest ancestors first
+    let capped = 0;
+    cascadePayments = cascadePayments.filter(p => {
+      if (capped + p.amount > maxRoyaltyPool) {
+        const remaining = Math.round((maxRoyaltyPool - capped) * 100) / 100;
+        if (remaining >= 0.01) {
+          p.amount = remaining;
+          capped += remaining;
+          return true;
+        }
+        return false; // drop this payment
+      }
+      capped += p.amount;
+      return true;
+    });
+
     totalCascade = Math.round(cascadePayments.reduce((sum, p) => sum + p.amount, 0) * 100) / 100;
   }
 
@@ -344,19 +367,24 @@ export function purchaseArtifact(db, { buyerId, artifactId, requestId, ip }) {
   const concordSplit = calculateConcordSplit(db, artifact, remainingAfterFees);
   let concordDeduction = 0;
   if (concordSplit) {
-    concordDeduction = concordSplit.totalConcordRoyalty;
-    // Add passthrough payments to cascade (they come from Concord's share, not seller's)
-    for (const pp of concordSplit.passthroughPayments) {
-      cascadePayments.push({
-        recipientId: pp.recipientId,
-        recipientArtifactId: pp.contentId,
-        amount: pp.amount,
-        generation: 0,
-        rate: 0.21,
-        reason: "concord_passthrough",
-      });
+    // Concord split also counts against the 30% cap
+    let concordAllowance = Math.round((maxRoyaltyPool - totalCascade) * 100) / 100;
+    if (concordAllowance > 0) {
+      concordDeduction = Math.min(concordSplit.totalConcordRoyalty, concordAllowance);
+      // Proportionally adjust passthrough payments if capped
+      const ratio = concordDeduction / (concordSplit.totalConcordRoyalty || 1);
+      for (const pp of concordSplit.passthroughPayments) {
+        cascadePayments.push({
+          recipientId: pp.recipientId,
+          recipientArtifactId: pp.contentId,
+          amount: Math.round(pp.amount * ratio * 100) / 100,
+          generation: 0,
+          rate: 0.21,
+          reason: "concord_passthrough",
+        });
+      }
+      totalCascade = Math.round((totalCascade + concordDeduction) * 100) / 100;
     }
-    totalCascade = Math.round((totalCascade + concordDeduction) * 100) / 100;
   }
 
   const creatorEarnings = Math.round((remainingAfterFees - totalCascade) * 100) / 100;

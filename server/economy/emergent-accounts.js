@@ -32,9 +32,15 @@ const RESERVE_PREFIX = "emergent_res:";
  * @param {object} opts
  * @param {string} opts.emergentId — unique emergent entity ID
  * @param {string} [opts.displayName] — human-readable name
- * @param {number} [opts.seedAmount=0] — initial seed in Concord Coins
+ * @param {number} [opts.seedAmount=0] — DEPRECATED: emergents start at zero. They earn through creation.
+ *   Seed amounts are rejected to prevent artificial economic activity.
  */
 export function createEmergentAccount(db, { emergentId, displayName, seedAmount = 0 }) {
+  // Emergents start at ZERO. They earn through creation, not handouts.
+  // Seeding creates circular revenue that an auditor would flag as wash trading.
+  if (seedAmount > 0) {
+    return { ok: false, error: "emergent_seed_disabled", detail: "Emergents must earn CC through creation. Seed funding is not permitted." };
+  }
   if (!emergentId) return { ok: false, error: "missing_emergent_id" };
 
   // Check if account already exists

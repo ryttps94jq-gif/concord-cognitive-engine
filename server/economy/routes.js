@@ -1007,6 +1007,81 @@ export function registerEconomyRoutes(app, db, opts = {}) {
     }
   });
 
+  // Royalty dashboard — lifetime stats + passive earnings for creator
+  app.get("/api/economy/royalties/dashboard", (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ ok: false, error: "unauthorized" });
+
+    try {
+      const lifetime = db.prepare(`
+        SELECT
+          COALESCE(SUM(CAST(ROUND(net * 100) AS INTEGER)), 0) AS total_cents,
+          COUNT(*) AS total_transactions,
+          COUNT(DISTINCT from_user_id) AS unique_citers,
+          MAX(CAST(json_extract(metadata_json, '$.generation') AS INTEGER)) AS deepest_generation
+        FROM economy_ledger
+        WHERE to_user_id = ? AND type = 'ROYALTY' AND status = 'complete'
+      `).get(userId);
+
+      const mostCited = db.prepare(`
+        SELECT json_extract(metadata_json, '$.recipientArtifactId') AS dtu_id, COUNT(*) AS cite_count
+        FROM economy_ledger
+        WHERE to_user_id = ? AND type = 'ROYALTY' AND status = 'complete'
+          AND json_extract(metadata_json, '$.recipientArtifactId') IS NOT NULL
+        GROUP BY dtu_id ORDER BY cite_count DESC LIMIT 1
+      `).get(userId);
+
+      const lastLogin = db.prepare("SELECT last_login_at FROM users WHERE id = ?").get(userId)?.last_login_at;
+      let sinceLastLogin = 0;
+      if (lastLogin) {
+        const passive = db.prepare(`
+          SELECT COALESCE(SUM(CAST(ROUND(net * 100) AS INTEGER)), 0) AS cents
+          FROM economy_ledger
+          WHERE to_user_id = ? AND type = 'ROYALTY' AND status = 'complete' AND created_at > ?
+        `).get(userId, lastLogin);
+        sinceLastLogin = (passive?.cents || 0) / 100;
+      }
+
+      const recent = db.prepare(`
+        SELECT net AS amount, metadata_json, created_at AS timestamp
+        FROM economy_ledger
+        WHERE to_user_id = ? AND type = 'ROYALTY' AND status = 'complete'
+        ORDER BY created_at DESC LIMIT 20
+      `).all(userId).map(r => {
+        const meta = JSON.parse(r.metadata_json || "{}");
+        return {
+          amount: r.amount,
+          fromArtifact: meta.artifactId,
+          yourDTU: meta.recipientArtifactId,
+          generation: meta.generation,
+          rate: meta.rate ? `${(meta.rate * 100).toFixed(1)}%` : null,
+          timestamp: r.timestamp,
+        };
+      });
+
+      res.json({
+        ok: true,
+        lifetime: {
+          totalEarned: (lifetime?.total_cents || 0) / 100,
+          totalTransactions: lifetime?.total_transactions || 0,
+          uniqueCiters: lifetime?.unique_citers || 0,
+          deepestGeneration: lifetime?.deepest_generation || 0,
+          mostCitedDTU: mostCited?.dtu_id || null,
+        },
+        recent,
+        passive: {
+          sinceLastLogin,
+          message: sinceLastLogin > 0
+            ? `Your work earned ${sinceLastLogin.toFixed(2)} CC while you were away`
+            : "No new royalties since your last login",
+        },
+      });
+    } catch (err) {
+      log("error", "royalty_dashboard_failed", { error: err.message });
+      res.status(500).json({ ok: false, error: "royalty_dashboard_failed" });
+    }
+  });
+
   app.get("/api/economy/royalties/creator/:creatorId", (req, res) => {
     try {
       const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
