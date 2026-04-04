@@ -1,4 +1,5 @@
 import { Metadata } from 'next';
+import { redirect } from 'next/navigation';
 
 /**
  * Public Lens Artifact Page — /lens/[domain]/[id]
@@ -80,6 +81,16 @@ export default async function PublicLensArtifactPage({
 }) {
   const { domain, id } = await params;
   const artifact = await fetchArtifact(domain, id);
+
+  // If the artifact specifies a redirect (e.g., content moved to another lens), follow it
+  if (artifact?.redirect) {
+    redirect(artifact.redirect);
+  }
+
+  // If the artifact has a canonical lens URL, redirect authenticated users there
+  if (artifact?.canonicalUrl) {
+    redirect(artifact.canonicalUrl);
+  }
 
   if (!artifact) {
     return (
