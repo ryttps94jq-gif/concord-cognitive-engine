@@ -224,7 +224,7 @@ async function _phaseHeal(STATE, cycle) {
       healResults.issuesFound++;
       healResults.recommendation = `${stale.length} stale DTUs could be archived`;
     }
-  } catch (_) {}
+  } catch (err) { console.warn('[dream-cycle] heal phase: failed to check stale DTUs', { err: err.message }); }
 
   return healResults;
 }

@@ -1260,7 +1260,7 @@ export function registerEconomyRoutes(app, db, opts = {}) {
         citations = db.prepare(
           "SELECT COUNT(*) as c FROM royalty_lineage WHERE parent_creator = ?"
         ).get(userId)?.c || 0;
-      } catch { /* table may not exist */ }
+      } catch (err) { console.warn('[economy/routes] reputation: could not count citations', { userId, err: err.message }); }
 
       // Sales: count completed marketplace purchases as seller
       let sales = 0;
@@ -1269,7 +1269,7 @@ export function registerEconomyRoutes(app, db, opts = {}) {
           SELECT COUNT(*) as c FROM economy_ledger
           WHERE from_user_id != ? AND to_user_id = ? AND type = 'MARKETPLACE_PURCHASE' AND status = 'complete'
         `).get(userId, userId)?.c || 0;
-      } catch { /* no ledger yet */ }
+      } catch (err) { console.warn('[economy/routes] reputation: could not count sales', { userId, err: err.message }); }
 
       // Royalties: total royalty income
       let royalties = 0;
@@ -1277,7 +1277,7 @@ export function registerEconomyRoutes(app, db, opts = {}) {
         royalties = db.prepare(
           "SELECT COALESCE(SUM(amount), 0) as total FROM royalty_payouts WHERE recipient_id = ?"
         ).get(userId)?.total || 0;
-      } catch { /* table may not exist */ }
+      } catch (err) { console.warn('[economy/routes] reputation: could not sum royalties', { userId, err: err.message }); }
 
       // Community activity: posts, comments, follows (approximate from ledger + social tables)
       let community = 0;
