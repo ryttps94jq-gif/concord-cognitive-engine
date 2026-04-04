@@ -155,7 +155,7 @@ export default function EcoLensPage() {
   const BIODIVERSITY: BiodiversityIndex[] = useMemo(() =>
     biodiversityItems.map(i => ({ ...i.data } as BiodiversityIndex)), [biodiversityItems]);
   const IMPACTS: ImpactAssessment[] = useMemo(() =>
-    impactItems.map(i => ({ id: i.id, ...i.data } as ImpactAssessment)), [impactItems]);
+    impactItems.map(i => ({ ...i.data } as ImpactAssessment)), [impactItems]);
 
   const isLoading = metricsLoading || organismsLoading;
 
@@ -192,7 +192,7 @@ export default function EcoLensPage() {
       list = list.filter(p => p.category === categoryFilter);
     }
     return list;
-  }, [searchQuery, categoryFilter]);
+  }, [searchQuery, categoryFilter, POPULATIONS]);
 
   // Aggregated stats
   const totalSpecies = POPULATIONS.length;

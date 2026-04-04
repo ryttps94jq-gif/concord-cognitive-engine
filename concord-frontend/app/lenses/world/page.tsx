@@ -5,53 +5,87 @@ import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { useSocket } from '@/hooks/useSocket';
-import { useLensNav } from '@/hooks/useLensNav';
-import { UniversalActions } from '@/components/lens/UniversalActions';
-import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import IsometricEngine from '@/components/world/IsometricEngine';
 import WorldHUD from '@/components/world/WorldHUD';
-import CharacterCustomizer from '@/components/world/CharacterCustomizer';
-import { LiveIndicator } from '@/components/lens/LiveIndicator';
-import { DTUExportButton } from '@/components/lens/DTUExportButton';
-import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
+import { CharacterCustomizer } from '@/components/world/CharacterCustomizer';
+
+// ── Local types ──────────────────────────────────────────────────
+
+interface District {
+  id: string;
+  name: string;
+  lens: string;
+}
+
+interface NearbyPlayer {
+  userId: string;
+  x: number;
+  y: number;
+  [key: string]: unknown;
+}
+
+interface CombatState {
+  active: boolean;
+  [key: string]: unknown;
+}
+
+interface WorldEntity {
+  id: string;
+  name?: string;
+}
+
+interface Progression {
+  coins?: number;
+  xp?: number;
+  rank?: number;
+}
+
+interface NPC {
+  id: string;
+  name: string;
+  type: string;
+  position: { x: number; y: number };
+  district: string;
+  questAvailable?: boolean;
+}
 
 export default function WorldLensPage() {
   // State
   const [playerPos, setPlayerPos] = useState({ x: 6, y: 11 }); // start at marketplace
-  const [activeDistrict, setActiveDistrict] = useState<any>(null);
+  const [activeDistrict, setActiveDistrict] = useState<District | null>(null);
   const [showAvatar, setShowAvatar] = useState(false); // true on first visit
-  const [nearbyPlayers, setNearbyPlayers] = useState<any[]>([]);
-  const [combatState, setCombatState] = useState<any>(null);
+  const [nearbyPlayers, setNearbyPlayers] = useState<NearbyPlayer[]>([]);
+  const [combatState, setCombatState] = useState<CombatState | null>(null);
   const [wantedLevel, setWantedLevel] = useState(0);
   const [districtBanner, setDistrictBanner] = useState<string | null>(null);
   const [showMinimap, setShowMinimap] = useState(true);
-  const [selectedNPC, setSelectedNPC] = useState<any>(null);
+  const [selectedNPC, setSelectedNPC] = useState<NPC | null>(null);
   const [showNPCDialog, setShowNPCDialog] = useState(false);
 
   const router = useRouter();
 
   // Data fetching
-  const { data: districts, isLoading: districtsLoading, isError: districtsError } = useQuery({
+  const { isLoading: districtsLoading, isError: districtsError } = useQuery({
     queryKey: ['world-districts'],
-    queryFn: () => api.get('/api/world/districts').then((r: any) => r.data),
+    queryFn: () => api.get('/api/world/districts').then((r: { data: District[] }) => r.data),
     staleTime: 60000,
   });
 
   const { data: quests } = useQuery({
     queryKey: ['world-quests'],
-    queryFn: () => api.get('/api/quests/mine').then((r: any) => r.data?.quests || []),
+    queryFn: () => api.get('/api/quests/mine').then((r: { data?: { quests?: unknown[] } }) => r.data?.quests || []),
     staleTime: 30000,
   });
 
   const { data: entities } = useQuery({
     queryKey: ['world-entities'],
-    queryFn: () => api.get('/api/emergent/list').then((r: any) => r.data?.agents || []),
+    queryFn: () => api.get('/api/emergent/list').then((r: { data?: { agents?: WorldEntity[] } }) => r.data?.agents || []),
     refetchInterval: 30000,
   });
 
   const { data: progression } = useQuery({
     queryKey: ['world-progression'],
-    queryFn: () => api.get('/api/world/progression/me').then((r: any) => r.data),
+    queryFn: () => api.get('/api/world/progression/me').then((r: { data: Progression }) => r.data),
     staleTime: 30000,
   });
 
@@ -61,8 +95,8 @@ export default function WorldLensPage() {
   useEffect(() => {
     if (!socket) return;
 
-    socket.on('city:positions', (players: any[]) => setNearbyPlayers(players));
-    socket.on('world:combat', (combat: any) => setCombatState(combat));
+    socket.on('city:positions', (players: NearbyPlayer[]) => setNearbyPlayers(players));
+    socket.on('world:combat', (combat: CombatState) => setCombatState(combat));
     socket.on('world:wanted', (level: number) => setWantedLevel(level));
 
     return () => {
@@ -87,7 +121,7 @@ export default function WorldLensPage() {
   );
 
   // District entry handler
-  const handleDistrictEnter = useCallback((district: any) => {
+  const handleDistrictEnter = useCallback((district: District) => {
     setActiveDistrict(district);
     setDistrictBanner(district.name);
     setTimeout(() => setDistrictBanner(null), 3000);
@@ -97,14 +131,14 @@ export default function WorldLensPage() {
 
   // Building click → navigate to lens
   const handleBuildingClick = useCallback(
-    (district: any) => {
+    (district: District) => {
       router.push(`/lenses/${district.lens}`);
     },
     [router],
   );
 
   // NPC click → show dialog
-  const handleNPCClick = useCallback((npc: any) => {
+  const handleNPCClick = useCallback((npc: NPC) => {
     setSelectedNPC(npc);
     setShowNPCDialog(true);
   }, []);
@@ -121,10 +155,10 @@ export default function WorldLensPage() {
 
   // Build NPC list from entities + static NPCs
   const npcs = useMemo(() => {
-    const list: any[] = [];
+    const list: NPC[] = [];
     // Add emergent entities as special NPCs
     if (entities) {
-      for (const entity of entities as Array<{ id: string; name?: string }>) {
+      for (const entity of entities as WorldEntity[]) {
         list.push({
           id: entity.id,
           name: entity.name || entity.id,
@@ -190,7 +224,7 @@ export default function WorldLensPage() {
       {showAvatar && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur">
           <CharacterCustomizer
-            onSave={(profile: any) => {
+            onSave={(profile: Record<string, string>) => {
               localStorage.setItem('concord_avatar', JSON.stringify(profile));
               api.post('/api/social/profile/avatar', profile).catch(() => {});
               setShowAvatar(false);
@@ -208,7 +242,7 @@ export default function WorldLensPage() {
         onDistrictEnter={handleDistrictEnter}
         onBuildingClick={handleBuildingClick}
         onNPCClick={handleNPCClick}
-        onPlayerClick={(p: any) => router.push(`/profile/${p.userId}`)}
+        onPlayerClick={(p: NearbyPlayer) => router.push(`/profile/${p.userId}`)}
         activeDistrict={activeDistrict?.id || null}
         wantedLevel={wantedLevel}
       />
