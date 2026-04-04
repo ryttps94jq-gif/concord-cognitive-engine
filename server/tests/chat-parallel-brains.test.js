@@ -59,7 +59,7 @@ describe('analyzeUnsaid', () => {
     };
 
     await analyzeUnsaid({
-      userMessage: 'I still dont get it',
+      userMessage: "I still don't get it",
       conversationSummary: 'We discussed quantum physics.',
       sessionId: 's1',
     }, STATE);
