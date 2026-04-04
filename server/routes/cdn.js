@@ -72,6 +72,19 @@ export default function createCDNRouter({ cdnManager, urlSigner, STATE }) {
     });
   }));
 
+  // ── GET /info — Public CDN info for frontend media URL resolution ────
+  router.get("/info", asyncHandler(async (_req, res) => {
+    const providerInfo = await cdnManager.getProviderInfo().catch(() => ({}));
+    res.json({
+      ok: true,
+      cdn: {
+        provider: providerInfo?.provider || "local",
+        configured: providerInfo?.configured || false,
+        baseUrl: providerInfo?.baseUrl || null,
+      },
+    });
+  }));
+
   // ── POST /purge — Purge specific artifact from CDN (admin) ────────
 
   router.post("/purge", asyncHandler(async (req, res) => {

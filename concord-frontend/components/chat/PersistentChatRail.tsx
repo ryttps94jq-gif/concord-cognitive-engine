@@ -514,7 +514,7 @@ export function PersistentChatRail({
       });
     } else {
       try {
-        const response = await api.post('/api/chat', {
+        const response = await api.post('/api/chat?full=1', {
           sessionId,
           prompt: content.trim(),
           lens: currentLens,

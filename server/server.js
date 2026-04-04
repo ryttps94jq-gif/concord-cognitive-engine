@@ -77,6 +77,9 @@ import { rateLimitMiddleware as perEndpointRateLimit, writeRateLimitMiddleware, 
 import { detectVulnerability, chooseDeliveryMode, hookVulnerability, assessAndAdapt } from "./emergent/vulnerability-engine.js";
 import { runCouncilVoices, getAllVoices as getAllCouncilVoices } from "./emergent/council-voices.js";
 
+// ── Brain Request Queue (priority serialization) ─────────────────────────────
+import { queues as brainQueues, PRIORITIES as BRAIN_PRIORITIES, getQueueStats as getBrainQueueStats } from "./requestQueue.js";
+
 // ── Brain Prompt Builders & Want Engine ────────────────────────────────────────
 import { buildConsciousPrompt, getConsciousParams } from "./prompts/conscious.js";
 import { buildSubconsciousPrompt, getSubconsciousParams, SUBCONSCIOUS_MODES } from "./prompts/subconscious.js";
@@ -12059,6 +12062,22 @@ async function callBrain(brainName, prompt, options = {}) {
   }
 }
 
+// ── Wire Brain Request Queue ──
+// Inject the direct callBrain function into each queue so they can serialize requests.
+for (const [name, q] of Object.entries(brainQueues)) {
+  q.setCallFn(callBrain);
+}
+
+/**
+ * Enqueue a brain request with priority serialization.
+ * Falls back to direct callBrain if the brain doesn't have a queue.
+ */
+async function brainEnqueue(brainName, prompt, options = {}, priority = BRAIN_PRIORITIES.UTILITY_INTERACTIVE) {
+  const q = brainQueues[brainName];
+  if (q) return q.enqueue(prompt, options, priority);
+  return callBrain(brainName, prompt, options);
+}
+
 // ── Shared DTU Pipeline — Every brain reads from and writes to the same store ──
 
 /**
@@ -12358,7 +12377,7 @@ async function consciousChat(userMessage, lens = null, options = {}) {
 
   // Use conscious brain prompt parameters (spec: 0.75 temp, scaled tokens)
   const consciousParams = getConsciousParams({ exchange_count: options._exchangeCount || 0, has_web_results: webResults.length > 0 });
-  const result = await callBrain("conscious", userMessage, {
+  const result = await brainEnqueue("conscious", userMessage, {
     system,
     temperature: options.temperature || consciousParams.temperature,
     maxTokens: options.maxTokens || consciousParams.maxTokens,
@@ -16741,7 +16760,7 @@ let localReply = formatCrispResponse({
     // The subconscious brain processes every message — generating reflections, emotional context,
     // background associations. Runs in parallel with conscious response.
     const _subconsciousPromise = (BRAIN.subconscious.enabled
-      ? callBrain("subconscious",
+      ? brainEnqueue("subconscious",
           `Reflect on this user message. What emotions, associations, and background patterns do you notice? What is the user really asking? What connections to existing knowledge might be relevant?\n\nUser message: ${prompt}\n\nContext:\n${_pipelineDtuContext.slice(0, 2000)}`,
           {
             system: buildSubconsciousPrompt({
@@ -27528,6 +27547,21 @@ app.get("/api/inspect/dtu/:id", asyncHandler(async (req, res) => {
   res.json({ ok: true, dtu });
 }));
 
+// Generic entity inspector — handles entity, emergent, and other entity types
+app.get("/api/inspect/entity/:id", asyncHandler(async (req, res) => {
+  const es = STATE.__emergent || STATE._emergent;
+  const entity = es?.emergents?.get(req.params.id);
+  if (!entity) return res.status(404).json({ ok: false, error: "Entity not found" });
+  res.json({ ok: true, entity });
+}));
+
+app.get("/api/inspect/emergent/:id", asyncHandler(async (req, res) => {
+  const es = STATE.__emergent || STATE._emergent;
+  const entity = es?.emergents?.get(req.params.id);
+  if (!entity) return res.status(404).json({ ok: false, error: "Emergent not found" });
+  res.json({ ok: true, entity });
+}));
+
 // Context Inspector — aggregated context engine state for Debug lens (Feature 48)
 app.get("/api/context/inspector", asyncHandler(async (req, res) => {
   const metrics = await runMacro("emergent", "context.metrics", {}, makeCtx(req));
@@ -27920,6 +27954,39 @@ app.get("/api/feedback/aggregate/:targetType/:targetId", async (req, res) => {
 // LLM queue metrics
 app.get("/api/system/llm-queue", asyncHandler(async (req, res) => {
   res.json({ ok: true, ..._llmQueue.getMetrics() });
+}));
+
+// System health — aggregated health for dashboard
+app.get("/api/system/health", asyncHandler(async (req, res) => {
+  const brains = {};
+  for (const [name, brain] of Object.entries(BRAIN)) {
+    brains[name] = { enabled: brain.enabled, model: brain.model, requests: brain.stats?.requests || 0, errors: brain.stats?.errors || 0 };
+  }
+  res.json({
+    ok: true,
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+    dtuCount: STATE.dtus?.size || 0,
+    sessionCount: STATE.sessions?.size || 0,
+    brains,
+    brainQueues: typeof getBrainQueueStats === "function" ? getBrainQueueStats() : {},
+  });
+}));
+
+// Guidance suggestions — synthesize next-step suggestions for the dashboard
+app.get("/api/guidance/suggestions", asyncHandler(async (req, res) => {
+  const suggestions = [];
+  const dtuCount = STATE.dtus?.size || 0;
+  if (dtuCount === 0) {
+    suggestions.push({ id: "ingest", title: "Start learning", description: "Ingest some content to build your knowledge base.", priority: "high" });
+  } else if (dtuCount < 100) {
+    suggestions.push({ id: "grow", title: "Keep building", description: `You have ${dtuCount} DTUs. More content means richer connections.`, priority: "medium" });
+  }
+  const sessionCount = STATE.sessions?.size || 0;
+  if (sessionCount === 0) {
+    suggestions.push({ id: "chat", title: "Start a conversation", description: "Chat with Concord to explore your knowledge.", priority: "high" });
+  }
+  res.json({ ok: true, suggestions });
 }));
 
 // Circuit breaker status
