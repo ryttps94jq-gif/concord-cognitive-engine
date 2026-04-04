@@ -16,8 +16,9 @@ docker builder prune -f --filter "until=48h" 2>/dev/null || true
 journalctl --vacuum-size=100M 2>/dev/null || true
 
 # Log rotation cleanup
-find /var/log -name "*.gz" -delete 2>/dev/null || true
-find /var/log -name "*.1" -delete 2>/dev/null || true
+CONCORD_LOG_DIR="${CONCORD_LOG_DIR:-/var/log/concord}"
+find "$CONCORD_LOG_DIR" -name "*.gz" -delete 2>/dev/null || true
+find "$CONCORD_LOG_DIR" -name "*.1" -delete 2>/dev/null || true
 
 # Qdrant snapshot bomb prevention — prune if snapshots exceed 25GB
 QDRANT_DIR=$(docker volume inspect concord_qdrant_data -f '{{.Mountpoint}}' 2>/dev/null || echo "")

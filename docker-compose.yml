@@ -151,7 +151,7 @@ services:
     networks:
       - concord-network
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:80/ready || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:80/health || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3

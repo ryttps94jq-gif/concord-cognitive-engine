@@ -5,7 +5,7 @@ TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 mkdir -p "$BACKUP_DIR"
 
 # Backup SQLite database
-cp /data/db/concord.db "$BACKUP_DIR/concord_$TIMESTAMP.db" 2>/dev/null
+sqlite3 /data/db/concord.db ".backup '$BACKUP_DIR/concord_$TIMESTAMP.db'" 2>/dev/null
 
 # Backup state JSON
 cp /data/concord_state.json "$BACKUP_DIR/state_$TIMESTAMP.json" 2>/dev/null

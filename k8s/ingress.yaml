@@ -89,13 +89,6 @@ spec:
                 name: concord-backend
                 port:
                   number: 5050
-          - path: /metrics
-            pathType: Exact
-            backend:
-              service:
-                name: concord-backend
-                port:
-                  number: 5050
           # ── Everything else -> frontend ────────────────────────────
           - path: /
             pathType: Prefix

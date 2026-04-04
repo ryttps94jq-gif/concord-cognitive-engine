@@ -16,8 +16,8 @@ CONSCIOUS_PORT=11434
 SUBCONSCIOUS_PORT=11435
 UTILITY_PORT=11436
 
-CONSCIOUS_MODEL="qwen2.5:7b"
-SUBCONSCIOUS_MODEL="qwen2.5:1.5b"
+CONSCIOUS_MODEL="qwen2.5:14b-q4_K_M"
+SUBCONSCIOUS_MODEL="qwen2.5:7b"
 UTILITY_MODEL="qwen2.5:3b"
 
 CONSCIOUS_CORES="0-3"
@@ -57,21 +57,21 @@ sleep 2
 
 # Brain 1: Conscious — chat and deep reasoning (4 cores, ~5GB RAM)
 log "Starting Brain 1 (Conscious) on port ${CONSCIOUS_PORT}, cores ${CONSCIOUS_CORES}..."
-OLLAMA_HOST="0.0.0.0:${CONSCIOUS_PORT}" taskset -c "${CONSCIOUS_CORES}" ollama serve \
+OLLAMA_HOST="127.0.0.1:${CONSCIOUS_PORT}" taskset -c "${CONSCIOUS_CORES}" ollama serve \
   > "${LOG_DIR}/brain-conscious.log" 2>&1 &
 CONSCIOUS_PID=$!
 log "Conscious PID: ${CONSCIOUS_PID}"
 
 # Brain 2: Subconscious — autogen, dream, evolution, synthesis, birth (2 cores, ~1GB RAM)
 log "Starting Brain 2 (Subconscious) on port ${SUBCONSCIOUS_PORT}, cores ${SUBCONSCIOUS_CORES}..."
-OLLAMA_HOST="0.0.0.0:${SUBCONSCIOUS_PORT}" taskset -c "${SUBCONSCIOUS_CORES}" ollama serve \
+OLLAMA_HOST="127.0.0.1:${SUBCONSCIOUS_PORT}" taskset -c "${SUBCONSCIOUS_CORES}" ollama serve \
   > "${LOG_DIR}/brain-subconscious.log" 2>&1 &
 SUBCONSCIOUS_PID=$!
 log "Subconscious PID: ${SUBCONSCIOUS_PID}"
 
 # Brain 3: Utility — lens interactions, entity actions (2 cores, ~2.5GB RAM)
 log "Starting Brain 3 (Utility) on port ${UTILITY_PORT}, cores ${UTILITY_CORES}..."
-OLLAMA_HOST="0.0.0.0:${UTILITY_PORT}" taskset -c "${UTILITY_CORES}" ollama serve \
+OLLAMA_HOST="127.0.0.1:${UTILITY_PORT}" taskset -c "${UTILITY_CORES}" ollama serve \
   > "${LOG_DIR}/brain-utility.log" 2>&1 &
 UTILITY_PID=$!
 log "Utility PID: ${UTILITY_PID}"
@@ -84,20 +84,20 @@ wait_for_ollama "${UTILITY_PORT}" "Utility"
 
 # Pull models
 log "Pulling model for Conscious: ${CONSCIOUS_MODEL}..."
-OLLAMA_HOST="0.0.0.0:${CONSCIOUS_PORT}" ollama pull "${CONSCIOUS_MODEL}"
+OLLAMA_HOST="127.0.0.1:${CONSCIOUS_PORT}" ollama pull "${CONSCIOUS_MODEL}"
 
 log "Pulling model for Subconscious: ${SUBCONSCIOUS_MODEL}..."
-OLLAMA_HOST="0.0.0.0:${SUBCONSCIOUS_PORT}" ollama pull "${SUBCONSCIOUS_MODEL}"
+OLLAMA_HOST="127.0.0.1:${SUBCONSCIOUS_PORT}" ollama pull "${SUBCONSCIOUS_MODEL}"
 
 log "Pulling model for Utility: ${UTILITY_MODEL}..."
-OLLAMA_HOST="0.0.0.0:${UTILITY_PORT}" ollama pull "${UTILITY_MODEL}"
+OLLAMA_HOST="127.0.0.1:${UTILITY_PORT}" ollama pull "${UTILITY_MODEL}"
 
 # Pull embedding model on all three instances (nomic-embed-text: 137MB, CPU, millisecond inference)
 EMBEDDING_MODEL="${EMBEDDING_MODEL:-nomic-embed-text}"
 log "Pulling embedding model (${EMBEDDING_MODEL}) on all three instances..."
-OLLAMA_HOST="0.0.0.0:${CONSCIOUS_PORT}" ollama pull "${EMBEDDING_MODEL}" &
-OLLAMA_HOST="0.0.0.0:${SUBCONSCIOUS_PORT}" ollama pull "${EMBEDDING_MODEL}" &
-OLLAMA_HOST="0.0.0.0:${UTILITY_PORT}" ollama pull "${EMBEDDING_MODEL}" &
+OLLAMA_HOST="127.0.0.1:${CONSCIOUS_PORT}" ollama pull "${EMBEDDING_MODEL}" &
+OLLAMA_HOST="127.0.0.1:${SUBCONSCIOUS_PORT}" ollama pull "${EMBEDDING_MODEL}" &
+OLLAMA_HOST="127.0.0.1:${UTILITY_PORT}" ollama pull "${EMBEDDING_MODEL}" &
 wait
 log "Embedding model pulled on all instances"
 
