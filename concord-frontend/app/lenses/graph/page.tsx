@@ -26,6 +26,7 @@ import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { ProvenanceBadge } from '@/components/dtu/ProvenanceBadge';
+import { useLatticeStore } from '@/store/lattice';
 
 // --- Types ---
 
@@ -163,6 +164,9 @@ function drawNodeIcon(ctx: CanvasRenderingContext2D, node: GraphNode, cx: number
 export default function GraphLensPage() {
   useLensNav('graph');
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('graph');
+
+  // Real-time topology stats from lattice store (populated by resonance:update socket events)
+  const topologyStats = useLatticeStore((s) => s.topologyStats);
 
   const {
     hyperDTUs, megaDTUs, regularDTUs,

@@ -3,7 +3,7 @@
 import { useState, useEffect, ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Target, Coffee, Play, Pause, RotateCcw } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, getScrollPercentage } from '@/lib/utils';
 
 interface FocusModeProps {
   children: ReactNode;

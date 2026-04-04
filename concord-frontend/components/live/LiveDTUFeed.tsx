@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { subscribe, connectSocket } from '@/lib/realtime/socket';
+import { isInViewport } from '@/lib/utils';
 import { Zap, Sparkles, Star, Ghost, Tag } from 'lucide-react';
 import { TierBadge } from '@/components/dtu/TierBadge';
 
@@ -53,13 +54,27 @@ const TYPE_COLORS: Record<string, string> = {
 
 export function LiveDTUFeed({ limit = 10, onDtuClick }: { limit?: number; onDtuClick?: (id: string) => void }) {
   const [liveDtus, setLiveDtus] = useState<DTUEvent[]>([]);
+  const [isFeedVisible, setIsFeedVisible] = useState(true);
   const feedRef = useRef<HTMLDivElement>(null);
+
+  // Pause real-time updates when the feed is scrolled out of the viewport
+  const checkVisibility = useCallback(() => {
+    if (feedRef.current) {
+      setIsFeedVisible(isInViewport(feedRef.current));
+    }
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener('scroll', checkVisibility, { passive: true });
+    checkVisibility();
+    return () => window.removeEventListener('scroll', checkVisibility);
+  }, [checkVisibility]);
 
   // Fetch recent DTUs as initial state
   const { data: dtusData } = useQuery({
     queryKey: ['dtus-recent'],
     queryFn: () => apiHelpers.dtus.paginated({ limit, pageSize: limit }).then(r => r.data),
-    refetchInterval: 60000,
+    refetchInterval: isFeedVisible ? 60000 : false,
   });
 
   // Populate initial list from query

@@ -8,7 +8,12 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSocket } from '@/hooks/useSocket';
-import { api } from '@/lib/api/client';
+import {
+  sharedSessionDetails,
+  sharedSessionChat,
+  saveSharedArtifact,
+  endSharedSession,
+} from '@/lib/api/client';
 import { cn } from '@/lib/utils';
 import {
   Users,
