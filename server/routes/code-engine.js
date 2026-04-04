@@ -32,21 +32,24 @@ import { ValidationError } from "../lib/errors.js";
  * @param {object} deps - Dependencies
  * @param {import('better-sqlite3').Database} deps.db - SQLite database
  */
-export default function registerCodeEngineRoutes(app, { db }) {
+export default function registerCodeEngineRoutes(app, { db, requireAuth }) {
   const engine = createCodeEngine(db);
 
   const PREFIX = "/api/code-engine";
 
+  // Auth middleware — tolerate missing requireAuth for backward compat
+  const auth = typeof requireAuth === "function" ? requireAuth() : (_req, _res, next) => next();
+
   // ── GET /api/code-engine/stats — Engine statistics ──────────────────
 
-  app.get(`${PREFIX}/stats`, asyncHandler(async (_req, res) => {
+  app.get(`${PREFIX}/stats`, auth, asyncHandler(async (_req, res) => {
     const stats = engine.getStats();
     res.json({ ok: true, ...stats });
   }));
 
   // ── POST /api/code-engine/ingest — Ingest a repository ─────────────
 
-  app.post(`${PREFIX}/ingest`, asyncHandler(async (req, res) => {
+  app.post(`${PREFIX}/ingest`, auth, asyncHandler(async (req, res) => {
     const { url, options } = req.body || {};
 
     if (!url) {
@@ -59,7 +62,7 @@ export default function registerCodeEngineRoutes(app, { db }) {
 
   // ── GET /api/code-engine/repositories — List repositories ──────────
 
-  app.get(`${PREFIX}/repositories`, asyncHandler(async (req, res) => {
+  app.get(`${PREFIX}/repositories`, auth, asyncHandler(async (req, res) => {
     const limit = req.query.limit ? Number(req.query.limit) : undefined;
     const offset = req.query.offset ? Number(req.query.offset) : undefined;
 
@@ -69,14 +72,14 @@ export default function registerCodeEngineRoutes(app, { db }) {
 
   // ── GET /api/code-engine/repositories/:id — Repository details ─────
 
-  app.get(`${PREFIX}/repositories/:id`, asyncHandler(async (req, res) => {
+  app.get(`${PREFIX}/repositories/:id`, auth, asyncHandler(async (req, res) => {
     const repo = engine.getRepository(req.params.id);
     res.json({ ok: true, repository: repo });
   }));
 
   // ── GET /api/code-engine/patterns — Search/list patterns ───────────
 
-  app.get(`${PREFIX}/patterns`, asyncHandler(async (req, res) => {
+  app.get(`${PREFIX}/patterns`, auth, asyncHandler(async (req, res) => {
     const query = {
       category: req.query.category || undefined,
       language: req.query.language || undefined,
@@ -92,14 +95,14 @@ export default function registerCodeEngineRoutes(app, { db }) {
 
   // ── GET /api/code-engine/patterns/:id — Pattern details ────────────
 
-  app.get(`${PREFIX}/patterns/:id`, asyncHandler(async (req, res) => {
+  app.get(`${PREFIX}/patterns/:id`, auth, asyncHandler(async (req, res) => {
     const pattern = engine.getPattern(req.params.id);
     res.json({ ok: true, pattern });
   }));
 
   // ── POST /api/code-engine/compress — Compress to Mega DTU ──────────
 
-  app.post(`${PREFIX}/compress`, asyncHandler(async (req, res) => {
+  app.post(`${PREFIX}/compress`, auth, asyncHandler(async (req, res) => {
     const { topic, minPatterns, category, eliteCount } = req.body || {};
 
     if (!topic) {
@@ -117,7 +120,7 @@ export default function registerCodeEngineRoutes(app, { db }) {
 
   // ── GET /api/code-engine/megas — List Mega DTUs ────────────────────
 
-  app.get(`${PREFIX}/megas`, asyncHandler(async (req, res) => {
+  app.get(`${PREFIX}/megas`, auth, asyncHandler(async (req, res) => {
     const result = engine.listMegas({
       limit: req.query.limit ? Number(req.query.limit) : undefined,
       offset: req.query.offset ? Number(req.query.offset) : undefined,
@@ -127,14 +130,14 @@ export default function registerCodeEngineRoutes(app, { db }) {
 
   // ── GET /api/code-engine/megas/:id — Mega DTU details ──────────────
 
-  app.get(`${PREFIX}/megas/:id`, asyncHandler(async (req, res) => {
+  app.get(`${PREFIX}/megas/:id`, auth, asyncHandler(async (req, res) => {
     const mega = engine.getMega(req.params.id);
     res.json({ ok: true, mega });
   }));
 
   // ── POST /api/code-engine/generate-lens — Generate a lens ──────────
 
-  app.post(`${PREFIX}/generate-lens`, asyncHandler(async (req, res) => {
+  app.post(`${PREFIX}/generate-lens`, auth, asyncHandler(async (req, res) => {
     const { request, constraints } = req.body || {};
 
     if (!request) {
@@ -148,7 +151,7 @@ export default function registerCodeEngineRoutes(app, { db }) {
 
   // ── GET /api/code-engine/generations — List lens generations ───────
 
-  app.get(`${PREFIX}/generations`, asyncHandler(async (req, res) => {
+  app.get(`${PREFIX}/generations`, auth, asyncHandler(async (req, res) => {
     const result = engine.listGenerations({
       status: req.query.status || undefined,
       limit: req.query.limit ? Number(req.query.limit) : undefined,
@@ -159,14 +162,14 @@ export default function registerCodeEngineRoutes(app, { db }) {
 
   // ── GET /api/code-engine/generations/:id — Generation details ──────
 
-  app.get(`${PREFIX}/generations/:id`, asyncHandler(async (req, res) => {
+  app.get(`${PREFIX}/generations/:id`, auth, asyncHandler(async (req, res) => {
     const generation = engine.getGeneration(req.params.id);
     res.json({ ok: true, generation });
   }));
 
   // ── POST /api/code-engine/errors — Record a production error ───────
 
-  app.post(`${PREFIX}/errors`, asyncHandler(async (req, res) => {
+  app.post(`${PREFIX}/errors`, auth, asyncHandler(async (req, res) => {
     const { lensId, errorType, stackTrace, context } = req.body || {};
 
     if (!errorType) {
@@ -184,7 +187,7 @@ export default function registerCodeEngineRoutes(app, { db }) {
 
   // ── GET /api/code-engine/errors — List errors with filters ─────────
 
-  app.get(`${PREFIX}/errors`, asyncHandler(async (req, res) => {
+  app.get(`${PREFIX}/errors`, auth, asyncHandler(async (req, res) => {
     const result = engine.listErrors({
       lensId: req.query.lensId || undefined,
       errorType: req.query.errorType || undefined,

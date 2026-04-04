@@ -44,6 +44,15 @@ export default function createAuthRouter({
   const _regIpDaily = new Map(); // ip → { count, day }
   const MAX_REGISTRATIONS_PER_IP_PER_DAY = 3;
 
+  // Cleanup stale entries from _regIpDaily every hour to prevent memory leak
+  const _regIpCleanupInterval = setInterval(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    for (const [ip, entry] of _regIpDaily) {
+      if (entry.day !== today) _regIpDaily.delete(ip);
+    }
+  }, 60 * 60 * 1000);
+  _regIpCleanupInterval.unref();
+
   router.post("/register", authRateLimitMiddleware, validate("userRegister"), (req, res) => {
     const { username, email, password } = req.validated || req.body;
 

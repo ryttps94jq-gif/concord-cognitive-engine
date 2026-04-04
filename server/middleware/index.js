@@ -97,13 +97,8 @@ export default function configureMiddleware(app, deps) {
     }));
   }
 
-  // ---- Expose CSP Nonce to Frontend ----
-  app.use((req, res, next) => {
-    if (res.locals.cspNonce) {
-      res.setHeader('X-CSP-Nonce', res.locals.cspNonce);
-    }
-    next();
-  });
+  // CSP nonce is available via res.locals.cspNonce for template rendering.
+  // It must NOT be exposed in a response header (that would defeat CSP).
 
   // ---- Compression ----
   if (compression) app.use(compression());

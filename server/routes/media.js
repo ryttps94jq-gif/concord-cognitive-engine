@@ -130,8 +130,8 @@ export default function createMediaRouter({ STATE }) {
    *   - data: string (base64-encoded file data, optional)
    */
   router.post("/upload", asyncHandler(async (req, res) => {
-    const authorId = req.user?.id || req.body.authorId;
-    if (!authorId) throw new ValidationError("authorId is required");
+    const authorId = req.user?.id;
+    if (!authorId) return res.status(401).json({ ok: false, error: "Authentication required" });
 
     const {
       title,

@@ -37990,8 +37990,8 @@ app.get("/api/admin/logs/stream", requireAuth(), requireRole("owner"), asyncHand
 
 // ---- Admin: SSL Status Endpoint ----
 app.get("/api/admin/ssl/status", requireAuth(), requireRole("owner"), asyncHandler(async (_req, res) => {
-  const { exec } = await import("child_process");
-  exec('certbot certificates 2>/dev/null', (err, stdout) => {
+  const { execFile } = await import("child_process");
+  execFile('certbot', ['certificates'], (err, stdout) => {
     const expiryMatch = stdout?.match(/Expiry Date: (.+?) /);
     const expiry = expiryMatch ? new Date(expiryMatch[1]) : null;
     const daysRemaining = expiry ? Math.round((expiry.getTime() - Date.now()) / 86400000) : null;
@@ -38006,9 +38006,9 @@ app.get("/api/admin/ssl/status", requireAuth(), requireRole("owner"), asyncHandl
 
 // ---- Admin: Repair Build Endpoint ----
 app.post("/api/admin/repair-build", requireAuth(), requireRole("owner"), asyncHandler(async (_req, res) => {
-  const { exec } = await import("child_process");
+  const { execFile } = await import("child_process");
   res.json({ ok: true, message: 'Repair cortex started' });
-  exec('bash server/scripts/repair-cortex.sh', (err, stdout, stderr) => {
+  execFile('bash', ['server/scripts/repair-cortex.sh'], (err, stdout, stderr) => {
     const success = !err;
     structuredLog(success ? "info" : "warn", "repair_cortex_result", {
       success, output: String(stdout).slice(-2000), stderr: String(stderr).slice(-500),
