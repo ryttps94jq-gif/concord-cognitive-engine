@@ -66,10 +66,20 @@ export function PersonalAgentPanel({ socket, onAction }: PersonalAgentPanelProps
 
   return (
     <div className="space-y-3">
-      <h3 className="text-sm font-medium text-zinc-400 flex items-center gap-2">
-        <Bot className="w-4 h-4 text-purple-400" />
-        Your Agent
-      </h3>
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-medium text-zinc-400 flex items-center gap-2">
+          <Bot className="w-4 h-4 text-purple-400" />
+          Your Agent
+        </h3>
+        <button
+          onClick={handleTick}
+          disabled={ticking}
+          className="p-1 text-zinc-500 hover:text-purple-400 transition-colors"
+          title="Refresh insights"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${ticking ? 'animate-spin' : ''}`} />
+        </button>
+      </div>
       {insights.map((insight, i) => (
         <div
           key={i}

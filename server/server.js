@@ -11832,6 +11832,39 @@ setTimeout(() => {
   });
 }, 8000);
 
+// ── Artifact Garbage Collection Timer (weekly) ──────────────────────────
+// Starts after a short delay so STATE and db are fully ready
+setTimeout(() => {
+  try {
+    const { initGarbageCollectionTimer: _initGC } = await import("./lib/artifact-gc.js");
+    _initGC(STATE, db);
+    structuredLog("info", "artifact_gc_timer_started", {});
+  } catch (e) {
+    structuredLog("warn", "artifact_gc_timer_init_failed", { error: String(e?.message || e) });
+  }
+}, 12000);
+
+// ── LLM Fallback Initialization ─────────────────────────────────────────
+// Wire fallback layers into the LLM fallback chain
+setTimeout(async () => {
+  try {
+    const fallback = await import("./lib/llm-fallback.js");
+    // Wire semantic cache if available
+    try {
+      const semCache = await import("./lib/semantic-cache.js");
+      if (semCache) fallback.setSemanticCache(semCache);
+    } catch (_e) { /* semantic cache not available */ }
+    // Wire macro cache if available
+    try {
+      const macroCache = await import("./lib/macro-response-cache.js");
+      if (macroCache) fallback.setMacroCache(macroCache);
+    } catch (_e) { /* macro cache not available */ }
+    structuredLog("info", "llm_fallback_initialized", {});
+  } catch (e) {
+    structuredLog("warn", "llm_fallback_init_failed", { error: String(e?.message || e) });
+  }
+}, 5000);
+
 // ── Semantic Intelligence Layer Initialization ────────────────────────────
 // Initialize after brains come online (embeddings use Ollama)
 setTimeout(async () => {
