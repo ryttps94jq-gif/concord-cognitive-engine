@@ -57,6 +57,7 @@ import "./lib/validators/finance-validator.js";
 import "./lib/validators/healthcare-validator.js";
 import "./lib/validators/legal-validator.js";
 import "./lib/validators/music-validator.js";
+import { runIntegrityCheck } from "./lib/integrity-check.js";
 
 // ---- Route modules (ESM) ----
 import registerSystemRoutes from "./routes/system.js";
@@ -27015,6 +27016,36 @@ app.get("/api/admin/governance-rejections", requireOwner, asyncHandler(async (re
   res.json({ ok: true, rejections, count: rejections.length });
 }));
 
+// Admin integrity check endpoint
+app.get("/api/admin/integrity", requireOwner, asyncHandler(async (req, res) => {
+  const runFresh = req.query.run === "true";
+  let results = STATE._lastIntegrityCheck || null;
+
+  if (runFresh) {
+    try {
+      results = runIntegrityCheck(STATE, log, { fix: true, verbose: true });
+      STATE._lastIntegrityCheck = { ...results, timestamp: Date.now() };
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: "integrity_check_failed", detail: String(e?.message || e) });
+    }
+  }
+
+  if (!results) {
+    return res.json({ ok: true, message: "No integrity check has run yet. Use ?run=true to trigger one." });
+  }
+
+  res.json({
+    ok: true,
+    lastRun: results.timestamp ? new Date(results.timestamp).toISOString() : null,
+    economy: results.economy || null,
+    lineage: results.lineage || null,
+    social: results.social || null,
+    fixes: results.fixes || 0,
+    errors: results.errors || 0,
+    summary: results.summary || null,
+  });
+}));
+
 // Lens action registry for domain-specific engines
 const LENS_ACTIONS = new Map(); // `${domain}.${action}` → async (ctx, artifact, params) => result
 function registerLensAction(domain, action, handler) {
@@ -43823,6 +43854,20 @@ function recoverPendingTransactions() {
 recoverPendingTransactions();
 globalThis._txLog = { begin: beginTransaction, complete: completeTransaction, rollback: rollbackTransaction };
 
+// ── Startup Integrity Check ──────────────────────────────────────────────────
+try {
+  const integrityResults = runIntegrityCheck(STATE, log, { fix: true, verbose: true });
+  STATE._lastIntegrityCheck = { ...integrityResults, timestamp: Date.now() };
+  structuredLog("info", "startup_integrity_check", {
+    economyOk: integrityResults.economy?.ok,
+    lineageOk: integrityResults.lineage?.ok,
+    socialOk: integrityResults.social?.ok,
+    fixes: integrityResults.fixes || 0,
+  });
+} catch (e) {
+  structuredLog("warn", "startup_integrity_check_failed", { error: String(e?.message || e) });
+}
+
 const SHOULD_LISTEN = (String(process.env.CONCORD_NO_LISTEN || "").toLowerCase() !== "true") && (String(process.env.NODE_ENV || "").toLowerCase() !== "test");
 
 const server = SHOULD_LISTEN ? app.listen(PORT, () => {
@@ -43857,6 +43902,23 @@ try {
 } catch (e) {
   structuredLog("warn", "auto_promotion_setup_failed", { error: String(e?.message || e) });
 }
+
+// ── Periodic Integrity Check (every 6 hours) ────────────────────────────────
+const INTEGRITY_INTERVAL = 6 * 60 * 60 * 1000;
+setInterval(() => {
+  try {
+    const results = runIntegrityCheck(STATE, log, { fix: true, verbose: false });
+    STATE._lastIntegrityCheck = { ...results, timestamp: Date.now() };
+    structuredLog("info", "periodic_integrity_check", {
+      economyOk: results.economy?.ok,
+      lineageOk: results.lineage?.ok,
+      socialOk: results.social?.ok,
+      fixes: results.fixes || 0,
+    });
+  } catch (e) {
+    structuredLog("warn", "periodic_integrity_check_failed", { error: String(e?.message || e) });
+  }
+}, INTEGRITY_INTERVAL).unref();
 
 // NOTE: Primary SIGINT/SIGTERM handlers are registered above via gracefulShutdown().
 // Register cleanup for timers as a shutdown callback instead of a duplicate handler.

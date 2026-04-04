@@ -605,7 +605,7 @@ export function exhibit(workId) {
       }
     } catch (_e) { logger.debug('emergent:creative-generation', 'silent', { error: _e?.message }); }
     return { ok: true, exhibitedAt: work.exhibitedAt };
-  } catch { return { ok: false, error: "exhibit_failed" }; }
+  } catch (err) { logger.error('emergent:creative-generation', 'exhibit failed', { workId, error: err?.message }); return { ok: false, error: "exhibit_failed" }; }
 }
 
 /**
@@ -617,7 +617,7 @@ export function getExhibition() {
   try {
     const works = Array.from(_exhibition.values()).sort((a, b) => new Date(b.exhibitedAt).getTime() - new Date(a.exhibitedAt).getTime());
     return { ok: true, works, count: works.length };
-  } catch { return { ok: false, error: "get_exhibition_failed", works: [], count: 0 }; }
+  } catch (err) { logger.warn('emergent:creative-generation', 'getExhibition failed', { error: err?.message }); return { ok: false, error: "get_exhibition_failed", works: [], count: 0 }; }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -637,7 +637,7 @@ function computeStructureFingerprint(structure, mode) {
       default: break;
     }
     return `${mode}:${keys}:${vals.join(";")}`;
-  } catch { return `${mode}:unknown`; }
+  } catch (err) { logger.debug('emergent:creative-generation', 'computeStructureFingerprint failed', { mode, error: err?.message }); return `${mode}:unknown`; }
 }
 
 /**
@@ -676,7 +676,7 @@ export function discoverTechnique(workId) {
     _techniques.set(techniqueId, technique);
     _metrics.totalTechniques++;
     return { ok: true, discovered: true, technique };
-  } catch { return { ok: false, error: "discover_technique_failed" }; }
+  } catch (err) { logger.warn('emergent:creative-generation', 'discoverTechnique failed', { workId, error: err?.message }); return { ok: false, error: "discover_technique_failed" }; }
 }
 
 /**
@@ -686,7 +686,7 @@ export function discoverTechnique(workId) {
  * @returns {object|null}
  */
 export function getTechnique(techniqueId) {
-  try { return _techniques.get(techniqueId) || null; } catch { return null; }
+  try { return _techniques.get(techniqueId) || null; } catch (err) { logger.debug('emergent:creative-generation', 'getTechnique failed', { techniqueId, error: err?.message }); return null; }
 }
 
 /**
@@ -702,7 +702,7 @@ export function listTechniques(mode) {
     if (mode && ALL_MODES.includes(mode)) results = results.filter(t => t.mode === mode);
     results.sort((a, b) => b.avgScore - a.avgScore);
     return { ok: true, techniques: results, count: results.length };
-  } catch { return { ok: false, error: "list_techniques_failed", techniques: [], count: 0 }; }
+  } catch (err) { logger.warn('emergent:creative-generation', 'listTechniques failed', { mode, error: err?.message }); return { ok: false, error: "list_techniques_failed", techniques: [], count: 0 }; }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -744,7 +744,7 @@ export function getCreativeProfile(entityId) {
         techniques, modeBreakdown, works,
       },
     };
-  } catch { return { ok: false, error: "get_profile_failed" }; }
+  } catch (err) { logger.warn('emergent:creative-generation', 'getCreativeProfile failed', { entityId, error: err?.message }); return { ok: false, error: "get_profile_failed" }; }
 }
 
 /**
@@ -758,7 +758,7 @@ export function getMasterworks() {
     const masterworks = Array.from(_works.values()).filter(w => w.tags.includes("masterwork"));
     masterworks.sort((a, b) => b.avgReception - a.avgReception);
     return { ok: true, masterworks, count: masterworks.length };
-  } catch { return { ok: false, error: "get_masterworks_failed", masterworks: [], count: 0 }; }
+  } catch (err) { logger.warn('emergent:creative-generation', 'getMasterworks failed', { error: err?.message }); return { ok: false, error: "get_masterworks_failed", masterworks: [], count: 0 }; }
 }
 
 /**
@@ -782,5 +782,5 @@ export function getCreativeMetrics() {
         creativeModes: ALL_MODES,
       },
     };
-  } catch { return { ok: false, error: "get_metrics_failed" }; }
+  } catch (err) { logger.warn('emergent:creative-generation', 'getCreativeMetrics failed', { error: err?.message }); return { ok: false, error: "get_metrics_failed" }; }
 }
