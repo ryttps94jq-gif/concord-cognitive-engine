@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
@@ -208,7 +209,7 @@ export default function StudioLensPage() {
   const [zoomLevel, setZoomLevel] = useState(1);
   const [showNewProject, setShowNewProject] = useState(false);
   const [showAddTrack, setShowAddTrack] = useState(false);
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   // New project form
   const [newTitle, setNewTitle] = useState('');
@@ -1313,6 +1314,7 @@ export default function StudioLensPage() {
       {/* Realtime Data */}
       {realtimeData && (
         <RealtimeDataPanel
+      <UniversalActions domain="studio" artifactId={null} compact />
           domain="studio"
           data={realtimeData}
           isLive={isLive}

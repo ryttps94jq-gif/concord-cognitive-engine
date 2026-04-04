@@ -49,7 +49,7 @@ export default function EnergyLensPage() {
   useLensNav('energy');
 
   const [activeTab, setActiveTab] = useState<'assets' | 'consumption' | 'mix'>('assets');
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
   const { latestData: realtimeData, isLive, lastUpdated, insights } = useRealtimeLens('energy');
 
   const { items: assetItems, isLoading, isError, error, refetch, create, update, remove } = useLensData<Record<string, unknown>>('energy', 'asset', { seed: [] });
@@ -182,7 +182,7 @@ export default function EnergyLensPage() {
       )}
 
       {/* Consumption vs Production Gauge */}
-      {assets.length > 0 && (
+      {assets.length > 0 ? (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="panel p-4">
           <h3 className="text-sm font-semibold mb-3 flex items-center gap-2"><BarChart3 className="w-4 h-4 text-neon-cyan" /> Production Efficiency</h3>
           <div className="flex items-center gap-4">
@@ -212,6 +212,10 @@ export default function EnergyLensPage() {
             </div>
           )}
         </motion.div>
+      ) : (
+        <div className="text-center py-6 text-gray-500 text-sm border border-dashed border-white/10 rounded-lg">
+          <p>No energy assets tracked yet. Add assets to monitor energy production.</p>
+        </div>
       )}
 
       {/* Tabs */}
@@ -332,7 +336,7 @@ export default function EnergyLensPage() {
 
       {/* Lens Features */}
       <div className="border-t border-white/10">
-        <button onClick={() => setShowFeatures(!showFeatures)} className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors">
+        <button onClick={() => setShowFeatures(!showFeatures)} className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg">
           <span className="flex items-center gap-2"><Layers className="w-4 h-4" /> Lens Features & Capabilities</span>
           <ChevronDown className={`w-4 h-4 transition-transform ${showFeatures ? 'rotate-180' : ''}`} />
         </button>

@@ -14,6 +14,7 @@ import {
   BarChart3, Sparkles, RotateCcw, Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -56,7 +57,7 @@ export default function AnimationPage() {
 
   const [tab, setTab] = useState<AnimTab>('projects');
   const [searchQuery, setSearchQuery] = useState('');
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedProject, setSelectedProject] = useState<AnimProject | null>(null);
 
@@ -139,6 +140,7 @@ export default function AnimationPage() {
 
         {showFeatures && <LensFeaturePanel lensId="animation" />}
         <RealtimeDataPanel data={realtimeData} insights={realtimeInsights} />
+      <UniversalActions domain="animation" artifactId={null} compact />
 
         {/* Stat Cards — keyframe timeline feel */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

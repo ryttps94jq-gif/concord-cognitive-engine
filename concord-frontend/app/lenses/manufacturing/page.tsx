@@ -282,7 +282,7 @@ export default function ManufacturingLensPage() {
   useLensNav('manufacturing');
   const { latestData: realtimeData, isLive, lastUpdated, insights } = useRealtimeLens('manufacturing');
 
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
   const [mode, setMode] = useState<ModeTab>('dashboard');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -1005,7 +1005,7 @@ export default function ManufacturingLensPage() {
             {isDetail && (
               <div className="space-y-4 mt-4 pt-4 border-t border-lattice-border">
                 {/* Measurements vs Tolerances */}
-                {measurements.length > 0 && (
+                {measurements.length > 0 ? (
                   <div>
                     <h4 className="text-sm font-semibold text-gray-300 mb-2">Measurements vs Tolerances</h4>
                     <div className="overflow-x-auto">
@@ -1038,6 +1038,10 @@ export default function ManufacturingLensPage() {
                         </tbody>
                       </table>
                     </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-6 text-gray-500 text-sm border border-dashed border-white/10 rounded-lg">
+                    <p>No quality measurements yet. Add measurements to track manufacturing quality.</p>
                   </div>
                 )}
 
@@ -1494,7 +1498,7 @@ export default function ManufacturingLensPage() {
       <RealtimeDataPanel domain="manufacturing" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <DTUExportButton domain="manufacturing" data={{}} compact />
       {/* Mode Tabs */}
-      <nav className="flex items-center gap-1 border-b border-lattice-border pb-3 overflow-x-auto">
+      <nav className="flex items-center gap-1 border-b border-lattice-border pb-3 flex-wrap">
         {MODE_TABS.map(tab => {
           const Icon = tab.icon;
           return (
@@ -1646,7 +1650,7 @@ export default function ManufacturingLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

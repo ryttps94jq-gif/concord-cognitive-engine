@@ -15,6 +15,7 @@ import {
   Activity, ArrowUp,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -478,7 +479,7 @@ export default function GameLensPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 overflow-x-auto pb-2 border-b border-lattice-border scrollbar-thin">
+      <div className="flex gap-1 flex-wrap pb-2 border-b border-lattice-border scrollbar-thin">
         {TABS.map((tab) => {
           const Icon = tab.icon;
           return (
@@ -1026,6 +1027,7 @@ export default function GameLensPage() {
       {/* Real-time Data Panel */}
       {realtimeData && (
         <RealtimeDataPanel
+      <UniversalActions domain="game" artifactId={null} compact />
           domain="game"
           data={realtimeData}
           isLive={isLive}

@@ -236,7 +236,7 @@ export default function AnalyticsPage() {
             </motion.div>
 
             {/* Revenue per lens */}
-            {lensBreakdown.length > 0 && (
+            {lensBreakdown.length > 0 ? (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -272,10 +272,14 @@ export default function AnalyticsPage() {
                   })}
                 </div>
               </motion.div>
+            ) : (
+              <div className="text-center py-6 text-gray-500 text-sm border border-dashed border-white/10 rounded-lg">
+                <p>No lens analytics data yet. Lens usage breakdown will appear here.</p>
+              </div>
             )}
 
             {/* Recent transactions */}
-            {txData?.transactions && txData.transactions.length > 0 && (
+            {txData?.transactions && txData.transactions.length > 0 ? (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -310,6 +314,10 @@ export default function AnalyticsPage() {
                   ))}
                 </div>
               </motion.div>
+            ) : (
+              <div className="text-center py-6 text-gray-500 text-sm border border-dashed border-white/10 rounded-lg">
+                <p>No transaction data yet. Transaction history will appear here.</p>
+              </div>
             )}
           </div>
         )}

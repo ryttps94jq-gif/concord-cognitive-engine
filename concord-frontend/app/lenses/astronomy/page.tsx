@@ -110,7 +110,7 @@ export default function AstronomyLensPage() {
   useLensNav('astronomy');
 
   const [activeTab, setActiveTab] = useState<'catalog' | 'observations' | 'planning'>('catalog');
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [groupByConstellation, setGroupByConstellation] = useState(false);
   const { latestData: realtimeData, isLive, lastUpdated, insights } = useRealtimeLens('astronomy');
@@ -315,7 +315,7 @@ export default function AstronomyLensPage() {
         <div className="panel p-4">
           <h3 className="font-semibold mb-3 flex items-center gap-2"><Target className="w-4 h-4 text-indigo-400" /> Session Planner</h3>
           <p className="text-gray-500 text-sm text-center py-4">Select objects from your catalog to plan an observation session. Best results with clear skies and low light pollution.</p>
-          {objects.length > 0 && (
+          {objects.length > 0 ? (
             <div className="mt-4 space-y-2">
               <p className="text-sm text-gray-400 mb-3">
                 Suggested targets — sorted by visibility tonight:
@@ -353,13 +353,17 @@ export default function AstronomyLensPage() {
                   );
                 })}
             </div>
+          ) : (
+            <div className="text-center py-6 text-gray-500 text-sm border border-dashed border-white/10 rounded-lg">
+              <p>No celestial objects cataloged yet. Add objects to see your observation log.</p>
+            </div>
           )}
         </div>
       )}
 
       {/* Lens Features */}
       <div className="border-t border-white/10">
-        <button onClick={() => setShowFeatures(!showFeatures)} className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors">
+        <button onClick={() => setShowFeatures(!showFeatures)} className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg">
           <span className="flex items-center gap-2"><Layers className="w-4 h-4" /> Lens Features & Capabilities</span>
           <ChevronDown className={`w-4 h-4 transition-transform ${showFeatures ? 'rotate-180' : ''}`} />
         </button>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useMutation } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
@@ -88,7 +89,7 @@ export default function AgentsLensPage() {
   const [newModel, setNewModel] = useState('claude-sonnet-4-5-20250929');
   const [newTemp, setNewTemp] = useState(0.3);
   const [newMaxTokens, setNewMaxTokens] = useState(4096);
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   // Persist agents via lens data (auto-seeds on first use)
   const { items: lensAgentItems, isLoading, isError, error, isSeeding: _isSeeding, refetch, create: createLensAgent, update: updateLensAgent, remove: _removeLensAgent } = useLensData<Record<string, unknown>>('agents', 'agent', {
@@ -822,6 +823,7 @@ export default function AgentsLensPage() {
       {/* Real-time Data Panel */}
       {realtimeData && (
         <RealtimeDataPanel
+      <UniversalActions domain="agents" artifactId={null} compact />
           domain="agents"
           data={realtimeData}
           isLive={isLive}
@@ -840,7 +842,7 @@ export default function AgentsLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useLensNav } from '@/hooks/useLensNav';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 import { motion } from 'framer-motion';
 import {
   Map, Layers, Radio, AlertTriangle, RefreshCw,
@@ -35,7 +36,7 @@ export default function AtlasLensPage() {
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('atlas');
 
   const [tab, setTab] = useState<Tab>('terrain');
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
   const [queryLat, setQueryLat] = useState('');
   const [queryLng, setQueryLng] = useState('');
 
@@ -276,6 +277,7 @@ export default function AtlasLensPage() {
       {/* Real-time Data Panel */}
       {realtimeData && (
         <RealtimeDataPanel
+      <UniversalActions domain="atlas" artifactId={null} compact />
           domain="atlas"
           data={realtimeData}
           isLive={isLive}
@@ -289,7 +291,7 @@ export default function AtlasLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

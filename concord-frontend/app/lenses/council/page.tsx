@@ -8,6 +8,7 @@ import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { api, apiHelpers } from '@/lib/api/client';
 import { ds } from '@/lib/design-system';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
 import {
@@ -1427,7 +1428,7 @@ export default function CouncilLensPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 border-b border-lattice-border overflow-x-auto">
+      <div className="flex items-center gap-1 border-b border-lattice-border flex-wrap">
         {TABS.map(tab => {
           const Icon = tab.icon;
           return (
@@ -1615,6 +1616,7 @@ export default function CouncilLensPage() {
       {/* Real-time Data Panel */}
       {realtimeData && (
         <RealtimeDataPanel
+      <UniversalActions domain="council" artifactId={null} compact />
           domain="council"
           data={realtimeData}
           isLive={isLive}

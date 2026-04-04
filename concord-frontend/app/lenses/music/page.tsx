@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useMusicStore } from '@/lib/music/store';
 import { getPlayer } from '@/lib/music/player';
 import type {
@@ -517,7 +518,7 @@ export default function MusicLensPage() {
                   <h2 className="text-lg font-semibold flex items-center gap-2 mb-3">
                     <Users className="w-5 h-5 text-neon-pink" /> Artists
                   </h2>
-                  <div className="flex gap-4 overflow-x-auto pb-2">
+                  <div className="flex gap-4 flex-wrap pb-2">
                     {artists.map(artist => (
                       <button
                         key={artist.id}
@@ -1336,6 +1337,7 @@ export default function MusicLensPage() {
       {isLive && realtimeData && (
         <div className="fixed right-4 bottom-24 z-40">
           <RealtimeDataPanel
+      <UniversalActions domain="music" artifactId={null} compact />
             domain="music"
             data={realtimeData}
             insights={realtimeInsights}

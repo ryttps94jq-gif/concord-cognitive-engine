@@ -12,6 +12,7 @@ import {
   Hash, Music, Layers, Moon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -251,7 +252,7 @@ export default function PoetryPage() {
 
   const [tab, setTab] = useState<PoetryTab>('collection');
   const [searchQuery, setSearchQuery] = useState('');
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
   const [formFilter, setFormFilter] = useState<PoemForm | null>(null);
   const [readingMode, setReadingMode] = useState(false);
   const [showAnalysis, setShowAnalysis] = useState(true);
@@ -374,6 +375,7 @@ export default function PoetryPage() {
 
         {showFeatures && <LensFeaturePanel lensId="poetry" />}
         <RealtimeDataPanel data={realtimeData} insights={realtimeInsights} />
+      <UniversalActions domain="poetry" artifactId={null} compact />
 
         {/* Tabs */}
         <div className="flex gap-1 bg-white/5 p-1 rounded-lg border border-white/10">

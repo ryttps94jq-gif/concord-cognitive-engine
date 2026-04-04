@@ -194,7 +194,7 @@ export default function RealEstateLensPage() {
   useLensNav('realestate');
   const { latestData: realtimeData, isLive, lastUpdated, insights } = useRealtimeLens('realestate');
 
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
   const [activeTab, setActiveTab] = useState<ModeTab>('Dashboard');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -496,7 +496,7 @@ export default function RealEstateLensPage() {
   const renderPipelineStage = (current: string) => {
     const idx = TRANSACTION_PIPELINE.indexOf(current);
     return (
-      <div className="flex items-center gap-1 overflow-x-auto py-2">
+      <div className="flex items-center gap-1 flex-wrap py-2">
         {TRANSACTION_PIPELINE.map((stage, i) => {
           const isActive = i === idx;
           const isDone = i < idx;
@@ -595,7 +595,7 @@ export default function RealEstateLensPage() {
       <RealtimeDataPanel domain="realestate" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <DTUExportButton domain="realestate" data={{}} compact />
       {/* Mode Tabs */}
-      <nav className="flex items-center gap-1 border-b border-lattice-border pb-3 overflow-x-auto">
+      <nav className="flex items-center gap-1 border-b border-lattice-border pb-3 flex-wrap">
         {MODE_TABS.map(tab => (
           <button
             key={tab.id}
@@ -1141,7 +1141,7 @@ export default function RealEstateLensPage() {
                         </div>
                       </div>
 
-                      {comps.length > 0 && (
+                      {comps.length > 0 ? (
                         <div className="overflow-x-auto">
                           <table className="w-full text-sm">
                             <thead>
@@ -1183,6 +1183,10 @@ export default function RealEstateLensPage() {
                               </tr>
                             </tfoot>
                           </table>
+                        </div>
+                      ) : (
+                        <div className="text-center py-6 text-gray-500 text-sm border border-dashed border-white/10 rounded-lg">
+                          <p>No comparable properties yet. Add comps to see market analysis.</p>
                         </div>
                       )}
 
@@ -1904,7 +1908,7 @@ export default function RealEstateLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

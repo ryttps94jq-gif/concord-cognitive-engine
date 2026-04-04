@@ -101,7 +101,7 @@ export default function MetacognitionLensPage() {
   const [predictionDomain, setPredictionDomain] = useState('');
   const [introspectFocus, setIntrospectFocus] = useState('');
   const [expandedPrediction, setExpandedPrediction] = useState<string | null>(null);
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   // --- Lens Bridge ---
   const bridge = useLensBridge('metacognition', 'snapshot');
@@ -910,7 +910,7 @@ export default function MetacognitionLensPage() {
           </div>
 
           {/* Confidence vs Accuracy Scatter Display */}
-          {predictions.length > 0 && (
+          {predictions.length > 0 ? (
             <div className="panel p-4">
               <h2 className="font-semibold mb-4 flex items-center gap-2">
                 <BarChart3 className="w-4 h-4 text-neon-purple" />
@@ -992,6 +992,10 @@ export default function MetacognitionLensPage() {
                   Ideal calibration
                 </span>
               </div>
+            </div>
+          ) : (
+            <div className="text-center py-6 text-gray-500 text-sm border border-dashed border-white/10 rounded-lg">
+              <p>No predictions yet. Create cognitive predictions to see pattern analysis here.</p>
             </div>
           )}
 
@@ -1323,7 +1327,7 @@ export default function MetacognitionLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

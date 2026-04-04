@@ -101,7 +101,7 @@ export default function DesertLensPage() {
 
   const [activeMode, setActiveMode] = useState<ModeTab>('Dashboard');
   const [searchQuery, setSearchQuery] = useState('');
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   const currentType = getTypeForTab(activeMode);
   const { items, isLoading, isError, error, refetch, create, remove } =
@@ -164,7 +164,7 @@ export default function DesertLensPage() {
         </div>
       </header>
 
-      <div className="flex gap-1 bg-zinc-900 rounded-lg p-1 overflow-x-auto">
+      <div className="flex gap-1 bg-zinc-900 rounded-lg p-1 flex-wrap">
         {MODE_TABS.map(({ key, label, icon: Icon }) => (
           <button key={key} onClick={() => setActiveMode(key)}
             className={cn('flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-colors',
@@ -264,7 +264,7 @@ export default function DesertLensPage() {
 
       <div className="border-t border-white/10">
         <button onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors">
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg">
           <span className="flex items-center gap-2"><Layers className="w-4 h-4" /> Lens Features</span>
           <ChevronDown className={cn('w-4 h-4 transition-transform', showFeatures && 'rotate-180')} />
         </button>

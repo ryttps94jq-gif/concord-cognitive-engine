@@ -1,6 +1,7 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
@@ -1143,7 +1144,7 @@ export default function WhiteboardLensPage() {
 
                 {/* Timeline */}
                 <div className="mt-4">
-                  <div className="flex items-end gap-3 mb-6 overflow-x-auto pb-4">
+                  <div className="flex items-end gap-3 mb-6 flex-wrap pb-4">
                     {arrangement.map((sec, idx) => (
                       <motion.div key={sec.id} layout draggable
                         onDragStart={() => handleArrDragStart(idx)}
@@ -1191,7 +1192,7 @@ export default function WhiteboardLensPage() {
                   </div>
 
                   {/* Bar ruler */}
-                  <div className="flex items-center gap-0 overflow-x-auto">
+                  <div className="flex items-center gap-0 flex-wrap">
                     {arrangement.map(sec => (
                       <div key={`ruler_${sec.id}`} className="flex-shrink-0 flex" style={{ width: Math.max(sec.bars * 20, 80) + 12 }}>
                         {Array.from({ length: sec.bars }, (_, i) => (
@@ -1344,6 +1345,7 @@ export default function WhiteboardLensPage() {
       {/* Real-time Data Panel */}
       {realtimeData && (
         <RealtimeDataPanel
+      <UniversalActions domain="whiteboard" artifactId={null} compact />
           domain="whiteboard"
           data={realtimeData}
           isLive={isLive}

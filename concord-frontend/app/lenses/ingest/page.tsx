@@ -40,7 +40,7 @@ export default function IngestLensPage() {
   const [domain, setDomain] = useState('');
   const [showConfig, setShowConfig] = useState(false);
   const [dragOver, setDragOver] = useState(false);
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   // Fetch past ingestions
   const { data: historyData, isLoading, isError, error, refetch } = useQuery({
@@ -176,7 +176,7 @@ export default function IngestLensPage() {
           <Gauge className="w-4 h-4 text-neon-cyan" />
           Ingestion Pipeline Status
         </h3>
-        <div className="flex items-center gap-2 overflow-x-auto py-2">
+        <div className="flex items-center gap-2 flex-wrap py-2">
           {[
             { stage: 'Queued', count: 0, color: 'bg-gray-500', textColor: 'text-gray-400' },
             { stage: 'Processing', count: ingestText.isPending ? 1 : 0, color: 'bg-neon-cyan', textColor: 'text-neon-cyan' },
@@ -482,7 +482,7 @@ export default function IngestLensPage() {
             <Gauge className="w-4 h-4 text-neon-cyan" />
             Pipeline Stages
           </h3>
-          <div className="flex items-center gap-1 overflow-x-auto py-2">
+          <div className="flex items-center gap-1 flex-wrap py-2">
             {[
               { name: 'Upload', count: 0, color: 'bg-neon-cyan' },
               { name: 'Parse', count: 2, color: 'bg-neon-purple' },
@@ -514,7 +514,7 @@ export default function IngestLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

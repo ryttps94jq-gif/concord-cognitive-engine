@@ -169,7 +169,7 @@ export default function HouseholdLensPage() {
   const [statusFilter, setStatusFilter] = useState<Status | 'all'>('all');
   const [showEditor, setShowEditor] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
   const [calendarView, setCalendarView] = useState<'week' | 'month'>('week');
   const [calendarOffset, setCalendarOffset] = useState(0);
   const [mealWeekOffset, setMealWeekOffset] = useState(0);
@@ -656,7 +656,7 @@ export default function HouseholdLensPage() {
         </div>
 
         {/* Fairness Meter */}
-        {Object.keys(chorePointsByPerson).length > 0 && (
+        {Object.keys(chorePointsByPerson).length > 0 ? (
           <div className={ds.panel}>
             <h3 className={cn(ds.heading3, 'mb-4 flex items-center gap-2')}><Award className="w-5 h-5 text-yellow-400" /> Fairness Meter</h3>
             <div className="space-y-4">
@@ -683,6 +683,10 @@ export default function HouseholdLensPage() {
                 </div>
               ))}
             </div>
+          </div>
+        ) : (
+          <div className="text-center py-6 text-gray-500 text-sm border border-dashed border-white/10 rounded-lg">
+            <p>No chore assignments yet. Assign chores to see point distribution.</p>
           </div>
         )}
 
@@ -1243,7 +1247,7 @@ export default function HouseholdLensPage() {
             })}
 
             {/* Pet medical info */}
-            {petItems.length > 0 && (
+            {petItems.length > 0 ? (
               <>
                 <h3 className={cn(ds.heading3, 'flex items-center gap-2 mt-6')}><Dog className="w-5 h-5 text-orange-400" /> Pet Info</h3>
                 {petItems.map(p => {
@@ -1274,6 +1278,10 @@ export default function HouseholdLensPage() {
                   );
                 })}
               </>
+            ) : (
+              <div className="text-center py-6 text-gray-500 text-sm border border-dashed border-white/10 rounded-lg">
+                <p>No pets registered yet. Add your pets to track care schedules.</p>
+              </div>
             )}
           </div>
         )}
@@ -1598,7 +1606,7 @@ export default function HouseholdLensPage() {
       <RealtimeDataPanel domain="household" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <DTUExportButton domain="household" data={{}} compact />
       {/* Mode tabs */}
-      <nav className="flex items-center gap-1 border-b border-lattice-border pb-4 overflow-x-auto">
+      <nav className="flex items-center gap-1 border-b border-lattice-border pb-4 flex-wrap">
         {MODE_TABS.map(tab => {
           const Icon = tab.icon;
           return (
@@ -1699,7 +1707,7 @@ export default function HouseholdLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

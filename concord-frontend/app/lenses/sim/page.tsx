@@ -19,6 +19,7 @@ import {
 import { ErrorState } from '@/components/common/EmptyState';
 import { useUIStore } from '@/store/ui';
 import { ds } from '@/lib/design-system';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 import { cn } from '@/lib/utils';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -842,7 +843,7 @@ export default function SimLensPage() {
       </div>
 
       {/* ── Tab Navigation ────────────────────────────────────────────────── */}
-      <div className="flex gap-1 border-b border-lattice-border overflow-x-auto pb-px">
+      <div className="flex gap-1 border-b border-lattice-border flex-wrap pb-px">
         {TAB_CONFIG.map(tab => (
           <button
             key={tab.key}
@@ -1242,6 +1243,7 @@ export default function SimLensPage() {
       )}
 
       <RealtimeDataPanel data={realtimeInsights} />
+      <UniversalActions domain="sim" artifactId={null} compact />
 
       {/* ── Import Modal ──────────────────────────────────────────────────── */}
       {showImportModal && (
@@ -1363,7 +1365,7 @@ function ScenariosTab({
       ))}
 
       {/* Backend simulations (legacy) */}
-      {backendSims.length > 0 && (
+      {backendSims.length > 0 ? (
         <>
           <div className="flex items-center gap-2 mt-6 mb-2">
             <div className="h-px flex-1 bg-lattice-border" />
@@ -1393,6 +1395,10 @@ function ScenariosTab({
             </details>
           ))}
         </>
+      ) : (
+        <div className="text-center py-6 text-gray-500 text-sm border border-dashed border-white/10 rounded-lg">
+          <p>No backend simulations found. Create a simulation to get started.</p>
+        </div>
       )}
     </div>
   );
@@ -1530,7 +1536,7 @@ function RunsTab({
   return (
     <div className="space-y-4">
       {/* Active Runs */}
-      {activeRuns.length > 0 && (
+      {activeRuns.length > 0 ? (
         <div className={ds.panel}>
           <h3 className={cn(ds.heading3, 'flex items-center gap-2 mb-3')}>
             <Activity className="w-4 h-4 text-blue-400 animate-pulse" /> Active Runs
@@ -1559,6 +1565,10 @@ function RunsTab({
               </div>
             ))}
           </div>
+        </div>
+      ) : (
+        <div className="text-center py-6 text-gray-500 text-sm border border-dashed border-white/10 rounded-lg">
+          <p>No active simulations running. Start a simulation to see live results.</p>
         </div>
       )}
 

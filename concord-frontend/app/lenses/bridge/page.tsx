@@ -91,7 +91,7 @@ export default function BridgeLens() {
   useLensNav('bridge');
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('bridge');
 
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
   const [tab, setTab] = useState<Tab>('activity');
   const [organisms, setOrganisms] = useState<Organism[]>([]);
   const [log, setLog] = useState<BridgeLogEntry[]>([]);
@@ -245,7 +245,7 @@ export default function BridgeLens() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

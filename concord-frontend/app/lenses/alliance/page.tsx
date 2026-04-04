@@ -51,7 +51,7 @@ export default function AllianceLensPage() {
   const [newAllianceName, setNewAllianceName] = useState('');
   const [newAllianceDesc, setNewAllianceDesc] = useState('');
   const [newAllianceType, setNewAllianceType] = useState<AllianceData['type']>('research');
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   const {
     items: allianceItems,
@@ -257,7 +257,7 @@ export default function AllianceLensPage() {
       </div>
 
       {/* Alliance Strength Meter */}
-      {alliances.length > 0 && (
+      {alliances.length > 0 ? (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -291,6 +291,10 @@ export default function AllianceLensPage() {
             })}
           </div>
         </motion.div>
+      ) : (
+        <div className="text-center py-6 text-gray-500 text-sm border border-dashed border-white/10 rounded-lg">
+          <p>No alliances formed yet. Create an alliance to see collaboration data.</p>
+        </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -439,7 +443,7 @@ export default function AllianceLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

@@ -142,7 +142,7 @@ export default function SpaceLensPage() {
 
   const [activeMode, setActiveMode] = useState<ModeTab>('Dashboard');
   const [searchQuery, setSearchQuery] = useState('');
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
   const [tick, setTick] = useState(0);
 
   // Drive countdown re-renders every second while on LaunchOps
@@ -259,7 +259,7 @@ export default function SpaceLensPage() {
       </header>
 
       {/* ── Tab bar ── */}
-      <div className="flex gap-1 bg-zinc-900 rounded-lg p-1 overflow-x-auto">
+      <div className="flex gap-1 bg-zinc-900 rounded-lg p-1 flex-wrap">
         {MODE_TABS.map(({ key, label, icon: Icon }) => (
           <button key={key} onClick={() => setActiveMode(key)}
             className={cn('flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-colors',
@@ -429,7 +429,7 @@ export default function SpaceLensPage() {
 
       {/* ── Telemetry system health bar ── */}
       <AnimatePresence>
-        {activeMode === 'Telemetry' && telemetryItems.length > 0 && (
+        {activeMode === 'Telemetry' && (telemetryItems.length > 0 ? (
           <motion.div
             key="syshealth"
             initial={{ opacity: 0, y: -6 }}
@@ -461,7 +461,11 @@ export default function SpaceLensPage() {
               </div>
             </div>
           </motion.div>
-        )}
+        ) : (
+          <div className="text-center py-6 text-gray-500 text-sm border border-dashed border-white/10 rounded-lg">
+            <p>No telemetry data yet. Add telemetry records to see spacecraft data.</p>
+          </div>
+        ))}
       </AnimatePresence>
 
       {/* ── Item cards ── */}
@@ -596,7 +600,7 @@ export default function SpaceLensPage() {
 
       <div className="border-t border-white/10">
         <button onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors">
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg">
           <span className="flex items-center gap-2"><Layers className="w-4 h-4" /> Lens Features</span>
           <ChevronDown className={cn('w-4 h-4 transition-transform', showFeatures && 'rotate-180')} />
         </button>

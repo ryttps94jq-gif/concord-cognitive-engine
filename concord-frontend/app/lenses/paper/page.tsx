@@ -18,6 +18,7 @@ import { ErrorState } from '@/components/common/EmptyState';
 import { useMutation } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { ds } from '@/lib/design-system';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 import { cn } from '@/lib/utils';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -194,7 +195,7 @@ export default function PaperLensPage() {
   const [sortField, setSortField] = useState<'updatedAt' | 'title'>('updatedAt');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [citationStyle, setCitationStyle] = useState<CitationData['style']>('apa');
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   // ---- Modal state for creating items ----
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -540,7 +541,7 @@ export default function PaperLensPage() {
       </div>
 
       {/* ---- Mode Tabs ---- */}
-      <div className="flex items-center gap-1 border-b border-lattice-border pb-0 overflow-x-auto">
+      <div className="flex items-center gap-1 border-b border-lattice-border pb-0 flex-wrap">
         {MODE_TABS.map(tab => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.key;
@@ -920,12 +921,13 @@ export default function PaperLensPage() {
       )}
 
       <RealtimeDataPanel data={realtimeInsights} />
+      <UniversalActions domain="paper" artifactId={null} compact />
 
       {/* Lens Features */}
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

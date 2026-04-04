@@ -44,6 +44,7 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { api, apiHelpers } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
 import { ds } from '@/lib/design-system';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 import { PurchaseFlow } from '@/components/wallet/PurchaseFlow';
 import { WithdrawFlow } from '@/components/wallet/WithdrawFlow';
 
@@ -538,7 +539,7 @@ function WalletPageInner() {
         >
           <div className={cn(ds.panel, 'p-0')}>
             {/* Tab Bar */}
-            <div className="flex gap-1 border-b border-lattice-border px-4 pt-4 overflow-x-auto">
+            <div className="flex gap-1 border-b border-lattice-border px-4 pt-4 flex-wrap">
               {TRANSACTION_TABS.map((tab) => {
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.id;

@@ -617,7 +617,7 @@ export default function CodeLensPage() {
   const [showApiRef, setShowApiRef] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [outputTab, setOutputTab] = useState<'output' | 'console'>('output');
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
   const [showForge, setShowForge] = useState(false);
   const [forgePrompt, setForgePrompt] = useState('');
   const [forgeResult, setForgeResult] = useState<string | null>(null);
@@ -1092,7 +1092,7 @@ export default function CodeLensPage() {
         {/* Main Editor Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Tab Bar */}
-          <div className="flex items-center gap-1 px-2 py-1 bg-lattice-surface/50 border-b border-lattice-border overflow-x-auto">
+          <div className="flex items-center gap-1 px-2 py-1 bg-lattice-surface/50 border-b border-lattice-border flex-wrap">
             <button
               onClick={() => setShowFileTree(!showFileTree)}
               className="p-1.5 rounded hover:bg-lattice-elevated text-gray-400 flex-shrink-0"
@@ -1382,7 +1382,7 @@ export default function CodeLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

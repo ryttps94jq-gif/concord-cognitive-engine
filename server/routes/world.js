@@ -318,6 +318,14 @@ export default function createWorldRoutes({ requireAuth } = {}) {
 
   // ── Progression ──────────────────────────────────────────────────────────
 
+  // GET /progression/me — get mastery profile for the authenticated user
+  router.get("/progression/me", wrap((req, res) => {
+    const userId = _userId(req) || req.user?.id || req.query.userId;
+    if (!userId) return res.status(401).json({ ok: false, error: "unauthorized", message: "User ID required" });
+    const profile = getMasteryProfile(userId);
+    res.json({ ok: true, profile });
+  }));
+
   router.get("/progression/:userId", wrap((req, res) => {
     const profile = getMasteryProfile(req.params.userId);
     res.json({ ok: true, profile });

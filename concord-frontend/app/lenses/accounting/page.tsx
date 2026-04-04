@@ -133,7 +133,7 @@ export default function AccountingLensPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [view, setView] = useState<'library' | 'dashboard'>('dashboard');
   const [ledgerSubType, setLedgerSubType] = useState<'Account' | 'Transaction'>('Account');
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   /* ---- sub-views per tab ---- */
   const [ledgerView, setLedgerView] = useState<LedgerView>('accounts');
@@ -2193,7 +2193,7 @@ export default function AccountingLensPage() {
             )}
 
             {/* Journal Entry Timeline */}
-            {transactions.length > 0 && (
+            {transactions.length > 0 ? (
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className={ds.panel}>
                 <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2"><Clock className="w-4 h-4 text-neon-cyan" /> Recent Journal Entries</h3>
                 <div className="space-y-0">
@@ -2215,13 +2215,17 @@ export default function AccountingLensPage() {
                   })}
                 </div>
               </motion.div>
+            ) : (
+              <div className="text-center py-6 text-gray-500 text-sm border border-dashed border-white/10 rounded-lg">
+                <p>No transactions recorded yet. Add transactions to see your financial ledger.</p>
+              </div>
             )}
           </>
         );
       })()}
 
       {/* Mode tabs */}
-      <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 overflow-x-auto">
+      <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 flex-wrap">
         {MODE_TABS.map(tab => {
           const Icon = tab.icon;
           return (
@@ -2349,7 +2353,7 @@ export default function AccountingLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

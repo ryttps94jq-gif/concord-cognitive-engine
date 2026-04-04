@@ -12,6 +12,7 @@ import {
   Play, Disc3, Timer
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -785,7 +786,7 @@ export default function CalendarLensPage() {
 
         <div className="relative">
           <div className="absolute top-8 left-0 right-0 h-0.5 bg-lattice-border" />
-          <div className="flex gap-4 overflow-x-auto pb-2">
+          <div className="flex gap-4 flex-wrap pb-2">
             {releaseEvents.map((event) => {
               const daysLeft = getDaysUntil(new Date(event.startDate));
               return (
@@ -1798,6 +1799,7 @@ export default function CalendarLensPage() {
       {/* Real-time Data Panel */}
       {realtimeData && (
         <RealtimeDataPanel
+      <UniversalActions domain="calendar" artifactId={null} compact />
           domain="calendar"
           data={realtimeData}
           isLive={isLive}

@@ -959,7 +959,7 @@ export default function EcoLensPage() {
       </div>
 
       {/* Tab Navigation */}
-      <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 overflow-x-auto">
+      <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 flex-wrap">
         {tabs.map((tab) => (
           <button
             key={tab.id}

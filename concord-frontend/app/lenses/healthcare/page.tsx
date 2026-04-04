@@ -390,7 +390,7 @@ export default function HealthcareLensPage() {
   const [showEditor, setShowEditor] = useState(false);
   const [editingItem, setEditingItem] = useState<LensItem<HealthcareArtifact> | null>(null);
   const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   /* ---------- generate care plan state ---------- */
   const [generateLoading, setGenerateLoading] = useState(false);
@@ -1162,7 +1162,7 @@ export default function HealthcareLensPage() {
       {/* ============================================================ */}
       {/* Mode Tabs                                                    */}
       {/* ============================================================ */}
-      <nav className="flex items-center gap-1 border-b border-blue-900/20 pb-3 overflow-x-auto">
+      <nav className="flex items-center gap-1 border-b border-blue-900/20 pb-3 flex-wrap">
         {MODE_TABS.map(tab => (
           <button
             key={tab.id}
@@ -1775,7 +1775,7 @@ export default function HealthcareLensPage() {
                 </div>
               </div>
               {/* Sub-tabs */}
-              <div className="flex items-center gap-1 border-b border-lattice-border pb-2 mb-3 overflow-x-auto">
+              <div className="flex items-center gap-1 border-b border-lattice-border pb-2 mb-3 flex-wrap">
                 {(['Overview', 'Vitals', 'Medications', 'Labs', 'History', 'Appointments'] as DetailSubTab[]).map(tab => (
                   <button
                     key={tab}

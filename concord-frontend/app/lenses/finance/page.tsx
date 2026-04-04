@@ -34,6 +34,7 @@ import {
   ChevronDown
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -199,7 +200,7 @@ export default function FinanceLensPage() {
   const [tradeAmount, setTradeAmount] = useState('');
   const [tradePrice, setTradePrice] = useState('');
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   // Chart tooltip state
   const [chartTooltip, setChartTooltip] = useState<{ x: number; y: number; value: number; index: number; min?: number } | null>(null);
@@ -1417,6 +1418,7 @@ export default function FinanceLensPage() {
       </header>
 
       <RealtimeDataPanel domain="finance" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
+      <UniversalActions domain="finance" artifactId={null} compact />
 
       {/* Navigation */}
       <nav className="flex items-center gap-1 border-b border-emerald-900/20 pb-4">
@@ -1579,7 +1581,7 @@ export default function FinanceLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

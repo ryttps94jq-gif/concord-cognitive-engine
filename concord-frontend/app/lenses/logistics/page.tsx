@@ -164,7 +164,7 @@ export default function LogisticsLensPage() {
   const [kanbanView, setKanbanView] = useState(true);
   const [warehouseView, setWarehouseView] = useState<'grid' | 'list'>('grid');
   const [routeExpanded, setRouteExpanded] = useState<string | null>(null);
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   // Editor form state
   const [formTitle, setFormTitle] = useState('');
@@ -642,7 +642,7 @@ export default function LogisticsLensPage() {
 
         {kanbanView ? (
           /* Kanban Board */
-          <div className="flex gap-3 overflow-x-auto pb-4">
+          <div className="flex gap-3 flex-wrap pb-4">
             {KANBAN_COLUMNS.map(col => {
               const columnItems = groupedShipments[col.key] || [];
               return (
@@ -1106,7 +1106,7 @@ export default function LogisticsLensPage() {
         })()}
 
         {/* DOT Inspections */}
-        {inspections.length > 0 && (
+        {inspections.length > 0 ? (
           <div className={ds.panel}>
             <div className="flex items-center gap-2 mb-3">
               <Eye className="w-4 h-4 text-neon-cyan" />
@@ -1135,6 +1135,10 @@ export default function LogisticsLensPage() {
                 );
               })}
             </div>
+          </div>
+        ) : (
+          <div className="text-center py-6 text-gray-500 text-sm border border-dashed border-white/10 rounded-lg">
+            <p>No inspections recorded yet. Add inspection records to track quality.</p>
           </div>
         )}
 
@@ -1365,7 +1369,7 @@ export default function LogisticsLensPage() {
       <RealtimeDataPanel domain="logistics" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <DTUExportButton domain="logistics" data={{}} compact />
       {/* Mode Tabs */}
-      <nav className="flex items-center gap-1 border-b border-lattice-border pb-3 overflow-x-auto">
+      <nav className="flex items-center gap-1 border-b border-lattice-border pb-3 flex-wrap">
         {MODE_TABS.map(tab => {
           const Icon = tab.icon;
           return (
@@ -1633,7 +1637,7 @@ export default function LogisticsLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

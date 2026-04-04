@@ -162,7 +162,7 @@ export default function MathLensPage() {
 
   /* ─── Active tab ─── */
   const [activeTab, setActiveTab] = useState<'evaluator' | 'solver' | 'formulas' | 'plotter'>('evaluator');
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   /* ─── Data from backend ─── */
   const {
@@ -504,7 +504,7 @@ export default function MathLensPage() {
               </div>
 
               {/* Expression History */}
-              {expressionItems.length > 0 && (
+              {expressionItems.length > 0 ? (
                 <div className="panel p-4">
                   <h2 className="font-semibold mb-4 flex items-center gap-2">
                     <History className="w-4 h-4 text-neon-purple" />
@@ -541,6 +541,10 @@ export default function MathLensPage() {
                       </div>
                     ))}
                   </div>
+                </div>
+              ) : (
+                <div className="text-center py-6 text-gray-500 text-sm border border-dashed border-white/10 rounded-lg">
+                  <p>No expressions yet. Create mathematical expressions to see computation results.</p>
                 </div>
               )}
             </div>
@@ -1022,7 +1026,7 @@ export default function MathLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

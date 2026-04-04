@@ -39,7 +39,7 @@ export default function EngineeringLensPage() {
   useLensNav('engineering');
 
   const [activeTab, setActiveTab] = useState<'projects' | 'specs' | 'standards'>('projects');
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
   const { latestData: realtimeData, isLive, lastUpdated, insights } = useRealtimeLens('engineering');
 
   const { items: projectItems, isLoading, isError, error, refetch, create, update, remove } = useLensData<Record<string, unknown>>('engineering', 'project', { seed: [] });
@@ -145,7 +145,7 @@ export default function EngineeringLensPage() {
           <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
             <HardHat className="w-4 h-4 text-neon-cyan" /> Project Pipeline
           </h3>
-          <div className="flex items-center gap-1 overflow-x-auto pb-2">
+          <div className="flex items-center gap-1 flex-wrap pb-2">
             {(['planning', 'design', 'review', 'fabrication', 'testing', 'complete'] as ProjectStatus[]).map((phase, i) => {
               const count = projects.filter(p => (p.status || 'planning') === phase).length;
               return (
@@ -259,7 +259,7 @@ export default function EngineeringLensPage() {
 
       {/* Lens Features */}
       <div className="border-t border-white/10">
-        <button onClick={() => setShowFeatures(!showFeatures)} className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors">
+        <button onClick={() => setShowFeatures(!showFeatures)} className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg">
           <span className="flex items-center gap-2"><Layers className="w-4 h-4" /> Lens Features & Capabilities</span>
           <ChevronDown className={`w-4 h-4 transition-transform ${showFeatures ? 'rotate-180' : ''}`} />
         </button>

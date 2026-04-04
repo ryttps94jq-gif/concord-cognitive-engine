@@ -174,7 +174,7 @@ export default function AgricultureLensPage() {
   const [editingItem, setEditingItem] = useState<LensItem<AgricultureArtifact> | null>(null);
   const [showDashboard, setShowDashboard] = useState(false);
   const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   // Editor form state
   const [formName, setFormName] = useState('');
@@ -795,7 +795,7 @@ export default function AgricultureLensPage() {
         );
       })()}
 
-      <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 overflow-x-auto">
+      <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 flex-wrap">
         {MODE_TABS.map(tab => (
           <button
             key={tab.id}
@@ -840,7 +840,7 @@ export default function AgricultureLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

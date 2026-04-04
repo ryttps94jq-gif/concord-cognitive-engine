@@ -15,6 +15,7 @@ import {
   Layers, ChevronLeft, ChevronRight, Focus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -60,7 +61,7 @@ export default function PhotographyPage() {
 
   const [tab, setTab] = useState<PhotoTab>('gallery');
   const [searchQuery, setSearchQuery] = useState('');
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [showUpload, setShowUpload] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -225,6 +226,7 @@ export default function PhotographyPage() {
 
         {showFeatures && <LensFeaturePanel lensId="photography" />}
         <RealtimeDataPanel data={realtimeData} insights={realtimeInsights} />
+      <UniversalActions domain="photography" artifactId={null} compact />
 
         {/* Tabs */}
         <div className="flex gap-1 bg-white/5 p-1 rounded-lg border border-white/10">

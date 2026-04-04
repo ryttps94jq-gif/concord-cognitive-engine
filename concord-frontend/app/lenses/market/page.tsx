@@ -1,6 +1,7 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
@@ -49,7 +50,7 @@ export default function MarketLensPage() {
   const [sortBy, setSortBy] = useState<SortField>('newest');
   const [purchasingId, setPurchasingId] = useState<string | null>(null);
   const [showPurchaseConfirm, setShowPurchaseConfirm] = useState<MarketListingItem | null>(null);
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   // Backend: GET /api/marketplace/listings
   const { data: listings, isLoading, isError, error, refetch } = useQuery({
@@ -197,6 +198,7 @@ export default function MarketLensPage() {
       </header>
 
       <RealtimeDataPanel domain="market" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
+      <UniversalActions domain="market" artifactId={null} compact />
 
       {/* Wallet Banner */}
       {wallet && (
@@ -435,7 +437,7 @@ export default function MarketLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { ds } from '@/lib/design-system';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 import { cn } from '@/lib/utils';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -463,7 +464,7 @@ export default function ReasoningLensPage() {
   // ----- Mode / Tab state -----
   const [mode, setMode] = useState<ModeTab>('arguments');
   const [searchQuery, setSearchQuery] = useState('');
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   // ----- Argument Map state -----
   const [argumentMaps, setArgumentMaps] = useState<ArgumentMap[]>([]);
@@ -2372,6 +2373,7 @@ export default function ReasoningLensPage() {
       {/* Real-time Data Panel */}
       {realtimeData && (
         <RealtimeDataPanel
+      <UniversalActions domain="reasoning" artifactId={null} compact />
           domain="reasoning"
           data={realtimeData}
           isLive={isLive}
@@ -2389,7 +2391,7 @@ export default function ReasoningLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

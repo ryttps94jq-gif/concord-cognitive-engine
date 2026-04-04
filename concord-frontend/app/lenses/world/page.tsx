@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { useSocket } from '@/hooks/useSocket';
 import { useLensNav } from '@/hooks/useLensNav';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import IsometricEngine from '@/components/world/IsometricEngine';
 import WorldHUD from '@/components/world/WorldHUD';
@@ -227,7 +228,7 @@ export default function WorldLensPage() {
                 </button>
               )}
               {selectedNPC.type === 'quest_giver' && (
-                <button className="btn-neon text-xs" onClick={() => {}}>
+                <button className="btn-neon text-xs" onClick={() => router.push('/lenses/questmarket')}>
                   Accept Quest
                 </button>
               )}

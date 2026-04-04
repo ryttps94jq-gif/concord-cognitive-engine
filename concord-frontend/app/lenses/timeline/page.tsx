@@ -329,7 +329,7 @@ export default function TimelineLensPage() {
         <main className="flex-1 max-w-xl mx-auto space-y-4">
           {/* Stories */}
           <div className="bg-[#242526] rounded-lg p-4">
-            <div className="flex gap-2 overflow-x-auto no-scrollbar">
+            <div className="flex gap-2 flex-wrap no-scrollbar">
               {stories?.map((story, i) => (
                 <button
                   key={story.id}

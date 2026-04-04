@@ -248,7 +248,7 @@ export default function RetailLensPage() {
   const [showEditor, setShowEditor] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [view, setView] = useState<'library' | 'dashboard'>('library');
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   /* Sub-tab state for deep features */
   const [productSubTab, setProductSubTab] = useState<ProductSubTab>('catalog');
@@ -1170,7 +1170,7 @@ export default function RetailLensPage() {
   /*  Sub-tab rendering                                                  */
   /* ------------------------------------------------------------------ */
   const renderSubTabs = (tabs: { id: string; label: string; icon: typeof Package }[], active: string, onChange: (id: string) => void) => (
-    <div className="flex items-center gap-1 mb-4 overflow-x-auto">
+    <div className="flex items-center gap-1 mb-4 flex-wrap">
       {tabs.map(tab => {
         const Icon = tab.icon;
         return (
@@ -1791,7 +1791,7 @@ export default function RetailLensPage() {
       <RealtimeDataPanel domain="retail" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <DTUExportButton domain="retail" data={{}} compact />
       {/* Mode tabs */}
-      <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 overflow-x-auto">
+      <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 flex-wrap">
         {MODE_TABS.map(tab => {
           const Icon = tab.icon;
           return (
@@ -1862,7 +1862,7 @@ export default function RetailLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

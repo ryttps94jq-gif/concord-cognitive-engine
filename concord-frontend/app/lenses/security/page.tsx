@@ -241,7 +241,7 @@ export default function SecurityLensPage() {
   const [showEditor, setShowEditor] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   const [formTitle, setFormTitle] = useState('');
   const [formStatus, setFormStatus] = useState<string>('detected');
@@ -816,7 +816,7 @@ export default function SecurityLensPage() {
       {/* Incident status pipeline */}
       <div className={ds.panel}>
         <h3 className={cn(ds.heading3, 'mb-4')}>Incident Pipeline</h3>
-        <div className="flex items-center gap-2 overflow-x-auto pb-2">
+        <div className="flex items-center gap-2 flex-wrap pb-2">
           {INCIDENT_STATUSES.map((s, idx) => {
             const count = incidents.filter(i => i.meta.status === s).length;
             return (
@@ -947,7 +947,7 @@ export default function SecurityLensPage() {
       {/* AI Actions */}
       <UniversalActions domain="security" artifactId={incidents[0]?.id} compact />
       {/* Mode Tabs */}
-      <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 overflow-x-auto">
+      <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 flex-wrap">
         {MODE_TABS.map(tab => {
           const Icon = tab.icon;
           return (
@@ -1164,7 +1164,7 @@ export default function SecurityLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

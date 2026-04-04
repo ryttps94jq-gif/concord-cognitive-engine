@@ -37,6 +37,7 @@ import {
   ListMusic,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useUIStore } from '@/store/ui';
 import { useLensDTUs } from '@/hooks/useLensDTUs';
@@ -1133,6 +1134,7 @@ export default function FeedLensPage() {
       {/* Real-time Data Panel */}
       {realtimeData && (
         <RealtimeDataPanel
+      <UniversalActions domain="feed" artifactId={null} compact />
           domain="feed"
           data={realtimeData}
           isLive={isLive}

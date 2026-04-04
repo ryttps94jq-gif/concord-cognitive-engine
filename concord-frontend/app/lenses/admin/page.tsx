@@ -224,7 +224,7 @@ export default function AdminDashboardPage() {
   useLensNav('admin');
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('admin');
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
   const [showTreasury, setShowTreasury] = useState(false);
   const [showPlugins, setShowPlugins] = useState(false);
   const [showMacros, setShowMacros] = useState(false);
@@ -687,7 +687,7 @@ export default function AdminDashboardPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowTreasury(!showTreasury)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <DollarSign className="w-4 h-4" />
@@ -706,7 +706,7 @@ export default function AdminDashboardPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowPlugins(!showPlugins)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Box className="w-4 h-4" />
@@ -721,7 +721,7 @@ export default function AdminDashboardPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowMacros(!showMacros)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Zap className="w-4 h-4" />
@@ -736,7 +736,7 @@ export default function AdminDashboardPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

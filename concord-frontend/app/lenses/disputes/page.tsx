@@ -160,7 +160,7 @@ function StatusBadge({ status }: { status: DisputeStatus }) {
 function StatusFlow({ currentStatus }: { currentStatus: DisputeStatus }) {
   const currentIndex = STATUS_FLOW.indexOf(currentStatus);
   return (
-    <div className="flex items-center gap-1 py-3 overflow-x-auto">
+    <div className="flex items-center gap-1 py-3 flex-wrap">
       {STATUS_FLOW.map((step, i) => {
         const config = STATUS_CONFIG[step];
         const Icon = config.icon;

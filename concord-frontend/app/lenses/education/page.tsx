@@ -457,7 +457,7 @@ export default function EducationLensPage() {
   const [filterStatus, setFilterStatus] = useState<Status | 'all'>('all');
   const [showEditor, setShowEditor] = useState(false);
   const [editingItem, setEditingItem] = useState<LensItem<EducationArtifact> | null>(null);
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
   const [showStudyPanel, setShowStudyPanel] = useState(false);
 
   /* ---------- detail views ---------- */
@@ -1260,7 +1260,7 @@ export default function EducationLensPage() {
       <RealtimeDataPanel domain="education" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
 
       {/* Mode Tabs */}
-      <nav className="flex items-center gap-1 border-b border-amber-800/20 pb-3 overflow-x-auto">
+      <nav className="flex items-center gap-1 border-b border-amber-800/20 pb-3 flex-wrap">
         {MODE_TABS.map(tab => (
           <button
             key={tab.id}
@@ -2938,7 +2938,7 @@ export default function EducationLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

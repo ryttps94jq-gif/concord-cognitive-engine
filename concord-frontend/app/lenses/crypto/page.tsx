@@ -64,7 +64,7 @@ export default function CryptoLensPage() {
   const [showSendModal, setShowSendModal] = useState(false);
   const [showAddWallet, setShowAddWallet] = useState(false);
   const [showAddChain, setShowAddChain] = useState(false);
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   // Send form
   const [sendAmount, setSendAmount] = useState('');
@@ -629,7 +629,7 @@ export default function CryptoLensPage() {
               </div>
 
               {/* Price Display */}
-              {chains.length > 0 && (
+              {chains.length > 0 ? (
                 <div className="panel p-4">
                   <h2 className="font-semibold mb-4 flex items-center gap-2">
                     <TrendingUp className="w-4 h-4 text-neon-blue" />
@@ -656,6 +656,10 @@ export default function CryptoLensPage() {
                       </div>
                     ))}
                   </div>
+                </div>
+              ) : (
+                <div className="text-center py-6 text-gray-500 text-sm border border-dashed border-white/10 rounded-lg">
+                  <p>No blockchain data yet. Add chains to see network analytics.</p>
                 </div>
               )}
             </div>
@@ -1058,7 +1062,7 @@ export default function CryptoLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

@@ -14,7 +14,7 @@ import { HomeClient } from '@/components/home/HomeClient';
 export const metadata: Metadata = {
   title: 'Concordos — Sovereign Cognitive Engine',
   description:
-    'A sovereign knowledge operating system that grows with you. 112 domain lenses, DTU-based memory, lattice governance, local-first AI. No ads, no extraction, no surveillance.',
+    'A sovereign knowledge operating system that grows with you. 175 domain lenses, DTU-based memory, lattice governance, local-first AI. No ads, no extraction, no surveillance.',
   alternates: {
     canonical: '/',
   },
@@ -61,16 +61,16 @@ export default function HomePage() {
               <span className="px-4 py-2 rounded-lg bg-neon-cyan/10 border border-neon-cyan/20 text-neon-cyan text-center">No ads. Ever.</span>
               <span className="px-4 py-2 rounded-lg bg-neon-blue/10 border border-neon-blue/20 text-neon-blue text-center">No subscriptions.</span>
               <span className="px-4 py-2 rounded-lg bg-neon-purple/10 border border-neon-purple/20 text-neon-purple text-center">No data extraction.</span>
-              <span className="px-4 py-2 rounded-lg bg-neon-green/10 border border-neon-green/20 text-neon-green text-center">Free.</span>
+              <span className="px-4 py-2 rounded-lg bg-neon-green/10 border border-neon-green/20 text-neon-green text-center">Free for all services.</span>
             </div>
             <p className="text-xs text-gray-500 mt-2">Not a promise — it&apos;s architecture. The sovereignty lock makes it mathematically enforced.</p>
           </div>
 
           <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-20">
             <div className="bg-lattice-surface border border-lattice-border rounded-xl p-6">
-              <h3 className="text-lg font-semibold text-white mb-2">112 Domain Lenses</h3>
+              <h3 className="text-lg font-semibold text-white mb-2">175 Domain Lenses</h3>
               <p className="text-gray-400 text-sm">
-                Healthcare, education, legal, accounting, manufacturing, creative arts, science, AI, and 100+ more specialized lenses.
+                Healthcare, education, legal, trades, manufacturing, creative arts, science, AI, and 160+ more specialized lenses.
               </p>
             </div>
             <div className="bg-lattice-surface border border-lattice-border rounded-xl p-6">

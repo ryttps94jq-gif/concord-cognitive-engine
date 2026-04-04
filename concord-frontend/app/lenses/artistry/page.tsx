@@ -14,6 +14,7 @@ import {
   BarChart3, Globe, Layers,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -32,7 +33,7 @@ export default function ArtistryLensPage() {
 
   const [tab, setTab] = useState<ArtistryTab>('feed');
   const [searchQuery, setSearchQuery] = useState('');
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
   const [showUpload, setShowUpload] = useState(false);
   const [feedMode, setFeedMode] = useState<FeedMode>('chronological');
 
@@ -129,6 +130,7 @@ export default function ArtistryLensPage() {
 
         {showFeatures && <LensFeaturePanel lensId="artistry" />}
         <RealtimeDataPanel data={realtimeData} insights={realtimeInsights} />
+      <UniversalActions domain="artistry" artifactId={null} compact />
 
         {/* Stat Cards — creative palette feel */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

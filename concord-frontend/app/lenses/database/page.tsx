@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { api, apiHelpers } from '@/lib/api/client';
@@ -452,7 +453,7 @@ export default function DatabaseLensPage() {
       </div>
 
       {/* Tab navigation */}
-      <div className="flex gap-1 border-b border-lattice-border overflow-x-auto pb-px">
+      <div className="flex gap-1 border-b border-lattice-border flex-wrap pb-px">
         {TABS.map(tab => (
           <button
             key={tab.id}
@@ -527,7 +528,7 @@ export default function DatabaseLensPage() {
               </div>
 
               {/* Results table */}
-              {queryResult && queryResult.rows.length > 0 && (
+              {queryResult && queryResult.rows.length > 0 ? (
                 <div className="panel p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <h2 className="text-sm font-semibold flex items-center gap-2">
@@ -599,6 +600,10 @@ export default function DatabaseLensPage() {
                       </div>
                     </div>
                   )}
+                </div>
+              ) : (
+                <div className="text-center py-6 text-gray-500 text-sm border border-dashed border-white/10 rounded-lg">
+                  <p>No query results yet. Run a query to see results here.</p>
                 </div>
               )}
 
@@ -1035,6 +1040,7 @@ export default function DatabaseLensPage() {
       {/* Real-time Data Panel */}
       {realtimeData && (
         <RealtimeDataPanel
+      <UniversalActions domain="database" artifactId={null} compact />
           domain="database"
           data={realtimeData}
           isLive={isLive}

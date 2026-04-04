@@ -279,7 +279,7 @@ export default function AviationLensPage() {
   useLensNav('aviation');
   const { latestData: realtimeData, isLive, lastUpdated, insights } = useRealtimeLens('aviation');
 
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
   const [activeMode, setActiveMode] = useState<ModeTab>('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -1678,7 +1678,7 @@ export default function AviationLensPage() {
       <RealtimeDataPanel domain="aviation" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <DTUExportButton domain="aviation" data={{}} compact />
       {/* Mode Tabs */}
-      <div className="flex gap-1 border-b border-lattice-border pb-0 overflow-x-auto">
+      <div className="flex gap-1 border-b border-lattice-border pb-0 flex-wrap">
         {MODE_TABS.map(tab => {
           const Icon = tab.icon;
           return (
@@ -1844,7 +1844,7 @@ export default function AviationLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

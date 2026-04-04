@@ -217,6 +217,7 @@ import {
   transitionPurchase,
   recordSettlement,
 } from "./economy/index.js";
+import { executeTransfer } from "./economy/transfer.js";
 
 // ---- Atlas + Platform Upgrade Imports (v2) ----
 import { DOMAIN_TYPES as ATLAS_DOMAIN_TYPES, EPISTEMIC_CLASSES, initAtlasState, getAtlasState } from "./emergent/atlas-epistemic.js";
@@ -23707,6 +23708,14 @@ try {
   structuredLog("warn", "emergent_features_routes_init_failed", { error: String(e?.message || e) });
 }
 
+// ===== UNIVERSAL EXPORT / IMPORT (DTU export/import via /api/lens/:domain/export-dtu) =====
+try {
+  const { default: createUniversalExportRouter } = await import("./routes/universal-export.js");
+  app.use(createUniversalExportRouter(STATE, runMacro, makeCtx));
+} catch (e) {
+  structuredLog("warn", "universal_export_routes_init_failed", { error: String(e?.message || e) });
+}
+
 // ===== PASSWORD RESET & EMAIL VERIFICATION =====
 try {
   const { default: createPasswordResetRouter } = await import("./routes/password-reset.js");
@@ -25535,6 +25544,21 @@ app.post("/api/federation/verify", (req, res) => {
   res.json({ ok: result.valid, verification: result });
 });
 
+app.get("/api/federation/peers", (req, res) => {
+  const peers = Array.from(_FEDERATION_TRUST.trustedNodes?.entries?.() || []).map(([id, node]) => ({
+    nodeId: id,
+    status: node?.status || "connected",
+    lastSeen: node?.lastSeen || new Date().toISOString(),
+    sharedDTUs: node?.sharedDTUs || 0,
+  }));
+  res.json({ ok: true, peers, count: peers.length });
+});
+
+app.get("/api/federation/escalation/stats", (req, res) => {
+  const escalations = STATE.disputes ? [...STATE.disputes.values()].filter(d => d.status === "escalated") : [];
+  res.json({ ok: true, total: escalations.length, escalations: escalations.slice(0, 20) });
+});
+
 // ============================================================================
 // OBSERVABILITY ALERTING PIPELINE (Tier 3)
 // ============================================================================
@@ -25864,6 +25888,57 @@ app.post("/api/marketplace/submit", validate("marketplaceSubmit"), asyncHandler(
 app.post("/api/marketplace/install", validate("marketplaceInstall"), asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "install", req.body, makeCtx(req)))));
 app.post("/api/marketplace/review", asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "review", req.body, makeCtx(req)))));
 app.get("/api/marketplace/installed", asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "installed", {}, makeCtx(req)))));
+
+// POST /api/marketplace/pack — create a bundled pack of DTUs with a combined price
+app.post("/api/marketplace/pack", requireAuth(), (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ ok: false, error: "unauthorized" });
+
+    const { name, description, dtu_ids, price } = req.body || {};
+    if (!name || !name.trim()) return res.status(400).json({ ok: false, error: "missing_name" });
+    if (!dtu_ids || !Array.isArray(dtu_ids) || dtu_ids.length === 0) {
+      return res.status(400).json({ ok: false, error: "missing_dtu_ids", message: "At least one DTU is required" });
+    }
+
+    const packPrice = Number(price) || 10;
+    const packId = `pack_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    // Verify all DTU IDs exist
+    const validDtus = [];
+    for (const dtuId of dtu_ids) {
+      const dtu = STATE.dtus?.get(dtuId);
+      if (dtu) validDtus.push({ id: dtuId, title: dtu.title || dtuId, domain: dtu.domain });
+    }
+
+    if (validDtus.length === 0) {
+      return res.status(400).json({ ok: false, error: "no_valid_dtus", message: "None of the specified DTUs exist" });
+    }
+
+    // Create the pack as a special listing in the economic state
+    ensureEconomicState();
+    const pack = {
+      id: packId,
+      type: "pack",
+      name: name.trim(),
+      description: (description || "").trim(),
+      dtuIds: validDtus.map(d => d.id),
+      dtus: validDtus,
+      price: packPrice,
+      sellerId: userId,
+      status: "active",
+      createdAt: new Date().toISOString(),
+      sales: 0,
+    };
+
+    STATE.economic.listings.set(packId, pack);
+    saveStateDebounced();
+
+    res.status(201).json({ ok: true, pack });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: "pack_creation_failed", message: err.message });
+  }
+});
 
 structuredLog("info", "module_loaded", { module: "Wave 1: Plugin Marketplace" });
 
@@ -38159,6 +38234,40 @@ app.post("/api/economy/tax-summary", requireAuth(), asyncHandler(async (req, res
   res.json({ ok: true, dtu: { id, title: dtu.title, year, totalIncome, totalExpenses, net: totalIncome - totalExpenses, transactionCount: allTxs.length }, dtuId: id });
 }));
 
+// POST /api/economy/transfer — transfer CC between users (atomic via economy/transfer.js)
+app.post("/api/economy/transfer", requireAuth(), (req, res) => {
+  try {
+    const userId = req.user?.id || req.body.from;
+    if (!userId) return res.status(401).json({ ok: false, error: "unauthorized" });
+
+    const { to, amount, type, metadata, refId } = req.body || {};
+    if (!to) return res.status(400).json({ ok: false, error: "missing_recipient" });
+    if (!amount || amount <= 0) return res.status(400).json({ ok: false, error: "invalid_amount" });
+
+    const result = executeTransfer(db, {
+      from: userId,
+      to,
+      amount: Number(amount),
+      type: type || "TRANSFER",
+      metadata: metadata || {},
+      refId: refId || `transfer_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      requestId: req.headers["x-request-id"],
+      ip: req.ip,
+    });
+
+    if (!result.ok && !result.idempotent) {
+      return res.status(400).json(result);
+    }
+    res.json(result);
+  } catch (err) {
+    if (err.message?.includes("insufficient_balance")) {
+      const parts = err.message.split(":");
+      return res.status(400).json({ ok: false, error: "insufficient_balance", balance: Number(parts[1]) || 0, required: Number(parts[2]) || 0 });
+    }
+    res.status(500).json({ ok: false, error: "transfer_failed", message: err.message });
+  }
+});
+
 // Growth/organs
 app.get("/api/growth/status", (req, res) => {
   res.json({ ok: true, status: STATE.growth || { stage: "seed", health: 1.0 }});
@@ -38905,6 +39014,28 @@ app.get("/api/social/profile", (req, res) => {
 
 app.get("/api/social/profile/:userId", (req, res) => {
   try { res.json(getProfile(STATE, req.params.userId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// POST /api/social/profile/avatar — update user avatar/character customization
+app.post("/api/social/profile/avatar", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id;
+    if (!userId) return res.status(400).json({ ok: false, error: "userId required" });
+    const avatarData = req.body || {};
+    // Merge avatar data into the user's profile via upsertProfile
+    const result = upsertProfile(STATE, userId, { avatar: avatarData, updatedAt: new Date().toISOString() });
+    res.json(result);
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.put("/api/social/profile/avatar", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id;
+    if (!userId) return res.status(400).json({ ok: false, error: "userId required" });
+    const avatarData = req.body || {};
+    const result = upsertProfile(STATE, userId, { avatar: avatarData, updatedAt: new Date().toISOString() });
+    res.json(result);
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.get("/api/social/profiles", (req, res) => {

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useMusicStore } from '@/lib/music/store';
 import { getPlayer } from '@/lib/music/player';
 import { MediaUpload } from '@/components/media/MediaUpload';
@@ -505,6 +506,7 @@ export default function PodcastLensPage() {
 
               {realtimeInsights.length > 0 && (
                 <RealtimeDataPanel data={null} insights={realtimeInsights} />
+      <UniversalActions domain="podcast" artifactId={null} compact />
               )}
             </motion.div>
           )}

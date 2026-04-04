@@ -1,6 +1,7 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useQuery } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useState, useMemo, useCallback } from 'react';
@@ -329,7 +330,7 @@ export default function NewsLensPage() {
       </div>
 
       {/* Category Tabs */}
-      <div className="flex gap-2 overflow-x-auto no-scrollbar">
+      <div className="flex gap-2 flex-wrap no-scrollbar">
         {categories.map((category) => {
           const Icon = category.icon;
           return (
@@ -625,6 +626,7 @@ export default function NewsLensPage() {
 
       {/* Real-time Data Panel */}
       <RealtimeDataPanel domain="news" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
+      <UniversalActions domain="news" artifactId={null} compact />
       </div>
     </div>
   );

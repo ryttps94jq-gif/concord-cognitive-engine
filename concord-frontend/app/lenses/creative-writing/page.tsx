@@ -13,6 +13,7 @@ import {
   Maximize2, Minimize2, Shuffle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -83,7 +84,7 @@ export default function CreativeWritingPage() {
 
   const [tab, setTab] = useState<WritingTab>('works');
   const [searchQuery, setSearchQuery] = useState('');
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
   const [genreFilter, setGenreFilter] = useState<WritingGenre | null>(null);
 
   // Editor state
@@ -267,6 +268,7 @@ export default function CreativeWritingPage() {
 
             {showFeatures && <LensFeaturePanel lensId="creative-writing" />}
             <RealtimeDataPanel data={realtimeData} insights={realtimeInsights} />
+      <UniversalActions domain="creative-writing" artifactId={null} compact />
 
             {/* Tabs */}
             <div className="flex gap-1 bg-white/5 p-1 rounded-lg border border-white/10">
