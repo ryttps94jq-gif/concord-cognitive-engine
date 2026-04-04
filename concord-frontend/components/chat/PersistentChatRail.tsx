@@ -26,6 +26,7 @@ import { useSessionId, resetSessionId } from '@/hooks/useSessionId';
 import { api } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
 import { SovereigntyPrompt } from '@/components/sovereignty/SovereigntyPrompt';
+import { SkeletonChat } from '@/components/common/Skeleton';
 import { PipelineProgress } from '@/components/pipeline/PipelineProgress';
 import {
   MessageSquare,
@@ -896,7 +897,10 @@ export function PersistentChatRail({
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-        {messages.length === 0 && chatMode === 'chat' && (
+        {messages.length === 0 && chatMode === 'chat' && chatStatus === 'thinking' && (
+          <SkeletonChat count={3} />
+        )}
+        {messages.length === 0 && chatMode === 'chat' && chatStatus !== 'thinking' && (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <Brain className="w-10 h-10 text-zinc-600 mb-3" />
             <p className="text-sm text-zinc-400 mb-1">Chat with Concord</p>

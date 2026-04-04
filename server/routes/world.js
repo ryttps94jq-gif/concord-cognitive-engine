@@ -353,6 +353,28 @@ export default function createWorldRoutes({ requireAuth } = {}) {
     res.json({ ok: true, ...result });
   }));
 
+  router.post("/jobs/promote", auth, wrap((req, res) => {
+    const { targetUserId } = req.body;
+    const result = promoteEmployee(targetUserId, _userId(req));
+    res.json(result);
+  }));
+
+  router.get("/jobs/me", auth, wrap((req, res) => {
+    const job = getUserJob(_userId(req));
+    if (!job) return res.status(404).json({ ok: false, error: "No active job" });
+    res.json({ ok: true, job });
+  }));
+
+  router.get("/jobs/user/:userId", wrap((req, res) => {
+    const job = getUserJob(req.params.userId);
+    if (!job) return res.status(404).json({ ok: false, error: "No active job for this user" });
+    res.json({ ok: true, job });
+  }));
+
+  router.get("/jobs/stats", wrap((_req, res) => {
+    res.json({ ok: true, ...getJobStats() });
+  }));
+
   // ── Businesses ───────────────────────────────────────────────────────────
 
   router.get("/businesses", wrap((req, res) => {

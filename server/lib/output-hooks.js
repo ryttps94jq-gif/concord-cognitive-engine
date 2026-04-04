@@ -5,8 +5,8 @@
  * into the response pipeline. Import and call from chat/response handlers.
  *
  * Usage in any response handler:
- *   import { processOutput } from '../lib/output-hooks.js';
- *   const processed = await processOutput(userId, outputText, { lens, domain });
+ *   import outputHooks from '../lib/output-hooks.js';
+ *   const processed = await outputHooks.processOutput(userId, outputText, { lens, domain });
  *   // processed.text may be modified, processed.flags may contain warnings
  */
 
