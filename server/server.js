@@ -22619,6 +22619,10 @@ import createLensFeatureRouter from "./routes/lens-features.js";
 import { LENS_FEATURES } from "./lib/lens-features.js";
 app.use("/api/lens-features", createLensFeatureRouter(db, LENS_FEATURES));
 
+// ===== WORLD ENGINE (districts, jobs, businesses, events, progression) =====
+import createWorldRoutes from "./routes/world.js";
+app.use("/api/world", createWorldRoutes({ requireAuth }));
+
 // ===== CONNECTIVE TISSUE (economy wiring, DTU pipeline, CRETI, compression, fork, preview, search, emergent/bot auth) =====
 import createConnectiveTissueRouter from "./routes/connective-tissue.js";
 app.use("/api/ct", createConnectiveTissueRouter({ db, requireAuth }));

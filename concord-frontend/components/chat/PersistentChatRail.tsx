@@ -1159,15 +1159,11 @@ export function PersistentChatRail({
                   const pp = pipelinePrompt;
                   setPipelinePrompt(null);
                   try {
-                    const res = await api.post('/api/pipeline/execute', {
-                      pipelineId: pp.pipelineId,
-                      variables: pp.variables,
-                      sessionId,
-                    });
-                    if (res.data?.execution) {
+                    const res = await executePipeline(pp.pipelineId, pp.variables, sessionId);
+                    if (res?.execution) {
                       setActivePipeline({
                         pipelineId: pp.pipelineId,
-                        executionId: res.data.execution.id,
+                        executionId: res.execution.id,
                         description: pp.description,
                         steps: pp.steps,
                       });
