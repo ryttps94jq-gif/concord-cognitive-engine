@@ -19,6 +19,7 @@ import { recordTransactionBatch, generateTxId } from "./ledger.js";
 import { PLATFORM_ACCOUNT_ID } from "./fees.js";
 import { distributeFee } from "./fee-split.js";
 import { economyAudit } from "./audit.js";
+import { validateBalance } from "./validators.js";
 import {
   ARTIFACT_TYPES, CREATIVE_MARKETPLACE, CREATIVE_FEDERATION,
   CREATIVE_QUESTS, CREATIVE_LEADERBOARD, CREATOR_RIGHTS, LICENSE_TYPES,
@@ -69,6 +70,7 @@ export function publishArtifact(db, {
   if (!fileSize || fileSize <= 0) return { ok: false, error: "invalid_file_size" };
   if (!fileHash) return { ok: false, error: "missing_file_hash" };
   if (!price || price <= 0) return { ok: false, error: "invalid_price" };
+  if (price > 50000) return { ok: false, error: "price_exceeds_maximum", maxPrice: 50000 };
 
   // Validate file size against type limit
   const typeConfig = ARTIFACT_TYPES[type];
@@ -310,6 +312,11 @@ export function purchaseArtifact(db, { buyerId, artifactId, requestId, ip }) {
   }
 
   const price = artifact.price;
+
+  // Validate buyer has sufficient balance before proceeding
+  const balanceCheck = validateBalance(db, buyerId, price);
+  if (!balanceCheck.ok) return balanceCheck;
+
   const purchaseId = uid("cap");
 
   // Calculate fees
@@ -324,6 +331,8 @@ export function purchaseArtifact(db, { buyerId, artifactId, requestId, ip }) {
 
   if (artifact.is_derivative) {
     cascadePayments = calculateCascadePayments(db, artifactId, remainingAfterFees);
+    // Anti-gaming: filter out self-citing (creator earning royalties on their own chain)
+    cascadePayments = cascadePayments.filter(p => p.recipientId !== artifact.creator_id && p.recipientId !== buyerId);
     totalCascade = Math.round(cascadePayments.reduce((sum, p) => sum + p.amount, 0) * 100) / 100;
   }
 
@@ -331,6 +340,10 @@ export function purchaseArtifact(db, { buyerId, artifactId, requestId, ip }) {
 
   // Execute atomically
   const doPurchase = db.transaction(() => {
+    // Re-check balance inside transaction to prevent race conditions
+    const txBalanceCheck = validateBalance(db, buyerId, price);
+    if (!txBalanceCheck.ok) throw new Error(`insufficient_balance:${txBalanceCheck.balance}:${price}`);
+
     const batchId = generateTxId();
     const now = nowISO();
     const entries = [];
@@ -420,12 +433,20 @@ export function purchaseArtifact(db, { buyerId, artifactId, requestId, ip }) {
       ) VALUES (?, ?, ?, ?, 'active', ?, ?, ?)
     `).run(uid("cul"), artifactId, buyerId, artifact.license_type, price, purchaseId, now);
 
-    // 6. Update artifact stats
-    db.prepare(`
-      UPDATE creative_artifacts
-      SET purchase_count = purchase_count + 1, updated_at = ?
-      WHERE id = ?
-    `).run(now, artifactId);
+    // 6. Update artifact stats + auto-delist exclusive items
+    if (artifact.license_type === "exclusive") {
+      db.prepare(`
+        UPDATE creative_artifacts
+        SET purchase_count = purchase_count + 1, marketplace_status = 'delisted', updated_at = ?
+        WHERE id = ?
+      `).run(now, artifactId);
+    } else {
+      db.prepare(`
+        UPDATE creative_artifacts
+        SET purchase_count = purchase_count + 1, updated_at = ?
+        WHERE id = ?
+      `).run(now, artifactId);
+    }
 
     // 7. Distribute fees through 80/10/10 split
     distributeFee(db, {

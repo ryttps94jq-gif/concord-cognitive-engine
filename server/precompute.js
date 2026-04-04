@@ -153,6 +153,7 @@ export async function runPrecomputeCycle({ subconsciousTask, dtusArray, createDT
               creti: result.content,
               tags: [lens === "_general" ? null : lens, "precomputed", "cache-warm"].filter(Boolean),
               source: "subconscious.precompute",
+              citationMode: "original", // system-generated prediction, no user content cited
               meta: {
                 predictedQuery: query,
                 theme: pred.theme,

@@ -295,6 +295,7 @@ Generate a comprehensive knowledge unit that would help answer these types of qu
           creti: result.content,
           tags: [gap.lens === "_general" ? null : gap.lens, "skill-building", "gap-fill"].filter(Boolean),
           source: "subconscious.skill-acquisition",
+          citationMode: "original", // system-generated knowledge, no user content cited
           meta: { addressesWeakness: gap.sampleQueries[0], gapSeverity: gap.avgRetrievalScore },
         });
         generated++;

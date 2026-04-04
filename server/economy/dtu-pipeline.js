@@ -24,6 +24,42 @@ const DTU_TIERS = {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
+// EMERGENT CITATION ENFORCEMENT
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Build citation-compliant DTU params for emergent/system-generated content.
+ *
+ * Emergents can NEVER claim "original" when they consumed user DTUs as context.
+ * The brain call's context window IS the citation list.
+ *
+ * @param {object} params - DTU creation params
+ * @param {Array} contextDTUs - DTUs that were fed to the brain call
+ * @returns {object} params with correct citationMode and citations
+ */
+export function enforceEmergentCitations(params, contextDTUs = []) {
+  const userContextDTUs = (contextDTUs || []).filter(d =>
+    d && d.id && d.creator && d.creator !== "__CONCORD__" && d.creator !== "system"
+  );
+
+  if (userContextDTUs.length === 0) {
+    // No user content referenced — system-generated original
+    return { ...params, citationMode: "original", citations: [] };
+  }
+
+  // User content was consumed — mandatory citation
+  return {
+    ...params,
+    citationMode: "citing",
+    citations: userContextDTUs.map(d => ({
+      parentId: d.id,
+      parentCreatorId: d.creator,
+      generation: 1,
+    })),
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // DTU CREATION
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -35,11 +71,24 @@ const DTU_TIERS = {
 export function createDTU(db, {
   creatorId, title, content, contentType, lensId, tier = "REGULAR",
   tags = [], citations = [], price = 0, previewPolicy = "first_3",
+  citationMode = "original", // "original" | "citing" | "derivative"
   metadata = {},
 }) {
   if (!creatorId) return { ok: false, error: "missing_creator_id" };
   if (!title) return { ok: false, error: "missing_title" };
   if (!content) return { ok: false, error: "missing_content" };
+
+  // Citation sovereignty: enforce citation mode rules
+  const validModes = ["original", "citing", "derivative"];
+  if (!validModes.includes(citationMode)) {
+    return { ok: false, error: "invalid_citation_mode", validModes };
+  }
+  if (citationMode === "original" && citations.length > 0) {
+    return { ok: false, error: "original_mode_cannot_have_citations" };
+  }
+  if (citationMode === "derivative" && citations.length === 0) {
+    return { ok: false, error: "derivative_mode_requires_citations" };
+  }
 
   const dtuId = uid("dtu");
   const now = nowISO();
@@ -57,7 +106,12 @@ export function createDTU(db, {
   });
 
   const doCreate = db.transaction(() => {
-    // Insert DTU
+    // Insert DTU with citation mode (citations locked after publish)
+    const dtuMetadata = {
+      ...metadata,
+      citationMode,
+      citationLocked: true, // citations cannot be changed after publish
+    };
     db.prepare(`
       INSERT INTO dtus (id, creator_id, title, content, content_type, lens_id,
         tier, tags_json, price, preview_policy, creti_score,
@@ -68,7 +122,7 @@ export function createDTU(db, {
       typeof content === "string" ? content : JSON.stringify(content),
       contentType || "text", lensId || "unknown", effectiveTier,
       JSON.stringify(tags), price, previewPolicy, cretiScore,
-      Math.round(sizeKb * 100) / 100, JSON.stringify(metadata), now, now,
+      Math.round(sizeKb * 100) / 100, JSON.stringify(dtuMetadata), now, now,
     );
 
     // Register ownership
@@ -114,7 +168,9 @@ export function createDTU(db, {
         cretiScore: result.cretiScore,
         price,
         lensId,
+        citationMode,
         citationCount: citations.length,
+        citationLocked: true,
         status: "published",
       },
     };
@@ -439,6 +495,9 @@ export function forkDTU(db, {
           ...origMeta,
           forkedFrom: originalDtuId,
           forkPolicy: "open",
+          citationMode: "derivative",
+          citationLocked: true,
+          royaltyNotice: `Original creator (${original.creator_id}) earns royalties on sales of this fork`,
         };
         // Preserve source attribution through forks — attribution cannot be removed
         if (origMeta.source || origMeta.via) {
