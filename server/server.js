@@ -11235,36 +11235,51 @@ async function llmChat(messagesOrCtx, messagesOrOptions = {}, maybeOptions = {})
 //   Utility      (3B)   — lens interactions, entity actions, quick domain tasks
 // ============================================================================
 
+// ── Single-Ollama Mode ──
+// If OLLAMA_HOST is set but individual BRAIN_*_URL env vars are NOT,
+// route all 4 brains to the same Ollama instance. Conscious gets the
+// big model; others share the default (smaller) model.
+const _singleOllamaHost = process.env.OLLAMA_HOST || null;
+const _singleOllamaMode = _singleOllamaHost
+  && !process.env.BRAIN_CONSCIOUS_URL
+  && !process.env.BRAIN_SUBCONSCIOUS_URL
+  && !process.env.BRAIN_UTILITY_URL
+  && !process.env.BRAIN_REPAIR_URL;
+const _singleOllamaDefaultModel = process.env.OLLAMA_DEFAULT_MODEL || "qwen2.5:7b";
+
 const BRAIN = {
   conscious: {
-    url: process.env.BRAIN_CONSCIOUS_URL || process.env.OLLAMA_HOST || "http://ollama-conscious:11434",
+    url: process.env.BRAIN_CONSCIOUS_URL || _singleOllamaHost || "http://ollama-conscious:11434",
     model: process.env.BRAIN_CONSCIOUS_MODEL || "qwen2.5:14b-instruct-q4_K_M",
     role: "chat, deep reasoning, complex queries",
     enabled: false,
     stats: { requests: 0, totalMs: 0, dtusGenerated: 0, errors: 0, lastCallAt: null },
   },
   subconscious: {
-    url: process.env.BRAIN_SUBCONSCIOUS_URL || "http://ollama-subconscious:11434",
-    model: process.env.BRAIN_SUBCONSCIOUS_MODEL || "qwen2.5:7b",
+    url: process.env.BRAIN_SUBCONSCIOUS_URL || (_singleOllamaMode ? _singleOllamaHost : "http://ollama-subconscious:11434"),
+    model: process.env.BRAIN_SUBCONSCIOUS_MODEL || (_singleOllamaMode ? _singleOllamaDefaultModel : "qwen2.5:7b"),
     role: "autogen, dream, evolution, synthesis, birth",
     enabled: false,
     stats: { requests: 0, totalMs: 0, dtusGenerated: 0, errors: 0, lastCallAt: null },
   },
   utility: {
-    url: process.env.BRAIN_UTILITY_URL || "http://ollama-utility:11434",
-    model: process.env.BRAIN_UTILITY_MODEL || "qwen2.5:7b",
+    url: process.env.BRAIN_UTILITY_URL || (_singleOllamaMode ? _singleOllamaHost : "http://ollama-utility:11434"),
+    model: process.env.BRAIN_UTILITY_MODEL || (_singleOllamaMode ? _singleOllamaDefaultModel : "qwen2.5:7b"),
     role: "lens interactions, entity actions, quick domain tasks",
     enabled: false,
     stats: { requests: 0, totalMs: 0, dtusGenerated: 0, errors: 0, lastCallAt: null },
   },
   repair: {
-    url: process.env.BRAIN_REPAIR_URL || "http://ollama-repair:11434",
-    model: process.env.BRAIN_REPAIR_MODEL || "qwen2.5:7b",
+    url: process.env.BRAIN_REPAIR_URL || (_singleOllamaMode ? _singleOllamaHost : "http://ollama-repair:11434"),
+    model: process.env.BRAIN_REPAIR_MODEL || (_singleOllamaMode ? _singleOllamaDefaultModel : "qwen2.5:7b"),
     role: "error detection, auto-fix, runtime repair",
     enabled: false,
     stats: { requests: 0, totalMs: 0, dtusGenerated: 0, errors: 0, fixes: 0, sleeping: true, lastCallAt: null },
   },
 };
+if (_singleOllamaMode) {
+  structuredLog("info", "single_ollama_mode", { host: _singleOllamaHost, defaultModel: _singleOllamaDefaultModel });
+}
 
 /**
  * Initialize four-brain architecture.
@@ -28206,6 +28221,50 @@ app.get("/api/system/health", asyncHandler(async (req, res) => {
     brainQueues: typeof getBrainQueueStats === "function" ? getBrainQueueStats() : {},
     redis: typeof getRedisStatus === "function" ? getRedisStatus() : { mode: "local" },
     stateSync: typeof getSyncStatus === "function" ? getSyncStatus() : { initialized: false },
+  });
+}));
+
+// Feature Status Dashboard — shows all feature flags and their current state
+app.get("/api/system/features", asyncHandler(async (_req, res) => {
+  const brains = {};
+  for (const [name, brain] of Object.entries(BRAIN)) {
+    brains[name] = { enabled: brain.enabled, model: brain.model, url: brain.url.replace(/\/\/.*@/, "//***@") };
+  }
+  let reproductionEnabled = false;
+  try {
+    const repro = await import("./emergent/reproduction.js");
+    reproductionEnabled = typeof repro.isReproductionEnabled === "function" ? repro.isReproductionEnabled() : false;
+  } catch { /* module may not be loaded */ }
+
+  res.json({
+    ok: true,
+    singleOllamaMode: !!_singleOllamaMode,
+    brains,
+    chicken2: {
+      enabled: STATE.__chicken2?.enabled ?? false,
+      mode: STATE.__chicken2?.mode || "unknown",
+    },
+    chicken3: {
+      enabled: STATE.__chicken3?.enabled ?? false,
+      cronEnabled: STATE.__chicken3?.cronEnabled ?? false,
+      metaEnabled: STATE.__chicken3?.metaEnabled ?? false,
+      streamingEnabled: STATE.__chicken3?.streamingEnabled ?? false,
+      multimodalEnabled: STATE.__chicken3?.multimodalEnabled ?? false,
+      voiceEnabled: STATE.__chicken3?.voiceEnabled ?? false,
+      toolsEnabled: STATE.__chicken3?.toolsEnabled ?? false,
+      federationEnabled: STATE.__chicken3?.federationEnabled ?? false,
+    },
+    settings: {
+      heartbeatEnabled: STATE.settings?.heartbeatEnabled ?? false,
+      autogenEnabled: STATE.settings?.autogenEnabled ?? false,
+      dreamEnabled: STATE.settings?.dreamEnabled ?? false,
+      evolutionEnabled: STATE.settings?.evolutionEnabled ?? false,
+      synthEnabled: STATE.settings?.synthEnabled ?? false,
+      speculativeGateEnabled: STATE.settings?.speculativeGateEnabled ?? false,
+    },
+    reproduction: reproductionEnabled,
+    repairNetwork: !!process.env.REPAIR_NETWORK_ENABLED,
+    fallbackChain: typeof getFallbackHealth === "function" ? getFallbackHealth() : null,
   });
 }));
 
