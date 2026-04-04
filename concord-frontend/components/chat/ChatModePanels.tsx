@@ -311,7 +311,7 @@ export function ExplorePanel({ currentLens, onSendMessage }: ModePanelProps) {
 
 // ── Connect Panel ───────────────────────────────────────────────
 
-export function ConnectPanel({ currentLens: _currentLens, onSendMessage }: ModePanelProps) {
+export function ConnectPanel({ currentLens, onSendMessage }: ModePanelProps) {
   return (
     <div className="px-3 py-4 space-y-4">
       {/* Mode header */}
@@ -332,7 +332,7 @@ export function ConnectPanel({ currentLens: _currentLens, onSendMessage }: ModeP
             label="Invite Collaborator"
             icon={UserPlus}
             color="neon-pink"
-            onClick={() => onSendMessage('I want to invite a collaborator to work with me on the current lens')}
+            onClick={() => onSendMessage(`I want to invite a collaborator to work with me on the "${currentLens}" lens`)}
           />
           <QuickActionButton
             label="Shared Sessions"
@@ -366,6 +366,10 @@ export function ConnectPanel({ currentLens: _currentLens, onSendMessage }: ModeP
           <Lightbulb className="w-3 h-3 text-neon-pink inline mr-1" />
           Collaborative workspaces let you share DTUs, chat in real-time, and co-create artifacts.
         </p>
+        <div className="flex items-center gap-2 text-xs text-zinc-500 mt-1.5">
+          <Eye className="w-3 h-3 text-neon-pink" />
+          <span>Current lens: <span className="text-neon-pink font-medium">{currentLens}</span></span>
+        </div>
       </div>
     </div>
   );
@@ -373,10 +377,20 @@ export function ConnectPanel({ currentLens: _currentLens, onSendMessage }: ModeP
 
 // ── Chat Panel (minimal) ────────────────────────────────────────
 
-export function ChatPanel({ currentLens: _currentLens }: ModePanelProps) {
+export function ChatPanel({ currentLens }: ModePanelProps) {
   // The chat panel is intentionally minimal — it's the legacy default mode.
   // It only shows when there are 0 messages and the mode is explicitly 'chat'.
-  return null;
+  if (!currentLens) return null;
+  return (
+    <div className="px-3 py-2">
+      <div className="p-2 rounded-lg bg-lattice-elevated border border-lattice-border">
+        <div className="flex items-center gap-2 text-xs text-zinc-400">
+          <MessageSquare className="w-3 h-3 text-neon-cyan" />
+          <span>Chatting in <span className="text-neon-cyan font-medium">{currentLens}</span></span>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ── Mode selector bar ───────────────────────────────────────────

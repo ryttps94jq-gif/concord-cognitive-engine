@@ -43,8 +43,8 @@ export function UploadFlow({ onUpload, onCancel, progress }: UploadFlowProps) {
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [isExplicit, setIsExplicit] = useState(false);
-  const [lyrics, _setLyrics] = useState('');
-  const [credits, _setCredits] = useState<TrackCredit[]>([]);
+  const [lyrics, setLyrics] = useState('');
+  const [credits, setCredits] = useState<TrackCredit[]>([]);
   const [crossPost, setCrossPost] = useState(true);
   const [previewStart, setPreviewStart] = useState(0);
   const [previewDuration, setPreviewDuration] = useState(30);

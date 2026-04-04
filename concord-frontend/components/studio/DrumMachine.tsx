@@ -42,7 +42,7 @@ export function DrumMachine({
   onSavePattern,
 }: DrumMachineProps) {
   const [selectedPadId, setSelectedPadId] = useState<string | null>(null);
-  const [_stepCount, setStepCount] = useState(pattern?.steps || 16);
+  const [stepCount, setStepCount] = useState(pattern?.steps || 16);
   const [showVelocity, setShowVelocity] = useState(false);
 
   const steps = pattern?.steps || 16;

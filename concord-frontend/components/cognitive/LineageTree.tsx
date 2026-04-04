@@ -86,6 +86,15 @@ export function LineageTree({
         </div>
         <div className="flex items-center gap-2">
           <button
+            onClick={() => setTimelineView(!timelineView)}
+            className={cn(
+              'px-2 py-1 text-xs transition-colors',
+              timelineView ? 'text-neon-cyan' : 'text-gray-400 hover:text-white'
+            )}
+          >
+            {timelineView ? 'Tree view' : 'Timeline'}
+          </button>
+          <button
             onClick={expandAll}
             className="px-2 py-1 text-xs text-gray-400 hover:text-white transition-colors"
           >

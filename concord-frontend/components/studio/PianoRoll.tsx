@@ -55,7 +55,7 @@ export function PianoRoll({
   const [tool, setTool] = useState<PianoRollTool>('draw');
   const [selectedNotes, setSelectedNotes] = useState<Set<string>>(new Set());
   const [zoomX, setZoomX] = useState(1);
-  const [zoomY, _setZoomY] = useState(1);
+  const [zoomY, setZoomY] = useState(1);
   const [showVelocity, setShowVelocity] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -179,12 +179,25 @@ export function PianoRoll({
           Velocity
         </button>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1" title="Horizontal Zoom">
           <button onClick={() => setZoomX(Math.max(0.25, zoomX - 0.25))} className="p-0.5 text-gray-500 hover:text-white">
             <ZoomOut className="w-3 h-3" />
           </button>
           <span className="text-[10px] text-gray-400 w-8 text-center">{Math.round(zoomX * 100)}%</span>
           <button onClick={() => setZoomX(Math.min(4, zoomX + 0.25))} className="p-0.5 text-gray-500 hover:text-white">
+            <ZoomIn className="w-3 h-3" />
+          </button>
+        </div>
+
+        <div className="w-px h-4 bg-white/10" />
+
+        <div className="flex items-center gap-1" title="Vertical Zoom">
+          <span className="text-[10px] text-gray-500">V:</span>
+          <button onClick={() => setZoomY(Math.max(0.5, zoomY - 0.25))} className="p-0.5 text-gray-500 hover:text-white">
+            <ZoomOut className="w-3 h-3" />
+          </button>
+          <span className="text-[10px] text-gray-400 w-8 text-center">{Math.round(zoomY * 100)}%</span>
+          <button onClick={() => setZoomY(Math.min(3, zoomY + 0.25))} className="p-0.5 text-gray-500 hover:text-white">
             <ZoomIn className="w-3 h-3" />
           </button>
         </div>

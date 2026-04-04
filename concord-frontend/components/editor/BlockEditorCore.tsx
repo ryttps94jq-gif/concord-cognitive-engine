@@ -439,12 +439,12 @@ function ToolbarButton({
 
 // Slash command menu component
 export function SlashCommandMenu({
-  editor: _editor,
+  editor,
   items,
   onSelect
 }: {
   editor: unknown;
-  items: Array<{ icon: React.ElementType; label: string; description: string; command: () => void }>;
+  items: Array<{ icon: React.ElementType; label: string; description: string; command: (editor?: unknown) => void }>;
   onSelect: () => void;
 }) {
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -459,7 +459,7 @@ export function SlashCommandMenu({
         setSelectedIndex((prev) => (prev - 1 + items.length) % items.length);
       } else if (e.key === 'Enter') {
         e.preventDefault();
-        items[selectedIndex].command();
+        items[selectedIndex].command(editor);
         onSelect();
       }
     };
@@ -480,7 +480,7 @@ export function SlashCommandMenu({
             <button
               key={item.label}
               onClick={() => {
-                item.command();
+                item.command(editor);
                 onSelect();
               }}
               className={cn(
