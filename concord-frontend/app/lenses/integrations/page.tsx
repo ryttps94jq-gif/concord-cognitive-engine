@@ -2,7 +2,8 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiHelpers } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
+import type { CreateWebhookRequest } from '@/lib/api/generated-types';
 import { useUIStore } from '@/store/ui';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
@@ -38,7 +39,7 @@ export default function IntegrationsLensPage() {
   });
 
   const createWebhookMutation = useMutation({
-    mutationFn: (data: Record<string, unknown>) => apiHelpers.webhooks.register(data),
+    mutationFn: (data: CreateWebhookRequest) => apiHelpers.webhooks.register(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['webhooks'] });
       setShowCreate(false);
@@ -58,7 +59,7 @@ export default function IntegrationsLensPage() {
 
   const toggleWebhookMutation = useMutation({
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
-      enabled ? apiHelpers.webhooks.deactivate(id) : apiHelpers.webhooks.register({ id }),
+      enabled ? apiHelpers.webhooks.deactivate(id) : api.post(`/api/webhooks/${id}/activate`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['webhooks'] }),
     onError: () => {
       useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
