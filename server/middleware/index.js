@@ -25,6 +25,7 @@ import logger from '../logger.js';
  * @param {Function} deps.requestIdMiddleware - Request ID middleware
  * @param {Function} deps.requestLoggerMiddleware - Structured logging middleware
  * @param {Function} deps.sanitizationMiddleware - Input sanitization middleware
+ * @param {Function|null} deps.inputLimitsMiddleware - Field-level input length enforcement (optional)
  * @param {Function|null} deps.requestTimeoutMiddleware - Request timeout middleware (optional)
  * @param {Function} deps.metricsMiddleware - Prometheus metrics middleware
  * @param {Function} deps.cookieParserMiddleware - Cookie parsing middleware
@@ -44,16 +45,13 @@ export default function configureMiddleware(app, deps) {
     requestIdMiddleware,
     requestLoggerMiddleware,
     sanitizationMiddleware,
+    inputLimitsMiddleware,
     requestTimeoutMiddleware,
     metricsMiddleware,
     cookieParserMiddleware,
     authMiddleware,
     productionWriteAuthMiddleware,
     csrfMiddleware,
-    writeRateLimitMiddleware,
-    readRateLimitMiddleware,
-    contentGuardMiddleware,
-    securityScanMiddleware,
     NODE_ENV,
   } = deps;
 
@@ -111,7 +109,7 @@ export default function configureMiddleware(app, deps) {
   if (compression) app.use(compression());
 
   // ---- Body Parsing (per-endpoint size limits) ----
-  // Default 1MB for JSON, 50MB for media uploads per pre-launch spec
+  // Strict limits for chatty endpoints; generous for bulk operations
   const BODY_LIMITS = {
     '/api/chat': '256kb',
     '/api/ask': '256kb',
@@ -121,14 +119,12 @@ export default function configureMiddleware(app, deps) {
     '/api/auth/login': '16kb',
     '/api/auth/change-password': '4kb',
     '/api/shared-session': '64kb',
-    '/api/media/upload': '50mb',
   };
-  const DEFAULT_JSON_LIMIT = '1mb';
 
   app.use((req, res, next) => {
     // Find most specific matching route prefix
     const matchedLimit = Object.entries(BODY_LIMITS).find(([prefix]) => req.url.startsWith(prefix));
-    const limit = matchedLimit ? matchedLimit[1] : DEFAULT_JSON_LIMIT;
+    const limit = matchedLimit ? matchedLimit[1] : '10mb';
     express.json({ limit, verify: (innerReq, _res, buf) => {
       if (innerReq.url === '/api/economy/webhook') innerReq.rawBody = buf;
     } })(req, res, next);
@@ -199,6 +195,7 @@ export default function configureMiddleware(app, deps) {
   app.use(requestIdMiddleware);       // Add request ID to all requests
   app.use(requestLoggerMiddleware);   // Structured JSON logging
   app.use(sanitizationMiddleware);    // Sanitize input
+  if (inputLimitsMiddleware) app.use(inputLimitsMiddleware); // Enforce field-level length limits
 
   // ---- Request Timeouts ----
   if (requestTimeoutMiddleware) app.use(requestTimeoutMiddleware);
@@ -211,21 +208,7 @@ export default function configureMiddleware(app, deps) {
 
   // ---- Auth Pipeline ----
   app.use(cookieParserMiddleware);          // Parse cookies before auth
-  app.use(authMiddleware);                  // Authentication (selective protection)
+  app.use(authMiddleware);                  // Authentication
   app.use(productionWriteAuthMiddleware);   // Enforce auth on all writes in production
   app.use(csrfMiddleware);                  // CSRF protection after auth
-
-  // ---- Pre-Launch Rate Limiting (per-route) ----
-  if (writeRateLimitMiddleware) app.use(writeRateLimitMiddleware);  // Write rate limits per endpoint
-  if (readRateLimitMiddleware) app.use(readRateLimitMiddleware);    // Read rate limits for open GETs
-
-  // ---- Content Guard — Illegal Content Blocking ----
-  // MUST run BEFORE security scanner. Blocks Categories 1-5 (CSAM, threats,
-  // terrorism, NCII, drug sales) and prevents content from being stored.
-  if (contentGuardMiddleware) app.use(contentGuardMiddleware);
-
-  // ---- Security Intelligence Scanner ----
-  // Scans POST/PUT body content through layers 1-3 (hash, regex, token-overlap).
-  // Flags and logs matches but only blocks blocking-level threats.
-  if (securityScanMiddleware) app.use(securityScanMiddleware);
 }

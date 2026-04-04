@@ -543,6 +543,15 @@ export default function ChatLensPage() {
   // Mutations
   // ──────────────────────────────────────────────
 
+  const chatAbortControllerRef = useRef<AbortController | null>(null);
+
+  // Abort in-flight chat requests on unmount
+  useEffect(() => {
+    return () => {
+      chatAbortControllerRef.current?.abort();
+    };
+  }, []);
+
   const sendMutation = useMutation({
     mutationFn: async (content: string) => {
       // Build attachment metadata
@@ -607,6 +616,12 @@ export default function ChatLensPage() {
       setQuotedMessage(null);
 
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5050';
+
+      // Abort any previous in-flight request and create a new controller
+      chatAbortControllerRef.current?.abort();
+      const abortController = new AbortController();
+      chatAbortControllerRef.current = abortController;
+
       try {
         setIsStreaming(true);
         setStreamingContent('');
@@ -614,6 +629,7 @@ export default function ChatLensPage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
+          signal: abortController.signal,
           body: JSON.stringify({
             message: messageContent,
             mode: aiMode.id,
@@ -669,7 +685,10 @@ export default function ChatLensPage() {
         setStreamingContent('');
         const data = await streamRes.json();
         return data;
-      } catch {
+      } catch (err) {
+        // If the request was aborted (unmount / navigation), don't retry
+        if (abortController.signal.aborted) throw err;
+
         // Stream endpoint failed, fall back to regular POST
         setIsStreaming(false);
         setStreamingContent('');
@@ -679,7 +698,7 @@ export default function ChatLensPage() {
           sessionId: activeSessionId,
           ...(systemPrompt ? { systemPrompt } : {}),
           ...(attachmentMeta.length > 0 ? { attachments: attachmentMeta } : {}),
-        });
+        }, { signal: abortController.signal });
         return response.data;
       }
     },
@@ -732,11 +751,15 @@ export default function ChatLensPage() {
 
   const regenerateMutation = useMutation({
     mutationFn: async (lastUserContent: string) => {
+      chatAbortControllerRef.current?.abort();
+      const abortController = new AbortController();
+      chatAbortControllerRef.current = abortController;
+
       const response = await api.post('/api/chat', {
         message: lastUserContent,
         mode: aiMode.id,
         sessionId: selectedConversation,
-      });
+      }, { signal: abortController.signal });
       return response.data;
     },
     onSuccess: (data) => {

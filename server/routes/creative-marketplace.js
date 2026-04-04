@@ -18,6 +18,7 @@
  */
 
 import express from "express";
+import logger from "../logger.js";
 import {
   publishArtifact,
   publishDerivativeArtifact,
@@ -51,14 +52,12 @@ import {
   LICENSE_TYPES,
 } from "../economy/creative-marketplace.js";
 import { QUEST_REWARD_POLICY } from "../lib/creative-marketplace-constants.js";
-import { requireConsent } from "../lib/consent.js";
-import { requireSellerEligibility } from "../lib/account-lifecycle.js";
 
 /**
  * Create the creative marketplace router.
  * @param {{ db: object }} deps
  */
-export default function createCreativeMarketplaceRouter({ db, requireAuth }) {
+export default function createCreativeMarketplaceRouter({ db, requireAuth, detectWashTrading }) {
   const router = express.Router();
 
   // Auth for writes: POST/PUT/DELETE/PATCH require authentication
@@ -97,31 +96,11 @@ export default function createCreativeMarketplaceRouter({ db, requireAuth }) {
   // ── Publish Artifact ────────────────────────────────────────────────
 
   router.post("/artifacts", (req, res) => {
-    const creatorId = req.body?.creatorId || req.user?.id;
-    if (creatorId) {
-      // Seller verification: account age + email verified + ToS accepted
-      const sellerCheck = requireSellerEligibility(db, creatorId);
-      if (!sellerCheck.allowed) return res.status(403).json(sellerCheck);
-
-      // Consent gate: nothing leaves personal universe without permission
-      const consent = requireConsent(db, creatorId, "publish_to_marketplace");
-      if (!consent.allowed) return res.status(403).json(consent);
-    }
-
     const result = publishArtifact(db, req.body || {});
     res.status(result.ok ? 201 : 400).json(result);
   });
 
   router.post("/artifacts/derivative", (req, res) => {
-    const creatorId = req.body?.creatorId || req.user?.id;
-    if (creatorId) {
-      const sellerCheck = requireSellerEligibility(db, creatorId);
-      if (!sellerCheck.allowed) return res.status(403).json(sellerCheck);
-
-      const consent = requireConsent(db, creatorId, "publish_to_marketplace");
-      if (!consent.allowed) return res.status(403).json(consent);
-    }
-
     const result = publishDerivativeArtifact(db, req.body || {});
     res.status(result.ok ? 201 : 400).json(result);
   });
@@ -158,8 +137,27 @@ export default function createCreativeMarketplaceRouter({ db, requireAuth }) {
   // ── Purchase ────────────────────────────────────────────────────────
 
   router.post("/artifacts/:id/purchase", (req, res) => {
+    const { buyerId } = req.body;
+
+    // ── Wash Trading Detection (Category 1: Adversarial) ───────────────
+    // Look up the artifact to get the seller/creator before purchase
+    if (typeof detectWashTrading === "function" && buyerId) {
+      const artifact = getArtifact(db, req.params.id);
+      if (artifact?.creator_id) {
+        const washResult = detectWashTrading(buyerId, artifact.creator_id, req);
+        if (washResult.suspicious) {
+          logger.warn("[CreativeMarketplace] Wash trade suspected", {
+            buyerId,
+            sellerId: artifact.creator_id,
+            artifactId: req.params.id,
+            reasons: washResult.reasons,
+          });
+        }
+      }
+    }
+
     const result = purchaseArtifact(db, {
-      buyerId: req.body.buyerId,
+      buyerId,
       artifactId: req.params.id,
       requestId: req.body.requestId,
       ip: req.ip,
@@ -219,20 +217,9 @@ export default function createCreativeMarketplaceRouter({ db, requireAuth }) {
   });
 
   router.post("/artifacts/:id/promote", (req, res) => {
-    // Consent gate: each scope escalation requires separate consent
-    const promotedBy = req.body.promotedBy || req.user?.id;
-    if (promotedBy) {
-      // Determine target tier from the artifact's current tier
-      const artifact = getArtifact(db, req.params.id);
-      const targetTier = artifact?.federation_tier === "regional" ? "national" : "global";
-      const consentAction = targetTier === "national" ? "promote_to_national" : "promote_to_global";
-      const consent = requireConsent(db, promotedBy, consentAction);
-      if (!consent.allowed) return res.status(403).json(consent);
-    }
-
     const result = promoteArtifact(db, {
       artifactId: req.params.id,
-      promotedBy,
+      promotedBy: req.body.promotedBy,
     });
     res.status(result.ok ? 200 : 400).json(result);
   });
