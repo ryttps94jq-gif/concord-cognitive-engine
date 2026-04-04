@@ -11,6 +11,7 @@ import {
   Loader2,
   Star,
 } from 'lucide-react';
+import Image from 'next/image';
 import { cn, formatNumber } from '@/lib/utils';
 import { api } from '@/lib/api/client';
 
@@ -169,9 +170,11 @@ export function SuggestedFollows({
                     )}
                   >
                     {creator.avatarUrl ? (
-                      <img
+                      <Image
                         src={creator.avatarUrl}
                         alt={creator.displayName}
+                        width={40}
+                        height={40}
                         className="w-full h-full rounded-full object-cover"
                       />
                     ) : (

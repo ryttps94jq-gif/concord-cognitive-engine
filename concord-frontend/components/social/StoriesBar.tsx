@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, X, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api/client';
 
@@ -83,9 +84,11 @@ function StoryCircle({
             )}
           >
             {user.avatarUrl ? (
-              <img
+              <Image
                 src={user.avatarUrl}
                 alt={user.displayName}
+                width={56}
+                height={56}
                 className="w-full h-full rounded-full object-cover"
               />
             ) : (
@@ -247,9 +250,11 @@ function StoryViewer({
             )}
           >
             {currentUser.avatarUrl ? (
-              <img
+              <Image
                 src={currentUser.avatarUrl}
                 alt={currentUser.displayName}
+                width={32}
+                height={32}
                 className="w-full h-full rounded-full object-cover"
               />
             ) : (
@@ -261,7 +266,7 @@ function StoryViewer({
 
         {/* Story content */}
         <div
-          className="w-full h-full flex items-center justify-center"
+          className="w-full h-full flex items-center justify-center relative"
           onClick={(e) => {
             const rect = e.currentTarget.getBoundingClientRect();
             const x = e.clientX - rect.left;
@@ -270,10 +275,11 @@ function StoryViewer({
           }}
         >
           {currentStory.imageUrl ? (
-            <img
+            <Image
               src={currentStory.imageUrl}
               alt=""
-              className="w-full h-full object-cover"
+              fill
+              className="object-cover"
             />
           ) : currentStory.content ? (
             <div className="p-8 text-center">

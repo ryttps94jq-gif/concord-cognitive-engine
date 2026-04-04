@@ -7,6 +7,7 @@ import { api } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useLensDTUs } from '@/hooks/useLensDTUs';
+import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Camera, Search, Upload, Grid, Image as ImageIcon,
@@ -301,10 +302,11 @@ export default function PhotographyPage() {
                       style={{ aspectRatio: MASONRY_RATIOS[idx % MASONRY_RATIOS.length] }}
                     >
                       {photo.mediaId ? (
-                        <img
+                        <Image
                           src={`/api/media/stream/${photo.mediaId}`}
                           alt={photo.title}
-                          className="w-full h-full object-cover"
+                          fill
+                          className="object-cover"
                           loading="lazy"
                         />
                       ) : (
@@ -362,7 +364,7 @@ export default function PhotographyPage() {
             >
               <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFileSelect(f); }} />
               {uploadPreview ? (
-                <img src={uploadPreview} alt="Preview" className="max-h-48 mx-auto rounded-lg mb-2" />
+                <Image src={uploadPreview} alt="Preview" width={400} height={192} className="max-h-48 mx-auto rounded-lg mb-2 w-auto" />
               ) : (
                 <Camera className="w-8 h-8 mx-auto mb-2 text-gray-500" />
               )}
@@ -467,10 +469,12 @@ export default function PhotographyPage() {
                 {/* Photo display */}
                 <div className="flex-1 flex items-center justify-center min-h-0 max-h-[70vh] lg:max-h-[80vh]">
                   {lightboxPhoto.mediaId ? (
-                    <img
+                    <Image
                       src={`/api/media/stream/${lightboxPhoto.mediaId}`}
                       alt={lightboxPhoto.title}
-                      className="max-w-full max-h-[70vh] lg:max-h-[80vh] object-contain rounded-lg shadow-2xl"
+                      width={800}
+                      height={600}
+                      className="max-w-full max-h-[70vh] lg:max-h-[80vh] object-contain rounded-lg shadow-2xl w-auto h-auto"
                     />
                   ) : (
                     <div className="w-full aspect-[4/3] max-w-lg bg-gradient-to-br from-sky-900/40 to-purple-900/40 rounded-lg flex items-center justify-center shadow-2xl">

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -286,9 +287,11 @@ function MembersSidebar({
                         )}
                       >
                         {member.avatarUrl ? (
-                          <img
+                          <Image
                             src={member.avatarUrl}
                             alt={member.displayName}
+                            width={32}
+                            height={32}
                             className="w-full h-full rounded-full object-cover"
                           />
                         ) : (
