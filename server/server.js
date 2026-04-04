@@ -28040,9 +28040,31 @@ app.get("/api/guidance/first-win", asyncHandler(async (req, res) => {
 app.get("/api/lens/artifacts", asyncHandler(async (req, res) => {
   const domain = req.query.domain || null;
   const limit = Math.min(Number(req.query.limit) || 50, 200);
-  let artifacts = dtusArray().filter(d => d.meta?.artifact || d.meta?.fileHash);
-  if (domain) artifacts = artifacts.filter(d => (d.tags || []).includes(domain) || d.scope === domain);
-  artifacts = artifacts.slice(0, limit);
+  const userId = req.user?.id || req.query.userId;
+
+  // Universe-aware: prioritize user's local DTUs, then global
+  let pool = [];
+  if (userId) {
+    try {
+      const uni = getUserUniverse(userId);
+      if (uni?.localDTUs?.size > 0) {
+        for (const [, dtu] of uni.localDTUs) {
+          if (dtu.meta?.artifact || dtu.meta?.fileHash) pool.push({ ...dtu, _local: true });
+        }
+      }
+    } catch (_e) { /* ignore */ }
+  }
+  // Add global DTUs (dedup by id)
+  const localIds = new Set(pool.map(d => d.id));
+  for (const d of dtusArray()) {
+    if (localIds.has(d.id)) continue;
+    if (d.meta?.artifact || d.meta?.fileHash) pool.push(d);
+  }
+
+  if (domain) pool = pool.filter(d => (d.tags || []).includes(domain) || d.scope === domain);
+  // Local-first sort
+  pool.sort((a, b) => (b._local ? 1 : 0) - (a._local ? 1 : 0));
+  const artifacts = pool.slice(0, limit);
   res.json({ ok: true, artifacts, total: artifacts.length });
 }));
 
