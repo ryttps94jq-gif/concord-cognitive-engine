@@ -11,7 +11,7 @@
  *   - Real-time dtu:created events via socket
  */
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -21,7 +21,7 @@ import { VirtualDTUList } from '@/components/lists/VirtualDTUList';
 import { DTUDetailView } from '@/components/dtu/DTUDetailView';
 import { DTUQuickCreate } from '@/components/dtu/DTUQuickCreate';
 import { LiveDTUFeed } from '@/components/live/LiveDTUFeed';
-import { useLatticeStore, selectDTUsByTier } from '@/store/lattice';
+import { useLatticeStore, selectDTUsByTier, selectFilteredDTUs } from '@/store/lattice';
 import { cn } from '@/lib/utils';
 import {
   Database, Plus, RefreshCw, ChevronLeft, ChevronRight,
@@ -72,6 +72,15 @@ export default function DTUBrowserPage() {
 
   // Real-time tier counts from the lattice store (populated by socket events)
   const tierCounts = useLatticeStore(selectDTUsByTier);
+
+  // Sync page filters into the lattice store so selectFilteredDTUs stays current
+  const setTierFilterStore = useLatticeStore((s) => s.setTierFilter);
+  const setSearchQueryStore = useLatticeStore((s) => s.setSearchQuery);
+  useEffect(() => { setTierFilterStore(tierFilter); }, [tierFilter, setTierFilterStore]);
+  useEffect(() => { setSearchQueryStore(searchQuery); }, [searchQuery, setSearchQueryStore]);
+
+  // Filtered DTUs from the lattice store (real-time, reflecting socket-pushed DTUs)
+  const filteredStoreDTUs = useLatticeStore(selectFilteredDTUs);
 
   const dtus: DTU[] = useMemo(() => data?.dtus || data?.items || [], [data?.dtus, data?.items]);
   const total = data?.total || 0;
@@ -371,8 +380,14 @@ export default function DTUBrowserPage() {
 
           {/* Right sidebar: live feed */}
           {showFeed && (
-            <aside className="w-80 flex-shrink-0 hidden xl:block">
+            <aside className="w-80 flex-shrink-0 hidden xl:block space-y-3">
               <LiveDTUFeed limit={15} onDtuClick={(id) => setSelectedDtuId(id)} />
+              {filteredStoreDTUs.length > 0 && (
+                <div className="px-3 py-2 rounded-lg border border-lattice-border bg-lattice-surface/50 text-xs text-gray-400">
+                  <Zap className="w-3 h-3 inline mr-1 text-neon-cyan" />
+                  {filteredStoreDTUs.length} DTUs match current filters in real-time store
+                </div>
+              )}
             </aside>
           )}
         </div>
