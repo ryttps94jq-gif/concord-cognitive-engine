@@ -457,6 +457,22 @@ export const apiHelpers = {
   // Note: Marketplace is defined in v4.0 APIs section below
 
   // Global feed
+  universe: {
+    stats: () => api.get('/api/universe/stats'),
+    dtus: (params?: { domain?: string; limit?: number }) => api.get('/api/universe/dtus', { params }),
+    initialize: (data: { mode: string; domains?: string[] }) => api.post('/api/universe/initialize', data),
+    preferences: (prefs: Record<string, unknown>) => api.put('/api/universe/preferences', prefs),
+  },
+
+  globalTimeline: {
+    browse: (params?: { domain?: string; search?: string; page?: number }) => api.get('/api/global/browse', { params }),
+    submit: (data: { dtuId: string; reason?: string }) => api.post('/api/global/submit', data),
+    sync: (data: { dtuIds: string[] }) => api.post('/api/global/sync', data),
+    review: (data: { submissionId: string; action: string; reason?: string }) => api.post('/api/global/review', data),
+    queue: () => api.get('/api/global/queue'),
+    contributions: () => api.get('/api/global/contributions'),
+  },
+
   global: {
     feed: () => api.get('/api/global/feed'),
     // "Everything Real" paginated endpoints

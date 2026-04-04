@@ -40889,7 +40889,7 @@ function freshnessLabel(score) {
 }
 
 // Track DTU access for freshness
-app.get("/api/dtus/:id/freshness", (req, res) => {
+app.get("/api/dtus/:id/freshness", async (req, res) => {
   const dtu = STATE.dtus.get(req.params.id);
   if (!dtu) return res.status(404).json({ ok: false, error: "DTU not found" });
 
