@@ -129,10 +129,10 @@ function _trust(a, b) {
   try {
     const tn = getSTATE()?.__emergent?._trustNetwork;
     return tn?.edges.get(`${a}\u2192${b}`)?.score ?? 0.5;
-  } catch { return 0.5; }
+  } catch (err) { logger.debug('emergent:entity-teaching', '_trust lookup failed', { a, b, error: err?.message }); return 0.5; }
 }
 function _species(id) {
-  try { return _body(id)?.species || null; } catch { return null; }
+  try { return _body(id)?.species || null; } catch (err) { logger.debug('emergent:entity-teaching', '_species lookup failed', { id, error: err?.message }); return null; }
 }
 function _boostOrgan(entityId, organId, delta) {
   try {
