@@ -238,48 +238,47 @@ export function useSocket(options: UseSocketOptions = {}): UseSocketReturn {
 // ── Store routing ──────────────────────────────────────────────
 
 function routeToStores(event: SocketEvent, data: unknown) {
+  if (!data || typeof data !== 'object') return;
   const d = data as Record<string, unknown>;
 
   switch (event) {
     // DTU → lattice store
     case 'dtu:created':
-      if (d && d.id) {
-        useLatticeStore.getState().addRecentDTU(d as DTU);
+      if (d.id) {
+        useLatticeStore.getState().addRecentDTU(data as unknown as DTU);
       }
       break;
     case 'dtu:updated':
-      if (d && d.id) {
-        const changes = (d.changes as Partial<DTU> | undefined) ?? (d as Partial<DTU>);
+      if (d.id) {
+        const changes = ((d.changes as Record<string, unknown> | undefined) ?? d) as unknown as Partial<DTU>;
         useLatticeStore.getState().updateDTU(d.id as string, changes);
       }
       break;
     case 'dtu:deleted':
-      if (d && d.id) {
+      if (d.id) {
         useLatticeStore.getState().removeDTU(d.id as string);
       }
       break;
 
     // System alerts → UI store toast
     case 'system:alert':
-      if (d && d.message) {
+      if (d.message) {
         useUIStore.getState().addToast({
           type: (d.type as 'error' | 'warning' | 'info') || 'info',
           message: d.message as string,
           duration: 8000,
         });
-        useSystemStore.getState().addSystemAlert(d as SystemAlert);
+        useSystemStore.getState().addSystemAlert(data as unknown as SystemAlert);
       }
       break;
 
     // Attention → system store
     case 'attention:allocation':
-      if (d) {
-        if (Array.isArray(d.allocation)) {
-          useSystemStore.getState().setAttentionAllocation(d.allocation as AttentionAllocation[]);
-        }
-        if (d.focusOverride !== undefined) {
-          useSystemStore.getState().setFocusOverride(d.focusOverride as FocusOverride | null);
-        }
+      if (Array.isArray(d.allocation)) {
+        useSystemStore.getState().setAttentionAllocation(d.allocation as unknown as AttentionAllocation[]);
+      }
+      if (d.focusOverride !== undefined) {
+        useSystemStore.getState().setFocusOverride(d.focusOverride as unknown as FocusOverride | null);
       }
       break;
 
@@ -295,16 +294,16 @@ function routeToStores(event: SocketEvent, data: unknown) {
 
     // Dream → sovereign store
     case 'dream:captured':
-      if (d && d.id) {
-        useSovereignStore.getState().addDream(d as Dream);
+      if (d.id) {
+        useSovereignStore.getState().addDream(data as unknown as Dream);
       }
       break;
 
     // Promotion → sovereign store
     case 'promotion:approved':
     case 'promotion:rejected':
-      if (d && d.id) {
-        useSovereignStore.getState().updatePromotion(d.id as string, d as Partial<Promotion>);
+      if (d.id) {
+        useSovereignStore.getState().updatePromotion(d.id as string, data as unknown as Partial<Promotion>);
       }
       break;
 
