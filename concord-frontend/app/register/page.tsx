@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { useState, useRef, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api/client';
@@ -16,6 +16,8 @@ export default function RegisterPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const pageLoadTime = useRef(Date.now());
+  const [honeypot, setHoneypot] = useState('');
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -35,7 +37,11 @@ export default function RegisterPage() {
     try {
       // Fetch CSRF token first
       await api.get('/api/auth/csrf-token');
-      const res = await api.post('/api/auth/register', { username, email, password });
+      const res = await api.post('/api/auth/register', {
+        username, email, password,
+        _t: pageLoadTime.current,
+        ...(honeypot && { website: honeypot }),
+      });
       if (res.data?.ok) {
         // Registration auto-sets auth cookies, redirect to onboarding for universe setup
         localStorage.setItem('concord_entered', 'true');
@@ -80,6 +86,10 @@ export default function RegisterPage() {
         {/* Form card */}
         <div className="bg-lattice-surface border border-lattice-border rounded-2xl p-8">
           <form onSubmit={handleSubmit} className="space-y-5" aria-describedby={error ? "register-error" : undefined}>
+            {/* Honeypot — hidden from real users, bots auto-fill it */}
+            <div className="absolute -left-[9999px]" aria-hidden="true">
+              <input type="text" name="website" tabIndex={-1} autoComplete="off" value={honeypot} onChange={(e) => setHoneypot(e.target.value)} />
+            </div>
             {error && (
               <div id="register-error" role="alert" aria-live="assertive" className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
                 {error}

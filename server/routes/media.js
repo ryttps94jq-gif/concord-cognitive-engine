@@ -59,6 +59,28 @@ import {
  * @param {{ STATE: object }} deps - Dependencies injected from server.js
  * @returns {Router}
  */
+// ── Per-User Storage Quota ───────────────────────────────────────────────
+const DEFAULT_STORAGE_QUOTA_BYTES = 10 * 1024 * 1024 * 1024; // 10 GB per user
+const OWNER_STORAGE_QUOTA_BYTES = 100 * 1024 * 1024 * 1024;  // 100 GB for owner
+
+function getUserStorageUsed(STATE, userId) {
+  if (!STATE._media?.mediaDTUs) return 0;
+  let total = 0;
+  for (const dtu of STATE._media.mediaDTUs.values()) {
+    if (dtu.authorId === userId && dtu.privacy !== "removed") {
+      total += dtu.fileSize || 0;
+    }
+  }
+  return total;
+}
+
+function getUserStorageQuota(STATE, userId) {
+  // Owner gets higher quota; could be extended to per-user overrides
+  const user = STATE._users?.get?.(userId);
+  if (user?.role === "owner") return OWNER_STORAGE_QUOTA_BYTES;
+  return Number(process.env.USER_STORAGE_QUOTA_BYTES) || DEFAULT_STORAGE_QUOTA_BYTES;
+}
+
 export default function createMediaRouter({ STATE }) {
   const router = Router();
 
@@ -108,6 +130,21 @@ export default function createMediaRouter({ STATE }) {
     } = req.body;
 
     if (!title) throw new ValidationError("title is required");
+
+    // ── Per-user storage quota check ────────────────────────────────
+    const currentUsage = getUserStorageUsed(STATE, authorId);
+    const quota = getUserStorageQuota(STATE, authorId);
+    if (fileSize > 0 && (currentUsage + fileSize) > quota) {
+      const usedGB = (currentUsage / (1024 ** 3)).toFixed(2);
+      const quotaGB = (quota / (1024 ** 3)).toFixed(0);
+      return res.status(413).json({
+        ok: false,
+        error: `Storage quota exceeded. Using ${usedGB} GB of ${quotaGB} GB. Free up space or contact support.`,
+        code: "STORAGE_QUOTA_EXCEEDED",
+        usage: currentUsage,
+        quota,
+      });
+    }
 
     // Auto-detect media type from MIME if not specified
     const resolvedMediaType = mediaType || (mimeType ? detectMediaType(mimeType) : null);

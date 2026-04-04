@@ -1,7 +1,10 @@
 # Concord OS — concord-os.org
 User-agent: *
 Allow: /
+Allow: /lenses/
 Disallow: /api/
-Disallow: /lenses/
+Disallow: /lenses/admin/
+Disallow: /lenses/debug/
+Disallow: /lenses/command-center/
 
 Sitemap: https://concord-os.org/sitemap.xml

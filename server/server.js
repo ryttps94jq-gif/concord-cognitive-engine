@@ -222,6 +222,7 @@ import {
 import { DOMAIN_TYPES as ATLAS_DOMAIN_TYPES, EPISTEMIC_CLASSES, initAtlasState, getAtlasState } from "./emergent/atlas-epistemic.js";
 import { createAtlasDtu, getAtlasDtu, searchAtlasDtus, promoteAtlasDtu, addAtlasLink, getScoreExplanation, recomputeScores, registerEntity, getEntity, getContradictions, getAtlasMetrics as getAtlasStoreMetrics } from "./emergent/atlas-store.js";
 import { runAntiGamingScan, getAntiGamingMetrics } from "./emergent/atlas-antigaming.js";
+import { spamGuard, getSpamMetrics } from "./emergent/spam-prevention.js";
 import { runAutogenV2, getAutogenRun, acceptAutogenOutput, mergeAutogenOutput, propagateConfidence, getAutogenV2Metrics } from "./emergent/atlas-autogen-v2.js";
 import { councilResolve, getCouncilQueue, councilRequestSources, councilMerge, getCouncilActions, getCouncilMetrics } from "./emergent/atlas-council.js";
 import { upsertProfile, getProfile, listProfiles, followUser, unfollowUser, getFollowers, getFollowing, publishDtu, unpublishDtu, recordCitation, getCitedBy, getFeed, computeTrending, discoverUsers, getSocialMetrics, createPost, getPost, deletePost, getUserPosts, addReaction as socialAddReaction, getReactions, addComment as socialAddComment, deleteComment as socialDeleteComment, getComments as socialGetComments, sharePost, getShares, bookmarkPost, getUserBookmarks, getForYouFeed, getFollowingFeed, getExploreFeed, sendMessage, getConversations, getMessages, markMessagesRead, createNotification, getNotifications, markNotificationRead, markAllNotificationsRead, getUnreadCount, deleteNotification, getActiveStories, viewStory, votePoll, getPollResults, getTrendingTopics, getPostsByTopic, createGroup, joinGroup, leaveGroup, getGroupFeed, postToGroup, listGroups, getGroupMembers, getCreatorAnalytics, getPostAnalytics, updateStreak as socialUpdateStreak, getStreak, tagListing, getPostSales, getPostEarnings, pinPost, unpinPost, getPinnedPosts, recordWatchTime, schedulePost, getScheduledPosts, cancelScheduledPost, processScheduledPosts, getTrendingContent, getTrendingCreators, getTrendingDomains } from "./emergent/social-layer.js";
@@ -28756,7 +28757,7 @@ app.get("/api/lens/:domain/:id", async (req, res) => {
     res.status(status).json({ ok: false, error: msg });
   }
 });
-app.post("/api/lens/:domain", async (req, res) => {
+app.post("/api/lens/:domain", spamGuard("lens_artifact", r => r.body?.title || r.body?.content), async (req, res) => {
   try {
     const ctx = makeCtx(req);
     res.json(await runMacro("lens", "create", { domain: req.params.domain, ...req.body }, ctx));
@@ -38648,6 +38649,11 @@ app.get("/api/atlas/antigaming/metrics", (req, res) => {
   try { res.json(getAntiGamingMetrics()); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
+// ---- Spam Prevention Metrics ----
+app.get("/api/admin/spam-metrics", (req, res) => {
+  try { res.json({ ok: true, ...getSpamMetrics() }); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 // ---- Atlas: Autogen v2 ----
 app.post("/api/atlas/autogen/run", (req, res) => {
   try {
@@ -38837,7 +38843,7 @@ app.get("/api/social/metrics", (req, res) => {
 
 // ---- Social Layer: Posts, Reactions, Comments, Shares, Bookmarks, Feeds, DMs, Notifications, etc. ----
 
-app.post("/api/social/post", (req, res) => {
+app.post("/api/social/post", spamGuard("social_post", r => r.body?.content), (req, res) => {
   try {
     const userId = req.body?.userId || req.user?.id;
     const result = createPost(STATE, { userId, ...req.body });
@@ -38877,7 +38883,7 @@ app.get("/api/social/reactions/:postId", (req, res) => {
   try { res.json(getReactions(STATE, req.params.postId, req.query.userId || req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.post("/api/social/comment", (req, res) => {
+app.post("/api/social/comment", spamGuard("comment", r => r.body?.content), (req, res) => {
   try {
     const userId = req.body?.userId || req.user?.id;
     const postId = req.body?.postId;
@@ -38933,7 +38939,7 @@ app.get("/api/social/feed/explore", (req, res) => {
   try { res.json(getExploreFeed(STATE, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0), topic: req.query.topic })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.post("/api/social/dm", (req, res) => {
+app.post("/api/social/dm", spamGuard("dm_message", r => r.body?.content), (req, res) => {
   try { res.json(sendMessage(STATE, { fromUserId: req.body?.fromUserId || req.user?.id, toUserId: req.body?.toUserId, content: req.body?.content, mediaUrl: req.body?.mediaUrl })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
