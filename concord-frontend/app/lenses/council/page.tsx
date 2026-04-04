@@ -1025,9 +1025,6 @@ export default function CouncilLensPage() {
                   </>
                 )}
                 <button onClick={() => removeDebateItem(d.id)} className={cn(ds.btnSecondary, 'text-xs text-red-400 hover:text-red-300')}><X className="w-3.5 h-3.5" />Remove</button>
-                {d.status !== 'active' && (
-                  <></>
-                )}
               </div>
             </div>
 
