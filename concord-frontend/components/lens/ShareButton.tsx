@@ -8,7 +8,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import { Share2, Check } from 'lucide-react';
+import { Share2, Check, Link2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ShareButtonProps {
@@ -21,7 +21,7 @@ interface ShareButtonProps {
 
 export function ShareButton({
   contentId,
-  contentType: _contentType = 'content',
+  contentType = 'content',
   title,
   compact = false,
   className,
@@ -29,8 +29,8 @@ export function ShareButton({
   const [copied, setCopied] = useState(false);
 
   const shareUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}/content/${contentId}`
-    : `/content/${contentId}`;
+    ? `${window.location.origin}/content/${contentType}/${contentId}`
+    : `/content/${contentType}/${contentId}`;
 
   const handleShare = useCallback(async () => {
     // Try native share API first (mobile)
@@ -62,9 +62,9 @@ export function ShareButton({
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
-  }, [shareUrl, title]);
+  }, [shareUrl, title, contentType]);
 
-  const Icon = copied ? Check : Share2;
+  const Icon = copied ? Check : Link2;
   const label = copied ? 'Copied!' : 'Share';
 
   return (

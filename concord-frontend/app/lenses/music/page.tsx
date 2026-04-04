@@ -778,7 +778,7 @@ export default function MusicLensPage() {
 
                 {libraryTab === 'playlists' && (
                   <div className="space-y-2">
-                    <button onClick={handleCreatePlaylist} className="flex items-center gap-2 w-full p-3 rounded-lg bg-white/[0.03] border border-dashed border-white/10 hover:border-neon-cyan/30 text-sm text-gray-400 hover:text-white transition-colors">
+                    <button onClick={() => handleCreatePlaylist()} className="flex items-center gap-2 w-full p-3 rounded-lg bg-white/[0.03] border border-dashed border-white/10 hover:border-neon-cyan/30 text-sm text-gray-400 hover:text-white transition-colors">
                       <Plus className="w-4 h-4" /> Create Playlist
                     </button>
                     {playlists.map(pl => (

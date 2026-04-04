@@ -190,10 +190,21 @@ export function FractalEmpireExplorer({
       if (!canvas) return;
 
       const rect = canvas.getBoundingClientRect();
-      const _x = (e.clientX - rect.left - dimensions.width / 2 - offset.x) / zoom;
-      const _y = (e.clientY - rect.top - dimensions.height / 2 - offset.y) / zoom;
+      const x = (e.clientX - rect.left - dimensions.width / 2 - offset.x) / zoom;
+      const y = (e.clientY - rect.top - dimensions.height / 2 - offset.y) / zoom;
 
-      // Would implement proper hit testing here
+      // Hit-test against root nodes to find which was clicked
+      const spacing = 200;
+      const rootSize = 30;
+      for (let i = 0; i < data.length; i++) {
+        const nodeX = (i - (data.length - 1) / 2) * spacing;
+        const nodeY = 0;
+        const dist = Math.sqrt((x - nodeX) ** 2 + (y - nodeY) ** 2);
+        if (dist <= rootSize) {
+          onNodeSelect(data[i].id);
+          return;
+        }
+      }
     }
   };
 

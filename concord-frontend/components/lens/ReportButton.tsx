@@ -36,7 +36,7 @@ interface ReportButtonProps {
 export function ReportButton({
   contentId,
   contentType = 'content',
-  creatorId: _creatorId,
+  creatorId,
   compact = false,
   className,
 }: ReportButtonProps) {
@@ -50,6 +50,7 @@ export function ReportButton({
       api.post('/api/moderation/report', {
         contentId: data.contentId,
         contentType,
+        creatorId,
         reason: data.reason,
         description: data.details || '',
       }).then(r => r.data),

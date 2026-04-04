@@ -630,7 +630,7 @@ export default function PrivacySharingPage() {
 
             {/* Toggles */}
             <div className="space-y-1">
-              {category.toggles.map((toggle, _ti) => {
+              {category.toggles.map((toggle, ti) => {
                 const isNonRevocable = NON_REVOCABLE.includes(toggle.key);
                 const isSocial = SOCIAL_KEYS.includes(toggle.key);
                 const checked = localConsent[toggle.key];
@@ -643,6 +643,7 @@ export default function PrivacySharingPage() {
                       'hover:bg-white/[0.03]',
                       isNonRevocable && checked && 'bg-amber-500/5'
                     )}
+                    style={{ transitionDelay: `${ti * 30}ms` }}
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
