@@ -388,6 +388,30 @@ export default function createWorldRoutes({ requireAuth } = {}) {
     res.status(201).json({ ok: true, business });
   }));
 
+  router.get("/businesses/:id", wrap((req, res) => {
+    const business = getBusiness(req.params.id);
+    if (!business) return res.status(404).json({ ok: false, error: "Business not found" });
+    res.json({ ok: true, business });
+  }));
+
+  router.post("/businesses/:id/stock", auth, wrap((req, res) => {
+    const { dtuId, price } = req.body;
+    const result = stockBusiness(req.params.id, dtuId, price, _userId(req));
+    res.json(result);
+  }));
+
+  router.post("/businesses/:id/hire", auth, wrap((req, res) => {
+    const { employeeId, role, revenueSharePct } = req.body;
+    const result = hireToBusiness(req.params.id, employeeId, { role, revenueSharePct }, _userId(req));
+    res.json(result);
+  }));
+
+  router.post("/businesses/:id/rate", auth, wrap((req, res) => {
+    const { rating } = req.body;
+    const result = rateBusiness(req.params.id, _userId(req), rating);
+    res.json(result);
+  }));
+
   router.post("/businesses/:id/sale", auth, wrap((req, res) => {
     const { buyerId, itemId, amount } = req.body;
     const result = recordBusinessSale(req.params.id, buyerId, itemId, amount);

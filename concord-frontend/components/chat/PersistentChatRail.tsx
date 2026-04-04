@@ -23,7 +23,7 @@
 import { useState, useEffect, useRef, useCallback, Fragment } from 'react';
 import { useSocket } from '@/hooks/useSocket';
 import { useSessionId, resetSessionId } from '@/hooks/useSessionId';
-import { api } from '@/lib/api/client';
+import { api, executePipeline } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
 import { SovereigntyPrompt } from '@/components/sovereignty/SovereigntyPrompt';
 import { SkeletonChat } from '@/components/common/Skeleton';

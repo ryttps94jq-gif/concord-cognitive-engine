@@ -192,9 +192,19 @@ export function BlockEditor({
     }
   }, [editor]);
 
-  const insertTable = useCallback(() => {
+  const insertTable = useCallback(async () => {
     if (!editor) return;
-    editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+    const prevContent = editor.getHTML();
+    await batchUndoable('Insert table', [
+      {
+        execute: () => {
+          editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+        },
+        undo: () => {
+          editor.commands.setContent(prevContent);
+        },
+      },
+    ]);
   }, [editor]);
 
   if (!editor) return null;

@@ -60,7 +60,7 @@ import "./lib/validators/music-validator.js";
 import { runIntegrityCheck } from "./lib/integrity-check.js";
 import { fullRecoverySequence } from "./lib/cascade-recovery.js";
 import { getScalingStatus } from "./lib/horizontal-scaling.js";
-import { registerTask, startAllIntervals, stopAllIntervals, getIntervalStatus } from "./lib/interval-registry.js";
+import { startAllIntervals, stopAllIntervals, getIntervalStatus } from "./lib/interval-registry.js";
 import { getMemoryPressureLevel, initMemoryWatchdog } from "./lib/memory-pressure.js";
 import { initStateSync, getSyncStatus, stopSync } from "./lib/state-sync.js";
 
