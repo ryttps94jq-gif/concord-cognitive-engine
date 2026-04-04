@@ -46,6 +46,7 @@ import { cn } from '@/lib/utils';
 import { ds } from '@/lib/design-system';
 import { PurchaseFlow } from '@/components/wallet/PurchaseFlow';
 import { WithdrawFlow } from '@/components/wallet/WithdrawFlow';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -310,6 +311,8 @@ function WalletPageInner() {
           <h1 className={ds.heading1}>Wallet & Billing</h1>
         </div>
       </div>
+
+      <UniversalActions domain="wallet" artifactId={null} compact />
 
       {/* ── Balance Card ──────────────────────────────────────────────────── */}
       <motion.div
