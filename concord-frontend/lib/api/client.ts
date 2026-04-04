@@ -2248,3 +2248,11 @@ export const sharedSessionDetails = (sessionId: string) =>
   api.get(`/api/shared-session/${sessionId}`).then(r => r.data);
 
 export default api;
+
+// Re-export extended API helpers — these cover atlas, admin, brain, RBAC,
+// compliance, physics, onboarding, species, federation, quests, plugins, etc.
+export {
+  atlasApi, adminApi, dtusApi, collabApi, socialApi, rbacApi,
+  complianceApi, aiApi, brainApi, speciesApi, federationApi,
+  questApi, onboardingApi, physicsApi, analyticsApi, systemApi, pluginsApi,
+} from './helpers-extended';

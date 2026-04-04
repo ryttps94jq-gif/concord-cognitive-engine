@@ -68,6 +68,7 @@ import createAuthRouter from "./routes/auth.js";
 import registerChatRoutes from "./routes/chat.js";
 import registerDomainRoutes from "./routes/domain.js";
 import registerDtuRoutes from "./routes/dtus.js";
+import registerHelpersExtendedRoutes from "./routes/helpers-extended.js";
 import createEmergentRouter from "./routes/emergent.js";
 import registerOperationRoutes from "./routes/operations.js";
 import createQualiaRouter from "./routes/qualia.js";
@@ -22396,6 +22397,7 @@ structuredLog("info", "server_starting", { version: VERSION, port: PORT, dotenvL
 
 // ---- DTU Endpoints (extracted to routes/dtus.js) ----
 registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuForClient, dtusArray, _withAck, saveStateDebounced, validate });
+registerHelpersExtendedRoutes(app, { STATE, makeCtx, runMacro, saveStateDebounced, dtusArray, uid, requireAuth: authenticateRequest, requireRole, asyncHandler });
 
 // ---- Chat + Ask Endpoints (extracted to routes/chat.js) ----
 registerChatRoutes(app, {
