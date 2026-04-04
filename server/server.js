@@ -56,6 +56,8 @@ import { initMemoryWatchdog, getMemoryPressureLevel } from "./lib/memory-pressur
 import { callWithFallback, setLocalLLM, setSemanticCache, setMacroCache, getFallbackHealth } from "./lib/llm-fallback.js";
 import * as _llmLocal from "./lib/llm-local.js";
 import * as _macroResponseCache from "./lib/macro-response-cache.js";
+import { initRedis as initRedisAdapter, isConnected as isRedisConnected, getStatus as getRedisStatus, sessionGet as redisSessionGet, sessionSet as redisSessionSet, lockAcquire, lockRelease } from "./lib/redis-adapter.js";
+import { initStateSync, notifyDTUChange, startEmergentSync, getSyncStatus } from "./lib/state-sync.js";
 import "./lib/vocabularies.js";
 import { BoundedMap } from "./lib/bounded-map.js";
 import { httpMetricsMiddleware, getActiveRequests, installGlobalMetrics } from "./lib/http-metrics.js";
@@ -6340,8 +6342,16 @@ function loadStateFromDisk() {
 function saveStateDebounced() {
   try {
     clearTimeout(_saveTimer);
-    _saveTimer = setTimeout(() => {
+    _saveTimer = setTimeout(async () => {
       try {
+        // Distributed lock: only one instance writes full snapshot at a time
+        if (typeof lockAcquire === "function") {
+          const gotLock = await lockAcquire("state-snapshot", 30000);
+          if (!gotLock) {
+            structuredLog("debug", "state_save_skipped", { reason: "another instance holds snapshot lock" });
+            return;
+          }
+        }
         // Check available disk space before writing — prevent disk-full wipe
         try {
           const stats = fs.statfsSync(DATA_DIR);
@@ -28189,10 +28199,13 @@ app.get("/api/system/health", asyncHandler(async (req, res) => {
     ok: true,
     uptime: process.uptime(),
     memory: process.memoryUsage(),
+    memoryPressure: typeof getMemoryPressureLevel === "function" ? getMemoryPressureLevel() : "unknown",
     dtuCount: STATE.dtus?.size || 0,
     sessionCount: STATE.sessions?.size || 0,
     brains,
     brainQueues: typeof getBrainQueueStats === "function" ? getBrainQueueStats() : {},
+    redis: typeof getRedisStatus === "function" ? getRedisStatus() : { mode: "local" },
+    stateSync: typeof getSyncStatus === "function" ? getSyncStatus() : { initialized: false },
   });
 }));
 
@@ -46585,6 +46598,18 @@ const SHOULD_LISTEN = (String(process.env.CONCORD_NO_LISTEN || "").toLowerCase()
 const server = SHOULD_LISTEN ? app.listen(PORT, () => {
   structuredLog("info", "server_listening", { url: `http://localhost:${PORT}`, statusUrl: `http://localhost:${PORT}/api/status` });
 }) : null;
+
+// ── Redis & Cross-Instance State Sync (optional per ADR 005) ──
+try {
+  const redisResult = await initRedisAdapter();
+  if (redisResult.connected) {
+    await initStateSync(STATE);
+    startEmergentSync();
+    structuredLog("info", "redis_and_sync_ready", { mode: "multi-instance" });
+  } else {
+    structuredLog("info", "redis_and_sync_skipped", { mode: "local-only", reason: redisResult.error || "REDIS_URL not set" });
+  }
+} catch (e) { structuredLog("warn", "redis_init_error", { error: e?.message }); }
 
 // Optional: enable thin realtime mirror (WebSockets) for queues/jobs/panels.
 try { await tryInitWebSockets(server); } catch (e) {
