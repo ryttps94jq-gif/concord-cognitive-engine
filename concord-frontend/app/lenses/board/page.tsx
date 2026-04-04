@@ -187,7 +187,7 @@ export default function BoardLensPage() {
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('board');
 
   // Persist tasks via real backend lens artifacts (auto-seeds on first use)
-  const { items: lensItems, isLoading: tasksLoading, isError, error, refetch, isSeeding, create: createLens, update: updateLens, remove: _removeLens } = useLensData<Record<string, unknown>>('board', 'task', {
+  const { items: lensItems, isLoading: tasksLoading, isError, error, refetch, isSeeding, create: createLens, update: updateLens, remove: removeLens } = useLensData<Record<string, unknown>>('board', 'task', {
     seed: SEED_TASKS,
   });
 
@@ -790,6 +790,7 @@ export default function BoardLensPage() {
               onClose={() => setSelectedTask(null)}
               onUpdate={updateTask}
               onToggleSubtask={toggleSubtask}
+              onDelete={(id) => { removeLens(id); setSelectedTask(null); }}
             />
           </motion.aside>
         )}
@@ -829,11 +830,13 @@ function TaskDetailPanel({
   onClose,
   onUpdate,
   onToggleSubtask,
+  onDelete,
 }: {
   task: Task;
   onClose: () => void;
   onUpdate: (id: string, patch: Partial<Task>) => void;
   onToggleSubtask: (taskId: string, subtaskId: string) => void;
+  onDelete: (id: string) => void;
 }) {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(task.title);
@@ -872,9 +875,14 @@ function TaskDetailPanel({
             </div>
           )}
         </div>
-        <button onClick={onClose} className="p-1 rounded-md hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
-          <X className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button onClick={() => onDelete(task.id)} className="p-1 rounded-md hover:bg-red-500/20 text-gray-400 hover:text-red-400 transition-colors" title="Delete task">
+            <Trash2 className="w-4 h-4" />
+          </button>
+          <button onClick={onClose} className="p-1 rounded-md hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Description */}
