@@ -221,8 +221,8 @@ export default function ServicesLensPage() {
 
   /* secondary data for dashboard */
   const { items: appointments } = useLensData<AppointmentData>('services', 'Appointment', { seed: [] });
-  const { items: _clients } = useLensData<ClientData>('services', 'Client', { seed: [] });
-  const { items: _serviceItems } = useLensData<ServiceItemData>('services', 'ServiceItem', { seed: [] });
+  const { items: clients } = useLensData<ClientData>('services', 'Client', { seed: [] });
+  const { items: serviceItems } = useLensData<ServiceItemData>('services', 'ServiceItem', { seed: [] });
   const { items: staff } = useLensData<StaffMemberData>('services', 'StaffMember', { seed: [] });
   const { items: transactions } = useLensData<TransactionData>('services', 'Transaction', { seed: [] });
   const { items: products } = useLensData<ProductData>('services', 'Product', { seed: [] });
@@ -329,8 +329,11 @@ export default function ServicesLensPage() {
       return d.stockLevel <= d.reorderLevel;
     }).length;
 
-    return { todaysAppts, revenueToday, noShowRate, topServices, staffUtilization, productSales, lowStock };
-  }, [appointments, transactions, staff, products]);
+    const totalClients = clients.length;
+    const totalServices = serviceItems.length;
+
+    return { todaysAppts, revenueToday, noShowRate, topServices, staffUtilization, productSales, lowStock, totalClients, totalServices };
+  }, [appointments, transactions, staff, products, clients, serviceItems]);
 
   /* ================================================================ */
   /*  Form fields                                                      */
