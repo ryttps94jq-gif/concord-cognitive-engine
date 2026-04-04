@@ -653,6 +653,20 @@ export default function ServicesLensPage() {
         </div>
       </div>
 
+      {/* Client & Service counts */}
+      <div className={ds.grid2}>
+        <div className={ds.panel}>
+          <div className="flex items-center gap-2 mb-2"><Users className="w-5 h-5 text-neon-cyan" /><span className={ds.textMuted}>Total Clients</span></div>
+          <p className="text-3xl font-bold text-neon-cyan">{dashboardStats.totalClients}</p>
+          <p className={ds.textMuted}>Registered clients</p>
+        </div>
+        <div className={ds.panel}>
+          <div className="flex items-center gap-2 mb-2"><Sparkles className="w-5 h-5 text-pink-400" /><span className={ds.textMuted}>Service Menu</span></div>
+          <p className="text-3xl font-bold text-pink-400">{dashboardStats.totalServices}</p>
+          <p className={ds.textMuted}>Available services</p>
+        </div>
+      </div>
+
       {/* Top services */}
       <div className={ds.panel}>
         <h3 className={cn(ds.heading3, 'mb-3')}>Top Services</h3>
