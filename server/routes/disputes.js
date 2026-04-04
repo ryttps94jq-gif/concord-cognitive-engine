@@ -10,7 +10,6 @@
 import express from "express";
 import { openDispute, updateDisputeStatus, getDispute, getDisputes } from "../economy/legal-liability.js";
 import { executeTransfer } from "../economy/transfer.js";
-import { generateId } from "../lib/id-factory.js";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -156,12 +155,10 @@ export default function createDisputeRouter({ db, requireAuth, adminOnly }) {
 
   router.get("/queue", (req, res) => {
     try {
-      // Admin check
-      if (typeof adminOnly === "function") {
-        const check = adminCheckSync(req);
-        if (!check.ok) {
-          return res.status(check.status || 403).json({ ok: false, error: check.error || "forbidden" });
-        }
+      // Admin check — mandatory for queue access
+      const check = adminCheckSync(req);
+      if (!check.ok) {
+        return res.status(check.status || 403).json({ ok: false, error: check.error || "forbidden" });
       }
 
       const openDisputes = getDisputes(db, { status: "open" });

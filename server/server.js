@@ -22607,7 +22607,7 @@ app.use("/api/legal", createLegalLiabilityRouter({ db }));
 
 // ===== MARKETPLACE LENS REGISTRY (112 LENSES) =====
 import createMarketplaceLensRegistryRouter from "./routes/marketplace-lens-registry.js";
-app.use("/api/marketplace-lens-registry", createMarketplaceLensRegistryRouter(db));
+app.use("/api/marketplace-lens-registry", createMarketplaceLensRegistryRouter(db, requireAuth));
 
 // ===== LENS FEATURES (112-LENS FEATURE SPECIFICATION) =====
 import createLensFeatureRouter from "./routes/lens-features.js";
@@ -22616,7 +22616,7 @@ app.use("/api/lens-features", createLensFeatureRouter(db, LENS_FEATURES));
 
 // ===== CONNECTIVE TISSUE (economy wiring, DTU pipeline, CRETI, compression, fork, preview, search, emergent/bot auth) =====
 import createConnectiveTissueRouter from "./routes/connective-tissue.js";
-app.use("/api/ct", createConnectiveTissueRouter(db));
+app.use("/api/ct", createConnectiveTissueRouter({ db, requireAuth }));
 
 // ===== MOBILE EXTERNAL PAYMENT (iOS External Purchase Link) =====
 import mobileCheckoutRouter from "./routes/mobile-checkout.js";
