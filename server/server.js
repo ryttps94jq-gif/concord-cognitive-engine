@@ -28240,7 +28240,7 @@ app.get("/api/feedback-review", asyncHandler(async (req, res) => {
 }));
 
 // ── Artifact API Endpoints ──
-app.post("/api/artifact/upload", async (req, res) => {
+app.post("/api/artifact/upload", requireAuth(), async (req, res) => {
   try {
     const artifactMod = await import("./lib/artifact-store.js").catch(() => null);
     if (!artifactMod) return res.status(500).json({ ok: false, error: "artifact_store_unavailable" });
@@ -28284,7 +28284,7 @@ app.post("/api/artifact/upload", async (req, res) => {
 });
 
 // Multi-file artifact upload — used by ArtifactUploader for batch uploads
-app.post("/api/artifact/upload-multi", async (req, res) => {
+app.post("/api/artifact/upload-multi", requireAuth(), async (req, res) => {
   try {
     const artifactMod = await import("./lib/artifact-store.js").catch(() => null);
     if (!artifactMod) return res.status(500).json({ ok: false, error: "artifact_store_unavailable" });

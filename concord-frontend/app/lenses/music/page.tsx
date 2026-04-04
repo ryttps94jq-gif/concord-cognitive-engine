@@ -350,7 +350,7 @@ export default function MusicLensPage() {
             prompt="Analyze this image related to music (album cover, concert photo, instrument, etc.). Describe what you see and suggest relevant genre tags, mood, and metadata for music cataloging."
             onResult={(res) => {
               handleCreatePlaylist();
-              console.log('[Vision] Music analysis:', res.analysis);
+              // Vision analysis result available via res.analysis
             }}
           />
           <button

@@ -11,7 +11,9 @@ import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import IsometricEngine from '@/components/world/IsometricEngine';
 import WorldHUD from '@/components/world/WorldHUD';
 import CharacterCustomizer from '@/components/world/CharacterCustomizer';
-import { LiveIndicator, DTUExportButton, RealtimeDataPanel } from '@/components/lens/';
+import { LiveIndicator } from '@/components/lens/LiveIndicator';
+import { DTUExportButton } from '@/components/lens/DTUExportButton';
+import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 
 export default function WorldLensPage() {
   // State
@@ -29,7 +31,7 @@ export default function WorldLensPage() {
   const router = useRouter();
 
   // Data fetching
-  const { data: districts } = useQuery({
+  const { data: districts, isLoading: districtsLoading } = useQuery({
     queryKey: ['world-districts'],
     queryFn: () => api.get('/api/world/districts').then((r: any) => r.data),
     staleTime: 60000,
@@ -159,6 +161,17 @@ export default function WorldLensPage() {
     xp: progression?.xp || 0,
     rank: progression?.rank || 0,
   };
+
+  if (districtsLoading) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-4rem)] bg-[#0a0a0f]">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-gray-400 text-sm">Loading world...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative w-full h-[calc(100vh-4rem)] overflow-hidden bg-[#0a0a0f]">
