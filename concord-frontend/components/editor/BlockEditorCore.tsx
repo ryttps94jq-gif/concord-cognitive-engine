@@ -60,6 +60,7 @@ export function BlockEditor({
 }: BlockEditorProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [wordCount, setWordCount] = useState(0);
+  const previousContentRef = useRef(content);
 
   const editor = useEditor({
     extensions: [
@@ -129,9 +130,25 @@ export function BlockEditor({
   const handleSave = useCallback(async () => {
     if (!editor || isSaving) return;
 
+    const currentContent = editor.getHTML();
+    const prevContent = previousContentRef.current;
+
     setIsSaving(true);
     try {
-      await onSave?.(editor.getHTML());
+      const undoableSave = createUndoableAction(
+        'Save editor content',
+        async () => {
+          await onSave?.(currentContent);
+          return currentContent;
+        },
+        async () => {
+          // Undo: restore previous content and save it
+          editor.commands.setContent(prevContent);
+          await onSave?.(prevContent);
+        }
+      );
+      await undoableSave();
+      previousContentRef.current = currentContent;
     } finally {
       setIsSaving(false);
     }

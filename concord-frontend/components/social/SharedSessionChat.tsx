@@ -193,9 +193,9 @@ export function SharedSessionChat({ sessionId, currentUserId, onEnd }: SharedSes
   }, [input, isSending, sessionId, currentUserId, sessionStatus]);
 
   // Save artifact
-  const saveArtifact = async (dtuId: string) => {
+  const handleSaveArtifact = async (dtuId: string) => {
     try {
-      await api.post(`/api/shared-session/${sessionId}/save-artifact`, { dtuId });
+      await saveSharedArtifact(sessionId, dtuId);
       setMessages(prev => [...prev, {
         type: 'system',
         content: 'Artifact saved to your substrate.',
@@ -205,9 +205,9 @@ export function SharedSessionChat({ sessionId, currentUserId, onEnd }: SharedSes
   };
 
   // End session
-  const endSession = async () => {
+  const handleEndSession = async () => {
     try {
-      await api.post(`/api/shared-session/${sessionId}/end`);
+      await endSharedSession(sessionId);
       onEnd?.();
     } catch { /* silent */ }
   };
@@ -239,7 +239,7 @@ export function SharedSessionChat({ sessionId, currentUserId, onEnd }: SharedSes
 
         {sessionStatus === 'active' && (
           <button
-            onClick={endSession}
+            onClick={handleEndSession}
             className="mt-4 py-2 text-xs rounded-lg bg-red-500/10 border
               border-red-500/30 text-red-400 hover:bg-red-500/20 transition-colors"
           >
