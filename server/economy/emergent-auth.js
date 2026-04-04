@@ -206,5 +206,5 @@ function hashKey(key) {
 }
 
 function safeJsonParse(str) {
-  try { return JSON.parse(str || "[]"); } catch { return []; }
+  try { return JSON.parse(str || "[]"); } catch (err) { console.debug('[emergent-auth] JSON parse failed', err?.message); return []; }
 }

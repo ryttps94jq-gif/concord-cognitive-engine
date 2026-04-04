@@ -269,7 +269,7 @@ export function getReconciliationHistory(db, { limit = 30, offset = 0 } = {}) {
 }
 
 function safeJsonParse(str) {
-  try { return JSON.parse(str); } catch { return {}; }
+  try { return JSON.parse(str); } catch (err) { console.debug('[treasury-reconciliation] JSON parse failed', err?.message); return {}; }
 }
 
 export { DRIFT_THRESHOLD };

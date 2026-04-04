@@ -43,7 +43,7 @@ function nowISO() {
 }
 
 function safeJsonParse(str, fallback = []) {
-  try { return JSON.parse(str); } catch { return fallback; }
+  try { return JSON.parse(str); } catch (err) { console.debug('[film-studio] JSON parse failed', err?.message); return fallback; }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

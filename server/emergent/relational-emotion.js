@@ -26,7 +26,7 @@ function clamp01(v) { return Math.max(0, Math.min(1, Number(v) || 0)); }
 
 function getSTATE() {
   try { return globalThis._concordSTATE || globalThis.STATE || null; }
-  catch { return null; }
+  catch (err) { logger.debug('emergent:relational-emotion', 'getSTATE failed', { error: err?.message }); return null; }
 }
 
 // ── Constants ───────────────────────────────────────────────────────────────
@@ -121,7 +121,7 @@ function computeBondStrength(emotions) {
     let sum = 0;
     for (const name of EMOTION_NAMES) sum += (emotions[name]?.intensity || 0);
     return sum / EMOTION_COUNT;
-  } catch { return 0; }
+  } catch (err) { logger.debug('emergent:relational-emotion', 'computeBondStrength failed', { error: err?.message }); return 0; }
 }
 
 function classifyBondType(emotions) {
@@ -158,7 +158,7 @@ function classifyBondType(emotions) {
       if (v > maxI) { maxI = v; dominant = name; }
     }
     return dominant;
-  } catch { return "neutral"; }
+  } catch (err) { logger.debug('emergent:relational-emotion', 'classifyBondType failed', { error: err?.message }); return "neutral"; }
 }
 
 function addHistoryEntry(bond, entry) {

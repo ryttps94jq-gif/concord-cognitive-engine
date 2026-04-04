@@ -48,13 +48,13 @@ function createSovereignDTU(STATE, action, input, output) {
     try { if (typeof globalThis.saveStateDebounced === "function") globalThis.saveStateDebounced(); } catch (_e) { logger.debug('sovereign-emergent', 'silent', { error: _e?.message }); }
     try { if (typeof globalThis.realtimeEmit === "function") globalThis.realtimeEmit("dtu:created", { dtu: { id: dtu.id, type: dtu.type, tags: dtu.tags } }); } catch (_e) { logger.debug('sovereign-emergent', 'silent', { error: _e?.message }); }
     return dtu;
-  } catch { return null; }
+  } catch (err) { logger.warn('sovereign-emergent', 'commitDTU failed', { error: err?.message }); return null; }
 }
 
 // ── Lazy-load modules (silent failure if not yet written) ──────────────────
 
 async function loadModule(path) {
-  try { return await import(path); } catch { return null; }
+  try { return await import(path); } catch (err) { logger.debug('sovereign-emergent', `module load failed: ${path}`, { error: err?.message }); return null; }
 }
 
 export default function createSovereignEmergentRouter({ STATE }) {

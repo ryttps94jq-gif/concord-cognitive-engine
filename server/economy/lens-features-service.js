@@ -237,7 +237,7 @@ export function searchFeatures(db, query) {
 // ── Formatters ──────────────────────────────────────────────────────
 
 function safeJsonParse(str) {
-  try { return JSON.parse(str || "[]"); } catch { return []; }
+  try { return JSON.parse(str || "[]"); } catch (err) { console.debug('[lens-features-service] JSON parse failed', err?.message); return []; }
 }
 
 function formatFeatureRow(row) {

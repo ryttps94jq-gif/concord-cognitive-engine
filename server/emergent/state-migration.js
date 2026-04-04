@@ -32,7 +32,7 @@ function clamp01(v) { return Math.max(0, Math.min(1, Number(v) || 0)); }
 
 function _getSTATE() {
   try { return globalThis._concordSTATE || globalThis.STATE || null; }
-  catch { return null; }
+  catch (err) { console.debug('[state-migration] _getSTATE failed', err?.message); return null; }
 }
 
 /**
@@ -41,7 +41,7 @@ function _getSTATE() {
  */
 function mapToArray(map) {
   if (!(map instanceof Map)) return [];
-  try { return Array.from(map.values()); } catch { return []; }
+  try { return Array.from(map.values()); } catch (err) { console.debug('[state-migration] mapToArray failed', err?.message); return []; }
 }
 
 /**
@@ -55,7 +55,7 @@ function mapEntriesToArray(map) {
       if (v && typeof v === "object") return { _key: k, ...v };
       return { _key: k, _value: v };
     });
-  } catch { return []; }
+  } catch (err) { console.debug('[state-migration] mapEntriesToArray failed', err?.message); return []; }
 }
 
 /**
@@ -71,7 +71,7 @@ function safeListResult(fn) {
       if (Array.isArray(r?.[key])) return r[key];
     }
     return [];
-  } catch { return []; }
+  } catch (err) { console.debug('[state-migration] safeListResult failed', err?.message); return []; }
 }
 
 // ── Constants ───────────────────────────────────────────────────────────────
@@ -117,12 +117,12 @@ function completeMigration(record, stats, errors = []) {
 // Lazy access into STATE substores. Each accessor mirrors how the owning
 // module reaches its own state. All wrapped in try/catch for resilience.
 
-function _es(S)     { try { return S?.__emergent || null; } catch { return null; } }
-function _atlas(S)  { try { return S?.__emergent?._atlas || null; } catch { return null; } }
-function _trust(S)  { try { return S?.__emergent?._trustNetwork || null; } catch { return null; } }
-function _comms(S)  { try { return S?.__emergent?._emergentComms || null; } catch { return null; } }
-function _const(S)  { try { return S?.__emergent?._constitution || null; } catch { return null; } }
-function _memory(S) { try { return S?.__emergent?._institutionalMemory || null; } catch { return null; } }
+function _es(S)     { try { return S?.__emergent || null; } catch (err) { console.debug('[state-migration] _es failed', err?.message); return null; } }
+function _atlas(S)  { try { return S?.__emergent?._atlas || null; } catch (err) { console.debug('[state-migration] _atlas failed', err?.message); return null; } }
+function _trust(S)  { try { return S?.__emergent?._trustNetwork || null; } catch (err) { console.debug('[state-migration] _trust failed', err?.message); return null; } }
+function _comms(S)  { try { return S?.__emergent?._emergentComms || null; } catch (err) { console.debug('[state-migration] _comms failed', err?.message); return null; } }
+function _const(S)  { try { return S?.__emergent?._constitution || null; } catch (err) { console.debug('[state-migration] _const failed', err?.message); return null; } }
+function _memory(S) { try { return S?.__emergent?._institutionalMemory || null; } catch (err) { console.debug('[state-migration] _memory failed', err?.message); return null; } }
 
 /**
  * Dynamic-import module-level list functions to avoid circular deps.
@@ -278,7 +278,7 @@ async function snapshotState(STATE) {
     const cutoff = Date.now() - SEVEN_DAYS_MS;
     commsMessages = mapToArray(comms.messages).filter(m => {
       try { return new Date(m.timestamp || m.sentAt || 0).getTime() >= cutoff; }
-      catch { return false; }
+      catch (err) { console.debug('[state-migration] comms date filter failed', err?.message); return false; }
     });
   }
 
@@ -416,7 +416,7 @@ export async function exportPartial(options = {}, STATE) {
     }
     const inRange = (ts) => {
       try { const t = new Date(ts).getTime(); return t >= dateFrom && t <= dateTo; }
-      catch { return true; }
+      catch (err) { console.debug('[state-migration] date range check failed', err?.message); return true; }
     };
 
     // Filter entities by ID
@@ -822,10 +822,11 @@ export function getMigrationHistory() {
   try {
     const all = Array.from(_migrations.values()).sort((a, b) => {
       try { return new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(); }
-      catch { return 0; }
+      catch (err) { console.debug('[state-migration] sort date parse failed', err?.message); return 0; }
     });
     return { ok: true, migrations: all, total: all.length };
-  } catch {
+  } catch (err) {
+    console.warn('[state-migration] getMigrationHistory failed', err?.message);
     return { ok: true, migrations: [], total: 0 };
   }
 }
@@ -867,7 +868,7 @@ export function getMigrationMetrics() {
 
     const sorted = all.sort((a, b) => {
       try { return new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(); }
-      catch { return 0; }
+      catch (err) { console.debug('[state-migration] sort date parse failed', err?.message); return 0; }
     });
     const last = sorted.length > 0 ? sorted[0] : null;
 

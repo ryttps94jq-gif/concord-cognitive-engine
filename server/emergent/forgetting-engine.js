@@ -64,7 +64,7 @@ const PROTECTION_RULES = [
 
 function isProtected(dtu) {
   return PROTECTION_RULES.some(rule => {
-    try { return rule(dtu); } catch { return false; }
+    try { return rule(dtu); } catch (err) { console.debug('[forgetting-engine] protection rule check failed', err?.message); return false; }
   });
 }
 

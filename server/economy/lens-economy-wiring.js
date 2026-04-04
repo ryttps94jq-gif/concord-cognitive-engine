@@ -196,7 +196,7 @@ export function awardMeritCredit(db, userId, activityType, points, metadata = {}
       metadata.lensId || null, JSON.stringify(metadata), nowISO());
 
     return { ok: true, userId, points, activityType };
-  } catch { return { ok: false }; }
+  } catch (err) { console.error('[lens-economy-wiring] awardMeritCredit failed', { userId, activityType, err: err.message }); return { ok: false }; }
 }
 
 /**

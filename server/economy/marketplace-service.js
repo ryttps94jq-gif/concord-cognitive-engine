@@ -498,7 +498,7 @@ function formatListing(row) {
 }
 
 function safeJsonParse(str) {
-  try { return JSON.parse(str); } catch { return []; }
+  try { return JSON.parse(str); } catch (err) { console.debug('[marketplace-service] JSON parse failed', err?.message); return []; }
 }
 
 export { PREVIEW_STRATEGIES };

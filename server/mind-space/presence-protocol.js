@@ -423,13 +423,13 @@ export class MindSpace {
       this.sharedContext.sharedDTUs = await this.substrate.findSharedDTUs(
         Array.from(this.participants.keys())
       ) || [];
-    } catch { this.sharedContext.sharedDTUs = []; }
+    } catch (err) { console.warn('[presence-protocol] failed to sync shared DTUs', err?.message); this.sharedContext.sharedDTUs = []; }
   }
 
   async _findRelatedDTUs(content) {
     if (!this.substrate) return [];
     try { return await this.substrate.searchDTUs({ query: content, limit: 5, minCRETI: 60 }); }
-    catch { return []; }
+    catch (err) { console.warn('[presence-protocol] DTU search failed', err?.message); return []; }
   }
 
   async _archiveThoughts() {
