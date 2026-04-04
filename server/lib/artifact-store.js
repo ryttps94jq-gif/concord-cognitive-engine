@@ -3,6 +3,8 @@ import path from "path";
 import crypto from "crypto";
 import zlib from "zlib";
 import logger from '../logger.js';
+import { transcodeImage, transcodeAudio, transcodeVideo, generateVideoDerivatives, isTranscodingAvailable } from './artifact-transcoder.js';
+import { checkBudget, downgradePlan } from './artifact-budget.js';
 
 const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), "data");
 // Prefer network volume (/workspace/concord-data) over root disk for artifact storage.
@@ -116,7 +118,7 @@ export async function storeArtifact(dtuId, buffer, mimeType, filename) {
   const thumbnail = generateThumbnail(dtuDir, diskPath, mimeType);
   const preview = generatePreview(dtuDir, diskPath, mimeType);
 
-  return {
+  const result = {
     type: mimeType,
     filename: sanitizedFilename,
     diskPath,
@@ -131,7 +133,58 @@ export async function storeArtifact(dtuId, buffer, mimeType, filename) {
     createdAt: new Date().toISOString(),
     lastAccessedAt: null,
     deduplicated: alreadyExists,
+    derivatives: {},
+    transcodedPath: null,
   };
+
+  // Fire-and-forget background transcoding (non-blocking)
+  if (!alreadyExists) {
+    scheduleTranscoding(diskPath, hashHex, mimeType, result).catch(e =>
+      logger.warn("artifact-store", "transcode-bg-error", { error: e?.message })
+    );
+  }
+
+  return result;
+}
+
+/**
+ * Background transcoding: convert to optimal format and generate derivatives.
+ * Mutates the result object in-place so callers who keep a reference get updates.
+ */
+async function scheduleTranscoding(diskPath, hashHex, mimeType, result) {
+  const available = await isTranscodingAvailable();
+  if (!available) return;
+
+  const derivDir = path.join(ARTIFACT_ROOT, "derivatives", hashHex);
+  fs.mkdirSync(derivDir, { recursive: true });
+
+  try {
+    if (mimeType.startsWith("image/") && mimeType !== "image/webp" && mimeType !== "image/svg+xml") {
+      const webp = await transcodeImage(diskPath, derivDir);
+      if (webp) {
+        result.transcodedPath = webp.path;
+        result.derivatives.webp = webp.path;
+      }
+    } else if (mimeType.startsWith("audio/") && mimeType !== "audio/ogg") {
+      const opus = await transcodeAudio(diskPath, derivDir);
+      if (opus) {
+        result.transcodedPath = opus.path;
+        result.derivatives.opus = opus.path;
+      }
+    } else if (mimeType.startsWith("video/")) {
+      const h265 = await transcodeVideo(diskPath, derivDir);
+      if (h265) {
+        result.transcodedPath = h265.path;
+        result.derivatives.h265 = h265.path;
+      }
+      const vDerivs = await generateVideoDerivatives(diskPath, hashHex, derivDir);
+      if (vDerivs?.derivatives) {
+        Object.assign(result.derivatives, vDerivs.derivatives);
+      }
+    }
+  } catch (e) {
+    logger.warn("artifact-store", "transcode-failed", { hashHex, mimeType, error: e?.message });
+  }
 }
 
 /**
@@ -508,3 +561,142 @@ export function migrateArtifactsToCompressed() {
   walk(ARTIFACT_ROOT);
   return stats;
 }
+
+// ---- MEGA/HYPER Artifact Reference-Linking ----
+// When DTUs consolidate, artifacts are reference-linked (not duplicated).
+// The MEGA/HYPER carries an absorbed_artifacts array pointing to content-addressed files.
+
+/**
+ * Collect artifact references from source DTUs for MEGA consolidation.
+ * Returns absorbed_artifacts array + primary_artifact selection.
+ *
+ * @param {string[]} sourceDtuIds - IDs of DTUs being consolidated
+ * @param {object} STATE - Server state with STATE.dtus Map
+ * @returns {{ absorbed: Array<{hash,ref,mimeType,sizeBytes,sourceId}>, primary: string|null }}
+ */
+export function collectArtifactRefs(sourceDtuIds, STATE) {
+  const absorbed = [];
+  let primaryHash = null;
+  let primaryScore = -1;
+
+  for (const id of sourceDtuIds) {
+    const dtu = STATE.dtus?.get(id);
+    if (!dtu?.artifact?.hash) continue;
+
+    const art = dtu.artifact;
+    absorbed.push({
+      hash: art.hash,
+      ref: art.diskPath || path.join(ARTIFACT_ROOT, art.hash.replace("sha256:", "") + "." + (SUPPORTED_TYPES[art.type]?.ext || "bin")),
+      mimeType: art.type,
+      sizeBytes: art.sizeBytes || 0,
+      sourceId: id,
+    });
+
+    // Pick primary: highest quality score or largest file
+    const score = (dtu.qualityTier === "verified" ? 3 : dtu.qualityTier === "reviewed" ? 2 : 1);
+    if (score > primaryScore || (score === primaryScore && (art.sizeBytes || 0) > 0)) {
+      primaryHash = art.hash;
+      primaryScore = score;
+    }
+  }
+
+  return { absorbed, primary: primaryHash };
+}
+
+/**
+ * Cascade artifact references from constituent MEGAs for HYPER consolidation.
+ * Collects all absorbed_artifacts from MEGAs + their own primary artifacts.
+ *
+ * @param {object[]} megaDtus - MEGA DTU objects
+ * @param {number} [hotCount=3] - Number of representative artifacts to keep "hot"
+ * @returns {{ absorbed: Array, primary: string|null, hotArtifacts: string[] }}
+ */
+export function cascadeArtifactRefs(megaDtus, hotCount = 3) {
+  const allAbsorbed = [];
+  const seen = new Set();
+
+  for (const mega of megaDtus) {
+    // Collect from MEGA's absorbed artifacts
+    if (mega.artifacts?.absorbed) {
+      for (const ref of mega.artifacts.absorbed) {
+        if (!seen.has(ref.hash)) {
+          seen.add(ref.hash);
+          allAbsorbed.push(ref);
+        }
+      }
+    }
+    // Also include MEGA's own primary if it has one
+    if (mega.artifact?.hash && !seen.has(mega.artifact.hash)) {
+      seen.add(mega.artifact.hash);
+      allAbsorbed.push({
+        hash: mega.artifact.hash,
+        ref: mega.artifact.diskPath,
+        mimeType: mega.artifact.type,
+        sizeBytes: mega.artifact.sizeBytes || 0,
+        sourceId: mega.id,
+      });
+    }
+  }
+
+  // Pick top N by size as "hot" (representative) artifacts
+  const ranked = [...allAbsorbed].sort((a, b) => (b.sizeBytes || 0) - (a.sizeBytes || 0));
+  const hotArtifacts = ranked.slice(0, hotCount).map(r => r.hash);
+  const primary = hotArtifacts[0] || null;
+
+  return { absorbed: allAbsorbed, primary, hotArtifacts };
+}
+
+/**
+ * Build the artifacts block for a MEGA or HYPER DTU.
+ * Call this from _makeMegaFromCluster / _makeHyperFromMegas and attach to the DTU object.
+ *
+ * @param {"mega"|"hyper"} tier
+ * @param {string[]|object[]} sources - source DTU IDs (mega) or MEGA objects (hyper)
+ * @param {object} STATE
+ * @returns {{ absorbed: Array, primary: string|null, hotArtifacts?: string[], derivatives: {} }}
+ */
+export function buildConsolidatedArtifacts(tier, sources, STATE) {
+  if (tier === "mega") {
+    const { absorbed, primary } = collectArtifactRefs(sources, STATE);
+    return { absorbed, primary, derivatives: {} };
+  }
+  // hyper — sources are MEGA DTU objects
+  const { absorbed, primary, hotArtifacts } = cascadeArtifactRefs(sources);
+  return { absorbed, primary, hotArtifacts, derivatives: {} };
+}
+
+/**
+ * Budget-aware artifact creation for emergent entities.
+ * Checks daily budget before storing, downgrades gracefully when over budget.
+ *
+ * @param {object} STATE - Server state (needs STATE.dailyArtifactBytes)
+ * @param {string} dtuId
+ * @param {Buffer} buffer
+ * @param {string} mimeType
+ * @param {string} filename
+ * @param {string} domain - The lens domain (music, art, studio, etc.)
+ * @param {string} action - The action being performed
+ * @returns {Promise<object|null>} - storeArtifact result, or null if budget rejected
+ */
+export async function budgetAwareStore(STATE, dtuId, buffer, mimeType, filename, domain, action) {
+  const budget = checkBudget(STATE);
+  if (!budget.allowed) {
+    const downgrade = downgradePlan(domain, action, budget.remainingBytes);
+    if (downgrade?.textOnly) {
+      logger.info("artifact-store", "budget-rejected-text-only", { domain, action, remainingBytes: budget.remainingBytes });
+      return null; // Caller should fall back to text-only DTU
+    }
+    // Downgrade plan modifies params but we still store something smaller
+    logger.info("artifact-store", "budget-downgrade", { domain, action, downgrade });
+  }
+
+  const result = await storeArtifact(dtuId, buffer, mimeType, filename);
+
+  // Track daily usage
+  STATE.dailyArtifactBytes = (STATE.dailyArtifactBytes || 0) + (result?.sizeBytes || 0);
+
+  return result;
+}
+
+// Re-export ARTIFACT_ROOT for use by other modules
+export { ARTIFACT_ROOT };

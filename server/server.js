@@ -49,6 +49,9 @@ import { renderAndAttach, hasRenderer as _hasRenderer } from "./lib/render-engin
 import { registerAllRenderers } from "./lib/render-registry.js";
 import { getArtifactSchema } from "./lib/artifact-schemas.js";
 import { getExemplarArtifact } from "./lib/exemplar-artifacts.js";
+import { buildConsolidatedArtifacts, budgetAwareStore, ARTIFACT_ROOT as _ARTIFACT_ROOT } from "./lib/artifact-store.js";
+import { initBudgetTimer } from "./lib/artifact-budget.js";
+import { initGarbageCollectionTimer } from "./lib/artifact-gc.js";
 import "./lib/vocabularies.js";
 import { BoundedMap } from "./lib/bounded-map.js";
 import { httpMetricsMiddleware, getActiveRequests, installGlobalMetrics } from "./lib/http-metrics.js";
@@ -10276,6 +10279,17 @@ function cleanupAttachments() {
 // Run attachment cleanup every 12 hours
 setInterval(cleanupAttachments, 12 * 60 * 60 * 1000);
 
+// ── Artifact budget + garbage collection timers ──
+try {
+  initBudgetTimer(STATE);
+  structuredLog("info", "artifact_budget_timer_started", {});
+} catch (e) { structuredLog("warn", "artifact_budget_timer_fail", { error: e?.message }); }
+
+try {
+  initGarbageCollectionTimer(STATE, db);
+  structuredLog("info", "artifact_gc_timer_started", { interval: "weekly" });
+} catch (e) { structuredLog("warn", "artifact_gc_timer_fail", { error: e?.message }); }
+
 function _saveAttachment(dtuId, filename, buffer, mimeType) {
   ensureAttachmentsDir();
   const id = uid("att");
@@ -14687,6 +14701,9 @@ SUMMARY: [A 1-2 sentence summary of what this mega represents]`;
     structuredLog("warn", "mega_llm_fallback", { error: e.message });
   }
 
+  // Collect artifact references from source DTUs (reference-link, don't duplicate)
+  const artifactRefs = buildConsolidatedArtifacts("mega", ids, STATE);
+
   const tags = Array.from(new Set([
     "mega","auto","canonical","cluster",
     ...members.flatMap(d=>_tagsOf(d)).filter(t=>typeof t==="string").slice(0,30)
@@ -14702,7 +14719,8 @@ SUMMARY: [A 1-2 sentence summary of what this mega represents]`;
       summary,
       bullets: [
         `Members: ${ids.slice(0,8).join(", ")}${ids.length>8 ? "…" : ""}`,
-        "This mega consolidates explicit content from members for reduced working-set load."
+        "This mega consolidates explicit content from members for reduced working-set load.",
+        ...(artifactRefs.absorbed.length ? [`Artifacts: ${artifactRefs.absorbed.length} reference-linked (deduped on disk)`] : []),
       ],
     },
     core: {
@@ -14722,10 +14740,11 @@ SUMMARY: [A 1-2 sentence summary of what this mega represents]`;
     machine: {
       kind: "mega_cluster",
       members: ids,
-      // A simple, explicit aggregation equation (no liberties):
       equation: "Mega(M) = ⊕_{i∈members} DTU_i  (explicit aggregation only)",
-      metrics: { memberCount: ids.length }
+      metrics: { memberCount: ids.length, artifactCount: artifactRefs.absorbed.length }
     },
+    // Artifact references: content-addressed, never duplicated
+    artifacts: artifactRefs,
     lineage: { parents: ids.slice(0, 32), children: [] },
     source: "auto",
     meta: { canonicalId: null, hidden: false },
@@ -14776,6 +14795,9 @@ SUMMARY: [A 1-2 sentence summary of what this kernel does]`;
     structuredLog("warn", "hyper_llm_fallback", { error: e.message });
   }
 
+  // Cascade artifact references from constituent MEGAs (reference-link, keep 1-3 hot)
+  const artifactRefs = buildConsolidatedArtifacts("hyper", members, STATE);
+
   const tags = Array.from(new Set([
     "hyper","auto","canonical","kernel",
     ...members.flatMap(d=>_tagsOf(d)).filter(t=>typeof t==="string").slice(0,30)
@@ -14791,7 +14813,8 @@ SUMMARY: [A 1-2 sentence summary of what this kernel does]`;
       summary,
       bullets: [
         `Mega inputs: ${ids.join(", ")}`,
-        "Kernel routes queries and enforces invariant consistency."
+        "Kernel routes queries and enforces invariant consistency.",
+        ...(artifactRefs.absorbed.length ? [`Artifacts: ${artifactRefs.absorbed.length} cascaded refs, ${artifactRefs.hotArtifacts?.length || 0} hot`] : []),
       ]
     },
     core: {
@@ -14822,8 +14845,10 @@ SUMMARY: [A 1-2 sentence summary of what this kernel does]`;
       kind: "hyper_kernel",
       members: ids,
       equation: "Route(q) = topK_{mega}(sim(q, mega)); Expand only if needed; Verify invariants first",
-      metrics: { megaCount: ids.length }
+      metrics: { megaCount: ids.length, artifactCount: artifactRefs.absorbed.length }
     },
+    // Cascaded artifact references from constituent MEGAs
+    artifacts: artifactRefs,
     lineage: { parents: ids.slice(0, 32), children: [] },
     source: "auto",
     meta: { canonicalId: null, hidden: false },
