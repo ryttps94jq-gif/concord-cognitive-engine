@@ -70,7 +70,17 @@ export function PersonalAgentPanel({ socket, onAction }: PersonalAgentPanelProps
         <h3 className="text-sm font-medium text-zinc-400 flex items-center gap-2">
           <Bot className="w-4 h-4 text-purple-400" />
           Your Agent
+          {statusData && (
+            <span className={`ml-1 text-xs ${statusData.active ? 'text-green-400' : 'text-zinc-600'}`}>
+              {statusData.active ? '● Active' : '○ Inactive'}
+            </span>
+          )}
         </h3>
+        {statusData?.lastTick && (
+          <span className="text-[10px] text-zinc-600">
+            Last tick: {new Date(statusData.lastTick).toLocaleTimeString()}
+          </span>
+        )}
         <button
           onClick={handleTick}
           disabled={ticking}

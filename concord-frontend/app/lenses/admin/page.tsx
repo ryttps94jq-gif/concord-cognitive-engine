@@ -807,6 +807,12 @@ export default function AdminDashboardPage() {
                       <p className="text-xs text-gray-500">{org.memberCount} members</p>
                     )}
                   </div>
+                  <button
+                    onClick={() => orgPromote(org.id, '').catch(() => {})}
+                    className="text-xs px-3 py-1.5 rounded-md bg-neon-blue/20 text-neon-blue hover:bg-neon-blue/30 font-medium transition-colors"
+                  >
+                    Promote
+                  </button>
                 </div>
               ))
             ) : (

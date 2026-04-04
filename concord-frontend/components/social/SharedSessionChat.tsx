@@ -65,6 +65,11 @@ export function SharedSessionChat({ sessionId, currentUserId, onEnd }: SharedSes
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [sessionStatus, setSessionStatus] = useState<'active' | 'ended'>('active');
+  const [shareDtuId, setShareDtuId] = useState('');
+  const [showShareInput, setShowShareInput] = useState(false);
+  const [showActionMenu, setShowActionMenu] = useState(false);
+  const [actionLens, setActionLens] = useState('');
+  const [actionName, setActionName] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 

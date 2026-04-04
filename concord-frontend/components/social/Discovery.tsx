@@ -599,6 +599,46 @@ export function Discovery({
         )}
       </AnimatePresence>
 
+      {/* Active Shared Sessions */}
+      {sharedSessionsQuery.data && sharedSessionsQuery.data.length > 0 && (
+        <div className="rounded-xl bg-lattice-deep border border-lattice-border p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-medium text-white flex items-center gap-2">
+              <Radio className="w-4 h-4 text-neon-cyan" />
+              Live Sessions
+              <span className="text-xs text-gray-500">({sharedSessionsQuery.data.length})</span>
+            </h4>
+            <button
+              onClick={() => createSharedSession(currentUserId || 'anonymous', [])}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/20 transition-colors"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              Start Session
+            </button>
+          </div>
+          <div className="space-y-2">
+            {sharedSessionsQuery.data.slice(0, 5).map((session: { id: string; topic?: string; participantCount?: number; createdAt?: string }) => (
+              <button
+                key={session.id}
+                onClick={() => onNavigateToContent?.(session.id)}
+                className="w-full flex items-center justify-between p-2 rounded-lg hover:bg-lattice-surface transition-colors text-left"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                  <span className="text-sm text-white truncate">{session.topic || 'Shared Session'}</span>
+                </div>
+                {session.participantCount != null && (
+                  <span className="text-xs text-gray-500 flex items-center gap-1">
+                    <Users className="w-3 h-3" />
+                    {session.participantCount}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Content area */}
       <div className="space-y-3">
         {/* Trending DTUs */}
