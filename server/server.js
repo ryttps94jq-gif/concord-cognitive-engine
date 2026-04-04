@@ -44099,6 +44099,9 @@ registerShutdownCallback(() => {
   if (typeof weeklyTimer !== "undefined" && weeklyTimer) clearInterval(weeklyTimer);
   if (typeof globalTickTimer !== "undefined" && globalTickTimer) clearInterval(globalTickTimer);
   clearInterval(_periodicSaveTimer);
+  stopAllIntervals();
+  stopSync();
+  _memoryWatchdog.stop();
 });
 // ---- OrganMaturationKernel + Growth OS (v2 upgrade) ----
 

@@ -7,7 +7,7 @@
 
 const EXEMPLARS = new Map();
 
-export function registerExemplar(domain, action, exemplar) {
+function registerExemplar(domain, action, exemplar) {
   EXEMPLARS.set(`${domain}.${action}`, exemplar);
 }
 
@@ -15,7 +15,7 @@ export function getExemplarArtifact(domain, action) {
   return EXEMPLARS.get(`${domain}.${action}`) || null;
 }
 
-export function getExemplarCount() {
+function getExemplarCount() {
   return EXEMPLARS.size;
 }
 

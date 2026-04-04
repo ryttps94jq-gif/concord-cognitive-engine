@@ -6,7 +6,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import { flywheelMetrics } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
 import {
   Database, Bot, Star, ShoppingBag, Users,
@@ -44,7 +44,7 @@ const SPOKES = [
 export function FlywheelDashboard() {
   const { data, isLoading } = useQuery<{ ok: boolean; metrics: FlywheelMetrics }>({
     queryKey: ['flywheel'],
-    queryFn: () => api.get('/api/flywheel/metrics').then(r => r.data),
+    queryFn: () => flywheelMetrics(),
     refetchInterval: 60000,
   });
 

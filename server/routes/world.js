@@ -214,8 +214,10 @@ export default function createWorldRoutes({ requireAuth } = {}) {
 
   // ── Districts ────────────────────────────────────────────────────────────
 
-  router.get("/districts", wrap((_req, res) => {
-    res.json({ ok: true, districts: DISTRICTS, count: DISTRICTS.length });
+  router.get("/districts", wrap((req, res) => {
+    const { category } = req.query;
+    const districts = category ? listDistricts(category) : DISTRICTS;
+    res.json({ ok: true, districts, count: districts.length });
   }));
 
   router.get("/districts/by-lens/:lens", wrap((req, res) => {
@@ -230,6 +232,38 @@ export default function createWorldRoutes({ requireAuth } = {}) {
     res.json({ ok: true, district });
   }));
 
+  router.get("/districts/:id/objects", wrap((req, res) => {
+    const objects = getDistrictObjects(req.params.id);
+    res.json({ ok: true, objects, count: objects.length });
+  }));
+
+  router.get("/district-categories", wrap((_req, res) => {
+    res.json({ ok: true, categories: getDistrictCategories() });
+  }));
+
+  router.get("/district-at-position", wrap((req, res) => {
+    const x = parseFloat(req.query.x);
+    const z = parseFloat(req.query.z);
+    if (Number.isNaN(x) || Number.isNaN(z)) return res.status(400).json({ ok: false, error: "x and z query params required" });
+    const district = getDistrictAtPosition(x, z);
+    if (!district) return res.status(404).json({ ok: false, error: "No district at this position" });
+    res.json({ ok: true, district });
+  }));
+
+  router.get("/control-modes", wrap((_req, res) => {
+    res.json({ ok: true, controlModes: CONTROL_MODES });
+  }));
+
+  router.get("/stats", wrap((_req, res) => {
+    res.json({ ok: true, ...getWorldStats() });
+  }));
+
+  router.delete("/objects/:objectId", auth, wrap((req, res) => {
+    const removed = removeWorldObject(req.params.objectId);
+    if (!removed) return res.status(404).json({ ok: false, error: "Object not found" });
+    res.json({ ok: true, removed: true });
+  }));
+
   // ── Workstations ─────────────────────────────────────────────────────────
 
   router.post("/workstations/start", auth, wrap((req, res) => {
@@ -242,6 +276,12 @@ export default function createWorldRoutes({ requireAuth } = {}) {
     const { sessionId } = req.body;
     const result = endWorkstationSession(sessionId);
     res.json({ ok: true, ...result });
+  }));
+
+  router.get("/workstations/active", wrap((req, res) => {
+    const { districtId } = req.query;
+    const sessions = getActiveWorkstations(districtId || undefined);
+    res.json({ ok: true, sessions, count: sessions.length });
   }));
 
   // ── Organizations ────────────────────────────────────────────────────────

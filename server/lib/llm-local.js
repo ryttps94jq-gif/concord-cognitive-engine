@@ -43,7 +43,7 @@ function _findModel() {
 /**
  * Check if llama.cpp is available.
  */
-export function isAvailable() {
+function isAvailable() {
   if (_available !== null) return _available;
   if (!LLAMA_MODEL || !existsSync(LLAMA_MODEL)) {
     _available = false;

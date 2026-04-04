@@ -58,10 +58,7 @@ export function SharedSessionInvite({ sessionId, onJoined, onDeclined }: SharedS
   const joinSession = async () => {
     setIsJoining(true);
     try {
-      await api.post(`/api/shared-session/${sessionId}/join`, {
-        sharingDomains,
-        sharingLevel,
-      });
+      await joinSharedSession(sessionId, sharingDomains, sharingLevel);
       onJoined?.(sessionId);
     } catch {
       setIsJoining(false);

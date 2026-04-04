@@ -7,7 +7,7 @@
  * rather than constructing their own Stripe instance.
  *
  * Usage:
- *   import { getStripe, STRIPE_ENABLED, CC_TO_USD } from "../lib/stripe.js";
+ *   import { getStripe, STRIPE_ENABLED } from "../lib/stripe.js";
  *   const stripe = await getStripe();
  */
 

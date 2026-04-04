@@ -22,7 +22,7 @@ export function ActivityTimeline({ domain }: ActivityTimelineProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [filter, setFilter] = useState<'all' | 'user' | 'system'>('all');
 
-  const { data } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['activity-timeline', domain],
     queryFn: () => apiHelpers.lens.list(domain, { limit: 20 }).then(r => r.data).catch(() => ({ items: [] })),
     staleTime: 30000,
@@ -80,7 +80,9 @@ export function ActivityTimeline({ domain }: ActivityTimelineProps) {
 
               {/* Timeline */}
               <div className="space-y-2 max-h-60 overflow-y-auto">
-                {filtered.length === 0 ? (
+                {isLoading ? (
+                  <SkeletonTimeline count={3} />
+                ) : filtered.length === 0 ? (
                   <p className="text-xs text-gray-500 text-center py-4">No activity yet</p>
                 ) : (
                   filtered.map((item, i) => {

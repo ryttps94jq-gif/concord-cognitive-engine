@@ -42,17 +42,17 @@ export async function initStateSync(STATE) {
 
 // ── Publishers (call from main code when state changes) ──
 
-export async function notifyDTUChange(dtuId, action, dtu) {
+async function notifyDTUChange(dtuId, action, dtu) {
   if (!_initialized) return;
   await publish(CHANNELS.DTU_CHANGE, { instanceId: INSTANCE_ID, dtuId, action, dtu, at: Date.now() });
 }
 
-export async function notifySessionChange(sessionId, action) {
+async function notifySessionChange(sessionId, action) {
   if (!_initialized) return;
   await publish(CHANNELS.SESSION_CHANGE, { instanceId: INSTANCE_ID, sessionId, action, at: Date.now() });
 }
 
-export async function notifyInvalidation(keys) {
+async function notifyInvalidation(keys) {
   if (!_initialized) return;
   await publish(CHANNELS.INVALIDATE, { instanceId: INSTANCE_ID, keys, at: Date.now() });
 }
@@ -62,7 +62,7 @@ export async function notifyInvalidation(keys) {
 const EMERGENT_SYNC_INTERVAL_MS = 30_000;
 let _emergentTimer = null;
 
-export function startEmergentSync() {
+function startEmergentSync() {
   if (!isConnected() || !_STATE) return;
 
   _emergentTimer = setInterval(async () => {
