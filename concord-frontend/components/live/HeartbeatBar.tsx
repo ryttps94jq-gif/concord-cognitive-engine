@@ -158,7 +158,7 @@ export function HeartbeatBar() {
           className="hidden lg:flex items-center gap-1.5 px-2 py-1 rounded-md bg-lattice-deep text-gray-300"
           title={`Scope: ${(scopeData as Record<string, unknown>).local ?? 0} local · ${(scopeData as Record<string, unknown>).marketplace ?? 0} market · ${(scopeData as Record<string, unknown>).global ?? 0} global`}
         >
-          <span className="font-mono text-xs">{(scopeData as Record<string, unknown>).total ?? 0}</span>
+          <span className="font-mono text-xs">{String((scopeData as Record<string, unknown>).total ?? 0)}</span>
           <span className="text-gray-500 text-xs">scope</span>
         </div>
       )}

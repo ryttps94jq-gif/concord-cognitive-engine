@@ -19,14 +19,31 @@ interface District {
 
 interface NearbyPlayer {
   userId: string;
+  username: string;
   x: number;
   y: number;
-  [key: string]: unknown;
+  direction: string;
+  district: string;
+  avatarColor?: string;
 }
 
 interface CombatState {
   active: boolean;
-  [key: string]: unknown;
+  playerHp: number;
+  playerMaxHp: number;
+  enemyName: string;
+  enemyHp: number;
+  enemyMaxHp: number;
+}
+
+interface Quest {
+  id: string;
+  title: string;
+  description: string;
+  progress: number;
+  maxProgress: number;
+  completed: boolean;
+  reward?: { type: string; amount: number };
 }
 
 interface WorldEntity {
@@ -74,7 +91,7 @@ export default function WorldLensPage() {
 
   const { data: quests } = useQuery({
     queryKey: ['world-quests'],
-    queryFn: () => api.get('/api/quests/mine').then((r: { data?: { quests?: unknown[] } }) => r.data?.quests || []),
+    queryFn: () => api.get('/api/quests/mine').then((r: { data?: { quests?: Quest[] } }) => r.data?.quests || []),
     staleTime: 30000,
   });
 
@@ -170,7 +187,7 @@ export default function WorldLensPage() {
       }
     }
     // Static NPCs per district
-    const STATIC_NPCS = [
+    const STATIC_NPCS: NPC[] = [
       { id: 'merchant-1', name: 'Merchant Kira', type: 'merchant', position: { x: 6, y: 11 }, district: 'marketplace' },
       { id: 'guard-1', name: 'Guard Captain', type: 'guard', position: { x: 3, y: 3 }, district: 'council' },
       { id: 'quest-welcome', name: 'Guide Aria', type: 'quest_giver', position: { x: 5, y: 10 }, district: 'marketplace', questAvailable: true },

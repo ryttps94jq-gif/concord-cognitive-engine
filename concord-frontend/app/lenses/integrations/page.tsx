@@ -358,7 +358,7 @@ function WebhookIngestInfo() {
   );
 }
 
-function CreateWebhookModal({ onClose, onCreate, creating }: { onClose: () => void; onCreate: (data: Record<string, unknown>) => void; creating: boolean }) {
+function CreateWebhookModal({ onClose, onCreate, creating }: { onClose: () => void; onCreate: (data: CreateWebhookRequest) => void; creating: boolean }) {
   const [form, setForm] = useState({ name: '', url: '', events: 'dtu.created' });
 
   return (

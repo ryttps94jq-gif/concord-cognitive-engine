@@ -52,7 +52,7 @@ interface Model {
   name: string;
   type: 'classification' | 'regression' | 'clustering' | 'generation' | 'embedding' | 'transformer';
   framework: 'pytorch' | 'tensorflow' | 'sklearn' | 'custom';
-  status: 'ready' | 'training' | 'failed' | 'deploying' | 'deployed';
+  status: 'ready' | 'training' | 'trained' | 'failed' | 'deploying' | 'deployed';
   version: string;
   accuracy?: number;
   f1Score?: number;

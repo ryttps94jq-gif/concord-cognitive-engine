@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { apiHelpers } from '@/lib/api/client';
+import type { ChatRequest } from '@/lib/api/generated-types';
 import { cn } from '@/lib/utils';
 import { Send, X, Bot, User, AlertCircle, Loader2 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -89,12 +90,12 @@ export default function DomainAssistant({ domain, domainLabel }: DomainAssistant
       // Prefer apiHelpers.chat.ask for one-shot Q&A; falls back to chat.send.
       let reply: string;
       try {
-        const res = await apiHelpers.chat.ask(fullMessage, domain);
+        const res = await apiHelpers.chat.ask(fullMessage, domain as ChatRequest['mode']);
         const data = res.data;
         reply = data?.reply || data?.answer || data?.response || 'No response received.';
       } catch {
         // Fallback: try the streaming-less chat.send endpoint
-        const res = await apiHelpers.chat.send(fullMessage, domain);
+        const res = await apiHelpers.chat.send(fullMessage, domain as ChatRequest['mode']);
         const data = res.data;
         reply = data?.reply || data?.answer || data?.response || 'No response received.';
       }

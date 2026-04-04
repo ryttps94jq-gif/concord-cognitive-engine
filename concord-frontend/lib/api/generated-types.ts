@@ -163,6 +163,8 @@ export interface UpdateDTURequest {
   content?: string;
   tags?: string[];
   meta?: Record<string, unknown>;
+  vote?: number;
+  reaction?: string;
 }
 
 export interface DTUListResponse {
@@ -213,7 +215,7 @@ export interface ForgeResponse {
 
 export interface ChatRequest {
   message: string;
-  mode?: 'overview' | 'deep' | 'creative' | 'critical' | 'ethics';
+  mode?: 'overview' | 'deep' | 'creative' | 'critical' | 'ethics' | 'math' | 'meta' | 'quantum';
 }
 
 export interface ChatResponse {

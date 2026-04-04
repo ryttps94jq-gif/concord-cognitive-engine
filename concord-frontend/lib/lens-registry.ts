@@ -31,7 +31,7 @@ import {
   ShieldCheck, Scissors, Umbrella,
   Shirt, ChefHat, Baby, PawPrint, Trophy, Hammer, Swords, BadgeCheck,
   HardHat, Plug, Mountain, Radio, Play,
-  Camera, TrendingUp, Bot, Pill, Map, Search, Gem, Link2, Waves,
+  Camera, TrendingUp, Bot, Pill, Map as MapIcon, Search, Gem, Link2, Waves,
   Wind, MapPin, Cog,
   type LucideIcon,
 } from 'lucide-react';
@@ -370,7 +370,7 @@ export const LENS_REGISTRY: LensEntry[] = [
 
   // ── Unregistered Knowledge & Science Lenses ────────────────────
   { id: 'astronomy', name: 'Astronomy', icon: Orbit, description: 'Astronomy & celestial observation', category: 'science', showInSidebar: false, showInCommandPalette: true, path: '/lenses/astronomy', order: 360, keywords: ['stars', 'planets', 'telescope', 'celestial'] },
-  { id: 'atlas', name: 'Atlas', icon: Map, description: 'Geographic atlas & mapping', category: 'science', showInSidebar: false, showInCommandPalette: true, path: '/lenses/atlas', order: 361, keywords: ['map', 'geography', 'location', 'terrain'] },
+  { id: 'atlas', name: 'Atlas', icon: MapIcon, description: 'Geographic atlas & mapping', category: 'science', showInSidebar: false, showInCommandPalette: true, path: '/lenses/atlas', order: 361, keywords: ['map', 'geography', 'location', 'terrain'] },
   { id: 'history', name: 'History', icon: FileText, description: 'Historical records & timelines', category: 'knowledge', showInSidebar: false, showInCommandPalette: true, path: '/lenses/history', order: 362, keywords: ['history', 'event', 'era', 'timeline'] },
   { id: 'linguistics', name: 'Linguistics', icon: Globe, description: 'Language analysis & translation', category: 'knowledge', showInSidebar: false, showInCommandPalette: true, path: '/lenses/linguistics', order: 363, keywords: ['language', 'translation', 'grammar', 'syntax'] },
   { id: 'philosophy', name: 'Philosophy', icon: Lightbulb, description: 'Philosophical frameworks & arguments', category: 'knowledge', showInSidebar: false, showInCommandPalette: true, path: '/lenses/philosophy', order: 364, keywords: ['philosophy', 'logic', 'argument', 'ethics'] },
