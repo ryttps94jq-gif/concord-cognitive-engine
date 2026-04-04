@@ -11834,7 +11834,7 @@ setTimeout(() => {
 
 // ── Artifact Garbage Collection Timer (weekly) ──────────────────────────
 // Starts after a short delay so STATE and db are fully ready
-setTimeout(() => {
+setTimeout(async () => {
   try {
     const { initGarbageCollectionTimer: _initGC } = await import("./lib/artifact-gc.js");
     _initGC(STATE, db);

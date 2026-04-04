@@ -57,7 +57,7 @@ export function PredictionCards({ predictions, onView, onDismiss }: PredictionCa
               View
             </button>
             <button
-              onClick={() => onDismiss?.(p.dtuId)}
+              onClick={() => handleDismiss(p.dtuId)}
               className="px-3 py-1 text-xs rounded-lg
                 bg-zinc-800 text-zinc-400 border border-zinc-700
                 hover:bg-zinc-700 transition-colors"
