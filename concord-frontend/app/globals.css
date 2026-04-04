@@ -2,6 +2,58 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   CONCORD DESIGN OVERHAUL — Refined Futurism
+   Apple meets a living system. Clean surfaces, organic warmth.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Typography — Display: Satoshi, Body: DM Sans, Mono: JetBrains Mono */
+@import url('https://api.fontshare.com/v2/css?f[]=satoshi@700,500,400&f[]=general-sans@600,500,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  /* ── Typography ── */
+  --font-display: 'Satoshi', 'General Sans', sans-serif;
+  --font-body: 'DM Sans', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* ── Backgrounds — layered, not flat ── */
+  --bg-base: #0C0C0E;
+  --bg-surface: #141416;
+  --bg-raised: #1C1C20;
+  --bg-overlay: #242428;
+
+  /* ── Text — hierarchy through opacity ── */
+  --text-primary: #F0EDE8;
+  --text-secondary: #9B978F;
+  --text-tertiary: #5C584F;
+
+  /* ── Accent — one dominant, two supporting ── */
+  --accent-primary: #3ECFA0;   /* living green — the system is alive */
+  --accent-warm: #E8A44C;      /* warm amber — human warmth */
+  --accent-cool: #5B8DEF;      /* calm blue — trust, links */
+
+  /* ── Borders — subtle, not harsh ── */
+  --border-subtle: rgba(240, 237, 232, 0.06);
+  --border-default: rgba(240, 237, 232, 0.10);
+  --border-strong: rgba(240, 237, 232, 0.16);
+
+  /* ── Spacing ── */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+  --space-3xl: 64px;
+  --tap-target: 44px;
+
+  /* ── Lens identity (overridden per-lens via useLensIdentity) ── */
+  --lens-accent: var(--accent-primary);
+  --lens-secondary: var(--text-secondary);
+  --lens-gradient: linear-gradient(135deg, transparent, transparent);
+}
+
 :root {
   --foreground-rgb: 255, 255, 255;
   --background-start-rgb: 10, 10, 15;
@@ -309,7 +361,257 @@
   .toast.error { @apply border-l-4 border-l-status-error; }
   .toast.warning { @apply border-l-4 border-l-status-warning; }
   .toast.info { @apply border-l-4 border-l-status-info; }
+
+  /* Hide scrollbar utility */
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DESIGN OVERHAUL — Typography, Cards, Buttons, Chat, Animations
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@layer base {
+  /* Display font for headings */
+  h1, h2, h3, .font-display {
+    font-family: var(--font-display);
+  }
+
+  /* Body font for everything else */
+  body, p, span, div, input, textarea, select, button {
+    font-family: var(--font-body);
+  }
+
+  /* Mono font for code/technical */
+  code, pre, .font-mono, kbd {
+    font-family: var(--font-mono);
+  }
+}
+
+@layer components {
+  /* ── Content Card — universal card for all content types ── */
+  .content-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 16px;
+    padding: var(--space-lg);
+    transition: all 0.2s ease;
+  }
+
+  .content-card:hover {
+    border-color: var(--border-default);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  }
+
+  .card-title {
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: var(--space-xs);
+  }
+
+  .card-meta {
+    font-size: 13px;
+    color: var(--text-tertiary);
+    margin-bottom: var(--space-md);
+  }
+
+  .card-body {
+    font-size: 15px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+
+  .card-actions {
+    display: flex;
+    gap: var(--space-sm);
+    margin-top: var(--space-md);
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  /* ── Buttons — three tiers ── */
+  .btn-primary-v2 {
+    background: var(--accent-primary);
+    color: var(--bg-base);
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 15px;
+    padding: 12px 24px;
+    border-radius: 12px;
+    border: none;
+    min-height: var(--tap-target);
+    transition: all 0.15s ease;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .btn-primary-v2:hover {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+  }
+
+  .btn-primary-v2:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    filter: none;
+  }
+
+  .btn-secondary-v2 {
+    background: var(--bg-raised);
+    color: var(--text-primary);
+    border: 1px solid var(--border-default);
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 15px;
+    padding: 12px 24px;
+    border-radius: 12px;
+    min-height: var(--tap-target);
+    transition: all 0.15s ease;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .btn-secondary-v2:hover {
+    background: var(--bg-overlay);
+    border-color: var(--border-strong);
+  }
+
+  .btn-ghost-v2 {
+    background: transparent;
+    color: var(--text-secondary);
+    border: none;
+    font-size: 15px;
+    padding: 12px 24px;
+    border-radius: 12px;
+    min-height: var(--tap-target);
+    transition: all 0.15s ease;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .btn-ghost-v2:hover {
+    color: var(--text-primary);
+    background: var(--bg-raised);
+  }
+
+  /* ── Chat Bubbles ── */
+  .message-concord {
+    background: var(--bg-surface);
+    border-left: 3px solid var(--accent-primary);
+    border-radius: 4px 16px 16px 16px;
+    padding: var(--space-md) var(--space-lg);
+    max-width: 85%;
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--text-primary);
+  }
+
+  .message-user {
+    background: var(--bg-raised);
+    border-radius: 16px 16px 4px 16px;
+    padding: var(--space-md) var(--space-lg);
+    max-width: 85%;
+    margin-left: auto;
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--text-primary);
+  }
+
+  .chat-input {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: 24px;
+    padding: 14px 20px;
+    font-size: 16px;
+    font-family: var(--font-body);
+    margin: var(--space-md);
+    color: var(--text-primary);
+    outline: none;
+    width: 100%;
+  }
+
+  .chat-input:focus {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 3px rgba(62, 207, 160, 0.1);
+  }
+
+  .chat-input::placeholder {
+    color: var(--text-tertiary);
+  }
+
+  /* ��─ Lens Gradient Background ── */
+  .lens-gradient-bg {
+    background: var(--lens-gradient);
+  }
+
+  /* ── Lens Accent ── */
+  .lens-accent-text {
+    color: var(--lens-accent);
+  }
+
+  .lens-accent-bg {
+    background-color: var(--lens-accent);
+  }
+
+  .lens-accent-border {
+    border-color: var(--lens-accent);
+  }
+
+  /* ── System Alive Dot ── */
+  .system-alive-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent-primary);
+    animation: breathe 3s ease infinite;
+  }
+}
+
+/* ── Animations ── */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes breathe {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.page-enter {
+  animation: fadeInUp 0.3s ease forwards;
+}
+
+/* Card stagger — cards load in sequence */
+.content-card:nth-child(1) { animation: fadeInUp 0.3s ease 0.05s both; }
+.content-card:nth-child(2) { animation: fadeInUp 0.3s ease 0.10s both; }
+.content-card:nth-child(3) { animation: fadeInUp 0.3s ease 0.15s both; }
+.content-card:nth-child(4) { animation: fadeInUp 0.3s ease 0.20s both; }
+.content-card:nth-child(5) { animation: fadeInUp 0.3s ease 0.25s both; }
+.content-card:nth-child(6) { animation: fadeInUp 0.3s ease 0.30s both; }
 
 /* Animations */
 @keyframes slide-up {

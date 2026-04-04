@@ -15,6 +15,7 @@ import { CrossDomainConnections } from '@/components/common/CrossDomainConnectio
 import { BrainMonitor } from '@/components/common/BrainMonitor';
 import { SkeletonCard } from '@/components/common/Skeleton';
 import { ContentPublisher } from '@/components/lens/ContentPublisher';
+import { useLensIdentity } from '@/hooks/useLensIdentity';
 import {
   isCoreLens,
   getParentCoreLens,
@@ -71,6 +72,9 @@ function useLensMeta() {
  */
 function UniversalLensFeatures({ children }: { children: React.ReactNode }) {
   const { slug, label } = useLensMeta();
+
+  // Apply per-lens visual identity (CSS variables)
+  useLensIdentity(slug);
 
   if (!slug) return <>{children}</>;
 
