@@ -12,12 +12,14 @@ import { LensTitle } from './topbar/LensTitle';
 import { NotificationBell } from '@/components/social/NotificationBell';
 import { DMIndicator } from '@/components/social/DMIndicator';
 import { UserMenu } from './topbar/UserMenu';
+import { usePowerMode } from '@/hooks/usePowerMode';
 
 export function Topbar() {
   const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed);
   const setCommandPaletteOpen = useUIStore((s) => s.setCommandPaletteOpen);
   const setSidebarOpen = useUIStore((s) => s.setSidebarOpen);
   const { isOnline } = useOnlineStatus();
+  const { powerMode, togglePowerMode } = usePowerMode();
 
   // Background resonance fetch (data consumed by HeartbeatBar via its own query)
   useQuery({

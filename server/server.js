@@ -24400,6 +24400,25 @@ app.post("/api/federation/verify", (req, res) => {
   res.json({ ok: result.valid, verification: result });
 });
 
+// Federation peers — inline fallback (supplements the federation router's /peers
+// which depends on a db handle that may be null at startup)
+app.get("/api/federation/peers", (req, res) => {
+  try {
+    const trustedNodes = _FEDERATION_TRUST.trustedNodes
+      ? Array.from(_FEDERATION_TRUST.trustedNodes.entries()).map(([nodeId, info]) => ({
+          id: nodeId,
+          nodeId,
+          status: "trusted",
+          lastSeen: info?.lastSeen || null,
+          addedAt: info?.addedAt || null,
+        }))
+      : [];
+    res.json({ ok: true, peers: trustedNodes });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message, peers: [] });
+  }
+});
+
 // ============================================================================
 // OBSERVABILITY ALERTING PIPELINE (Tier 3)
 // ============================================================================
@@ -36775,6 +36794,77 @@ app.get("/api/social/cited-by/:dtuId", (req, res) => {
 
 app.get("/api/social/metrics", (req, res) => {
   try { res.json(getSocialMetrics(STATE)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- Social Notifications ----
+app.get("/api/social/notifications", (req, res) => {
+  try {
+    const userId = req.query.userId || req.user?.id;
+    const limit = Math.min(Number(req.query.limit) || 50, 200);
+    const unreadOnly = req.query.unreadOnly === "true";
+    // STATE.notifications is a Map<id, notification> if it exists
+    const allNotifications = STATE.notifications
+      ? Array.from(STATE.notifications.values())
+      : [];
+    let filtered = userId
+      ? allNotifications.filter(n => n.userId === userId || n.targetUserId === userId)
+      : allNotifications;
+    if (unreadOnly) {
+      filtered = filtered.filter(n => !n.read && !n.readAt);
+    }
+    filtered.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+    const notifications = filtered.slice(0, limit);
+    res.json({ ok: true, notifications });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/notifications/count", (req, res) => {
+  try {
+    const userId = req.query.userId || req.user?.id;
+    const allNotifications = STATE.notifications
+      ? Array.from(STATE.notifications.values())
+      : [];
+    const unread = allNotifications.filter(n =>
+      (n.userId === userId || n.targetUserId === userId) && !n.read && !n.readAt
+    );
+    res.json({ ok: true, count: unread.length });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/social/notifications/:id/read", (req, res) => {
+  try {
+    const notification = STATE.notifications?.get(req.params.id);
+    if (!notification) return res.status(404).json({ ok: false, error: "Notification not found" });
+    notification.read = true;
+    notification.readAt = new Date().toISOString();
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/social/notifications/read-all", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id;
+    const now = new Date().toISOString();
+    if (STATE.notifications) {
+      for (const n of STATE.notifications.values()) {
+        if ((n.userId === userId || n.targetUserId === userId) && !n.read) {
+          n.read = true;
+          n.readAt = now;
+        }
+      }
+    }
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.delete("/api/social/notifications/:id", (req, res) => {
+  try {
+    if (STATE.notifications?.has(req.params.id)) {
+      STATE.notifications.delete(req.params.id);
+      return res.json({ ok: true });
+    }
+    res.status(404).json({ ok: false, error: "Notification not found" });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 // ---- Collaboration ----
