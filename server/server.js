@@ -23634,6 +23634,14 @@ app.use("/api/film-studio", createFilmStudioRouter({ db }));
 import createMediaRouter from "./routes/media.js";
 app.use("/api/media", createMediaRouter({ STATE }));
 
+// ===== CDN MANAGEMENT =====
+import createCDNRouter from "./routes/cdn.js";
+import { createCDNManager } from "./lib/cdn-manager.js";
+import { createURLSigner } from "./lib/cdn-url-signer.js";
+const cdnManager = createCDNManager();
+const urlSigner = createURLSigner();
+app.use("/api/cdn", createCDNRouter({ cdnManager, urlSigner, STATE }));
+
 // ===== CONTENT MODERATION =====
 app.use("/api/moderation", createModerationRouter({
   STATE,
