@@ -63,6 +63,7 @@ import {
 } from './ChatModePanels';
 import { useChatProactive } from './useChatProactive';
 import { useCrossLensMemory } from './useCrossLensMemory';
+import { useConversationMemory } from '@/hooks/useConversationMemory';
 import { ContextOverlay } from './ContextOverlay';
 import { InitiativeList } from './InitiativeChip';
 import type { Initiative } from './InitiativeChip';
@@ -286,6 +287,10 @@ export function PersistentChatRail({
   // ── Cross-lens memory ──────────────────────────────────────
 
   const crossLensMemory = useCrossLensMemory(currentLens);
+
+  // ── Conversation memory (compression & stats) ─────────────
+
+  const conversationMemory = useConversationMemory();
 
   // ── Proactive messages ─────────────────────────────────────
 

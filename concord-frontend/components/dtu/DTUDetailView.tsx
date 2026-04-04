@@ -15,6 +15,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import type { DTU } from '@/lib/api/generated-types';
+import { useOfflineFirstDTU } from '@/hooks/useOfflineFirst';
 import { DTUIntegrityBadge } from './DTUIntegrityBadge';
 import { ProvenanceBadge } from './ProvenanceBadge';
 import {
@@ -104,8 +105,16 @@ export function DTUDetailView({ dtuId, onClose, onNavigate }: DTUDetailViewProps
   const [activeTab, setActiveTab] = useState<'content' | 'lineage' | 'metadata'>('content');
   const [showPromote, setShowPromote] = useState(false);
 
-  // Fetch DTU details
-  const { data: dtuData, isLoading, isError } = useQuery({
+  // Offline-first: instantly show cached DTU from IndexedDB while server refreshes
+  const {
+    data: offlineDtu,
+    loading: offlineLoading,
+    source: offlineSource,
+    stale: offlineStale,
+  } = useOfflineFirstDTU(dtuId);
+
+  // Fetch DTU details from server (authoritative source)
+  const { data: serverDtu, isLoading: serverLoading, isError } = useQuery({
     queryKey: ['dtu-detail', dtuId],
     queryFn: async () => {
       const res = await apiHelpers.dtus.get(dtuId);
@@ -114,6 +123,10 @@ export function DTUDetailView({ dtuId, onClose, onNavigate }: DTUDetailViewProps
     enabled: Boolean(dtuId),
     staleTime: 30_000,
   });
+
+  // Prefer server data when available, fall back to offline cache
+  const dtuData = (serverDtu || offlineDtu as DTU | null) ?? null;
+  const isLoading = serverLoading && offlineLoading;
 
   // Fetch lineage (enhanced: includes forks, citations, citedBy, royaltyCascade)
   const { data: lineageData } = useQuery({
