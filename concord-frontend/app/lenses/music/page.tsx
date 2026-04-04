@@ -763,7 +763,31 @@ export default function MusicLensPage() {
             {/* ---- LIBRARY ---- */}
             {view === 'library' && (
               <div className="space-y-4">
-                <h1 className="text-xl font-bold">Your Library</h1>
+                <div className="flex items-center justify-between">
+                  <h1 className="text-xl font-bold">Your Library</h1>
+                  {dtusLoading && <span className="w-4 h-4 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin" />}
+                </div>
+
+                {/* DTU Overview */}
+                {(contextDTUs.length > 0 || regularDTUs.length > 0 || hyperDTUs.length > 0) && (
+                  <div className="flex gap-3 flex-wrap">
+                    {contextDTUs.length > 0 && (
+                      <span className="px-3 py-1.5 rounded-full text-xs bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/20">
+                        {contextDTUs.length} Context DTUs
+                      </span>
+                    )}
+                    {regularDTUs.length > 0 && (
+                      <span className="px-3 py-1.5 rounded-full text-xs bg-neon-purple/10 text-neon-purple border border-neon-purple/20">
+                        {regularDTUs.length} Regular DTUs
+                      </span>
+                    )}
+                    {hyperDTUs.length > 0 && (
+                      <span className="px-3 py-1.5 rounded-full text-xs bg-neon-pink/10 text-neon-pink border border-neon-pink/20">
+                        {hyperDTUs.length} Hyper DTUs
+                      </span>
+                    )}
+                  </div>
+                )}
 
                 <div className="flex gap-1 border-b border-white/5">
                   {(['playlists', 'liked', 'purchased', 'recent'] as const).map(tab => (
@@ -853,7 +877,16 @@ export default function MusicLensPage() {
                   <h1 className="text-xl font-bold flex items-center gap-2">
                     <ShoppingBag className="w-5 h-5 text-neon-cyan" /> Beat Marketplace
                   </h1>
-                  <span className="text-xs text-gray-500">Beats · Samples · Stems</span>
+                  <button
+                    onClick={() => {
+                      const firstTrack = tracks[0];
+                      if (firstTrack) publishToMarketplace({ dtuId: firstTrack.id });
+                    }}
+                    disabled={tracks.length === 0}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-neon-green/10 text-neon-green hover:bg-neon-green/20 disabled:opacity-30 transition-colors"
+                  >
+                    <ShoppingBag className="w-3.5 h-3.5" /> Publish to Marketplace
+                  </button>
                 </div>
 
                 {/* Tab bar */}

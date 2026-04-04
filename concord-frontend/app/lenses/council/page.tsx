@@ -1249,6 +1249,7 @@ export default function CouncilLensPage() {
                     {entry.details && <p className="text-xs text-gray-500 mt-0.5">{entry.details}</p>}
                   </div>
                   <span className={cn('px-1.5 py-0.5 rounded text-[9px] capitalize', catColors[entry.category] || 'text-gray-500', 'bg-lattice-surface flex-shrink-0')}>{entry.category}</span>
+                  <button onClick={(e) => { e.stopPropagation(); removeAuditItem(entry.id); }} className="text-red-400 hover:text-red-300 flex-shrink-0 ml-1"><X className="w-3 h-3" /></button>
                 </div>
               );
             })}
@@ -1345,7 +1346,7 @@ export default function CouncilLensPage() {
               <div className="flex items-center justify-between mb-1">
                 <h3 className={ds.heading3}>{c.name}</h3>
                 <div className="flex items-center gap-1">
-                  <button onClick={() => updateCommitteeItem(c.id, { data: { ...c, description: c.description } as unknown as Record<string, unknown> })} className="text-gray-500 hover:text-white text-[10px]"><Edit3 className="w-3 h-3" /></button>
+                  <button onClick={() => updateCommitteeItem(c.id, { data: { ...c, description: c.description } as unknown as Record<string, unknown> })} className="text-gray-500 hover:text-white text-[10px]"><PenLine className="w-3 h-3" /></button>
                   <button onClick={() => removeCommitteeItem(c.id)} className="text-red-400 hover:text-red-300 text-[10px]"><X className="w-3 h-3" /></button>
                 </div>
               </div>
