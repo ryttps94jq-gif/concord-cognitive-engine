@@ -814,7 +814,7 @@ export const apiHelpers = {
   // Automations
   automations: {
     list: () => api.get('/api/automations'),
-    create: (data: { name: string; trigger: unknown; actions: unknown[] }) =>
+    create: (data: CreateAutomationRequest) =>
       api.post('/api/automations', data),
     run: (id: string, triggerData?: unknown) =>
       api.post(`/api/automations/${id}/run`, triggerData || {}),
@@ -1168,7 +1168,7 @@ export const apiHelpers = {
     // API key management (for programmatic access)
     apiKeys: {
       list: () => api.get('/api/auth/api-keys'),
-      create: (data: { name: string; scopes: string[] }) =>
+      create: (data: CreateApiKeyRequest) =>
         api.post('/api/auth/api-keys', data),
       delete: (id: string) => api.delete(`/api/auth/api-keys/${id}`),
     },

@@ -1,4 +1,8 @@
 /**
+ * @deprecated These extended helpers are re-exported from client.ts but have no
+ * production consumers yet. Import from '@/lib/api/client' when wiring new pages.
+ * If still unused after feature integration, consider consolidating into client.ts.
+ *
  * Extended API helpers for previously unreachable backend endpoints.
  *
  * The backend has 963 endpoints. The original client.ts covers ~300.
