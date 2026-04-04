@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
-import { Upload, FileJson, Database, Check, AlertTriangle, Loader2, FileText, Archive, RefreshCw, Layers, ChevronDown, Clock, CheckCircle2 } from 'lucide-react';
+import { Upload, FileJson, Database, Check, AlertTriangle, Loader2, FileText, Archive, RefreshCw, Layers, ChevronDown, Clock, CheckCircle2, Download } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { UniversalActions } from '@/components/lens/UniversalActions';
