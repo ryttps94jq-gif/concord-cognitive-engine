@@ -193,16 +193,7 @@ const SKILL_TREES: Record<SkillBranch, { label: string; color: string; icon: typ
   },
 };
 
-const SHOP_ITEMS: ShopItem[] = [
-  { id: 's1', name: 'Vinyl Veteran Badge', description: 'Show your dedication to the craft', icon: '🏅', type: 'badge', cost: 500, rarity: 'common', owned: false },
-  { id: 's2', name: 'Waveform Wanderer', description: 'Title: displayed next to your name', icon: '🌊', type: 'title', cost: 800, rarity: 'rare', owned: false },
-  { id: 's3', name: 'Neon Grid Theme', description: 'Cyberpunk-inspired profile theme', icon: '🎆', type: 'theme', cost: 1200, rarity: 'rare', owned: false },
-  { id: 's4', name: 'Golden Fader Badge', description: 'The mark of a true mix engineer', icon: '🏆', type: 'badge', cost: 2000, rarity: 'epic', owned: false },
-  { id: 's5', name: 'Sub Bass Overlord', description: 'Title: for the low-end specialists', icon: '💀', type: 'title', cost: 1500, rarity: 'epic', owned: false },
-  { id: 's6', name: 'Cosmic Producer', description: 'Title: out of this world', icon: '🚀', type: 'title', cost: 3000, rarity: 'legendary', owned: false },
-  { id: 's7', name: 'Fire Emote', description: 'React with flames on community tracks', icon: '🔥', type: 'emote', cost: 300, rarity: 'common', owned: true },
-  { id: 's8', name: 'Headphone Halo Badge', description: 'A radiant symbol of critical listening', icon: '😇', type: 'badge', cost: 1800, rarity: 'epic', owned: false },
-];
+// Shop items are fetched from the backend via useLensData (see component body)
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -235,9 +226,7 @@ export default function GameLensPage() {
 
   const [activeTab, setActiveTab] = useState<MainTab>('dashboard');
   const [lbPeriod, setLbPeriod] = useState<LeaderboardPeriod>('alltime');
-  const { items: shopLensItems, update: updateShopItem } = useLensData<ShopItem>('game', 'shop-item', {
-    seed: SHOP_ITEMS.map(s => ({ title: s.name, data: s as unknown as Record<string, unknown> })),
-  });
+  const { items: shopLensItems, update: updateShopItem } = useLensData<ShopItem>('game', 'shop-item', { noSeed: true });
   const [shopItems, setShopItems] = useState<ShopItem[]>([]);
 
   // Sync shop items from API

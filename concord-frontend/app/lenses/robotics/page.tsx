@@ -72,8 +72,8 @@ const TYPE_ICONS: Record<RobotType, string> = {
   custom: 'Custom',
 };
 
-// Mock sensor readings per robot type
-const MOCK_SENSORS: Record<RobotType, { label: string; value: string; unit: string }[]> = {
+// Default sensor configurations per robot type (shown until real telemetry connects)
+const DEFAULT_SENSORS: Record<RobotType, { label: string; value: string; unit: string }[]> = {
   arm: [
     { label: 'Torque', value: '12.4', unit: 'Nm' },
     { label: 'Temp', value: '42', unit: '°C' },
@@ -106,8 +106,8 @@ const MOCK_SENSORS: Record<RobotType, { label: string; value: string; unit: stri
   ],
 };
 
-// Mock command history
-const MOCK_COMMANDS = [
+// Default command options (shown until real command history loads)
+const DEFAULT_COMMANDS = [
   'INIT_SEQUENCE',
   'MOVE_TO(0,0,0)',
   'CALIBRATE_SENSORS',
@@ -169,7 +169,7 @@ export default function RoboticsLensPage() {
         uptime: 0,
         sensors: [],
         actuators: [],
-        lastCommand: MOCK_COMMANDS[Math.floor(Math.random() * MOCK_COMMANDS.length)],
+        lastCommand: DEFAULT_COMMANDS[Math.floor(Math.random() * DEFAULT_COMMANDS.length)],
         errorCount: 0,
       },
     });
@@ -280,7 +280,7 @@ export default function RoboticsLensPage() {
             ) : (
               robots.map(robot => {
                 const robotType = (robot.type as RobotType) || 'custom';
-                const sensors = MOCK_SENSORS[robotType] || MOCK_SENSORS.custom;
+                const sensors = DEFAULT_SENSORS[robotType] || DEFAULT_SENSORS.custom;
                 const isExpanded = expandedRobot === robot.id;
                 const mockCommands = [
                   robot.lastCommand || 'INIT_SEQUENCE',
@@ -516,12 +516,12 @@ export default function RoboticsLensPage() {
                       </div>
                       <div>
                         <span className="text-gray-500">Sensors</span>
-                        <p className="font-mono text-base mt-1 text-neon-cyan">{MOCK_SENSORS[(robot.type as RobotType) || 'custom']?.length || 3}</p>
+                        <p className="font-mono text-base mt-1 text-neon-cyan">{DEFAULT_SENSORS[(robot.type as RobotType) || 'custom']?.length || 3}</p>
                       </div>
                     </div>
                     {/* Sensor readings in diagnostics */}
                     <div className="mt-3 grid grid-cols-3 gap-1.5">
-                      {MOCK_SENSORS[(robot.type as RobotType) || 'custom'].map(s => (
+                      {DEFAULT_SENSORS[(robot.type as RobotType) || 'custom'].map(s => (
                         <div key={s.label} className="p-1.5 rounded bg-black/30 text-center">
                           <p className="text-[10px] text-gray-500">{s.label}</p>
                           <p className="font-mono text-xs text-neon-cyan">{s.value}{s.unit}</p>

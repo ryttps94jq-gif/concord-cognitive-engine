@@ -45,13 +45,8 @@ const GENRES: { id: WritingGenre; label: string }[] = [
   { id: 'other', label: 'Other' },
 ];
 
-const WRITING_PROMPTS: { text: string; genres: WritingGenre[] }[] = [
-  { text: 'A stranger arrives in a town where everyone shares the same recurring dream.', genres: ['fiction', 'short-story'] },
-  { text: 'Write a story that begins with the last sentence.', genres: ['fiction', 'novel'] },
-  { text: 'Two characters who speak different languages must solve a puzzle together.', genres: ['fiction', 'short-story', 'screenplay'] },
-  { text: 'An object gains sentience during an ordinary day.', genres: ['fiction', 'short-story'] },
-  { text: 'Describe a world where music is the primary currency.', genres: ['fiction', 'novel', 'essay'] },
-];
+// Prompts are loaded from the backend via useLensData; empty until real data exists
+const FALLBACK_PROMPTS: { text: string; genres: WritingGenre[] }[] = [];
 
 const WORD_COUNT_GOAL = 1000;
 
@@ -79,6 +74,12 @@ export default function CreativeWritingPage() {
 
   const { items: workItems, isLoading, isError, error, refetch, create: createWork, update: updateWork, remove: removeWork } = useLensData<WritingWork>('creative-writing', 'work', { seed: [] });
   const works = useMemo(() => workItems.map(i => ({ ...(i.data as unknown as WritingWork), id: i.id, title: i.title })), [workItems]);
+
+  const { items: promptItems } = useLensData<{ text: string; genres: string[] }>('creative-writing', 'prompt', { noSeed: true });
+  const WRITING_PROMPTS = useMemo(() => {
+    if (promptItems.length > 0) return promptItems.map(i => ({ text: i.data.text || i.title, genres: (i.data.genres || []) as WritingGenre[] }));
+    return FALLBACK_PROMPTS;
+  }, [promptItems]);
 
   const [tab, setTab] = useState<WritingTab>('works');
   const [searchQuery, setSearchQuery] = useState('');

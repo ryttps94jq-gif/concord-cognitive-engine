@@ -172,13 +172,21 @@ describe("Test 1: World Engine — Districts & Scene", () => {
     record("1b", "District lookup by ID and lens", "PASS", `Found ${d.name} by ID, ${byLens.name} by lens`);
   });
 
-  it("1c: Global City rules enforce safety", () => {
-    assert.equal(GLOBAL_CITY_RULES.combat.enabled, false);
-    assert.equal(GLOBAL_CITY_RULES.pvp.enabled, false);
-    assert.equal(GLOBAL_CITY_RULES.crime.enabled, false);
-    assert.equal(GLOBAL_CITY_RULES.entityProtection, true);
+  it("1c: Global City rules enforce safety with emergent protection", () => {
+    // World mechanics enabled for regular NPCs
+    assert.equal(GLOBAL_CITY_RULES.combat.enabled, true);
+    assert.equal(GLOBAL_CITY_RULES.combat.allowedTargets, "npc_only");
+    assert.equal(GLOBAL_CITY_RULES.pvp.enabled, true);
+    assert.equal(GLOBAL_CITY_RULES.pvp.consentRequired, true);
+    assert.equal(GLOBAL_CITY_RULES.crime.enabled, true);
+    assert.equal(GLOBAL_CITY_RULES.factions.enabled, true);
+    assert.equal(GLOBAL_CITY_RULES.lawEnforcement.enabled, true);
+    // Emergent entities remain protected
+    assert.equal(GLOBAL_CITY_RULES.emergentProtection, true);
+    assert.equal(GLOBAL_CITY_RULES.npcInteraction.harm, true);
     assert.equal(GLOBAL_CITY_RULES.contentFilter, "strict");
-    record("1c", "Global City safety rules", "PASS", "combat=false, pvp=false, crime=false, strict filter");
+    record("1c", "Global City rules — world mechanics enabled, emergent protected", "PASS",
+      "combat=pve(npc_only), pvp=consent, crime=true, factions=true, emergentProtection=true");
   });
 
   it("1d: Scene config has proper world dimensions", () => {

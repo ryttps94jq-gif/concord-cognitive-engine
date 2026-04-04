@@ -76,49 +76,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   TreeDeciduous,
 };
 
-// ── Simulated Population Data ─────────────────────────────────────────────────
-
-const SIMULATED_POPULATIONS: PopulationEntry[] = [
-  { species: 'Red Oak', category: 'flora', population: 14200, trend: 2.3, habitat: 'Temperate Forest', conservationStatus: 'stable', lastSurveyed: '2026-02-15' },
-  { species: 'White-tailed Deer', category: 'fauna', population: 3800, trend: -1.2, habitat: 'Mixed Woodland', conservationStatus: 'declining', lastSurveyed: '2026-02-10' },
-  { species: 'Eastern Bluebird', category: 'fauna', population: 920, trend: 5.6, habitat: 'Open Meadow', conservationStatus: 'growing', lastSurveyed: '2026-02-20' },
-  { species: 'Brook Trout', category: 'fauna', population: 2150, trend: -3.8, habitat: 'Freshwater Stream', conservationStatus: 'endangered', lastSurveyed: '2026-01-28' },
-  { species: 'Chanterelle', category: 'fungi', population: 6700, trend: 1.1, habitat: 'Forest Floor', conservationStatus: 'stable', lastSurveyed: '2026-02-05' },
-  { species: 'Sugar Maple', category: 'flora', population: 8900, trend: -0.5, habitat: 'Deciduous Forest', conservationStatus: 'stable', lastSurveyed: '2026-02-18' },
-  { species: 'Monarch Butterfly', category: 'fauna', population: 450, trend: -8.2, habitat: 'Pollinator Corridor', conservationStatus: 'critical', lastSurveyed: '2026-02-12' },
-  { species: 'Gray Wolf', category: 'fauna', population: 82, trend: 12.5, habitat: 'Northern Range', conservationStatus: 'growing', lastSurveyed: '2026-02-01' },
-  { species: 'Soil Microbiome A', category: 'microorganism', population: 2400000, trend: 0.3, habitat: 'Agricultural Soil', conservationStatus: 'stable', lastSurveyed: '2026-02-22' },
-  { species: 'Wild Fern', category: 'flora', population: 11300, trend: 1.8, habitat: 'Wetland Edge', conservationStatus: 'growing', lastSurveyed: '2026-02-14' },
-  { species: 'American Beaver', category: 'fauna', population: 260, trend: 7.4, habitat: 'Riparian Zone', conservationStatus: 'growing', lastSurveyed: '2026-02-08' },
-  { species: 'Lichen Complex', category: 'fungi', population: 18500, trend: -0.2, habitat: 'Rocky Outcrop', conservationStatus: 'stable', lastSurveyed: '2026-02-19' },
-];
-
-const SIMULATED_CLIMATE: ClimateDataPoint[] = [
-  { month: 'Sep', temperature: 18.2, precipitation: 82, humidity: 68, co2Level: 417, uvIndex: 5.2 },
-  { month: 'Oct', temperature: 12.5, precipitation: 94, humidity: 72, co2Level: 416, uvIndex: 3.8 },
-  { month: 'Nov', temperature: 5.8, precipitation: 78, humidity: 76, co2Level: 418, uvIndex: 2.1 },
-  { month: 'Dec', temperature: -1.2, precipitation: 65, humidity: 80, co2Level: 419, uvIndex: 1.4 },
-  { month: 'Jan', temperature: -4.5, precipitation: 58, humidity: 78, co2Level: 420, uvIndex: 1.2 },
-  { month: 'Feb', temperature: -2.1, precipitation: 52, humidity: 74, co2Level: 421, uvIndex: 2.0 },
-];
-
-const SIMULATED_BIODIVERSITY: BiodiversityIndex[] = [
-  { zone: 'Northern Forest', shannonIndex: 3.42, simpsonIndex: 0.91, speciesRichness: 187, evenness: 0.82, trend: 'stable', lastAssessed: '2026-01-15' },
-  { zone: 'Wetland Reserve', shannonIndex: 2.89, simpsonIndex: 0.87, speciesRichness: 134, evenness: 0.76, trend: 'improving', lastAssessed: '2026-02-01' },
-  { zone: 'Prairie Corridor', shannonIndex: 2.15, simpsonIndex: 0.78, speciesRichness: 89, evenness: 0.68, trend: 'declining', lastAssessed: '2026-01-20' },
-  { zone: 'Riparian Buffer', shannonIndex: 3.67, simpsonIndex: 0.94, speciesRichness: 215, evenness: 0.88, trend: 'improving', lastAssessed: '2026-02-10' },
-  { zone: 'Alpine Meadow', shannonIndex: 1.98, simpsonIndex: 0.72, speciesRichness: 64, evenness: 0.71, trend: 'stable', lastAssessed: '2026-01-05' },
-  { zone: 'Coastal Margin', shannonIndex: 3.11, simpsonIndex: 0.89, speciesRichness: 156, evenness: 0.79, trend: 'declining', lastAssessed: '2026-02-14' },
-];
-
-const SIMULATED_IMPACTS: ImpactAssessment[] = [
-  { id: 'imp-1', name: 'Highway Expansion Zone', type: 'urbanization', severity: 'high', affectedArea: 340, mitigationStatus: 'in_progress', description: 'Road widening affecting 340 ha of mixed woodland habitat with planned wildlife corridors.', startDate: '2025-06-01' },
-  { id: 'imp-2', name: 'Agricultural Runoff - North Creek', type: 'pollution', severity: 'moderate', affectedArea: 120, mitigationStatus: 'planned', description: 'Nitrate and phosphorus levels exceeding safe thresholds in downstream waterways.', startDate: '2025-09-15' },
-  { id: 'imp-3', name: 'Emerald Ash Borer Spread', type: 'invasive_species', severity: 'critical', affectedArea: 890, mitigationStatus: 'in_progress', description: 'Invasive beetle decimating ash tree populations across monitored zones.', startDate: '2024-03-01' },
-  { id: 'imp-4', name: 'Seasonal Drought Pattern', type: 'climate', severity: 'moderate', affectedArea: 2100, mitigationStatus: 'not_started', description: 'Extended dry periods reducing soil moisture and stressing native vegetation.', startDate: '2025-07-01' },
-  { id: 'imp-5', name: 'Timber Harvest Block C', type: 'resource_extraction', severity: 'low', affectedArea: 45, mitigationStatus: 'completed', description: 'Selective harvest completed with replanting program underway.', startDate: '2025-01-15' },
-  { id: 'imp-6', name: 'Wetland Drainage - South Sector', type: 'deforestation', severity: 'high', affectedArea: 200, mitigationStatus: 'planned', description: 'Historical drainage reducing wetland extent; restoration assessment in progress.', startDate: '2025-11-01' },
-];
+// ── Data now fetched from real API via useLensData (see component body) ──────
 
 // ── Helper Functions ──────────────────────────────────────────────────────────
 
@@ -184,6 +142,21 @@ export default function EcoLensPage() {
     seed: SEED_ORGANISMS,
   });
 
+  const { items: populationItems } = useLensData<PopulationEntry>('eco', 'population', { noSeed: true });
+  const { items: climateItems } = useLensData<ClimateDataPoint>('eco', 'climate', { noSeed: true });
+  const { items: biodiversityItems } = useLensData<BiodiversityIndex>('eco', 'biodiversity', { noSeed: true });
+  const { items: impactItems } = useLensData<ImpactAssessment>('eco', 'impact', { noSeed: true });
+
+  // Map fetched items to typed arrays (real API data, empty if no DTUs exist yet)
+  const POPULATIONS: PopulationEntry[] = useMemo(() =>
+    populationItems.map(i => ({ ...i.data } as PopulationEntry)), [populationItems]);
+  const CLIMATE: ClimateDataPoint[] = useMemo(() =>
+    climateItems.map(i => ({ ...i.data } as ClimateDataPoint)), [climateItems]);
+  const BIODIVERSITY: BiodiversityIndex[] = useMemo(() =>
+    biodiversityItems.map(i => ({ ...i.data } as BiodiversityIndex)), [biodiversityItems]);
+  const IMPACTS: ImpactAssessment[] = useMemo(() =>
+    impactItems.map(i => ({ id: i.id, ...i.data } as ImpactAssessment)), [impactItems]);
+
   const isLoading = metricsLoading || organismsLoading;
 
   // Map fetched items to display shape
@@ -206,7 +179,7 @@ export default function EcoLensPage() {
 
   // Filtered populations
   const filteredPopulations = useMemo(() => {
-    let list = [...SIMULATED_POPULATIONS];
+    let list = [...POPULATIONS];
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       list = list.filter(p =>
@@ -222,12 +195,12 @@ export default function EcoLensPage() {
   }, [searchQuery, categoryFilter]);
 
   // Aggregated stats
-  const totalSpecies = SIMULATED_POPULATIONS.length;
-  const criticalCount = SIMULATED_POPULATIONS.filter(p => p.conservationStatus === 'critical' || p.conservationStatus === 'endangered').length;
-  const growingCount = SIMULATED_POPULATIONS.filter(p => p.conservationStatus === 'growing').length;
-  const avgBiodiversity = SIMULATED_BIODIVERSITY.reduce((sum, b) => sum + b.shannonIndex, 0) / SIMULATED_BIODIVERSITY.length;
-  const totalImpactArea = SIMULATED_IMPACTS.reduce((sum, i) => sum + i.affectedArea, 0);
-  const criticalImpacts = SIMULATED_IMPACTS.filter(i => i.severity === 'critical' || i.severity === 'high').length;
+  const totalSpecies = POPULATIONS.length;
+  const criticalCount = POPULATIONS.filter(p => p.conservationStatus === 'critical' || p.conservationStatus === 'endangered').length;
+  const growingCount = POPULATIONS.filter(p => p.conservationStatus === 'growing').length;
+  const avgBiodiversity = BIODIVERSITY.reduce((sum, b) => sum + b.shannonIndex, 0) / BIODIVERSITY.length;
+  const totalImpactArea = IMPACTS.reduce((sum, i) => sum + i.affectedArea, 0);
+  const criticalImpacts = IMPACTS.filter(i => i.severity === 'critical' || i.severity === 'high').length;
 
   const handleRefresh = useCallback(() => {
     refetch();
@@ -353,7 +326,7 @@ export default function EcoLensPage() {
           Climate Summary (6-Month Trend)
         </h2>
         <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
-          {SIMULATED_CLIMATE.map((point) => (
+          {CLIMATE.map((point) => (
             <div key={point.month} className="text-center">
               <p className="text-xs text-gray-500 mb-1">{point.month}</p>
               <p className={cn(
@@ -514,7 +487,7 @@ export default function EcoLensPage() {
             {/* Zero line */}
             <div className="absolute left-0 right-0 border-t border-dashed border-gray-600" style={{ bottom: '50%' }} />
             <span className="absolute -left-1 text-[10px] text-gray-500" style={{ bottom: 'calc(50% - 6px)' }}>0</span>
-            {SIMULATED_CLIMATE.map((point) => {
+            {CLIMATE.map((point) => {
               const normalizedTemp = ((point.temperature + 10) / 30) * 100;
               return (
                 <div key={point.month} className="flex-1 flex flex-col items-center gap-1 h-full justify-end">
@@ -542,7 +515,7 @@ export default function EcoLensPage() {
             Precipitation (mm)
           </h2>
           <div className="h-32 flex items-end gap-2">
-            {SIMULATED_CLIMATE.map((point) => (
+            {CLIMATE.map((point) => (
               <div key={point.month} className="flex-1 flex flex-col items-center gap-1">
                 <span className="text-[10px] text-gray-400">{point.precipitation}</span>
                 <div
@@ -561,7 +534,7 @@ export default function EcoLensPage() {
             Humidity (%)
           </h2>
           <div className="h-32 flex items-end gap-2">
-            {SIMULATED_CLIMATE.map((point) => (
+            {CLIMATE.map((point) => (
               <div key={point.month} className="flex-1 flex flex-col items-center gap-1">
                 <span className="text-[10px] text-gray-400">{point.humidity}%</span>
                 <div
@@ -583,7 +556,7 @@ export default function EcoLensPage() {
             CO2 Concentration (ppm)
           </h2>
           <div className="space-y-3">
-            {SIMULATED_CLIMATE.map((point) => {
+            {CLIMATE.map((point) => {
               const pct = ((point.co2Level - 415) / 10) * 100;
               return (
                 <div key={point.month} className="flex items-center gap-3">
@@ -604,7 +577,7 @@ export default function EcoLensPage() {
             UV Index
           </h2>
           <div className="space-y-3">
-            {SIMULATED_CLIMATE.map((point) => (
+            {CLIMATE.map((point) => (
               <div key={point.month} className="flex items-center gap-3">
                 <span className="w-8 text-xs text-gray-500">{point.month}</span>
                 <div className="flex-1 h-3 bg-lattice-surface rounded-full overflow-hidden">
@@ -636,7 +609,7 @@ export default function EcoLensPage() {
           Biodiversity Index Comparison by Zone
         </h2>
         <div className="h-48 flex items-end gap-3">
-          {SIMULATED_BIODIVERSITY.map((zone) => (
+          {BIODIVERSITY.map((zone) => (
             <div key={zone.zone} className="flex-1 flex flex-col items-center gap-1">
               <span className="text-[10px] text-gray-400">{zone.shannonIndex.toFixed(2)}</span>
               <div className="w-full flex gap-0.5 h-36 items-end">
@@ -689,7 +662,7 @@ export default function EcoLensPage() {
               </tr>
             </thead>
             <tbody>
-              {SIMULATED_BIODIVERSITY.map((zone) => (
+              {BIODIVERSITY.map((zone) => (
                 <tr key={zone.zone} className="border-b border-lattice-border/50 hover:bg-lattice-elevated/50 transition-colors">
                   <td className="px-4 py-3 font-medium">{zone.zone}</td>
                   <td className="px-4 py-3 text-right font-mono">{zone.shannonIndex.toFixed(2)}</td>
@@ -719,8 +692,8 @@ export default function EcoLensPage() {
           Species Richness Distribution
         </h2>
         <div className="space-y-3">
-          {SIMULATED_BIODIVERSITY.sort((a, b) => b.speciesRichness - a.speciesRichness).map((zone) => {
-            const maxRichness = Math.max(...SIMULATED_BIODIVERSITY.map(z => z.speciesRichness));
+          {BIODIVERSITY.sort((a, b) => b.speciesRichness - a.speciesRichness).map((zone) => {
+            const maxRichness = Math.max(...BIODIVERSITY.map(z => z.speciesRichness));
             return (
               <div key={zone.zone} className="flex items-center gap-3">
                 <span className="w-32 text-xs text-gray-400 truncate">{zone.zone}</span>
@@ -749,7 +722,7 @@ export default function EcoLensPage() {
       {/* Impact Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {(['low', 'moderate', 'high', 'critical'] as const).map((sev) => {
-          const count = SIMULATED_IMPACTS.filter(i => i.severity === sev).length;
+          const count = IMPACTS.filter(i => i.severity === sev).length;
           return (
             <div key={sev} className="lens-card">
               <p className={cn('text-xs uppercase font-medium mb-1', SEVERITY_COLORS[sev].split(' ')[0])}>{sev}</p>
@@ -762,7 +735,7 @@ export default function EcoLensPage() {
 
       {/* Impact Assessments List */}
       <div className="space-y-3">
-        {SIMULATED_IMPACTS.map((impact) => {
+        {IMPACTS.map((impact) => {
           const isExpanded = expandedImpact === impact.id;
           return (
             <div key={impact.id} className="panel overflow-hidden">
@@ -972,7 +945,7 @@ export default function EcoLensPage() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 2 * 0.05 }} className="panel p-3 flex items-center gap-3">
           <CheckCircle2 className="w-5 h-5 text-neon-blue" />
           <div>
-            <p className="text-lg font-bold">{SIMULATED_IMPACTS.filter(i => i.mitigationStatus === 'completed' || i.mitigationStatus === 'in_progress').length}</p>
+            <p className="text-lg font-bold">{IMPACTS.filter(i => i.mitigationStatus === 'completed' || i.mitigationStatus === 'in_progress').length}</p>
             <p className="text-xs text-gray-500">Eco Actions Done</p>
           </div>
         </motion.div>

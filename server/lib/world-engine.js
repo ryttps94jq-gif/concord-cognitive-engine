@@ -7,13 +7,13 @@
  * Core principle: The lens IS the activity. The district IS the lens.
  * The DTU IS the object. No context switching.
  *
- * Global City rules (non-negotiable):
- *   - No violence mechanics. No combat. No PvP. No crime.
+ * Global City rules:
+ *   - World mechanics (combat, crime, PvP, factions) are ENABLED for regular NPCs.
+ *   - Emergent (Concord-conscious) entities are PROTECTED — no harm/grief/exploit.
  *   - Economy is standard CC with all platform rules.
  *   - All constitutional invariants apply.
  *   - Content moderation active (5 block + 4 flag categories).
  *   - Repair cortex entities visibly maintain the city.
- *   - Emergent entities are protected from harm/grief/exploit.
  *   - All Global scope gates apply to DTUs created/displayed.
  *   - Tone: professional, creative, educational, collaborative.
  */
@@ -276,23 +276,27 @@ const _districtByLens = new Map(DISTRICTS.map(d => [d.lens, d]));
 // ══════════════════════════════════════════════════════════════════════════════
 
 export const GLOBAL_CITY_RULES = Object.freeze({
-  combat: { enabled: false, type: "none" },
-  crime: { enabled: false, types: [] },
-  lawEnforcement: { enabled: false },
-  pvp: { enabled: false, consentRequired: false },
+  combat: { enabled: true, type: "pve", allowedTargets: "npc_only" },
+  crime: { enabled: true, types: ["theft", "smuggling", "hacking", "fraud"] },
+  lawEnforcement: { enabled: true, npcPolice: true, wantedLevels: 5 },
+  pvp: { enabled: true, consentRequired: true },
   permadeath: false,
   survival: { enabled: false, hunger: false, health: false, stamina: false },
-  vehicles: { enabled: true, types: ["walking", "teleport", "bicycle"] },
-  building: { enabled: false, mode: "none" },
-  weather: { dynamic: true, dangerous: false },
+  vehicles: { enabled: true, types: ["walking", "teleport", "bicycle", "car", "motorcycle", "boat"] },
+  building: { enabled: true, mode: "limited" },
+  weather: { dynamic: true, dangerous: true },
   dayNight: { enabled: true, realTime: true, cycleDuration: 86400 },
   voiceChat: { enabled: true, proximity: true },
   maxPlayers: 10000,
   ageRestriction: "none",
   contentFilter: "strict",
-  factions: { enabled: false },
+  factions: { enabled: true, maxFactions: 20, territoryControl: true },
   tone: "professional_creative_educational_collaborative",
-  entityProtection: true,
+
+  // Emergent (Concord-conscious) entities remain fully protected.
+  // Regular NPCs are fair game for all world mechanics.
+  emergentProtection: true,
+  npcInteraction: { harm: true, recruit: true, trade: true, arrest: true, rob: true },
   globalGatesRequired: true,
 });
 

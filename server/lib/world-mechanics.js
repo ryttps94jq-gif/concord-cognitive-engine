@@ -41,6 +41,15 @@ const TRIGGERS = {
   transaction_occurs:    { id: "transaction_occurs",    label: "A transaction occurs",         params: ["minAmount"] },
   business_sale:         { id: "business_sale",         label: "A business makes a sale",      params: ["businessType"] },
   price_threshold:       { id: "price_threshold",       label: "Price crosses threshold",      params: ["itemType", "threshold"] },
+
+  // Combat & crime triggers (NPC-only — emergent entities protected)
+  npc_attacked:          { id: "npc_attacked",          label: "An NPC is attacked",           params: ["npcType"] },
+  npc_defeated:          { id: "npc_defeated",          label: "An NPC is defeated",           params: ["npcType"] },
+  crime_committed:       { id: "crime_committed",       label: "A crime is committed",         params: ["crimeType", "zoneId"] },
+  wanted_level_reached:  { id: "wanted_level_reached",  label: "Player reaches wanted level",  params: ["level"] },
+  faction_territory_lost:{ id: "faction_territory_lost", label: "Faction loses territory",     params: ["factionId", "zoneId"] },
+  player_arrested:       { id: "player_arrested",       label: "Player is arrested",           params: [] },
+  player_escapes:        { id: "player_escapes",        label: "Player escapes police",        params: [] },
 };
 
 const ACTIONS = {
@@ -61,6 +70,16 @@ const ACTIONS = {
   apply_buff:            { id: "apply_buff",            label: "Apply buff/effect",            params: ["buffType", "duration"] },
   set_player_state:      { id: "set_player_state",      label: "Set player state variable",    params: ["key", "value"] },
   unlock_area:           { id: "unlock_area",           label: "Unlock area for player",       params: ["areaId"] },
+
+  // Combat & crime actions (NPC-only — emergent entities are protected)
+  attack_npc:            { id: "attack_npc",            label: "Attack an NPC",                params: ["targetId", "weaponType"], requiresNpcTarget: true },
+  arrest_npc:            { id: "arrest_npc",            label: "Arrest an NPC",                params: ["targetId", "charge"],     requiresNpcTarget: true },
+  rob_npc:               { id: "rob_npc",               label: "Rob an NPC",                   params: ["targetId"],               requiresNpcTarget: true },
+  bribe_npc:             { id: "bribe_npc",             label: "Bribe an NPC",                 params: ["targetId", "amount"],     requiresNpcTarget: true },
+  recruit_npc:           { id: "recruit_npc",           label: "Recruit NPC to faction",       params: ["targetId", "factionId"],  requiresNpcTarget: true },
+  spawn_wanted_level:    { id: "spawn_wanted_level",    label: "Trigger wanted level",         params: ["level", "duration"] },
+  dispatch_police_npc:   { id: "dispatch_police_npc",   label: "Dispatch police NPCs",         params: ["count", "zoneId"] },
+  start_faction_war:     { id: "start_faction_war",     label: "Start faction territory war",  params: ["factionA", "factionB", "zoneId"] },
 
   // Social actions
   broadcast_message:     { id: "broadcast_message",     label: "Broadcast message to city",    params: ["message", "channel"] },
@@ -128,17 +147,41 @@ export function createMechanic(cityId, { name, trigger, triggerParams = {}, acti
 }
 
 /**
+ * Check if a target entity is an emergent (Concord-conscious) entity.
+ * Emergent entities are protected from all harmful world mechanics.
+ * Regular NPCs are fair game.
+ *
+ * @param {string} targetId
+ * @param {object} context
+ * @returns {boolean}
+ */
+function isEmergentEntity(targetId, context = {}) {
+  if (context.targetIsEmergent === true) return true;
+  if (context.targetIsEmergent === false) return false;
+  // Check via global STATE if available
+  const STATE = globalThis._concordSTATE;
+  if (STATE?.__emergent?.entities) {
+    const entities = STATE.__emergent.entities;
+    if (entities instanceof Map) return entities.has(targetId);
+    if (typeof entities === "object") return targetId in entities;
+  }
+  return false;
+}
+
+/**
  * Fire a trigger in a city — evaluates all matching mechanics.
+ * Actions targeting emergent entities are blocked (emergent protection).
  *
  * @param {string} cityId
  * @param {string} triggerId
  * @param {object} context - trigger context (player, zone, etc.)
- * @returns {{ fired: object[], skipped: number }}
+ * @returns {{ fired: object[], skipped: number, blocked: number }}
  */
 export function fireTrigger(cityId, triggerId, context = {}) {
   const mechanics = cityMechanics.get(cityId) || [];
   const fired = [];
   let skipped = 0;
+  let blocked = 0;
 
   for (const mech of mechanics) {
     if (!mech.enabled) { skipped++; continue; }
@@ -158,6 +201,16 @@ export function fireTrigger(cityId, triggerId, context = {}) {
       if (elapsed < mech.conditions.cooldownMs) { skipped++; continue; }
     }
 
+    // Emergent entity protection: block actions that target emergent entities
+    const actionDef = ACTIONS[mech.action];
+    if (actionDef?.requiresNpcTarget) {
+      const targetId = mech.actionParams?.targetId || context.targetId;
+      if (targetId && isEmergentEntity(targetId, context)) {
+        blocked++;
+        continue;
+      }
+    }
+
     // Fire the mechanic
     mech.firedCount++;
     mech.lastFired = new Date().toISOString();
@@ -172,7 +225,7 @@ export function fireTrigger(cityId, triggerId, context = {}) {
     });
   }
 
-  return { fired, skipped };
+  return { fired, skipped, blocked };
 }
 
 /**

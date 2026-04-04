@@ -703,18 +703,18 @@ export default function StudioLensPage() {
   }, [updateProject]);
 
   const handleAnalyze = useCallback(() => {
-    // Simulated analysis (real impl would use Web Audio analyser nodes)
+    // Placeholder — real implementation needs Web Audio AnalyserNode
     setTimeout(() => {
       setMasteringAnalysis({
-        integratedLUFS: -14 + Math.random() * 4 - 2,
-        shortTermLUFS: -12 + Math.random() * 4 - 2,
-        momentaryLUFS: -10 + Math.random() * 4 - 2,
-        truePeak: -0.5 + Math.random() * 0.5 - 0.25,
-        dynamicRange: 8 + Math.random() * 6,
-        stereoCorrelation: 0.7 + Math.random() * 0.3,
-        spectralBalance: Array.from({ length: 8 }, () => Math.random()),
+        integratedLUFS: 0,
+        shortTermLUFS: 0,
+        momentaryLUFS: 0,
+        truePeak: 0,
+        dynamicRange: 0,
+        stereoCorrelation: 0,
+        spectralBalance: Array.from({ length: 8 }, () => 0),
       });
-    }, 1000);
+    }, 500);
   }, []);
 
   const handleExport = useCallback((settings: ExportSettings) => {

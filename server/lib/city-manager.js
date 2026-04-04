@@ -66,6 +66,7 @@ const CITY_RULES_SCHEMA = {
   building:         { type: "enum",    options: ["disabled", "limited", "full", "unlimited"], default: "limited" },
   economy:          { type: "enum",    options: ["disabled", "barter", "full"], default: "full" },
   entityProtection: { type: "boolean", default: true },
+  emergentProtection: { type: "boolean", default: true },
   contentFilter:    { type: "enum",    options: ["strict", "moderate", "relaxed"], default: "moderate" },
   maxPlayers:       { type: "number",  min: 2, max: 500, default: 100 },
   respawnTime:      { type: "number",  min: 0, max: 600, default: 10 },

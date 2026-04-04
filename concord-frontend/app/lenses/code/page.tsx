@@ -603,9 +603,10 @@ export default function CodeLensPage() {
   // Persist scripts to backend
   const { isLoading, isError, error, refetch, create: saveScript, items: savedScripts } = useLensData('code', 'script', { noSeed: true });
 
-  const [files, setFiles] = useState<FileNode[]>(TEMPLATE_FILES);
+  const [files, setFiles] = useState<FileNode[]>([]);
+  const [showTemplates, setShowTemplates] = useState(false);
   const [tabs, setTabs] = useState<Tab[]>([
-    { id: 'main', name: 'untitled.js', language: 'javascript', content: DEFAULT_CODE, isDirty: false, scriptType: 'midi' },
+    { id: 'main', name: 'untitled.js', language: 'javascript', content: '// Start writing your script here\n', isDirty: false, scriptType: 'midi' },
   ]);
   const [activeTabId, setActiveTabId] = useState('main');
   const [scriptOutput, setScriptOutput] = useState<{ log: string; visualization: string } | null>(null);
@@ -1058,7 +1059,17 @@ export default function CodeLensPage() {
                   </div>
                 </div>
                 <div className="flex-1 overflow-y-auto py-2">
-                  {files.map((file) => renderFileNode(file))}
+                  {files.length === 0 ? (
+                    <div className="px-3 py-4 text-center">
+                      <p className="text-xs text-gray-500 mb-2">No files yet</p>
+                      <button
+                        onClick={() => setFiles(TEMPLATE_FILES)}
+                        className="text-xs text-green-400 hover:text-green-300 underline"
+                      >
+                        Load starter templates
+                      </button>
+                    </div>
+                  ) : files.map((file) => renderFileNode(file))}
                 </div>
                 {/* DTU Context */}
                 <div className="p-3 border-t border-white/10 space-y-3">
