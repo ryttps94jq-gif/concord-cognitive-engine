@@ -25884,9 +25884,9 @@ register("marketplace", "dtu_browse", async (ctx, input) => {
 }, { description: "Browse marketplace listings." });
 
 app.get("/api/marketplace/browse", asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "browse", { category: req.query.category, search: req.query.search, sort: req.query.sort, page: req.query.page, pageSize: req.query.pageSize }, makeCtx(req)))));
-app.post("/api/marketplace/submit", validate("marketplaceSubmit"), asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "submit", req.body, makeCtx(req)))));
-app.post("/api/marketplace/install", validate("marketplaceInstall"), asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "install", req.body, makeCtx(req)))));
-app.post("/api/marketplace/review", asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "review", req.body, makeCtx(req)))));
+app.post("/api/marketplace/submit", requireAuth(), validate("marketplaceSubmit"), asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "submit", req.body, makeCtx(req)))));
+app.post("/api/marketplace/install", requireAuth(), validate("marketplaceInstall"), asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "install", req.body, makeCtx(req)))));
+app.post("/api/marketplace/review", requireAuth(), asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "review", req.body, makeCtx(req)))));
 app.get("/api/marketplace/installed", asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "installed", {}, makeCtx(req)))));
 
 // POST /api/marketplace/pack — create a bundled pack of DTUs with a combined price
@@ -26724,12 +26724,12 @@ register("scope", "royaltyPreview", async (ctx, input) => {
 
 // ── API Routes for Dual Global & Royalties ──────────────────────────────────
 
-app.post("/api/scope/promote", asyncHandler(async (req, res) => res.json(await runMacro("scope", "promote", req.body, makeCtx(req)))));
+app.post("/api/scope/promote", requireAuth(), asyncHandler(async (req, res) => res.json(await runMacro("scope", "promote", req.body, makeCtx(req)))));
 app.post("/api/scope/checkCitations", asyncHandler(async (req, res) => res.json(await runMacro("scope", "checkCitations", req.body, makeCtx(req)))));
 app.post("/api/scope/royaltyPreview", asyncHandler(async (req, res) => res.json(await runMacro("scope", "royaltyPreview", req.body, makeCtx(req)))));
 app.post("/api/creative/registry", asyncHandler(async (req, res) => res.json(await runMacro("creative", "registry", req.body, makeCtx(req)))));
 app.get("/api/creative/domains", asyncHandler(async (req, res) => res.json(await runMacro("creative", "domains", {}, makeCtx(req)))));
-app.post("/api/marketplace/purchaseWithRoyalties", asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "purchaseWithRoyalties", req.body, makeCtx(req)))));
+app.post("/api/marketplace/purchaseWithRoyalties", requireAuth(), asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "purchaseWithRoyalties", req.body, makeCtx(req)))));
 app.get("/api/marketplace/royalties/:userId", asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "royalties", { userId: req.params.userId }, makeCtx(req)))));
 app.get("/api/marketplace/royalties", asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "royalties", {}, makeCtx(req)))));
 
@@ -26838,7 +26838,7 @@ app.get("/api/marketplace/:id/delta-price", (req, res) => {
 });
 
 // POST /api/marketplace/:id/purchase — purchase with delta pricing + royalty cascade
-app.post("/api/marketplace/:id/purchase", asyncHandler(async (req, res) => {
+app.post("/api/marketplace/:id/purchase", requireAuth(), asyncHandler(async (req, res) => {
   const id = req.params.id;
   const { buyerId, requestId } = req.body || {};
   if (!buyerId) return res.status(400).json({ ok: false, error: "buyerId required" });

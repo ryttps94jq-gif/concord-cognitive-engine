@@ -31,7 +31,7 @@ export default function WorldLensPage() {
   const router = useRouter();
 
   // Data fetching
-  const { data: districts, isLoading: districtsLoading } = useQuery({
+  const { data: districts, isLoading: districtsLoading, isError: districtsError } = useQuery({
     queryKey: ['world-districts'],
     queryFn: () => api.get('/api/world/districts').then((r: any) => r.data),
     staleTime: 60000,
@@ -124,7 +124,7 @@ export default function WorldLensPage() {
     const list: any[] = [];
     // Add emergent entities as special NPCs
     if (entities) {
-      for (const entity of entities as any[]) {
+      for (const entity of entities as Array<{ id: string; name?: string }>) {
         list.push({
           id: entity.id,
           name: entity.name || entity.id,
@@ -161,6 +161,17 @@ export default function WorldLensPage() {
     xp: progression?.xp || 0,
     rank: progression?.rank || 0,
   };
+
+  if (districtsError) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-4rem)] bg-[#0a0a0f]">
+        <div className="text-center">
+          <p className="text-red-400 text-sm mb-2">Failed to load world data</p>
+          <button onClick={() => window.location.reload()} className="text-xs text-neon-cyan hover:underline">Retry</button>
+        </div>
+      </div>
+    );
+  }
 
   if (districtsLoading) {
     return (

@@ -129,19 +129,20 @@ function EventStreamPanel({ events, connected }: { events: Array<{ type: string;
 }
 
 function OverviewDashboard() {
-  const { data: statusData, isLoading: statusLoading } = useQuery({
+  const { data: statusData, isLoading: statusLoading, isError: statusError } = useQuery({
     queryKey: ['platform-status'],
     queryFn: () => api.get('/api/status').then(r => r.data),
     refetchInterval: 15_000,
   });
 
-  const { data: healthData, isLoading: healthLoading } = useQuery({
+  const { data: healthData, isLoading: healthLoading, isError: healthError } = useQuery({
     queryKey: ['platform-health'],
     queryFn: () => apiHelpers.guidance.health().then(r => r.data),
     refetchInterval: 15_000,
   });
 
   const isLoading = statusLoading || healthLoading;
+  const isError = statusError || healthError;
   const status = statusData || {};
   const health = healthData || {};
 
@@ -167,6 +168,9 @@ function OverviewDashboard() {
           <BarChart3 className="w-6 h-6 text-neon-cyan" />
           Platform Overview
         </h2>
+        {isError && (
+          <span className="text-xs text-red-400">Failed to load some data</span>
+        )}
         {isLoading && (
           <div className="w-4 h-4 border-2 border-neon-blue border-t-transparent rounded-full animate-spin" />
         )}

@@ -328,7 +328,6 @@ export default function EnvironmentLensPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [view, setView] = useState<'library' | 'dashboard' | 'actions'>('library');
   const [detailItem, setDetailItem] = useState<string | null>(null);
-  const [_showActionPanel, _setShowActionPanel] = useState(false);
   const [selectedAction, setSelectedAction] = useState<string | null>(null);
 
   const [formTitle, setFormTitle] = useState('');

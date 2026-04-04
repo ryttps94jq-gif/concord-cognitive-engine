@@ -42,7 +42,7 @@ export default function AtlasLensPage() {
 
   // ── Data fetching ──────────────────────────────────────────────────────
 
-  const { data: coverageData, isLoading: coverageLoading } = useQuery({
+  const { data: coverageData, isLoading: coverageLoading, isError: coverageError } = useQuery({
     queryKey: ['atlas-coverage'],
     queryFn: () => apiHelpers.atlasTomography.coverage().then(r => r.data),
     refetchInterval: 30000,
@@ -54,7 +54,7 @@ export default function AtlasLensPage() {
     refetchInterval: 20000,
   });
 
-  const { data: anomalyData, isLoading: anomalyLoading } = useQuery({
+  const { data: anomalyData, isLoading: anomalyLoading, isError: anomalyError } = useQuery({
     queryKey: ['atlas-anomalies'],
     queryFn: () => apiHelpers.atlasTomography.signalsAnomalies(50).then(r => r.data),
     refetchInterval: 15000,
@@ -106,6 +106,13 @@ export default function AtlasLensPage() {
 
   return (
     <div data-lens-theme="atlas" className="min-h-screen bg-zinc-950 text-zinc-100 p-6 space-y-6">
+      {/* Error banner */}
+      {(coverageError || anomalyError) && (
+        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 flex items-center justify-between">
+          <p className="text-red-400 text-sm">Some data sources failed to load. Showing available data.</p>
+          <button onClick={() => window.location.reload()} className="text-xs text-red-300 hover:text-white">Retry</button>
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">

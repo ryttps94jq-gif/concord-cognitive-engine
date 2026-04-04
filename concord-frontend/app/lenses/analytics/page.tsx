@@ -55,7 +55,7 @@ export default function AnalyticsPage() {
   const [activeSection, setActiveSection] = useState<'overview' | 'revenue' | 'dtus'>('overview');
 
   // Fetch user profile for userId
-  const { data: profileData } = useQuery({
+  const { data: profileData, isError: profileError } = useQuery({
     queryKey: ['my-social-profile'],
     queryFn: async () => {
       const res = await api.get('/api/social/profile');
@@ -135,6 +135,17 @@ export default function AnalyticsPage() {
     { id: 'revenue' as const, label: 'Revenue', icon: Coins },
     { id: 'dtus' as const, label: 'DTUs', icon: FileText },
   ];
+
+  if (profileError) {
+    return (
+      <div className="min-h-screen bg-lattice-void flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-400 text-sm mb-2">Failed to load analytics data</p>
+          <button onClick={() => window.location.reload()} className="text-xs text-neon-cyan hover:underline">Retry</button>
+        </div>
+      </div>
+    );
+  }
 
   if (!userId) {
     return (

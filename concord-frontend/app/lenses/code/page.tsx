@@ -604,7 +604,6 @@ export default function CodeLensPage() {
   const { isLoading, isError, error, refetch, create: saveScript, items: savedScripts } = useLensData('code', 'script', { noSeed: true });
 
   const [files, setFiles] = useState<FileNode[]>([]);
-  const [showTemplates, setShowTemplates] = useState(false);
   const [tabs, setTabs] = useState<Tab[]>([
     { id: 'main', name: 'untitled.js', language: 'javascript', content: '// Start writing your script here\n', isDirty: false, scriptType: 'midi' },
   ]);

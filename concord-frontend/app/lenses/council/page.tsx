@@ -317,7 +317,6 @@ export default function CouncilLensPage() {
   const [showCreateBudgetItem, setShowCreateBudgetItem] = useState(false);
   const [showCreateCommittee, setShowCreateCommittee] = useState(false);
   const [showCreateDebate, setShowCreateDebate] = useState(false);
-  const [_showCallVote, _setShowCallVote] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<ProposalStatus | 'all'>('all');
   const [budgetScenario, setBudgetScenario] = useState<'current' | 'proposed' | 'alternative' | 'all'>('all');
