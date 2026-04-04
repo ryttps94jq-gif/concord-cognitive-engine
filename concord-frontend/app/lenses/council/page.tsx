@@ -1342,7 +1342,13 @@ export default function CouncilLensPage() {
         <div className={ds.grid2}>
           {committees.map(c => (
             <div key={c.id} className={ds.panel}>
-              <h3 className={cn(ds.heading3, 'mb-1')}>{c.name}</h3>
+              <div className="flex items-center justify-between mb-1">
+                <h3 className={ds.heading3}>{c.name}</h3>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => updateCommitteeItem(c.id, { data: { ...c, description: c.description } as unknown as Record<string, unknown> })} className="text-gray-500 hover:text-white text-[10px]"><Edit3 className="w-3 h-3" /></button>
+                  <button onClick={() => removeCommitteeItem(c.id)} className="text-red-400 hover:text-red-300 text-[10px]"><X className="w-3 h-3" /></button>
+                </div>
+              </div>
               <p className={cn(ds.textMuted, 'mb-3')}>{c.description}</p>
               <div className="space-y-1.5">
                 {c.members.map(mid => {

@@ -675,6 +675,24 @@ export default function DailyLensPage() {
             <p className="text-sm text-gray-300 leading-relaxed">{dailyDigest}</p>
           </motion.div>
 
+          {/* Notes from API */}
+          {notes.length > 0 && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.45 }} className="lens-card">
+              <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2 mb-3">
+                <FileText className="w-4 h-4 text-neon-cyan" /> Notes
+              </h2>
+              <div className="space-y-2">
+                {notes.map((note: { id?: string; title?: string; content?: string; date?: string }, idx: number) => (
+                  <div key={note.id || idx} className="p-3 rounded-lg bg-white/5 border border-lattice-border">
+                    {note.title && <p className="text-sm font-medium text-white mb-1">{note.title}</p>}
+                    {note.content && <p className="text-sm text-gray-300">{note.content}</p>}
+                    {note.date && <p className="text-xs text-gray-500 mt-1">{note.date}</p>}
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+
           <div className="h-6" />
 
       {/* Real-time Data Panel */}

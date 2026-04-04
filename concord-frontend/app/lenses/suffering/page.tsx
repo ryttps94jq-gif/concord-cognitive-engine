@@ -41,19 +41,19 @@ export default function SufferingLensPage() {
   }, [remove]);
 
   // Backend: GET /api/status
-  const { data: _status } = useQuery({
-    queryKey: ['_status'],
+  const { data: status } = useQuery({
+    queryKey: ['backend-status'],
     queryFn: () => api.get('/api/status').then((r) => r.data),
   });
 
-  // Chicken2 metrics (derived from wellbeing artifacts or defaults)
+  // Chicken2 metrics (derived from backend status or defaults)
   const metrics = {
-    suffering: 0.15,
-    homeostasis: 0.82,
-    contradictionLoad: 0.08,
-    functionalDecline: 0.05,
-    stressAccumulation: 0.12,
-    coherenceScore: 0.88,
+    suffering: status?.suffering ?? 0.15,
+    homeostasis: status?.homeostasis ?? 0.82,
+    contradictionLoad: status?.contradictionLoad ?? 0.08,
+    functionalDecline: status?.functionalDecline ?? 0.05,
+    stressAccumulation: status?.stressAccumulation ?? 0.12,
+    coherenceScore: status?.coherenceScore ?? 0.88,
   };
 
   const healthScore = (metrics.homeostasis - metrics.suffering) * 100;
