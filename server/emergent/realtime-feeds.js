@@ -492,42 +492,47 @@ export async function tickRealTimeFeeds(STATE, tickCount, realtimeEmit, callBrai
 
   const tasks = [];
 
-  // Financial + Crypto — every 5th tick (~10 min at 120s heartbeat)
-  if (tickCount % 5 === 0) {
+  // NOTE: This function is called from the governor tick every REALTIME_DATA ticks (5),
+  // so tickCount is always a multiple of 5 (0, 5, 10, 15, 20, ...).
+  // We use (tickCount / 5) as the "call count" for internal staggering.
+  const callCount = Math.floor(tickCount / 5);
+
+  // Financial — every call (~10 min at 120s heartbeat)
+  if (callCount % 2 === 0) {
     tasks.push(tickFinancialFeeds(STATE, realtimeEmit, callBrain).catch(e => recordError("finance", e)));
   }
-  // Crypto offset by 2 ticks from finance so they don't fire together
-  if (tickCount % 5 === 2) {
+  // Crypto — alternates with finance (~10 min, offset by 1 call)
+  if (callCount % 2 === 1) {
     tasks.push(tickCryptoFeeds(STATE, realtimeEmit).catch(e => recordError("crypto", e)));
   }
 
-  // News — every 10th tick (~20 min at 120s heartbeat)
-  if (tickCount % 10 === 0) {
+  // News — every 4th call (~40 min at 120s heartbeat)
+  if (callCount % 4 === 0) {
     tasks.push(tickNewsFeeds(STATE, realtimeEmit).catch(e => recordError("news", e)));
   }
 
-  // Weather — every 20th tick (~40 min at 120s heartbeat)
-  if (tickCount % 20 === 3) {
+  // Weather — every 6th call (~1 hour at 120s heartbeat), offset from news
+  if (callCount % 6 === 3) {
     tasks.push(tickWeatherFeeds(STATE, realtimeEmit).catch(e => recordError("weather", e)));
   }
 
-  // Research — every 50th tick (~100 min at 120s heartbeat)
-  if (tickCount % 50 === 7) {
+  // Research — every 10th call (~100 min at 120s heartbeat)
+  if (callCount % 10 === 5) {
     tasks.push(tickResearchFeeds(STATE, realtimeEmit).catch(e => recordError("research", e)));
   }
 
-  // Economy — every 100th tick (~3.3 hours at 120s heartbeat)
-  if (tickCount % 100 === 11) {
+  // Economy — every 20th call (~3.3 hours at 120s heartbeat)
+  if (callCount % 20 === 7) {
     tasks.push(tickEconomyFeeds(STATE, realtimeEmit).catch(e => recordError("economy", e)));
   }
 
-  // Health — every 50th tick (~100 min at 120s heartbeat), offset from research
-  if (tickCount % 50 === 13) {
+  // Health — every 10th call (~100 min at 120s heartbeat), offset from research
+  if (callCount % 10 === 9) {
     tasks.push(tickHealthFeeds(STATE, realtimeEmit).catch(e => recordError("health", e)));
   }
 
-  // Energy — every 100th tick, offset from economy
-  if (tickCount % 100 === 17) {
+  // Energy — every 20th call (~3.3 hours), offset from economy
+  if (callCount % 20 === 13) {
     tasks.push(tickEnergyFeeds(STATE, realtimeEmit).catch(e => recordError("energy", e)));
   }
 
