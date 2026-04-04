@@ -271,7 +271,7 @@ export default function InsuranceLensPage() {
   /* secondary data for dashboard */
   const { items: policies } = useLensData<PolicyData>('insurance', 'Policy', { seed: [] });
   const { items: claims } = useLensData<ClaimData>('insurance', 'Claim', { seed: [] });
-  const { items: _clients } = useLensData<InsuredClientData>('insurance', 'InsuredClient', { seed: [] });
+  const { items: clients } = useLensData<InsuredClientData>('insurance', 'InsuredClient', { seed: [] });
   const { items: commissions } = useLensData<CommissionData>('insurance', 'Commission', { seed: [] });
   const { items: compliance } = useLensData<ComplianceItemData>('insurance', 'ComplianceItem', { seed: [] });
 
@@ -398,8 +398,10 @@ export default function InsuranceLensPage() {
 
     const expiringCompliance = compliance.filter(i => i.meta.status === 'expiring_soon' || i.meta.status === 'expired').length;
 
-    return { policiesInForce, premiumsWritten, openClaims, upcomingRenewals, lossRatio, commissionEarned, policyMix, expiringCompliance };
-  }, [policies, claims, commissions, compliance]);
+    const totalClients = clients.length;
+
+    return { policiesInForce, premiumsWritten, openClaims, upcomingRenewals, lossRatio, commissionEarned, policyMix, expiringCompliance, totalClients };
+  }, [policies, claims, commissions, compliance, clients]);
 
   /* ================================================================ */
   /*  Form fields                                                      */
@@ -797,6 +799,13 @@ export default function InsuranceLensPage() {
           <p className="text-3xl font-bold text-neon-cyan">${dashboardStats.commissionEarned.toLocaleString()}</p>
           <p className={ds.textMuted}>Total commission</p>
         </div>
+      </div>
+
+      {/* Client Count */}
+      <div className={ds.panel}>
+        <div className="flex items-center gap-2 mb-2"><Users className="w-5 h-5 text-purple-400" /><span className={ds.textMuted}>Total Clients</span></div>
+        <p className="text-3xl font-bold text-purple-400">{dashboardStats.totalClients}</p>
+        <p className={ds.textMuted}>Insured clients on file</p>
       </div>
 
       {/* Renewals and Loss Ratio */}

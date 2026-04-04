@@ -258,12 +258,14 @@ export default function DailyLensPage() {
   // -- Add session ----------------------------------------------------------
   const addSession = useCallback(() => {
     if (!newProject.trim()) return;
-    setSessions((prev) => [...prev, {
+    const sessionData = {
       id: `s${Date.now()}`, project: newProject, duration: parseInt(newDuration) || 30,
       genre: newGenre || 'General', startedAt: new Date().toISOString(),
-    }]);
+    };
+    setSessions((prev) => [...prev, sessionData]);
+    createSession({ title: newProject, data: sessionData as unknown as Record<string, unknown> });
     setNewProject(''); setNewGenre(''); setNewDuration(''); setShowSessionForm(false);
-  }, [newProject, newGenre, newDuration]);
+  }, [newProject, newGenre, newDuration, createSession]);
 
   // -- Calendar helpers -----------------------------------------------------
   const calDays = useMemo(() => {
@@ -303,7 +305,9 @@ export default function DailyLensPage() {
   };
   const handleAddReminder = () => {
     if (!reminderTitle.trim() || !reminderDue) return;
-    setLocalReminders((prev) => [...prev, { id: `r${Date.now()}`, title: reminderTitle, dueAt: reminderDue, completed: false }]);
+    const reminderData = { id: `r${Date.now()}`, title: reminderTitle, dueAt: reminderDue, completed: false };
+    setLocalReminders((prev) => [...prev, reminderData]);
+    createReminder({ title: reminderTitle, data: reminderData as unknown as Record<string, unknown> });
     createReminderMut.mutate(); setReminderTitle(''); setReminderDue('');
   };
   const handleSelectDate = (dateStr: string) => {
@@ -483,6 +487,15 @@ export default function DailyLensPage() {
               <textarea value={goals} onChange={(e) => setGoals(e.target.value)}
                 placeholder="What do you want to accomplish?" rows={2} className="input-lattice w-full text-sm resize-none" />
             </div>
+            <button
+              onClick={() => {
+                if (!journalNotes.trim() && !workedOn.trim()) return;
+                createEntry({ title: selectedDate, data: { date: selectedDate, mood: selectedMood, notes: journalNotes, workedOn, learned, goals } as Record<string, unknown> });
+              }}
+              className="btn-neon purple text-sm w-full flex items-center justify-center gap-2"
+            >
+              Save Entry
+            </button>
           </motion.div>
 
           {/* Session log */}
