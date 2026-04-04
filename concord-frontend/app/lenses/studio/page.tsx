@@ -1313,15 +1313,17 @@ export default function StudioLensPage() {
 
       {/* Realtime Data */}
       {realtimeData && (
-        <UniversalActions domain="studio" artifactId={null} compact />
-        <RealtimeDataPanel
-          domain="studio"
-          data={realtimeData}
-          isLive={isLive}
-          lastUpdated={lastUpdated}
-          insights={realtimeInsights}
-          compact
-        />
+        <>
+          <UniversalActions domain="studio" artifactId={null} compact />
+          <RealtimeDataPanel
+            domain="studio"
+            data={realtimeData}
+            isLive={isLive}
+            lastUpdated={lastUpdated}
+            insights={realtimeInsights}
+            compact
+          />
+        </>
       )}
     </div>
   );

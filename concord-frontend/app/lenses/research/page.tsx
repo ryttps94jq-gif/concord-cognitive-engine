@@ -500,15 +500,17 @@ export default function ResearchLensPage() {
 
       {/* Real-time Data Panel */}
       {realtimeData && (
-        <UniversalActions domain="research" artifactId={null} compact />
-        <RealtimeDataPanel
-          domain="research"
-          data={realtimeData}
-          isLive={isLive}
-          lastUpdated={lastUpdated}
-          insights={realtimeInsights}
-          compact
-        />
+        <>
+          <UniversalActions domain="research" artifactId={null} compact />
+          <RealtimeDataPanel
+            domain="research"
+            data={realtimeData}
+            isLive={isLive}
+            lastUpdated={lastUpdated}
+            insights={realtimeInsights}
+            compact
+          />
+        </>
       )}
       </div>
 

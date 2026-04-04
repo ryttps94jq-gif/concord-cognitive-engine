@@ -1521,15 +1521,17 @@ export default function PhysicsLensPage() {
 
       {/* Real-time Data Panel */}
       {realtimeData && (
-        <UniversalActions domain="physics" artifactId={null} compact />
-        <RealtimeDataPanel
-          domain="physics"
-          data={realtimeData}
-          isLive={isLive}
-          lastUpdated={lastUpdated}
-          insights={realtimeInsights}
-          compact
-        />
+        <>
+          <UniversalActions domain="physics" artifactId={null} compact />
+          <RealtimeDataPanel
+            domain="physics"
+            data={realtimeData}
+            isLive={isLive}
+            lastUpdated={lastUpdated}
+            insights={realtimeInsights}
+            compact
+          />
+        </>
       )}
       </div>
 

@@ -1398,15 +1398,17 @@ export default function MarketplaceLensPage() {
 
       {/* Real-time Data Panel */}
       {realtimeData && (
-        <UniversalActions domain="marketplace" artifactId={null} compact />
-        <RealtimeDataPanel
-          domain="marketplace"
-          data={realtimeData}
-          isLive={isLive}
-          lastUpdated={lastUpdated}
-          insights={realtimeInsights}
-          compact
-        />
+        <>
+          <UniversalActions domain="marketplace" artifactId={null} compact />
+          <RealtimeDataPanel
+            domain="marketplace"
+            data={realtimeData}
+            isLive={isLive}
+            lastUpdated={lastUpdated}
+            insights={realtimeInsights}
+            compact
+          />
+        </>
       )}
         </div>
       )}

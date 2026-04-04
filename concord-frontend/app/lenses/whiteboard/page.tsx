@@ -1344,15 +1344,17 @@ export default function WhiteboardLensPage() {
 
       {/* Real-time Data Panel */}
       {realtimeData && (
-        <UniversalActions domain="whiteboard" artifactId={null} compact />
-        <RealtimeDataPanel
-          domain="whiteboard"
-          data={realtimeData}
-          isLive={isLive}
-          lastUpdated={lastUpdated}
-          insights={realtimeInsights}
-          compact
-        />
+        <>
+          <UniversalActions domain="whiteboard" artifactId={null} compact />
+          <RealtimeDataPanel
+            domain="whiteboard"
+            data={realtimeData}
+            isLive={isLive}
+            lastUpdated={lastUpdated}
+            insights={realtimeInsights}
+            compact
+          />
+        </>
       )}
 
       {/* DTU Detail View modal (opened by double-clicking a DTU element on canvas) */}
