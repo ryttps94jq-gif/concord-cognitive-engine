@@ -276,15 +276,43 @@ function CSVTablePreview({ dtuId, filename, downloadUrl }: { dtuId: string; file
 }
 
 // MEGA SPEC: MIDI Preview
-function MidiPreview({ dtuId: _dtuId, filename, downloadUrl }: { dtuId: string; filename: string; downloadUrl: string }) {
+function MidiPreview({ dtuId, filename, downloadUrl }: { dtuId: string; filename: string; downloadUrl: string }) {
+  const [midiData, setMidiData] = useState<{ notes?: { pitch: number; time: number; duration: number }[]; duration?: number } | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/artifact/${dtuId}/stream`)
+      .then(r => r.json())
+      .then(data => setMidiData(data))
+      .catch(() => setMidiData(null));
+  }, [dtuId]);
+
   return (
     <div className="space-y-2 p-3 rounded-lg bg-zinc-900 border border-zinc-700">
       <div className="flex items-center gap-2">
         <span className="text-neon-purple text-lg">{'\u266B'}</span>
         <span className="text-sm text-zinc-200">{filename}</span>
+        {midiData?.duration && (
+          <span className="text-xs text-zinc-500">{Math.round(midiData.duration)}s</span>
+        )}
       </div>
-      <div className="h-24 bg-zinc-800 rounded flex items-center justify-center text-xs text-zinc-500">
-        MIDI piano roll preview
+      <div className="h-24 bg-zinc-800 rounded overflow-hidden relative">
+        {midiData?.notes && midiData.notes.length > 0 ? (
+          <svg viewBox="0 0 200 100" className="w-full h-full" preserveAspectRatio="none">
+            {midiData.notes.slice(0, 500).map((note, i) => {
+              const maxTime = midiData.duration || 1;
+              const x = (note.time / maxTime) * 200;
+              const w = Math.max(1, (note.duration / maxTime) * 200);
+              const y = 100 - ((note.pitch - 21) / 87) * 100;
+              return (
+                <rect key={i} x={x} y={y} width={w} height={2} fill="#a855f7" opacity={0.7} />
+              );
+            })}
+          </svg>
+        ) : (
+          <div className="flex items-center justify-center h-full text-xs text-zinc-500">
+            MIDI piano roll preview
+          </div>
+        )}
       </div>
       <div className="flex gap-2">
         <DownloadButton url={downloadUrl} filename={filename} />

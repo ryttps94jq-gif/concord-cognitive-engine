@@ -78,7 +78,7 @@ export default function LensHubPage() {
   // Stats
   const totalCount = allLenses.length;
   const filteredCount = filteredLenses.length;
-  const _categoryCount = grouped.size;
+  const categoryCount = grouped.size;
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-lattice-void">
@@ -91,7 +91,7 @@ export default function LensHubPage() {
                 Lens Explorer
               </h1>
               <p className="text-gray-400 max-w-2xl text-sm lg:text-base">
-                {totalCount} lenses across {Object.keys(LENS_CATEGORIES).length} domains.
+                {totalCount} lenses across {categoryCount} domains.
                 Every lens is a specialized workspace — from AI reasoning to healthcare management.
               </p>
             </div>

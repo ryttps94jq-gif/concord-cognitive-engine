@@ -298,10 +298,16 @@ function ActivityTab({ log, onDtuClick }: { log: BridgeLogEntry[]; onDtuClick?: 
   );
 }
 
-function OrganismsTab({ organisms, onRefresh: _onRefresh }: { organisms: Organism[]; onRefresh: () => void }) {
+function OrganismsTab({ organisms, onRefresh }: { organisms: Organism[]; onRefresh: () => void }) {
   if (organisms.length === 0) return <EmptyCard icon={<Network />} message="No organisms detected" hint="DTU swarms with 10+ members can be awakened as Knowledge Organisms." />;
 
   return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <button onClick={onRefresh} className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-neon-cyan/10 text-neon-cyan hover:bg-neon-cyan/20 transition-colors">
+          <RefreshCw className="w-3.5 h-3.5" /> Refresh
+        </button>
+      </div>
     <div className="grid gap-4 md:grid-cols-2">
       {organisms.map(org => (
         <div key={org.id} className="p-4 bg-zinc-900 rounded-lg border border-zinc-800">

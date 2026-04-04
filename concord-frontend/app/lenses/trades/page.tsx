@@ -686,7 +686,7 @@ export default function TradesLensPage() {
     return <span className={ds.badge(cfg.color)}>{cfg.label}</span>;
   };
 
-  const _renderPhaseStatusBadge = (status: PhaseStatus) => {
+  const renderPhaseStatusBadge = (status: PhaseStatus) => {
     const cfg = PHASE_STATUS_CONFIG[status];
     return <span className={ds.badge(cfg.color)}>{cfg.label}</span>;
   };

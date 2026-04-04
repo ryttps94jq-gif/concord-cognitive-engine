@@ -305,12 +305,16 @@ interface UnlinkedMentionsProps {
 }
 
 export function UnlinkedMentions({ dtuId, className }: UnlinkedMentionsProps) {
-  const [mentions, _setMentions] = useState<UnlinkedMention[]>([]);
+  const [mentions, setMentions] = useState<UnlinkedMention[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // In a real implementation, this would call an API to find potential links
-    setLoading(false);
+    let cancelled = false;
+    api.get(`/api/dtus/${dtuId}/unlinked-mentions`)
+      .then(r => { if (!cancelled) setMentions(r.data?.mentions || []); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [dtuId]);
 
   if (loading || mentions.length === 0) return null;
