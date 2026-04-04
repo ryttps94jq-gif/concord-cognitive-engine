@@ -1038,9 +1038,9 @@ export default function DatabaseLensPage() {
               )}
 
       {/* Real-time Data Panel */}
+      <UniversalActions domain="database" artifactId={null} compact />
       {realtimeData && (
         <RealtimeDataPanel
-      <UniversalActions domain="database" artifactId={null} compact />
           domain="database"
           data={realtimeData}
           isLive={isLive}

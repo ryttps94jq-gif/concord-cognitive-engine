@@ -282,9 +282,9 @@ export default function AtlasLensPage() {
       </div>
 
       {/* Real-time Data Panel */}
+      <UniversalActions domain="atlas" artifactId={null} compact />
       {realtimeData && (
         <RealtimeDataPanel
-      <UniversalActions domain="atlas" artifactId={null} compact />
           domain="atlas"
           data={realtimeData}
           isLive={isLive}

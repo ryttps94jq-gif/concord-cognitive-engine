@@ -181,10 +181,13 @@ export default function MusicLensPage() {
   }, []);
 
   // ---- Playlist creation ----
-  const handleCreatePlaylist = useCallback(() => {
+  const handleCreatePlaylist = useCallback((visionResult?: { analysis: string; suggestedTags?: string[] }) => {
+    const baseName = visionResult?.suggestedTags?.length
+      ? `${visionResult.suggestedTags.slice(0, 3).join(' / ')} Playlist`
+      : `New Playlist ${playlists.length + 1}`;
     const playlistData: Partial<Playlist> = {
-      name: `New Playlist ${playlists.length + 1}`,
-      description: '',
+      name: baseName,
+      description: visionResult?.analysis ?? '',
       coverArtUrl: null,
       creatorId: 'user-1',
       creatorName: 'Sovereign',
@@ -195,7 +198,11 @@ export default function MusicLensPage() {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    createPlaylistItem({ title: playlistData.name!, data: playlistData as unknown as Record<string, unknown> })
+    const data: Record<string, unknown> = { ...playlistData };
+    if (visionResult?.suggestedTags?.length) {
+      data.tags = visionResult.suggestedTags;
+    }
+    createPlaylistItem({ title: playlistData.name!, data })
       .catch(err => console.error('Failed to create playlist:', err instanceof Error ? err.message : err));
   }, [playlists.length, createPlaylistItem]);
 
@@ -348,9 +355,8 @@ export default function MusicLensPage() {
           <VisionAnalyzeButton
             domain="music"
             prompt="Analyze this image related to music (album cover, concert photo, instrument, etc.). Describe what you see and suggest relevant genre tags, mood, and metadata for music cataloging."
-            onResult={(_res) => {
-              handleCreatePlaylist();
-              // Vision analysis result available via res.analysis
+            onResult={(res) => {
+              handleCreatePlaylist(res);
             }}
           />
           <button
@@ -1336,8 +1342,8 @@ export default function MusicLensPage() {
       {/* Real-time panel */}
       {isLive && realtimeData && (
         <div className="fixed right-4 bottom-24 z-40">
+          <UniversalActions domain="music" artifactId={null} compact />
           <RealtimeDataPanel
-      <UniversalActions domain="music" artifactId={null} compact />
             domain="music"
             data={realtimeData}
             insights={realtimeInsights}

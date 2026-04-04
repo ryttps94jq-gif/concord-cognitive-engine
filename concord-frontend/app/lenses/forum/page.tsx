@@ -927,9 +927,9 @@ export default function ForumLensPage() {
                 </button>
 
       {/* Real-time Data Panel */}
+      <UniversalActions domain="forum" artifactId={null} compact />
       {realtimeData && (
         <RealtimeDataPanel
-      <UniversalActions domain="forum" artifactId={null} compact />
           domain="forum"
           data={realtimeData}
           isLive={isLive}

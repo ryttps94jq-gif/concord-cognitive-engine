@@ -1127,8 +1127,8 @@ export default function SRSLensPage() {
 
       {/* Real-time Data Panel */}
       {realtimeData && (
+        <UniversalActions domain="srs" artifactId={null} compact />
         <RealtimeDataPanel
-      <UniversalActions domain="srs" artifactId={null} compact />
           domain="srs"
           data={realtimeData}
           isLive={isLive}

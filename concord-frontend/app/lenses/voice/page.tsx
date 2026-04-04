@@ -950,8 +950,8 @@ export default function VoiceLensPage() {
 
       {/* Real-time Data Panel */}
       {realtimeData && (
+        <UniversalActions domain="voice" artifactId={null} compact />
         <RealtimeDataPanel
-      <UniversalActions domain="voice" artifactId={null} compact />
           domain="voice"
           data={realtimeData}
           isLive={isLive}

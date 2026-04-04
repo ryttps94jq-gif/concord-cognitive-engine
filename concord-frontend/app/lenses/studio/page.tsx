@@ -1313,8 +1313,8 @@ export default function StudioLensPage() {
 
       {/* Realtime Data */}
       {realtimeData && (
+        <UniversalActions domain="studio" artifactId={null} compact />
         <RealtimeDataPanel
-      <UniversalActions domain="studio" artifactId={null} compact />
           domain="studio"
           data={realtimeData}
           isLive={isLive}

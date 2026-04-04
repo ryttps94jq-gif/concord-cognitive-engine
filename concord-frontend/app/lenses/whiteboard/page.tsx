@@ -1344,8 +1344,8 @@ export default function WhiteboardLensPage() {
 
       {/* Real-time Data Panel */}
       {realtimeData && (
+        <UniversalActions domain="whiteboard" artifactId={null} compact />
         <RealtimeDataPanel
-      <UniversalActions domain="whiteboard" artifactId={null} compact />
           domain="whiteboard"
           data={realtimeData}
           isLive={isLive}

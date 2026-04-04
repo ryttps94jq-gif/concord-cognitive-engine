@@ -678,9 +678,9 @@ export default function DailyLensPage() {
           <div className="h-6" />
 
       {/* Real-time Data Panel */}
+      <UniversalActions domain="daily" artifactId={null} compact />
       {realtimeData && (
         <RealtimeDataPanel
-      <UniversalActions domain="daily" artifactId={null} compact />
           domain="daily"
           data={realtimeData}
           isLive={isLive}

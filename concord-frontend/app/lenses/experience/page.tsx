@@ -1038,9 +1038,9 @@ export default function ExperienceLensPage() {
               </div>
 
       {/* Real-time Data Panel */}
+      <UniversalActions domain="experience" artifactId={null} compact />
       {realtimeData && (
         <RealtimeDataPanel
-      <UniversalActions domain="experience" artifactId={null} compact />
           domain="experience"
           data={realtimeData}
           isLive={isLive}

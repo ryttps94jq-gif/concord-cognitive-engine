@@ -505,8 +505,8 @@ export default function PodcastLensPage() {
               </div>
 
               {realtimeInsights.length > 0 && (
+                <UniversalActions domain="podcast" artifactId={null} compact />
                 <RealtimeDataPanel data={null} insights={realtimeInsights} />
-      <UniversalActions domain="podcast" artifactId={null} compact />
               )}
             </motion.div>
           )}

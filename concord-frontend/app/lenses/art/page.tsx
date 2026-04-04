@@ -1100,9 +1100,9 @@ export default function ArtLensPage() {
                 </button>
 
       {/* Real-time Data Panel */}
+      <UniversalActions domain="art" artifactId={null} compact />
       {realtimeData && (
         <RealtimeDataPanel
-      <UniversalActions domain="art" artifactId={null} compact />
           domain="art"
           data={realtimeData}
           isLive={isLive}

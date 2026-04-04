@@ -1613,9 +1613,9 @@ export default function CouncilLensPage() {
           </div>
 
       {/* Real-time Data Panel */}
+      <UniversalActions domain="council" artifactId={null} compact />
       {realtimeData && (
         <RealtimeDataPanel
-      <UniversalActions domain="council" artifactId={null} compact />
           domain="council"
           data={realtimeData}
           isLive={isLive}

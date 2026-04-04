@@ -1132,9 +1132,9 @@ export default function FeedLensPage() {
         <FeedbackWidget targetType="lens" targetId="feed" />
 
       {/* Real-time Data Panel */}
+      <UniversalActions domain="feed" artifactId={null} compact />
       {realtimeData && (
         <RealtimeDataPanel
-      <UniversalActions domain="feed" artifactId={null} compact />
           domain="feed"
           data={realtimeData}
           isLive={isLive}

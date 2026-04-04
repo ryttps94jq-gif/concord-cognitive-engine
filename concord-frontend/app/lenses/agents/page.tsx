@@ -821,9 +821,9 @@ export default function AgentsLensPage() {
                 </button>
 
       {/* Real-time Data Panel */}
+      <UniversalActions domain="agents" artifactId={null} compact />
       {realtimeData && (
         <RealtimeDataPanel
-      <UniversalActions domain="agents" artifactId={null} compact />
           domain="agents"
           data={realtimeData}
           isLive={isLive}

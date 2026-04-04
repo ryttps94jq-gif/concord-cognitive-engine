@@ -1031,9 +1031,9 @@ export default function GameLensPage() {
                 </button>
 
       {/* Real-time Data Panel */}
+      <UniversalActions domain="game" artifactId={null} compact />
       {realtimeData && (
         <RealtimeDataPanel
-      <UniversalActions domain="game" artifactId={null} compact />
           domain="game"
           data={realtimeData}
           isLive={isLive}
