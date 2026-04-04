@@ -1,4 +1,9 @@
 /**
+ * NOTE: This hook is not currently imported by any production component.
+ * It is intended for chat-related pages that need rolling window compression
+ * and server-side memory management. Wire into the chat page or conversation
+ * view when the memory compression feature is enabled.
+ *
  * useConversationMemory — Rolling Window Compression Hook
  *
  * Monitors the active session's message count and triggers server-side

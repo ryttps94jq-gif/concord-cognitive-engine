@@ -20,6 +20,8 @@ import { useSystemStore } from '@/store/system';
 import { useSovereignStore } from '@/store/sovereign';
 import { useUIStore } from '@/store/ui';
 import type { SocketEvent } from '@/lib/realtime/socket';
+import type { DTU } from '@/lib/types/dtu';
+import type { SystemAlert, AttentionAllocation, FocusOverride, Dream, Promotion } from '@/lib/types/system';
 
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5050';
 

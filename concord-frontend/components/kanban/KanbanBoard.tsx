@@ -7,7 +7,8 @@ import {
   GripVertical,
   Trash2,
   Clock,
-  User
+  User,
+  Pencil
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -45,7 +46,7 @@ export function KanbanBoard({
   columns,
   onMoveCard,
   onAddCard,
-  onUpdateCard: _onUpdateCard,
+  onUpdateCard,
   onDeleteCard,
   onAddColumn,
   onDeleteColumn,
@@ -57,6 +58,8 @@ export function KanbanBoard({
   const [newCardTitle, setNewCardTitle] = useState('');
   const [addingColumn, setAddingColumn] = useState(false);
   const [newColumnTitle, setNewColumnTitle] = useState('');
+  const [editingCardId, setEditingCardId] = useState<string | null>(null);
+  const [editingCardTitle, setEditingCardTitle] = useState('');
 
   const handleDragStart = (card: KanbanCard, columnId: string) => {
     setDraggedCard({ card, columnId });

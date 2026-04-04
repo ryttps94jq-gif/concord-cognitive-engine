@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useLensDTUs } from '@/hooks/useLensDTUs';
@@ -159,8 +159,7 @@ export default function MusicLensPage() {
   }, [marketplaceTab, marketplaceBpmMin, marketplaceBpmMax, marketplaceGenre, marketplaceKey, marketplaceSearch]);
 
   // Fetch when marketplace view opens or filters change
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useMemo(() => { if (view === 'marketplace') fetchMarketplace(); }, [view === 'marketplace', marketplaceTab, fetchMarketplace]);
+  useEffect(() => { if (view === 'marketplace') fetchMarketplace(); }, [view, marketplaceTab, fetchMarketplace]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- Album MEGA DTUs ----
   const albumMegaDTUs = useMemo(() => {
