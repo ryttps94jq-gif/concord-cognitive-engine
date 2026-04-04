@@ -244,12 +244,13 @@ function routeToStores(event: SocketEvent, data: unknown) {
     // DTU → lattice store
     case 'dtu:created':
       if (d && d.id) {
-        useLatticeStore.getState().addRecentDTU(d as never);
+        useLatticeStore.getState().addRecentDTU(d as DTU);
       }
       break;
     case 'dtu:updated':
       if (d && d.id) {
-        useLatticeStore.getState().updateDTU(d.id as string, d.changes as never ?? d);
+        const changes = (d.changes as Partial<DTU> | undefined) ?? (d as Partial<DTU>);
+        useLatticeStore.getState().updateDTU(d.id as string, changes);
       }
       break;
     case 'dtu:deleted':
@@ -266,7 +267,7 @@ function routeToStores(event: SocketEvent, data: unknown) {
           message: d.message as string,
           duration: 8000,
         });
-        useSystemStore.getState().addSystemAlert(d as never);
+        useSystemStore.getState().addSystemAlert(d as SystemAlert);
       }
       break;
 
@@ -274,10 +275,10 @@ function routeToStores(event: SocketEvent, data: unknown) {
     case 'attention:allocation':
       if (d) {
         if (Array.isArray(d.allocation)) {
-          useSystemStore.getState().setAttentionAllocation(d.allocation as never);
+          useSystemStore.getState().setAttentionAllocation(d.allocation as AttentionAllocation[]);
         }
         if (d.focusOverride !== undefined) {
-          useSystemStore.getState().setFocusOverride(d.focusOverride as never);
+          useSystemStore.getState().setFocusOverride(d.focusOverride as FocusOverride | null);
         }
       }
       break;
@@ -295,7 +296,7 @@ function routeToStores(event: SocketEvent, data: unknown) {
     // Dream → sovereign store
     case 'dream:captured':
       if (d && d.id) {
-        useSovereignStore.getState().addDream(d as never);
+        useSovereignStore.getState().addDream(d as Dream);
       }
       break;
 
@@ -303,7 +304,7 @@ function routeToStores(event: SocketEvent, data: unknown) {
     case 'promotion:approved':
     case 'promotion:rejected':
       if (d && d.id) {
-        useSovereignStore.getState().updatePromotion(d.id as string, d as never);
+        useSovereignStore.getState().updatePromotion(d.id as string, d as Partial<Promotion>);
       }
       break;
 

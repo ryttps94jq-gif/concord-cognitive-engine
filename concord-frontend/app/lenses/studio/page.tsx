@@ -202,6 +202,7 @@ export default function StudioLensPage() {
   const [studioView, setStudioView] = useState<StudioViewType>('arrange');
   const [project, setProject] = useState<DAWProject | null>(null);
   const [transportState, setTransportState] = useState<TransportState>('stopped');
+  const transportStateRef = useRef<TransportState>('stopped');
   const [currentBeat, setCurrentBeat] = useState(0);
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
@@ -255,6 +256,11 @@ export default function StudioLensPage() {
   const [masteringAnalysis, setMasteringAnalysis] = useState<MasteringAnalysis | null>(null);
   const [spectrumData, setSpectrumData] = useState<Uint8Array | null>(null);
 
+  // Keep transportState ref in sync for use in intervals
+  useEffect(() => {
+    transportStateRef.current = transportState;
+  }, [transportState]);
+
   // ---- Initialize engines ----
   useEffect(() => {
     transportRef.current = new TransportEngine();
@@ -276,7 +282,7 @@ export default function StudioLensPage() {
 
     // Spectrum analyzer update
     const spectrumInterval = setInterval(() => {
-      if (mixerRef.current && transportState === 'playing') {
+      if (mixerRef.current && transportStateRef.current === 'playing') {
         setSpectrumData(mixerRef.current.getMasterAnalyserData());
       }
     }, 50);
