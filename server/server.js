@@ -5218,11 +5218,11 @@ function metricsMiddleware(req, res, next) {
   next();
 }
 
-// Update gauges periodically
+// Update gauges periodically (every 60s — no need for 5s resolution)
 setInterval(() => {
   if (METRICS.gauges.dtuCount) METRICS.gauges.dtuCount.set(STATE.dtus.size);
   if (METRICS.gauges.activeConnections) METRICS.gauges.activeConnections.set(REALTIME.clients?.size || 0);
-}, 5000);
+}, 60000);
 
 // ---- Backup & Restore ----
 const BACKUP_DIR = process.env.BACKUP_DIR || path.join(DATA_DIR, "backups");
@@ -6490,9 +6490,11 @@ function saveStateCritical() {
 }
 
 // ---- Periodic Safety-Net Save (crash protection) ----
-// Ensures state is persisted at least every 30s even if the debounce
-// timer already fired and silent mutations accumulated (e.g. tick loops).
-const PERIODIC_SAVE_INTERVAL_MS = 30_000;
+// State save every 24 hours — not every 30 seconds. Serializing hundreds of
+// DTUs every few seconds thrashes the disk and blocks the event loop.
+// The debounced save (on mutation) still fires for critical changes.
+// SIGTERM/beforeExit handlers guarantee a final save on shutdown.
+const PERIODIC_SAVE_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const _periodicSaveTimer = setInterval(() => {
   try {
     saveStateSync();
@@ -12084,8 +12086,9 @@ async function initGhostFleet() {
     })),
   });
 
-  // ── Secondary Heartbeat (60s) — Entity Economy + History ────────────────
-  // Heavier operations that don't need to run on the 15s governor heartbeat
+  // ── Secondary Heartbeat (5 min) — Entity Economy + History ────────────────
+  // Economy cycles, history transitions, and mediation checks don't need
+  // per-minute resolution. 5 minutes gives each process room to complete.
   const secondaryTimer = setInterval(async () => {
     try {
       // Entity economy cycle (inflation/deflation, UBI, trade expiry)
@@ -12094,13 +12097,15 @@ async function initGhostFleet() {
         try { econ.runEconomicCycle(); } catch (e) { observe(e, "ghost_fleet_economy_cycle"); }
       }
 
-      // History era transitions
+      // History era transitions — staggered 30s after economy
+      await new Promise(r => setTimeout(r, 30000));
       const hist = await import("./emergent/history-engine.js").catch(() => null);
       if (hist?.checkEraTransition) {
         try { hist.checkEraTransition(); } catch (e) { observe(e, "ghost_fleet_history_era_check"); }
       }
 
-      // Conflict mediation timeouts
+      // Conflict mediation timeouts — staggered 30s after history
+      await new Promise(r => setTimeout(r, 30000));
       const conf = await import("./emergent/conflict-resolution.js").catch(() => null);
       if (conf?.listDisputes) {
         try {
@@ -12111,7 +12116,7 @@ async function initGhostFleet() {
         } catch (e) { observe(e, "ghost_fleet_mediation_timeout"); }
       }
     } catch (e) { observe(e, "ghost_fleet_secondary_heartbeat"); }
-  }, 60000);
+  }, 300000); // 5 minutes
   if (secondaryTimer.unref) secondaryTimer.unref();
 
   return GHOST_FLEET_STATUS;
@@ -22896,8 +22901,12 @@ function startHeartbeat() {
     }
   }
 
-  // ── Local Scope Tick (GPU cadence, 10s default — organism speed, not machine speed) ──
-  const ms = clamp(Number(STATE.settings.heartbeatMs || 10000), 2000, 120000);
+  // ── Local Scope Tick (creative cadence — 120s default) ──
+  // 10s was too fast — multiple creators' ticks pile up and the sub-processes
+  // (autogen, dream, evolution, synthesis) all fire simultaneously, giving no
+  // time to properly create a DTU before the next tick stomps on it.
+  // 120s gives each cognitive process room to breathe.
+  const ms = clamp(Number(STATE.settings.heartbeatMs || 120000), 30000, 600000);
   heartbeatTimer = setInterval(async () => {
     if (!STATE.settings.heartbeatEnabled) return;
     // Memory pressure gate: skip heartbeat under critical pressure
@@ -22939,18 +22948,25 @@ function startHeartbeat() {
         }
       }
     } else if (!cognitiveWorkerReady) {
-      // Fallback: run cognitive tasks on main thread if worker isn't available
-      if (STATE.settings.autogenEnabled) {
-        await runMacro("system","autogen", {}, ctx).catch((err) => { console.error('[system] Heartbeat autogen error:', err); });
-      }
-      if (STATE.settings.dreamEnabled) {
-        await runMacro("system","dream", { seed: "Concord heartbeat dream" }, ctx).catch((err) => { console.error('[system] Heartbeat dream error:', err); });
-      }
-      if (STATE.settings.evolutionEnabled) {
-        await runMacro("system","evolution", {}, ctx).catch((err) => { console.error('[system] Heartbeat evolution error:', err); });
-      }
-      if (STATE.settings.synthEnabled) {
-        await runMacro("system","synthesize", {}, ctx).catch((err) => { console.error('[system] Heartbeat synthesize error:', err); });
+      // Fallback: run cognitive tasks on main thread if worker isn't available.
+      // STAGGERED: only ONE cognitive process runs per tick. Round-robin through
+      // autogen → dream → evolution → synthesis. Each gets a full tick cycle to
+      // breathe, create, and settle before the next process fires.
+      const cognitivePhases = [];
+      if (STATE.settings.autogenEnabled) cognitivePhases.push("autogen");
+      if (STATE.settings.dreamEnabled) cognitivePhases.push("dream");
+      if (STATE.settings.evolutionEnabled) cognitivePhases.push("evolution");
+      if (STATE.settings.synthEnabled) cognitivePhases.push("synthesis");
+
+      if (cognitivePhases.length > 0) {
+        const phaseIndex = _heartbeatCount % cognitivePhases.length;
+        const phase = cognitivePhases[phaseIndex];
+        try {
+          if (phase === "autogen") await runMacro("system", "autogen", {}, ctx);
+          else if (phase === "dream") await runMacro("system", "dream", { seed: "Concord heartbeat dream" }, ctx);
+          else if (phase === "evolution") await runMacro("system", "evolution", {}, ctx);
+          else if (phase === "synthesis") await runMacro("system", "synthesize", {}, ctx);
+        } catch (err) { console.error(`[system] Heartbeat ${phase} error:`, err); }
       }
     }
 
@@ -22970,13 +22986,21 @@ function startHeartbeat() {
     } catch (err) { console.error('[system] Analogize error:', err); }
 
     // ── v5.8: Biological Systems Tick ──────────────────────────────────────
-    // Wire all 12 emergent modules into the heartbeat for living biology
+    // STAGGERED: Only process ONE entity per tick (round-robin).
+    // With 120s ticks, each entity gets biological updates every N*120s
+    // where N = number of active entities. This prevents pile-up.
     try {
       const entities = STATE.__emergent
         ? Array.from(STATE.__emergent.emergents.values()).filter(e => e.active)
         : [];
 
-      for (const entity of entities) {
+      _heartbeatCount = (_heartbeatCount || 0) + 1;
+
+      if (entities.length > 0) {
+        // Round-robin: one entity per tick
+        const entityIndex = _heartbeatCount % entities.length;
+        const entity = entities[entityIndex];
+
         // Body decay & organ simulation
         try { tickBodyDecay(entity.id); } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
         // Sleep cycle transitions (fatigue → drowsy → sleep → REM → wake)
@@ -22995,9 +23019,8 @@ function startHeartbeat() {
         } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
       }
 
-      // System-wide drift scan (runs every 5th heartbeat to avoid overhead)
-      _heartbeatCount = (_heartbeatCount || 0) + 1;
-      if (_heartbeatCount % 5 === 0) {
+      // System-wide drift scan (every 10th heartbeat @ 120s = ~20 min)
+      if (_heartbeatCount % 10 === 0) {
         try { runDriftScan(STATE); } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
       }
     } catch (err) { console.error('[system] Biological systems tick error:', err); }
@@ -23005,8 +23028,8 @@ function startHeartbeat() {
     // Plugin system tick — runs tick() on all loaded plugins
     try { tickPlugins(STATE); } catch (err) { console.error('[system] Plugin tick error:', err); }
 
-    // ── Want Engine: hourly decay (runs every 240th heartbeat @ 15s = ~hourly) ──
-    if (_heartbeatCount % 240 === 0) {
+    // ── Want Engine: hourly decay (every 30th heartbeat @ 120s = ~hourly) ──
+    if (_heartbeatCount % 30 === 0) {
       try {
         const decayResult = decayAllWants(STATE);
         if (decayResult.killed > 0) {
@@ -23015,8 +23038,8 @@ function startHeartbeat() {
       } catch (_e) { logger.debug('server', 'want engine not critical', { error: _e?.message }); }
     }
 
-    // ── Learning Verification: probation audit (every 480th heartbeat @ 15s = ~2 hours) ──
-    if (_heartbeatCount % 480 === 0) {
+    // ── Learning Verification: probation audit (every 60th heartbeat @ 120s = ~2 hours) ──
+    if (_heartbeatCount % 60 === 0) {
       try {
         const probationResult = runProbationAudit(STATE);
         if (probationResult.demoted > 0) {
@@ -23034,8 +23057,8 @@ function startHeartbeat() {
       } catch (_e) { logger.debug('server', 'learning verification not critical', { error: _e?.message }); }
     }
 
-    // ── Learning Verification: dedup audit (every 5760th heartbeat @ 15s = ~24 hours) ──
-    if (_heartbeatCount % 5760 === 0 && _heartbeatCount > 0) {
+    // ── Learning Verification: dedup audit (every 720th heartbeat @ 120s = ~24 hours) ──
+    if (_heartbeatCount % 720 === 0 && _heartbeatCount > 0) {
       try {
         const dedupResult = runDedupAudit(STATE);
         if (dedupResult.redundant > 0) {
@@ -23044,8 +23067,8 @@ function startHeartbeat() {
       } catch (_e) { logger.debug('server', 'learning verification not critical', { error: _e?.message }); }
     }
 
-    // ── Learning Verification: substrate pruning (every 172800th heartbeat @ 15s = ~30 days) ──
-    if (_heartbeatCount % 172800 === 0 && _heartbeatCount > 0) {
+    // ── Learning Verification: substrate pruning (every 21600th heartbeat @ 120s = ~30 days) ──
+    if (_heartbeatCount % 21600 === 0 && _heartbeatCount > 0) {
       try {
         const pruneResult = runSubstratePruning(STATE);
         if (pruneResult.total_pruned > 0) {
@@ -23054,8 +23077,8 @@ function startHeartbeat() {
       } catch (_e) { logger.debug('server', 'learning verification not critical', { error: _e?.message }); }
     }
 
-    // ── Spontaneous message check (runs every 120th heartbeat @ 15s = ~30 min) ──
-    if (_heartbeatCount % 120 === 0) {
+    // ── Spontaneous message check (every 15th heartbeat @ 120s = ~30 min) ──
+    if (_heartbeatCount % 15 === 0) {
       try {
         // Check if any high-intensity wants should trigger spontaneous messages
         const trigger = checkSpontaneousTrigger(STATE);
@@ -23143,7 +23166,7 @@ function startHeartbeat() {
   // HTTP requests are zero LLM compute. Only synthesis afterwards needs the subconscious brain.
   // Heartbeat windows: :00-:09 autogen, :10-:19 dream, :20-:29 evolution,
   //   :30-:39 synthesis, :40-:49 birth, :50-:59 exploration
-  const explorationMs = 240000; // check every 4 minutes — LLM-calling process needs spacing
+  const explorationMs = 600000; // check every 10 minutes — LLM-calling process needs spacing
   let explorationTimer = null;
   explorationTimer = setInterval(async () => {
     if (!STATE.settings.heartbeatEnabled) return;
@@ -24541,7 +24564,7 @@ function _startGovernorHeartbeat() {
   try {
     if (__governorTimer) return { ok:true, already:true };
     const s = STATE.settings || {};
-    const ms = clamp(Number(s.heartbeatMs ?? 10000), 1000, 10*60*1000);
+    const ms = clamp(Number(s.heartbeatMs ?? 120000), 30000, 10*60*1000);
     if (s.heartbeatEnabled === false) return { ok:false, reason:"heartbeat_disabled" };
     __governorTimer = setInterval(() => { governorTick("interval").catch(e => logger.debug?.('server', 'governor interval tick failed', { error: e?.message })); }, ms);
     structuredLog("info", "governor_heartbeat_active", { intervalSec: (ms/1000).toFixed(2) });
@@ -25499,8 +25522,8 @@ const _ALERTING = {
   }
 };
 
-// Evaluate alerts every 30 seconds
-setInterval(() => _ALERTING.evaluate(), 30000);
+// Evaluate alerts every 2 minutes (was 30s — no alert needs sub-minute detection)
+setInterval(() => _ALERTING.evaluate(), 120000);
 
 app.get("/api/alerts", (req, res) => {
   res.json({ ok: true, alerts: _ALERTING.stats() });
