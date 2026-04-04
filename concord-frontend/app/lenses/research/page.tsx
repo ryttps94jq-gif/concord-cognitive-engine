@@ -54,6 +54,30 @@ export default function ResearchLensPage() {
   const [generateResult, setGenerateResult] = useState<{ content: string; title: string } | null>(null);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [savingDTU, setSavingDTU] = useState(false);
+  const [deepResearchLoading, setDeepResearchLoading] = useState(false);
+
+  const handleDeepResearch = useCallback(async () => {
+    if (!hypothesis.trim()) return;
+    setDeepResearchLoading(true);
+    setGenerateError(null);
+    setGenerateResult(null);
+    try {
+      const data = await conductResearch(hypothesis.trim());
+      const content = typeof data?.result === 'string'
+        ? data.result
+        : typeof data?.content === 'string'
+          ? data.content
+          : JSON.stringify(data, null, 2);
+      setGenerateResult({
+        content,
+        title: data?.title || 'Deep Research Result',
+      });
+    } catch (err) {
+      setGenerateError(err instanceof Error ? err.message : 'Deep research failed');
+    } finally {
+      setDeepResearchLoading(false);
+    }
+  }, [hypothesis]);
 
   const handleRunAnalysis = useCallback(async () => {
     if (!hypothesis.trim()) return;
@@ -250,7 +274,7 @@ export default function ResearchLensPage() {
           />
           <button
             onClick={handleRunAnalysis}
-            disabled={generateLoading || !hypothesis.trim()}
+            disabled={generateLoading || deepResearchLoading || !hypothesis.trim()}
             className="flex items-center gap-2 px-5 py-2.5 bg-neon-cyan/20 text-neon-cyan rounded-lg text-sm font-medium hover:bg-neon-cyan/30 disabled:opacity-50 transition-colors whitespace-nowrap"
           >
             {generateLoading ? (
@@ -259,6 +283,18 @@ export default function ResearchLensPage() {
               <Zap className="w-4 h-4" />
             )}
             {generateLoading ? 'Analyzing...' : 'Analyze'}
+          </button>
+          <button
+            onClick={handleDeepResearch}
+            disabled={deepResearchLoading || generateLoading || !hypothesis.trim()}
+            className="flex items-center gap-2 px-5 py-2.5 bg-purple-500/20 text-purple-400 rounded-lg text-sm font-medium hover:bg-purple-500/30 disabled:opacity-50 transition-colors whitespace-nowrap"
+          >
+            {deepResearchLoading ? (
+              <span className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Microscope className="w-4 h-4" />
+            )}
+            {deepResearchLoading ? 'Researching...' : 'Deep Research'}
           </button>
         </div>
         {generateError && (
