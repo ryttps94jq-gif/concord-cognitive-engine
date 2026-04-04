@@ -5017,12 +5017,38 @@ const LLM_TIMEOUT_MS = parseInt(process.env.LLM_REQUEST_TIMEOUT_MS, 10) || 60000
 // Routes that involve LLM calls get longer timeouts
 const _LLM_ROUTE_PREFIXES = ["/api/chat", "/api/forge", "/api/ask", "/api/swarm", "/api/sim", "/api/council/debate"];
 
+// Stuck streaming response timeout: force-close if no data sent for this many ms
+const STREAMING_IDLE_TIMEOUT_MS = 60000;
+
 function requestTimeoutMiddleware(req, res, next) {
-  // Skip for SSE/streaming (they manage their own lifecycle)
-  const accept = String(req.headers.accept || "");
-  if (accept.includes("text/event-stream")) return next();
   // Skip for health/ready checks
   if (req.path === "/health" || req.path === "/ready" || req.path === "/metrics") return next();
+
+  const accept = String(req.headers.accept || "");
+  const isSSE = accept.includes("text/event-stream");
+
+  // For SSE/streaming: monitor idle time instead of hard timeout
+  if (isSSE) {
+    let lastActivity = Date.now();
+    const origWrite = res.write;
+    res.write = function (...args) {
+      lastActivity = Date.now();
+      return origWrite.apply(this, args);
+    };
+    const idleCheck = setInterval(() => {
+      if (Date.now() - lastActivity > STREAMING_IDLE_TIMEOUT_MS) {
+        clearInterval(idleCheck);
+        if (!res.destroyed) {
+          structuredLog("warn", "streaming_idle_timeout", { path: req.path, idleMs: STREAMING_IDLE_TIMEOUT_MS });
+          try { res.end(); } catch (_e) { /* already closed */ }
+        }
+      }
+    }, 15000);
+    if (idleCheck.unref) idleCheck.unref();
+    res.on("finish", () => clearInterval(idleCheck));
+    res.on("close", () => clearInterval(idleCheck));
+    return next();
+  }
 
   const isLLMRoute = _LLM_ROUTE_PREFIXES.some(p => req.path.startsWith(p));
   const timeoutMs = isLLMRoute ? LLM_TIMEOUT_MS : DEFAULT_TIMEOUT_MS;
@@ -7247,11 +7273,30 @@ async function runMacro(domain, name, input, ctx) {
     }
   }
 
+  // ── Per-macro timeout enforcement ──
+  // Classify macro by name pattern to determine timeout tier
+  const _macroTimeoutMs = (() => {
+    const _n = name.toLowerCase();
+    // LLM-routed macros get brain-level timeout
+    if (domain === "chat" || domain === "brain" || domain === "council" || _n.includes("reason") || _n.includes("dream") || _n.includes("synth")) return 45000;
+    // Heavy macros: consolidation, migration, bulk, export
+    if (_n.includes("consolidat") || _n.includes("migrat") || _n.includes("bulk") || _n.includes("export") || _n.includes("rebuild")) return 30000;
+    // Write macros
+    if (_n.includes("create") || _n.includes("update") || _n.includes("delete") || _n.includes("set") || _n.includes("add") || _n.includes("remove")) return 15000;
+    // Read macros (default)
+    return 5000;
+  })();
+
   // Plugin macro hooks (best-effort, never block macro execution)
   try { fireHook(STATE, "macro:beforeExecute", { domain, name, input }); } catch (e) { observe(e, "macro_hook_before_execute_main"); }
   let result;
   try {
-    result = await m.fn(ctx, input ?? {});
+    // Race macro execution against timeout
+    const _macroPromise = m.fn(ctx, input ?? {});
+    const _timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`macro_timeout: ${domain}.${name} exceeded ${_macroTimeoutMs}ms`)), _macroTimeoutMs)
+    );
+    result = await Promise.race([_macroPromise, _timeoutPromise]);
   } catch (macroErr) {
     // Avoidance learning: record macro failures for pattern learning
     try {
