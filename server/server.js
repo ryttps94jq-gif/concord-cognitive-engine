@@ -11812,6 +11812,12 @@ async function initGhostFleet() {
           }
         } catch (e) { observe(e, "ghost_fleet_mediation_timeout"); }
       }
+
+      // Process recurring world events (create next instances of completed recurring events)
+      const worldEvents = await import("./lib/world-events.js").catch(() => null);
+      if (worldEvents?.processRecurringEvents) {
+        try { worldEvents.processRecurringEvents(); } catch (e) { observe(e, "ghost_fleet_recurring_events"); }
+      }
     } catch (e) { observe(e, "ghost_fleet_secondary_heartbeat"); }
   }, 60000);
   if (secondaryTimer.unref) secondaryTimer.unref();
@@ -37953,6 +37959,19 @@ app.get("/api/brain/health", asyncHandler(async (_req, res) => {
   }
   const allHealthy = Object.values(health).every(r => r.online);
   res.json({ ok: true, allHealthy, ...health, brains: health });
+}));
+
+// LLM Fallback health — shows active tiers and available fallback layers
+import { getFallbackHealth, setLocalLLM as _setFallbackLocalLLM, setSemanticCache as _setFallbackSemanticCache, setMacroCache as _setFallbackMacroCache } from "./lib/llm-fallback.js";
+app.get("/api/brain/fallback-health", (_req, res) => {
+  res.json({ ok: true, ...getFallbackHealth() });
+});
+
+// Artifact GC admin endpoints
+import { getOrphanCount, initGarbageCollectionTimer } from "./lib/artifact-gc.js";
+app.get("/api/admin/artifact-gc/orphan-count", asyncHandler(async (_req, res) => {
+  const count = await getOrphanCount(STATE, db);
+  res.json({ ok: true, orphanCount: count });
 }));
 
 // ---- Entity Growth, Exploration & Hive APIs ----

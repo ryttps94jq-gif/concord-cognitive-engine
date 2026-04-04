@@ -5,8 +5,9 @@
  * Meeting preps, overdue alerts, workout adjustments, meal reminders.
  */
 
-import { useState, useEffect } from 'react';
-import { Bot } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Bot, RefreshCw } from 'lucide-react';
+import { agentStatus, agentTick } from '@/lib/api/client';
 
 interface AgentInsight {
   type: 'meeting_prep' | 'overdue_alert' | 'workout_adjustment' | 'meal_reminder';
@@ -25,7 +26,20 @@ interface PersonalAgentPanelProps {
 
 export function PersonalAgentPanel({ socket, onAction }: PersonalAgentPanelProps) {
   const [insights, setInsights] = useState<AgentInsight[]>([]);
+  const [statusData, setStatusData] = useState<{ active?: boolean; lastTick?: string } | null>(null);
+  const [ticking, setTicking] = useState(false);
 
+  // Load agent status on mount
+  useEffect(() => {
+    agentStatus()
+      .then(data => {
+        setStatusData(data);
+        if (data?.insights) setInsights(data.insights);
+      })
+      .catch(() => { /* agent may not be active yet */ });
+  }, []);
+
+  // Listen for real-time insight updates via socket
   useEffect(() => {
     if (!socket) return;
     const handler = (data: unknown) => {
@@ -37,6 +51,16 @@ export function PersonalAgentPanel({ socket, onAction }: PersonalAgentPanelProps
       socket.off('agent:insights', handler);
     };
   }, [socket]);
+
+  // Manual tick to request fresh insights from the agent
+  const handleTick = useCallback(async () => {
+    setTicking(true);
+    try {
+      const data = await agentTick();
+      if (data?.insights) setInsights(data.insights);
+    } catch { /* silent */ }
+    finally { setTicking(false); }
+  }, []);
 
   if (insights.length === 0) return null;
 
