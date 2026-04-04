@@ -345,7 +345,7 @@ function generateThumbnail(dtuDir, filePath, mimeType) {
       const waveformPath = path.join(dtuDir, "waveform.json");
       fs.writeFileSync(waveformPath, JSON.stringify(peaks));
       return waveformPath;
-    } catch { return null; }
+    } catch (err) { console.warn('[artifact-store] waveform extraction failed', err?.message); return null; }
   }
   if (mimeType.startsWith("text/") || mimeType === "application/json" || mimeType === "application/javascript") {
     try {
@@ -353,7 +353,7 @@ function generateThumbnail(dtuDir, filePath, mimeType) {
       const previewPath = path.join(dtuDir, "text_preview.txt");
       fs.writeFileSync(previewPath, text);
       return previewPath;
-    } catch { return null; }
+    } catch (err) { console.warn('[artifact-store] text preview generation failed', err?.message); return null; }
   }
   return null;
 }

@@ -282,7 +282,7 @@ function _selectChannel(channels, priority) {
  */
 function _safeParseJSON(str, fallback) {
   if (!str) return fallback;
-  try { return JSON.parse(str); } catch { return fallback; }
+  try { return JSON.parse(str); } catch (err) { console.debug('[initiative-engine] JSON parse failed', err?.message); return fallback; }
 }
 
 /**

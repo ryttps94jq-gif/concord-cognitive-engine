@@ -104,7 +104,7 @@ export async function sessionDelete(sessionId) {
   try {
     await _client.del(`concord:session:${sessionId}`);
     return true;
-  } catch { return false; }
+  } catch (err) { console.warn('[redis-adapter] sessionDelete failed', err?.message); return false; }
 }
 
 // ── Token revocation ──
@@ -115,14 +115,14 @@ export async function revokeToken(tokenHash) {
     await _client.sadd("concord:revoked_tokens", tokenHash);
     await _client.expire("concord:revoked_tokens", 86400 * 7); // 7 day TTL
     return true;
-  } catch { return false; }
+  } catch (err) { console.warn('[redis-adapter] revokeToken failed', err?.message); return false; }
 }
 
 export async function isTokenRevoked(tokenHash) {
   if (!_connected) return false; // Can't check, assume not revoked
   try {
     return await _client.sismember("concord:revoked_tokens", tokenHash) === 1;
-  } catch { return false; }
+  } catch (err) { console.warn('[redis-adapter] isTokenRevoked check failed', err?.message); return false; }
 }
 
 // ── Pub/Sub ──
@@ -132,7 +132,7 @@ export async function publish(channel, data) {
   try {
     await _client.publish(channel, JSON.stringify(data));
     return true;
-  } catch { return false; }
+  } catch (err) { console.warn('[redis-adapter] publish failed', { channel, err: err?.message }); return false; }
 }
 
 export async function subscribe(channel, callback) {
@@ -153,7 +153,7 @@ export async function lockAcquire(lockName, ttlMs = 30000) {
     const key = `concord:lock:${lockName}`;
     const result = await _client.set(key, process.pid.toString(), "PX", ttlMs, "NX");
     return result === "OK";
-  } catch { return true; } // Fail-open: allow operation if Redis errors
+  } catch (err) { console.warn('[redis-adapter] lockAcquire failed, failing open', { lockName, err: err?.message }); return true; } // Fail-open: allow operation if Redis errors
 }
 
 export async function lockRelease(lockName) {
@@ -161,7 +161,7 @@ export async function lockRelease(lockName) {
   try {
     await _client.del(`concord:lock:${lockName}`);
     return true;
-  } catch { return true; }
+  } catch (err) { console.warn('[redis-adapter] lockRelease failed', { lockName, err: err?.message }); return true; }
 }
 
 // ── Cleanup ──

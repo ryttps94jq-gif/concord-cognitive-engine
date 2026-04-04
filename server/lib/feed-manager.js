@@ -230,7 +230,7 @@ function tryParseDate(str) {
   try {
     const d = new Date(str);
     return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
-  } catch { return new Date().toISOString(); }
+  } catch (err) { console.debug('[feed-manager] date parse failed', err?.message); return new Date().toISOString(); }
 }
 
 
