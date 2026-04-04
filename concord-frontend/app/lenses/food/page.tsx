@@ -750,7 +750,12 @@ export default function FoodLensPage() {
             </div>
             <div>
               <label className={ds.label}>Qty</label>
-              <input type="number" value={wasteQty} onChange={e => setWasteQty(e.target.value)} className={ds.input} placeholder="0" />
+              <div className="flex gap-1">
+                <input type="number" value={wasteQty} onChange={e => setWasteQty(e.target.value)} className={cn(ds.input, 'flex-1')} placeholder="0" />
+                <select value={wasteUnit} onChange={e => setWasteUnit(e.target.value)} className={cn(ds.select, 'w-20')}>
+                  {['lb', 'kg', 'oz', 'g', 'ea', 'gal', 'L', 'qt', 'pt'].map(u => <option key={u} value={u}>{u}</option>)}
+                </select>
+              </div>
             </div>
             <div>
               <label className={ds.label}>Reason</label>

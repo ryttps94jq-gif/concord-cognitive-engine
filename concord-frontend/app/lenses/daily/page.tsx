@@ -173,7 +173,7 @@ export default function DailyLensPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['reminders-due'] }),
     onError: (err) => console.error('completeReminderMut failed:', err instanceof Error ? err.message : err),
   });
-  const _notes = useMemo(() => {
+  const notes = useMemo(() => {
     const raw = dailyData?.notes || dailyData || [];
     return Array.isArray(raw) ? raw : [];
   }, [dailyData]);

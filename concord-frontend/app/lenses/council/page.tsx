@@ -282,22 +282,22 @@ export default function CouncilLensPage() {
   const queryClient = useQueryClient();
 
   // ----- Lens persistence (auto-seeds on first use, derives local data) -----
-  const { items: proposalLensItems, isLoading: _proposalsLoading, isError, error, refetch, create: createProposalItem, update: updateProposalItem, remove: _removeProposalItem } = useLensData<Record<string, unknown>>('council', 'proposal', {
+  const { items: proposalLensItems, isLoading: _proposalsLoading, isError, error, refetch, create: createProposalItem, update: updateProposalItem, remove: removeProposalItem } = useLensData<Record<string, unknown>>('council', 'proposal', {
     seed: INITIAL_PROPOSALS.map(p => ({ title: p.title, data: p as unknown as Record<string, unknown> })),
   });
-  const { items: budgetLensItems, create: createBudgetItem, update: updateBudgetItem, remove: _removeBudgetItem } = useLensData<Record<string, unknown>>('council', 'budget', {
+  const { items: budgetLensItems, create: createBudgetItem, update: updateBudgetItem, remove: removeBudgetItem } = useLensData<Record<string, unknown>>('council', 'budget', {
     seed: INITIAL_BUDGET_ITEMS.map(b => ({ title: b.description, data: b as unknown as Record<string, unknown> })),
   });
-  const { items: stakeholderLensItems, create: _createStakeholderItem, update: updateStakeholderItem, remove: _removeStakeholderItem } = useLensData<Record<string, unknown>>('council', 'stakeholder', {
+  const { items: stakeholderLensItems, create: createStakeholderItem, update: updateStakeholderItem, remove: removeStakeholderItem } = useLensData<Record<string, unknown>>('council', 'stakeholder', {
     seed: INITIAL_STAKEHOLDERS.map(s => ({ title: s.name, data: s as unknown as Record<string, unknown> })),
   });
-  const { items: committeeLensItems, create: createCommitteeItem, update: _updateCommitteeItem, remove: _removeCommitteeItem } = useLensData<Record<string, unknown>>('council', 'committee', {
+  const { items: committeeLensItems, create: createCommitteeItem, update: updateCommitteeItem, remove: removeCommitteeItem } = useLensData<Record<string, unknown>>('council', 'committee', {
     seed: INITIAL_COMMITTEES.map(c => ({ title: c.name, data: c as unknown as Record<string, unknown> })),
   });
-  const { items: auditLensItems, create: createAuditItem, update: _updateAuditItem, remove: _removeAuditItem } = useLensData<Record<string, unknown>>('council', 'audit', {
+  const { items: auditLensItems, create: createAuditItem, update: updateAuditItem, remove: removeAuditItem } = useLensData<Record<string, unknown>>('council', 'audit', {
     seed: INITIAL_AUDIT.map(a => ({ title: a.action, data: a as unknown as Record<string, unknown> })),
   });
-  const { items: debateLensItems, create: createDebateItem, update: updateDebateItem, remove: _removeDebateItem } = useLensData<Record<string, unknown>>('council', 'debate', {
+  const { items: debateLensItems, create: createDebateItem, update: updateDebateItem, remove: removeDebateItem } = useLensData<Record<string, unknown>>('council', 'debate', {
     seed: INITIAL_DEBATES.map(d => ({ title: d.topic, data: d as unknown as Record<string, unknown> })),
   });
 
@@ -757,6 +757,9 @@ export default function CouncilLensPage() {
             {p.coSponsors.length > 0 && <span>Co-sponsors: {p.coSponsors.map(c => stakeholderName(c)).join(', ')}</span>}
             <span>Created: {formatDate(p.createdAt)}</span>
             <span>Updated: {formatDate(p.updatedAt)}</span>
+            <button onClick={() => { removeProposalItem(p.id); setSelectedProposalId(null); }} className="ml-auto text-red-400 hover:text-red-300 text-xs flex items-center gap-1">
+              <X className="w-3 h-3" /> Remove
+            </button>
           </div>
 
       {/* Real-time Enhancement Toolbar */}
@@ -1323,10 +1326,16 @@ export default function CouncilLensPage() {
                   </button>
                 )}
               </div>
-              <p className="text-[10px] text-gray-600 mt-2">Joined: {formatDate(s.joinedAt)}</p>
+              <div className="flex items-center justify-between mt-2">
+                <p className="text-[10px] text-gray-600">Joined: {formatDate(s.joinedAt)}</p>
+                <button onClick={() => removeStakeholderItem(s.id)} className="text-red-400 hover:text-red-300 text-[10px] flex items-center gap-0.5"><X className="w-3 h-3" />Remove</button>
+              </div>
             </div>
           ))}
         </div>
+
+        {/* Add Stakeholder */}
+        <button onClick={() => createStakeholderItem({ title: 'New Stakeholder', data: { name: 'New Stakeholder', role: 'observer', votingWeight: 1, votingHistory: {}, committees: [], conflicts: [], delegatedTo: null, joinedAt: new Date().toISOString() } as unknown as Record<string, unknown> })} className={ds.btnSecondary}><Plus className="w-4 h-4" />Add Stakeholder</button>
 
         {/* Committees */}
         <h2 className={cn(ds.heading2, 'flex items-center gap-2 mt-6')}><Layers className="w-5 h-5 text-purple-400" />Committees</h2>

@@ -599,7 +599,10 @@ export default function ArtLensPage() {
 
       {/* Featured Section */}
       <section>
-        <h2 className="text-lg font-bold mb-4">Featured Artwork</h2>
+        <div className="flex items-center gap-2 mb-4">
+          <h2 className="text-lg font-bold">Featured Artwork</h2>
+          {assetsLoading && <span className="w-4 h-4 border-2 border-neon-pink border-t-transparent rounded-full animate-spin inline-block" />}
+        </div>
         <div className="columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4">
           {(artAssets as ArtAsset[]).length > 0 ? (artAssets as ArtAsset[]).map((art: ArtAsset) => (
             <motion.div
@@ -1093,6 +1096,12 @@ export default function ArtLensPage() {
                     {ART_TYPES.map(t => <option key={t} value={t} className="bg-lattice-surface">{t.replace('-', ' ')}</option>)}
                   </select>
                   <input type="number" value={listingPrice} onChange={e => setListingPrice(e.target.value)} className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:outline-none" placeholder="Price ($)" />
+                </div>
+                <div>
+                  <label className="text-sm text-gray-400 block mb-1">Style</label>
+                  <select value={listingStyle} onChange={e => setListingStyle(e.target.value)} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:outline-none">
+                    {ART_STYLES.map(s => <option key={s} value={s} className="bg-lattice-surface">{s}</option>)}
+                  </select>
                 </div>
                 <input type="text" value={listingTags} onChange={e => setListingTags(e.target.value)} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:outline-none" placeholder="Tags (comma separated)" />
                 <button onClick={handleCreateListing} disabled={createListingMutation.isPending} className="w-full py-2.5 bg-neon-pink text-white rounded-lg font-medium hover:bg-neon-pink/80 disabled:opacity-50">

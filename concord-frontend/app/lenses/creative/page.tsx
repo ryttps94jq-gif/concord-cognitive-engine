@@ -1000,7 +1000,7 @@ export default function CreativeLensPage() {
   // ---------------------------------------------------------------------------
   const renderBudget = () => {
     const categories = ['talent', 'equipment', 'location', 'post_production', 'licensing'];
-    const _projectBudgets = allProjects.map(p => {
+    const projectBudgets = allProjects.map(p => {
       const d = p.data as Record<string, unknown>;
       const projectLines = filtered.filter(l => (l.data as Record<string, unknown>).project === String(d.client) + ' ' + p.title || String((l.data as Record<string, unknown>).project).includes(String(d.client)));
       const lineEstimated = projectLines.reduce((s, l) => s + Number((l.data as Record<string, unknown>).estimated || 0), 0);
@@ -1063,6 +1063,28 @@ export default function CreativeLensPage() {
             })}
           </div>
         </div>
+
+        {/* Per-project budget breakdown */}
+        {projectBudgets.length > 0 && (
+          <div className={ds.panel}>
+            <h3 className={cn(ds.heading3, 'mb-3')}>Per-Project Budgets</h3>
+            <div className="space-y-3">
+              {projectBudgets.map(pb => {
+                const pct = pb.lineEstimated > 0 ? pb.lineActual / pb.lineEstimated : 0;
+                return (
+                  <div key={pb.id} className="flex items-center gap-3">
+                    <span className="w-40 text-sm text-gray-300 truncate">{pb.title}</span>
+                    <div className="flex-1 bg-lattice-elevated rounded-full h-3">
+                      <div className={cn('h-3 rounded-full transition-all', pct > 1 ? 'bg-red-400' : pct > 0.8 ? 'bg-amber-400' : 'bg-neon-cyan')} style={{ width: `${Math.min(pct * 100, 100)}%` }} />
+                    </div>
+                    <span className="w-24 text-right text-sm text-gray-300">{fmtCurrency(pb.lineActual)}</span>
+                    <span className={cn('w-24 text-right text-xs text-gray-500')}>/ {fmtCurrency(pb.lineEstimated)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Line items table */}
         <div className={ds.panel}>
