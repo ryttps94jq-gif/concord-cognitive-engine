@@ -940,7 +940,7 @@ function MetricCard({ icon, label, value, trend, color }: { icon: React.ReactNod
   );
 }
 
-function ModelCard({ model, statusConfig, typeConfig, onSelect, onDeploy: _onDeploy, isDeploying: _isDeploying }: { model: Model; statusConfig: Record<string, Record<string, unknown>>; typeConfig: Record<string, Record<string, unknown>>; onSelect: () => void; onDeploy: () => void; isDeploying?: boolean }) {
+function ModelCard({ model, statusConfig, typeConfig, onSelect, onDeploy, isDeploying }: { model: Model; statusConfig: Record<string, Record<string, unknown>>; typeConfig: Record<string, Record<string, unknown>>; onSelect: () => void; onDeploy: () => void; isDeploying?: boolean }) {
   const StatusIcon = (statusConfig[model.status]?.icon || Activity) as React.ElementType;
   const TypeIcon = (typeConfig[model.type]?.icon || Brain) as React.ElementType;
 
@@ -986,13 +986,24 @@ function ModelCard({ model, statusConfig, typeConfig, onSelect, onDeploy: _onDep
       </div>
 
       {model.tags && (
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap gap-1 mb-3">
           {model.tags.slice(0, 3).map((tag: string) => (
             <span key={tag} className="text-xs bg-lattice-surface px-2 py-0.5 rounded text-gray-400">
               {tag}
             </span>
           ))}
         </div>
+      )}
+
+      {model.status === 'trained' && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onDeploy(); }}
+          disabled={isDeploying}
+          className="w-full mt-2 py-1.5 text-xs font-medium rounded bg-neon-green/20 text-neon-green hover:bg-neon-green/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1"
+        >
+          <Rocket className="w-3 h-3" />
+          {isDeploying ? 'Deploying...' : 'Deploy Model'}
+        </button>
       )}
     </motion.div>
   );

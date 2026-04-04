@@ -199,7 +199,7 @@ export default function HouseholdLensPage() {
   const { items: maintenanceItems } = useLensData<MaintenanceItem>('household', 'MaintenanceItem', { noSeed: true });
   const { items: calendarItems } = useLensData<CalendarEvent>('household', 'CalendarEvent', { noSeed: true });
   const { items: budgetItems } = useLensData<BudgetEntry>('household', 'BudgetEntry', { noSeed: true });
-  const { items: _emergencyItems } = useLensData<EmergencyContact>('household', 'EmergencyContact', { noSeed: true });
+  const { items: emergencyItems } = useLensData<EmergencyContact>('household', 'EmergencyContact', { noSeed: true });
   const { items: petItems } = useLensData<Pet>('household', 'Pet', { noSeed: true });
 
   const runAction = useRunArtifact('household');
@@ -510,6 +510,29 @@ export default function HouseholdLensPage() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Emergency Contacts */}
+      <div className={ds.panel}>
+        <h3 className={cn(ds.heading3, 'mb-3 flex items-center gap-2')}><Shield className="w-5 h-5 text-red-400" /> Emergency Contacts</h3>
+        {emergencyItems.length === 0 ? (
+          <p className={ds.textMuted}>No emergency contacts on file. Add contacts in the Emergency tab.</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {emergencyItems.slice(0, 6).map(ec => {
+              const d = ec.data as unknown as EmergencyContact;
+              return (
+                <div key={ec.id} className="flex items-center gap-3 p-2 rounded-lg bg-red-500/5 border border-red-500/10">
+                  <Shield className="w-4 h-4 text-red-400 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-white truncate">{ec.title || d.name}</p>
+                    <p className={ds.textMuted}>{d.relationship}{d.phone ? ` - ${d.phone}` : ''}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
