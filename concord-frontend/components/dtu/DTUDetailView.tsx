@@ -276,6 +276,12 @@ export function DTUDetailView({ dtuId, onClose, onNavigate }: DTUDetailViewProps
                   {dtu?.domain && (
                     <span className="text-gray-600">{dtu.domain}</span>
                   )}
+                  {offlineStale && !serverDtu && (
+                    <span className="text-amber-400/70" title="Showing cached data, refreshing...">cached</span>
+                  )}
+                  {offlineSource === 'offline' && !serverDtu && (
+                    <span className="text-gray-500" title="Loaded from offline cache">offline</span>
+                  )}
                 </div>
               </div>
             </div>

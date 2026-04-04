@@ -3236,6 +3236,7 @@ const STATE = {
   transactions: new Map(),// txId -> {id, buyerOrgId, sellerOrgId, listingId, amount, fee, createdAt}
   papers: new Map(),      // paperId -> {id, orgId, topic, outline, sections, refs, status, createdAt, updatedAt}
   organs: new Map(),      // organId -> organState
+  notifications: new Map(), // notificationId -> {id, userId, type, message, read, readAt, createdAt, meta}
   growth: null,          // growth OS state
   // v3: Generic lens artifact store (domain.type → artifact)
   lensArtifacts: new Map(), // artifactId → {id, domain, type, ownerId, title, data, meta, createdAt, updatedAt, version}
@@ -37864,6 +37865,22 @@ app.post("/api/utility/call", asyncHandler(async (req, res) => {
   }
   const result = await utilityCall(action, lens, data);
   res.json({ ok: result.ok, result: result.content || null, error: result.error || null, source: result.source, model: result.model });
+}));
+
+// Conscious brain endpoint — direct conscious interaction (bare /api/brain/conscious)
+app.post("/api/brain/conscious", asyncHandler(async (req, res) => {
+  const { message, lens, query } = req.body || {};
+  const userMessage = message || query;
+  if (!userMessage) {
+    return res.status(400).json({ ok: false, error: "message is required" });
+  }
+  const result = await consciousChat(userMessage, lens);
+  res.json({
+    ok: result.ok, reply: result.content || null, error: result.error || null,
+    source: result.source, model: result.model,
+    sources: result.sources || undefined,
+    webAugmented: result.webAugmented || false,
+  });
 }));
 
 // Conscious brain endpoint — direct conscious chat (bypasses normal chat pipeline)

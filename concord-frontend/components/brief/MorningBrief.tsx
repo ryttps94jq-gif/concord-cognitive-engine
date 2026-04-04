@@ -14,6 +14,7 @@
 import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
+import { useOfflineFirst } from '@/hooks/useOfflineFirst';
 import { ds } from '@/lib/design-system';
 import { cn } from '@/lib/utils';
 import {
@@ -54,7 +55,17 @@ export function MorningBrief({ compact = false, className }: MorningBriefProps) 
   const [expanded, setExpanded] = useState(true);
   const queryClient = useQueryClient();
 
-  // Fetch latest brief
+  // Offline-first: instantly show cached brief from localStorage while server refreshes
+  const {
+    data: offlineBrief,
+    source: offlineSource,
+    stale: offlineBriefStale,
+  } = useOfflineFirst<{ ok: boolean; brief: BriefData | null }>('/api/brief/latest', {
+    cacheKey: 'morning-brief',
+    cacheTTL: 5 * 60 * 1000,
+  });
+
+  // Fetch latest brief (authoritative)
   const { data: briefData, isLoading: isFetching } = useQuery<{ ok: boolean; brief: BriefData | null }>({
     queryKey: ['morning-brief'],
     queryFn: async () => {
@@ -79,8 +90,8 @@ export function MorningBrief({ compact = false, className }: MorningBriefProps) 
     generateMutation.mutate(true);
   }, [generateMutation]);
 
-  const brief = generateMutation.data?.brief || briefData?.brief;
-  const isLoading = isFetching || generateMutation.isPending;
+  const brief = generateMutation.data?.brief || briefData?.brief || offlineBrief?.brief || null;
+  const isLoading = (isFetching && !offlineBrief) || generateMutation.isPending;
 
   // Compact mode: inline summary
   if (compact) {
@@ -186,6 +197,12 @@ export function MorningBrief({ compact = false, className }: MorningBriefProps) 
                   <span>Generated {new Date(brief.generatedAt).toLocaleString()}</span>
                   <span>via {brief.source}</span>
                   {brief.model && <span>({brief.model})</span>}
+                  {!briefData && offlineSource === 'cache' && (
+                    <span className="text-amber-400/70">(cached{offlineBriefStale ? ', refreshing' : ''})</span>
+                  )}
+                  {!briefData && offlineSource === 'offline' && (
+                    <span className="text-gray-500">(offline)</span>
+                  )}
                 </div>
               </div>
             )}

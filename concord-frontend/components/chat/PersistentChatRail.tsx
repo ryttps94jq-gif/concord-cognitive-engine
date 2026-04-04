@@ -290,7 +290,12 @@ export function PersistentChatRail({
 
   // ── Conversation memory (compression & stats) ─────────────
 
-  const conversationMemory = useConversationMemory();
+  const {
+    stats: memoryStats,
+    isCompressing: memoryCompressing,
+    forceCompress: memoryForceCompress,
+    refreshStats: memoryRefreshStats,
+  } = useConversationMemory();
 
   // ── Proactive messages ─────────────────────────────────────
 
@@ -472,6 +477,8 @@ export function PersistentChatRail({
         setWebResults([]);
         // Update DTU context depth counter
         if (d.dtuCount != null) setLastDtuCount(d.dtuCount);
+        // Refresh conversation memory stats after each response
+        memoryRefreshStats();
       }
     };
 
@@ -486,7 +493,7 @@ export function PersistentChatRail({
       off('chat:web_results', handleWebResults);
       off('chat:complete', handleComplete);
     };
-  }, [on, off, sessionId, currentLens]);
+  }, [on, off, sessionId, currentLens, memoryRefreshStats]);
 
   // ── Send message ──────────────────────────────────────────
 
@@ -568,6 +575,7 @@ export function PersistentChatRail({
         };
         setMessages(prev => [...prev, assistantMsg]);
         if (data?.dtuCount != null) setLastDtuCount(data.dtuCount);
+        memoryRefreshStats();
       } catch (err) {
         const errorMsg: ChatMessage = {
           id: `msg-${Date.now()}-err`,
@@ -581,7 +589,7 @@ export function PersistentChatRail({
         setChatStatus('idle');
       }
     }
-  }, [sessionId, currentLens, isConnected, emit, crossLensMemory, proactive]);
+  }, [sessionId, currentLens, isConnected, emit, crossLensMemory, proactive, memoryRefreshStats]);
 
   // ── Handle sovereignty resolution ──────────────────────────
 
