@@ -38920,6 +38920,30 @@ app.get("/api/atlas/domains", (req, res) => {
   res.json({ ok: true, domainTypes: Object.values(ATLAS_DOMAIN_TYPES), epistemicClasses: Object.values(EPISTEMIC_CLASSES) });
 });
 
+// GET /api/atlas/domains/:id — single domain detail
+app.get("/api/atlas/domains/:id", (req, res) => {
+  const domain = ATLAS_DOMAIN_TYPES[req.params.id];
+  if (!domain) return res.status(404).json({ ok: false, error: "Domain not found" });
+  res.json({ ok: true, domain });
+});
+
+// GET /api/atlas/domains/:id/gaps — knowledge gaps for a domain
+app.get("/api/atlas/domains/:id/gaps", (req, res) => {
+  const domainId = req.params.id;
+  const dtus = (STATE.dtus || []).filter(d => d.domain === domainId || (d.tags || []).includes(domainId));
+  const totalExpected = 50;
+  const coverage = Math.min(dtus.length / totalExpected, 1);
+  const gaps = coverage < 1 ? [{ domain: domainId, coverage: (coverage * 100).toFixed(1) + "%", missingEstimate: Math.max(0, totalExpected - dtus.length) }] : [];
+  res.json({ ok: true, domainId, gaps, coverage });
+});
+
+// GET /api/atlas/domains/:id/dtus — DTUs belonging to a domain
+app.get("/api/atlas/domains/:id/dtus", (req, res) => {
+  const domainId = req.params.id;
+  const dtus = (STATE.dtus || []).filter(d => d.domain === domainId || (d.tags || []).includes(domainId)).slice(0, 100);
+  res.json({ ok: true, domainId, dtus, total: dtus.length });
+});
+
 // ---- Atlas: Anti-Gaming ----
 app.get("/api/atlas/antigaming/scan/:id", (req, res) => {
   try { res.json(runAntiGamingScan(STATE, req.params.id, req.user?.id || "unknown")); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }

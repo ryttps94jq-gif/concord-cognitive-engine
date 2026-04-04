@@ -394,6 +394,41 @@ export default function registerHelpersExtendedRoutes(app, {
     } catch (e) { res.json({ ok: true, userId, permission, allowed: true }); }
   });
 
+  // RBAC custom roles CRUD
+  app.get("/api/rbac/roles/:id", (req, res) => {
+    const builtIn = { owner: "Full access", admin: "Administrative access", member: "Standard access", viewer: "Read-only access", guest: "Limited access" };
+    const id = req.params.id;
+    if (builtIn[id]) return res.json({ ok: true, role: { id, name: id, description: builtIn[id], builtIn: true } });
+    const custom = (STATE.rbacCustomRoles || []).find(r => r.id === id);
+    if (custom) return res.json({ ok: true, role: custom });
+    res.status(404).json({ ok: false, error: "Role not found" });
+  });
+
+  app.post("/api/rbac/roles", requireAuth(), (req, res) => {
+    const { name, description, permissions } = req.body || {};
+    if (!name) return res.status(400).json({ ok: false, error: "name required" });
+    if (!STATE.rbacCustomRoles) STATE.rbacCustomRoles = [];
+    const role = { id: `role_${Date.now()}`, name, description: description || "", permissions: permissions || [], createdAt: new Date().toISOString() };
+    STATE.rbacCustomRoles.push(role);
+    res.json({ ok: true, role });
+  });
+
+  app.put("/api/rbac/roles/:id", requireAuth(), (req, res) => {
+    if (!STATE.rbacCustomRoles) STATE.rbacCustomRoles = [];
+    const role = STATE.rbacCustomRoles.find(r => r.id === req.params.id);
+    if (!role) return res.status(404).json({ ok: false, error: "Role not found or built-in" });
+    Object.assign(role, req.body, { id: role.id });
+    res.json({ ok: true, role });
+  });
+
+  app.delete("/api/rbac/roles/:id", requireAuth(), (req, res) => {
+    if (!STATE.rbacCustomRoles) STATE.rbacCustomRoles = [];
+    const idx = STATE.rbacCustomRoles.findIndex(r => r.id === req.params.id);
+    if (idx === -1) return res.status(404).json({ ok: false, error: "Role not found or built-in" });
+    STATE.rbacCustomRoles.splice(idx, 1);
+    res.json({ ok: true, deleted: req.params.id });
+  });
+
   app.get("/api/rbac/users/:userId/roles", (req, res) => {
     try {
       const role = globalThis._getUserRole?.("default", req.params.userId);
