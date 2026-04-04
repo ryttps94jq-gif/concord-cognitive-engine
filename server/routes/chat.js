@@ -21,7 +21,11 @@ export default function registerChatRoutes(app, {
   ETHOS_INVARIANTS,
   validate,
   perEndpointRateLimit,
+  requireAuth,
 }) {
+
+  // Auth middleware — tolerate missing requireAuth for backward compat
+  const auth = typeof requireAuth === "function" ? requireAuth() : (_req, _res, next) => next();
 
   // Per-endpoint rate limit: 30 req/min per user for chat (conscious.chat category)
   const chatRateLimit = perEndpointRateLimit ? perEndpointRateLimit("conscious.chat") : ((_req, _res, next) => next());
@@ -109,7 +113,7 @@ export default function registerChatRoutes(app, {
 
   // Chicken3: SSE streaming chat (additive; does not replace /api/chat)
   // POST /api/chat/feedback — record user thumbs up/down
-  app.post("/api/chat/feedback", asyncHandler(async (req, res) => {
+  app.post("/api/chat/feedback", auth, asyncHandler(async (req, res) => {
     try {
       const out = await runMacro("chat", "feedback", req.body, makeCtx(req));
       return res.json(out);
@@ -194,7 +198,7 @@ export default function registerChatRoutes(app, {
     }
   });
 
-  app.post("/api/session/optin", (req, res) => {
+  app.post("/api/session/optin", auth, (req, res) => {
     try {
       enforceEthosInvariant("optin");
       const b = req.body || {};
@@ -228,7 +232,7 @@ export default function registerChatRoutes(app, {
   }));
 
   // POST /api/chat/harvest — runs Phase 1 only, returns ranked DTU candidates
-  app.post("/api/chat/harvest", asyncHandler(async (req, res) => {
+  app.post("/api/chat/harvest", auth, asyncHandler(async (req, res) => {
     try {
       const out = await runMacro("chat", "harvest", req.body, makeCtx(req));
       return res.json(out);
@@ -259,7 +263,7 @@ export default function registerChatRoutes(app, {
   }));
 
   // POST /api/chat/forge/message — Forge DTU from chat message
-  app.post("/api/chat/forge/message", asyncHandler(async (req, res) => {
+  app.post("/api/chat/forge/message", auth, asyncHandler(async (req, res) => {
     try {
       const out = await runMacro("chat", "forge.message", req.body, makeCtx(req));
       return res.json(out);
@@ -270,7 +274,7 @@ export default function registerChatRoutes(app, {
 
   // ── Forge Artifact Actions ────────────────────────────────────────────
   // POST /api/chat/forge/save — Save forged DTU to substrate
-  app.post("/api/chat/forge/save", asyncHandler(async (req, res) => {
+  app.post("/api/chat/forge/save", auth, asyncHandler(async (req, res) => {
     try {
       const out = await runMacro("chat", "forge.save", req.body, makeCtx(req));
       return res.json(out);
@@ -280,7 +284,7 @@ export default function registerChatRoutes(app, {
   }));
 
   // POST /api/chat/forge/delete — Delete forged DTU completely
-  app.post("/api/chat/forge/delete", asyncHandler(async (req, res) => {
+  app.post("/api/chat/forge/delete", auth, asyncHandler(async (req, res) => {
     try {
       const out = await runMacro("chat", "forge.delete", req.body, makeCtx(req));
       return res.json(out);
@@ -290,7 +294,7 @@ export default function registerChatRoutes(app, {
   }));
 
   // POST /api/chat/forge/list — Save and list on marketplace
-  app.post("/api/chat/forge/list", asyncHandler(async (req, res) => {
+  app.post("/api/chat/forge/list", auth, asyncHandler(async (req, res) => {
     try {
       const out = await runMacro("chat", "forge.list", req.body, makeCtx(req));
       return res.json(out);
@@ -300,7 +304,7 @@ export default function registerChatRoutes(app, {
   }));
 
   // POST /api/chat/forge/iterate — Iterate on existing forged artifact
-  app.post("/api/chat/forge/iterate", asyncHandler(async (req, res) => {
+  app.post("/api/chat/forge/iterate", auth, asyncHandler(async (req, res) => {
     try {
       const out = await runMacro("chat", "forge.iterate", req.body, makeCtx(req));
       return res.json(out);

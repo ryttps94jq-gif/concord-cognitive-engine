@@ -21781,6 +21781,7 @@ registerChatRoutes(app, {
   STATE, makeCtx, runMacro, enforceRequestInvariants, enforceEthosInvariant,
   uid, kernelTick, uiJson, _withAck, _extractReply, clamp, nowISO,
   saveStateDebounced, ETHOS_INVARIANTS, validate, perEndpointRateLimit,
+  requireAuth,
 });
 
 // ---- Domain Routes (extracted to routes/domain.js) ----
