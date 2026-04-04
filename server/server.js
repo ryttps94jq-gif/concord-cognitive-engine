@@ -53,6 +53,9 @@ import { buildConsolidatedArtifacts, budgetAwareStore, ARTIFACT_ROOT as _ARTIFAC
 import { initBudgetTimer } from "./lib/artifact-budget.js";
 import { initGarbageCollectionTimer } from "./lib/artifact-gc.js";
 import { initMemoryWatchdog, getMemoryPressureLevel } from "./lib/memory-pressure.js";
+import { callWithFallback, setLocalLLM, setSemanticCache, setMacroCache, getFallbackHealth } from "./lib/llm-fallback.js";
+import * as _llmLocal from "./lib/llm-local.js";
+import * as _macroResponseCache from "./lib/macro-response-cache.js";
 import "./lib/vocabularies.js";
 import { BoundedMap } from "./lib/bounded-map.js";
 import { httpMetricsMiddleware, getActiveRequests, installGlobalMetrics } from "./lib/http-metrics.js";
@@ -7306,6 +7309,8 @@ async function runMacro(domain, name, input, ctx) {
     throw macroErr;
   }
   try { fireHook(STATE, "macro:afterExecute", { domain, name, result }); } catch (e) { observe(e, "macro_hook_after_execute_main"); }
+  // Cache successful macro responses for LLM fallback Tier 4
+  try { _macroResponseCache.set(domain, name, input, result); } catch (_e) { /* best-effort cache */ }
 
   // Institutional memory: record significant actions
   if (!_domainNameAllowed && _method !== "GET") {
@@ -9484,7 +9489,12 @@ function makeCtx(req=null) {
         const subconsciousAvailable = BRAIN.subconscious && BRAIN.subconscious.enabled;
 
         if (!consciousAvailable && !subconsciousAvailable) {
-          return { ok: false, reason: "LLM not configured (no conscious or subconscious brain available)." };
+          // Tier 2-5 fallback: try llama.cpp, semantic cache, macro cache, graceful error
+          const fallbackResult = await callWithFallback("conscious", { system, messages, temperature, maxTokens, timeoutMs }, async () => null);
+          if (fallbackResult && fallbackResult.tier !== "graceful_error") {
+            return { ok: true, content: fallbackResult.text, brain: "fallback", source: fallbackResult.tier, _llmTier: fallbackResult.tier, confidence: fallbackResult.confidence };
+          }
+          return { ok: false, reason: "LLM not configured (no conscious or subconscious brain available).", _llmTier: "graceful_error" };
         }
 
         // ── Try conscious brain FIRST (primary, user-facing) ──
@@ -9559,10 +9569,16 @@ function makeCtx(req=null) {
             return { ok: true, content, raw: json, brain: "subconscious", source: "ollama" };
           }
           BRAIN.subconscious.stats.errors++;
-          return { ok: false, reason: "Both conscious and subconscious brains failed." };
+          // Both Ollama brains returned bad response — try Tier 2-5
+          const fb = await callWithFallback("conscious", { system, messages, temperature, maxTokens, timeoutMs }, async () => null);
+          if (fb && fb.tier !== "graceful_error") return { ok: true, content: fb.text, brain: "fallback", source: fb.tier, _llmTier: fb.tier, confidence: fb.confidence };
+          return { ok: false, reason: "Both conscious and subconscious brains failed.", _llmTier: "graceful_error" };
         } catch (err) {
           BRAIN.subconscious.stats.errors++;
-          return { ok: false, reason: `All local brains unavailable: ${String(err?.message || err)}` };
+          // Both Ollama brains threw exceptions — try Tier 2-5
+          const fb = await callWithFallback("conscious", { system, messages, temperature, maxTokens, timeoutMs }, async () => null);
+          if (fb && fb.tier !== "graceful_error") return { ok: true, content: fb.text, brain: "fallback", source: fb.tier, _llmTier: fb.tier, confidence: fb.confidence };
+          return { ok: false, reason: `All local brains unavailable: ${String(err?.message || err)}`, _llmTier: "graceful_error" };
         }
       }
     }
@@ -11317,6 +11333,15 @@ globalThis._concordSTATE = STATE;
 globalThis._repairObserve = observe;
 // Repair loop + guardian monitors now self-delay 3 minutes internally
 startRepairLoop();
+
+// ── LLM Fallback Chain Initialization ──
+// Wire tiered fallback: Ollama → llama.cpp → semantic cache → macro cache → graceful error
+try {
+  setLocalLLM(_llmLocal);
+  setSemanticCache({ check: (query, opts) => semanticCacheCheck(query, STATE.dtus, opts) });
+  setMacroCache(_macroResponseCache);
+  structuredLog("info", "llm_fallback_chain_initialized", getFallbackHealth());
+} catch (e) { structuredLog("warn", "llm_fallback_init_fail", { error: e?.message }); }
 
 // ── Ghost Fleet: Wire 18 Dormant Emergent Modules ─────────────────────────
 // Every module lazy-loaded, macros registered, ticks wired. Silent failure everywhere.
@@ -40081,7 +40106,16 @@ app.get("/api/brain/health", asyncHandler(async (_req, res) => {
     }
   }
   const allHealthy = Object.values(health).every(r => r.online);
-  res.json({ ok: true, allHealthy, ...health, brains: health });
+  const fallback = getFallbackHealth();
+  const llamaCppAvailable = typeof _llmLocal.isAvailable === "function" ? await _llmLocal.isAvailable() : false;
+  res.json({
+    ok: true,
+    allHealthy,
+    ...health,
+    brains: health,
+    fallbackChain: fallback,
+    llama_cpp_available: llamaCppAvailable,
+  });
 }));
 
 // ---- Entity Growth, Exploration & Hive APIs ----
