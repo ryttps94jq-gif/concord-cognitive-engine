@@ -15,7 +15,7 @@ const nextConfig = {
       '@tiptap/starter-kit',
     ],
   },
-  // Security headers (CSP is now set in middleware.ts with per-request nonces)
+  // Security headers (CSP nonces were removed — they block Next.js inline scripts)
   async headers() {
     return [
       {

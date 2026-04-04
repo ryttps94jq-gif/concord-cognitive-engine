@@ -989,7 +989,7 @@ class CircuitBreaker {
 
 // Shared breakers for external services
 const BREAKERS = {
-  ollama: new CircuitBreaker("ollama", { threshold: 5, resetMs: 30000 }),
+  ollama: new CircuitBreaker("ollama", { threshold: 5, resetMs: 15000 }),
   stripe: new CircuitBreaker("stripe", { threshold: 3, resetMs: 60000 }),
 };
 
@@ -5403,6 +5403,37 @@ const _SLIDING_WINDOW = {
 };
 setInterval(() => _SLIDING_WINDOW.cleanup(), 300000);
 
+// ---- Session + Backup Cleanup (prevent unbounded growth) ----
+// Every 30 minutes: evict sessions inactive for 24h
+setInterval(() => {
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+  let cleaned = 0;
+  for (const [id, sess] of STATE.sessions) {
+    const lastActive = new Date(sess.lastActivity || sess.updatedAt || sess.createdAt || 0).getTime();
+    if (lastActive < cutoff) {
+      STATE.sessions.delete(id);
+      cleaned++;
+    }
+  }
+  if (cleaned > 0) structuredLog("debug", "session_cleanup", { cleaned, remaining: STATE.sessions.size });
+}, 30 * 60 * 1000);
+
+// On startup: keep only last 7 backup directories
+try {
+  const backupDir = path.join(DATA_DIR, "backups");
+  if (fs.existsSync(backupDir)) {
+    const dirs = fs.readdirSync(backupDir).filter(d => {
+      try { return fs.statSync(path.join(backupDir, d)).isDirectory(); } catch { return false; }
+    }).sort();
+    if (dirs.length > 7) {
+      for (const d of dirs.slice(0, -7)) {
+        fs.rmSync(path.join(backupDir, d), { recursive: true, force: true });
+      }
+      structuredLog("info", "backup_cleanup", { removed: dirs.length - 7, kept: 7 });
+    }
+  }
+} catch (_e) { /* ignore backup cleanup errors */ }
+
 // ============================================================================
 // END WAVE 1: PRODUCTION READINESS
 // ============================================================================
@@ -6967,6 +6998,13 @@ async function runMacro(domain, name, input, ctx) {
     admin: new Set(["dashboard", "stats", "metrics", "audit", "logs", "queue", "backup", "ssl", "governance-rejections", "repair"]),
     heartbeat: new Set(["status", "history", "metrics"]),
     ai: new Set(["search", "gaps", "embeddings"]),
+    context: new Set(["query", "status", "profiles", "metrics"]),
+    persona: new Set(["list", "get", "active"]),
+    verify: new Set(["status", "run", "get"]),
+    export: new Set(["csv", "json", "full", "run"]),
+    autotag: new Set(["status", "run"]),
+    synth: new Set(["status", "run"]),
+    experiment: new Set(["list", "get", "status"]),
     feedback: new Set(["aggregate"]),
     artifact: new Set(["info", "thumbnail"]),
     // Missing frontend domains (three-gate audit scan)
@@ -12031,7 +12069,7 @@ async function callBrain(brainName, prompt, options = {}) {
  * @param {number} maxDTUs - Maximum DTUs to include
  * @returns {string} Formatted context string
  */
-async function buildBrainContext(query, lens = null, maxDTUs = 10, sessionId = null, userId = null) {
+async function buildBrainContext(query, lens = null, maxDTUs = 25, sessionId = null, userId = null) {
   // Sovereignty: if userId provided, route through scoped context
   if (userId && userId !== "anon") {
     try {
