@@ -318,6 +318,38 @@ function routeToStores(event: SocketEvent, data: unknown) {
       }
       break;
 
+    // Resonance update → lattice store (topology stats)
+    case 'resonance:update':
+      if (d.nodes !== undefined || d.edges !== undefined || d.clusters !== undefined) {
+        useLatticeStore.getState().setTopologyStats({
+          nodes: (d.nodes as number) ?? useLatticeStore.getState().topologyStats.nodes,
+          edges: (d.edges as number) ?? useLatticeStore.getState().topologyStats.edges,
+          clusters: (d.clusters as number) ?? useLatticeStore.getState().topologyStats.clusters,
+        });
+      }
+      break;
+
+    // Domain insight → lattice store (active domains)
+    case 'agent:domain_insight':
+      if (d.domains && Array.isArray(d.domains)) {
+        useLatticeStore.getState().setActiveDomains(d.domains as string[]);
+      } else if (d.domain && typeof d.domain === 'string') {
+        const current = useLatticeStore.getState().activeDomains;
+        if (!current.includes(d.domain as string)) {
+          useLatticeStore.getState().setActiveDomains([...current, d.domain as string]);
+        }
+      }
+      break;
+
+    // Agent insights → lattice store (knowledge gaps)
+    case 'agent:insights':
+      if (d.knowledgeGaps && Array.isArray(d.knowledgeGaps)) {
+        useLatticeStore.getState().setKnowledgeGaps(
+          d.knowledgeGaps as Array<{ id: string; domain: string; description: string; severity: number; discoveredAt: string }>
+        );
+      }
+      break;
+
     // Meta-derivation → sovereign store
     case 'lattice:meta:derived':
     case 'lattice:meta:convergence':

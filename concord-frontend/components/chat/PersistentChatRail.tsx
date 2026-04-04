@@ -44,6 +44,7 @@ import {
   Maximize2,
   Layers,
   Database,
+  Archive,
 } from 'lucide-react';
 
 // ── Mode system imports ─────────────────────────────────────────
@@ -771,6 +772,25 @@ export function PersistentChatRail({
             >
               <Database className="w-2.5 h-2.5" />
               {lastDtuCount} DTUs
+            </button>
+          )}
+          {/* Conversation memory stats indicator */}
+          {memoryStats && (
+            <button
+              onClick={memoryForceCompress}
+              disabled={memoryCompressing}
+              className={cn(
+                'flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full border transition-colors',
+                memoryCompressing
+                  ? 'text-amber-400 bg-amber-400/10 border-amber-400/20 animate-pulse'
+                  : 'text-zinc-400 bg-zinc-800 border-zinc-700 hover:text-zinc-300 hover:bg-zinc-700',
+              )}
+              title={memoryCompressing
+                ? 'Compressing memory...'
+                : `${memoryStats.activeMessages} msgs in window (${memoryStats.windowUtilization}) | ${memoryStats.compressionCycles} compressions | Click to compress`}
+            >
+              <Archive className="w-2.5 h-2.5" />
+              {memoryCompressing ? 'Compressing...' : `${memoryStats.activeMessages} msgs`}
             </button>
           )}
         </div>
