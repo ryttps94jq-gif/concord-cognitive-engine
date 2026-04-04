@@ -43,10 +43,11 @@ interface Progression {
 interface NPC {
   id: string;
   name: string;
-  type: string;
+  type: 'entity' | 'guard' | 'merchant' | 'quest_giver' | 'civilian';
   position: { x: number; y: number };
   district: string;
   questAvailable?: boolean;
+  questComplete?: boolean;
 }
 
 export default function WorldLensPage() {

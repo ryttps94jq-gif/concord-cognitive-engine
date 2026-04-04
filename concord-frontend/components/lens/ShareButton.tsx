@@ -8,7 +8,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import { Share2, Check, Link2 } from 'lucide-react';
+import { Check, Link2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ShareButtonProps {
@@ -62,7 +62,7 @@ export function ShareButton({
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
-  }, [shareUrl, title, contentType]);
+  }, [shareUrl, title]);
 
   const Icon = copied ? Check : Link2;
   const label = copied ? 'Copied!' : 'Share';
