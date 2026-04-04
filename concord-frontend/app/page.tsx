@@ -50,10 +50,21 @@ export default function HomePage() {
             </span>
           </h1>
 
-          <p className="text-xl text-gray-400 max-w-2xl mx-auto mb-12 text-center">
+          <p className="text-xl text-gray-400 max-w-2xl mx-auto mb-8 text-center">
             A sovereign knowledge operating system that grows with you.
-            Your thoughts never leave your control. No ads. No extraction. No surveillance.
+            Your thoughts never leave your control.
           </p>
+
+          {/* Trust Signal */}
+          <div className="flex flex-col items-center gap-1.5 mb-12">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm font-semibold">
+              <span className="px-4 py-2 rounded-lg bg-neon-cyan/10 border border-neon-cyan/20 text-neon-cyan text-center">No ads. Ever.</span>
+              <span className="px-4 py-2 rounded-lg bg-neon-blue/10 border border-neon-blue/20 text-neon-blue text-center">No subscriptions.</span>
+              <span className="px-4 py-2 rounded-lg bg-neon-purple/10 border border-neon-purple/20 text-neon-purple text-center">No data extraction.</span>
+              <span className="px-4 py-2 rounded-lg bg-neon-green/10 border border-neon-green/20 text-neon-green text-center">Free.</span>
+            </div>
+            <p className="text-xs text-gray-500 mt-2">Not a promise — it&apos;s architecture. The sovereignty lock makes it mathematically enforced.</p>
+          </div>
 
           <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-20">
             <div className="bg-lattice-surface border border-lattice-border rounded-xl p-6">

@@ -15,6 +15,7 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -68,6 +69,12 @@ export default function RegisterPage() {
             <span className="text-3xl font-bold text-white">Concordos</span>
           </Link>
           <p className="text-gray-400 mt-3">Create your sovereign account</p>
+          <div className="flex items-center justify-center gap-3 mt-4 text-xs font-semibold">
+            <span className="px-2.5 py-1 rounded bg-neon-cyan/10 border border-neon-cyan/20 text-neon-cyan">No ads</span>
+            <span className="px-2.5 py-1 rounded bg-neon-blue/10 border border-neon-blue/20 text-neon-blue">No subscriptions</span>
+            <span className="px-2.5 py-1 rounded bg-neon-purple/10 border border-neon-purple/20 text-neon-purple">No data extraction</span>
+            <span className="px-2.5 py-1 rounded bg-neon-green/10 border border-neon-green/20 text-neon-green">Free</span>
+          </div>
         </div>
 
         {/* Form card */}
@@ -165,9 +172,25 @@ export default function RegisterPage() {
               />
             </div>
 
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={agreedToTerms}
+                onChange={(e) => setAgreedToTerms(e.target.checked)}
+                required
+                className="mt-1 rounded border-lattice-border bg-lattice-deep accent-neon-cyan"
+              />
+              <span className="text-xs text-gray-400">
+                I agree to the{' '}
+                <Link href="/legal/terms" target="_blank" className="text-neon-cyan hover:underline">Terms of Service</Link>
+                {' '}and{' '}
+                <Link href="/legal/privacy" target="_blank" className="text-neon-cyan hover:underline">Privacy Policy</Link>
+              </span>
+            </label>
+
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !agreedToTerms}
               className="w-full py-3 bg-gradient-to-r from-neon-cyan to-neon-blue rounded-lg text-white font-semibold hover:shadow-lg hover:shadow-neon-cyan/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {loading ? (
