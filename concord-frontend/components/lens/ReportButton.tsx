@@ -36,7 +36,7 @@ interface ReportButtonProps {
 export function ReportButton({
   contentId,
   contentType = 'content',
-  creatorId,
+  creatorId: _creatorId,
   compact = false,
   className,
 }: ReportButtonProps) {

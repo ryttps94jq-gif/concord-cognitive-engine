@@ -182,7 +182,7 @@ export function ContentPublisher({
   // ── External share ─────────────────────────────────────────────────────────
 
   const handleExternal = useCallback(async (platform: ExternalPlatform) => {
-    const text = `${title}\n\n${postText || description}`;
+    const _text = `${title}\n\n${postText || description}`;
     const hashtags = tags.slice(0, 3).map(t => `#${t}`).join(' ');
 
     if (platform === 'link') {

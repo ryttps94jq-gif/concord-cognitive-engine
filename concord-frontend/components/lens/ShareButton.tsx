@@ -8,7 +8,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import { Share2, Link2, Check } from 'lucide-react';
+import { Share2, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ShareButtonProps {
@@ -21,7 +21,7 @@ interface ShareButtonProps {
 
 export function ShareButton({
   contentId,
-  contentType = 'content',
+  contentType: _contentType = 'content',
   title,
   compact = false,
   className,

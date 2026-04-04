@@ -391,7 +391,7 @@ export default function MessagesPage() {
     refetchInterval: 30000,
   });
 
-  const conversations = conversationsData || [];
+  const conversations = useMemo(() => conversationsData || [], [conversationsData]);
 
   // Get active conversation metadata
   const activeConversation = useMemo(
