@@ -194,9 +194,9 @@ export function startAutoFlush(): void {
 
   _autoFlushCleanup = onOnlineStatusChange(async (online) => {
     if (online) {
-      console.log('[OfflineQueue] Online — flushing queue...');
+      console.debug('[OfflineQueue] Online — flushing queue...');
       const result = await flushQueue();
-      console.log(`[OfflineQueue] Flushed: ${result.synced} synced, ${result.failed} failed`);
+      console.debug(`[OfflineQueue] Flushed: ${result.synced} synced, ${result.failed} failed`);
     }
   });
 }

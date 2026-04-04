@@ -194,7 +194,6 @@ export function FractalEmpireExplorer({
       const y = (e.clientY - rect.top - dimensions.height / 2 - offset.y) / zoom;
 
       // Would implement proper hit testing here
-      console.log('Click at fractal coords:', x, y);
     }
   };
 

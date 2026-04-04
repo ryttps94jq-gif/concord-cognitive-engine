@@ -44,13 +44,13 @@ export function getSocket(): Socket {
 
     // Connection event handlers
     socket.on('connect', () => {
-      console.log('[Socket] Connected:', socket?.id);
+      console.debug('[Socket] Connected:', socket?.id);
       // Reset sequence tracking on reconnect
       Object.keys(_lastSeq).forEach(k => delete _lastSeq[k]);
     });
 
     socket.on('disconnect', (reason) => {
-      console.log('[Socket] Disconnected:', reason);
+      console.debug('[Socket] Disconnected:', reason);
     });
 
     socket.on('connect_error', (error) => {
@@ -63,7 +63,7 @@ export function getSocket(): Socket {
 
     // Handle hello message from server
     socket.on('hello', (data) => {
-      console.log('[Socket] Server hello:', data);
+      console.debug('[Socket] Server hello:', data);
       // ---- Clock Normalization (Category 4: Offline Sync) ----
       if (data?.ts) {
         updateClockOffset(data.ts);

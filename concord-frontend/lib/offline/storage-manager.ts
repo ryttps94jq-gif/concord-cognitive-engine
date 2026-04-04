@@ -274,7 +274,7 @@ export async function checkAndEvict(): Promise<StorageUsage> {
   if (usage.overBudget) {
     console.warn(`[Storage] Over budget: ${usage.totalMB}MB / ${STORAGE_BUDGET_MB}MB. Evicting...`);
     const result = await evict();
-    console.log(`[Storage] Evicted ${result.evictedCount} items, freed ${Math.round(result.freedBytes / 1024)}KB`);
+    console.debug(`[Storage] Evicted ${result.evictedCount} items, freed ${Math.round(result.freedBytes / 1024)}KB`);
   }
 
   return usage;
