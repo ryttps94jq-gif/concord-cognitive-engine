@@ -167,12 +167,20 @@ function VoteIcon({ vote }: { vote: 'approve' | 'reject' | 'abstain' }) {
   return <Minus className="w-3.5 h-3.5 text-gray-500" />;
 }
 
+const CONFIDENCE_BAR_COLORS: Record<string, string> = {
+  red: 'bg-red-500',
+  blue: 'bg-blue-500',
+  orange: 'bg-orange-500',
+  green: 'bg-green-500',
+  yellow: 'bg-yellow-500',
+};
+
 function ConfidenceBar({ value, color }: { value: number; color: string }) {
   return (
     <div className="flex items-center gap-2 w-full">
       <div className="flex-1 h-2 bg-lattice-void rounded-full overflow-hidden">
         <div
-          className={cn('h-full rounded-full transition-all', `bg-${color}-500`)}
+          className={cn('h-full rounded-full transition-all', CONFIDENCE_BAR_COLORS[color] || 'bg-gray-500')}
           style={{ width: `${Math.round(value * 100)}%` }}
         />
       </div>

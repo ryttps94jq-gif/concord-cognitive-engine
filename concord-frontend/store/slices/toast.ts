@@ -13,19 +13,35 @@ export interface ToastSlice {
   removeToast: (id: string) => void;
 }
 
-export const createToastSlice: StateCreator<ToastSlice, [], [], ToastSlice> = (set) => ({
+const toastTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+export const createToastSlice: StateCreator<ToastSlice, [], [], ToastSlice> = (set, get) => ({
   toasts: [],
 
-  addToast: (toast) =>
+  addToast: (toast) => {
+    const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     set((state) => ({
       toasts: [
         ...state.toasts,
-        { ...toast, id: `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` },
+        { ...toast, id },
       ],
-    })),
+    }));
+    const duration = toast.duration ?? 5000;
+    const timer = setTimeout(() => {
+      toastTimers.delete(id);
+      get().removeToast(id);
+    }, duration);
+    toastTimers.set(id, timer);
+  },
 
-  removeToast: (id) =>
+  removeToast: (id) => {
+    const timer = toastTimers.get(id);
+    if (timer) {
+      clearTimeout(timer);
+      toastTimers.delete(id);
+    }
     set((state) => ({
       toasts: state.toasts.filter((t) => t.id !== id),
-    })),
+    }));
+  },
 });

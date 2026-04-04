@@ -1,6 +1,6 @@
 // DTU (Discrete Thought Unit) types
 
-export type DTUTier = 'regular' | 'mega' | 'hyper' | 'shadow';
+export type DTUTier = 'regular' | 'mega' | 'hyper' | 'shadow' | 'archive';
 
 export interface DTU {
   id: string;

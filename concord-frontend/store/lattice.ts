@@ -230,6 +230,7 @@ export const selectDTUsByTier = (
     mega: 0,
     hyper: 0,
     shadow: 0,
+    archive: 0,
   };
 
   dtuList.forEach((id) => {

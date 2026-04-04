@@ -1,6 +1,31 @@
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { updateClockOffset } from '../offline/db';
 import { useUIStore } from '@/store/ui';
+import { fromAxiosError } from '@/lib/errors';
+import type {
+  CreateDTURequest,
+  UpdateDTURequest,
+  ChatRequest,
+  VoteRequest,
+  CredibilityRequest,
+  ForgeManualRequest,
+  ForgeHybridRequest,
+  ForgeAutoRequest,
+  ForgeFromSourceRequest,
+  GraphQueryRequest,
+  GraphVisualParams,
+  GraphForceParams,
+  PersonaSpeakRequest,
+  PersonaAnimateRequest,
+  PluginSubmitRequest,
+  PluginInstallRequest,
+  PluginReviewRequest,
+  CreateWebhookRequest,
+  CreateAutomationRequest,
+  LoginRequest,
+  RegisterRequest,
+  CreateApiKeyRequest,
+} from './generated-types';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5050';
 
@@ -251,7 +276,7 @@ api.interceptors.response.use(
         }
       }
     }
-    return Promise.reject(error);
+    return Promise.reject(fromAxiosError(error));
   }
 );
 
@@ -287,18 +312,9 @@ export const apiHelpers = {
     syncFromGlobal: (dtuId: string) =>
       api.post('/api/dtus/sync-from-global', { dtuId }),
 
-    create: (data: {
-      title?: string;
-      content: string;
-      tags?: string[];
-      source?: string;
-      parents?: string[];
-      isGlobal?: boolean;
-      meta?: Record<string, unknown>;
-      declaredSourceType?: string;
-    }) => api.post('/api/dtus', data),
+    create: (data: CreateDTURequest) => api.post('/api/dtus', data),
 
-    update: (id: string, patch: Record<string, unknown>) =>
+    update: (id: string, patch: UpdateDTURequest) =>
       api.patch(`/api/dtus/${id}`, patch),
 
     get: (id: string) => api.get(`/api/dtus/${id}`),
@@ -355,11 +371,11 @@ export const apiHelpers = {
 
   // Chat operations
   chat: {
-    send: (message: string, mode: string = 'overview') =>
-      api.post('/api/chat?full=1', { message, mode }),
+    send: (message: string, mode: ChatRequest['mode'] = 'overview') =>
+      api.post('/api/chat?full=1', { message, mode } satisfies ChatRequest),
 
-    ask: (message: string, mode: string = 'overview') =>
-      api.post('/api/ask?full=1', { message, mode }),
+    ask: (message: string, mode: ChatRequest['mode'] = 'overview') =>
+      api.post('/api/ask?full=1', { message, mode } satisfies ChatRequest),
 
     feedback: (data: { sessionId: string; rating: 'up' | 'down' | number; messageIndex?: number; comment?: string }) =>
       api.post('/api/chat/feedback', data),
@@ -393,13 +409,13 @@ export const apiHelpers = {
 
   // Forge (DTU creation modes)
   forge: {
-    manual: (data: { title?: string; content: string; tags?: string[]; source?: string }) =>
+    manual: (data: ForgeManualRequest) =>
       api.post('/api/forge/manual', data),
-    hybrid: (data: { title?: string; content: string; tags?: string[]; source?: string }) =>
+    hybrid: (data: ForgeHybridRequest) =>
       api.post('/api/forge/hybrid', data),
-    auto: (data: { prompt: string; tags?: string[] }) =>
+    auto: (data: ForgeAutoRequest) =>
       api.post('/api/forge/auto', data),
-    fromSource: (data: { url?: string; text?: string; tags?: string[] }) =>
+    fromSource: (data: ForgeFromSourceRequest) =>
       api.post('/api/forge/fromSource', data),
   },
 
@@ -415,20 +431,20 @@ export const apiHelpers = {
     list: () => api.get('/api/personas'),
 
     speak: (personaId: string, text: string) =>
-      api.post(`/api/personas/${personaId}/speak`, { text }),
+      api.post(`/api/personas/${personaId}/speak`, { text } satisfies PersonaSpeakRequest),
 
-    animate: (personaId: string, kind: string = 'talk') =>
-      api.post(`/api/personas/${personaId}/animate`, { kind }),
+    animate: (personaId: string, kind: PersonaAnimateRequest['kind'] = 'talk') =>
+      api.post(`/api/personas/${personaId}/animate`, { kind } satisfies PersonaAnimateRequest),
   },
 
   // Council (review + proposal voting)
   council: {
     reviewGlobal: () => api.post('/api/council/review-global', {}),
     weekly: () => api.post('/api/council/weekly', {}),
-    vote: (data: { dtuId?: string; proposalId?: string; vote: 'approve' | 'reject'; reason?: string }) =>
+    vote: (data: VoteRequest & { proposalId?: string }) =>
       api.post('/api/council/vote', data),
     tally: (dtuId: string) => api.get(`/api/council/tally/${dtuId}`),
-    credibility: (data: { dtuId: string }) =>
+    credibility: (data: CredibilityRequest) =>
       api.post('/api/council/credibility', data),
     proposePromotion: (dtuId: string, reason?: string) =>
       api.post('/api/council/propose-promotion', { dtuId, reason }),
@@ -709,21 +725,21 @@ export const apiHelpers = {
     listings: () => api.get('/api/marketplace/listings'),
     browse: (params?: { search?: string; category?: string; page?: number }) =>
       api.get('/api/marketplace/browse', { params }),
-    submit: (data: { name: string; githubUrl: string; description?: string; category?: string }) =>
+    submit: (data: PluginSubmitRequest) =>
       api.post('/api/marketplace/submit', data),
-    install: (data: { pluginId?: string; fromGithub?: boolean; githubUrl?: string }) =>
+    install: (data: PluginInstallRequest) =>
       api.post('/api/marketplace/install', data),
     installed: () => api.get('/api/marketplace/installed'),
-    review: (data: { pluginId: string; rating: number; comment?: string }) =>
+    review: (data: PluginReviewRequest) =>
       api.post('/api/marketplace/review', data),
   },
 
   // Graph Queries
   graph: {
-    query: (dsl: string) => api.post('/api/graph/query', { dsl }),
-    visual: (params?: { tier?: string; limit?: number; includeShadow?: boolean }) =>
+    query: (dsl: string) => api.post('/api/graph/query', { dsl } satisfies GraphQueryRequest),
+    visual: (params?: GraphVisualParams & { includeShadow?: boolean }) =>
       api.get('/api/graph/visual', { params }),
-    force: (params?: { centerNode?: string; depth?: number; maxNodes?: number }) =>
+    force: (params?: GraphForceParams) =>
       api.get('/api/graph/force', { params }),
   },
 
@@ -1136,10 +1152,10 @@ export const apiHelpers = {
 
   // Auth - uses httpOnly cookies (token also returned for non-browser clients)
   auth: {
-    login: (data: { username?: string; email?: string; password: string }) =>
+    login: (data: LoginRequest) =>
       api.post('/api/auth/login', data),
 
-    register: (data: { username: string; email: string; password: string }) =>
+    register: (data: RegisterRequest) =>
       api.post('/api/auth/register', data),
 
     logout: () => api.post('/api/auth/logout', {}),

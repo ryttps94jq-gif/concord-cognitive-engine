@@ -46,12 +46,18 @@ export function useApi<T = unknown>(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const mountedRef = useRef(true);
+  const bodyRef = useRef(body);
+  const bodyKey = JSON.stringify(body);
+
+  useEffect(() => {
+    bodyRef.current = body;
+  }, [bodyKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetch = useCallback(async () => {
     try {
       setLoading(true);
       const resp = method === 'post'
-        ? await api.post(endpoint, body)
+        ? await api.post(endpoint, bodyRef.current)
         : await api.get(endpoint);
       if (mountedRef.current) {
         setData(resp.data);
@@ -66,7 +72,7 @@ export function useApi<T = unknown>(
         setLoading(false);
       }
     }
-  }, [endpoint, method, body]);
+  }, [endpoint, method, bodyKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     mountedRef.current = true;

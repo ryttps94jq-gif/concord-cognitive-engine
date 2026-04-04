@@ -67,12 +67,12 @@ const AGENT_TYPES = [
   { value: 'synthesis', label: 'Synthesis', icon: Layers, description: 'Synthesizes cross-domain insights' },
 ] as const;
 
-const SEVERITY_COLORS: Record<string, string> = {
-  info: 'neon-blue',
-  low: 'neon-cyan',
-  medium: 'neon-yellow',
-  high: 'orange-400',
-  critical: 'red-400',
+const SEVERITY_BADGE_CLASSES: Record<string, string> = {
+  info: 'bg-neon-blue/20 text-neon-blue',
+  low: 'bg-neon-cyan/20 text-neon-cyan',
+  medium: 'bg-yellow-400/20 text-yellow-400',
+  high: 'bg-orange-400/20 text-orange-400',
+  critical: 'bg-red-400/20 text-red-400',
 };
 
 const _SEVERITY_ORDER: Record<string, number> = {
@@ -83,8 +83,8 @@ const _SEVERITY_ORDER: Record<string, number> = {
   info: 4,
 };
 
-function severityColor(sev: string): string {
-  return SEVERITY_COLORS[sev] || 'gray-400';
+function severityBadgeClass(sev: string): string {
+  return SEVERITY_BADGE_CLASSES[sev] || 'bg-gray-400/20 text-gray-400';
 }
 
 function agentTypeIcon(type: string) {
@@ -500,7 +500,7 @@ export default function AgentMonitorPage() {
                                   <span
                                     className={cn(
                                       'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0',
-                                      `bg-${severityColor(f.severity)}/20 text-${severityColor(f.severity)}`,
+                                      severityBadgeClass(f.severity),
                                     )}
                                   >
                                     {f.severity}
@@ -582,7 +582,7 @@ export default function AgentMonitorPage() {
                       <span
                         className={cn(
                           'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium',
-                          `bg-${severityColor(finding.severity)}/20 text-${severityColor(finding.severity)}`,
+                          severityBadgeClass(finding.severity),
                         )}
                       >
                         {finding.severity}
