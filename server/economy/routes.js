@@ -1287,7 +1287,7 @@ export function registerEconomyRoutes(app, db, opts = {}) {
           "SELECT COUNT(*) as c FROM economy_ledger WHERE from_user_id = ? AND type IN ('TRANSFER', 'MARKETPLACE_PURCHASE') AND status = 'complete'"
         ).get(userId)?.c || 0;
         community = transfers;
-      } catch { /* */ }
+      } catch (err) { console.warn('[economy/routes] reputation: could not count community activity', { userId, err: err.message }); }
 
       // Score formula: weighted sum, capped at 1000
       const citationScore = Math.min(citations * 5, 250);
