@@ -9,9 +9,11 @@ metadata:
     app.kubernetes.io/part-of: concord-cognitive-engine
 spec:
   accessModes:
-    - ReadWriteOnce
+    - ReadWriteMany
   resources:
     requests:
       storage: 100Gi
+  # ReadWriteMany enables multi-replica access (requires NFS, EFS, or similar CSI driver).
+  # For single-node deployments, ReadWriteOnce also works.
   # Uncomment and set a storageClassName if your cluster requires it:
-  # storageClassName: gp3
+  # storageClassName: efs-sc
