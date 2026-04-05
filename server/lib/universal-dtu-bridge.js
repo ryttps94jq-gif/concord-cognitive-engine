@@ -2,7 +2,8 @@
 // Universal bridge for converting any lens data to/from DTU format.
 // Wraps any artifact into a DTU container using the existing binary format.
 
-import { encodeDTU, decodeDTU, verifyDTU, DTU_FORMAT_CONSTANTS } from "../economy/dtu-format.js";
+import { encodeDTU, decodeDTU, verifyDTU } from "../economy/dtu-format.js";
+import { DTU_FORMAT_CONSTANTS } from "./dtu-format-constants.js";
 
 const { PRIMARY_TYPES } = DTU_FORMAT_CONSTANTS;
 
