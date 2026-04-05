@@ -129,6 +129,10 @@ function _evictOldSessions(STATE) {
     const age = now - (session.createdAt || session.startedAt || 0);
     if (age > SESSION_EVICT_AGE_MS) {
       STATE.sessions.delete(id);
+      // Clean up orphaned styleVectors for this session
+      if (STATE.styleVectors && typeof STATE.styleVectors.delete === "function") {
+        STATE.styleVectors.delete(id);
+      }
       evicted++;
     }
   });
@@ -180,6 +184,9 @@ function _aggressiveEviction(STATE) {
     const age = now - (session.createdAt || session.startedAt || 0);
     if (age > SHORT_AGE) {
       STATE.sessions.delete(id);
+      if (STATE.styleVectors && typeof STATE.styleVectors.delete === "function") {
+        STATE.styleVectors.delete(id);
+      }
       evicted++;
     }
   });
@@ -194,6 +201,40 @@ function _aggressiveEviction(STATE) {
   // Trim logs
   if (STATE.logs?.length > 1000) {
     STATE.logs.splice(0, STATE.logs.length - 500);
+  }
+
+  // Trim unbounded queues
+  if (STATE.queues?.notifications?.length > 500) {
+    STATE.queues.notifications.splice(0, STATE.queues.notifications.length - 200);
+  }
+  if (STATE.queues?.macroProposals?.length > 200) {
+    STATE.queues.macroProposals.splice(0, STATE.queues.macroProposals.length - 100);
+  }
+  if (STATE.queues?.synthesis?.length > 200) {
+    STATE.queues.synthesis.splice(0, STATE.queues.synthesis.length - 100);
+  }
+
+  // Trim globalThread queues
+  if (STATE.globalThread?.councilQueue?.length > 200) {
+    // Keep only pending + most recent 100 resolved
+    const pending = STATE.globalThread.councilQueue.filter(s => s.status === "pending");
+    const resolved = STATE.globalThread.councilQueue.filter(s => s.status !== "pending").slice(-100);
+    STATE.globalThread.councilQueue = [...pending, ...resolved];
+  }
+  if (STATE.globalThread?.acceptedContributions?.length > 500) {
+    STATE.globalThread.acceptedContributions = STATE.globalThread.acceptedContributions.slice(-200);
+  }
+
+  // Prune completed/failed jobs
+  if (STATE.jobs && typeof STATE.jobs.forEach === "function") {
+    const toPrune = [];
+    STATE.jobs.forEach((j, id) => {
+      if (j && (j.status === "succeeded" || j.status === "failed")) toPrune.push(id);
+    });
+    for (const id of toPrune) STATE.jobs.delete(id);
+    if (toPrune.length > 0) {
+      logger.log("warn", "lib", "memory_watchdog_jobs_pruned", { pruned: toPrune.length });
+    }
   }
 
   if (evicted > 0) {

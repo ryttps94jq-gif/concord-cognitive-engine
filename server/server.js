@@ -21823,6 +21823,8 @@ async function runJob(j) {
 }
 
 let _jobTimer = null;
+const _JOB_POLL_MS = 5000; // 5s polling — was 250ms which burned CPU scanning the full jobs Map 4x/sec
+const _JOB_MAX_COMPLETED = 500; // prune completed/failed jobs beyond this count
 function startJobWorker() {
   if (_jobTimer) clearInterval(_jobTimer);
   _jobTimer = setInterval(async () => {
@@ -21835,9 +21837,19 @@ function startJobWorker() {
       const next = runnable[0];
       if (!next) return;
       await runJob(next);
+
+      // Prune old completed/failed jobs to prevent unbounded growth
+      const done = Array.from(STATE.jobs.entries())
+        .filter(([, j]) => j && (j.status === "succeeded" || j.status === "failed"))
+        .sort((a,b) => (a[1].updatedAt || "").localeCompare(b[1].updatedAt || ""));
+      if (done.length > _JOB_MAX_COMPLETED) {
+        const toRemove = done.slice(0, done.length - _JOB_MAX_COMPLETED);
+        for (const [id] of toRemove) STATE.jobs.delete(id);
+      }
     } catch (e) { structuredLog("error", "job_worker_tick_failed", { error: String(e) }); }
-  }, 250);
-  log("jobs.worker", "Job worker started", { everyMs: 250 });
+  }, _JOB_POLL_MS);
+  if (_jobTimer.unref) _jobTimer.unref();
+  log("jobs.worker", "Job worker started", { everyMs: _JOB_POLL_MS });
 }
 startJobWorker();
 
