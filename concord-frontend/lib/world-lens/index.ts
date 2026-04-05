@@ -31,3 +31,9 @@ export * from './snap-build-templates';
 
 // ── 3D Renderer Types ──────────────────────────────────────────────
 export * from './renderer-types';
+
+// ── Premium Features ──────────────────────────────────────────────
+export * from './premium-features-types';
+
+// ── Infrastructure ────────────────────────────────────────────────
+export * from './infrastructure-types';

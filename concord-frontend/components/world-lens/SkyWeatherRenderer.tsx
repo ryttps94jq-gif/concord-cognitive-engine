@@ -1,337 +1,639 @@
 'use client';
 
-import React, { useRef, useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useRef } from 'react';
 
 // ── Types ──────────────────────────────────────────────────────────
 
-type WeatherType = 'clear' | 'rain' | 'snow' | 'fog' | 'overcast' | 'storm';
-type SkyPeriod = 'dawn' | 'day' | 'dusk' | 'night';
-type Season = 'spring' | 'summer' | 'fall' | 'winter';
-type QualityLevel = 'low' | 'medium' | 'high' | 'ultra';
-
-interface SkyColors {
-  sky: string;
-  horizon: string;
-  sun: string | null;
-  ambientIntensity: number;
-  directionalIntensity: number;
-}
-
-interface WeatherConfig {
-  type: WeatherType;
-  intensity: number; // 0-1
-  windDirection: number; // degrees
-  windSpeed: number; // m/s
-}
+export type WeatherType = 'clear' | 'rain' | 'snow' | 'fog' | 'overcast' | 'storm';
+export type Season = 'spring' | 'summer' | 'autumn' | 'winter';
 
 interface SkyWeatherRendererProps {
-  timeOfDay?: number; // 0-24
-  weather?: WeatherConfig;
-  season?: Season;
-  quality?: QualityLevel;
-  onTimeChange?: (time: number) => void;
+  /** 0-24 continuous hour value (e.g. 14.5 = 2:30 PM) */
+  timeOfDay: number;
+  weather: WeatherType;
+  /** Wind direction in radians (0 = north, PI/2 = east) */
+  windDirection: number;
+  /** Wind speed in m/s */
+  windSpeed: number;
+  season: Season;
+  quality: 'low' | 'medium' | 'high' | 'ultra';
 }
 
-// ── Constants ──────────────────────────────────────────────────────
+// ── Sky Shader ──────────────────────────────────────────────────
 
-const SKY_COLORS: Record<SkyPeriod, SkyColors> = {
-  dawn:  { sky: '#ffa07a', horizon: '#ff6347', sun: '#ff4500', ambientIntensity: 0.3, directionalIntensity: 0.5 },
-  day:   { sky: '#87ceeb', horizon: '#b0e0e6', sun: '#ffffff', ambientIntensity: 0.6, directionalIntensity: 1.0 },
-  dusk:  { sky: '#ff6b6b', horizon: '#ff4500', sun: '#ff0000', ambientIntensity: 0.3, directionalIntensity: 0.4 },
-  night: { sky: '#0a0a2e', horizon: '#1a1a3e', sun: null, ambientIntensity: 0.08, directionalIntensity: 0.05 },
-};
+const SKY_VERTEX_SHADER = `
+  varying vec3 vWorldPosition;
+  varying vec2 vUv;
 
-const SHADOW_CONFIG = {
-  mapSize: 2048,
-  cascadeCount: 3,
-  maxDistance: 100,
-  bias: -0.0005,
-};
+  void main() {
+    vUv = uv;
+    vec4 worldPos = modelMatrix * vec4(position, 1.0);
+    vWorldPosition = worldPos.xyz;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
 
-const RAIN_CONFIG = {
-  lightCount: 2000,
-  heavyCount: 10000,
-  streakLength: 0.5,
-  splashEnabled: true,
-  wetSurfaceReflectivity: 0.8,
-};
+const SKY_FRAGMENT_SHADER = `
+  uniform float uTimeOfDay;  // 0-24
+  uniform vec3 uSunDirection;
+  uniform float uCloudCover;
+  uniform float uSeason;     // 0=spring, 1=summer, 2=autumn, 3=winter
 
-const SNOW_CONFIG = {
-  lightCount: 1000,
-  heavyCount: 5000,
-  driftSpeed: 0.3,
-  accumulationRate: 0.01,
-};
+  varying vec3 vWorldPosition;
+  varying vec2 vUv;
 
-const FOG_CONFIG = {
-  morningDensity: 0.015,
-  eveningDensity: 0.01,
-  normalDensity: 0.002,
-  riverProximityBonus: 0.005,
-};
+  // Color palette for time-of-day transitions
+  vec3 dawnColor   = vec3(0.95, 0.6, 0.3);   // Warm orange
+  vec3 dayColor    = vec3(0.4, 0.65, 0.95);   // Blue sky
+  vec3 duskColor   = vec3(0.85, 0.3, 0.2);    // Red/orange
+  vec3 nightColor  = vec3(0.05, 0.05, 0.15);  // Deep blue
 
-const PARTICLE_BUDGETS: Record<QualityLevel, number> = {
-  low: 2000,
-  medium: 5000,
+  vec3 getSkyColor(float t, float height) {
+    // t is 0-24 time of day
+    vec3 color;
+
+    if (t < 5.0) {
+      // Night
+      color = nightColor;
+    } else if (t < 7.0) {
+      // Dawn transition
+      float f = (t - 5.0) / 2.0;
+      color = mix(nightColor, dawnColor, f);
+    } else if (t < 8.5) {
+      // Dawn to day
+      float f = (t - 7.0) / 1.5;
+      color = mix(dawnColor, dayColor, f);
+    } else if (t < 16.5) {
+      // Full day
+      color = dayColor;
+    } else if (t < 18.0) {
+      // Day to dusk
+      float f = (t - 16.5) / 1.5;
+      color = mix(dayColor, duskColor, f);
+    } else if (t < 20.0) {
+      // Dusk to night
+      float f = (t - 18.0) / 2.0;
+      color = mix(duskColor, nightColor, f);
+    } else {
+      // Night
+      color = nightColor;
+    }
+
+    // Zenith darkening: sky is darker near horizon at night
+    float horizonFactor = smoothstep(0.0, 0.3, height);
+    if (t < 5.0 || t > 20.0) {
+      color = mix(color * 0.5, color, horizonFactor);
+    }
+
+    // Cloud cover darkening
+    color = mix(color, color * 0.6, uCloudCover * 0.4);
+
+    return color;
+  }
+
+  void main() {
+    // Height above horizon (normalized)
+    float height = normalize(vWorldPosition).y;
+    height = max(0.0, height);
+
+    vec3 skyColor = getSkyColor(uTimeOfDay, height);
+
+    // Sun/moon glow near horizon
+    float sunDot = max(0.0, dot(normalize(vWorldPosition), uSunDirection));
+    float sunGlow = pow(sunDot, 32.0) * 0.5;
+    float sunDisc = pow(sunDot, 256.0) * 2.0;
+
+    if (uTimeOfDay > 5.0 && uTimeOfDay < 20.0) {
+      // Daytime sun
+      skyColor += vec3(1.0, 0.9, 0.7) * (sunGlow + sunDisc);
+    } else {
+      // Nighttime moon (cooler tint)
+      float moonDot = max(0.0, dot(normalize(vWorldPosition), -uSunDirection));
+      float moonGlow = pow(moonDot, 64.0) * 0.3;
+      float moonDisc = pow(moonDot, 512.0) * 1.0;
+      skyColor += vec3(0.7, 0.8, 1.0) * (moonGlow + moonDisc);
+    }
+
+    gl_FragColor = vec4(skyColor, 1.0);
+  }
+`;
+
+// ── Constants ─────────────────────────────────────────────────────
+
+/** Rain particle count by quality */
+const RAIN_COUNTS: Record<string, number> = {
+  low: 5000,
+  medium: 7000,
   high: 10000,
-  ultra: 15000,
+  ultra: 10000,
 };
 
-// ── Helpers ────────────────────────────────────────────────────────
+/** Snow particle count by quality */
+const SNOW_COUNTS: Record<string, number> = {
+  low: 3000,
+  medium: 5000,
+  high: 8000,
+  ultra: 10000,
+};
 
-function getSkyPeriod(timeOfDay: number): SkyPeriod {
-  if (timeOfDay >= 5 && timeOfDay < 7) return 'dawn';
-  if (timeOfDay >= 7 && timeOfDay < 17) return 'day';
-  if (timeOfDay >= 17 && timeOfDay < 19) return 'dusk';
-  return 'night';
+const SHADOW_CASCADE_SIZE = 2048;
+const SHADOW_CASCADE_COUNT = 3;
+
+// ── Helper: compute sun/moon position from time ────────────────
+
+function computeSunDirection(timeOfDay: number): [number, number, number] {
+  // Sun orbits from east (6am) to west (18pm)
+  // Parametric: angle = (timeOfDay - 6) / 12 * PI for daytime arc
+  const t = ((timeOfDay - 6) / 12) * Math.PI;
+  const x = Math.cos(t);          // East-west
+  const y = Math.sin(t);          // Height above horizon
+  const z = Math.sin(t * 0.3) * 0.2; // Slight north-south drift
+
+  // Normalize
+  const len = Math.sqrt(x * x + y * y + z * z);
+  return [x / len, Math.max(y / len, -0.3), z / len];
 }
 
-function lerpColor(a: string, b: string, t: number): string {
-  const ah = parseInt(a.replace('#', ''), 16);
-  const bh = parseInt(b.replace('#', ''), 16);
-  const ar = (ah >> 16) & 0xff, ag = (ah >> 8) & 0xff, ab = ah & 0xff;
-  const br = (bh >> 16) & 0xff, bg = (bh >> 8) & 0xff, bb = bh & 0xff;
-  const rr = Math.round(ar + (br - ar) * t);
-  const rg = Math.round(ag + (bg - ag) * t);
-  const rb = Math.round(ab + (bb - ab) * t);
-  return `#${((rr << 16) | (rg << 8) | rb).toString(16).padStart(6, '0')}`;
+function computeAmbientIntensity(timeOfDay: number): number {
+  if (timeOfDay < 5 || timeOfDay > 20) return 0.1;  // Night
+  if (timeOfDay < 7) return 0.1 + ((timeOfDay - 5) / 2) * 0.4; // Dawn ramp
+  if (timeOfDay > 18) return 0.5 - ((timeOfDay - 18) / 2) * 0.4; // Dusk fade
+  return 0.5; // Day
 }
 
-function getSunPosition(timeOfDay: number): { x: number; y: number; z: number } {
-  const angle = ((timeOfDay - 6) / 12) * Math.PI; // rises at 6, peaks at 12, sets at 18
-  return {
-    x: Math.cos(angle) * 500,
-    y: Math.max(Math.sin(angle) * 500, -100),
-    z: -200,
-  };
+function computeSunIntensity(timeOfDay: number): number {
+  if (timeOfDay < 5 || timeOfDay > 20) return 0.0;
+  if (timeOfDay < 7) return ((timeOfDay - 5) / 2) * 1.2;
+  if (timeOfDay > 18) return (1 - (timeOfDay - 18) / 2) * 1.2;
+  return 1.2;
 }
 
-// ── Component ──────────────────────────────────────────────────────
+// ── Component ────────────────────────────────────────────────────
 
 export default function SkyWeatherRenderer({
-  timeOfDay = 14.0,
-  weather = { type: 'clear', intensity: 0, windDirection: 270, windSpeed: 8 },
-  season = 'spring',
-  quality = 'medium',
-  onTimeChange,
+  timeOfDay,
+  weather,
+  windDirection,
+  windSpeed,
+  season,
+  quality,
 }: SkyWeatherRendererProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const frameRef = useRef<number>(0);
-  const [initialized, setInitialized] = useState(false);
+  const skyGroupRef = useRef<unknown>(null);
+  const sunLightRef = useRef<unknown>(null);
+  const ambientLightRef = useRef<unknown>(null);
+  const particleSystemRef = useRef<unknown>(null);
 
-  const skyPeriod = useMemo(() => getSkyPeriod(timeOfDay), [timeOfDay]);
-  const skyColors = useMemo(() => SKY_COLORS[skyPeriod], [skyPeriod]);
-  const sunPos = useMemo(() => getSunPosition(timeOfDay), [timeOfDay]);
-  const maxParticles = useMemo(() => PARTICLE_BUDGETS[quality], [quality]);
-
-  // Particle count based on weather
-  const particleCount = useMemo(() => {
-    if (weather.type === 'rain') {
-      const base = weather.intensity > 0.5 ? RAIN_CONFIG.heavyCount : RAIN_CONFIG.lightCount;
-      return Math.min(base * weather.intensity, maxParticles);
-    }
-    if (weather.type === 'snow') {
-      const base = weather.intensity > 0.5 ? SNOW_CONFIG.heavyCount : SNOW_CONFIG.lightCount;
-      return Math.min(base * weather.intensity, maxParticles);
-    }
-    return 0;
-  }, [weather, maxParticles]);
-
-  // Fog density
-  const fogDensity = useMemo(() => {
-    let density = FOG_CONFIG.normalDensity;
-    if (timeOfDay >= 5 && timeOfDay < 8) density = FOG_CONFIG.morningDensity;
-    if (timeOfDay >= 18 && timeOfDay < 21) density = FOG_CONFIG.eveningDensity;
-    if (weather.type === 'fog') density += 0.02 * weather.intensity;
-    return density;
-  }, [timeOfDay, weather]);
-
-  // Snow accumulation tracking
-  const [snowAccumulation, setSnowAccumulation] = useState(0);
   useEffect(() => {
-    if (weather.type === 'snow' && weather.intensity > 0) {
-      const interval = setInterval(() => {
-        setSnowAccumulation(prev => Math.min(prev + SNOW_CONFIG.accumulationRate * weather.intensity, 1.0));
-      }, 1000);
-      return () => clearInterval(interval);
-    }
-  }, [weather]);
-
-  // Initialize Three.js sky system
-  useEffect(() => {
-    if (!canvasRef.current) return;
     let disposed = false;
 
-    const init = async () => {
-      try {
-        const THREE = await import('three');
-        if (disposed) return;
+    async function init() {
+      const THREE = await import('three');
+      if (disposed) return;
 
-        const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(75, canvasRef.current!.width / canvasRef.current!.height, 0.1, 2000);
+      const skyGroup = new THREE.Group();
+      skyGroup.name = 'sky_weather';
 
-        // Sky hemisphere
-        const skyGeo = new THREE.SphereGeometry(1000, 32, 32);
-        const skyMat = new THREE.ShaderMaterial({
-          uniforms: {
-            topColor: { value: new THREE.Color(skyColors.sky) },
-            bottomColor: { value: new THREE.Color(skyColors.horizon) },
-            offset: { value: 20 },
-            exponent: { value: 0.6 },
-          },
-          vertexShader: `
-            varying vec3 vWorldPosition;
-            void main() {
-              vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-              vWorldPosition = worldPosition.xyz;
-              gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-            }
-          `,
-          fragmentShader: `
-            uniform vec3 topColor;
-            uniform vec3 bottomColor;
-            uniform float offset;
-            uniform float exponent;
-            varying vec3 vWorldPosition;
-            void main() {
-              float h = normalize(vWorldPosition + offset).y;
-              gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0);
-            }
-          `,
-          side: THREE.BackSide,
+      // ── Sun direction from time of day ────────────────────
+      const [sx, sy, sz] = computeSunDirection(timeOfDay);
+      const sunDir = new THREE.Vector3(sx, sy, sz);
+
+      // ── Dynamic sky dome ──────────────────────────────────
+      const skyGeom = new THREE.SphereGeometry(2000, 32, 16);
+      // Invert normals so we see inside
+      skyGeom.scale(-1, 1, 1);
+
+      const cloudCover = weather === 'overcast' || weather === 'storm' ? 0.8
+        : weather === 'rain' ? 0.6
+        : weather === 'fog' ? 0.4
+        : weather === 'snow' ? 0.5
+        : 0.0;
+
+      const seasonValue = { spring: 0, summer: 1, autumn: 2, winter: 3 }[season];
+
+      const skyUniforms = {
+        uTimeOfDay: { value: timeOfDay },
+        uSunDirection: { value: sunDir },
+        uCloudCover: { value: cloudCover },
+        uSeason: { value: seasonValue },
+      };
+
+      const skyMaterial = new THREE.ShaderMaterial({
+        vertexShader: SKY_VERTEX_SHADER,
+        fragmentShader: SKY_FRAGMENT_SHADER,
+        uniforms: skyUniforms,
+        side: THREE.BackSide,
+        depthWrite: false,
+      });
+
+      const skyDome = new THREE.Mesh(skyGeom, skyMaterial);
+      skyDome.userData = { isSkyDome: true };
+      skyGroup.add(skyDome);
+
+      // ── Star field (visible at night) ──────────────────────
+      const isNight = timeOfDay < 5 || timeOfDay > 20;
+      const isDusk = timeOfDay >= 18 && timeOfDay <= 20;
+      const isDawn = timeOfDay >= 5 && timeOfDay <= 7;
+
+      if (isNight || isDusk || isDawn) {
+        const starCount = quality === 'low' ? 500 : quality === 'medium' ? 1000 : 2000;
+        const starGeom = new THREE.BufferGeometry();
+        const starPositions = new Float32Array(starCount * 3);
+        const starSizes = new Float32Array(starCount);
+
+        for (let i = 0; i < starCount; i++) {
+          // Distribute on upper hemisphere
+          const theta = Math.random() * Math.PI * 2;
+          const phi = Math.random() * Math.PI * 0.5; // Only above horizon
+          const r = 1800;
+          starPositions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+          starPositions[i * 3 + 1] = r * Math.cos(phi);
+          starPositions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+          starSizes[i] = 1 + Math.random() * 2;
+        }
+
+        starGeom.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+        starGeom.setAttribute('size', new THREE.BufferAttribute(starSizes, 1));
+
+        // Star brightness fades during dawn/dusk
+        let starOpacity = 1.0;
+        if (isDawn) starOpacity = 1 - (timeOfDay - 5) / 2;
+        if (isDusk) starOpacity = (timeOfDay - 18) / 2;
+
+        const starMat = new THREE.PointsMaterial({
+          color: 0xffffff,
+          size: 2,
+          transparent: true,
+          opacity: starOpacity * 0.8,
+          depthWrite: false,
+          sizeAttenuation: false,
         });
-        const sky = new THREE.Mesh(skyGeo, skyMat);
-        scene.add(sky);
 
-        // Sun directional light
-        const sunLight = new THREE.DirectionalLight(skyColors.sun ? new THREE.Color(skyColors.sun) : new THREE.Color('#000000'), skyColors.directionalIntensity);
-        sunLight.position.set(sunPos.x, sunPos.y, sunPos.z);
-        if (quality !== 'low') {
-          sunLight.castShadow = true;
-          sunLight.shadow.mapSize.set(SHADOW_CONFIG.mapSize, SHADOW_CONFIG.mapSize);
-          sunLight.shadow.camera.far = SHADOW_CONFIG.maxDistance;
-          sunLight.shadow.bias = SHADOW_CONFIG.bias;
-        }
-        scene.add(sunLight);
-
-        // Ambient light
-        const ambientLight = new THREE.AmbientLight('#ffffff', skyColors.ambientIntensity);
-        scene.add(ambientLight);
-
-        // Stars (night only)
-        if (skyPeriod === 'night' || skyPeriod === 'dusk') {
-          const starCount = 2000;
-          const starGeo = new THREE.BufferGeometry();
-          const starPositions = new Float32Array(starCount * 3);
-          for (let i = 0; i < starCount; i++) {
-            const theta = Math.random() * Math.PI * 2;
-            const phi = Math.random() * Math.PI * 0.5;
-            const r = 900;
-            starPositions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-            starPositions[i * 3 + 1] = r * Math.cos(phi);
-            starPositions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
-          }
-          starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
-          const starMat = new THREE.PointsMaterial({ color: '#ffffff', size: 1.5, sizeAttenuation: false, transparent: true, opacity: skyPeriod === 'night' ? 0.8 : 0.3 });
-          scene.add(new THREE.Points(starGeo, starMat));
-        }
-
-        // Weather particles
-        if (particleCount > 0) {
-          const pGeo = new THREE.BufferGeometry();
-          const pPositions = new Float32Array(particleCount * 3);
-          const pVelocities = new Float32Array(particleCount * 3);
-          for (let i = 0; i < particleCount; i++) {
-            pPositions[i * 3] = (Math.random() - 0.5) * 200;
-            pPositions[i * 3 + 1] = Math.random() * 100;
-            pPositions[i * 3 + 2] = (Math.random() - 0.5) * 200;
-            // Velocity: rain falls fast, snow falls slow
-            const fallSpeed = weather.type === 'rain' ? -15 : -2;
-            const windEffect = weather.windSpeed * 0.1;
-            pVelocities[i * 3] = Math.sin(weather.windDirection * Math.PI / 180) * windEffect;
-            pVelocities[i * 3 + 1] = fallSpeed;
-            pVelocities[i * 3 + 2] = Math.cos(weather.windDirection * Math.PI / 180) * windEffect;
-          }
-          pGeo.setAttribute('position', new THREE.BufferAttribute(pPositions, 3));
-          const pMat = new THREE.PointsMaterial({
-            color: weather.type === 'rain' ? '#aaccff' : '#ffffff',
-            size: weather.type === 'rain' ? 0.1 : 0.3,
-            transparent: true,
-            opacity: 0.6,
-          });
-          const particles = new THREE.Points(pGeo, pMat);
-          scene.add(particles);
-        }
-
-        // Fog
-        if (fogDensity > 0.003 || weather.type === 'fog') {
-          scene.fog = new THREE.FogExp2(skyColors.horizon, fogDensity);
-        }
-
-        setInitialized(true);
-      } catch {
-        // Three.js not available
-        setInitialized(false);
+        const stars = new THREE.Points(starGeom, starMat);
+        stars.userData = { isStarField: true };
+        skyGroup.add(stars);
       }
-    };
+
+      // ── Directional light (sun) with cascaded shadow maps ──
+      const sunIntensity = computeSunIntensity(timeOfDay);
+      const sunColor = timeOfDay < 7 ? 0xffddaa
+        : timeOfDay > 18 ? 0xffaa77
+        : 0xfff4e0;
+
+      const sunLight = new THREE.DirectionalLight(sunColor, sunIntensity);
+      sunLight.position.set(sx * 300, sy * 300, sz * 300);
+      sunLight.castShadow = true;
+
+      // Cascaded shadow setup
+      sunLight.shadow.mapSize.width = SHADOW_CASCADE_SIZE;
+      sunLight.shadow.mapSize.height = SHADOW_CASCADE_SIZE;
+      sunLight.shadow.camera.near = 1;
+      sunLight.shadow.camera.far = 800;
+
+      // Shadow cascade frustum sizes (3 cascades simulated via shadow camera extent)
+      const cascadeExtents = [100, 300, 600];
+      const cascadeIdx = quality === 'ultra' ? 2 : quality === 'high' ? 2 : quality === 'medium' ? 1 : 0;
+      const extent = cascadeExtents[Math.min(cascadeIdx, SHADOW_CASCADE_COUNT - 1)];
+      sunLight.shadow.camera.left = -extent;
+      sunLight.shadow.camera.right = extent;
+      sunLight.shadow.camera.top = extent;
+      sunLight.shadow.camera.bottom = -extent;
+
+      sunLightRef.current = sunLight;
+      skyGroup.add(sunLight);
+
+      // ── Ambient light ─────────────────────────────────────
+      const ambientIntensity = computeAmbientIntensity(timeOfDay);
+      const ambientColor = isNight ? 0x1a1a3a : 0x405070;
+      const ambient = new THREE.AmbientLight(ambientColor, ambientIntensity);
+      ambientLightRef.current = ambient;
+      skyGroup.add(ambient);
+
+      // ── Weather particles ─────────────────────────────────
+
+      // Rain system
+      if (weather === 'rain' || weather === 'storm') {
+        const rainCount = RAIN_COUNTS[quality];
+        const rainGeom = new THREE.BufferGeometry();
+        const rainPositions = new Float32Array(rainCount * 3);
+        const rainVelocities = new Float32Array(rainCount);
+
+        const spread = 500;
+        const heightRange = 200;
+
+        for (let i = 0; i < rainCount; i++) {
+          rainPositions[i * 3] = (Math.random() - 0.5) * spread;
+          rainPositions[i * 3 + 1] = Math.random() * heightRange;
+          rainPositions[i * 3 + 2] = (Math.random() - 0.5) * spread;
+          rainVelocities[i] = 15 + Math.random() * 10; // Fall speed
+        }
+
+        rainGeom.setAttribute('position', new THREE.BufferAttribute(rainPositions, 3));
+
+        // Rain streaks as elongated points
+        const rainMat = new THREE.PointsMaterial({
+          color: 0xaaccff,
+          size: weather === 'storm' ? 0.4 : 0.2,
+          transparent: true,
+          opacity: 0.6,
+          depthWrite: false,
+          sizeAttenuation: true,
+        });
+
+        const rain = new THREE.Points(rainGeom, rainMat);
+        rain.userData = {
+          isRain: true,
+          velocities: rainVelocities,
+          spread,
+          heightRange,
+        };
+        skyGroup.add(rain);
+
+        // Splash particles on ground (reuse a subset)
+        if (quality !== 'low') {
+          const splashCount = Math.floor(rainCount * 0.1);
+          const splashGeom = new THREE.BufferGeometry();
+          const splashPositions = new Float32Array(splashCount * 3);
+          for (let i = 0; i < splashCount; i++) {
+            splashPositions[i * 3] = (Math.random() - 0.5) * spread;
+            splashPositions[i * 3 + 1] = 0.1;
+            splashPositions[i * 3 + 2] = (Math.random() - 0.5) * spread;
+          }
+          splashGeom.setAttribute('position', new THREE.BufferAttribute(splashPositions, 3));
+          const splashMat = new THREE.PointsMaterial({
+            color: 0xffffff,
+            size: 0.8,
+            transparent: true,
+            opacity: 0.3,
+            depthWrite: false,
+          });
+          const splashes = new THREE.Points(splashGeom, splashMat);
+          splashes.userData = { isSplash: true };
+          skyGroup.add(splashes);
+        }
+
+        // Wet surface shader: darken ground materials
+        // (Signaled via group userData for TerrainRenderer to read)
+        skyGroup.userData.wetSurface = true;
+        skyGroup.userData.puddleIntensity = weather === 'storm' ? 0.8 : 0.4;
+      }
+
+      // Snow system
+      if (weather === 'snow') {
+        const snowCount = SNOW_COUNTS[quality];
+        const snowGeom = new THREE.BufferGeometry();
+        const snowPositions = new Float32Array(snowCount * 3);
+        const snowDrifts = new Float32Array(snowCount * 2); // drift x, drift z per particle
+
+        const spread = 500;
+        const heightRange = 150;
+
+        for (let i = 0; i < snowCount; i++) {
+          snowPositions[i * 3] = (Math.random() - 0.5) * spread;
+          snowPositions[i * 3 + 1] = Math.random() * heightRange;
+          snowPositions[i * 3 + 2] = (Math.random() - 0.5) * spread;
+          // Each snowflake has a unique drift pattern
+          snowDrifts[i * 2] = (Math.random() - 0.5) * 2;
+          snowDrifts[i * 2 + 1] = (Math.random() - 0.5) * 2;
+        }
+
+        snowGeom.setAttribute('position', new THREE.BufferAttribute(snowPositions, 3));
+
+        const snowMat = new THREE.PointsMaterial({
+          color: 0xffffff,
+          size: 1.0,
+          transparent: true,
+          opacity: 0.8,
+          depthWrite: false,
+          sizeAttenuation: true,
+        });
+
+        const snow = new THREE.Points(snowGeom, snowMat);
+        snow.userData = {
+          isSnow: true,
+          drifts: snowDrifts,
+          spread,
+          heightRange,
+        };
+        skyGroup.add(snow);
+
+        // Snow accumulation signaling
+        skyGroup.userData.snowAccumulation = true;
+        skyGroup.userData.snowLoadWarning = season === 'winter' && windSpeed > 5;
+      }
+
+      // Fog system
+      if (weather === 'fog') {
+        // Exponential fog applied to scene
+        skyGroup.userData.fogConfig = {
+          type: 'exponential',
+          density: 0.003,
+          color: 0xcccccc,
+          // Morning fog near river
+          nearRiver: timeOfDay < 10,
+          // Evening rolling in
+          eveningRoll: timeOfDay > 16,
+        };
+      }
+
+      // Cloud shadow projection
+      if (weather !== 'clear' && quality !== 'low') {
+        // Create a shadow-casting plane that moves across terrain
+        const cloudShadowGeom = new THREE.PlaneGeometry(800, 800);
+        cloudShadowGeom.rotateX(-Math.PI / 2);
+
+        const cloudShadowMat = new THREE.MeshBasicMaterial({
+          color: 0x000000,
+          transparent: true,
+          opacity: cloudCover * 0.15,
+          depthWrite: false,
+        });
+
+        const cloudShadow = new THREE.Mesh(cloudShadowGeom, cloudShadowMat);
+        cloudShadow.position.y = 1; // Just above terrain
+        cloudShadow.userData = {
+          isCloudShadow: true,
+          moveSpeed: windSpeed * 0.5,
+          moveDirection: windDirection,
+        };
+        skyGroup.add(cloudShadow);
+      }
+
+      // ── Weather transition state ───────────────────────────
+      skyGroup.userData.weatherTransition = {
+        current: weather,
+        target: weather,
+        progress: 1.0, // 1.0 = fully transitioned
+        transitionSpeed: 0.1, // Gradual onset/clear
+      };
+
+      // ── Animation update function ──────────────────────────
+      skyGroup.userData.update = (delta: number, elapsed: number) => {
+        // Update sky uniforms for smooth time progression
+        skyUniforms.uTimeOfDay.value = timeOfDay;
+
+        // Update sun/moon position
+        const [sx2, sy2, sz2] = computeSunDirection(timeOfDay);
+        skyUniforms.uSunDirection.value.set(sx2, sy2, sz2);
+
+        // Update directional light
+        const sl = sunLightRef.current as InstanceType<typeof import('three').DirectionalLight>;
+        if (sl) {
+          sl.position.set(sx2 * 300, sy2 * 300, sz2 * 300);
+          sl.intensity = computeSunIntensity(timeOfDay);
+        }
+
+        // Update ambient
+        const al = ambientLightRef.current as InstanceType<typeof import('three').AmbientLight>;
+        if (al) {
+          al.intensity = computeAmbientIntensity(timeOfDay);
+        }
+
+        // ── Rain animation ──────────────────────────────────
+        skyGroup.traverse((child) => {
+          const obj = child as unknown as InstanceType<typeof import('three').Points> & {
+            userData: Record<string, unknown>;
+          };
+
+          if (obj.userData?.isRain) {
+            const posAttr = (obj.geometry as InstanceType<typeof import('three').BufferGeometry>)
+              .getAttribute('position') as InstanceType<typeof import('three').BufferAttribute>;
+            const velocities = obj.userData.velocities as Float32Array;
+            const spread = obj.userData.spread as number;
+            const heightRange = obj.userData.heightRange as number;
+
+            // Wind affects rain angle
+            const windX = Math.sin(windDirection) * windSpeed * 0.3;
+            const windZ = Math.cos(windDirection) * windSpeed * 0.3;
+
+            for (let i = 0; i < posAttr.count; i++) {
+              let x = posAttr.getX(i);
+              let y = posAttr.getY(i);
+              let z = posAttr.getZ(i);
+
+              y -= velocities[i] * delta;
+              x += windX * delta;
+              z += windZ * delta;
+
+              // Reset when below ground
+              if (y < 0) {
+                y = heightRange;
+                x = (Math.random() - 0.5) * spread;
+                z = (Math.random() - 0.5) * spread;
+              }
+
+              posAttr.setXYZ(i, x, y, z);
+            }
+            posAttr.needsUpdate = true;
+          }
+
+          if (obj.userData?.isSnow) {
+            const posAttr = (obj.geometry as InstanceType<typeof import('three').BufferGeometry>)
+              .getAttribute('position') as InstanceType<typeof import('three').BufferAttribute>;
+            const drifts = obj.userData.drifts as Float32Array;
+            const spread = obj.userData.spread as number;
+            const heightRange = obj.userData.heightRange as number;
+
+            const windX = Math.sin(windDirection) * windSpeed * 0.5;
+            const windZ = Math.cos(windDirection) * windSpeed * 0.5;
+            const fallSpeed = 2.0; // Snow falls slowly
+
+            for (let i = 0; i < posAttr.count; i++) {
+              let x = posAttr.getX(i);
+              let y = posAttr.getY(i);
+              let z = posAttr.getZ(i);
+
+              // Slow fall with wind drift
+              y -= fallSpeed * delta;
+              x += (windX + drifts[i * 2] * Math.sin(elapsed * 0.5 + i)) * delta;
+              z += (windZ + drifts[i * 2 + 1] * Math.cos(elapsed * 0.4 + i)) * delta;
+
+              // Reset at ground, simulating accumulation
+              if (y < 0) {
+                y = heightRange;
+                x = (Math.random() - 0.5) * spread;
+                z = (Math.random() - 0.5) * spread;
+              }
+
+              posAttr.setXYZ(i, x, y, z);
+            }
+            posAttr.needsUpdate = true;
+          }
+
+          // Cloud shadow movement
+          if (obj.userData?.isCloudShadow) {
+            const speed = obj.userData.moveSpeed as number;
+            const dir = obj.userData.moveDirection as number;
+            const mesh = obj as unknown as InstanceType<typeof import('three').Mesh>;
+            mesh.position.x += Math.sin(dir) * speed * delta;
+            mesh.position.z += Math.cos(dir) * speed * delta;
+
+            // Wrap cloud shadow position
+            if (mesh.position.x > 500) mesh.position.x -= 1000;
+            if (mesh.position.x < -500) mesh.position.x += 1000;
+            if (mesh.position.z > 500) mesh.position.z -= 1000;
+            if (mesh.position.z < -500) mesh.position.z += 1000;
+          }
+        });
+
+        // ── Weather transition ──────────────────────────────
+        const transition = skyGroup.userData.weatherTransition as {
+          current: string;
+          target: string;
+          progress: number;
+          transitionSpeed: number;
+        };
+        if (transition.progress < 1.0) {
+          transition.progress = Math.min(1.0, transition.progress + delta * transition.transitionSpeed);
+        }
+      };
+
+      skyGroupRef.current = skyGroup;
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('concordia:sky-weather-ready', {
+          detail: { skyGroup },
+        }));
+      }
+    }
 
     init();
-    return () => { disposed = true; cancelAnimationFrame(frameRef.current); };
-  }, [timeOfDay, weather, quality, skyPeriod]);
 
-  // Season-specific weather descriptions
-  const seasonWeather: Record<Season, string> = {
-    spring: 'Occasional rain showers test drainage. Mild temps.',
-    summer: 'Heat waves test thermal expansion. Long daylight hours.',
-    fall: 'Cooling temps, wind gusts test structural stability.',
-    winter: 'Snow accumulation tests roof loads. Freeze-thaw cycles.',
-  };
+    return () => {
+      disposed = true;
+      if (skyGroupRef.current) {
+        const group = skyGroupRef.current as {
+          traverse: (cb: (obj: unknown) => void) => void;
+        };
+        group.traverse((obj) => {
+          const mesh = obj as {
+            geometry?: { dispose: () => void };
+            material?: { dispose: () => void; map?: { dispose: () => void } } |
+                        { dispose: () => void; map?: { dispose: () => void } }[];
+          };
+          if (mesh.geometry) mesh.geometry.dispose();
+          if (mesh.material) {
+            const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+            mats.forEach((m) => {
+              if (m.map) m.map.dispose();
+              m.dispose();
+            });
+          }
+        });
+      }
+    };
+  }, [timeOfDay, weather, windDirection, windSpeed, season, quality]);
 
   return (
-    <div className="relative">
-      <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none" style={{ zIndex: -1 }} />
-
-      {/* Sky/Weather info overlay */}
-      <div className="absolute top-2 right-2 bg-black/40 backdrop-blur-sm border border-white/10 rounded px-3 py-2 text-xs space-y-1">
-        <div className="flex items-center gap-2">
-          <span className="text-white/70">{skyPeriod === 'night' ? '🌙' : skyPeriod === 'dawn' ? '🌅' : skyPeriod === 'dusk' ? '🌇' : '☀️'}</span>
-          <span className="text-white">{Math.floor(timeOfDay)}:{String(Math.floor((timeOfDay % 1) * 60)).padStart(2, '0')}</span>
-          <span className="text-white/40 capitalize">{skyPeriod}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span>{weather.type === 'rain' ? '🌧' : weather.type === 'snow' ? '🌨' : weather.type === 'fog' ? '🌫' : weather.type === 'storm' ? '⛈' : '☀️'}</span>
-          <span className="text-white/70 capitalize">{weather.type}</span>
-          {weather.intensity > 0 && <span className="text-white/40">({Math.round(weather.intensity * 100)}%)</span>}
-        </div>
-        <div className="flex items-center gap-2 text-white/40">
-          <span>💨 {weather.windSpeed}m/s</span>
-          <span>{weather.windDirection}°</span>
-        </div>
-        {weather.type === 'snow' && snowAccumulation > 0 && (
-          <div className="text-blue-300">❄ Snow depth: {(snowAccumulation * 30).toFixed(1)}cm</div>
-        )}
-        <div className="text-white/30 capitalize">{season} — {seasonWeather[season]}</div>
-      </div>
-
-      {/* Performance info */}
-      <div className="absolute bottom-2 right-2 text-[10px] text-white/20">
-        Particles: {Math.round(particleCount)} | Fog: {fogDensity.toFixed(4)} | Shadows: {quality !== 'low' ? 'on' : 'off'} | Quality: {quality}
-      </div>
-
-      {/* Expose state for ConcordiaScene consumption */}
-      <div className="hidden"
-        data-sky-weather="true"
-        data-time={timeOfDay}
-        data-period={skyPeriod}
-        data-sky-colors={JSON.stringify(skyColors)}
-        data-sun-position={JSON.stringify(sunPos)}
-        data-weather={JSON.stringify(weather)}
-        data-fog-density={fogDensity}
-        data-shadow-config={JSON.stringify(SHADOW_CONFIG)}
-        data-snow-accumulation={snowAccumulation}
-        data-particle-count={particleCount}
-        data-initialized={initialized}
-      />
-    </div>
+    <div
+      data-component="sky-weather-renderer"
+      data-time={timeOfDay}
+      data-weather={weather}
+      data-season={season}
+      data-wind-speed={windSpeed}
+      style={{ display: 'none' }}
+      aria-hidden
+    />
   );
 }
+
+export { computeSunDirection, computeAmbientIntensity, computeSunIntensity };

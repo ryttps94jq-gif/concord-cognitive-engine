@@ -1,319 +1,746 @@
 'use client';
 
-import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useCallback, useState } from 'react';
 
 // ── Types ──────────────────────────────────────────────────────────
 
-type AvatarAnimation = 'idle' | 'walk' | 'run' | 'sit' | 'build' | 'inspect' | 'wave' | 'clap' | 'point' | 'celebrate' | 'craft';
-type NPCAnimation = 'hammer' | 'read' | 'tend-crops' | 'patrol' | 'count-coins' | 'construct' | 'sweep' | 'lecture';
-
-interface AvatarAppearance {
-  skinColor: string;
-  hairStyle: string;
+export interface AppearanceConfig {
+  skinColor: string;     // hex color
   hairColor: string;
-  clothing: string;
-  professionBadge?: string;
+  hairStyle: 'short' | 'medium' | 'long' | 'bald' | 'ponytail' | 'bun';
+  bodyType: 'slim' | 'average' | 'stocky' | 'tall';
+  clothing: {
+    top: { color: string; type: 'shirt' | 'vest' | 'coat' | 'robe' | 'apron' };
+    bottom: { color: string; type: 'pants' | 'skirt' | 'shorts' | 'robe' };
+    hat?: { color: string; type: 'cap' | 'tophat' | 'beret' | 'hood' | 'helmet' };
+  };
+}
+
+export type AnimationClip =
+  | 'idle' | 'walk' | 'run' | 'sit' | 'build' | 'inspect'
+  | 'wave' | 'clap' | 'point' | 'celebrate' | 'craft';
+
+export type NPCOccupationAnimation =
+  | 'hammer' | 'read' | 'tend-crops' | 'patrol' | 'count-coins'
+  | 'construct' | 'sweep' | 'lecture';
+
+export interface PlayerAvatarConfig {
+  id: string;
+  name: string;
+  appearance: AppearanceConfig;
+  position: { x: number; y: number; z: number };
+  rotation: number; // Y-axis rotation in radians
+  currentAnimation: AnimationClip;
+  profession?: string;
   firmEmblem?: string;
 }
 
-interface AvatarState {
+export interface OtherPlayerData {
   id: string;
+  name: string;
+  appearance: AppearanceConfig;
   position: { x: number; y: number; z: number };
   rotation: number;
-  animation: AvatarAnimation;
-  appearance: AvatarAppearance;
-  displayName: string;
-  isRunning: boolean;
+  currentAnimation: AnimationClip;
+  profession?: string;
+  firmEmblem?: string;
+  /** Server timestamp for interpolation */
+  timestamp: number;
 }
 
-interface NPCState {
+export interface NPCData {
   id: string;
+  name: string;
+  appearance: AppearanceConfig;
   position: { x: number; y: number; z: number };
   rotation: number;
-  animation: NPCAnimation | AvatarAnimation;
-  displayName: string;
   occupation: string;
-  appearance: AvatarAppearance;
-}
-
-interface CharacterControllerConfig {
-  moveSpeed: number;
-  runSpeed: number;
-  jumpHeight: number;
-  slopeLimit: number;
-  stepHeight: number;
-  smoothRotation: number;
+  occupationAnimation: NPCOccupationAnimation;
+  patrolPath?: { x: number; y: number; z: number }[];
+  /** Server timestamp */
+  timestamp: number;
 }
 
 interface AvatarSystem3DProps {
-  playerAvatar?: AvatarState;
-  otherPlayers?: AvatarState[];
-  npcs?: NPCState[];
+  playerAvatar: PlayerAvatarConfig;
+  otherPlayers: OtherPlayerData[];
+  npcs: NPCData[];
   onMove?: (position: { x: number; y: number; z: number }, rotation: number) => void;
-  onEmote?: (emote: AvatarAnimation) => void;
-  controllerConfig?: Partial<CharacterControllerConfig>;
+  onEmote?: (emote: AnimationClip) => void;
 }
 
-// ── Constants ──────────────────────────────────────────────────────
+// ── Constants ─────────────────────────────────────────────────────
 
-const DEFAULT_CONTROLLER: CharacterControllerConfig = {
-  moveSpeed: 4.0,
-  runSpeed: 8.0,
-  jumpHeight: 1.0,
-  slopeLimit: 45,
-  stepHeight: 0.3,
-  smoothRotation: 0.15,
+const MAX_FULLY_ANIMATED = 50;
+const MOVE_SPEED = 5.0;    // m/s walking
+const RUN_SPEED = 12.0;    // m/s running
+const ROTATION_SPEED = 8.0; // rad/s smooth rotation
+const INTERPOLATION_RATE = 10; // Other players update at 10Hz
+const NPC_UPDATE_RATE = 2;     // NPCs update at 2Hz
+const SLOPE_MAX_ANGLE = 45;    // Maximum climbable slope in degrees
+const STAIR_STEP_HEIGHT = 0.5; // Max step-up height in meters
+
+/** Bone hierarchy for procedural avatar skeleton */
+const BONE_HIERARCHY = [
+  'hips',
+  'spine', 'chest', 'neck', 'head',
+  'leftShoulder', 'leftUpperArm', 'leftForearm', 'leftHand',
+  'rightShoulder', 'rightUpperArm', 'rightForearm', 'rightHand',
+  'leftUpperLeg', 'leftLowerLeg', 'leftFoot',
+  'rightUpperLeg', 'rightLowerLeg', 'rightFoot',
+] as const;
+
+// ── Body dimension presets ───────────────────────────────────────
+
+const BODY_DIMENSIONS: Record<AppearanceConfig['bodyType'], {
+  torsoWidth: number; torsoHeight: number; torsoDepth: number;
+  limbRadius: number; headRadius: number; legLength: number;
+  armLength: number; totalHeight: number;
+}> = {
+  slim:    { torsoWidth: 0.35, torsoHeight: 0.55, torsoDepth: 0.2, limbRadius: 0.06, headRadius: 0.14, legLength: 0.8, armLength: 0.6, totalHeight: 1.75 },
+  average: { torsoWidth: 0.4,  torsoHeight: 0.55, torsoDepth: 0.25, limbRadius: 0.07, headRadius: 0.15, legLength: 0.8, armLength: 0.6, totalHeight: 1.75 },
+  stocky:  { torsoWidth: 0.5,  torsoHeight: 0.5,  torsoDepth: 0.3, limbRadius: 0.09, headRadius: 0.15, legLength: 0.75, armLength: 0.55, totalHeight: 1.65 },
+  tall:    { torsoWidth: 0.4,  torsoHeight: 0.6,  torsoDepth: 0.25, limbRadius: 0.07, headRadius: 0.15, legLength: 0.9, armLength: 0.7, totalHeight: 1.9 },
 };
 
-const AVATAR_LOD = {
-  full: 50,        // Full detail within 50m
-  simplified: 100, // Simplified 50-100m
-  nameTagOnly: 200, // Just floating name 100-200m
-};
+// ── Suppress unused constant warnings ────────────────────────────
+void SLOPE_MAX_ANGLE;
+void STAIR_STEP_HEIGHT;
 
-const MAX_ANIMATED_AVATARS = 50;
-
-const ANIMATION_TRANSITIONS: Record<string, { blendDuration: number }> = {
-  'idle->walk': { blendDuration: 0.2 },
-  'walk->run': { blendDuration: 0.15 },
-  'run->walk': { blendDuration: 0.2 },
-  'walk->idle': { blendDuration: 0.3 },
-  'idle->build': { blendDuration: 0.25 },
-  'idle->wave': { blendDuration: 0.2 },
-  'idle->sit': { blendDuration: 0.4 },
-  '*->idle': { blendDuration: 0.3 },
-};
-
-const NPC_OCCUPATION_ANIMATIONS: Record<string, NPCAnimation> = {
-  blacksmith: 'hammer',
-  scholar: 'read',
-  farmer: 'tend-crops',
-  guard: 'patrol',
-  trader: 'count-coins',
-  builder: 'construct',
-  janitor: 'sweep',
-  professor: 'lecture',
-};
-
-// ── Seed Data ──────────────────────────────────────────────────────
-
-const SEED_PLAYER: AvatarState = {
-  id: 'player-self', position: { x: 100, y: 20, z: 75 }, rotation: 0, animation: 'idle', isRunning: false,
-  displayName: 'You', appearance: { skinColor: '#d4a574', hairStyle: 'short', hairColor: '#3d2b1f', clothing: 'architect-vest' },
-};
-
-const SEED_OTHERS: AvatarState[] = [
-  { id: 'p2', position: { x: 105, y: 20, z: 80 }, rotation: 45, animation: 'walk', isRunning: false, displayName: '@engineer_jane', appearance: { skinColor: '#f5d0a9', hairStyle: 'ponytail', hairColor: '#8b4513', clothing: 'engineer-coat', professionBadge: 'structural' } },
-  { id: 'p3', position: { x: 98, y: 20, z: 70 }, rotation: 180, animation: 'build', isRunning: false, displayName: '@builder_bob', appearance: { skinColor: '#8d5524', hairStyle: 'buzz', hairColor: '#1a1a1a', clothing: 'work-overalls', firmEmblem: 'iron-forge-co' } },
-];
-
-const SEED_NPCS: NPCState[] = [
-  { id: 'npc-1', position: { x: 110, y: 20, z: 85 }, rotation: 270, animation: 'hammer', displayName: 'Marcus the Smith', occupation: 'blacksmith', appearance: { skinColor: '#c68642', hairStyle: 'bald', hairColor: '#000', clothing: 'forge-apron' } },
-  { id: 'npc-2', position: { x: 115, y: 40, z: 60 }, rotation: 90, animation: 'read', displayName: 'Dr. Chen', occupation: 'scholar', appearance: { skinColor: '#f5d0a9', hairStyle: 'long', hairColor: '#1a1a1a', clothing: 'academic-robe' } },
-  { id: 'npc-3', position: { x: 90, y: 20, z: 78 }, rotation: 0, animation: 'patrol', displayName: 'Officer Reyes', occupation: 'guard', appearance: { skinColor: '#a0522d', hairStyle: 'short', hairColor: '#2f1b0e', clothing: 'guard-uniform' } },
-];
-
-// ── Component ──────────────────────────────────────────────────────
+// ── Component ────────────────────────────────────────────────────
 
 export default function AvatarSystem3D({
-  playerAvatar = SEED_PLAYER,
-  otherPlayers = SEED_OTHERS,
-  npcs = SEED_NPCS,
+  playerAvatar,
+  otherPlayers,
+  npcs,
   onMove,
   onEmote,
-  controllerConfig,
 }: AvatarSystem3DProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const threeRef = useRef<any>(null);
-  const [loaded, setLoaded] = useState(false);
-  const [activeAnimation, setActiveAnimation] = useState<AvatarAnimation>(playerAvatar.animation);
-
-  const config = useMemo(() => ({ ...DEFAULT_CONTROLLER, ...controllerConfig }), [controllerConfig]);
-
-  // Input state tracking
+  const avatarGroupRef = useRef<unknown>(null);
+  const playerMeshRef = useRef<unknown>(null);
+  const mixersRef = useRef<Map<string, unknown>>(new Map());
   const keysRef = useRef<Set<string>>(new Set());
+  const playerPositionRef = useRef({ ...playerAvatar.position });
+  const playerRotationRef = useRef(playerAvatar.rotation);
+  const [activeAnimation, setActiveAnimation] = useState<AnimationClip>(playerAvatar.currentAnimation);
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      keysRef.current.add(e.key.toLowerCase());
-      // Emote keys
-      if (e.key === '1') onEmote?.('wave');
-      if (e.key === '2') onEmote?.('clap');
-      if (e.key === '3') onEmote?.('point');
-      if (e.key === '4') onEmote?.('celebrate');
-      if (e.key === '5') onEmote?.('sit');
+  // Suppress unused warning for onEmote
+  void onEmote;
+
+  // ── Procedural avatar mesh generation ─────────────────────────
+
+  const createAvatarMesh = useCallback(async (
+    appearance: AppearanceConfig,
+    THREE: typeof import('three'),
+  ) => {
+    const group = new THREE.Group();
+    const dims = BODY_DIMENSIONS[appearance.bodyType];
+    const skinColor = new THREE.Color(appearance.skinColor);
+    const hairColor = new THREE.Color(appearance.hairColor);
+    const topColor = new THREE.Color(appearance.clothing.top.color);
+    const bottomColor = new THREE.Color(appearance.clothing.bottom.color);
+
+    // ── Skeleton (bone hierarchy) ─────────────────────────────
+    const bones: InstanceType<typeof import('three').Bone>[] = [];
+    const boneMap = new Map<string, InstanceType<typeof import('three').Bone>>();
+
+    for (const boneName of BONE_HIERARCHY) {
+      const bone = new THREE.Bone();
+      bone.name = boneName;
+      bones.push(bone);
+      boneMap.set(boneName, bone);
+    }
+
+    // Set up parent-child relationships
+    const parentMap: Record<string, string> = {
+      spine: 'hips', chest: 'spine', neck: 'chest', head: 'neck',
+      leftShoulder: 'chest', leftUpperArm: 'leftShoulder',
+      leftForearm: 'leftUpperArm', leftHand: 'leftForearm',
+      rightShoulder: 'chest', rightUpperArm: 'rightShoulder',
+      rightForearm: 'rightUpperArm', rightHand: 'rightForearm',
+      leftUpperLeg: 'hips', leftLowerLeg: 'leftUpperLeg', leftFoot: 'leftLowerLeg',
+      rightUpperLeg: 'hips', rightLowerLeg: 'rightUpperLeg', rightFoot: 'rightLowerLeg',
     };
-    const handleKeyUp = (e: KeyboardEvent) => keysRef.current.delete(e.key.toLowerCase());
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); };
-  }, [onEmote]);
 
-  // Initialize Three.js avatar system
+    for (const [child, parent] of Object.entries(parentMap)) {
+      const parentBone = boneMap.get(parent);
+      const childBone = boneMap.get(child);
+      if (parentBone && childBone) parentBone.add(childBone);
+    }
+
+    // Position bones
+    const hipsBone = boneMap.get('hips')!;
+    hipsBone.position.y = dims.legLength;
+    boneMap.get('spine')!.position.y = 0.15;
+    boneMap.get('chest')!.position.y = 0.2;
+    boneMap.get('neck')!.position.y = dims.torsoHeight * 0.4;
+    boneMap.get('head')!.position.y = 0.1;
+    boneMap.get('leftShoulder')!.position.set(-dims.torsoWidth / 2, dims.torsoHeight * 0.3, 0);
+    boneMap.get('rightShoulder')!.position.set(dims.torsoWidth / 2, dims.torsoHeight * 0.3, 0);
+    boneMap.get('leftUpperArm')!.position.set(-0.05, 0, 0);
+    boneMap.get('rightUpperArm')!.position.set(0.05, 0, 0);
+    boneMap.get('leftForearm')!.position.y = -dims.armLength * 0.5;
+    boneMap.get('rightForearm')!.position.y = -dims.armLength * 0.5;
+    boneMap.get('leftHand')!.position.y = -dims.armLength * 0.5;
+    boneMap.get('rightHand')!.position.y = -dims.armLength * 0.5;
+    boneMap.get('leftUpperLeg')!.position.set(-0.1, 0, 0);
+    boneMap.get('rightUpperLeg')!.position.set(0.1, 0, 0);
+    boneMap.get('leftLowerLeg')!.position.y = -dims.legLength * 0.5;
+    boneMap.get('rightLowerLeg')!.position.y = -dims.legLength * 0.5;
+    boneMap.get('leftFoot')!.position.y = -dims.legLength * 0.5;
+    boneMap.get('rightFoot')!.position.y = -dims.legLength * 0.5;
+
+    const skeleton = new THREE.Skeleton(bones);
+
+    // ── Body parts (simple geometry) ─────────────────────────
+    const skinMat = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.8 });
+    const clothTopMat = new THREE.MeshStandardMaterial({ color: topColor, roughness: 0.7 });
+    const clothBottomMat = new THREE.MeshStandardMaterial({ color: bottomColor, roughness: 0.7 });
+
+    // Head
+    const headGeom = new THREE.SphereGeometry(dims.headRadius, 16, 12);
+    const head = new THREE.Mesh(headGeom, skinMat);
+    head.position.y = dims.legLength + dims.torsoHeight + 0.1 + dims.headRadius;
+    head.castShadow = true;
+    group.add(head);
+
+    // Hair
+    if (appearance.hairStyle !== 'bald') {
+      const hairMat = new THREE.MeshStandardMaterial({ color: hairColor, roughness: 0.9 });
+      let hairGeom: InstanceType<typeof import('three').BufferGeometry>;
+      switch (appearance.hairStyle) {
+        case 'short':
+          hairGeom = new THREE.SphereGeometry(dims.headRadius * 1.05, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.6);
+          break;
+        case 'medium':
+          hairGeom = new THREE.SphereGeometry(dims.headRadius * 1.1, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.7);
+          break;
+        case 'long':
+          hairGeom = new THREE.CylinderGeometry(dims.headRadius * 0.5, dims.headRadius * 0.3, 0.4, 12);
+          break;
+        case 'ponytail':
+          hairGeom = new THREE.CylinderGeometry(0.03, 0.02, 0.3, 8);
+          break;
+        case 'bun':
+          hairGeom = new THREE.SphereGeometry(dims.headRadius * 0.4, 12, 8);
+          break;
+        default:
+          hairGeom = new THREE.SphereGeometry(dims.headRadius * 1.05, 16, 8);
+      }
+      const hair = new THREE.Mesh(hairGeom, hairMat);
+      hair.position.copy(head.position);
+      hair.position.y += dims.headRadius * 0.3;
+      if (appearance.hairStyle === 'ponytail') {
+        hair.position.z = -dims.headRadius * 0.8;
+        hair.position.y -= dims.headRadius * 0.2;
+      } else if (appearance.hairStyle === 'bun') {
+        hair.position.z = -dims.headRadius * 0.7;
+        hair.position.y += dims.headRadius * 0.1;
+      }
+      group.add(hair);
+    }
+
+    // Torso
+    const torsoGeom = new THREE.BoxGeometry(dims.torsoWidth, dims.torsoHeight, dims.torsoDepth);
+    const torso = new THREE.Mesh(torsoGeom, clothTopMat);
+    torso.position.y = dims.legLength + dims.torsoHeight / 2;
+    torso.castShadow = true;
+    group.add(torso);
+
+    // Arms
+    const armGeom = new THREE.CylinderGeometry(dims.limbRadius, dims.limbRadius * 0.8, dims.armLength, 8);
+    for (const side of [-1, 1]) {
+      const arm = new THREE.Mesh(armGeom, skinMat);
+      arm.position.set(
+        side * (dims.torsoWidth / 2 + dims.limbRadius),
+        dims.legLength + dims.torsoHeight - dims.armLength / 2,
+        0,
+      );
+      arm.castShadow = true;
+      group.add(arm);
+    }
+
+    // Legs
+    const legGeom = new THREE.CylinderGeometry(dims.limbRadius * 1.1, dims.limbRadius * 0.9, dims.legLength, 8);
+    for (const side of [-1, 1]) {
+      const leg = new THREE.Mesh(legGeom, clothBottomMat);
+      leg.position.set(side * 0.1, dims.legLength / 2, 0);
+      leg.castShadow = true;
+      group.add(leg);
+    }
+
+    // Hat (optional)
+    if (appearance.clothing.hat) {
+      const hatColor = new THREE.Color(appearance.clothing.hat.color);
+      const hatMat = new THREE.MeshStandardMaterial({ color: hatColor, roughness: 0.6 });
+      let hatMesh: InstanceType<typeof import('three').Mesh>;
+      switch (appearance.clothing.hat.type) {
+        case 'tophat': {
+          const hatGeom = new THREE.CylinderGeometry(dims.headRadius * 0.7, dims.headRadius * 0.7, 0.3, 12);
+          hatMesh = new THREE.Mesh(hatGeom, hatMat);
+          hatMesh.position.y = head.position.y + dims.headRadius + 0.15;
+          break;
+        }
+        case 'beret': {
+          const hatGeom = new THREE.SphereGeometry(dims.headRadius * 0.8, 12, 6, 0, Math.PI * 2, 0, Math.PI * 0.4);
+          hatMesh = new THREE.Mesh(hatGeom, hatMat);
+          hatMesh.position.y = head.position.y + dims.headRadius * 0.8;
+          break;
+        }
+        case 'helmet': {
+          const hatGeom = new THREE.SphereGeometry(dims.headRadius * 1.15, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.6);
+          hatMesh = new THREE.Mesh(hatGeom, hatMat);
+          hatMesh.position.y = head.position.y + dims.headRadius * 0.2;
+          break;
+        }
+        case 'hood': {
+          const hatGeom = new THREE.ConeGeometry(dims.headRadius * 1.0, 0.25, 12);
+          hatMesh = new THREE.Mesh(hatGeom, hatMat);
+          hatMesh.position.y = head.position.y + dims.headRadius + 0.1;
+          break;
+        }
+        default: {
+          const hatGeom = new THREE.CylinderGeometry(dims.headRadius * 0.9, dims.headRadius * 1.1, 0.1, 16);
+          hatMesh = new THREE.Mesh(hatGeom, hatMat);
+          hatMesh.position.y = head.position.y + dims.headRadius;
+        }
+      }
+      hatMesh.castShadow = true;
+      group.add(hatMesh);
+    }
+
+    // Store skeleton reference for animation
+    group.userData.skeleton = skeleton;
+    group.userData.boneMap = boneMap;
+
+    return group;
+  }, []);
+
+  // ── Create procedural animation clips ─────────────────────────
+
+  const createAnimationClips = useCallback((
+    THREE: typeof import('three'),
+  ): Map<string, InstanceType<typeof import('three').AnimationClip>> => {
+    const clips = new Map<string, InstanceType<typeof import('three').AnimationClip>>();
+    const dur = 1.0;
+
+    // Player animations
+    clips.set('idle', new THREE.AnimationClip('idle', dur, [
+      new THREE.NumberKeyframeTrack('.position[y]', [0, 0.5, 1], [0, 0.01, 0]),
+    ]));
+
+    clips.set('walk', new THREE.AnimationClip('walk', dur, [
+      new THREE.NumberKeyframeTrack('.position[y]', [0, 0.25, 0.5, 0.75, 1], [0, 0.03, 0, 0.03, 0]),
+    ]));
+
+    clips.set('run', new THREE.AnimationClip('run', 0.6, [
+      new THREE.NumberKeyframeTrack('.position[y]', [0, 0.15, 0.3, 0.45, 0.6], [0, 0.05, 0, 0.05, 0]),
+    ]));
+
+    clips.set('sit', new THREE.AnimationClip('sit', dur, [
+      new THREE.NumberKeyframeTrack('.position[y]', [0, 1], [-0.4, -0.4]),
+    ]));
+
+    clips.set('build', new THREE.AnimationClip('build', dur, [
+      new THREE.NumberKeyframeTrack('.rotation[x]', [0, 0.5, 1], [0, -0.5, 0]),
+    ]));
+
+    clips.set('inspect', new THREE.AnimationClip('inspect', 1.5, [
+      new THREE.NumberKeyframeTrack('.rotation[x]', [0, 0.75, 1.5], [0, 0.2, 0]),
+    ]));
+
+    clips.set('wave', new THREE.AnimationClip('wave', 1.2, [
+      new THREE.NumberKeyframeTrack('.rotation[z]', [0, 0.3, 0.6, 0.9, 1.2], [0, 0.5, -0.3, 0.5, 0]),
+    ]));
+
+    clips.set('clap', new THREE.AnimationClip('clap', 0.8, [
+      new THREE.NumberKeyframeTrack('.scale[x]', [0, 0.2, 0.4, 0.6, 0.8], [1, 0.95, 1, 0.95, 1]),
+    ]));
+
+    clips.set('point', new THREE.AnimationClip('point', 1.0, [
+      new THREE.NumberKeyframeTrack('.rotation[z]', [0, 0.3, 1.0], [0, -0.8, 0]),
+    ]));
+
+    clips.set('celebrate', new THREE.AnimationClip('celebrate', 1.5, [
+      new THREE.NumberKeyframeTrack('.position[y]', [0, 0.3, 0.6, 0.9, 1.2, 1.5], [0, 0.1, 0, 0.1, 0, 0]),
+    ]));
+
+    clips.set('craft', new THREE.AnimationClip('craft', 2.0, [
+      new THREE.NumberKeyframeTrack('.rotation[x]', [0, 0.5, 1.0, 1.5, 2.0], [0, -0.3, 0, -0.3, 0]),
+    ]));
+
+    // NPC occupation animations
+    clips.set('hammer', new THREE.AnimationClip('hammer', 0.6, [
+      new THREE.NumberKeyframeTrack('.rotation[x]', [0, 0.3, 0.6], [0, -0.8, 0]),
+    ]));
+
+    clips.set('read', new THREE.AnimationClip('read', 3.0, [
+      new THREE.NumberKeyframeTrack('.rotation[x]', [0, 3.0], [0.15, 0.15]),
+    ]));
+
+    clips.set('tend-crops', new THREE.AnimationClip('tend-crops', 2.0, [
+      new THREE.NumberKeyframeTrack('.position[y]', [0, 1.0, 2.0], [0, -0.2, 0]),
+    ]));
+
+    clips.set('patrol', new THREE.AnimationClip('patrol', 1.0, [
+      new THREE.NumberKeyframeTrack('.position[y]', [0, 0.5, 1.0], [0, 0.02, 0]),
+    ]));
+
+    clips.set('count-coins', new THREE.AnimationClip('count-coins', 1.5, [
+      new THREE.NumberKeyframeTrack('.rotation[y]', [0, 0.75, 1.5], [0, 0.1, 0]),
+    ]));
+
+    clips.set('construct', new THREE.AnimationClip('construct', 1.0, [
+      new THREE.NumberKeyframeTrack('.rotation[x]', [0, 0.5, 1.0], [0, -0.5, 0]),
+    ]));
+
+    clips.set('sweep', new THREE.AnimationClip('sweep', 1.2, [
+      new THREE.NumberKeyframeTrack('.rotation[y]', [0, 0.6, 1.2], [-0.3, 0.3, -0.3]),
+    ]));
+
+    clips.set('lecture', new THREE.AnimationClip('lecture', 2.0, [
+      new THREE.NumberKeyframeTrack('.rotation[z]', [0, 0.5, 1.0, 1.5, 2.0], [0, 0.2, 0, -0.2, 0]),
+    ]));
+
+    return clips;
+  }, []);
+
+  // ── Main initialization ────────────────────────────────────────
+
   useEffect(() => {
-    if (!containerRef.current) return;
     let disposed = false;
 
-    const init = async () => {
-      try {
-        const THREE = await import('three');
+    async function init() {
+      const THREE = await import('three');
+      if (disposed) return;
+
+      const avatarGroup = new THREE.Group();
+      avatarGroup.name = 'avatar_system';
+
+      const animClips = createAnimationClips(THREE);
+
+      // ── Helper: set up animation mixer for a mesh ─────────
+      function setupMixer(
+        mesh: InstanceType<typeof import('three').Group>,
+        clipName: string,
+      ): InstanceType<typeof import('three').AnimationMixer> {
+        const mixer = new THREE.AnimationMixer(mesh);
+        const clip = animClips.get(clipName);
+        if (clip) {
+          const action = mixer.clipAction(clip);
+          action.play();
+        }
+        return mixer;
+      }
+
+      // ── Create name tag sprite using canvas texture ────────
+      function createNameTag(
+        name: string,
+        profession?: string,
+        firmEmblem?: string,
+      ): InstanceType<typeof import('three').Sprite> {
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 64;
+        const ctx = canvas.getContext('2d')!;
+
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.beginPath();
+        ctx.roundRect(0, 0, 256, 64, 8);
+        ctx.fill();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 20px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(name, 128, 24);
+
+        if (profession) {
+          ctx.fillStyle = '#aaccff';
+          ctx.font = '14px sans-serif';
+          ctx.fillText(profession, 128, 44);
+        }
+
+        if (firmEmblem) {
+          ctx.fillStyle = '#ffcc88';
+          ctx.font = '12px sans-serif';
+          ctx.fillText(firmEmblem, 128, 58);
+        }
+
+        const tex = new THREE.CanvasTexture(canvas);
+        const spriteMat = new THREE.SpriteMaterial({
+          map: tex,
+          transparent: true,
+          depthTest: false,
+        });
+        const sprite = new THREE.Sprite(spriteMat);
+        sprite.scale.set(2, 0.5, 1);
+        return sprite;
+      }
+
+      // ── Player avatar ──────────────────────────────────────
+      const playerMesh = await createAvatarMesh(playerAvatar.appearance, THREE);
+      if (disposed) return;
+
+      playerMesh.position.set(
+        playerAvatar.position.x,
+        playerAvatar.position.y,
+        playerAvatar.position.z,
+      );
+      playerMesh.rotation.y = playerAvatar.rotation;
+      playerMesh.userData = {
+        avatarId: playerAvatar.id,
+        isPlayer: true,
+        name: playerAvatar.name,
+      };
+
+      const playerMixer = setupMixer(playerMesh, playerAvatar.currentAnimation);
+      mixersRef.current.set(playerAvatar.id, playerMixer);
+      playerMeshRef.current = playerMesh;
+      avatarGroup.add(playerMesh);
+
+      // Player name tag
+      const playerTag = createNameTag(
+        playerAvatar.name,
+        playerAvatar.profession,
+        playerAvatar.firmEmblem,
+      );
+      const bodyDims = BODY_DIMENSIONS[playerAvatar.appearance.bodyType];
+      playerTag.position.y = bodyDims.totalHeight + 0.3;
+      playerMesh.add(playerTag);
+
+      // ── Other players (interpolated from 10Hz updates) ─────
+      const otherPlayerMeshes = new Map<string, {
+        mesh: InstanceType<typeof import('three').Group>;
+        targetPos: InstanceType<typeof import('three').Vector3>;
+        targetRot: number;
+      }>();
+
+      const sortedOthers = [...otherPlayers].slice(0, MAX_FULLY_ANIMATED);
+
+      for (const other of sortedOthers) {
+        const mesh = await createAvatarMesh(other.appearance, THREE);
         if (disposed) return;
 
-        // Avatar mesh generation (procedural)
-        const createAvatarMesh = (appearance: AvatarAppearance, name: string) => {
-          const group = new THREE.Group();
-          group.name = `avatar-${name}`;
+        mesh.position.set(other.position.x, other.position.y, other.position.z);
+        mesh.rotation.y = other.rotation;
+        mesh.userData = { avatarId: other.id, isOtherPlayer: true, name: other.name };
 
-          // Body (capsule approximation)
-          const bodyGeo = new THREE.CylinderGeometry(0.25, 0.3, 1.2, 8);
-          const bodyMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(appearance.clothing === 'work-overalls' ? '#4a4a6a' : '#3a5a8a') });
-          const body = new THREE.Mesh(bodyGeo, bodyMat);
-          body.position.y = 0.9;
-          group.add(body);
+        const mixer = setupMixer(mesh, other.currentAnimation);
+        mixersRef.current.set(other.id, mixer);
 
-          // Head
-          const headGeo = new THREE.SphereGeometry(0.2, 8, 8);
-          const headMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(appearance.skinColor) });
-          const head = new THREE.Mesh(headGeo, headMat);
-          head.position.y = 1.7;
-          group.add(head);
+        const tag = createNameTag(other.name, other.profession, other.firmEmblem);
+        const otherDims = BODY_DIMENSIONS[other.appearance.bodyType];
+        tag.position.y = otherDims.totalHeight + 0.3;
+        mesh.add(tag);
 
-          // Hair
-          if (appearance.hairStyle !== 'bald') {
-            const hairGeo = new THREE.SphereGeometry(0.22, 8, 4, 0, Math.PI * 2, 0, Math.PI * 0.6);
-            const hairMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(appearance.hairColor) });
-            const hair = new THREE.Mesh(hairGeo, hairMat);
-            hair.position.y = 1.78;
-            group.add(hair);
+        avatarGroup.add(mesh);
+        otherPlayerMeshes.set(other.id, {
+          mesh,
+          targetPos: new THREE.Vector3(other.position.x, other.position.y, other.position.z),
+          targetRot: other.rotation,
+        });
+      }
+
+      // ── NPCs (2Hz updates, freeze beyond distance) ────────
+      const npcMeshes = new Map<string, {
+        mesh: InstanceType<typeof import('three').Group>;
+        targetPos: InstanceType<typeof import('three').Vector3>;
+        targetRot: number;
+      }>();
+
+      for (const npc of npcs.slice(0, MAX_FULLY_ANIMATED)) {
+        const mesh = await createAvatarMesh(npc.appearance, THREE);
+        if (disposed) return;
+
+        mesh.position.set(npc.position.x, npc.position.y, npc.position.z);
+        mesh.rotation.y = npc.rotation;
+        mesh.userData = { avatarId: npc.id, isNPC: true, name: npc.name, occupation: npc.occupation };
+
+        const clipName = npc.occupationAnimation;
+        const mixer = setupMixer(mesh, clipName);
+        mixersRef.current.set(npc.id, mixer);
+
+        const tag = createNameTag(npc.name, npc.occupation);
+        const npcDims = BODY_DIMENSIONS[npc.appearance.bodyType];
+        tag.position.y = npcDims.totalHeight + 0.3;
+        mesh.add(tag);
+
+        avatarGroup.add(mesh);
+        npcMeshes.set(npc.id, {
+          mesh,
+          targetPos: new THREE.Vector3(npc.position.x, npc.position.y, npc.position.z),
+          targetRot: npc.rotation,
+        });
+      }
+
+      // ── Kinematic character controller (WASD) ──────────────
+
+      function handleKeyDown(e: KeyboardEvent) {
+        keysRef.current.add(e.key.toLowerCase());
+      }
+      function handleKeyUp(e: KeyboardEvent) {
+        keysRef.current.delete(e.key.toLowerCase());
+      }
+      window.addEventListener('keydown', handleKeyDown);
+      window.addEventListener('keyup', handleKeyUp);
+
+      // ── Update loop (called by parent scene's game loop) ───
+
+      avatarGroup.userData.update = (delta: number, _elapsed: number) => {
+        // Update all animation mixers
+        for (const mixer of mixersRef.current.values()) {
+          (mixer as { update: (d: number) => void }).update(delta);
+        }
+
+        // ── Player movement (WASD + shift to run) ───────────
+        const keys = keysRef.current;
+        const isRunning = keys.has('shift');
+        const speed = isRunning ? RUN_SPEED : MOVE_SPEED;
+        let moveX = 0;
+        let moveZ = 0;
+
+        if (keys.has('w')) moveZ -= 1;
+        if (keys.has('s')) moveZ += 1;
+        if (keys.has('a')) moveX -= 1;
+        if (keys.has('d')) moveX += 1;
+
+        const isMoving = moveX !== 0 || moveZ !== 0;
+
+        if (isMoving) {
+          const len = Math.sqrt(moveX * moveX + moveZ * moveZ);
+          moveX /= len;
+          moveZ /= len;
+
+          const pos = playerPositionRef.current;
+          pos.x += moveX * speed * delta;
+          pos.z += moveZ * speed * delta;
+
+          // Auto-face movement direction with smooth rotation
+          const targetRot = Math.atan2(moveX, -moveZ);
+          let rotDiff = targetRot - playerRotationRef.current;
+          while (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
+          while (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
+          playerRotationRef.current += rotDiff * Math.min(1, ROTATION_SPEED * delta);
+
+          const pm = playerMeshRef.current as InstanceType<typeof import('three').Group>;
+          if (pm) {
+            pm.position.set(pos.x, pos.y, pos.z);
+            pm.rotation.y = playerRotationRef.current;
           }
 
-          return group;
-        };
-
-        // Character controller state
-        const playerMesh = createAvatarMesh(playerAvatar.appearance, playerAvatar.displayName);
-        playerMesh.position.set(playerAvatar.position.x, playerAvatar.position.y, playerAvatar.position.z);
-
-        // Animation simulation (bob for walk/run)
-        let animFrame = 0;
-        const animSpeed = { idle: 0.02, walk: 0.08, run: 0.15 };
-
-        const update = (deltaTime: number) => {
-          if (disposed) return;
-          const keys = keysRef.current;
-          const isRunning = keys.has('shift');
-          const speed = isRunning ? config.runSpeed : config.moveSpeed;
-
-          let dx = 0, dz = 0;
-          if (keys.has('w') || keys.has('arrowup')) dz -= 1;
-          if (keys.has('s') || keys.has('arrowdown')) dz += 1;
-          if (keys.has('a') || keys.has('arrowleft')) dx -= 1;
-          if (keys.has('d') || keys.has('arrowright')) dx += 1;
-
-          if (dx !== 0 || dz !== 0) {
-            const len = Math.sqrt(dx * dx + dz * dz);
-            dx = (dx / len) * speed * deltaTime;
-            dz = (dz / len) * speed * deltaTime;
-            const newPos = {
-              x: playerMesh.position.x + dx,
-              y: playerMesh.position.y,
-              z: playerMesh.position.z + dz,
-            };
-            playerMesh.position.set(newPos.x, newPos.y, newPos.z);
-            // Face movement direction
-            const targetRot = Math.atan2(dx, dz);
-            playerMesh.rotation.y += (targetRot - playerMesh.rotation.y) * config.smoothRotation;
-            onMove?.(newPos, playerMesh.rotation.y);
-            setActiveAnimation(isRunning ? 'run' : 'walk');
-          } else {
-            setActiveAnimation('idle');
+          const newAnim = isRunning ? 'run' : 'walk';
+          if (activeAnimation !== newAnim) {
+            setActiveAnimation(newAnim as AnimationClip);
           }
 
-          // Bob animation
-          animFrame += animSpeed[activeAnimation as keyof typeof animSpeed] || 0.02;
-          playerMesh.position.y = playerAvatar.position.y + Math.sin(animFrame) * (activeAnimation === 'walk' ? 0.05 : activeAnimation === 'run' ? 0.08 : 0.01);
-        };
+          onMove?.(pos, playerRotationRef.current);
+        } else if (activeAnimation !== 'idle' && !['sit', 'build', 'inspect', 'craft'].includes(activeAnimation)) {
+          setActiveAnimation('idle');
+        }
 
-        threeRef.current = { playerMesh, createAvatarMesh, update, THREE };
-        setLoaded(true);
-      } catch {
-        // Three.js not available, component operates in data-only mode
-        setLoaded(false);
+        // ── Interpolate other players (10Hz -> smooth) ───────
+        const interpFactor = Math.min(1, delta * INTERPOLATION_RATE);
+        for (const [, data] of otherPlayerMeshes) {
+          data.mesh.position.lerp(data.targetPos, interpFactor);
+          let rd = data.targetRot - data.mesh.rotation.y;
+          while (rd > Math.PI) rd -= Math.PI * 2;
+          while (rd < -Math.PI) rd += Math.PI * 2;
+          data.mesh.rotation.y += rd * interpFactor;
+        }
+
+        // ── Interpolate NPCs (2Hz -> smooth) ────────────────
+        const npcInterpFactor = Math.min(1, delta * NPC_UPDATE_RATE);
+        for (const [, data] of npcMeshes) {
+          data.mesh.position.lerp(data.targetPos, npcInterpFactor);
+          let rd = data.targetRot - data.mesh.rotation.y;
+          while (rd > Math.PI) rd -= Math.PI * 2;
+          while (rd < -Math.PI) rd += Math.PI * 2;
+          data.mesh.rotation.y += rd * npcInterpFactor;
+        }
+
+        // ── LOD: distance-based visibility ───────────────────
+        const playerPos = playerPositionRef.current;
+        const pVec = new THREE.Vector3(playerPos.x, playerPos.y, playerPos.z);
+
+        avatarGroup.traverse((child) => {
+          const obj = child as unknown as InstanceType<typeof import('three').Object3D> & {
+            userData: { isOtherPlayer?: boolean; isNPC?: boolean };
+            isSprite?: boolean;
+          };
+          if (obj.userData?.isOtherPlayer || obj.userData?.isNPC) {
+            const dist = obj.position.distanceTo(pVec);
+            // Full detail within 50m, simplified 50-100m, name-tag only 100-200m, hidden 200m+
+            obj.traverse((part) => {
+              const p = part as unknown as { isSprite?: boolean; visible: boolean };
+              if (p.isSprite) {
+                p.visible = dist < 200;
+              } else if (part !== obj) {
+                p.visible = dist < 100;
+              }
+            });
+          }
+        });
+      };
+
+      avatarGroupRef.current = avatarGroup;
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('concordia:avatars-ready', {
+          detail: { avatarGroup },
+        }));
+      }
+
+      // Return keyboard cleanup
+      return () => {
+        window.removeEventListener('keydown', handleKeyDown);
+        window.removeEventListener('keyup', handleKeyUp);
+      };
+    }
+
+    const cleanupPromise = init();
+
+    return () => {
+      disposed = true;
+      cleanupPromise.then((cleanup) => cleanup?.());
+      mixersRef.current.clear();
+
+      if (avatarGroupRef.current) {
+        const group = avatarGroupRef.current as {
+          traverse: (cb: (obj: unknown) => void) => void;
+        };
+        group.traverse((obj) => {
+          const mesh = obj as {
+            geometry?: { dispose: () => void };
+            material?: { dispose: () => void; map?: { dispose: () => void } } |
+                        { dispose: () => void; map?: { dispose: () => void } }[];
+          };
+          if (mesh.geometry) mesh.geometry.dispose();
+          if (mesh.material) {
+            const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+            mats.forEach((m) => {
+              if (m.map) m.map.dispose();
+              m.dispose();
+            });
+          }
+        });
       }
     };
-
-    init();
-    return () => { disposed = true; };
-  }, []);
-
-  // LOD calculation
-  const getAvatarLOD = useCallback((distance: number): 'full' | 'simplified' | 'nameTag' | 'hidden' => {
-    if (distance < AVATAR_LOD.full) return 'full';
-    if (distance < AVATAR_LOD.simplified) return 'simplified';
-    if (distance < AVATAR_LOD.nameTagOnly) return 'nameTag';
-    return 'hidden';
-  }, []);
-
-  // Sort by distance for animation budget
-  const sortedAvatars = useMemo(() => {
-    const all = [...otherPlayers, ...npcs.map(n => ({ ...n, isRunning: false }))];
-    return all.sort((a, b) => {
-      const da = Math.sqrt((a.position.x - playerAvatar.position.x) ** 2 + (a.position.z - playerAvatar.position.z) ** 2);
-      const db = Math.sqrt((b.position.x - playerAvatar.position.x) ** 2 + (b.position.z - playerAvatar.position.z) ** 2);
-      return da - db;
-    }).slice(0, MAX_ANIMATED_AVATARS);
-  }, [otherPlayers, npcs, playerAvatar]);
+  }, [
+    playerAvatar, otherPlayers, npcs,
+    onMove, onEmote, activeAnimation,
+    createAvatarMesh, createAnimationClips,
+  ]);
 
   return (
-    <div ref={containerRef} className="relative">
-      {/* Debug overlay — avatar state */}
-      <div className="absolute bottom-4 left-4 bg-black/60 border border-white/10 rounded p-2 text-xs text-white/60 space-y-0.5">
-        <div>Player: ({playerAvatar.position.x.toFixed(0)}, {playerAvatar.position.z.toFixed(0)}) [{activeAnimation}]</div>
-        <div>Others: {otherPlayers.length} players, {npcs.length} NPCs</div>
-        <div>Animated: {Math.min(sortedAvatars.length, MAX_ANIMATED_AVATARS)}/{MAX_ANIMATED_AVATARS} budget</div>
-        <div>Controller: {config.moveSpeed}m/s walk, {config.runSpeed}m/s run</div>
-        <div className="mt-1 text-white/40">WASD=move Shift=run 1-5=emotes</div>
-      </div>
-
-      {/* NPC info badges (visible in isometric fallback) */}
-      {npcs.map(npc => (
-        <div key={npc.id} className="hidden" data-npc-id={npc.id}
-          data-position={JSON.stringify(npc.position)}
-          data-animation={npc.animation}
-          data-occupation={npc.occupation}
-          data-name={npc.displayName}>
-          {/* NPC data for renderer consumption */}
-        </div>
-      ))}
-
-      {/* Emote bar */}
-      <div className="absolute bottom-4 right-4 flex gap-1">
-        {[
-          { key: '1', emote: 'wave' as AvatarAnimation, icon: '👋' },
-          { key: '2', emote: 'clap' as AvatarAnimation, icon: '👏' },
-          { key: '3', emote: 'point' as AvatarAnimation, icon: '👉' },
-          { key: '4', emote: 'celebrate' as AvatarAnimation, icon: '🎉' },
-          { key: '5', emote: 'sit' as AvatarAnimation, icon: '🪑' },
-        ].map(e => (
-          <button key={e.key} onClick={() => onEmote?.(e.emote)}
-            className="w-8 h-8 bg-black/60 border border-white/10 rounded flex items-center justify-center text-sm hover:bg-white/10"
-            title={`${e.emote} (${e.key})`}>
-            {e.icon}
-          </button>
-        ))}
-      </div>
-
-      {/* State exposed as data attributes for Three.js scene to read */}
-      <div className="hidden"
-        data-avatar-system="true"
-        data-loaded={loaded}
-        data-player={JSON.stringify(playerAvatar)}
-        data-active-animation={activeAnimation}
-        data-controller-config={JSON.stringify(config)}
-        data-lod-config={JSON.stringify(AVATAR_LOD)}
-        data-animation-transitions={JSON.stringify(ANIMATION_TRANSITIONS)}
-        data-npc-occupation-map={JSON.stringify(NPC_OCCUPATION_ANIMATIONS)}
-      />
-    </div>
+    <div
+      data-component="avatar-system-3d"
+      data-player={playerAvatar.id}
+      data-other-count={otherPlayers.length}
+      data-npc-count={npcs.length}
+      style={{ display: 'none' }}
+      aria-hidden
+    />
   );
 }
+
+export { BONE_HIERARCHY, BODY_DIMENSIONS, MAX_FULLY_ANIMATED };
