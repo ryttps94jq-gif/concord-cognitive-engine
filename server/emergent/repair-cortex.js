@@ -150,10 +150,18 @@ const _repairMemory = new Map();
 function _ensureRepairMemory() {
   try {
     const S = _getSTATE();
-    if (S && S.repairMemory instanceof Map && _repairMemory.size === 0) {
-      for (const [k, v] of S.repairMemory) {
-        _repairMemory.set(k, v);
+    if (!S || _repairMemory.size > 0) return;
+
+    // Handle both Map (runtime) and plain object (deserialized from JSON)
+    if (S.repairMemory instanceof Map) {
+      for (const [k, v] of S.repairMemory) _repairMemory.set(k, v);
+    } else if (S.repairMemory && typeof S.repairMemory === "object") {
+      // JSON.stringify(Map) produces {} or a plain object — restore from it
+      for (const [k, v] of Object.entries(S.repairMemory)) {
+        if (v && typeof v === "object") _repairMemory.set(k, v);
       }
+      // Upgrade to a real Map for future use
+      S.repairMemory = new Map(_repairMemory);
     }
   } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
 }
@@ -4023,11 +4031,14 @@ Artifact data (first 500 chars): ${JSON.stringify(artifact.data).slice(0, 500)}`
 
 const REPAIR_STARTUP_DELAY = 180_000; // 3 minutes — match ghost fleet, let server fully boot
 
+let _repairDelayTimer = null; // tracks the startup delay setTimeout
+
 export function startRepairLoop() {
   if (_repairLoopTimer) return { ok: true, status: "already_running" };
 
   // Delay activation so the server is fully booted before repair systems fire
-  const delayTimer = setTimeout(() => {
+  _repairDelayTimer = setTimeout(() => {
+    _repairDelayTimer = null; // delay has fired
     _repairLoopTimer = setInterval(async () => {
       try {
         await runRepairCycle();
@@ -4041,10 +4052,10 @@ export function startRepairLoop() {
 
     logger.info('emergent:repair-cortex', 'Repair loop activated after startup delay');
   }, REPAIR_STARTUP_DELAY);
-  if (delayTimer.unref) delayTimer.unref();
+  if (_repairDelayTimer.unref) _repairDelayTimer.unref();
 
-  // Mark as "pending" so we don't double-start
-  _repairLoopTimer = delayTimer;
+  // Mark as "pending" so we don't double-start (use a truthy sentinel)
+  _repairLoopTimer = { _pending: true };
 
   // Also start Guardian monitors (with same delay)
   startGuardian();
@@ -4058,10 +4069,16 @@ export function startRepairLoop() {
 }
 
 export function stopRepairLoop() {
-  if (_repairLoopTimer) {
-    clearInterval(_repairLoopTimer);
-    _repairLoopTimer = null;
+  // Clear the startup delay timer if it hasn't fired yet
+  if (_repairDelayTimer) {
+    clearTimeout(_repairDelayTimer);
+    _repairDelayTimer = null;
   }
+  // Clear the interval (only if it's a real timer, not the pending sentinel)
+  if (_repairLoopTimer && !_repairLoopTimer._pending) {
+    clearInterval(_repairLoopTimer);
+  }
+  _repairLoopTimer = null;
   stopGuardian();
   return { ok: true };
 }
@@ -4554,12 +4571,17 @@ const REPAIR_STRATEGIES = [
     name: "type_error_fix",
     match: (err) => /TypeError|is not a function|is not iterable/i.test(err.error.message),
     apply: async (errorEntry) => {
+      // Record the patch key so we can track occurrences, but do NOT claim fixed:true
+      // since this strategy cannot actually patch the calling code at runtime.
+      // Instead, escalate so the sovereign / operator is alerted.
       const patchKey = `type_guard:${errorEntry.context.module}:${errorEntry.context.function}`;
       if (!RUNTIME_PATCHES.has(patchKey)) {
-        RUNTIME_PATCHES.set(patchKey, { type: "type_guard", module: errorEntry.context.module, appliedAt: nowISO() });
-        return { fixed: true, method: "type_guard" };
+        RUNTIME_PATCHES.set(patchKey, { type: "type_guard", module: errorEntry.context.module, appliedAt: nowISO(), occurrences: 1 });
+      } else {
+        const p = RUNTIME_PATCHES.get(patchKey);
+        p.occurrences = (p.occurrences || 0) + 1;
       }
-      return { fixed: false };
+      return { fixed: false, escalate: true, method: "type_guard_logged" };
     },
   },
   {
@@ -4842,7 +4864,9 @@ export async function repairCortexSelfTest() {
   const total = Object.keys(results).filter(k => typeof results[k] === "boolean").length;
   results.overall = passed === total ? "healthy" : passed > total * 0.7 ? "degraded" : "failing";
 
-  if (results.overall === "failing") throw new Error(`Repair cortex failing: ${total - passed}/${total} checks failed`);
+  if (results.overall === "failing") {
+    results.error = `Repair cortex failing: ${total - passed}/${total} checks failed`;
+  }
   return results;
 }
 

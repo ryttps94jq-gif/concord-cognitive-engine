@@ -34634,6 +34634,11 @@ async function fetchRSSFeed(feedId) {
       if (itemId && !feed.itemsSeen.has(itemId)) {
         items.push({ title: title.trim(), link: link.trim(), description: description.trim(), pubDate });
         feed.itemsSeen.add(itemId);
+        // Cap itemsSeen to prevent unbounded memory growth
+        if (feed.itemsSeen.size > 10000) {
+          const iter = feed.itemsSeen.values();
+          for (let i = 0; i < 2000; i++) { feed.itemsSeen.delete(iter.next().value); }
+        }
       }
     }
 
@@ -37571,9 +37576,11 @@ setInterval(() => {
     }
   }
 
-  // Macro rate limits: evict stale entries
+  // Macro rate limits: prune old call timestamps from each bucket
   for (const [key, entry] of _macroRateLimits) {
-    if (entry.resetAt && now > entry.resetAt + 3600000) { _macroRateLimits.delete(key); cleaned++; }
+    if (entry.calls && Array.isArray(entry.calls)) {
+      entry.calls = entry.calls.filter(t => now - t < (entry.windowMs || 60000));
+    }
   }
 
   if (cleaned > 0) log("cleanup", `Map sweep: evicted ${cleaned} stale entries`);
@@ -53947,12 +53954,15 @@ function syncDTUToLensArtifacts(dtu) {
 /**
  * Retroactive tagger: classify and tag ALL existing DTUs, then sync to lenses.
  */
-function retroTagAllDTUs() {
+async function retroTagAllDTUs() {
   try {
     let tagged = 0, lensArtifactsCreated = 0;
     const startTime = Date.now();
 
-    for (const [id, dtu] of STATE.dtus) {
+    const dtus = typeof STATE.dtus?.values === "function" ? Array.from(STATE.dtus.values()) : [];
+    let processed = 0;
+
+    for (const dtu of dtus) {
       // Auto-classify and merge tags
       const domains = autoClassifyDTU(dtu);
       if (domains.length > 0) {
@@ -53968,27 +53978,33 @@ function retroTagAllDTUs() {
 
       // Sync to lens artifacts
       lensArtifactsCreated += syncDTUToLensArtifacts(dtu);
+
+      // Yield event loop every 200 DTUs to avoid blocking
+      if (++processed % 200 === 0) await new Promise(r => setTimeout(r, 0));
     }
 
     // Backfill missing hashes
     let hashesBackfilled = 0;
-    for (const [id, dtu] of STATE.dtus) {
+    processed = 0;
+    for (const dtu of dtus) {
       if (!dtu.hash) {
         try {
           dtu.hash = pipeContentFingerprint(dtu);
           hashesBackfilled++;
         } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
       }
+      if (++processed % 200 === 0) await new Promise(r => setTimeout(r, 0));
     }
 
     saveStateDebounced();
 
     const elapsed = Date.now() - startTime;
-    const msg = `[RetroTag] Tagged ${tagged}/${STATE.dtus.size} DTUs, created ${lensArtifactsCreated} lens artifacts, backfilled ${hashesBackfilled} hashes in ${elapsed}ms`;
-    structuredLog("info", "retro_tag_complete", { tagged, total: STATE.dtus.size, lensArtifactsCreated, hashesBackfilled, elapsedMs: elapsed });
+    const total = dtus.length;
+    const msg = `[RetroTag] Tagged ${tagged}/${total} DTUs, created ${lensArtifactsCreated} lens artifacts, backfilled ${hashesBackfilled} hashes in ${elapsed}ms`;
+    structuredLog("info", "retro_tag_complete", { tagged, total, lensArtifactsCreated, hashesBackfilled, elapsedMs: elapsed });
     try { pipeAudit("retro_tag", msg, { tagged, lensArtifactsCreated, hashesBackfilled, elapsed }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
-    return { ok: true, tagged, lensArtifactsCreated, hashesBackfilled, elapsed, total: STATE.dtus.size };
+    return { ok: true, tagged, lensArtifactsCreated, hashesBackfilled, elapsed, total };
   } catch (e) {
     console.error("[RetroTag] Fatal error:", String(e?.message || e));
     return { ok: false, error: String(e?.message || e) };
@@ -53999,11 +54015,14 @@ function retroTagAllDTUs() {
  * Full lens sync: ensures all tagged DTUs have corresponding lens artifacts.
  * Safe to run multiple times (idempotent).
  */
-function syncAllDTUsToLenses() {
+async function syncAllDTUsToLenses() {
   try {
-    let synced = 0;
-    for (const [id, dtu] of STATE.dtus) {
+    let synced = 0, processed = 0;
+    const dtus = typeof STATE.dtus?.values === "function" ? Array.from(STATE.dtus.values()) : [];
+    for (const dtu of dtus) {
       synced += syncDTUToLensArtifacts(dtu);
+      // Yield event loop every 200 DTUs to avoid blocking
+      if (++processed % 200 === 0) await new Promise(r => setTimeout(r, 0));
     }
     if (synced > 0) {
       saveStateDebounced();
@@ -54017,10 +54036,10 @@ function syncAllDTUsToLenses() {
 }
 
 // ── Run retroactive tagging on startup (delayed to avoid blocking boot) ──────
-setTimeout(() => {
+setTimeout(async () => {
   try {
     structuredLog("info", "retro_tag_starting", {});
-    const result = retroTagAllDTUs();
+    const result = await retroTagAllDTUs();
     structuredLog("info", "retro_tag_finished", { result });
   } catch (e) {
     console.error("[RetroTag] Startup error:", String(e?.message || e));

@@ -237,6 +237,29 @@ function _aggressiveEviction(STATE) {
     }
   }
 
+  // Cap large Maps that grow without bound
+  const mapCaps = [
+    ["sources", 5000],
+    ["transactions", 10000],
+    ["listings", 5000],
+    ["entitlements", 5000],
+    ["styleVectors", 500],
+  ];
+  for (const [field, cap] of mapCaps) {
+    const m = STATE[field];
+    if (m && typeof m.size === "number" && m.size > cap && typeof m.delete === "function") {
+      // Delete oldest entries (Maps iterate in insertion order)
+      const excess = m.size - Math.floor(cap * 0.8);
+      const iter = m.keys();
+      for (let i = 0; i < excess; i++) {
+        const k = iter.next();
+        if (k.done) break;
+        m.delete(k.value);
+      }
+      logger.log("warn", "lib", `memory_watchdog_${field}_capped`, { before: m.size + excess, after: m.size });
+    }
+  }
+
   if (evicted > 0) {
     logger.log("warn", "lib", "memory_watchdog_aggressive_evict", { evicted });
   }
