@@ -126,7 +126,7 @@ export default function registerChatRoutes(app, {
   app.get("/api/chat/conversations", (req, res) => {
     try {
       const limit = Math.min(Number(req.query.limit) || 50, 200);
-      const conversations = Array.from(STATE.sessions.entries())
+      const conversations = Array.from(STATE.sessions?.entries?.() || [])
         .map(([id, sess]) => {
           const msgs = sess.messages || [];
           const lastMsg = msgs[msgs.length - 1];

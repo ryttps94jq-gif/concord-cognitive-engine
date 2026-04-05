@@ -348,7 +348,8 @@ export default function registerDomainRoutes(app, {
       ]);
       res.json(result);
     } catch (e) {
-      res.json({ ok: true, local: STATE.dtus.size, marketplace: 0, global: STATE.dtus.size, total: STATE.dtus.size, localCount: STATE.dtus.size, globalCount: STATE.dtus.size, error: e.message, timeout: true });
+      const sz = STATE.dtus?.size || 0;
+      res.json({ ok: true, local: sz, marketplace: 0, global: sz, total: sz, localCount: sz, globalCount: sz, error: e.message, timeout: true });
     }
   }));
   app.get("/api/scope/dtus/:scope", asyncHandler(async (req,res)=> res.json(await runMacro("emergent","scope.listByScope", { scope: req.params.scope, limit: Number(req.query.limit||50) }, makeCtx(req)))));
@@ -367,11 +368,11 @@ export default function registerDomainRoutes(app, {
     return res.json(out);
   }));
   app.get("/api/papers", (req, res) => {
-    const papers = Array.from(STATE.papers.values());
+    const papers = Array.from(STATE.papers?.values?.() || []);
     return res.json({ ok: true, papers });
   });
   app.get("/api/papers/:id", (req, res) => {
-    const paper = STATE.papers.get(req.params.id);
+    const paper = STATE.papers?.get(req.params.id);
     if (!paper) return res.status(404).json({ ok: false, error: "Paper not found" });
     return res.json({ ok: true, paper });
   });
@@ -994,12 +995,12 @@ export default function registerDomainRoutes(app, {
 
   // ---- Sessions ----
   app.get("/api/sessions", (req, res) => {
-    const sessions = Array.from(STATE.sessions.entries()).map(([id, data]) => ({
+    const sessions = Array.from(STATE.sessions?.entries?.() || []).map(([id, data]) => ({
       sessionId: id,
       createdAt: data.createdAt,
       messageCount: (data.messages || []).length,
       cloudOptIn: !!data.cloudOptIn,
-      lastActivity: (data.messages || [])[data.messages.length - 1]?.ts || data.createdAt
+      lastActivity: (data.messages || [])[data.messages?.length - 1]?.ts || data.createdAt
     }));
     return res.json({ ok: true, sessions });
   });

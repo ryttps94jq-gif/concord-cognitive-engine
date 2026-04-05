@@ -14,6 +14,12 @@
 // === DATA DIRECTORY (canonical) ===
 /** @type {string} Data directory for persistent storage */
 const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
+// Ensure required directories exist early — prevents crash on first write
+try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch {}
+try { fs.mkdirSync(path.join(DATA_DIR, 'backups'), { recursive: true }); } catch {}
+try { fs.mkdirSync(path.join(DATA_DIR, 'snapshots'), { recursive: true }); } catch {}
+try { fs.mkdirSync(path.join(DATA_DIR, 'artifacts'), { recursive: true }); } catch {}
+try { fs.mkdirSync(path.join(DATA_DIR, 'seed'), { recursive: true }); } catch {}
 /**
  * Concord v2 — Macro‑Max Monolith (Single File)
  * - Macro-first architecture: nearly all logic is macros.
@@ -6115,6 +6121,27 @@ function loadStateFromDisk() {
 
     return { ok: true, loaded: true, path: STATE_PATH, backend: USE_SQLITE_STATE ? "sqlite (migrated)" : "json", savedAt: obj.savedAt || null };
   } catch (e) {
+    structuredLog("error", "state_json_corrupted", { error: e.message, path: STATE_PATH });
+    // Try loading latest backup
+    try {
+      const backupBase = path.join(path.dirname(STATE_PATH), "backups");
+      if (fs.existsSync(backupBase)) {
+        const dirs = fs.readdirSync(backupBase).sort().reverse();
+        for (const dir of dirs.slice(0, 5)) {
+          const bp = path.join(backupBase, dir, "concord_state.json");
+          if (fs.existsSync(bp)) {
+            const bRaw = fs.readFileSync(bp, "utf-8");
+            const bObj = JSON.parse(bRaw);
+            _hydrateState(bObj);
+            _normalizeSettingsDefaults();
+            structuredLog("warn", "state_restored_from_backup", { backup: dir });
+            return { ok: true, loaded: true, path: bp, backend: "json (backup)", restoredFrom: dir };
+          }
+        }
+      }
+    } catch (backupErr) {
+      structuredLog("error", "backup_restore_failed", { error: backupErr.message });
+    }
     return { ok: false, loaded: false, path: STATE_PATH, backend: "json", error: String(e?.message || e) };
   }
 }
@@ -22893,7 +22920,8 @@ app.get("/api/species/registry", (_req, res) => res.json({ ok: true, registry: g
 app.get("/api/species/census", (_req, res) => res.json({ ok: true, ...getSpeciesCensus(STATE) }));
 app.get("/api/species/all", (_req, res) => res.json({ ok: true, entities: classifyAllEntities(STATE) }));
 app.get("/api/species/:entityId", (req, res) => {
-  const emergents = STATE.emergents || STATE.__emergents;
+  const emergents = STATE.emergents || STATE.__emergents || STATE.__emergent?.emergents;
+  if (!emergents) return res.json({ ok: false, error: "entity not found" });
   const entity = emergents instanceof Map ? emergents.get(req.params.entityId) : emergents?.[req.params.entityId];
   if (!entity) return res.json({ ok: false, error: "entity not found" });
   const species = classifyEntity(entity);
@@ -33632,7 +33660,7 @@ app.get("/api/integrations", asyncHandler(async (req, res) => res.json(await run
 app.get("/api/events", (req, res) => {
   try {
     // Return recent system events/logs
-    const events = STATE.logs.slice(-100).map(log => ({
+    const events = (STATE.logs || []).slice(-100).map(log => ({
       id: log.id || uid("evt"),
       type: log.domain || "system",
       action: log.action || "event",
@@ -35744,7 +35772,7 @@ app.get("/api/lattice/resonance", asyncHandler(async (req, res) => {
     res.json(out);
   } catch {
     // Compute basic resonance from DTU state instead of returning fake data
-    const dtuCount = STATE.dtus.size;
+    const dtuCount = STATE.dtus?.size || 0;
     const megaCount = dtusArray().filter(d => d.tier === "mega").length;
     const avgScore = dtuCount > 0 ? dtusArray().reduce((sum, d) => sum + (d.authority?.score || 0), 0) / dtuCount : 0;
     res.json({ ok: true, resonance: clamp(avgScore, 0, 1), harmony: clamp(megaCount / Math.max(1, dtuCount) * 10, 0, 1), computed: true });
@@ -36247,7 +36275,7 @@ app.get("/api/economy/status", (req, res) => {
 app.get("/api/economy/balance", (req, res) => {
   ensureEconomicState();
   const userId = req.query.user_id || req.user?.id || "default";
-  const wallet = STATE.economic.wallets.get(userId);
+  const wallet = STATE.economic?.wallets?.get(userId);
   res.json({ ok: true, balance: wallet?.balance || 0, tier: wallet?.tier || "free" });
 });
 

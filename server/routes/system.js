@@ -212,10 +212,10 @@ export default function registerSystemRoutes(app, {
       uptime: process.uptime(),
       llmReady: LLM_READY,
       counts: {
-        dtus: STATE.dtus.size,
-        wrappers: STATE.wrappers.size,
-        layers: STATE.layers.size,
-        personas: STATE.personas.size,
+        dtus: STATE.dtus?.size || 0,
+        wrappers: STATE.wrappers?.size || 0,
+        layers: STATE.layers?.size || 0,
+        personas: STATE.personas?.size || 0,
         events: AUDIT_LOG?.length || 0,
         emergents: STATE.__emergent?.emergents?.size || 0,
       },
@@ -230,7 +230,7 @@ export default function registerSystemRoutes(app, {
         port: PORT,
         llmModel: { fast: LLM_MODEL_FAST, smart: LLM_MODEL_SMART },
         macroDomains: listDomains(),
-        crawlQueue: STATE.crawlQueue.length,
+        crawlQueue: STATE.crawlQueue?.length || 0,
         settings: STATE.settings,
         seed: SEED_INFO,
         stateDisk: STATE_DISK,
@@ -390,14 +390,14 @@ export default function registerSystemRoutes(app, {
     const cap = {
       version: VERSION,
       llmReady: LLM_READY,
-      dtus: STATE.dtus.size,
-      wrappers: STATE.wrappers.size,
-      layers: STATE.layers.size,
-      personas: STATE.personas.size,
-      sessions: STATE.sessions.size,
-      organs: STATE.organs.size,
-      growth: STATE.growth,
-      abstraction: STATE.abstraction,
+      dtus: STATE.dtus?.size || 0,
+      wrappers: STATE.wrappers?.size || 0,
+      layers: STATE.layers?.size || 0,
+      personas: STATE.personas?.size || 0,
+      sessions: STATE.sessions?.size || 0,
+      organs: STATE.organs?.size || 0,
+      growth: STATE.growth || {},
+      abstraction: STATE.abstraction || {},
     };
     res.json({ ok:true, capabilities: cap });
   });
@@ -427,40 +427,40 @@ export default function registerSystemRoutes(app, {
         grand_total: substrateStats.substrate.grand_total,
       } : {
         // Legacy fallback
-        total: STATE.dtus.size,
+        total: STATE.dtus?.size || 0,
         byTier: {
           regular: userVisibleDTUs().filter(d => d.tier === "regular").length,
           mega: userVisibleDTUs().filter(d => d.tier === "mega").length,
           hyper: userVisibleDTUs().filter(d => d.tier === "hyper").length,
-          shadow: STATE.shadowDtus.size
+          shadow: STATE.shadowDtus?.size || 0
         }
       },
       sessions: {
-        total: STATE.sessions.size,
-        active: Array.from(STATE.sessions.values()).filter(s => {
-          const last = (s.messages || [])[s.messages.length - 1];
+        total: STATE.sessions?.size || 0,
+        active: Array.from(STATE.sessions?.values?.() || []).filter(s => {
+          const last = (s.messages || [])[s.messages?.length - 1];
           return last && (Date.now() - new Date(last.ts).getTime()) < 3600000;
         }).length
       },
       organs: {
-        total: STATE.organs.size,
-        healthy: Array.from(STATE.organs.values()).filter(o => o.status === "alive").length
+        total: STATE.organs?.size || 0,
+        healthy: Array.from(STATE.organs?.values?.() || []).filter(o => o.status === "alive").length
       },
-      growth: STATE.growth,
+      growth: STATE.growth || {},
       abstraction: {
-        enabled: STATE.abstraction.enabled,
-        metrics: STATE.abstraction.metrics,
-        ledger: STATE.abstraction.ledger
+        enabled: STATE.abstraction?.enabled ?? false,
+        metrics: STATE.abstraction?.metrics || {},
+        ledger: STATE.abstraction?.ledger || {}
       },
       queues: Object.fromEntries(
         Object.entries(STATE.queues || {}).map(([k, v]) => [k, v.length])
       ),
       jobs: {
-        total: STATE.jobs.size,
-        queued: Array.from(STATE.jobs.values()).filter(j => j.status === "queued").length,
-        running: Array.from(STATE.jobs.values()).filter(j => j.status === "running").length,
-        succeeded: Array.from(STATE.jobs.values()).filter(j => j.status === "succeeded").length,
-        failed: Array.from(STATE.jobs.values()).filter(j => j.status === "failed").length
+        total: STATE.jobs?.size || 0,
+        queued: Array.from(STATE.jobs?.values?.() || []).filter(j => j.status === "queued").length,
+        running: Array.from(STATE.jobs?.values?.() || []).filter(j => j.status === "running").length,
+        succeeded: Array.from(STATE.jobs?.values?.() || []).filter(j => j.status === "succeeded").length,
+        failed: Array.from(STATE.jobs?.values?.() || []).filter(j => j.status === "failed").length
       }
     };
     return res.json({ ok: true, stats });
@@ -476,9 +476,9 @@ export default function registerSystemRoutes(app, {
       timestamp: nowISO(),
       checks: {
         state: STATE ? "ok" : "error",
-        dtus: STATE.dtus.size > 0 ? "ok" : "warning",
+        dtus: (STATE.dtus?.size || 0) > 0 ? "ok" : "warning",
         llm: LLM_READY ? "ok" : "disabled",
-        organs: STATE.organs.size > 0 ? "ok" : "warning",
+        organs: (STATE.organs?.size || 0) > 0 ? "ok" : "warning",
         growth: STATE.growth ? "ok" : "warning"
       }
     };

@@ -659,7 +659,7 @@ export default function registerOperationRoutes(app, {
       });
       if (!result.ok) return res.json(result);
       // Immediately run the agent with DTUs related to the topic
-      const dtus = Array.from(STATE.dtus.values()).filter(d => {
+      const dtus = Array.from(STATE.dtus?.values?.() || []).filter(d => {
         const text = `${d.title || ""} ${d.summary || ""} ${(d.tags || []).join(" ")}`.toLowerCase();
         return text.includes(topic.toLowerCase());
       }).slice(0, 200);
@@ -680,8 +680,8 @@ export default function registerOperationRoutes(app, {
   app.post("/api/reseed", requireRole("owner", "admin"), asyncHandler(async (req, res) => {
     try {
       const force = req.body?.force === true;
-      if (!force && STATE.dtus.size > 0) {
-        return res.json({ ok: false, error: "DTUs already exist. Pass { force: true } to reseed anyway.", currentCount: STATE.dtus.size });
+      if (!force && (STATE.dtus?.size || 0) > 0) {
+        return res.json({ ok: false, error: "DTUs already exist. Pass { force: true } to reseed anyway.", currentCount: STATE.dtus?.size || 0 });
       }
       const seeds = await tryLoadSeedDTUs();
       if (!seeds.length) {
@@ -692,13 +692,13 @@ export default function registerOperationRoutes(app, {
         // Scope Separation: reseeded DTUs enter Global scope (canonical knowledge)
         s.scope = "global";
         const d = toOptionADTU(s);
-        if (!STATE.dtus.has(d.id)) {
-          STATE.dtus.set(d.id, d);
+        if (!STATE.dtus?.has(d.id)) {
+          STATE.dtus?.set(d.id, d);
           added++;
         }
       }
       saveStateDebounced();
-      return res.json({ ok: true, added, total: STATE.dtus.size, scope: "global", seedInfo: SEED_INFO });
+      return res.json({ ok: true, added, total: STATE.dtus?.size || 0, scope: "global", seedInfo: SEED_INFO });
     } catch (e) {
       return res.status(500).json({ ok: false, error: String(e?.message || e) });
     }

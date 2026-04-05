@@ -27,7 +27,7 @@ module.exports = {
       kill_timeout: 10000,
       // Wait for the server to signal ready before marking it online
       wait_ready: true,
-      listen_timeout: 30000,
+      listen_timeout: 60000,
       // Logging
       error_file: 'logs/backend-error.log',
       out_file: 'logs/backend-out.log',
