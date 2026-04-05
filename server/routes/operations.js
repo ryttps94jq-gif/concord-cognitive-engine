@@ -17,6 +17,7 @@ export default function registerOperationRoutes(app, {
   ensureOrganRegistry,
   ensureQueues,
   dtusArray,
+  userVisibleDTUs,
   uid,
   sha256Hex,
   nowISO,
@@ -463,7 +464,7 @@ export default function registerOperationRoutes(app, {
   }));
 
   app.get("/api/experiments", (req, res) => {
-    const experiments = dtusArray().filter(d => (d.tags || []).includes("experiment"));
+    const experiments = userVisibleDTUs().filter(d => (d.tags || []).includes("experiment"));
     return res.json({ ok: true, experiments });
   });
 

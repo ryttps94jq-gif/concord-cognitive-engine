@@ -236,6 +236,7 @@ import {
   decideBehavior, ageEntity as ageGrowthEntity, selectExplorer,
   getGrowthDashboardData, getAllGrowthProfiles, saveGrowthProfile,
   getGrowthProfile, getTopOrgans, mapLensToDomainOrgan,
+  serializeGrowthStore, hydrateGrowthStore,
 } from "./emergent/entity-growth.js";
 import {
   entityWebExplore, selectExplorationTarget, buildSynthesisPrompt,
@@ -5882,6 +5883,8 @@ function _serializeState() {
     lensArtifacts: toArr(STATE.lensArtifacts),
     _scopeSeparation: STATE._scopeSeparation || null,
     _autogenPipeline: STATE._autogenPipeline || null,
+    // Entity growth profiles (persist across restarts)
+    entityGrowthProfiles: serializeGrowthStore(),
     // v4: User Universes
     userUniverses: Array.from(STATE.userUniverses.entries()).map(([userId, u]) => ({
       userId,
@@ -6021,6 +6024,12 @@ function _hydrateState(obj) {
   // Autogen Pipeline state
   if (obj._autogenPipeline && typeof obj._autogenPipeline === "object") {
     STATE._autogenPipeline = obj._autogenPipeline;
+  }
+
+  // Entity growth profiles (restore across restarts)
+  if (Array.isArray(obj.entityGrowthProfiles)) {
+    hydrateGrowthStore(obj.entityGrowthProfiles);
+    log("hydrate", `Restored ${obj.entityGrowthProfiles.length} entity growth profiles`);
   }
 
   // v4: User Universes hydration
@@ -9670,7 +9679,23 @@ function computeAdaptiveThreshold() {
 }
 
 // ---- DTU helpers ----
-function dtusArray() { return Array.from(STATE.dtus.values()); }
+const _SYSTEM_DTU_SOURCES = new Set([
+  "repair_cortex", "concord_brain_index", "system_guardian",
+  "guardian_monitor", "lattice_audit", "self_repair",
+]);
+
+/** All DTUs (including system/internal). Use for admin endpoints only. */
+function dtusArray() { return typeof STATE.dtus?.values === "function" ? Array.from(STATE.dtus.values()) : []; }
+
+/** User-visible DTUs only: filters out repair cortex, system internals, and internal-scope DTUs. */
+function userVisibleDTUs() {
+  return dtusArray().filter(d =>
+    !_SYSTEM_DTU_SOURCES.has(d.source) &&
+    !_SYSTEM_DTU_SOURCES.has(d.creatorType) &&
+    d.scope !== "system" &&
+    d.visibility !== "internal"
+  );
+}
 function dtusByIds(ids=[]) {
   const out = [];
   for (const id of ids) {
@@ -15491,7 +15516,7 @@ register("dtu", "list", (ctx, input) => {
   const userId = ctx?.actor?.id || ctx?.actor?.odId || null;
 
   // Filter out shadow DTUs - they are internal and should not appear in user-facing lists
-  let items = dtusArray().filter(d => !isShadowDTU(d));
+  let items = userVisibleDTUs().filter(d => !isShadowDTU(d));
 
   // Scope-aware filtering:
   // - scope="global" → only global DTUs (visible to everyone)
@@ -21455,7 +21480,7 @@ registerSystemRoutes(app, {
   LLM_READY, OPENAI_MODEL_FAST, OPENAI_MODEL_SMART, SEED_INFO, STATE_DISK,
   USE_SQLITE_STATE, ENV_VALIDATION, AUTH_MODE, CAPS, METRICS, JWT_SECRET,
   AUTH_USES_JWT, AUTH_USES_APIKEY, AuthDB, rateLimiter, helmet,
-  normalizeText, nowISO, clamp, dtusArray, isShadowDTU, saveStateDebounced,
+  normalizeText, nowISO, clamp, dtusArray, userVisibleDTUs, isShadowDTU, saveStateDebounced,
   listDomains, getLLMPipelineStatus, setLLMPipelineMode, llmPipeline,
   getTimeInfo, getWeather, createBackup, listBackups, restoreBackup,
   ensureOrganRegistry, ensureQueues, _getPatternHistory, classifyDomain,
@@ -21996,7 +22021,7 @@ structuredLog("info", "server_starting", { version: VERSION, port: PORT, dotenvL
 
 
 // ---- DTU Endpoints (extracted to routes/dtus.js) ----
-registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuForClient, dtusArray, _withAck, saveStateDebounced, validate });
+registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuForClient, dtusArray, userVisibleDTUs, _withAck, saveStateDebounced, validate });
 
 // ---- Chat + Ask Endpoints (extracted to routes/chat.js) ----
 registerChatRoutes(app, {
@@ -22462,9 +22487,7 @@ function startHeartbeat() {
     if (!STATE.settings.heartbeatEnabled) return;
     if (STATE.settings.explorationEnabled === false) return;
 
-    // Only run in the :50-:59 second window of each minute
-    const second = new Date().getSeconds();
-    if (second < 50) return;
+    // Removed :50-:59 second gate — with 4-min interval spacing is already sufficient
 
     const ctx = makeInternalCtx("exploration_window");
 
@@ -22521,7 +22544,7 @@ function startHeartbeat() {
                 },
                 lineage: explorer.lineage ? [explorer.lineage] : [],
                 scope: "local",
-              }, ctx).catch(() => null);
+              }, ctx).catch((err) => { structuredLog("warn", "entity_dtu_create_failed", { entityId: explorer.id, error: String(err?.message || err) }); return null; });
 
               if (dtu?.ok) {
                 synthesizedDTUs.push({
@@ -22603,7 +22626,7 @@ function startHeartbeat() {
                 },
                 lineage: recv.entity.lineage ? [recv.entity.lineage] : [],
                 scope: "local",
-              }, ctx).catch(() => null);
+              }, ctx).catch((err) => { structuredLog("warn", "hive_dtu_create_failed", { entityId: recv.entity.id, error: String(err?.message || err) }); return null; });
 
               if (hiveDtu?.ok) {
                 recordCascadeResponse(broadcastPlan.signal.cascadeId, recv.entity.id, {
@@ -22740,7 +22763,7 @@ startHeartbeat();
 // ---- Operations Endpoints (extracted to routes/operations.js) ----
 registerOperationRoutes(app, {
   STATE, makeCtx, runMacro, _withAck, ensureOrganRegistry, ensureQueues,
-  dtusArray, uid, sha256Hex, nowISO, saveStateDebounced, requireRole,
+  dtusArray, userVisibleDTUs, uid, sha256Hex, nowISO, saveStateDebounced, requireRole,
   PIPE, TEMPORAL_FRAMES, pipeListProposals, computeAbstractionSnapshot,
   maybeRunLocalUpgrade, runAutoPromotion, tryLoadSeedDTUs, toOptionADTU,
   SEED_INFO, kernelTick, uiJson

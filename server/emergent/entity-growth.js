@@ -468,6 +468,23 @@ export function deleteGrowthProfile(entityId) {
   entityGrowthStore.delete(entityId);
 }
 
+/** Serialize all growth profiles for STATE persistence. */
+export function serializeGrowthStore() {
+  return Array.from(entityGrowthStore.values());
+}
+
+/** Hydrate growth store from persisted STATE data (called on boot). */
+export function hydrateGrowthStore(arr) {
+  if (!Array.isArray(arr)) return;
+  for (const profile of arr) {
+    if (profile && profile.id) {
+      // Ensure growthLog is an array (may be lost in serialization)
+      if (!Array.isArray(profile.growthLog)) profile.growthLog = [];
+      entityGrowthStore.set(profile.id, profile);
+    }
+  }
+}
+
 /**
  * Get summary stats for all entities (for dashboard).
  */

@@ -38,7 +38,7 @@ export default function registerSystemRoutes(app, {
   normalizeText,
   nowISO,
   clamp,
-  dtusArray,
+  dtusArray, userVisibleDTUs,
   isShadowDTU,
   _saveStateDebounced,
   listDomains,
@@ -353,7 +353,7 @@ export default function registerSystemRoutes(app, {
       const sessionId = normalizeText(req.query.sessionId || "default");
       const sess = STATE.sessions.get(sessionId) || { createdAt: null, messages: [] };
       const lastMessages = (sess.messages || []).slice(-20);
-      const latestDTUs = dtusArray().slice(0, 10).map(d => ({
+      const latestDTUs = userVisibleDTUs().slice(0, 10).map(d => ({
         id: d.id,
         title: d.title,
         tier: d.tier,
@@ -429,9 +429,9 @@ export default function registerSystemRoutes(app, {
         // Legacy fallback
         total: STATE.dtus.size,
         byTier: {
-          regular: dtusArray().filter(d => d.tier === "regular").length,
-          mega: dtusArray().filter(d => d.tier === "mega").length,
-          hyper: dtusArray().filter(d => d.tier === "hyper").length,
+          regular: userVisibleDTUs().filter(d => d.tier === "regular").length,
+          mega: userVisibleDTUs().filter(d => d.tier === "mega").length,
+          hyper: userVisibleDTUs().filter(d => d.tier === "hyper").length,
           shadow: STATE.shadowDtus.size
         }
       },
@@ -512,7 +512,7 @@ export default function registerSystemRoutes(app, {
     const scopeFilter = req.query.scope || null;
     const userId = req.user?.id || null;
 
-    let dtus = dtusArray();
+    let dtus = userVisibleDTUs();
 
     // Scope-aware filtering: same logic as dtu.list macro
     if (scopeFilter === "global") {
@@ -575,7 +575,7 @@ export default function registerSystemRoutes(app, {
     if (scope === "all" || scope === "tags") {
       const qLower = query.toLowerCase();
       const tagCounts = new Map();
-      for (const dtu of dtusArray()) {
+      for (const dtu of userVisibleDTUs()) {
         if (isShadowDTU(dtu)) continue;
         for (const tag of (dtu.tags || [])) {
           if (tag.toLowerCase().includes(qLower)) {

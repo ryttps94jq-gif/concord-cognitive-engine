@@ -5,7 +5,7 @@
 import { asyncHandler } from "../lib/async-handler.js";
 import logger from '../logger.js';
 
-export default function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuForClient, dtusArray, _withAck, _saveStateDebounced, validate }) {
+export default function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuForClient, dtusArray, userVisibleDTUs, _withAck, _saveStateDebounced, validate }) {
 
   /** Parse limit/offset query params with sensible defaults and bounds. */
   function parsePagination(query, defaultLimit = 50, maxLimit = 200) {
@@ -46,7 +46,7 @@ export default function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuFo
   // ── DTU Stats ─────────────────────────────────────────────────────────
   app.get("/api/dtus/stats", (req, res) => {
     try {
-      const all = dtusArray();
+      const all = userVisibleDTUs();
       const tierCounts = {};
       const kindCounts = {};
       let totalRichness = 0;
@@ -189,13 +189,13 @@ export default function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuFo
   app.get("/api/megas", (req,res)=> {
     const { limit, offset } = parsePagination(req.query);
     const tier = "mega";
-    const all = dtusArray().filter(d => d.tier===tier).sort((a,b)=> (b.updatedAt||b.createdAt||"").localeCompare(a.updatedAt||a.createdAt||""));
+    const all = userVisibleDTUs().filter(d => d.tier===tier).sort((a,b)=> (b.updatedAt||b.createdAt||"").localeCompare(a.updatedAt||a.createdAt||""));
     const out = all.slice(offset, offset + limit);
     res.json({ ok:true, megas: out, total: all.length, limit, offset });
   });
   app.get("/api/hypers", (req,res)=> {
     const { limit, offset } = parsePagination(req.query);
-    const all = dtusArray().filter(d => d.tier==="hyper").sort((a,b)=> (b.updatedAt||b.createdAt||"").localeCompare(a.updatedAt||a.createdAt||""));
+    const all = userVisibleDTUs().filter(d => d.tier==="hyper").sort((a,b)=> (b.updatedAt||b.createdAt||"").localeCompare(a.updatedAt||a.createdAt||""));
     const out = all.slice(offset, offset + limit);
     res.json({ ok:true, hypers: out, total: all.length, limit, offset });
   });
@@ -258,7 +258,7 @@ export default function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuFo
 
   app.get("/api/definitions", (req, res) => {
     const { limit, offset } = parsePagination(req.query);
-    const all = dtusArray().filter(d =>
+    const all = userVisibleDTUs().filter(d =>
       (d.tags || []).includes("definition") ||
       /^def(inition)?:/i.test(d.title || "")
     );
@@ -268,7 +268,7 @@ export default function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuFo
 
   app.get("/api/definitions/:term", (req, res) => {
     const term = String(req.params.term || "").toLowerCase();
-    const dtu = dtusArray().find(d =>
+    const dtu = userVisibleDTUs().find(d =>
       ((d.tags || []).includes("definition") || /^def(inition)?:/i.test(d.title || "")) &&
       (d.meta?.term || "").toLowerCase() === term
     );
