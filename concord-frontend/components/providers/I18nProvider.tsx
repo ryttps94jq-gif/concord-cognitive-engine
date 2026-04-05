@@ -1,7 +1,6 @@
 'use client';
 
 import {
-  createContext,
   useState,
   useEffect,
   useCallback,
@@ -16,21 +15,10 @@ import {
   type Locale,
 } from '@/lib/i18n';
 import { applyDocumentDirection, applyDocumentLang } from '@/lib/i18n/rtl';
+import { I18nContext, type I18nContextValue } from '@/lib/i18n/context';
 
-// ── Context ─────────────────────────────────────────────────────────────────
-
-export interface I18nContextValue {
-  /** Current active locale */
-  locale: Locale;
-  /** Whether the current locale is RTL */
-  isRTL: boolean;
-  /** Change the active locale */
-  setLocale: (locale: Locale) => Promise<void>;
-  /** Whether translations have been loaded */
-  ready: boolean;
-}
-
-export const I18nContext = createContext<I18nContextValue | null>(null);
+// Re-export for any existing consumers
+export { I18nContext, type I18nContextValue };
 
 // ── Provider ────────────────────────────────────────────────────────────────
 
