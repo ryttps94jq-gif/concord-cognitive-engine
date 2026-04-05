@@ -79,7 +79,7 @@ function _tick(STATE) {
 
   // Log on level change
   if (_level !== prevLevel) {
-    structuredLog(_level === "normal" ? "info" : "warn", "memory_pressure_change", {
+    logger.log(_level === "normal" ? "info" : "warn", "lib", "memory_pressure_change", {
       from: prevLevel,
       to: _level,
       heapUsedMB: Math.round(heapUsedMB),
