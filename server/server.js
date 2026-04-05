@@ -15089,7 +15089,11 @@ async function pipelineCommitDTU(ctx, dtu, opts={}) {
   } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   // ===== END QUALITY PIPELINE BACKEND ENHANCEMENTS =====
 
-  const snap = pipeSnapshot();
+  // Save a lightweight rollback of just this DTU (not full state snapshot —
+  // pipeSnapshot() was serializing the ENTIRE state on every DTU write,
+  // creating ~45MB of garbage per upsert and filling snapshots/ on disk)
+  const _prevDtu = STATE.dtus.get(dtu.id) || null;
+  const _rollbackDtu = _prevDtu ? { ..._prevDtu } : null;
   try {
     // Human projection firewall: always render human-safe DTU view
     if (!dtu.cretiHuman) dtu.cretiHuman = renderHumanDTU(dtu);
@@ -15134,7 +15138,7 @@ async function pipelineCommitDTU(ctx, dtu, opts={}) {
     try { await maybeRunLocalUpgrade(); } catch (e) { observe(e, "local_upgrade_attempt_post_dtu"); }
 
     p.status = "installed";
-    p.install = { installedAt: nowISO(), snapshotBefore: null };
+    p.install = { installedAt: nowISO() };
     p.updatedAt = nowISO();
     pipeWal("proposal.install", { id: p.id, action: p.action });
     pipeAudit("dtu.commit", `DTU committed: ${dtu.title}`, { id: dtu.id, proposalId: p.id, hash: dtu.hash });
@@ -15144,12 +15148,17 @@ async function pipelineCommitDTU(ctx, dtu, opts={}) {
 
     return { ok:true, dtu, proposalId: p.id };
   } catch (e) {
-    const rb = pipeRestoreSnapshot(snap);
+    // Lightweight rollback: restore just this DTU (not full state snapshot)
+    if (_rollbackDtu) {
+      STATE.dtus.set(dtu.id, _rollbackDtu);
+    } else {
+      STATE.dtus.delete(dtu.id);
+    }
     p.status = "failed";
-    p.install = { failedAt: nowISO(), error: String(e?.message||e), snapshotBefore: snap, rollback: rb };
+    p.install = { failedAt: nowISO(), error: String(e?.message||e), rollback: "dtu_level" };
     p.updatedAt = nowISO();
     pipeWal("proposal.install.fail", { id: p.id, error: String(e?.message||e) });
-    pipeAudit("install.fail", "Commit failed; rolled back", { proposalId: p.id, error: String(e?.message||e), snapshot: snap });
+    pipeAudit("install.fail", "Commit failed; DTU rolled back", { proposalId: p.id, error: String(e?.message||e) });
     return { ok:false, error:String(e?.message||e), proposalId:p.id };
   }
 }

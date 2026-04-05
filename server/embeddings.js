@@ -67,6 +67,22 @@ let _log = null;
  */
 export async function initEmbeddings({ db = null, ollamaUrls = [], structuredLog = console.warn } = {}) {
   _db = db;
+
+  // Ensure dedicated embeddings table exists (separate from dtu_store)
+  if (_db) {
+    try {
+      _db.exec(`
+        CREATE TABLE IF NOT EXISTS embedding_cache (
+          dtu_id TEXT PRIMARY KEY,
+          embedding BLOB NOT NULL,
+          hash TEXT,
+          created_at TEXT NOT NULL
+        )
+      `);
+    } catch (e) {
+      structuredLog("warn", "embedding_table_create_failed", { error: String(e?.message || e) });
+    }
+  }
   _log = structuredLog;
 
   // Ensure SQLite column exists
@@ -320,13 +336,13 @@ export function storeEmbedding(dtuId, vec) {
     embeddingCache.set(dtuId, vec);
   }
 
-  // SQLite persistence
+  // SQLite persistence (dedicated embedding_cache table)
   if (_db) {
     try {
       const buf = Buffer.from(vec.buffer, vec.byteOffset, vec.byteLength);
-      _db.prepare("UPDATE dtus SET embedding = ? WHERE id = ?").run(buf, dtuId);
+      _db.prepare("INSERT OR REPLACE INTO embedding_cache (dtu_id, embedding, created_at) VALUES (?, ?, ?)").run(dtuId, buf, new Date().toISOString());
     } catch {
-      // DTU may not be in SQLite yet (JSON backend) — silent
+      // Table may not exist yet — silent
     }
   }
 }
@@ -350,7 +366,7 @@ export function removeEmbedding(dtuId) {
   embeddingCache.delete(dtuId);
   if (_db) {
     try {
-      _db.prepare("UPDATE dtus SET embedding = NULL WHERE id = ?").run(dtuId);
+      _db.prepare("DELETE FROM embedding_cache WHERE dtu_id = ?").run(dtuId);
     } catch (_e) { logger.debug('embeddings', 'silent', { error: _e?.message }); }
   }
 }
@@ -540,12 +556,8 @@ function _loadEmbeddingsFromDb() {
   if (!_db) return;
 
   try {
-    // Check if dtus table and embedding column exist
-    const tableInfo = _db.prepare("PRAGMA table_info(dtus)").all();
-    const hasEmbeddingCol = tableInfo.some(col => col.name === "embedding");
-    if (!hasEmbeddingCol) return;
-
-    const rows = _db.prepare("SELECT id, embedding FROM dtus WHERE embedding IS NOT NULL").all();
+    // Load from dedicated embedding_cache table
+    const rows = _db.prepare("SELECT dtu_id, embedding FROM embedding_cache").all();
     let loaded = 0;
 
     for (const row of rows) {
@@ -556,7 +568,7 @@ function _loadEmbeddingsFromDb() {
             row.embedding.byteOffset,
             row.embedding.byteLength / Float64Array.BYTES_PER_ELEMENT
           );
-          embeddingCache.set(row.id, vec);
+          embeddingCache.set(row.dtu_id, vec);
           loaded++;
         } catch {
           // Corrupted embedding — skip
@@ -567,8 +579,42 @@ function _loadEmbeddingsFromDb() {
     if (_log && loaded > 0) {
       _log("info", "embeddings_loaded_from_db", { count: loaded });
     }
+
+    // Migration: also check legacy dtus table if embedding_cache is empty
+    if (loaded === 0) {
+      try {
+        const tableInfo = _db.prepare("PRAGMA table_info(dtus)").all();
+        const hasEmbeddingCol = tableInfo.some(col => col.name === "embedding");
+        if (hasEmbeddingCol) {
+          const legacyRows = _db.prepare("SELECT id, embedding FROM dtus WHERE embedding IS NOT NULL").all();
+          let migrated = 0;
+          for (const row of legacyRows) {
+            if (row.embedding && migrated < MAX_IN_MEMORY) {
+              try {
+                const vec = new Float64Array(
+                  row.embedding.buffer,
+                  row.embedding.byteOffset,
+                  row.embedding.byteLength / Float64Array.BYTES_PER_ELEMENT
+                );
+                embeddingCache.set(row.id, vec);
+                // Migrate to new table
+                const buf = Buffer.from(vec.buffer, vec.byteOffset, vec.byteLength);
+                _db.prepare("INSERT OR IGNORE INTO embedding_cache (dtu_id, embedding, created_at) VALUES (?, ?, ?)").run(row.id, buf, new Date().toISOString());
+                migrated++;
+              } catch {
+                // Corrupted — skip
+              }
+            }
+          }
+          if (_log && migrated > 0) {
+            _log("info", "embeddings_migrated_from_legacy", { count: migrated });
+          }
+        }
+      } catch {
+        // Legacy table doesn't exist — fine
+      }
+    }
   } catch (e) {
-    // dtus table may not exist in SQLite (JSON backend)
     if (_log) _log("warn", "embeddings_db_load_skip", { error: String(e?.message || e) });
   }
 }
