@@ -869,6 +869,26 @@ function clearTrackedInterval(id) {
   _activeTimers.delete(id);
 }
 
+/** Memory-aware setInterval: skips tick if heap exceeds threshold (default 3GB) */
+const _THROTTLE_HEAP_LIMIT = 3 * 1024 * 1024 * 1024;
+function throttledInterval(fn, ms, name) {
+  const id = setInterval(async () => {
+    const heap = process.memoryUsage().heapUsed;
+    if (heap > _THROTTLE_HEAP_LIMIT) {
+      structuredLog("warn", "task_skipped_memory", { name, heapMB: Math.round(heap / 1024 / 1024) });
+      return;
+    }
+    try {
+      await fn();
+    } catch (err) {
+      structuredLog("error", "task_error", { name, error: String(err?.message || err) });
+    }
+  }, ms);
+  if (id.unref) id.unref();
+  _activeTimers.add(id);
+  return id;
+}
+
 async function gracefulShutdown(signal) {
   if (isShuttingDown) return;
   isShuttingDown = true;
@@ -3146,7 +3166,7 @@ function cleanupShadowDTUs() {
 }
 
 // Run shadow cleanup periodically (every 6 hours)
-setInterval(() => cleanupShadowDTUs(), 6 * 60 * 60 * 1000);
+throttledInterval(() => cleanupShadowDTUs(), 6 * 60 * 60 * 1000, "shadow_dtu_cleanup");
 setTimeout(() => cleanupShadowDTUs(), 60000); // Initial cleanup after 1 min
 
 // ---- Index Reconciliation (Category 3: Data Integrity) ----
@@ -3199,7 +3219,7 @@ function reconcileIndices() {
 }
 
 // Run index reconciliation every 4 hours
-setInterval(() => reconcileIndices(), 4 * 60 * 60 * 1000);
+throttledInterval(() => reconcileIndices(), 4 * 60 * 60 * 1000, "index_reconciliation");
 setTimeout(() => reconcileIndices(), 120000); // 2 min after startup
 
 // ---- End semantic query expansion ----
@@ -5817,7 +5837,17 @@ if (USE_SQLITE_STATE) {
 }
 
 function _serializeState() {
-  const toArr = (m) => Array.from(m.values());
+  const toArr = (m) => {
+    if (typeof m?.values === "function") return Array.from(m.values());
+    return [];
+  };
+  // Only save active jobs (queued/running), not completed/failed history
+  const activeJobs = Array.from(STATE.jobs.values()).filter(j => j && (j.status === "queued" || j.status === "running"));
+  // Cap transactions/sources/listings to most recent entries for save
+  const capArr = (m, max) => {
+    const arr = toArr(m);
+    return arr.length > max ? arr.slice(-max) : arr;
+  };
   return {
     version: VERSION,
     savedAt: nowISO(),
@@ -5826,26 +5856,30 @@ function _serializeState() {
     wrappers: toArr(STATE.wrappers),
     layers: toArr(STATE.layers),
     personas: toArr(STATE.personas),
-    sessions: Array.from(STATE.sessions.entries()).map(([sessionId, v]) => ({ sessionId, createdAt: v.createdAt, messages: (v.messages||[]).slice(-200) })),
-    styleVectors: Array.from(STATE.styleVectors.entries()),
+    sessions: Array.from(STATE.sessions.entries()).slice(-500).map(([sessionId, v]) => ({ sessionId, createdAt: v.createdAt, messages: (v.messages||[]).slice(-60) })),
+    styleVectors: Array.from(STATE.styleVectors.entries()).slice(-200),
     organs: toArr(STATE.organs),
     growth: STATE.growth,
     abstraction: STATE.abstraction,
     settings: STATE.settings,
-    logs: STATE.logs.slice(-1000),
-    crawlQueue: STATE.crawlQueue,
-    queues: STATE.queues,
+    logs: STATE.logs.slice(-500),
+    crawlQueue: (STATE.crawlQueue || []).filter(c => c.status !== "done" && c.status !== "error").slice(-200),
+    queues: {
+      notifications: (STATE.queues?.notifications || []).slice(-500),
+      macroProposals: (STATE.queues?.macroProposals || []).slice(-100),
+      synthesis: (STATE.queues?.synthesis || []).slice(-100),
+    },
     users: Array.from(STATE.users.values()),
     orgs: Array.from(STATE.orgs.values()),
     apiKeys: Array.from(STATE.apiKeys.values()),
-    jobs: Array.from(STATE.jobs.values()),
-    sources: Array.from(STATE.sources.values()),
+    jobs: activeJobs,
+    sources: capArr(STATE.sources, 5000),
     globalIndex: { byHash: Array.from(STATE.globalIndex.byHash.entries()), byId: Array.from(STATE.globalIndex.byId.entries()) },
-    listings: Array.from(STATE.listings.values()),
-    entitlements: Array.from(STATE.entitlements.values()),
-    transactions: Array.from(STATE.transactions.values()),
-    papers: Array.from(STATE.papers.values()),
-    lensArtifacts: Array.from(STATE.lensArtifacts.values()),
+    listings: capArr(STATE.listings, 5000),
+    entitlements: capArr(STATE.entitlements, 5000),
+    transactions: capArr(STATE.transactions, 10000),
+    papers: toArr(STATE.papers),
+    lensArtifacts: toArr(STATE.lensArtifacts),
     _scopeSeparation: STATE._scopeSeparation || null,
     _autogenPipeline: STATE._autogenPipeline || null,
     // v4: User Universes
@@ -5856,9 +5890,13 @@ function _serializeState() {
       syncedFromGlobal: Array.from(u.syncedFromGlobal),
       preferences: u.preferences,
       stats: u.stats,
-      discoveryLog: (u.discoveryLog || []).slice(-500),
+      discoveryLog: (u.discoveryLog || []).slice(-200),
     })),
-    globalThread: STATE.globalThread || { councilQueue: [], acceptedContributions: [] },
+    globalThread: {
+      councilQueue: (STATE.globalThread?.councilQueue || []).slice(-500),
+      acceptedContributions: (STATE.globalThread?.acceptedContributions || []).slice(-200),
+    },
+    // Excluded from save: _caches, _derivedIndexes, _repairCaches, _styleVectors (transient)
   };
 }
 
@@ -6173,6 +6211,70 @@ if (_DTU_STORE_READY && db) {
   structuredLog("info", "dtu_store_boot_migration", migResult);
   // Replace STATE.dtus with the write-through store
   STATE.dtus = dtuStore;
+}
+
+// ── Post-load memory optimization ────────────────────────────────────────
+// The 45MB JSON state file inflates in RAM due to object overhead, Maps, indexes.
+// Trim non-essential data from old DTUs and cap unbounded collections immediately.
+try {
+  const _TRIM_CUTOFF = Date.now() - (30 * 24 * 60 * 60 * 1000); // 30 days
+  let _trimmedDTUs = 0;
+  const _dtuValues = typeof STATE.dtus?.values === "function" ? STATE.dtus.values() : [];
+  for (const dtu of _dtuValues) {
+    const createdMs = dtu.createdAt ? new Date(dtu.createdAt).getTime() : 0;
+    if (createdMs > 0 && createdMs < _TRIM_CUTOFF) {
+      // Keep metadata, drop heavy content fields for old DTUs
+      if (dtu.content) { dtu.content = undefined; _trimmedDTUs++; }
+      if (dtu.rawContent) dtu.rawContent = undefined;
+      if (dtu.embedding) dtu.embedding = undefined;
+    }
+  }
+
+  // Cap in-memory collections that grow without bound
+  const _capMap = (map, max) => {
+    if (!map || typeof map.size !== "number" || map.size <= max) return 0;
+    const excess = map.size - max;
+    const iter = map.keys();
+    for (let i = 0; i < excess; i++) { const k = iter.next(); if (k.done) break; map.delete(k.value); }
+    return excess;
+  };
+  const _capArray = (arr, max) => {
+    if (!Array.isArray(arr) || arr.length <= max) return;
+    arr.splice(0, arr.length - max);
+  };
+
+  _capMap(STATE.sessions, 500);
+  _capMap(STATE.styleVectors, 200);
+  _capMap(STATE.notifications, 2000);
+  _capArray(STATE.logs, 2000);
+  _capArray(STATE.queues?.notifications, 1000);
+  _capArray(STATE.queues?.macroProposals, 200);
+  _capArray(STATE.queues?.synthesis, 200);
+  _capArray(STATE.globalThread?.councilQueue, 500);
+  _capArray(STATE.globalThread?.acceptedContributions, 500);
+
+  // Prune completed/failed jobs
+  if (STATE.jobs && typeof STATE.jobs.forEach === "function") {
+    const _doneJobs = [];
+    STATE.jobs.forEach((j, id) => { if (j && (j.status === "succeeded" || j.status === "failed")) _doneJobs.push(id); });
+    if (_doneJobs.length > 100) {
+      for (let i = 0; i < _doneJobs.length - 100; i++) STATE.jobs.delete(_doneJobs[i]);
+    }
+  }
+
+  // Force GC after trimming if available (--expose-gc)
+  if (global.gc) {
+    global.gc();
+  }
+
+  const heapMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+  structuredLog("info", "post_load_memory_optimization", {
+    trimmedDTUs: _trimmedDTUs,
+    heapUsedMB: heapMB,
+    dtuCount: typeof STATE.dtus?.size === "number" ? STATE.dtus.size : "unknown",
+  });
+} catch (e) {
+  structuredLog("warn", "post_load_optimization_failed", { error: String(e?.message || e) });
 }
 
 // Final boot normalization (ensures env-driven defaults win)
@@ -10091,7 +10193,7 @@ function cleanupAttachments() {
 }
 
 // Run attachment cleanup every 12 hours
-setInterval(cleanupAttachments, 12 * 60 * 60 * 1000);
+throttledInterval(cleanupAttachments, 12 * 60 * 60 * 1000, "attachment_cleanup");
 
 function _saveAttachment(dtuId, filename, buffer, mimeType) {
   ensureAttachmentsDir();
@@ -34707,7 +34809,7 @@ function cleanupReminders() {
 }
 
 // Run cleanup every 6 hours
-setInterval(cleanupReminders, 6 * 60 * 60 * 1000);
+throttledInterval(cleanupReminders, 6 * 60 * 60 * 1000, "reminder_cleanup");
 
 function createReminder(dtuId, reminderAt, message = null) {
   const dtu = STATE.dtus.get(dtuId);
@@ -37524,18 +37626,18 @@ app.get("/api/atlas/rights/metrics", (req, res) => {
 });
 
 // ---- Periodic Tasks (Analytics + Efficiency snapshots, Webhook delivery, Heartbeats) ----
-setInterval(() => {
+throttledInterval(() => {
   try { takeAnalyticsSnapshot(STATE); } catch (e) { log("heartbeat.error", `analyticsSnapshot: ${e?.message}`); }
   try { takeEfficiencySnapshot(STATE); } catch (e) { log("heartbeat.error", `efficiencySnapshot: ${e?.message}`); }
   try { processPendingDeliveries(STATE); } catch (e) { log("heartbeat.error", `pendingDeliveries: ${e?.message}`); }
-}, 300000); // Every 5 minutes
+}, 300000, "analytics_snapshots"); // Every 5 minutes
 
 // Global + Marketplace heartbeats on separate cadence (every 10 minutes)
-setInterval(() => {
+throttledInterval(() => {
   try { tickGlobal(STATE); } catch (e) { log("heartbeat.error", `tickGlobal: ${e?.message}`); }
   try { tickMarketplace(STATE); } catch (e) { log("heartbeat.error", `tickMarketplace: ${e?.message}`); }
   try { newCapabilitiesHeartbeat(); } catch (e) { log("heartbeat.error", `newCapabilities: ${e?.message}`); }
-}, 600000);
+}, 600000, "global_marketplace_heartbeat");
 
 // ---- Map Cleanup Sweep (runs hourly — evicts stale entries from unbounded Maps) ----
 setInterval(() => {
@@ -44156,6 +44258,11 @@ const SHOULD_LISTEN = (String(process.env.CONCORD_NO_LISTEN || "").toLowerCase()
 
 const server = SHOULD_LISTEN ? app.listen(PORT, () => {
   structuredLog("info", "server_listening", { url: `http://localhost:${PORT}`, statusUrl: `http://localhost:${PORT}/api/status` });
+  // Signal PM2 that we're ready to accept connections (ecosystem.config has wait_ready: true)
+  if (typeof process.send === "function") {
+    process.send("ready");
+    structuredLog("info", "pm2_ready_signal_sent", {});
+  }
 }) : null;
 
 // Optional: enable thin realtime mirror (WebSockets) for queues/jobs/panels.
@@ -44189,20 +44296,16 @@ try {
 
 // ── Periodic Integrity Check (every 6 hours) ────────────────────────────────
 const INTEGRITY_INTERVAL = 6 * 60 * 60 * 1000;
-setInterval(() => {
-  try {
-    const results = runIntegrityCheck(STATE, log, { fix: true, verbose: false });
-    STATE._lastIntegrityCheck = { ...results, timestamp: Date.now() };
-    structuredLog("info", "periodic_integrity_check", {
-      economyOk: results.economy?.ok,
-      lineageOk: results.lineage?.ok,
-      socialOk: results.social?.ok,
-      fixes: results.fixes || 0,
-    });
-  } catch (e) {
-    structuredLog("warn", "periodic_integrity_check_failed", { error: String(e?.message || e) });
-  }
-}, INTEGRITY_INTERVAL).unref();
+throttledInterval(() => {
+  const results = runIntegrityCheck(STATE, log, { fix: true, verbose: false });
+  STATE._lastIntegrityCheck = { ...results, timestamp: Date.now() };
+  structuredLog("info", "periodic_integrity_check", {
+    economyOk: results.economy?.ok,
+    lineageOk: results.lineage?.ok,
+    socialOk: results.social?.ok,
+    fixes: results.fixes || 0,
+  });
+}, INTEGRITY_INTERVAL, "integrity_check");
 
 // NOTE: Primary SIGINT/SIGTERM handlers are registered above via gracefulShutdown().
 // Register cleanup for timers as a shutdown callback instead of a duplicate handler.
@@ -54047,9 +54150,7 @@ setTimeout(async () => {
 }, 30000); // 30s after startup
 
 // ── Periodic lens sync (every 2 hours) ──────────────────────────────────────
-setInterval(() => {
-  try { syncAllDTUsToLenses(); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
-}, 2 * 60 * 60 * 1000);
+throttledInterval(() => syncAllDTUsToLenses(), 2 * 60 * 60 * 1000, "lens_sync");
 
 // ── Register macros for manual triggering ────────────────────────────────────
 register("autotag", "retro", (ctx, _input = {}) => {
