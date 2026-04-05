@@ -6702,6 +6702,28 @@ function _c2repairDominance(){
     return { ok: score > 0.01, score };
   } catch { return { ok:true, score:0.5 }; }
 }
+
+/**
+ * Adaptive overlap threshold: ramps up as the DTU substrate grows.
+ * During bootstrap (few DTUs), novel content has no prior art to match against,
+ * so the threshold must be low. As the knowledge base matures, the threshold
+ * rises automatically. Can be overridden via admin dashboard.
+ */
+function _getAdaptiveOverlapThreshold() {
+  // Manual override from admin: if explicitly set to a number, use it
+  const manual = STATE.__chicken2?.thresholdOverlap;
+  if (typeof manual === "number" && manual > 0 && manual < 0.95) return manual;
+
+  const dtuCount = typeof STATE.dtus?.size === "number" ? STATE.dtus.size : 0;
+  if (dtuCount < 100) return 0.00;      // Bootstrap: let everything through
+  if (dtuCount < 500) return 0.10;      // Early growth: very loose
+  if (dtuCount < 1000) return 0.20;     // Building invariants
+  if (dtuCount < 5000) return 0.35;     // Substrate has enough to compare
+  if (dtuCount < 10000) return 0.50;    // Real filtering begins
+  if (dtuCount < 50000) return 0.65;    // Strong coherence expected
+  if (dtuCount < 100000) return 0.80;   // Mature lattice
+  return 0.90;                           // Full protection
+}
 function inLatticeReality({ type="macro", domain="", name="", input=null, ctx=null }={}){
   const cfg = STATE.__chicken2 || {};
   // 1) primal satisfaction
@@ -6721,13 +6743,15 @@ function inLatticeReality({ type="macro", domain="", name="", input=null, ctx=nu
     cfg.metrics.rejections++;
     return { ok:false, severity:"hard", reason:nv.reason };
   }
-  // 4) repair dominance projection + overlap requirement (>=0.95 default) if genesis exists
+  // 4) repair dominance projection + overlap requirement if genesis exists
+  // Adaptive threshold: ramps up as the substrate grows (bootstrap-friendly)
   const g = _c2genesisDTU();
   if (g){
     const ov = overlap_verifier(g, { invariants: Object.keys(STATE.settings||{}), lineage:{ root:"genesis_reality_anchor_v1" }});
-    if (ov < (cfg.thresholdOverlap ?? 0.95)){
+    const adaptiveThreshold = _getAdaptiveOverlapThreshold();
+    if (ov < adaptiveThreshold){
       cfg.metrics.rejections++;
-      return { ok:false, severity:"quarantine", reason:"overlap_below_threshold", meta:{ ov, threshold: cfg.thresholdOverlap } };
+      return { ok:false, severity:"quarantine", reason:"overlap_below_threshold", meta:{ ov, threshold: adaptiveThreshold, dtuCount: typeof STATE.dtus?.size === "number" ? STATE.dtus.size : 0 } };
     }
   }
   const rd = _c2repairDominance();
@@ -22104,7 +22128,7 @@ function buildCognitiveSnapshot() {
     dtus: dtuEntries,
     shadowDtus: shadowEntries,
     settings: { ...STATE.settings },
-    pipelineState: STATE._autogenPipeline ? JSON.parse(JSON.stringify(STATE._autogenPipeline)) : null,
+    pipelineState: STATE._autogenPipeline ? { mode: STATE._autogenPipeline.mode, enabled: STATE._autogenPipeline.enabled, lastRun: STATE._autogenPipeline.lastRun } : null,
     governanceConfig: STATE._governanceConfig ? { ...STATE._governanceConfig } : null,
   };
 }
@@ -38044,7 +38068,7 @@ try {
       dtus: dtuEntries,
       shadowDtus: Array.from((STATE.shadowDtus || new Map()).entries()).map(([id, d]) => [id, { id: d.id, title: d.title, tags: d.tags, tier: d.tier }]),
       settings: { ...STATE.settings },
-      pipelineState: STATE._autogenPipeline ? JSON.parse(JSON.stringify(STATE._autogenPipeline)) : null,
+      pipelineState: STATE._autogenPipeline ? { mode: STATE._autogenPipeline.mode, enabled: STATE._autogenPipeline.enabled, lastRun: STATE._autogenPipeline.lastRun } : null,
       governanceConfig: STATE._governanceConfig ? { ...STATE._governanceConfig } : null,
     };
   }
