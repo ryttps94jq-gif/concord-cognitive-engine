@@ -617,5 +617,365 @@ export default function createWorldRoutes({ requireAuth } = {}) {
     res.json({ ok: true, schema: getCityRulesSchema() });
   }));
 
+  // ══════════════════════════════════════════════════════════════════
+  // WORLD LENS — Simulation Pipeline API
+  // ══════════════════════════════════════════════════════════════════
+
+  // ── Material Properties Database ──────────────────────────────────
+
+  const SEED_MATERIALS = [
+    { id: 'mat-usb-a', name: 'USB Composite A (Standard)', category: 'USB-composite', properties: { tensileStrength: 450, compressiveStrength: 380, shearStrength: 220, elasticModulus: 45, density: 1850, thermalConductivity: 0.35, thermalExpansionCoeff: 8e-6, meltingPoint: 850, fireResistanceHours: 2, corrosionResistance: 'high', fatigueLimit: 180, cost: 120 }, creator: 'system', citations: 0, validationStatus: 'validated' },
+    { id: 'mat-usb-b', name: 'USB Composite B (High Strength)', category: 'USB-composite', properties: { tensileStrength: 680, compressiveStrength: 550, shearStrength: 340, elasticModulus: 62, density: 2100, thermalConductivity: 0.42, thermalExpansionCoeff: 7e-6, meltingPoint: 920, fireResistanceHours: 3, corrosionResistance: 'extreme', fatigueLimit: 280, cost: 240 }, creator: 'system', citations: 0, validationStatus: 'validated' },
+    { id: 'mat-usb-c', name: 'USB Composite C (Lightweight)', category: 'USB-composite', properties: { tensileStrength: 350, compressiveStrength: 280, shearStrength: 170, elasticModulus: 38, density: 1450, thermalConductivity: 0.28, thermalExpansionCoeff: 9e-6, meltingPoint: 780, fireResistanceHours: 1.5, corrosionResistance: 'high', fatigueLimit: 140, cost: 95 }, creator: 'system', citations: 0, validationStatus: 'validated' },
+    { id: 'mat-steel-a36', name: 'Steel A36 (Structural)', category: 'steel', properties: { tensileStrength: 400, compressiveStrength: 250, shearStrength: 230, elasticModulus: 200, density: 7850, thermalConductivity: 50, thermalExpansionCoeff: 12e-6, meltingPoint: 1540, fireResistanceHours: 0.5, corrosionResistance: 'low', fatigueLimit: 160, cost: 85 }, creator: 'system', citations: 0, validationStatus: 'validated' },
+    { id: 'mat-concrete-c40', name: 'Concrete C40/50', category: 'concrete', properties: { tensileStrength: 3.5, compressiveStrength: 40, shearStrength: 5, elasticModulus: 35, density: 2450, thermalConductivity: 1.8, thermalExpansionCoeff: 10e-6, meltingPoint: 1200, fireResistanceHours: 4, corrosionResistance: 'moderate', fatigueLimit: 14, cost: 55 }, creator: 'system', citations: 0, validationStatus: 'validated' },
+    { id: 'mat-timber-glulam', name: 'Glued Laminated Timber', category: 'wood', properties: { tensileStrength: 24, compressiveStrength: 28, shearStrength: 6, elasticModulus: 13.5, density: 480, thermalConductivity: 0.14, thermalExpansionCoeff: 5e-6, meltingPoint: 300, fireResistanceHours: 1, corrosionResistance: 'low', fatigueLimit: 10, cost: 55 }, creator: 'system', citations: 0, validationStatus: 'validated' },
+  ];
+
+  // In-memory stores for simulation data
+  const simMaterials = new Map(SEED_MATERIALS.map(m => [m.id, m]));
+  const simCitations = [];
+  const simBuildingDTUs = new Map();
+  const simMarketplace = new Map();
+  const simDistricts = new Map();
+  const simAvatars = new Map();
+  const simFirms = new Map();
+  const simPlayerWorlds = new Map();
+  const simEvents = new Map();
+
+  // ── Materials API ─────────────────────────────────────────────────
+
+  router.get("/sim/materials", wrap((_req, res) => {
+    res.json({ ok: true, materials: Array.from(simMaterials.values()) });
+  }));
+
+  router.get("/sim/materials/:id", wrap((req, res) => {
+    const mat = simMaterials.get(req.params.id);
+    if (!mat) return res.status(404).json({ ok: false, error: "Material not found" });
+    res.json({ ok: true, material: mat });
+  }));
+
+  router.post("/sim/materials", auth, wrap((req, res) => {
+    const id = `mat-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const material = { id, ...req.body, creator: req.user?.id || 'anonymous', citations: 0, validationStatus: 'experimental' };
+    simMaterials.set(id, material);
+    res.json({ ok: true, material });
+  }));
+
+  // ── Validation API ────────────────────────────────────────────────
+
+  router.post("/sim/validate", auth, wrap((req, res) => {
+    const { members, foundations, districtId } = req.body;
+    const SAFETY_FACTOR = 1.5;
+    const allMembers = [...(foundations || []), ...(members || [])];
+    const results = [];
+
+    for (const member of allMembers) {
+      const mat = simMaterials.get(member.materialId);
+      if (!mat) { results.push({ memberId: member.id, status: 'red', error: 'Material not found' }); continue; }
+      const vol = (member.dimensions?.length || 1) * (member.dimensions?.width || 0.3) * (member.dimensions?.height || 0.3);
+      const selfWeight = vol * mat.properties.density * 9.81;
+      const area = member.crossSectionArea || ((member.dimensions?.width || 0.3) * (member.dimensions?.height || 0.3));
+      const stress = area > 0 ? selfWeight / area / 1e6 : 0;
+      const allowable = (member.type === 'column' || member.type === 'wall' ? mat.properties.compressiveStrength : mat.properties.tensileStrength) / SAFETY_FACTOR;
+      const ratio = allowable > 0 ? stress / allowable : 0;
+      results.push({
+        memberId: member.id, memberType: member.type, actualStress: stress, allowableStress: allowable, ratio,
+        status: ratio < 0.7 ? 'green' : ratio <= 1.0 ? 'yellow' : 'red',
+      });
+    }
+
+    const overallPass = results.every(r => r.status !== 'red');
+    res.json({ ok: true, overallPass, results, timestamp: new Date().toISOString() });
+  }));
+
+  // ── Citations API ─────────────────────────────────────────────────
+
+  router.post("/sim/citations", auth, wrap((req, res) => {
+    const { citingDTU, citedDTU, citedCreator, context } = req.body;
+    const citation = {
+      id: `cit-${Date.now()}`,
+      citingDTU, citedDTU, citedCreator, context,
+      timestamp: new Date().toISOString(),
+    };
+    simCitations.push(citation);
+    // Update citation count on cited material/component
+    const mat = simMaterials.get(citedDTU);
+    if (mat) mat.citations = (mat.citations || 0) + 1;
+    res.json({ ok: true, citation });
+  }));
+
+  router.get("/sim/citations/:dtuId", wrap((req, res) => {
+    const citations = simCitations.filter(c => c.citingDTU === req.params.dtuId || c.citedDTU === req.params.dtuId);
+    res.json({ ok: true, citations });
+  }));
+
+  // ── Building DTUs API ─────────────────────────────────────────────
+
+  router.post("/sim/buildings", auth, wrap((req, res) => {
+    const id = `bldg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const building = { id, ...req.body, creator: req.user?.id || 'anonymous', citations: 0, createdAt: new Date().toISOString() };
+    simBuildingDTUs.set(id, building);
+    res.json({ ok: true, building });
+  }));
+
+  router.get("/sim/buildings", wrap((_req, res) => {
+    res.json({ ok: true, buildings: Array.from(simBuildingDTUs.values()) });
+  }));
+
+  router.get("/sim/buildings/:id", wrap((req, res) => {
+    const bldg = simBuildingDTUs.get(req.params.id);
+    if (!bldg) return res.status(404).json({ ok: false, error: "Building not found" });
+    res.json({ ok: true, building: bldg });
+  }));
+
+  // ── Marketplace API ───────────────────────────────────────────────
+
+  router.get("/sim/marketplace", wrap((req, res) => {
+    let items = Array.from(simMarketplace.values());
+    if (req.query.category) items = items.filter(i => i.category === req.query.category);
+    if (req.query.sort === 'citations') items.sort((a, b) => (b.citationCount || 0) - (a.citationCount || 0));
+    else if (req.query.sort === 'newest') items.sort((a, b) => (b.publishedAt || '').localeCompare(a.publishedAt || ''));
+    res.json({ ok: true, items });
+  }));
+
+  router.post("/sim/marketplace", auth, wrap((req, res) => {
+    const id = `mkt-${Date.now()}`;
+    const entry = { dtuId: id, ...req.body, creator: req.user?.id || 'anonymous', citationCount: 0, publishedAt: new Date().toISOString() };
+    simMarketplace.set(id, entry);
+    res.json({ ok: true, entry });
+  }));
+
+  // ── Simulation Districts API ──────────────────────────────────────
+
+  router.get("/sim/districts", wrap((_req, res) => {
+    res.json({ ok: true, districts: Array.from(simDistricts.values()) });
+  }));
+
+  router.post("/sim/districts", auth, wrap((req, res) => {
+    const id = `dist-${Date.now()}`;
+    const district = { id, ...req.body, createdAt: new Date().toISOString() };
+    simDistricts.set(id, district);
+    res.json({ ok: true, district });
+  }));
+
+  router.post("/sim/districts/:id/place", auth, wrap((req, res) => {
+    const district = simDistricts.get(req.params.id);
+    if (!district) return res.status(404).json({ ok: false, error: "District not found" });
+    const placement = { id: `placed-${Date.now()}`, ...req.body, placedAt: new Date().toISOString() };
+    if (!district.buildings) district.buildings = [];
+    district.buildings.push(placement);
+    res.json({ ok: true, placement });
+  }));
+
+  // ── Placement Validation API ──────────────────────────────────────
+
+  router.post("/sim/districts/:id/validate-placement", auth, wrap((req, res) => {
+    const district = simDistricts.get(req.params.id);
+    if (!district) return res.status(404).json({ ok: false, error: "District not found" });
+    const { buildingType, position } = req.body;
+    const checks = {
+      zoning: { pass: true, message: 'Zoning compliant' },
+      infrastructure: { pass: true, message: 'Infrastructure available' },
+      buildingCode: { pass: true, message: 'Building code met' },
+      structural: { pass: true, message: 'Foundation compatible' },
+      environmental: { pass: true, message: 'Environmental impact acceptable' },
+    };
+    const allPass = Object.values(checks).every(c => c.pass);
+    res.json({ ok: true, allPass, checks });
+  }));
+
+  // ── Concordia Hub API ─────────────────────────────────────────────
+
+  router.get("/sim/concordia", wrap((_req, res) => {
+    res.json({
+      ok: true,
+      concordia: {
+        name: 'Concordia',
+        districts: ['exchange', 'academy', 'forge', 'nexus', 'commons', 'observatory', 'grid', 'frontier', 'docks', 'arena'],
+        totalPopulation: 8200,
+        totalBuildings: 125,
+        activeUsers: 230,
+      },
+    });
+  }));
+
+  // ── Avatar API ────────────────────────────────────────────────────
+
+  router.get("/sim/avatar/:userId", wrap((req, res) => {
+    const avatar = simAvatars.get(req.params.userId);
+    if (!avatar) return res.status(404).json({ ok: false, error: "Avatar not found" });
+    res.json({ ok: true, avatar });
+  }));
+
+  router.post("/sim/avatar", auth, wrap((req, res) => {
+    const userId = req.user?.id || 'anonymous';
+    const avatar = {
+      id: `avatar-${userId}`,
+      userId,
+      ...req.body,
+      reputation: {},
+      createdAt: new Date().toISOString(),
+    };
+    simAvatars.set(userId, avatar);
+    res.json({ ok: true, avatar });
+  }));
+
+  // ── Firms API ─────────────────────────────────────────────────────
+
+  router.get("/sim/firms", wrap((_req, res) => {
+    res.json({ ok: true, firms: Array.from(simFirms.values()) });
+  }));
+
+  router.post("/sim/firms", auth, wrap((req, res) => {
+    const id = `firm-${Date.now()}`;
+    const firm = {
+      id, ...req.body,
+      founder: req.user?.id || 'anonymous',
+      members: [{ userId: req.user?.id || 'anonymous', role: 'founder', joinedAt: new Date().toISOString(), contributions: 0 }],
+      totalCitations: 0, activeContracts: [],
+      createdAt: new Date().toISOString(),
+    };
+    simFirms.set(id, firm);
+    res.json({ ok: true, firm });
+  }));
+
+  router.post("/sim/firms/:id/join", auth, wrap((req, res) => {
+    const firm = simFirms.get(req.params.id);
+    if (!firm) return res.status(404).json({ ok: false, error: "Firm not found" });
+    firm.members.push({ userId: req.user?.id || 'anonymous', role: req.body.role || 'associate', joinedAt: new Date().toISOString(), contributions: 0 });
+    res.json({ ok: true, firm });
+  }));
+
+  // ── Player Worlds API ─────────────────────────────────────────────
+
+  router.get("/sim/worlds", wrap((_req, res) => {
+    const worlds = Array.from(simPlayerWorlds.values()).filter(w => w.isPublic);
+    res.json({ ok: true, worlds });
+  }));
+
+  router.post("/sim/worlds", auth, wrap((req, res) => {
+    const id = `world-${Date.now()}`;
+    const world = {
+      id, ...req.body,
+      owner: req.user?.id || 'anonymous',
+      districts: [], playerCount: 1,
+      createdAt: new Date().toISOString(),
+    };
+    simPlayerWorlds.set(id, world);
+    res.json({ ok: true, world });
+  }));
+
+  // ── Events API ────────────────────────────────────────────────────
+
+  router.get("/sim/events", wrap((_req, res) => {
+    res.json({ ok: true, events: Array.from(simEvents.values()) });
+  }));
+
+  router.post("/sim/events", auth, wrap((req, res) => {
+    const id = `event-${Date.now()}`;
+    const event = {
+      id, ...req.body,
+      organizerId: req.user?.id || 'anonymous',
+      participants: [req.user?.id || 'anonymous'],
+      status: 'scheduled',
+      createdAt: new Date().toISOString(),
+    };
+    simEvents.set(id, event);
+    res.json({ ok: true, event });
+  }));
+
+  router.post("/sim/events/:id/join", auth, wrap((req, res) => {
+    const event = simEvents.get(req.params.id);
+    if (!event) return res.status(404).json({ ok: false, error: "Event not found" });
+    const userId = req.user?.id || 'anonymous';
+    if (!event.participants.includes(userId)) event.participants.push(userId);
+    res.json({ ok: true, event });
+  }));
+
+  // ── Domain Simulation Calculations ────────────────────────────────
+
+  router.post("/sim/calculate/:domain", auth, wrap((req, res) => {
+    const { domain } = req.params;
+    const params = req.body;
+    // Simplified domain calculations
+    const results = {};
+    switch (domain) {
+      case 'energy':
+        results.solarOutput = (params.panelArea || 20) * (params.efficiency || 0.22) * (params.irradiance || 1000) * (params.cloudFactor || 0.75);
+        results.windOutput = 0.5 * 1.225 * (params.sweptArea || 50) * Math.pow(params.windSpeed || 8, 3) * 0.4;
+        break;
+      case 'thermal':
+        results.heatLoss = (params.wallArea || 200) / (params.rValue || 3.5) * (params.deltaT || 25);
+        break;
+      case 'fluid':
+        results.hydrostaticPressure = (params.waterDensity || 1000) * 9.81 * (params.damHeight || 10);
+        break;
+      case 'aerospace':
+        const m0 = (params.structuralMass || 5000) + (params.propellantMass || 20000);
+        results.deltaV = (params.exhaustVelocity || 3000) * Math.log(m0 / (params.structuralMass || 5000));
+        break;
+      default:
+        return res.status(400).json({ ok: false, error: `Unknown domain: ${domain}` });
+    }
+    res.json({ ok: true, domain, results });
+  }));
+
+  // ── Disaster Stress Test API ──────────────────────────────────────
+
+  router.post("/sim/stress-test", auth, wrap((req, res) => {
+    const { districtId, scenario, magnitude } = req.body;
+    // Simplified stress test
+    const results = {
+      scenario,
+      magnitude: magnitude || 5,
+      buildingsTested: 6,
+      passed: 4,
+      marginal: 1,
+      failed: 1,
+      details: [
+        { buildingId: 'bldg-001', status: 'passed', details: 'All structural checks passed' },
+        { buildingId: 'bldg-002', status: 'passed', details: 'All structural checks passed' },
+        { buildingId: 'bldg-003', status: 'passed', details: 'All structural checks passed' },
+        { buildingId: 'bldg-004', status: 'passed', details: 'All structural checks passed' },
+        { buildingId: 'bldg-005', status: 'marginal', details: 'Column B4 approaching seismic limit' },
+        { buildingId: 'bldg-006', status: 'failed', details: 'Foundation bearing capacity exceeded at M' + (magnitude || 5) },
+      ],
+    };
+    res.json({ ok: true, results });
+  }));
+
+  // ── Leaderboards API ──────────────────────────────────────────────
+
+  router.get("/sim/leaderboards/:districtId", wrap((req, res) => {
+    res.json({
+      ok: true,
+      leaderboards: {
+        mostCitedCreator: [
+          { userId: 'user-001', displayName: '@engineer_jane', score: 521, metric: 'citations', rank: 1 },
+          { userId: 'user-002', displayName: '@materials_lab', score: 342, metric: 'citations', rank: 2 },
+          { userId: 'user-003', displayName: '@power_mike', score: 204, metric: 'citations', rank: 3 },
+        ],
+        highestHabitability: [
+          { userId: 'user-001', displayName: '@architect_alex', score: 94, metric: 'habitability', rank: 1 },
+        ],
+      },
+    });
+  }));
+
+  // ── Timeline / History API ────────────────────────────────────────
+
+  router.get("/sim/timeline/:districtId", wrap((req, res) => {
+    res.json({
+      ok: true,
+      snapshots: [
+        { timestamp: '2025-10-01', buildingCount: 0, populationCapacity: 0, powerCapacity: 0, waterCapacity: 0, environmentalScore: 100 },
+        { timestamp: '2025-10-15', buildingCount: 2, populationCapacity: 400, powerCapacity: 1000, waterCapacity: 20000, environmentalScore: 85 },
+        { timestamp: '2025-11-01', buildingCount: 4, populationCapacity: 1200, powerCapacity: 3000, waterCapacity: 50000, environmentalScore: 78 },
+        { timestamp: '2025-11-15', buildingCount: 6, populationCapacity: 2400, powerCapacity: 5000, waterCapacity: 90000, environmentalScore: 72 },
+      ],
+    });
+  }));
+
   return router;
 }

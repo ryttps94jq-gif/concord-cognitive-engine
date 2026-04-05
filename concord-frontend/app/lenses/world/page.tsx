@@ -1,336 +1,361 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
-import { useSocket } from '@/hooks/useSocket';
-import IsometricEngine from '@/components/world/IsometricEngine';
-import WorldHUD from '@/components/world/WorldHUD';
-import { CharacterCustomizer } from '@/components/world/CharacterCustomizer';
+import { useLensNav } from '@/hooks/useLensNav';
+import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useRealtimeLens } from '@/hooks/useRealtimeLens';
+import { LiveIndicator } from '@/components/lens/LiveIndicator';
+import { UniversalActions } from '@/components/lens/UniversalActions';
+import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 
-// ── Local types ──────────────────────────────────────────────────
+import DistrictViewport from '@/components/world-lens/DistrictViewport';
+import CreationToolbar from '@/components/world-lens/CreationToolbar';
+import InspectorPanel from '@/components/world-lens/InspectorPanel';
+import StatusBar from '@/components/world-lens/StatusBar';
+import GuidedCreator from '@/components/world-lens/GuidedCreator';
+import ComponentCreator from '@/components/world-lens/ComponentCreator';
+import RawDTUEditor from '@/components/world-lens/RawDTUEditor';
+import MarketplacePalette from '@/components/world-lens/MarketplacePalette';
+import ConcordiaHub from '@/components/world-lens/ConcordiaHub';
+import OnboardingTutorial from '@/components/world-lens/OnboardingTutorial';
 
-interface District {
-  id: string;
-  name: string;
-  lens: string;
-}
+import { DEMO_DISTRICT } from '@/lib/world-lens/district-seed';
+import { SEED_MATERIALS } from '@/lib/world-lens/material-seed';
+import { cacheMaterials } from '@/lib/world-lens/validation-engine';
+import type {
+  District, CreationMode, PlacedBuildingDTU, InfrastructureDTU,
+  TerrainCell, Citation, BuildingDTU, MaterialDTU, ValidationReport,
+} from '@/lib/world-lens/types';
+import type { ConcordiaDistrict } from '@/components/world-lens/ConcordiaHub';
 
-interface NearbyPlayer {
-  userId: string;
-  username: string;
-  x: number;
-  y: number;
-  direction: string;
-  district: string;
-  avatarColor?: string;
-}
+import {
+  Globe, Building2, ChevronDown, Layers, Map as MapIcon,
+} from 'lucide-react';
 
-interface CombatState {
-  active: boolean;
-  playerHp: number;
-  playerMaxHp: number;
-  enemyName: string;
-  enemyHp: number;
-  enemyMaxHp: number;
-}
+// ── View Modes ──────────────────────────────────────────────────────
 
-interface Quest {
-  id: string;
-  title: string;
-  description: string;
-  progress: number;
-  maxProgress: number;
-  completed: boolean;
-  reward?: { type: string; amount: number };
-}
+type ViewMode = 'concordia' | 'district';
 
-interface WorldEntity {
-  id: string;
-  name?: string;
-}
-
-interface Progression {
-  coins?: number;
-  xp?: number;
-  rank?: number;
-}
-
-interface NPC {
-  id: string;
-  name: string;
-  type: 'entity' | 'guard' | 'merchant' | 'quest_giver' | 'civilian';
-  position: { x: number; y: number };
-  district: string;
-  questAvailable?: boolean;
-  questComplete?: boolean;
-}
+// ── Component ───────────────────────────────────────────────────────
 
 export default function WorldLensPage() {
-  // State
-  const [playerPos, setPlayerPos] = useState({ x: 6, y: 11 }); // start at marketplace
-  const [activeDistrict, setActiveDistrict] = useState<District | null>(null);
-  const [showAvatar, setShowAvatar] = useState(false); // true on first visit
-  const [nearbyPlayers, setNearbyPlayers] = useState<NearbyPlayer[]>([]);
-  const [combatState, setCombatState] = useState<CombatState | null>(null);
-  const [wantedLevel, setWantedLevel] = useState(0);
-  const [districtBanner, setDistrictBanner] = useState<string | null>(null);
-  const [showMinimap, setShowMinimap] = useState(true);
-  const [selectedNPC, setSelectedNPC] = useState<NPC | null>(null);
-  const [showNPCDialog, setShowNPCDialog] = useState(false);
+  useLensNav('world');
 
   const router = useRouter();
+  const { isLive, lastUpdated } = useRealtimeLens('world');
 
-  // Data fetching
-  const { isLoading: districtsLoading, isError: districtsError } = useQuery({
-    queryKey: ['world-districts'],
-    queryFn: () => api.get('/api/world/districts').then((r: { data: District[] }) => r.data),
-    staleTime: 60000,
-  });
+  // ── State ─────────────────────────────────────────────────────
+  const [viewMode, setViewMode] = useState<ViewMode>('concordia');
+  const [activeDistrict, setActiveDistrict] = useState<District>(DEMO_DISTRICT);
+  const [creationMode, setCreationMode] = useState<CreationMode | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [rotation, setRotation] = useState<0 | 1 | 2 | 3>(0);
+  const [visibleLayers, setVisibleLayers] = useState(new Set(['water', 'power', 'drainage', 'road', 'data']));
+  const [showValidation, setShowValidation] = useState(false);
+  const [showWeather, setShowWeather] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(false);
 
-  const { data: quests } = useQuery({
-    queryKey: ['world-quests'],
-    queryFn: () => api.get('/api/quests/mine').then((r: { data?: { quests?: Quest[] } }) => r.data?.quests || []),
-    staleTime: 30000,
-  });
+  // Selection state
+  const [selectedBuilding, setSelectedBuilding] = useState<PlacedBuildingDTU | null>(null);
+  const [selectedInfra, setSelectedInfra] = useState<InfrastructureDTU | null>(null);
+  const [selectedTerrain, setSelectedTerrain] = useState<TerrainCell | null>(null);
+  const [validationReport, setValidationReport] = useState<ValidationReport | null>(null);
+  const [citations, setCitations] = useState<Citation[]>([]);
 
-  const { data: entities } = useQuery({
-    queryKey: ['world-entities'],
-    queryFn: () => api.get('/api/emergent/list').then((r: { data?: { agents?: WorldEntity[] } }) => r.data?.agents || []),
-    refetchInterval: 30000,
-  });
+  // Materials
+  const [materials] = useState<MaterialDTU[]>(SEED_MATERIALS);
 
-  const { data: progression } = useQuery({
-    queryKey: ['world-progression'],
-    queryFn: () => api.get('/api/world/progression/me').then((r: { data: Progression }) => r.data),
-    staleTime: 30000,
-  });
-
-  // WebSocket for multiplayer
-  const { socket, isConnected, emit } = useSocket({ autoConnect: true });
-
+  // Cache materials for validation engine
   useEffect(() => {
-    if (!socket) return;
+    cacheMaterials(materials);
+  }, [materials]);
 
-    socket.on('city:positions', (players: NearbyPlayer[]) => setNearbyPlayers(players));
-    socket.on('world:combat', (combat: CombatState) => setCombatState(combat));
-    socket.on('world:wanted', (level: number) => setWantedLevel(level));
-
-    return () => {
-      socket.off('city:positions');
-      socket.off('world:combat');
-      socket.off('world:wanted');
-    };
-  }, [socket]);
-
-  // Throttled position broadcast
-  const lastBroadcast = useRef(0);
-  const handlePlayerMove = useCallback(
-    (x: number, y: number) => {
-      setPlayerPos({ x, y });
-      const now = Date.now();
-      if (now - lastBroadcast.current > 100 && socket) {
-        lastBroadcast.current = now;
-        emit('world:move', { x, y, district: activeDistrict?.id });
-      }
-    },
-    [socket, emit, activeDistrict],
-  );
-
-  // District entry handler
-  const handleDistrictEnter = useCallback((district: District) => {
-    setActiveDistrict(district);
-    setDistrictBanner(district.name);
-    setTimeout(() => setDistrictBanner(null), 3000);
-    // Record visit for explorer achievement
-    api.post('/api/world/explorer/visit', { districtId: district.id }).catch(() => {});
-  }, []);
-
-  // Building click → navigate to lens
-  const handleBuildingClick = useCallback(
-    (district: District) => {
-      router.push(`/lenses/${district.lens}`);
-    },
-    [router],
-  );
-
-  // NPC click → show dialog
-  const handleNPCClick = useCallback((npc: NPC) => {
-    setSelectedNPC(npc);
-    setShowNPCDialog(true);
-  }, []);
-
-  // Combat actions
-  const handleCombatAction = useCallback(
-    (action: string) => {
-      if (combatState && socket) {
-        emit('world:combat_action', { action });
-      }
-    },
-    [combatState, socket, emit],
-  );
-
-  // Build NPC list from entities + static NPCs
-  const npcs = useMemo(() => {
-    const list: NPC[] = [];
-    // Add emergent entities as special NPCs
-    if (entities) {
-      for (const entity of entities as WorldEntity[]) {
-        list.push({
-          id: entity.id,
-          name: entity.name || entity.id,
-          type: 'entity' as const,
-          position: { x: 5 + Math.random() * 3, y: 10 + Math.random() * 3 },
-          district: 'marketplace',
-        });
-      }
+  // Check first visit
+  useEffect(() => {
+    const visited = localStorage.getItem('world_lens_visited');
+    if (!visited) {
+      setShowOnboarding(true);
     }
-    // Static NPCs per district
-    const STATIC_NPCS: NPC[] = [
-      { id: 'merchant-1', name: 'Merchant Kira', type: 'merchant', position: { x: 6, y: 11 }, district: 'marketplace' },
-      { id: 'guard-1', name: 'Guard Captain', type: 'guard', position: { x: 3, y: 3 }, district: 'council' },
-      { id: 'quest-welcome', name: 'Guide Aria', type: 'quest_giver', position: { x: 5, y: 10 }, district: 'marketplace', questAvailable: true },
-      { id: 'scholar-1', name: 'Scholar Thane', type: 'civilian', position: { x: 3, y: 3 }, district: 'research' },
-      { id: 'musician-1', name: 'Bard Lyra', type: 'civilian', position: { x: 9, y: 3 }, district: 'music' },
-      { id: 'coder-1', name: 'Engineer Vex', type: 'quest_giver', position: { x: 9, y: 9 }, district: 'code', questAvailable: true },
-    ];
-    list.push(...STATIC_NPCS);
-    return list;
-  }, [entities]);
-
-  // Check first visit for avatar creation
-  useEffect(() => {
-    const hasAvatar = localStorage.getItem('concord_avatar');
-    if (!hasAvatar) setShowAvatar(true);
   }, []);
 
-  // Player stats
-  const playerStats = {
-    hp: 100,
-    maxHp: 100,
-    coins: progression?.coins || 0,
-    xp: progression?.xp || 0,
-    rank: progression?.rank || 0,
-  };
+  // DTU persistence
+  const { items: buildingItems, create: createBuilding } = useLensData('world', 'building', {
+    seed: [],
+    enabled: true,
+  });
 
-  if (districtsError) {
-    return (
-      <div className="flex items-center justify-center h-[calc(100vh-4rem)] bg-[#0a0a0f]">
-        <div className="text-center">
-          <p className="text-red-400 text-sm mb-2">Failed to load world data</p>
-          <button onClick={() => window.location.reload()} className="text-xs text-neon-cyan hover:underline">Retry</button>
-        </div>
-      </div>
-    );
-  }
+  // ── Handlers ──────────────────────────────────────────────────
 
-  if (districtsLoading) {
-    return (
-      <div className="flex items-center justify-center h-[calc(100vh-4rem)] bg-[#0a0a0f]">
-        <div className="text-center">
-          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-gray-400 text-sm">Loading world...</p>
-        </div>
-      </div>
-    );
-  }
+  const handleBuildingClick = useCallback((building: PlacedBuildingDTU) => {
+    setSelectedBuilding(building);
+    setSelectedInfra(null);
+    setSelectedTerrain(null);
+    // Generate mock citations for demo
+    setCitations([
+      { id: 'c1', citingDTU: building.dtuId, citedDTU: 'comp-concrete-found-v2', citedCreator: '@engineer_jane', timestamp: new Date().toISOString(), context: 'foundation' },
+      { id: 'c2', citingDTU: building.dtuId, citedDTU: 'mat-usb-a', citedCreator: '@materials_lab', timestamp: new Date().toISOString(), context: 'beam material' },
+      { id: 'c3', citingDTU: building.dtuId, citedDTU: 'infra-water-1', citedCreator: '@civil_sara', timestamp: new Date().toISOString(), context: 'water connection' },
+    ]);
+  }, []);
+
+  const handleInfraClick = useCallback((infra: InfrastructureDTU) => {
+    setSelectedInfra(infra);
+    setSelectedBuilding(null);
+    setSelectedTerrain(null);
+    setCitations([]);
+  }, []);
+
+  const handleTerrainClick = useCallback((x: number, y: number) => {
+    const cell = activeDistrict.terrain.grid[y]?.[x] || null;
+    setSelectedTerrain(cell);
+    setSelectedBuilding(null);
+    setSelectedInfra(null);
+    setCitations([]);
+  }, [activeDistrict]);
+
+  const handleCloseInspector = useCallback(() => {
+    setSelectedBuilding(null);
+    setSelectedInfra(null);
+    setSelectedTerrain(null);
+    setCitations([]);
+    setValidationReport(null);
+  }, []);
+
+  const handleToggleLayer = useCallback((layer: string) => {
+    setVisibleLayers(prev => {
+      const next = new Set(prev);
+      if (next.has(layer)) next.delete(layer);
+      else next.add(layer);
+      return next;
+    });
+  }, []);
+
+  const handleRotate = useCallback(() => {
+    setRotation(prev => ((prev + 1) % 4) as 0 | 1 | 2 | 3);
+  }, []);
+
+  const handlePublishBuilding = useCallback((building: BuildingDTU) => {
+    createBuilding({
+      title: building.name,
+      data: building as unknown as Record<string, unknown>,
+    });
+    setCreationMode(null);
+    // Add to district
+    setActiveDistrict(prev => ({
+      ...prev,
+      buildings: [
+        ...prev.buildings,
+        {
+          id: `placed-${building.id}`,
+          dtuId: building.id,
+          position: { x: 10 + Math.random() * 5, y: 10 + Math.random() * 5 },
+          rotation: 0,
+          validationStatus: building.validationReport?.overallPass ? 'validated' : 'experimental',
+          creator: building.creator,
+          placedAt: new Date().toISOString().slice(0, 10),
+        },
+      ],
+    }));
+  }, [createBuilding]);
+
+  const handlePublishComponent = useCallback((component: {
+    name: string;
+    category: string;
+    materialId: string;
+    dimensions: { length: number; width: number; height: number };
+    crossSection: string;
+  }) => {
+    createBuilding({
+      title: component.name,
+      data: component as unknown as Record<string, unknown>,
+    });
+    setCreationMode(null);
+  }, [createBuilding]);
+
+  const handlePublishRawDTU = useCallback((dtu: Record<string, unknown>) => {
+    createBuilding({
+      title: (dtu.name as string) || 'Raw DTU',
+      data: dtu,
+    });
+    setCreationMode(null);
+  }, [createBuilding]);
+
+  const handleConcordiaDistrictSelect = useCallback((_district: ConcordiaDistrict) => {
+    // In future: load actual district data from server
+    setViewMode('district');
+  }, []);
+
+  const handleOnboardingComplete = useCallback(() => {
+    localStorage.setItem('world_lens_visited', '1');
+    setShowOnboarding(false);
+  }, []);
 
   return (
-    <div className="relative w-full h-[calc(100vh-4rem)] overflow-hidden bg-[#0a0a0f]">
-      {/* Avatar creation modal on first visit */}
-      {showAvatar && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur">
-          <CharacterCustomizer
-            onSave={(profile: Record<string, string>) => {
-              localStorage.setItem('concord_avatar', JSON.stringify(profile));
-              api.post('/api/social/profile/avatar', profile).catch(() => {});
-              setShowAvatar(false);
-            }}
+    <div data-lens-theme="world" className="flex flex-col h-full min-h-0">
+      {/* Header */}
+      <header className="flex items-center justify-between px-4 py-2 border-b border-white/10">
+        <div className="flex items-center gap-3">
+          <Globe className="w-6 h-6 text-cyan-400" />
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-base font-bold">World Lens</h1>
+              <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} />
+            </div>
+            <p className="text-[10px] text-gray-500">
+              Design, validate, and publish DTU-based creations in shared districts
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* View mode toggle */}
+          <div className="flex items-center bg-black/40 border border-white/10 rounded-lg overflow-hidden">
+            <button
+              onClick={() => setViewMode('concordia')}
+              className={`px-3 py-1.5 text-xs ${viewMode === 'concordia' ? 'bg-cyan-500/20 text-cyan-300' : 'text-gray-400 hover:text-white'}`}
+            >
+              <Globe className="w-3.5 h-3.5 inline mr-1" />
+              Concordia
+            </button>
+            <button
+              onClick={() => setViewMode('district')}
+              className={`px-3 py-1.5 text-xs ${viewMode === 'district' ? 'bg-cyan-500/20 text-cyan-300' : 'text-gray-400 hover:text-white'}`}
+            >
+              <MapIcon className="w-3.5 h-3.5 inline mr-1" />
+              District
+            </button>
+          </div>
+          <UniversalActions domain="world" artifactId={undefined} compact />
+        </div>
+      </header>
+
+      {/* Main Content */}
+      {viewMode === 'concordia' ? (
+        <div className="flex-1 overflow-y-auto p-4">
+          <ConcordiaHub
+            onDistrictSelect={handleConcordiaDistrictSelect}
+            onNavigateToLens={(lens) => router.push(`/lenses/${lens}`)}
+          />
+        </div>
+      ) : (
+        <div className="flex-1 flex min-h-0">
+          {/* Left Sidebar: Toolbar + Creation Panel */}
+          <div className="flex flex-col w-56 flex-shrink-0 border-r border-white/10 overflow-y-auto">
+            <CreationToolbar
+              activeMode={creationMode}
+              onModeChange={setCreationMode}
+              zoom={zoom}
+              onZoomChange={setZoom}
+              rotation={rotation}
+              onRotate={handleRotate}
+              visibleLayers={visibleLayers}
+              onToggleLayer={handleToggleLayer}
+              showValidationOverlay={showValidation}
+              onToggleValidation={() => setShowValidation(!showValidation)}
+              showWeatherOverlay={showWeather}
+              onToggleWeather={() => setShowWeather(!showWeather)}
+            />
+
+            {/* Marketplace palette when in guided/component mode */}
+            {(creationMode === 'guided' || creationMode === 'component') && (
+              <div className="border-t border-white/10 p-2">
+                <MarketplacePalette
+                  onSelectComponent={(entry) => {
+                    // Auto-cite when selecting from marketplace
+                    console.log('Selected component:', entry.dtuId, 'by', entry.creator);
+                  }}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Center: District Viewport */}
+          <div className="flex-1 flex flex-col min-w-0">
+            {/* Creation panels overlay */}
+            {creationMode === 'guided' && (
+              <div className="absolute left-60 top-24 z-20 w-80">
+                <GuidedCreator
+                  district={activeDistrict}
+                  materials={materials}
+                  onPublish={handlePublishBuilding}
+                  onCancel={() => setCreationMode(null)}
+                />
+              </div>
+            )}
+            {creationMode === 'component' && (
+              <div className="absolute left-60 top-24 z-20 w-72">
+                <ComponentCreator
+                  materials={materials}
+                  onPublish={handlePublishComponent}
+                  onCancel={() => setCreationMode(null)}
+                />
+              </div>
+            )}
+            {creationMode === 'raw' && (
+              <div className="absolute left-60 top-24 z-20 w-96">
+                <RawDTUEditor
+                  materials={materials}
+                  onPublish={handlePublishRawDTU}
+                  onCancel={() => setCreationMode(null)}
+                />
+              </div>
+            )}
+
+            <DistrictViewport
+              district={activeDistrict}
+              selectedBuildingId={selectedBuilding?.id || null}
+              onBuildingClick={handleBuildingClick}
+              onInfrastructureClick={handleInfraClick}
+              onTerrainClick={handleTerrainClick}
+              showValidationOverlay={showValidation}
+              showWeatherOverlay={showWeather}
+              visibleLayers={visibleLayers}
+              zoom={zoom}
+              rotation={rotation}
+            />
+          </div>
+
+          {/* Right Sidebar: Inspector */}
+          <InspectorPanel
+            selectedBuilding={selectedBuilding}
+            selectedInfra={selectedInfra}
+            selectedTerrain={selectedTerrain}
+            validationReport={validationReport}
+            citations={citations}
+            materials={materials}
+            onClose={handleCloseInspector}
           />
         </div>
       )}
 
-      {/* Isometric game canvas */}
-      <IsometricEngine
-        playerPosition={playerPos}
-        onPlayerMove={handlePlayerMove}
-        npcs={npcs}
-        nearbyPlayers={nearbyPlayers}
-        onDistrictEnter={handleDistrictEnter}
-        onBuildingClick={handleBuildingClick}
-        onNPCClick={handleNPCClick}
-        onPlayerClick={(p: NearbyPlayer) => router.push(`/profile/${p.userId}`)}
-        activeDistrict={activeDistrict?.id || null}
-        wantedLevel={wantedLevel}
-      />
+      {/* Bottom Status Bar */}
+      <StatusBar district={viewMode === 'district' ? activeDistrict : null} />
 
-      {/* HUD overlays */}
-      <WorldHUD
-        activeDistrict={activeDistrict}
-        quests={quests || []}
-        combatState={combatState}
-        wantedLevel={wantedLevel}
-        playerStats={playerStats}
-        onNavigateToLens={(lens: string) => router.push(`/lenses/${lens}`)}
-        onQuestClick={(id: string) => api.post(`/api/quests/${id}/complete`).catch(() => {})}
-        onCombatAction={handleCombatAction}
-        showMinimap={showMinimap}
-        onToggleMinimap={() => setShowMinimap(!showMinimap)}
-        districtEntryBanner={districtBanner}
-      />
-
-      {/* NPC Dialog modal */}
-      {showNPCDialog && selectedNPC && (
-        <div className="absolute inset-0 z-40 flex items-end justify-center pb-24 pointer-events-none">
-          <div className="pointer-events-auto bg-black/80 backdrop-blur border border-white/10 rounded-xl p-6 max-w-md w-full mx-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-bold text-white">{selectedNPC.name}</h3>
-              <span className="text-xs px-2 py-0.5 rounded bg-white/10 text-gray-400">
-                {selectedNPC.type}
-              </span>
-            </div>
-            <p className="text-gray-300 text-sm mb-4">
-              {selectedNPC.type === 'merchant' && 'Looking to trade? I have the finest goods in the district.'}
-              {selectedNPC.type === 'guard' && 'Keep it civil in this district, citizen.'}
-              {selectedNPC.type === 'quest_giver' && 'I have a task for you, traveler. Interested?'}
-              {selectedNPC.type === 'entity' && 'I am an emergent intelligence. I observe, I learn, I grow.'}
-              {selectedNPC.type === 'civilian' && 'Welcome to our district. There\'s much to discover here.'}
-            </p>
-            <div className="flex gap-2">
-              {selectedNPC.type === 'merchant' && (
-                <button className="btn-neon text-xs" onClick={() => router.push('/lenses/marketplace')}>
-                  Trade
-                </button>
-              )}
-              {selectedNPC.type === 'quest_giver' && (
-                <button className="btn-neon text-xs" onClick={() => router.push('/lenses/questmarket')}>
-                  Accept Quest
-                </button>
-              )}
-              {selectedNPC.type === 'entity' && (
-                <button className="btn-neon text-xs" onClick={() => router.push('/lenses/agents')}>
-                  View Profile
-                </button>
-              )}
-              <button
-                className="px-3 py-1.5 text-xs border border-white/20 rounded-lg text-gray-400 hover:text-white transition"
-                onClick={() => setShowNPCDialog(false)}
-              >
-                Walk Away
-              </button>
-            </div>
+      {/* Lens Features (collapsible) */}
+      <div className="border-t border-white/10">
+        <button
+          onClick={() => setShowFeatures(!showFeatures)}
+          className="w-full flex items-center justify-between px-4 py-2 text-xs text-gray-400 hover:text-white transition-colors"
+        >
+          <span className="flex items-center gap-1"><Layers className="w-3.5 h-3.5" /> Lens Features</span>
+          <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showFeatures ? 'rotate-180' : ''}`} />
+        </button>
+        {showFeatures && (
+          <div className="px-4 pb-3">
+            <LensFeaturePanel lensId="world" />
           </div>
-        </div>
-      )}
-
-      {/* Connection indicator */}
-      <div className="absolute bottom-2 right-2 z-30">
-        <div
-          className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}
-          title={isConnected ? 'Connected' : 'Disconnected'}
-        />
+        )}
       </div>
+
+      {/* Onboarding Tutorial */}
+      {showOnboarding && (
+        <OnboardingTutorial
+          onComplete={handleOnboardingComplete}
+          onDismiss={handleOnboardingComplete}
+        />
+      )}
     </div>
   );
 }
