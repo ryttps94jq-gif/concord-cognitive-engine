@@ -142,7 +142,7 @@ function _pauseBackgroundWork(STATE) {
   if (!STATE?.settings) return;
   if (!STATE._memoryPausedFeatures) {
     STATE._memoryPausedFeatures = {};
-    const features = ["autogenEnabled", "dreamEnabled", "evolutionEnabled", "synthEnabled"];
+    const features = ["autogenEnabled", "dreamEnabled", "evolutionEnabled", "synthEnabled", "heartbeatEnabled"];
     for (const f of features) {
       if (STATE.settings[f] === true) {
         STATE._memoryPausedFeatures[f] = true;

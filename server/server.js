@@ -11153,9 +11153,11 @@ const GHOST_FLEET_STATUS = {
   totalFailed: 0,
 };
 
+const _ghostFleetYield = () => new Promise(r => setTimeout(r, 2000)); // 2s gap between modules
+
 async function initGhostFleet() {
   const startTime = Date.now();
-  structuredLog("info", "ghost_fleet_init_start", { message: "Wiring 18 emergent modules..." });
+  structuredLog("info", "ghost_fleet_init_start", { message: "Wiring emergent modules (staggered)..." });
 
   // ── Phase 1: Critical Four ──────────────────────────────────────────────
 
@@ -11175,6 +11177,7 @@ async function initGhostFleet() {
     GHOST_FLEET_STATUS.modules["hlr-engine"] = { loaded: false, error: err.message };
     structuredLog("warn", "ghost_fleet_module_failed", { name: "hlr-engine", error: err.message });
   }
+  await _ghostFleetYield();
 
   // 2. HLM Engine — Lattice topology mapping
   try {
@@ -11182,37 +11185,37 @@ async function initGhostFleet() {
     GHOST_FLEET_STATUS.modules["hlm-engine"] = { loaded: true, loadedAt: new Date().toISOString() };
 
     register("hlm", "run", async (_ctx, _input = {}) => {
-      const dtus = STATE.dtus instanceof Map ? Array.from(STATE.dtus.values()) : [];
+      const dtus = typeof STATE.dtus?.values === 'function' ? Array.from(STATE.dtus.values()) : [];
       return hlm.runHLMPass(dtus);
     });
     register("hlm", "clusters", (_ctx, _input = {}) => {
-      const dtus = STATE.dtus instanceof Map ? Array.from(STATE.dtus.values()) : [];
+      const dtus = typeof STATE.dtus?.values === 'function' ? Array.from(STATE.dtus.values()) : [];
       return hlm.clusterAnalysis(dtus);
     });
     register("hlm", "gaps", (_ctx, _input = {}) => {
-      const dtus = STATE.dtus instanceof Map ? Array.from(STATE.dtus.values()) : [];
+      const dtus = typeof STATE.dtus?.values === 'function' ? Array.from(STATE.dtus.values()) : [];
       const clusters = hlm.clusterAnalysis(dtus);
       return hlm.gapAnalysis(clusters, dtus);
     });
     register("hlm", "redundancy", (_ctx, _input = {}) => {
-      const dtus = STATE.dtus instanceof Map ? Array.from(STATE.dtus.values()) : [];
+      const dtus = typeof STATE.dtus?.values === 'function' ? Array.from(STATE.dtus.values()) : [];
       return hlm.redundancyDetection(dtus);
     });
     register("hlm", "orphans", (_ctx, _input = {}) => {
-      const dtus = STATE.dtus instanceof Map ? Array.from(STATE.dtus.values()) : [];
+      const dtus = typeof STATE.dtus?.values === 'function' ? Array.from(STATE.dtus.values()) : [];
       const clusters = hlm.clusterAnalysis(dtus);
       return hlm.orphanRescue(dtus, clusters);
     });
     register("hlm", "topology", (_ctx, _input = {}) => {
-      const dtus = STATE.dtus instanceof Map ? Array.from(STATE.dtus.values()) : [];
+      const dtus = typeof STATE.dtus?.values === 'function' ? Array.from(STATE.dtus.values()) : [];
       return hlm.topologyMap(dtus);
     });
     register("hlm", "domain_census", (_ctx, _input = {}) => {
-      const dtus = STATE.dtus instanceof Map ? Array.from(STATE.dtus.values()) : [];
+      const dtus = typeof STATE.dtus?.values === 'function' ? Array.from(STATE.dtus.values()) : [];
       return hlm.domainCensus(dtus);
     });
     register("hlm", "freshness", (_ctx, _input = {}) => {
-      const dtus = STATE.dtus instanceof Map ? Array.from(STATE.dtus.values()) : [];
+      const dtus = typeof STATE.dtus?.values === 'function' ? Array.from(STATE.dtus.values()) : [];
       return hlm.freshnessCheck(dtus);
     });
     register("hlm", "metrics", () => hlm.getHLMMetrics());
@@ -11220,7 +11223,7 @@ async function initGhostFleet() {
     // HLM slow interval: every 8 minutes — graph computation, no LLM but CPU-intensive
     const hlmTimer = setInterval(async () => {
       try {
-        const dtus = STATE.dtus instanceof Map ? Array.from(STATE.dtus.values()) : [];
+        const dtus = typeof STATE.dtus?.values === 'function' ? Array.from(STATE.dtus.values()) : [];
         if (dtus.length > 0) await hlm.runHLMPass(dtus);
       } catch (e) { observe(e, "hlm_slow_interval"); }
     }, 480000);
@@ -11231,6 +11234,7 @@ async function initGhostFleet() {
     GHOST_FLEET_STATUS.modules["hlm-engine"] = { loaded: false, error: err.message };
     structuredLog("warn", "ghost_fleet_module_failed", { name: "hlm-engine", error: err.message });
   }
+  await _ghostFleetYield();
 
   // 3. Agent System — Lattice immune system (6 agent types)
   try {
@@ -11239,7 +11243,7 @@ async function initGhostFleet() {
 
     register("agents", "create", (_ctx, input = {}) => agents.createAgent(input.type, input.config));
     register("agents", "run", (_ctx, input = {}) => {
-      const dtus = STATE.dtus instanceof Map ? Array.from(STATE.dtus.values()) : [];
+      const dtus = typeof STATE.dtus?.values === 'function' ? Array.from(STATE.dtus.values()) : [];
       return agents.runAgent(input.agentId, dtus);
     });
     register("agents", "pause", (_ctx, input = {}) => agents.pauseAgent(input.agentId));
@@ -11252,7 +11256,7 @@ async function initGhostFleet() {
     register("agents", "freeze", () => agents.freezeAllAgents());
     register("agents", "thaw", () => agents.thawAllAgents());
     register("agents", "tick", (_ctx, _input = {}) => {
-      const dtus = STATE.dtus instanceof Map ? Array.from(STATE.dtus.values()) : [];
+      const dtus = typeof STATE.dtus?.values === 'function' ? Array.from(STATE.dtus.values()) : [];
       return agents.agentTickJob(dtus);
     });
     register("agents", "metrics", () => agents.getAgentMetrics());
@@ -11276,6 +11280,7 @@ async function initGhostFleet() {
     GHOST_FLEET_STATUS.modules["agent-system"] = { loaded: false, error: err.message };
     structuredLog("warn", "ghost_fleet_module_failed", { name: "agent-system", error: err.message });
   }
+  await _ghostFleetYield();
 
   // 4. Hypothesis Engine — Formal hypothesis lifecycle
   try {
@@ -11301,6 +11306,7 @@ async function initGhostFleet() {
     GHOST_FLEET_STATUS.modules["hypothesis-engine"] = { loaded: false, error: err.message };
     structuredLog("warn", "ghost_fleet_module_failed", { name: "hypothesis-engine", error: err.message });
   }
+  await _ghostFleetYield();
 
   // ── Phase 2: Knowledge Expansion ────────────────────────────────────────
 
@@ -11326,6 +11332,7 @@ async function initGhostFleet() {
     GHOST_FLEET_STATUS.modules["ingest-engine"] = { loaded: false, error: err.message };
     structuredLog("warn", "ghost_fleet_module_failed", { name: "ingest-engine", error: err.message });
   }
+  await _ghostFleetYield();
 
   // 6. Research Jobs Queue
   try {
@@ -11347,6 +11354,7 @@ async function initGhostFleet() {
     GHOST_FLEET_STATUS.modules["research-jobs"] = { loaded: false, error: err.message };
     structuredLog("warn", "ghost_fleet_module_failed", { name: "research-jobs", error: err.message });
   }
+  await _ghostFleetYield();
 
   // 7. Council Voices (already imported statically — just register macros)
   try {
@@ -11360,6 +11368,7 @@ async function initGhostFleet() {
     GHOST_FLEET_STATUS.modules["council-voices"] = { loaded: false, error: err.message };
     structuredLog("warn", "ghost_fleet_module_failed", { name: "council-voices", error: err.message });
   }
+  await _ghostFleetYield();
 
   // 8. Quest Engine
   try {
@@ -11382,6 +11391,7 @@ async function initGhostFleet() {
     GHOST_FLEET_STATUS.modules["quest-engine"] = { loaded: false, error: err.message };
     structuredLog("warn", "ghost_fleet_module_failed", { name: "quest-engine", error: err.message });
   }
+  await _ghostFleetYield();
 
   // ── Phase 3: Entity Intelligence ────────────────────────────────────────
 
@@ -11407,6 +11417,7 @@ async function initGhostFleet() {
     GHOST_FLEET_STATUS.modules["entity-teaching"] = { loaded: false, error: err.message };
     structuredLog("warn", "ghost_fleet_module_failed", { name: "entity-teaching", error: err.message });
   }
+  await _ghostFleetYield();
 
   // 10. Entity Economy
   try {
@@ -11432,6 +11443,7 @@ async function initGhostFleet() {
     GHOST_FLEET_STATUS.modules["entity-economy"] = { loaded: false, error: err.message };
     structuredLog("warn", "ghost_fleet_module_failed", { name: "entity-economy", error: err.message });
   }
+  await _ghostFleetYield();
 
   // 11. Creative Generation
   try {
@@ -11454,6 +11466,7 @@ async function initGhostFleet() {
     GHOST_FLEET_STATUS.modules["creative-generation"] = { loaded: false, error: err.message };
     structuredLog("warn", "ghost_fleet_module_failed", { name: "creative-generation", error: err.message });
   }
+  await _ghostFleetYield();
 
   // 12. Entity Autonomy
   try {
@@ -11477,6 +11490,7 @@ async function initGhostFleet() {
     GHOST_FLEET_STATUS.modules["entity-autonomy"] = { loaded: false, error: err.message };
     structuredLog("warn", "ghost_fleet_module_failed", { name: "entity-autonomy", error: err.message });
   }
+  await _ghostFleetYield();
 
   // 13. Conflict Resolution
   try {
@@ -11500,6 +11514,7 @@ async function initGhostFleet() {
     GHOST_FLEET_STATUS.modules["conflict-resolution"] = { loaded: false, error: err.message };
     structuredLog("warn", "ghost_fleet_module_failed", { name: "conflict-resolution", error: err.message });
   }
+  await _ghostFleetYield();
 
   // 14. History Engine
   try {
@@ -11523,6 +11538,7 @@ async function initGhostFleet() {
     GHOST_FLEET_STATUS.modules["history-engine"] = { loaded: false, error: err.message };
     structuredLog("warn", "ghost_fleet_module_failed", { name: "history-engine", error: err.message });
   }
+  await _ghostFleetYield();
 
   // ── Phase 4: Extended Systems ───────────────────────────────────────────
 
@@ -11548,6 +11564,7 @@ async function initGhostFleet() {
     GHOST_FLEET_STATUS.modules["cri-system"] = { loaded: false, error: err.message };
     structuredLog("warn", "ghost_fleet_module_failed", { name: "cri-system", error: err.message });
   }
+  await _ghostFleetYield();
 
   // 16. Culture Layer (already ticked in governor heartbeat — just register macros)
   try {
@@ -11576,6 +11593,7 @@ async function initGhostFleet() {
     GHOST_FLEET_STATUS.modules["culture-layer"] = { loaded: false, error: err.message };
     structuredLog("warn", "ghost_fleet_module_failed", { name: "culture-layer", error: err.message });
   }
+  await _ghostFleetYield();
 
   // 17. Breakthrough Clusters
   try {
@@ -11595,6 +11613,7 @@ async function initGhostFleet() {
     GHOST_FLEET_STATUS.modules["breakthrough-clusters"] = { loaded: false, error: err.message };
     structuredLog("warn", "ghost_fleet_module_failed", { name: "breakthrough-clusters", error: err.message });
   }
+  await _ghostFleetYield();
 
   // 18. Physical DTU Schema
   try {
@@ -11615,6 +11634,7 @@ async function initGhostFleet() {
     GHOST_FLEET_STATUS.modules["physical-dtu"] = { loaded: false, error: err.message };
     structuredLog("warn", "ghost_fleet_module_failed", { name: "physical-dtu", error: err.message });
   }
+  await _ghostFleetYield();
 
   // ── Phase 5: New Cognitive Systems ──────────────────────────────────────
 
@@ -11637,6 +11657,7 @@ async function initGhostFleet() {
     GHOST_FLEET_STATUS.modules["forgetting-engine"] = { loaded: false, error: err.message };
     structuredLog("warn", "ghost_fleet_module_failed", { name: "forgetting-engine", error: err.message });
   }
+  await _ghostFleetYield();
 
   // 20. Civilization Attention Allocator
   try {
@@ -11656,6 +11677,7 @@ async function initGhostFleet() {
     GHOST_FLEET_STATUS.modules["attention-allocator"] = { loaded: false, error: err.message };
     structuredLog("warn", "ghost_fleet_module_failed", { name: "attention-allocator", error: err.message });
   }
+  await _ghostFleetYield();
 
   // 21. Global Repair Network (stub — disabled by default)
   try {
@@ -11673,6 +11695,7 @@ async function initGhostFleet() {
     GHOST_FLEET_STATUS.modules["repair-network"] = { loaded: false, error: err.message };
     structuredLog("warn", "ghost_fleet_module_failed", { name: "repair-network", error: err.message });
   }
+  await _ghostFleetYield();
 
   // 22. App Maker
   try {
@@ -11695,6 +11718,7 @@ async function initGhostFleet() {
     GHOST_FLEET_STATUS.modules["app-maker"] = { loaded: false, error: err.message };
     structuredLog("warn", "ghost_fleet_module_failed", { name: "app-maker", error: err.message });
   }
+  await _ghostFleetYield();
 
   // 23. Promotion Pipeline
   try {
@@ -11714,6 +11738,7 @@ async function initGhostFleet() {
     GHOST_FLEET_STATUS.modules["promotion-pipeline"] = { loaded: false, error: err.message };
     structuredLog("warn", "ghost_fleet_module_failed", { name: "promotion-pipeline", error: err.message });
   }
+  await _ghostFleetYield();
 
   // 24. Adjacent Reality Explorer
   try {
@@ -11730,6 +11755,7 @@ async function initGhostFleet() {
     GHOST_FLEET_STATUS.modules["reality-explorer"] = { loaded: false, error: err.message };
     structuredLog("warn", "ghost_fleet_module_failed", { name: "reality-explorer", error: err.message });
   }
+  await _ghostFleetYield();
 
   // 25. Dream Capture Pipeline
   try {
@@ -11748,6 +11774,7 @@ async function initGhostFleet() {
     GHOST_FLEET_STATUS.modules["dream-capture"] = { loaded: false, error: err.message };
     structuredLog("warn", "ghost_fleet_module_failed", { name: "dream-capture", error: err.message });
   }
+  await _ghostFleetYield();
 
   // 26. Lens Macros (Browser Extension backend — register analysis macros)
   try {
@@ -11770,6 +11797,7 @@ async function initGhostFleet() {
     GHOST_FLEET_STATUS.modules["lens-macros"] = { loaded: false, error: err.message };
     structuredLog("warn", "ghost_fleet_module_failed", { name: "lens-macros", error: err.message });
   }
+  await _ghostFleetYield();
 
   // ── Finalize ────────────────────────────────────────────────────────────
 
@@ -11825,12 +11853,13 @@ async function initGhostFleet() {
   return GHOST_FLEET_STATUS;
 }
 
-// Launch Ghost Fleet 8 seconds after boot (after brains init at 3s, before repair loop at 10s)
+// Launch Ghost Fleet 30 seconds after boot — server responds to HTTP immediately,
+// ghost fleet modules load one-at-a-time with 2s gaps between each.
 setTimeout(() => {
   initGhostFleet().catch(err => {
     structuredLog("error", "ghost_fleet_init_error", { error: err.message });
   });
-}, 8000);
+}, 30000);
 
 // ── Artifact Garbage Collection Timer (weekly) ──────────────────────────
 // Starts after a short delay so STATE and db are fully ready
@@ -22091,8 +22120,10 @@ function startHeartbeat() {
 
   // ── Local Scope Tick (GPU cadence, 10s default — organism speed, not machine speed) ──
   const ms = clamp(Number(STATE.settings.heartbeatMs || 10000), 2000, 120000);
+  let _heartbeatTickCount = 0;
   heartbeatTimer = setInterval(async () => {
     if (!STATE.settings.heartbeatEnabled) return;
+    _heartbeatTickCount++;
     const ctx = makeInternalCtx("heartbeat");
 
     // process crawl queue once (Local scope only — ingest is local activity)
@@ -22147,21 +22178,27 @@ function startHeartbeat() {
     // v3: local self-upgrade (abstraction governor) at fixed cadence
     try { await maybeRunLocalUpgrade(); } catch (err) { console.error('[system] Local self-upgrade error:', err); }
 
-    // v5.5: capability bridge tick — beacon check + dedup scan + auto-hypothesis
-    try { await runMacro("emergent","bridge.heartbeatTick", {}, ctx).catch((err) => { console.error('[system] Emergent bridge heartbeat tick error:', err); }); } catch (err) { console.error('[system] Heartbeat tick error:', err); }
+    // v5.5: capability bridge tick — beacon check + dedup scan + auto-hypothesis (every 6th tick ~60s)
+    if (_heartbeatTickCount % 6 === 0) {
+      try { await runMacro("emergent","bridge.heartbeatTick", {}, ctx).catch((err) => { console.error('[system] Emergent bridge heartbeat tick error:', err); }); } catch (err) { console.error('[system] Heartbeat tick error:', err); }
+    }
 
-    // v5.6: repair agent tick — lattice health audit (stale DTUs, orphaned lineage, contradictions)
-    try { await runMacro("emergent","repair.agent.tick", {}, ctx).catch((err) => { console.error('[system] Repair agent tick error:', err); }); } catch (err) { console.error('[system] Repair agent tick error:', err); }
+    // v5.6: repair agent tick — lattice health audit (every 30th tick ~5min, also has internal 5min cooldown)
+    if (_heartbeatTickCount % 30 === 0) {
+      try { await runMacro("emergent","repair.agent.tick", {}, ctx).catch((err) => { console.error('[system] Repair agent tick error:', err); }); } catch (err) { console.error('[system] Repair agent tick error:', err); }
+    }
 
-    // v5.7: analogize engine — minimal delay on GPU (let main pipelines settle)
-    try {
-      await new Promise((resolve) => { setTimeout(resolve, 1000); });
-      await runMacro("system","analogize", {}, ctx).catch((err) => { console.error('[system] Analogize error:', err); });
-    } catch (err) { console.error('[system] Analogize error:', err); }
+    // v5.7: analogize engine — every 18th tick (~3min, let main pipelines settle)
+    if (_heartbeatTickCount % 18 === 0) {
+      try {
+        await runMacro("system","analogize", {}, ctx).catch((err) => { console.error('[system] Analogize error:', err); });
+      } catch (err) { console.error('[system] Analogize error:', err); }
+    }
 
-    // ── v5.8: Biological Systems Tick ──────────────────────────────────────
+    // ── v5.8: Biological Systems Tick (every 3rd tick ~30s) ────────────────
     // Wire all 12 emergent modules into the heartbeat for living biology
-    try {
+    if (_heartbeatTickCount % 3 !== 0) { /* skip biology this tick */ }
+    else try {
       const entities = STATE.__emergent
         ? Array.from(STATE.__emergent.emergents.values()).filter(e => e.active)
         : [];
@@ -22969,7 +23006,7 @@ async function governorTick(reason="heartbeat") {
       // New agent system tick (agent-system.js — separate from legacy STATE.personas agents)
       const agentSys = await import("./emergent/agent-system.js").catch(() => null);
       if (agentSys?.agentTickJob) {
-        const dtus = STATE.dtus instanceof Map ? Array.from(STATE.dtus.values()) : [];
+        const dtus = typeof STATE.dtus?.values === 'function' ? Array.from(STATE.dtus.values()) : [];
         agentSys.agentTickJob(dtus);
       }
 

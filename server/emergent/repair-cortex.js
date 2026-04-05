@@ -3347,29 +3347,38 @@ export function startGuardian() {
   try {
     // Delay guardian activation to match repair loop startup delay
     const delayTimer = setTimeout(() => {
+      let stagger = 0;
+      const STAGGER_GAP = 5000; // 5 seconds between each monitor start
+
       for (const [name, monitor] of Object.entries(GUARDIAN_MONITORS)) {
         if (_guardianTimers.has(name)) continue; // Already running
 
-        const timer = setInterval(async () => {
-          try {
-            const result = await monitor.check();
-            _guardianStatuses.set(name, {
-              ...result,
-              lastChecked: nowISO(),
-            });
+        stagger += STAGGER_GAP;
+        const monitorDelay = stagger;
 
-            if (!result.healthy) {
-              await monitor.repair(result);
-            }
-          } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
-        }, monitor.interval);
+        const startTimer = setTimeout(() => {
+          const timer = setInterval(async () => {
+            try {
+              const result = await monitor.check();
+              _guardianStatuses.set(name, {
+                ...result,
+                lastChecked: nowISO(),
+              });
 
-        // Unref so it doesn't prevent process exit
-        if (timer.unref) timer.unref();
-        _guardianTimers.set(name, timer);
+              if (!result.healthy) {
+                await monitor.repair(result);
+              }
+            } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
+          }, monitor.interval);
+
+          // Unref so it doesn't prevent process exit
+          if (timer.unref) timer.unref();
+          _guardianTimers.set(name, timer);
+        }, monitorDelay);
+        if (startTimer.unref) startTimer.unref();
       }
 
-      logger.info('emergent:repair-cortex', 'Guardian monitors activated after startup delay');
+      logger.info('emergent:repair-cortex', 'Guardian monitors activating with staggered delays', { monitors: Object.keys(GUARDIAN_MONITORS).length, totalStaggerMs: stagger });
     }, REPAIR_STARTUP_DELAY);
     if (delayTimer.unref) delayTimer.unref();
 

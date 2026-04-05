@@ -2673,24 +2673,42 @@ function init({ register, STATE, helpers }) {
     return runProphet(projectRoot);
   }, { description: "Run pre-build prophet scan", public: false });
 
+  let _lastLatticeAudit = 0;
+  const LATTICE_AUDIT_COOLDOWN = 5 * 60 * 1000; // 5 minutes between audits
+  let _latticeAuditFailCount = 0;
+
   register("emergent", "repair.agent.tick", async (_ctx) => {
     const guardianResult = await repairAgentTick();
 
     // ── Lattice Health Audit ──────────────────────────────────────────────
     // Scans for structural issues: stale DTUs, orphaned lineage, low quality, contradictions
+    // Cooldown: only run once every 5 minutes; back off on repeated failures
     const audit = { staleDtus: [], orphanedLineage: [], lowQuality: [], contradictions: [] };
+    const auditCooldown = LATTICE_AUDIT_COOLDOWN * Math.max(1, _latticeAuditFailCount);
+    if (Date.now() - _lastLatticeAudit < auditCooldown) {
+      return { ...guardianResult, audit, skipped: true };
+    }
+    _lastLatticeAudit = Date.now();
     try {
       const now = Date.now();
       const sevenDays = 7 * 24 * 60 * 60 * 1000;
 
-      // Safe iteration: STATE.dtus may be a Map, Array, or plain Object
-      const dtusIterable = STATE.dtus instanceof Map
-        ? STATE.dtus
-        : Array.isArray(STATE.dtus)
-          ? new Map(STATE.dtus.map(d => [d.id, d]))
-          : typeof STATE.dtus === 'object' && STATE.dtus
-            ? new Map(Object.entries(STATE.dtus))
-            : new Map();
+      // Safe iteration: STATE.dtus may be a Map, DTU store (has .entries()), Array, or plain Object
+      let dtusIterable;
+      if (!STATE.dtus) {
+        dtusIterable = new Map();
+      } else if (STATE.dtus instanceof Map) {
+        dtusIterable = STATE.dtus;
+      } else if (typeof STATE.dtus.entries === 'function') {
+        // DTU store or Map-like object with .entries() method
+        dtusIterable = new Map(STATE.dtus.entries());
+      } else if (Array.isArray(STATE.dtus)) {
+        dtusIterable = new Map(STATE.dtus.map(d => [d.id, d]));
+      } else if (typeof STATE.dtus === 'object') {
+        dtusIterable = new Map(Object.entries(STATE.dtus));
+      } else {
+        dtusIterable = new Map();
+      }
 
       const allIds = new Set(dtusIterable.keys());
 
@@ -2753,8 +2771,10 @@ function init({ register, STATE, helpers }) {
       if (totalIssues > 0) {
         console.warn(`[REPAIR] Lattice audit: ${audit.staleDtus.length} stale, ${audit.orphanedLineage.length} orphaned, ${audit.lowQuality.length} low-quality, ${audit.contradictions.length} contradictions`);
       }
+      _latticeAuditFailCount = 0; // Reset on success
     } catch (e) {
-      console.error("[REPAIR] Lattice audit error:", e.message);
+      _latticeAuditFailCount = Math.min(_latticeAuditFailCount + 1, 6); // Cap at 6 → 30min max backoff
+      console.error("[REPAIR] Lattice audit error:", e.message, `(backoff: ${_latticeAuditFailCount}x cooldown)`);
     }
 
     return { ...guardianResult, audit };
