@@ -4538,6 +4538,7 @@ const REPAIR_STRATEGIES = [
     match: (err) => /timeout|timed out|ETIMEDOUT|ECONNRESET/i.test(err.error.message),
     apply: async (errorEntry) => {
       const S = _getSTATE();
+      if (!S) return { fixed: false, reason: "state_not_ready" };
       if (!S._repairCaches) S._repairCaches = new Map();
       const cacheKey = `timeout_cache:${errorEntry.context.module}`;
       if (!S._repairCaches.has(cacheKey)) {
@@ -4608,7 +4609,9 @@ const REPAIR_STRATEGIES = [
         const pathMatch = errorEntry.error.message.match(/ENOENT.*'([^']+)'/);
         if (pathMatch) {
           const S = _getSTATE();
-          for (const [id, dtu] of (S?.dtus || new Map())) {
+          const dtus = S?.dtus;
+          const dtuIterable = !dtus ? [] : typeof dtus.entries === 'function' ? dtus.entries() : dtus instanceof Map ? dtus : new Map();
+          for (const [id, dtu] of dtuIterable) {
             if (dtu.artifact?.diskPath === pathMatch[1]) {
               dtu.artifact.diskPath = null;
               return { fixed: true, method: "marked_artifact_unavailable", dtuId: id };

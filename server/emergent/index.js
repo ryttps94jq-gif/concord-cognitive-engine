@@ -2791,9 +2791,9 @@ function init({ register, STATE, helpers }) {
       .catch(() => { /* silent */ });
   } catch (_e) { logger.debug('emergent:index', 'silent', { error: _e?.message }); }
 
-  // Start guardian monitors (continuous runtime self-repair)
+  // Guardian monitors are started by startRepairLoop() — don't double-start here
   try {
-    startGuardian();
+    // startGuardian() — removed: called from startRepairLoop() which already delays properly
     if (helpers?.log) {
       helpers.log("emergent.init", "[Repair Cortex] Guardian monitors started — organ 169 active");
     }
