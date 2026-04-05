@@ -643,6 +643,31 @@ export default function createWorldRoutes({ requireAuth } = {}) {
   const simPlayerWorlds = new Map();
   const simEvents = new Map();
 
+  // Game systems stores
+  const simInventories = new Map();
+  const simCraftingStations = new Map();
+  const simQuests = new Map();
+  const simNotifications = new Map();
+  const simReports = new Map();
+  const simModActions = [];
+  const simReplays = new Map();
+  const simProfiles = new Map();
+  const simFriends = new Map();
+  const simMessages = new Map();
+  const simPresence = new Map();
+  const simSnapTemplates = new Map();
+  const simVisitorLogs = [];
+  const simDailyDigests = new Map();
+  const simAnalytics = new Map();
+  const simCraftingRecipes = [
+    { id: 'recipe-usb-beam', name: 'USB Composite Beam', inputs: [{ itemId: 'mat-usb-a', quantity: 3 }], output: { itemId: 'comp-usb-beam', quantity: 1 }, stationType: 'forge', duration: 30, skillRequired: 'novice' },
+    { id: 'recipe-steel-column', name: 'Steel Column', inputs: [{ itemId: 'mat-steel-a36', quantity: 5 }], output: { itemId: 'comp-steel-column', quantity: 1 }, stationType: 'forge', duration: 45, skillRequired: 'apprentice' },
+    { id: 'recipe-concrete-slab', name: 'Concrete Floor Slab', inputs: [{ itemId: 'mat-concrete-c40', quantity: 8 }], output: { itemId: 'comp-concrete-slab', quantity: 1 }, stationType: 'assembly', duration: 60, skillRequired: 'journeyman' },
+    { id: 'recipe-timber-truss', name: 'Timber Roof Truss', inputs: [{ itemId: 'mat-timber-glulam', quantity: 6 }], output: { itemId: 'comp-timber-truss', quantity: 1 }, stationType: 'workbench', duration: 40, skillRequired: 'apprentice' },
+    { id: 'recipe-glass-panel', name: 'Tempered Glass Panel', inputs: [{ itemId: 'mat-glass-float', quantity: 2 }], output: { itemId: 'comp-glass-panel', quantity: 1 }, stationType: 'kiln', duration: 50, skillRequired: 'journeyman' },
+    { id: 'recipe-solar-cell', name: 'Solar Cell Array', inputs: [{ itemId: 'mat-usb-c', quantity: 4 }, { itemId: 'mat-glass-float', quantity: 1 }], output: { itemId: 'comp-solar-array', quantity: 1 }, stationType: 'lab', duration: 90, skillRequired: 'expert' },
+  ];
+
   // ── Materials API ─────────────────────────────────────────────────
 
   router.get("/sim/materials", wrap((_req, res) => {
@@ -975,6 +1000,532 @@ export default function createWorldRoutes({ requireAuth } = {}) {
         { timestamp: '2025-11-15', buildingCount: 6, populationCapacity: 2400, powerCapacity: 5000, waterCapacity: 90000, environmentalScore: 72 },
       ],
     });
+  }));
+
+  // ══════════════════════════════════════════════════════════════════
+  // GAME SYSTEMS API — Sound, Inventory, Crafting, Combat, Quests,
+  // Progression, Notifications, Moderation, Social, Analytics, 3D
+  // ══════════════════════════════════════════════════════════════════
+
+  // ── Inventory API ────────────────────────────────────────────────
+
+  router.get("/sim/inventory/:userId", wrap((req, res) => {
+    const inv = simInventories.get(req.params.userId) || { items: [], maxSlots: 24, equipped: {} };
+    res.json({ ok: true, inventory: inv });
+  }));
+
+  router.post("/sim/inventory/:userId/add", auth, wrap((req, res) => {
+    const userId = req.params.userId;
+    let inv = simInventories.get(userId);
+    if (!inv) { inv = { items: [], maxSlots: 24, equipped: {} }; simInventories.set(userId, inv); }
+    const item = { id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`, ...req.body, acquiredAt: new Date().toISOString() };
+    if (inv.items.length >= inv.maxSlots) return res.status(400).json({ ok: false, error: 'Inventory full' });
+    inv.items.push(item);
+    res.json({ ok: true, item });
+  }));
+
+  router.post("/sim/inventory/:userId/equip", auth, wrap((req, res) => {
+    const inv = simInventories.get(req.params.userId);
+    if (!inv) return res.status(404).json({ ok: false, error: 'Inventory not found' });
+    const { slot, itemId } = req.body;
+    inv.equipped[slot] = itemId;
+    res.json({ ok: true, equipped: inv.equipped });
+  }));
+
+  router.delete("/sim/inventory/:userId/item/:itemId", auth, wrap((req, res) => {
+    const inv = simInventories.get(req.params.userId);
+    if (!inv) return res.status(404).json({ ok: false, error: 'Inventory not found' });
+    inv.items = inv.items.filter(i => i.id !== req.params.itemId);
+    res.json({ ok: true });
+  }));
+
+  // ── Crafting API ─────────────────────────────────────────────────
+
+  router.get("/sim/crafting/recipes", wrap((_req, res) => {
+    res.json({ ok: true, recipes: simCraftingRecipes });
+  }));
+
+  router.get("/sim/crafting/stations", wrap((_req, res) => {
+    res.json({ ok: true, stations: Array.from(simCraftingStations.values()) });
+  }));
+
+  router.post("/sim/crafting/stations", auth, wrap((req, res) => {
+    const id = `station-${Date.now()}`;
+    const station = { id, ...req.body, currentJob: null, createdAt: new Date().toISOString() };
+    simCraftingStations.set(id, station);
+    res.json({ ok: true, station });
+  }));
+
+  router.post("/sim/crafting/craft", auth, wrap((req, res) => {
+    const { recipeId, stationId } = req.body;
+    const recipe = simCraftingRecipes.find(r => r.id === recipeId);
+    if (!recipe) return res.status(404).json({ ok: false, error: 'Recipe not found' });
+    const station = simCraftingStations.get(stationId);
+    if (station && station.currentJob) return res.status(400).json({ ok: false, error: 'Station busy' });
+    const result = {
+      success: true,
+      outputItem: { id: `crafted-${Date.now()}`, ...recipe.output, craftedAt: new Date().toISOString(), craftedBy: req.user?.id || 'anonymous' },
+      qualityBonus: Math.random() > 0.7 ? Math.floor(Math.random() * 15) + 5 : 0,
+      byproducts: [],
+    };
+    res.json({ ok: true, result });
+  }));
+
+  // ── Quest & Mission API ──────────────────────────────────────────
+
+  router.get("/sim/quests", wrap((req, res) => {
+    let quests = Array.from(simQuests.values());
+    if (req.query.type) quests = quests.filter(q => q.type === req.query.type);
+    if (req.query.worldId) quests = quests.filter(q => q.worldId === req.query.worldId);
+    res.json({ ok: true, quests });
+  }));
+
+  router.post("/sim/quests", auth, wrap((req, res) => {
+    const id = `quest-${Date.now()}`;
+    const quest = { id, ...req.body, creator: req.user?.id || 'anonymous', status: 'available', createdAt: new Date().toISOString() };
+    simQuests.set(id, quest);
+    res.json({ ok: true, quest });
+  }));
+
+  router.get("/sim/quests/:id", wrap((req, res) => {
+    const quest = simQuests.get(req.params.id);
+    if (!quest) return res.status(404).json({ ok: false, error: 'Quest not found' });
+    res.json({ ok: true, quest });
+  }));
+
+  router.post("/sim/quests/:id/accept", auth, wrap((req, res) => {
+    const quest = simQuests.get(req.params.id);
+    if (!quest) return res.status(404).json({ ok: false, error: 'Quest not found' });
+    quest.status = 'active';
+    quest.acceptedBy = req.user?.id || 'anonymous';
+    quest.acceptedAt = new Date().toISOString();
+    res.json({ ok: true, quest });
+  }));
+
+  router.post("/sim/quests/:id/complete", auth, wrap((req, res) => {
+    const quest = simQuests.get(req.params.id);
+    if (!quest) return res.status(404).json({ ok: false, error: 'Quest not found' });
+    quest.status = 'completed';
+    quest.completedAt = new Date().toISOString();
+    res.json({ ok: true, quest, rewards: quest.rewards || [] });
+  }));
+
+  // ── Progression / Reputation API ─────────────────────────────────
+
+  router.get("/sim/progression/:userId", wrap((req, res) => {
+    const profile = simProfiles.get(req.params.userId) || {
+      userId: req.params.userId,
+      domains: {
+        structural: { score: 0, tier: 'novice', citations: 0 },
+        materials: { score: 0, tier: 'novice', citations: 0 },
+        infrastructure: { score: 0, tier: 'novice', citations: 0 },
+        energy: { score: 0, tier: 'novice', citations: 0 },
+        architecture: { score: 0, tier: 'novice', citations: 0 },
+        mentorship: { score: 0, tier: 'novice', citations: 0 },
+        governance: { score: 0, tier: 'novice', citations: 0 },
+        exploration: { score: 0, tier: 'novice', citations: 0 },
+      },
+      totalCitations: 0, totalRoyalties: 0, badges: [],
+    };
+    res.json({ ok: true, profile });
+  }));
+
+  router.post("/sim/progression/:userId/cite", auth, wrap((req, res) => {
+    const { domain, amount } = req.body;
+    let profile = simProfiles.get(req.params.userId);
+    if (!profile) {
+      profile = { userId: req.params.userId, domains: {}, totalCitations: 0, totalRoyalties: 0, badges: [] };
+      simProfiles.set(req.params.userId, profile);
+    }
+    if (!profile.domains[domain]) profile.domains[domain] = { score: 0, tier: 'novice', citations: 0 };
+    profile.domains[domain].citations += (amount || 1);
+    profile.domains[domain].score += (amount || 1) * 10;
+    profile.totalCitations += (amount || 1);
+    // Auto-tier
+    const tiers = ['novice', 'apprentice', 'journeyman', 'expert', 'master', 'grandmaster'];
+    const tierThresholds = [0, 10, 50, 200, 500, 1000];
+    const c = profile.domains[domain].citations;
+    for (let i = tiers.length - 1; i >= 0; i--) {
+      if (c >= tierThresholds[i]) { profile.domains[domain].tier = tiers[i]; break; }
+    }
+    res.json({ ok: true, profile });
+  }));
+
+  // ── Notifications API ────────────────────────────────────────────
+
+  router.get("/sim/notifications/:userId", wrap((req, res) => {
+    const notifs = simNotifications.get(req.params.userId) || [];
+    res.json({ ok: true, notifications: notifs });
+  }));
+
+  router.post("/sim/notifications/:userId", auth, wrap((req, res) => {
+    const userId = req.params.userId;
+    if (!simNotifications.has(userId)) simNotifications.set(userId, []);
+    const notif = { id: `notif-${Date.now()}`, ...req.body, read: false, timestamp: new Date().toISOString() };
+    simNotifications.get(userId).unshift(notif);
+    // Keep max 100
+    const list = simNotifications.get(userId);
+    if (list.length > 100) simNotifications.set(userId, list.slice(0, 100));
+    res.json({ ok: true, notification: notif });
+  }));
+
+  router.post("/sim/notifications/:userId/read", auth, wrap((req, res) => {
+    const list = simNotifications.get(req.params.userId);
+    if (!list) return res.json({ ok: true });
+    const { notificationId } = req.body;
+    if (notificationId === 'all') { list.forEach(n => n.read = true); }
+    else { const n = list.find(x => x.id === notificationId); if (n) n.read = true; }
+    res.json({ ok: true });
+  }));
+
+  // ── Daily Digest API ─────────────────────────────────────────────
+
+  router.get("/sim/digest/:userId", wrap((req, res) => {
+    const digest = simDailyDigests.get(req.params.userId) || {
+      date: new Date().toISOString().split('T')[0],
+      newCitations: Math.floor(Math.random() * 12),
+      royaltiesEarned: +(Math.random() * 5).toFixed(2),
+      worldEvents: ['New building validated in District 3', 'Weather: light snow expected tonight'],
+      topCreation: { name: 'USB-A Foundation Slab', citations: 7 },
+      npcSummary: 'The blacksmith at The Forge completed 3 commissions while you were away.',
+    };
+    res.json({ ok: true, digest });
+  }));
+
+  // ── Moderation / Anti-Grief API ──────────────────────────────────
+
+  router.post("/sim/reports", auth, wrap((req, res) => {
+    const report = {
+      id: `report-${Date.now()}`, reporterId: req.user?.id || 'anonymous',
+      ...req.body, status: 'pending', timestamp: new Date().toISOString(),
+    };
+    simReports.set(report.id, report);
+    res.json({ ok: true, report });
+  }));
+
+  router.get("/sim/reports", wrap((req, res) => {
+    let reports = Array.from(simReports.values());
+    if (req.query.status) reports = reports.filter(r => r.status === req.query.status);
+    res.json({ ok: true, reports });
+  }));
+
+  router.post("/sim/moderation/action", auth, wrap((req, res) => {
+    const action = {
+      id: `mod-${Date.now()}`, moderatorId: req.user?.id || 'system',
+      ...req.body, timestamp: new Date().toISOString(),
+    };
+    simModActions.push(action);
+    res.json({ ok: true, action });
+  }));
+
+  router.get("/sim/moderation/actions", wrap((_req, res) => {
+    res.json({ ok: true, actions: simModActions.slice(-50) });
+  }));
+
+  // ── Social / Friends API ─────────────────────────────────────────
+
+  router.get("/sim/friends/:userId", wrap((req, res) => {
+    const friends = simFriends.get(req.params.userId) || [];
+    res.json({ ok: true, friends });
+  }));
+
+  router.post("/sim/friends/:userId/add", auth, wrap((req, res) => {
+    const userId = req.params.userId;
+    if (!simFriends.has(userId)) simFriends.set(userId, []);
+    const friend = { userId: req.body.friendId, displayName: req.body.displayName || req.body.friendId, addedAt: new Date().toISOString(), onlineStatus: 'offline' };
+    simFriends.get(userId).push(friend);
+    res.json({ ok: true, friend });
+  }));
+
+  router.delete("/sim/friends/:userId/:friendId", auth, wrap((req, res) => {
+    const list = simFriends.get(req.params.userId);
+    if (list) simFriends.set(req.params.userId, list.filter(f => f.userId !== req.params.friendId));
+    res.json({ ok: true });
+  }));
+
+  // ── Player Presence API ──────────────────────────────────────────
+
+  router.get("/sim/presence", wrap((_req, res) => {
+    const players = Array.from(simPresence.values()).filter(p => p.isOnline);
+    res.json({ ok: true, players, count: players.length });
+  }));
+
+  router.post("/sim/presence/update", auth, wrap((req, res) => {
+    const userId = req.user?.id || 'anonymous';
+    const presence = {
+      userId, ...req.body, isOnline: true,
+      lastSeen: new Date().toISOString(),
+    };
+    simPresence.set(userId, presence);
+    res.json({ ok: true, presence });
+  }));
+
+  router.post("/sim/presence/offline", auth, wrap((req, res) => {
+    const userId = req.user?.id || 'anonymous';
+    const p = simPresence.get(userId);
+    if (p) { p.isOnline = false; p.lastSeen = new Date().toISOString(); }
+    res.json({ ok: true });
+  }));
+
+  // ── Messages / Chat API ──────────────────────────────────────────
+
+  router.get("/sim/messages/:channelId", wrap((req, res) => {
+    const msgs = simMessages.get(req.params.channelId) || [];
+    const limit = parseInt(req.query.limit) || 50;
+    res.json({ ok: true, messages: msgs.slice(-limit) });
+  }));
+
+  router.post("/sim/messages/:channelId", auth, wrap((req, res) => {
+    const channelId = req.params.channelId;
+    if (!simMessages.has(channelId)) simMessages.set(channelId, []);
+    const msg = {
+      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+      channelId, senderId: req.user?.id || 'anonymous',
+      ...req.body, timestamp: new Date().toISOString(),
+    };
+    simMessages.get(channelId).push(msg);
+    // Keep max 500 per channel
+    const list = simMessages.get(channelId);
+    if (list.length > 500) simMessages.set(channelId, list.slice(-500));
+    res.json({ ok: true, message: msg });
+  }));
+
+  // ── World Travel / Portal API ────────────────────────────────────
+
+  router.get("/sim/travel/departures", wrap((_req, res) => {
+    const worlds = Array.from(simPlayerWorlds.values()).filter(w => w.isPublic).map(w => ({
+      worldId: w.id, worldName: w.name, owner: w.owner,
+      playerCount: w.playerCount || 0, mode: w.mode || 'realistic',
+      accessStatus: w.isPublic ? 'public' : 'private',
+      description: w.description || '',
+    }));
+    res.json({ ok: true, departures: worlds });
+  }));
+
+  router.post("/sim/travel/portal", auth, wrap((req, res) => {
+    const { destWorldId } = req.body;
+    const world = simPlayerWorlds.get(destWorldId);
+    if (!world) return res.status(404).json({ ok: false, error: 'World not found' });
+    const transition = {
+      sourceWorld: 'concordia', destWorld: destWorldId,
+      transitionType: req.body.transitionType || 'terminal',
+      arrived: true, timestamp: new Date().toISOString(),
+    };
+    // Log visitor
+    simVisitorLogs.push({ worldId: destWorldId, visitorId: req.user?.id || 'anonymous', enteredAt: new Date().toISOString() });
+    res.json({ ok: true, transition });
+  }));
+
+  router.post("/sim/travel/invite", auth, wrap((req, res) => {
+    const invite = {
+      id: `invite-${Date.now()}`, fromUserId: req.user?.id || 'anonymous',
+      ...req.body, status: 'pending', timestamp: new Date().toISOString(),
+    };
+    res.json({ ok: true, invite });
+  }));
+
+  // ── Snap-Build Templates API ─────────────────────────────────────
+
+  router.get("/sim/templates/snap-build", wrap((req, res) => {
+    let templates = Array.from(simSnapTemplates.values());
+    if (req.query.category) templates = templates.filter(t => t.category === req.query.category);
+    if (req.query.sort === 'citations') templates.sort((a, b) => (b.citations || 0) - (a.citations || 0));
+    else if (req.query.sort === 'newest') templates.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    res.json({ ok: true, templates });
+  }));
+
+  router.post("/sim/templates/snap-build", auth, wrap((req, res) => {
+    const id = `snap-${Date.now()}`;
+    const template = { id, ...req.body, creator: req.user?.id || 'anonymous', citations: 0, validationStatus: 'validated', createdAt: new Date().toISOString() };
+    simSnapTemplates.set(id, template);
+    res.json({ ok: true, template });
+  }));
+
+  // ── Collaboration / Project Board API ────────────────────────────
+
+  router.get("/sim/projects/:boardId", wrap((req, res) => {
+    const seed = {
+      id: req.params.boardId, name: 'District 3 Development',
+      tasks: [
+        { id: 'task-1', title: 'Design water treatment plant', status: 'open', payment: 50 },
+        { id: 'task-2', title: 'Build Main Street facades', status: 'claimed', claimedBy: '@builder_bob', payment: 30 },
+        { id: 'task-3', title: 'Wire power grid section B', status: 'in-progress', claimedBy: '@power_mike', payment: 40 },
+        { id: 'task-4', title: 'Validate all residential structures', status: 'complete', claimedBy: '@architect_alex', payment: 25 },
+      ],
+    };
+    res.json({ ok: true, board: seed });
+  }));
+
+  router.post("/sim/projects/:boardId/tasks", auth, wrap((req, res) => {
+    const task = { id: `task-${Date.now()}`, ...req.body, status: 'open', createdAt: new Date().toISOString() };
+    res.json({ ok: true, task });
+  }));
+
+  router.post("/sim/projects/:boardId/tasks/:taskId/claim", auth, wrap((req, res) => {
+    res.json({ ok: true, taskId: req.params.taskId, claimedBy: req.user?.id || 'anonymous', status: 'claimed' });
+  }));
+
+  // ── Design Review API ────────────────────────────────────────────
+
+  router.post("/sim/reviews", auth, wrap((req, res) => {
+    const review = {
+      id: `review-${Date.now()}`, reviewerId: req.user?.id || 'anonymous',
+      ...req.body, verdict: 'pending', createdAt: new Date().toISOString(),
+    };
+    res.json({ ok: true, review });
+  }));
+
+  router.post("/sim/reviews/:id/annotate", auth, wrap((req, res) => {
+    const annotation = {
+      id: `ann-${Date.now()}`, reviewId: req.params.id,
+      ...req.body, createdAt: new Date().toISOString(),
+    };
+    res.json({ ok: true, annotation });
+  }));
+
+  router.post("/sim/reviews/:id/verdict", auth, wrap((req, res) => {
+    res.json({ ok: true, reviewId: req.params.id, verdict: req.body.verdict, comments: req.body.comments });
+  }));
+
+  // ── Analytics API ────────────────────────────────────────────────
+
+  router.get("/sim/analytics/personal/:userId", wrap((req, res) => {
+    const stats = simAnalytics.get(req.params.userId) || {
+      totalCitations: Math.floor(Math.random() * 500),
+      totalRoyalties: +(Math.random() * 100).toFixed(2),
+      mostCitedDTU: { name: 'USB-A Reinforced Beam', citations: 47 },
+      mostUsedMaterial: { name: 'USB Composite A', uses: 89 },
+      reputationByDomain: { structural: 340, materials: 120, infrastructure: 85, energy: 45, architecture: 200, mentorship: 30, governance: 15, exploration: 60 },
+      buildCount: Math.floor(Math.random() * 50) + 5,
+      playtime: Math.floor(Math.random() * 200) + 10,
+      loginStreak: Math.floor(Math.random() * 30) + 1,
+    };
+    res.json({ ok: true, stats });
+  }));
+
+  router.get("/sim/analytics/world/:worldId", wrap((req, res) => {
+    res.json({
+      ok: true, stats: {
+        population: 2400, buildingCount: 47, infraCoverage: 72,
+        envScore: 68, economicActivity: 14500, visitorCount: 890,
+        timeseries: [
+          { date: '2025-10-01', visitors: 12, buildings: 2 },
+          { date: '2025-10-15', visitors: 45, buildings: 8 },
+          { date: '2025-11-01', visitors: 120, buildings: 23 },
+          { date: '2025-11-15', visitors: 230, buildings: 47 },
+        ],
+      },
+    });
+  }));
+
+  router.get("/sim/analytics/global", wrap((_req, res) => {
+    res.json({
+      ok: true, stats: {
+        activeDistricts: 10, totalBuildings: 1250, totalCitations: 45000,
+        activeUsers: 890, totalWorlds: 67,
+        trendingComponents: [
+          { name: 'USB-B I-Beam 30cm', creator: '@struct_team', citationsThisWeek: 89 },
+          { name: 'Solar Mount v3', creator: '@green_firm', citationsThisWeek: 67 },
+          { name: 'Concrete Foundation Slab', creator: '@builder_bob', citationsThisWeek: 52 },
+        ],
+        topCreators: [
+          { userId: 'user-001', name: '@engineer_jane', citations: 2100, rank: 1 },
+          { userId: 'user-002', name: '@architect_alex', citations: 1800, rank: 2 },
+          { userId: 'user-003', name: '@materials_lab', citations: 1200, rank: 3 },
+        ],
+      },
+    });
+  }));
+
+  // ── Seasonal / Events Calendar API ───────────────────────────────
+
+  router.get("/sim/seasonal/current", wrap((_req, res) => {
+    const month = new Date().getMonth();
+    const seasons = ['winter', 'winter', 'spring', 'spring', 'spring', 'summer', 'summer', 'summer', 'fall', 'fall', 'fall', 'winter'];
+    res.json({
+      ok: true, season: seasons[month],
+      activeEvent: { name: 'Spring Engineering Festival', endsAt: new Date(Date.now() + 7 * 86400000).toISOString() },
+      monthlyChallenge: { title: 'Bridge Builder Challenge', description: 'Design a pedestrian bridge rated for 200 occupants', objective: 'Build and validate a pedestrian bridge', progress: 0, reward: { type: 'title', value: 'Bridge Master' } },
+    });
+  }));
+
+  // ── Replay / Spectator API ───────────────────────────────────────
+
+  router.get("/sim/replays/:worldId", wrap((req, res) => {
+    const replays = Array.from(simReplays.values()).filter(r => r.worldId === req.params.worldId);
+    res.json({ ok: true, replays });
+  }));
+
+  router.post("/sim/replays", auth, wrap((req, res) => {
+    const id = `replay-${Date.now()}`;
+    const replay = { id, ...req.body, creatorId: req.user?.id || 'anonymous', createdAt: new Date().toISOString() };
+    simReplays.set(id, replay);
+    res.json({ ok: true, replay });
+  }));
+
+  // ── Visitor Logs API ─────────────────────────────────────────────
+
+  router.get("/sim/visitors/:worldId", wrap((req, res) => {
+    const logs = simVisitorLogs.filter(l => l.worldId === req.params.worldId);
+    res.json({ ok: true, visitors: logs.slice(-100) });
+  }));
+
+  // ── 3D Scene State API ───────────────────────────────────────────
+
+  router.get("/sim/scene/:districtId", wrap((req, res) => {
+    const district = simDistricts.get(req.params.districtId);
+    res.json({
+      ok: true,
+      scene: {
+        districtId: req.params.districtId,
+        terrain: { type: 'heightmap', resolution: 2048, minElevation: 0, maxElevation: 80 },
+        buildings: district?.buildings || [],
+        infrastructure: district?.infrastructure || {},
+        npcs: [], // populated by NPC system
+        weather: district?.weather || { type: 'clear', windSpeed: 8, windDirection: 270, temperature: 15 },
+        timeOfDay: ((Date.now() / 60000) % 24).toFixed(1), // cycles
+        quality: req.query.quality || 'medium',
+      },
+    });
+  }));
+
+  router.post("/sim/scene/player-update", auth, wrap((req, res) => {
+    // Receives player position/rotation/animation for multiplayer sync
+    const update = { userId: req.user?.id || 'anonymous', ...req.body, timestamp: Date.now() };
+    res.json({ ok: true, update });
+  }));
+
+  // ── Accessibility Preferences API ────────────────────────────────
+
+  router.get("/sim/accessibility/:userId", wrap((req, res) => {
+    res.json({
+      ok: true, settings: {
+        colorblindMode: 'none', textScale: 1.0, screenReaderEnabled: false,
+        keyboardNavEnabled: false, reducedMotion: false, subtitlesEnabled: true,
+        oneHandedMode: false, gameSpeed: 1.0, highContrast: false,
+      },
+    });
+  }));
+
+  router.post("/sim/accessibility/:userId", auth, wrap((req, res) => {
+    res.json({ ok: true, settings: req.body });
+  }));
+
+  // ── Settings API ─────────────────────────────────────────────────
+
+  router.get("/sim/settings/:userId", wrap((req, res) => {
+    res.json({
+      ok: true, settings: {
+        graphics: 'medium', audio: { master: 0.8, music: 0.6, ambient: 0.7, sfx: 0.8, dialogue: 0.9 },
+        notifications: { citation: true, royalty: true, event: true, social: true, system: true, dailyDigest: true },
+        privacy: { profileVisibility: 'public', worldVisibility: 'public', activityStatus: true, allowDMs: true },
+        controls: {}, locale: 'en', measurementUnit: 'metric',
+      },
+    });
+  }));
+
+  router.post("/sim/settings/:userId", auth, wrap((req, res) => {
+    res.json({ ok: true, settings: req.body });
   }));
 
   return router;
