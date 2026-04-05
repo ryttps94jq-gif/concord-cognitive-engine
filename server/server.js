@@ -14774,6 +14774,13 @@ async function _makeMegaFromCluster(cluster, reason="auto_cluster") {
     for (const x of (c.examples||[])) if (examples.length < 10) examples.push(String(x));
   }
 
+  // Reject empty MEGAs — if no content was aggregated, don't create
+  const totalContent = inv.length + defs.length + claims.length + examples.length;
+  if (totalContent === 0) {
+    log("mega.skip", "Skipped empty MEGA: no content to aggregate", { members: ids.length, reason });
+    return null;
+  }
+
   // Try LLM-enhanced title and summary
   let title = `MEGA: ${seedTitle} (+${Math.max(0, ids.length-1)})`;
   let summary = `Canonical mega DTU synthesized from ${ids.length} DTUs to reduce working-set load. Reason: ${reason}.`;
@@ -15003,6 +15010,7 @@ async function runAutoPromotion(ctx, { maxNewMegas=2, maxNewHypers: _maxNewHyper
       if (cluster.length < 4) continue; // don't synthesize tiny clusters
 
       const mega = await _makeMegaFromCluster(cluster, "usage_coactivation");
+      if (!mega) continue; // skip empty clusters with no aggregatable content
       const res = await pipelineCommitDTU(ctx, mega, { op:"auto.promo.mega", allowRewrite:false });
       if (res?.ok) {
         made.megas.push(res.dtu?.id || mega.id);
@@ -33954,10 +33962,24 @@ app.post("/api/ai/embeddings/rebuild", asyncHandler(async (req, res) => {
 }));
 
 app.get("/api/ai/search", asyncHandler(async (req, res) => {
-  const result = await embeddingSearch(req.query.q || "", {
-    limit: Number(req.query.limit || 10),
+  const q = req.query.q || "";
+  const limit = Number(req.query.limit || 10);
+  const result = await embeddingSearch(q, {
+    limit,
     minScore: Number(req.query.minScore || 0.3)
   });
+  // Fallback to text search if embeddings unavailable or returned no results
+  if (!result.ok || (result.results && result.results.length === 0)) {
+    const qLower = q.toLowerCase();
+    const textResults = userVisibleDTUs()
+      .filter(d => {
+        const text = `${d.title || ""} ${(d.tags || []).join(" ")} ${d.summary || ""} ${d.creti || ""}`.toLowerCase();
+        return text.includes(qLower);
+      })
+      .slice(0, limit)
+      .map(d => ({ ...d, _semanticScore: 0, _textMatch: true }));
+    return res.json({ ok: true, results: textResults, query: q, fallback: "text" });
+  }
   res.json(result);
 }));
 

@@ -665,6 +665,20 @@ function stopFeedTimer(feedId) {
  */
 export function initFeedManager(deps = {}) {
   _deps = deps;
+  // Rebuild dedup set from existing feed DTUs to prevent duplicates after restart
+  try {
+    const dtusArray = deps.dtusArray || (() => []);
+    const feedDtus = dtusArray().filter(d => d.source?.startsWith("feed.") || d.meta?.sourceName);
+    for (const d of feedDtus) {
+      if (d.meta?.sourceUrl) _seenHashes.add(urlHash(d.meta.sourceUrl));
+      if (d.title) _seenHashes.add(titleHash(d.title));
+    }
+    if (feedDtus.length > 0) {
+      logger.info?.(`[feed-manager] Rebuilt dedup set: ${_seenHashes.size} hashes from ${feedDtus.length} feed DTUs`);
+    }
+  } catch (e) {
+    logger.warn?.("[feed-manager] Failed to rebuild dedup set:", e?.message);
+  }
   logger.info?.("[feed-manager] Initialized with deps:", Object.keys(deps).filter(k => !!deps[k]).join(", "));
 }
 
