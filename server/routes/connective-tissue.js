@@ -30,137 +30,217 @@ export default function connectiveTissueRoutes({ db, requireAuth }) {
 
   // ── TIPPING ────────────────────────────────────────────────────────
 
-  router.post("/tip", requireAuth(), validateBody(tipSchema), (req, res) => {
-    const { tipperId, creatorId, contentId, contentType, lensId, amount } = req.body;
-    const result = tipContent(db, {
-      tipperId, creatorId, contentId, contentType, lensId, amount,
-      requestId: req.requestId, ip: req.ip,
-    });
-    res.json(result);
+  router.post("/tip", requireAuth(), validateBody(tipSchema), async (req, res) => {
+    try {
+      const { tipperId, creatorId, contentId, contentType, lensId, amount } = req.body;
+      if (!tipperId || !creatorId || !contentId || !contentType || !lensId || amount == null) {
+        return res.status(400).json({ error: "Missing required fields: tipperId, creatorId, contentId, contentType, lensId, amount" });
+      }
+      const result = await tipContent(db, {
+        tipperId, creatorId, contentId, contentType, lensId, amount,
+        requestId: req.requestId, ip: req.ip,
+      });
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
   });
 
   // ── BOUNTIES ───────────────────────────────────────────────────────
 
-  router.post("/bounties", requireAuth(), validateBody(bountyCreateSchema), (req, res) => {
-    const { posterId, title, description, lensId, amount, tags, expiresAt } = req.body;
-    const result = postBounty(db, {
-      posterId, title, description, lensId, amount, tags, expiresAt,
-      requestId: req.requestId, ip: req.ip,
-    });
-    res.json(result);
+  router.post("/bounties", requireAuth(), validateBody(bountyCreateSchema), async (req, res) => {
+    try {
+      const { posterId, title, description, lensId, amount, tags, expiresAt } = req.body;
+      if (!posterId || !title || !lensId || amount == null) {
+        return res.status(400).json({ error: "Missing required fields: posterId, title, lensId, amount" });
+      }
+      const result = await postBounty(db, {
+        posterId, title, description, lensId, amount, tags, expiresAt,
+        requestId: req.requestId, ip: req.ip,
+      });
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
   });
 
-  router.post("/bounties/:bountyId/claim", requireAuth(), validateBody(bountyClaimSchema), (req, res) => {
-    const { claimerId, posterId, solutionDtuId } = req.body;
-    const result = claimBounty(db, {
-      bountyId: req.params.bountyId, claimerId, posterId, solutionDtuId,
-      requestId: req.requestId, ip: req.ip,
-    });
-    res.json(result);
+  router.post("/bounties/:bountyId/claim", requireAuth(), validateBody(bountyClaimSchema), async (req, res) => {
+    try {
+      const { claimerId, posterId, solutionDtuId } = req.body;
+      if (!claimerId || !posterId || !solutionDtuId) {
+        return res.status(400).json({ error: "Missing required fields: claimerId, posterId, solutionDtuId" });
+      }
+      const result = await claimBounty(db, {
+        bountyId: req.params.bountyId, claimerId, posterId, solutionDtuId,
+        requestId: req.requestId, ip: req.ip,
+      });
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
   });
 
   router.get("/bounties", (req, res) => {
-    const { lensId, status, limit, offset } = req.query;
-    let sql = "SELECT * FROM bounties WHERE 1=1";
-    const params = [];
-    if (lensId) { sql += " AND lens_id = ?"; params.push(lensId); }
-    if (status) { sql += " AND status = ?"; params.push(status); }
-    else { sql += " AND status = 'OPEN'"; }
-    sql += " ORDER BY created_at DESC LIMIT ? OFFSET ?";
-    params.push(parseInt(limit) || 50, parseInt(offset) || 0);
-    const bounties = db.prepare(sql).all(...params);
-    res.json({ ok: true, bounties, count: bounties.length });
+    try {
+      const { lensId, status, limit, offset } = req.query;
+      let sql = "SELECT * FROM bounties WHERE 1=1";
+      const params = [];
+      if (lensId) { sql += " AND lens_id = ?"; params.push(lensId); }
+      if (status) { sql += " AND status = ?"; params.push(status); }
+      else { sql += " AND status = 'OPEN'"; }
+      sql += " ORDER BY created_at DESC LIMIT ? OFFSET ?";
+      params.push(parseInt(limit) || 50, parseInt(offset) || 0);
+      const bounties = db.prepare(sql).all(...params);
+      res.json({ ok: true, bounties, count: bounties.length });
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
   });
 
   // ── MERIT CREDIT ───────────────────────────────────────────────────
 
   router.get("/merit/:userId", (req, res) => {
-    const result = getMeritCredit(db, req.params.userId);
-    res.json({ ok: true, ...result });
+    try {
+      const result = getMeritCredit(db, req.params.userId);
+      res.json({ ok: true, ...result });
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
   });
 
   router.get("/loan-eligibility/:userId", (req, res) => {
-    const result = checkLoanEligibility(db, req.params.userId);
-    res.json({ ok: true, ...result });
+    try {
+      const result = checkLoanEligibility(db, req.params.userId);
+      res.json({ ok: true, ...result });
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
   });
 
   // ── DTU CREATION & PUBLICATION ─────────────────────────────────────
 
-  router.post("/dtu/create", requireAuth(), (req, res) => {
-    const result = createDTU(db, req.body);
-    res.json(result);
+  router.post("/dtu/create", requireAuth(), async (req, res) => {
+    try {
+      const result = await createDTU(db, req.body);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
   });
 
-  router.post("/dtu/list", requireAuth(), (req, res) => {
-    const result = listDTU(db, req.body);
-    res.json(result);
+  router.post("/dtu/list", requireAuth(), async (req, res) => {
+    try {
+      const result = await listDTU(db, req.body);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
   });
 
-  router.post("/dtu/purchase", requireAuth(), validateBody(purchaseSchema), (req, res) => {
-    const { buyerId, dtuId, sellerId, amount, lensId } = req.body;
-    const result = purchaseDTU(db, {
-      buyerId, dtuId, sellerId, amount, lensId,
-      requestId: req.requestId, ip: req.ip,
-    });
-    res.json(result);
+  router.post("/dtu/purchase", requireAuth(), validateBody(purchaseSchema), async (req, res) => {
+    try {
+      const { buyerId, dtuId, sellerId, amount, lensId } = req.body;
+      if (!buyerId || !dtuId || !sellerId || amount == null || !lensId) {
+        return res.status(400).json({ error: "Missing required fields: buyerId, dtuId, sellerId, amount, lensId" });
+      }
+      const result = await purchaseDTU(db, {
+        buyerId, dtuId, sellerId, amount, lensId,
+        requestId: req.requestId, ip: req.ip,
+      });
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
   });
 
   // ── CRETI SCORING ──────────────────────────────────────────────────
 
-  router.get("/dtu/:dtuId/creti", (req, res) => {
-    const result = recalculateCRETI(db, req.params.dtuId);
-    res.json(result);
+  router.get("/dtu/:dtuId/creti", async (req, res) => {
+    try {
+      const result = await recalculateCRETI(db, req.params.dtuId);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
   });
 
-  router.post("/dtu/:dtuId/creti/recalculate", requireAuth(), (req, res) => {
-    const result = recalculateCRETI(db, req.params.dtuId);
-    res.json(result);
+  router.post("/dtu/:dtuId/creti/recalculate", requireAuth(), async (req, res) => {
+    try {
+      const result = await recalculateCRETI(db, req.params.dtuId);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
   });
 
   // ── DTU COMPRESSION ────────────────────────────────────────────────
 
-  router.post("/dtu/compress/mega", requireAuth(), (req, res) => {
-    const result = compressToDMega(db, req.body);
-    res.json(result);
+  router.post("/dtu/compress/mega", requireAuth(), async (req, res) => {
+    try {
+      const result = await compressToDMega(db, req.body);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
   });
 
-  router.post("/dtu/compress/hyper", requireAuth(), (req, res) => {
-    const result = compressToHyper(db, req.body);
-    res.json(result);
+  router.post("/dtu/compress/hyper", requireAuth(), async (req, res) => {
+    try {
+      const result = await compressToHyper(db, req.body);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
   });
 
   // ── FORK MECHANISM ─────────────────────────────────────────────────
 
-  router.post("/dtu/fork", requireAuth(), (req, res) => {
-    const result = forkDTU(db, req.body);
-    res.json(result);
+  router.post("/dtu/fork", requireAuth(), async (req, res) => {
+    try {
+      const result = await forkDTU(db, req.body);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
   });
 
-  router.get("/dtu/:dtuId/forks", (req, res) => {
-    const result = getForkTree(db, req.params.dtuId);
-    res.json(result);
+  router.get("/dtu/:dtuId/forks", async (req, res) => {
+    try {
+      const result = await getForkTree(db, req.params.dtuId);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
   });
 
   // ── PREVIEW SYSTEM ─────────────────────────────────────────────────
 
-  router.get("/dtu/:dtuId/preview", (req, res) => {
-    const result = getDTUPreview(db, req.params.dtuId);
-    res.json(result);
+  router.get("/dtu/:dtuId/preview", async (req, res) => {
+    try {
+      const result = await getDTUPreview(db, req.params.dtuId);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
   });
 
   // ── CROSS-LENS SEARCH ─────────────────────────────────────────────
 
-  router.get("/search", (req, res) => {
-    const { q, lensId, tier, minCreti, maxPrice, sortBy, limit, offset } = req.query;
-    const result = searchDTUs(db, {
-      query: q, lensId, tier,
-      minCreti: minCreti ? parseInt(minCreti) : 0,
-      maxPrice: maxPrice ? parseFloat(maxPrice) : undefined,
-      sortBy: sortBy || "creti_score",
-      limit: parseInt(limit) || 50,
-      offset: parseInt(offset) || 0,
-    });
-    res.json(result);
+  router.get("/search", async (req, res) => {
+    try {
+      const { q, lensId, tier, minCreti, maxPrice, sortBy, limit, offset } = req.query;
+      const result = await searchDTUs(db, {
+        query: q, lensId, tier,
+        minCreti: minCreti ? parseInt(minCreti) : 0,
+        maxPrice: maxPrice ? parseFloat(maxPrice) : undefined,
+        sortBy: sortBy || "creti_score",
+        limit: parseInt(limit) || 50,
+        offset: parseInt(offset) || 0,
+      });
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
   });
 
   // ── EMERGENT / BOT AUTH ────────────────────────────────────────────

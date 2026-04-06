@@ -45,37 +45,83 @@ export default function createStorageRouter({ db, requireAuth }) {
 
   // ── Vault ─────────────────────────────────────────────────────────
   router.post("/vault/store", validateBody(vaultStoreSchema), (req, res) => {
-    const { fileBase64, mimeType } = req.body || {};
-    if (!fileBase64) return res.status(400).json({ ok: false, error: "missing_file_data" });
-    const fileBuffer = Buffer.from(fileBase64, "base64");
-    const result = storeInVault(db, { fileBuffer, mimeType });
-    res.status(result.ok ? 201 : 400).json(result);
+    try {
+      const { fileBase64, mimeType } = req.body || {};
+      if (!fileBase64) return res.status(400).json({ ok: false, error: "missing_file_data" });
+      let fileBuffer;
+      try {
+        fileBuffer = Buffer.from(fileBase64, "base64");
+      } catch (bufErr) {
+        return res.status(400).json({ ok: false, error: "invalid_base64", detail: bufErr.message });
+      }
+      const result = storeInVault(db, { fileBuffer, mimeType });
+      res.status(result.ok ? 201 : 400).json(result);
+    } catch (err) {
+      res.status(500).json({ ok: false, error: "vault_store_failed", detail: err.message });
+    }
   });
 
   router.get("/vault/:hash", (req, res) => {
-    const entry = getVaultEntry(db, req.params.hash);
-    if (!entry) return res.status(404).json({ ok: false, error: "not_found" });
-    res.json({ ok: true, entry });
+    try {
+      const { hash } = req.params;
+      if (!hash || !/^[a-fA-F0-9]{16,128}$/.test(hash)) {
+        return res.status(400).json({ ok: false, error: "invalid_hash_format" });
+      }
+      const entry = getVaultEntry(db, hash);
+      if (!entry) return res.status(404).json({ ok: false, error: "not_found" });
+      res.json({ ok: true, entry });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: "vault_get_failed", detail: err.message });
+    }
   });
 
   router.post("/vault/:hash/ref/increment", (req, res) => {
-    incrementVaultRef(db, req.params.hash);
-    res.json({ ok: true });
+    try {
+      const { hash } = req.params;
+      if (!hash || !/^[a-fA-F0-9]{16,128}$/.test(hash)) {
+        return res.status(400).json({ ok: false, error: "invalid_hash_format" });
+      }
+      const result = incrementVaultRef(db, hash);
+      if (result && !result.ok) return res.status(400).json(result);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: "ref_increment_failed", detail: err.message });
+    }
   });
 
   router.post("/vault/:hash/ref/decrement", (req, res) => {
-    decrementVaultRef(db, req.params.hash);
-    res.json({ ok: true });
+    try {
+      const { hash } = req.params;
+      if (!hash || !/^[a-fA-F0-9]{16,128}$/.test(hash)) {
+        return res.status(400).json({ ok: false, error: "invalid_hash_format" });
+      }
+      const result = decrementVaultRef(db, hash);
+      if (result && !result.ok) return res.status(400).json(result);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: "ref_decrement_failed", detail: err.message });
+    }
   });
 
   router.post("/vault/cleanup", (_req, res) => {
-    const result = cleanupUnreferencedArtifacts(db);
-    res.json(result);
+    try {
+      const result = cleanupUnreferencedArtifacts(db);
+      if (!result || typeof result !== "object") {
+        return res.status(500).json({ ok: false, error: "cleanup_invalid_result" });
+      }
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ ok: false, error: "cleanup_failed", detail: err.message });
+    }
   });
 
   router.get("/vault-stats", (_req, res) => {
-    const stats = getVaultStats(db);
-    res.json(stats);
+    try {
+      const stats = getVaultStats(db);
+      res.json(stats);
+    } catch (err) {
+      res.status(500).json({ ok: false, error: "vault_stats_failed", detail: err.message });
+    }
   });
 
   // ── Downloads ─────────────────────────────────────────────────────
