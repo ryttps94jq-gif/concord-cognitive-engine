@@ -17114,8 +17114,85 @@ When helpful, reference DTU titles in plain language (do not dump ids unless ask
     // ===== END DIRECT CONSCIOUS BRAIN CALL =====
   }
 
+  // ===== TOOL CALL EXECUTION LOOP =====
+  // After the brain responds, check for [TOOL_CALL: ...] markers.
+  // If found, execute the tools and make a follow-up brain call with results.
+  let _toolCallsExecuted = [];
+  if (_toolsAvailable && llmUsed && finalReply) {
+    try {
+      const _toolCalls = _parseToolCalls(finalReply);
+      if (_toolCalls.length > 0) {
+        ctx.log("chat_tools", "Tool calls detected in brain response", { count: _toolCalls.length, tools: _toolCalls.map(c => c.tool) });
+
+        // Execute all tool calls
+        const _toolResults = await _executeToolCalls(_toolCalls);
+        _toolCallsExecuted = _toolResults;
+
+        // Strip tool call markers from the initial response
+        const _cleanedInitialReply = _stripToolCalls(finalReply);
+
+        // Build follow-up messages with tool results
+        const _toolResultsText = _formatToolResults(_toolResults);
+        const _followUpMessages = [
+          { role: "user", content: `User prompt:\n${prompt}` },
+          { role: "assistant", content: _cleanedInitialReply || "(tool calls issued)" },
+          { role: "user", content: `Tool results:\n${_toolResultsText}\n\nNow provide your final answer to the user, incorporating the tool results. Do NOT output any [TOOL_CALL:] markers. Respond naturally.` }
+        ];
+
+        // Make a follow-up brain call with tool results
+        const _followUpSystem = `You are ConcordOS. Be natural, concise but not dry. Use DTUs as memory. Never pretend features exist.\nMode: ${mode}.\nYou previously called tools and received their results. Now synthesize a final answer for the user.`;
+        try {
+          const _fuAc = new AbortController();
+          const _fuTimeout = setTimeout(() => _fuAc.abort(), 120000);
+          const _fuStart = Date.now();
+          const _fuRes = await fetch(`${brainUrl}/api/chat`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: brainModel,
+              messages: [{ role: "system", content: _followUpSystem }, ..._followUpMessages],
+              stream: false,
+              options: { temperature: 0.4, num_predict: 900 }
+            }),
+            signal: _fuAc.signal
+          }).finally(() => clearTimeout(_fuTimeout));
+          const _fuJson = await _fuRes.json().catch(() => ({}));
+          const _fuElapsed = Date.now() - _fuStart;
+          BRAIN.conscious.stats.requests++;
+          BRAIN.conscious.stats.totalMs += _fuElapsed;
+          BRAIN.conscious.stats.lastCallAt = new Date().toISOString();
+          if (_fuRes.ok && _fuJson.message?.content) {
+            finalReply = _fuJson.message.content.trim();
+            ctx.log("chat_tools", "Follow-up brain call with tool results succeeded", { elapsed: _fuElapsed, toolCount: _toolResults.length });
+          } else {
+            // Follow-up failed — use the cleaned initial reply + inline tool results
+            BRAIN.conscious.stats.errors++;
+            finalReply = _cleanedInitialReply + "\n\n" + _toolResults
+              .filter(r => r.ok)
+              .map(r => r.tool === "web_search" ? `Search results:\n${r.result}` : r.tool === "create_dtu" ? `Created DTU: "${r.title}"` : JSON.stringify(r.result || r).slice(0, 2000))
+              .join("\n\n");
+            ctx.log("chat_tools", "Follow-up brain call failed, using inline results", { status: _fuRes.status });
+          }
+        } catch (_fuErr) {
+          BRAIN.conscious.stats.errors++;
+          // Graceful degradation: append tool results to the cleaned reply
+          const _cleanReply = _stripToolCalls(finalReply);
+          finalReply = _cleanReply + "\n\n" + _toolResults
+            .filter(r => r.ok)
+            .map(r => r.tool === "web_search" ? `Search results:\n${r.result}` : r.tool === "create_dtu" ? `Created DTU: "${r.title}"` : JSON.stringify(r.result || r).slice(0, 2000))
+            .join("\n\n");
+          ctx.log("chat_tools", "Follow-up brain call threw, using inline results", { error: String(_fuErr?.message || _fuErr) });
+        }
+      }
+    } catch (_toolErr) {
+      // Tool execution is supplementary — never block the chat path
+      ctx.log("chat_tools.error", "Tool execution failed", { error: String(_toolErr?.message || _toolErr) });
+    }
+  }
+  // ===== END TOOL CALL EXECUTION LOOP =====
+
   const _qpMeta = _fusedContext ? { patternsApplied: _fusedContext.meta.patternsApplied, queryIntent: _qualityPipelineResult?.queryIntent, tokenEstimate: _fusedContext.meta.tokenEstimate } : null;
-  sess.messages.push({ role: "assistant", content: finalReply, ts: nowISO(), meta: { llmUsed, semanticUsed, mode, relevant: relevant.map(d=>d.id), qualityPipeline: _qpMeta, dtuCount: _pipelineDtuCount } });
+  sess.messages.push({ role: "assistant", content: finalReply, ts: nowISO(), meta: { llmUsed, semanticUsed, mode, relevant: relevant.map(d=>d.id), qualityPipeline: _qpMeta, dtuCount: _pipelineDtuCount, toolCalls: _toolCallsExecuted.length > 0 ? _toolCallsExecuted.map(t => ({ tool: t.tool, ok: t.ok })) : undefined } });
   ctx.log("chat", "Chat response generated", { sessionId, mode, llmUsed, semanticUsed, relevant: relevant.map(d=>d.id), qualityPipeline: _qpMeta, pipelineDtuCount: _pipelineDtuCount });
 
   // ===== DTU ENRICHMENT: Output DTU + Consolidation Check =====
@@ -17240,6 +17317,8 @@ When helpful, reference DTU titles in plain language (do not dump ids unless ask
 
   return {
     ok: true, reply: finalReply, sessionId, mode, llmUsed, semanticUsed,
+    toolCalls: _toolCallsExecuted.length > 0 ? _toolCallsExecuted.map(t => ({ tool: t.tool, ok: t.ok })) : undefined,
+    toolsAvailable: _toolsAvailable || undefined,
     relevant: relevant.map(d=>({ id:d.id, title:d.title, tier:d.tier })),
     dtuCount: _pipelineDtuCount,
     pipeline: _pipelineHarvest ? {
@@ -17282,6 +17361,59 @@ When helpful, reference DTU titles in plain language (do not dump ids unless ask
 
 // ===== CHAT PIPELINE MACROS =====
 // New macros for the DTU-enriched context pipeline.
+
+register("chat", "tools", (ctx, _input = {}) => {
+  const flags = _c3sessionFlags(ctx);
+  const globalEnabled = Boolean(STATE.__chicken3?.toolsEnabled);
+  const sessionOptIn = flags.toolsOptIn;
+  const available = globalEnabled && sessionOptIn;
+
+  const tools = [
+    {
+      name: "web_search",
+      description: "Search the web for current information using DuckDuckGo or SearxNG.",
+      params: { query: { type: "string", required: true, description: "Search query" } },
+      requiresOptIn: true,
+    },
+    {
+      name: "create_dtu",
+      description: "Create a new DTU (Decision/Thought Unit) from the conversation.",
+      params: {
+        title: { type: "string", required: true, description: "DTU title" },
+        summary: { type: "string", required: false, description: "Brief summary" },
+        tags: { type: "array", required: false, description: "Tags for categorization" },
+      },
+      requiresOptIn: true,
+    },
+    {
+      name: "run_lens_action",
+      description: "Invoke a lens domain action (e.g., legal.draft, finance.analyze).",
+      params: {
+        domain: { type: "string", required: true, description: "Lens domain" },
+        action: { type: "string", required: true, description: "Action name" },
+        params: { type: "object", required: false, description: "Action-specific parameters" },
+      },
+      requiresOptIn: true,
+    },
+  ];
+
+  // List registered lens actions
+  const lensActions = [];
+  for (const key of LENS_ACTIONS.keys()) {
+    const [domain, action] = key.split(".");
+    lensActions.push({ domain, action, key });
+  }
+
+  return {
+    ok: true,
+    available,
+    globalEnabled,
+    sessionOptIn,
+    tools,
+    lensActions,
+    usage: 'Tools are invoked by the brain via [TOOL_CALL: {"tool": "name", "params": {...}}] markers in responses.',
+  };
+}, { description: "List all tools available to the chat system and their opt-in status." });
 
 register("chat", "harvest", (ctx, input) => {
   const sessionId = String(input.sessionId || "default");
