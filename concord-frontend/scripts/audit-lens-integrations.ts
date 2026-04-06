@@ -100,7 +100,7 @@ function runAudit(): AuditResult {
 
   // Check for orphaned profiles (profiles without lenses)
   const orphanedProfiles = Object.keys(WIRING_PROFILES).filter(
-    p => !categories.includes(p)
+    p => !(categories as string[]).includes(p)
   );
 
   // Build category breakdown

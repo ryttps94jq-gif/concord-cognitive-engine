@@ -76,7 +76,7 @@ const CATEGORY_DOMAINS: Record<string, string[]> = {
   lifestyle: ['fitness', 'cooking', 'gardening', 'diy', 'parenting', 'personal-finance', 'meditation', 'sports', 'gaming'],
 };
 
-function getCategoryForDomain(domain: string): string | undefined {
+function _getCategoryForDomain(domain: string): string | undefined {
   for (const [cat, domains] of Object.entries(CATEGORY_DOMAINS)) {
     if (domains.includes(domain)) return cat;
   }
