@@ -6,7 +6,7 @@ import { Upload, FileJson, Database, Check, AlertTriangle, Loader2, FileText, Ar
 import { motion } from 'framer-motion';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { UniversalActions } from '@/components/lens/UniversalActions';
-import { apiHelpers, exportSubstrate, importSubstrate } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -264,7 +264,7 @@ export default function ImportLens() {
   const handleExportSubstrate = async () => {
     setImporting(true);
     try {
-      const response = await exportSubstrate();
+      const response = await api.get('/api/substrate/export', { responseType: 'arraybuffer' });
       const blob = new Blob([response.data], { type: 'application/gzip' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -280,7 +280,7 @@ export default function ImportLens() {
     setImporting(true);
     try {
       const buffer = await file.arrayBuffer();
-      await importSubstrate(buffer);
+      await api.post('/api/substrate/import', buffer, { headers: { 'Content-Type': 'application/gzip' } }).then(r => r.data);
       await createJob({
         title: file.name,
         data: {

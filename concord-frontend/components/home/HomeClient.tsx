@@ -12,7 +12,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { api, apiHelpers, ensureCsrfToken } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import dynamic from 'next/dynamic';
 const KnowledgeSpace3D = dynamic(
   () => import('@/components/graphs/KnowledgeSpace3DCanvas').then(mod => ({ default: mod.KnowledgeSpace3D })),
@@ -92,7 +92,7 @@ export function HomeClient() {
       const authCheck = api.get('/api/auth/me')
         .then(async () => {
           // Auth succeeded — eagerly fetch CSRF token for subsequent writes
-          await ensureCsrfToken();
+          await api.get('/api/auth/csrf-token').catch(() => {});
           return 'ok' as const;
         })
         .catch(() => {

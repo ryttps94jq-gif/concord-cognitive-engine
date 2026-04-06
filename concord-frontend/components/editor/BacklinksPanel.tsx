@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Link2, ChevronRight, Brain, Search, ArrowUpRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api/client';
-import { useUIStore } from '@/store/ui';
 
 interface Backlink {
   id: string;

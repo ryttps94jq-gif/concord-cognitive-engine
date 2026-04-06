@@ -2,7 +2,7 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
-import { apiHelpers, qualityThresholds, flywheelMetrics, flywheelHistory, listOrgs, orgPromote, createApiKey, listApiKeys, revokeApiKey, pipelineExecutions } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import { useState, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import {
@@ -257,34 +257,34 @@ export default function AdminDashboardPage() {
   // Quality thresholds
   const { data: qualityData } = useQuery({
     queryKey: ['admin-quality-thresholds'],
-    queryFn: () => qualityThresholds(),
+    queryFn: () => api.get('/api/quality/thresholds').then(r => r.data),
     refetchInterval: autoRefresh ? 30000 : false,
   });
 
   // Flywheel metrics & history
   const { data: flywheelData } = useQuery({
     queryKey: ['admin-flywheel'],
-    queryFn: () => flywheelMetrics(),
+    queryFn: () => api.get('/api/flywheel/metrics').then(r => r.data),
     refetchInterval: autoRefresh ? 30000 : false,
   });
 
   const { data: flywheelHistoryData } = useQuery({
     queryKey: ['admin-flywheel-history'],
-    queryFn: () => flywheelHistory(),
+    queryFn: () => api.get('/api/flywheel/history').then(r => r.data),
     refetchInterval: autoRefresh ? 60000 : false,
   });
 
   // Organizations
   const { data: orgsData } = useQuery({
     queryKey: ['admin-orgs'],
-    queryFn: () => listOrgs(),
+    queryFn: () => api.get('/api/org/list').then(r => r.data),
     refetchInterval: autoRefresh ? 60000 : false,
   });
 
   // Pipeline executions
   const { data: pipelineExecsData } = useQuery({
     queryKey: ['admin-pipeline-executions'],
-    queryFn: () => pipelineExecutions(),
+    queryFn: () => api.get('/api/pipeline/executions').then(r => r.data),
     refetchInterval: autoRefresh ? 30000 : false,
   });
 
@@ -809,7 +809,7 @@ export default function AdminDashboardPage() {
                     )}
                   </div>
                   <button
-                    onClick={() => orgPromote(org.id, '').catch((e) => { console.error('[Admin] Failed to promote org:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to promote organization' }); })}
+                    onClick={() => api.post(`/api/org/${org.id}/promote`, { dtuId: '' }).then(r => r.data).catch((e) => { console.error('[Admin] Failed to promote org:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to promote organization' }); })}
                     className="text-xs px-3 py-1.5 rounded-md bg-neon-blue/20 text-neon-blue hover:bg-neon-blue/30 font-medium transition-colors"
                   >
                     Promote
@@ -1249,14 +1249,14 @@ function ApiKeysPanel() {
 
   const { data: keysData, refetch } = useQuery({
     queryKey: ['admin-api-keys'],
-    queryFn: () => listApiKeys(),
+    queryFn: () => api.get('/api/v1/keys').then(r => r.data),
   });
 
   const handleCreate = useCallback(async () => {
     if (!newKeyName.trim()) return;
     setCreating(true);
     try {
-      const data = await createApiKey(newKeyName.trim());
+      const data = await api.post('/api/v1/keys/create', { name: newKeyName.trim() }).then(r => r.data);
       setCreatedKey(data?.key || data?.apiKey || null);
       setNewKeyName('');
       refetch();
@@ -1265,7 +1265,7 @@ function ApiKeysPanel() {
   }, [newKeyName, refetch]);
 
   const handleRevoke = useCallback(async (keyId: string) => {
-    await revokeApiKey(keyId);
+    await api.delete(`/api/v1/keys/${keyId}`).then(r => r.data);
     refetch();
   }, [refetch]);
 

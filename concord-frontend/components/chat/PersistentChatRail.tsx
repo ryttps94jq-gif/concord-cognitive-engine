@@ -23,7 +23,7 @@
 import { useState, useEffect, useRef, useCallback, Fragment } from 'react';
 import { useSocket } from '@/hooks/useSocket';
 import { useSessionId, resetSessionId } from '@/hooks/useSessionId';
-import { api, executePipeline } from '@/lib/api/client';
+import { api } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
 import { useUIStore } from '@/store/ui';
 import { SovereigntyPrompt } from '@/components/sovereignty/SovereigntyPrompt';
@@ -1160,7 +1160,7 @@ export function PersistentChatRail({
                   const pp = pipelinePrompt;
                   setPipelinePrompt(null);
                   try {
-                    const res = await executePipeline(pp.pipelineId, pp.variables, sessionId);
+                    const res = await api.post('/api/pipeline/execute', { pipelineId: pp.pipelineId, variables: pp.variables, sessionId }).then(r => r.data);
                     if (res?.execution) {
                       setActivePipeline({
                         pipelineId: pp.pipelineId,

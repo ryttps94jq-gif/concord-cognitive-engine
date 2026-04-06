@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
-import { apiHelpers, activeCollabs, createCollab, acceptCollab, closeCollab } from '@/lib/api/client';
+import { apiHelpers, api } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
@@ -234,7 +234,7 @@ export default function CollabLensPage() {
   // Fetch active collaborations from the API
   const { data: activeCollabsData } = useQuery({
     queryKey: ['active-collabs'],
-    queryFn: () => activeCollabs(),
+    queryFn: () => api.get('/api/collab/active').then(r => r.data),
     refetchInterval: 30000,
   });
 
@@ -535,7 +535,7 @@ export default function CollabLensPage() {
                   )}
                 </div>
                 <button
-                  onClick={() => closeCollab(collab.id).catch((err) => { console.error('[Collab] Failed to close collaboration:', err); useUIStore.getState().addToast({ type: 'error', message: 'Failed to close collaboration' }); })}
+                  onClick={() => api.post(`/api/collab/${collab.id}/close`).then(r => r.data).catch((err) => { console.error('[Collab] Failed to close collaboration:', err); useUIStore.getState().addToast({ type: 'error', message: 'Failed to close collaboration' }); })}
                   className="text-xs px-3 py-1.5 rounded-md bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors font-medium shrink-0 ml-3"
                 >
                   Close
@@ -731,7 +731,7 @@ function ActiveSessionView({ session, onLeave }: { session: CollabSession; onLea
         </div>
         <button
           onClick={() => {
-            closeCollab(session.id).then(() => onLeave()).catch((err) => { console.error('[Collab] Failed to leave session:', err); useUIStore.getState().addToast({ type: 'error', message: 'Failed to leave session' }); });
+            api.post(`/api/collab/${session.id}/close`).then(r => r.data).then(() => onLeave()).catch((err) => { console.error('[Collab] Failed to leave session:', err); useUIStore.getState().addToast({ type: 'error', message: 'Failed to leave session' }); });
           }}
           className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors font-medium"
         >
@@ -960,7 +960,7 @@ function InvitationCard({ invitation }: { invitation: Invitation }) {
       <div className="flex items-center gap-2 shrink-0">
         <button
           onClick={() => {
-            closeCollab(invitation.id).then(() => setResponded('declined')).catch((err) => { console.error('[Collab] Failed to decline invitation:', err); useUIStore.getState().addToast({ type: 'error', message: 'Failed to decline invitation' }); });
+            api.post(`/api/collab/${invitation.id}/close`).then(r => r.data).then(() => setResponded('declined')).catch((err) => { console.error('[Collab] Failed to decline invitation:', err); useUIStore.getState().addToast({ type: 'error', message: 'Failed to decline invitation' }); });
           }}
           className="text-xs px-3 py-1.5 rounded-md bg-lattice-surface border border-lattice-border text-gray-400 hover:text-red-400 hover:border-red-500/30 transition-colors"
         >
@@ -968,7 +968,7 @@ function InvitationCard({ invitation }: { invitation: Invitation }) {
         </button>
         <button
           onClick={() => {
-            acceptCollab(invitation.id).then(() => setResponded('accepted')).catch((err) => { console.error('[Collab] Failed to accept invitation:', err); useUIStore.getState().addToast({ type: 'error', message: 'Failed to accept invitation' }); });
+            api.post(`/api/collab/${invitation.id}/accept`).then(r => r.data).then(() => setResponded('accepted')).catch((err) => { console.error('[Collab] Failed to accept invitation:', err); useUIStore.getState().addToast({ type: 'error', message: 'Failed to accept invitation' }); });
           }}
           className="text-xs px-3 py-1.5 rounded-md bg-neon-blue/20 text-neon-blue hover:bg-neon-blue/30 font-medium transition-colors"
         >
@@ -1051,7 +1051,7 @@ function CreateSessionModal({ onClose }: { onClose: () => void }) {
       queryClient.invalidateQueries({ queryKey: ['artistry-collab-sessions'] });
       queryClient.invalidateQueries({ queryKey: ['active-collabs'] });
       // Also register the collaboration via the createCollab API
-      createCollab('', [form.type], form.description || form.name).catch((err) => { console.error('[Collab] Failed to register collaboration:', err); });
+      api.post('/api/collab/create', { inviteeId: '', domains: [form.type], description: form.description || form.name }).then(r => r.data).catch((err) => { console.error('[Collab] Failed to register collaboration:', err); });
       onClose();
     },
     onError: (err) => {

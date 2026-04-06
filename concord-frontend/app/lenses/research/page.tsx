@@ -4,7 +4,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
-import { api, conductResearch } from '@/lib/api/client';
+import { api } from '@/lib/api/client';
 import { Search, Filter, ArrowRight, BookOpen, Tag, Calendar, Layers, ChevronDown, RefreshCw, Beaker, Download, X, AlertCircle, Zap, Save, FileText, Microscope, CheckCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
@@ -62,7 +62,7 @@ export default function ResearchLensPage() {
     setGenerateError(null);
     setGenerateResult(null);
     try {
-      const data = await conductResearch(hypothesis.trim());
+      const data = await api.post('/api/research/conduct', { topic: hypothesis.trim() }).then(r => r.data);
       const content = typeof data?.result === 'string'
         ? data.result
         : typeof data?.content === 'string'

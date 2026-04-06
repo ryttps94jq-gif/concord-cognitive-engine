@@ -13,7 +13,7 @@
 
 import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, morningBrief as fetchMorningBrief } from '@/lib/api/client';
+import { api } from '@/lib/api/client';
 import { useOfflineFirst } from '@/hooks/useOfflineFirst';
 import { ds } from '@/lib/design-system';
 import { cn } from '@/lib/utils';
@@ -68,7 +68,7 @@ export function MorningBrief({ compact = false, className }: MorningBriefProps) 
   // Fetch latest brief (authoritative)
   const { data: briefData, isLoading: isFetching } = useQuery<{ ok: boolean; brief: BriefData | null }>({
     queryKey: ['morning-brief'],
-    queryFn: () => fetchMorningBrief(),
+    queryFn: () => api.get('/api/brief/morning').then(r => r.data),
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 

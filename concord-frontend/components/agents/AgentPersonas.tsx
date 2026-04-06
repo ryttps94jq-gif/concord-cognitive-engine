@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, createAgent, configureAgent } from '@/lib/api/client';
+import { api } from '@/lib/api/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   BarChart3, Palette, Wrench, Shield, Compass, BookOpen,
@@ -53,14 +53,14 @@ export function AgentPersonas({ className }: { className?: string }) {
   });
 
   const createAgentMutation = useMutation({
-    mutationFn: () => createAgent(),
+    mutationFn: () => api.post('/api/agent/create').then(r => r.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['personas'] });
     },
   });
 
   const configureAgentMutation = useMutation({
-    mutationFn: (config: Record<string, unknown>) => configureAgent(config),
+    mutationFn: (config: Record<string, unknown>) => api.put('/api/agent/config', config).then(r => r.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['personas'] });
     },
