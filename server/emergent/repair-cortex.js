@@ -2687,7 +2687,9 @@ const GUARDIAN_MONITORS = {
         for (const ep of endpoints) {
           try {
             const start = Date.now();
-            const res = await fetch(`http://localhost:${PORT}${ep}`);
+            const res = await fetch(`http://localhost:${PORT}${ep}`, {
+              signal: AbortSignal.timeout(3000), // 3s cap — prevent self-deadlock
+            });
             results.push({
               endpoint: ep,
               status: res.status,
@@ -2719,24 +2721,37 @@ const GUARDIAN_MONITORS = {
 
   ollama_connectivity: {
     interval: GUARDIAN_INTERVALS.ollama_connectivity,
-    check: async () => {
+    _failCount: 0,
+    _backoffUntil: 0,
+    check: async function() {
+      // Back off after repeated failures — Ollama may just be uninstalled
+      if (this._backoffUntil > Date.now()) {
+        return { healthy: true, backingOff: true };
+      }
       try {
         const host = process.env.OLLAMA_HOST || "http://concord-ollama:11434";
-        const res = await fetch(`${host}/api/tags`, { signal: AbortSignal.timeout(5000) });
+        const res = await fetch(`${host}/api/tags`, { signal: AbortSignal.timeout(3000) });
         const data = await res.json();
+        this._failCount = 0;
+        clearBrainCooldown(); // Ollama is reachable
         return {
           healthy: res.ok,
           models: (data.models || []).map(m => m.name),
           modelCount: (data.models || []).length,
         };
       } catch {
-        return { healthy: false, error: "Ollama unreachable" };
+        this._failCount++;
+        if (this._failCount >= 3) {
+          this._backoffUntil = Date.now() + 600_000; // back off 10 minutes
+          enterBrainCooldown();
+        }
+        return { healthy: false, error: "Ollama unreachable", failCount: this._failCount };
       }
     },
-    repair: async (result) => {
+    repair: async function(result) {
       try {
-        if (!result.healthy) {
-          const res = await safeDockerExec("docker restart concord-ollama 2>/dev/null");
+        if (!result.healthy && !result.backingOff) {
+          const res = await safeDockerExec("docker restart concord-ollama 2>/dev/null", 10000);
           logRepairDTU(REPAIR_PHASES.POST_BUILD, res.skipped ? "ollama_restart_skipped_no_docker" : "ollama_restart", result);
         }
       } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
@@ -3366,6 +3381,8 @@ export function startGuardian() {
 
         const startTimer = setTimeout(() => {
           const timer = setInterval(async () => {
+            // Skip if memory ceiling monitor has paused background tasks
+            if (globalThis.__memoryPaused?.()) return;
             try {
               const result = await monitor.check();
               _guardianStatuses.set(name, {
@@ -3472,6 +3489,25 @@ const RUNTIME_REPAIR_INTERVAL = 300000; // 5 minutes — repair doesn't need rea
 // each repair cycle time to complete and errors time to accumulate into patterns.
 let _repairLoopTimer = null;
 let _repairLoopRunning = false;
+
+// ── Brain Availability Cooldown ───────────────────────────────────────────
+// When brain/Ollama is unreachable, stop retrying for 5 minutes.
+// Each failed call would block the event loop for up to timeout duration.
+let _brainCooldownUntil = 0;
+const BRAIN_COOLDOWN_MS = 300_000; // 5 minutes
+
+function isBrainInCooldown() {
+  return Date.now() < _brainCooldownUntil;
+}
+
+function enterBrainCooldown() {
+  _brainCooldownUntil = Date.now() + BRAIN_COOLDOWN_MS;
+  logger.info('emergent:repair-cortex', `Brain unavailable — cooldown for ${BRAIN_COOLDOWN_MS / 1000}s, skipping all LLM repair calls`);
+}
+
+function clearBrainCooldown() {
+  _brainCooldownUntil = 0;
+}
 
 // ── Deterministic Executors ─────────────────────────────────────────────────
 // These are the ACTUAL fixes. Not text descriptions. Real functions.
@@ -3758,6 +3794,9 @@ function findExecutorForDiagnosis(diagnosis) {
 // Replaces free-text tryAIFix() with structured output
 
 async function callRepairBrain(errorEntry) {
+  // COOLDOWN CHECK: If brain recently failed, skip entirely — never block event loop
+  if (isBrainInCooldown()) return null;
+
   const BRAIN = globalThis._concordBRAIN;
   if (!BRAIN?.repair?.enabled) return null;
 
@@ -3784,10 +3823,9 @@ CONFIDENCE: 0.0
 REASONING: <why>`;
 
   try {
-    // Serialize repair brain calls so they don't compete with chat
-    // Wait for any active chat queue to drain before proceeding
+    // Yield to active chat — but don't wait more than 1s
     if (queues.conscious?.active > 0 || queues.utility?.active > 0) {
-      await new Promise(r => setTimeout(r, 2000)); // yield to active chat
+      await new Promise(r => setTimeout(r, 1000));
     }
 
     const resp = await fetch(`${BRAIN.repair.url}/api/generate`, {
@@ -3799,9 +3837,11 @@ REASONING: <why>`;
         stream: false,
         options: { temperature: 0.1, num_predict: 200 },
       }),
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(5000), // 5s hard cap — never block event loop longer
     });
 
+    // Brain responded — clear any cooldown
+    clearBrainCooldown();
     BRAIN.repair.stats.requests++;
     const data = await resp.json();
     const text = (data.response || "").trim();
@@ -3826,6 +3866,8 @@ REASONING: <why>`;
 
     return { executor, context, confidence };
   } catch {
+    // Brain is down — enter cooldown so we don't keep blocking the event loop
+    enterBrainCooldown();
     return null;
   }
 }
@@ -3834,6 +3876,8 @@ REASONING: <why>`;
 
 async function runRepairCycle() {
   if (_repairLoopRunning) return; // No concurrent cycles
+  // Skip entire cycle if memory ceiling monitor has paused background tasks
+  if (globalThis.__memoryPaused?.()) return;
   _repairLoopRunning = true;
 
   const cycleStart = Date.now();
@@ -3984,6 +4028,8 @@ export function initSpotCheck(callBrainFn, stateFn) {
 
 async function repairBrainSpotCheck() {
   if (!_spotCheckCallBrain || !_spotCheckState) return { checked: 0 };
+  // Skip if brain is in cooldown — spot checks are not critical
+  if (isBrainInCooldown()) return { checked: 0, skipped: "brain_cooldown" };
   const STATE = typeof _spotCheckState === "function" ? _spotCheckState() : _spotCheckState;
   if (!STATE?.lensArtifacts) return { checked: 0 };
 
@@ -4648,7 +4694,7 @@ const REPAIR_STRATEGIES = [
   // The 0.5B model picks from a short list. Then deterministic strategies handle the fix.
   {
     name: "repair_brain_triage",
-    match: () => true,
+    match: () => !isBrainInCooldown(), // Skip entirely when brain is in cooldown
     apply: async (errorEntry) => {
       try {
         const BRAIN = globalThis._concordBRAIN;
@@ -4668,7 +4714,7 @@ Category:`;
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ model: brainConfig.model, messages: [{ role: "user", content: prompt }], stream: false }),
-          signal: AbortSignal.timeout(10000),
+          signal: AbortSignal.timeout(5000), // 5s hard cap
         });
         const result = await response.json();
         const category = result?.message?.content?.trim().toUpperCase().split(/\s/)[0];
@@ -4692,8 +4738,10 @@ Category:`;
             return { ...fixResult, triageCategory: category, method: `llm_triage_${category.toLowerCase()}` };
           }
         }
+        clearBrainCooldown(); // Brain responded
         return { fixed: false, triageCategory: category || "UNKNOWN" };
       } catch (err) {
+        enterBrainCooldown(); // Brain down — stop retrying
         return { fixed: false, reason: "llm_triage_failed", error: err?.message };
       }
     },
@@ -4703,7 +4751,7 @@ Category:`;
   // Borrows one inference from the utility brain (or conscious brain as fallback).
   {
     name: "deep_diagnostic",
-    match: () => true,
+    match: () => !isBrainInCooldown(), // Skip when brain is in cooldown
     apply: async (errorEntry) => {
       try {
         const BRAIN = globalThis._concordBRAIN;
@@ -4728,8 +4776,9 @@ Provide your response as JSON with no other text:
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ model: brainConfig.model, messages: [{ role: "user", content: prompt }], stream: false }),
-          signal: AbortSignal.timeout(30000),
+          signal: AbortSignal.timeout(5000), // 5s hard cap — never block event loop longer
         });
+        clearBrainCooldown(); // Brain responded
         const result = await response.json();
         const content = result?.message?.content;
         if (!content) return { fixed: false, reason: "no_llm_response" };
@@ -4766,6 +4815,7 @@ Provide your response as JSON with no other text:
           default: return { fixed: false };
         }
       } catch (err) {
+        enterBrainCooldown(); // Brain down — stop retrying
         return { fixed: false, reason: "deep_diagnostic_failed", error: err?.message };
       }
     },
@@ -4812,7 +4862,9 @@ async function _escalateToSovereign(errorEntry) {
 
 export async function processRepairQueue() {
   if (REPAIR_QUEUE.length === 0) return { processed: 0 };
-  const batch = REPAIR_QUEUE.splice(0, 20);
+  // Skip if memory ceiling monitor has paused background tasks
+  if (globalThis.__memoryPaused?.()) return { processed: 0, skipped: "memory_paused" };
+  const batch = REPAIR_QUEUE.splice(0, 10); // Process max 10 (was 20) to limit cycle duration
   let fixed = 0, escalated = 0;
 
   for (const errorEntry of batch) {

@@ -215,7 +215,7 @@ export default function registerSystemRoutes(app, {
         dtus: STATE.dtus?.size || 0,
         wrappers: STATE.wrappers?.size || 0,
         layers: STATE.layers?.size || 0,
-        personas: STATE.personas?.size || 0,
+        personas: STATE.personas?.length || STATE.personas?.size || 0,
         events: AUDIT_LOG?.length || 0,
         emergents: STATE.__emergent?.emergents?.size || 0,
       },

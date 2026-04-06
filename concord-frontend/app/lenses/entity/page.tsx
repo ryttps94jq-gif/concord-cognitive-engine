@@ -58,7 +58,7 @@ export default function EntityLensPage() {
       queryClient.invalidateQueries({ queryKey: ['worldmodel-entities'] });
     },
     onError: () => {
-      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+      useUIStore.getState().addToast({ type: 'error', message: 'Entity operation failed. The server may still be loading.' });
     },
   });
 
@@ -78,7 +78,7 @@ export default function EntityLensPage() {
       queryClient.invalidateQueries({ queryKey: ['worldmodel-entities'] });
     },
     onError: () => {
-      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+      useUIStore.getState().addToast({ type: 'error', message: 'Entity operation failed. The server may still be loading.' });
     },
   });
 
@@ -647,7 +647,7 @@ function AgentStatusPanel() {
       queryClient.invalidateQueries({ queryKey: ['agents-status'] });
     },
     onError: () => {
-      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+      useUIStore.getState().addToast({ type: 'error', message: 'Entity operation failed. The server may still be loading.' });
     },
   });
 

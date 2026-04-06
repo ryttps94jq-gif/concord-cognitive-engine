@@ -6379,6 +6379,52 @@ try {
 
 
 
+// ── Comprehensive STATE field initialization ────────────────────────────────
+// Ensures every field accessed by any route handler exists BEFORE routes mount.
+// Prevents TypeErrors from empty/missing state on fresh installs or partial hydration.
+{
+  const _ensureMap = (key) => { if (!(STATE[key] instanceof Map)) STATE[key] = new Map(); };
+  const _ensureArr = (key) => { if (!Array.isArray(STATE[key])) STATE[key] = []; };
+  const _ensureObj = (key, def) => { if (!STATE[key] || typeof STATE[key] !== "object") STATE[key] = def; };
+
+  // Core Maps (should exist from STATE init, but guard hydration edge cases)
+  ["dtus", "shadowDtus", "wrappers", "layers", "sessions", "styleVectors",
+   "users", "orgs", "apiKeys", "jobs", "sources", "listings", "entitlements",
+   "transactions", "papers", "organs", "notifications", "lensArtifacts",
+   "lensDomainIndex", "userUniverses"].forEach(_ensureMap);
+
+  // Feature Maps (initialized inline throughout server.js — ensure early)
+  ["entities", "councilVotes", "customPersonas", "councilProposals",
+   "marketplaceListings", "teamTemplates", "mlJobs", "mlModels",
+   "gameProfiles", "chemCompounds", "chemReactions", "debates", "wallets",
+   "subscriptions", "cognitiveDigitalTwins", "pathWeights",
+   "_pipelineExecutions", "_rateLimits", "_costAccounting"].forEach(_ensureMap);
+
+  // Feature Arrays
+  ["swarms", "_sessionRecordings", "episodes", "councilSessions",
+   "delegatedTasks", "gardens", "bounties", "futures", "causalEdges",
+   "mentorships", "battles", "timeCrystals", "_traces"].forEach(_ensureArr);
+
+  // Feature Objects
+  _ensureObj("xpStore", {});
+  _ensureObj("_pulses", {});
+  _ensureObj("music", { playing: false, currentTrack: null, queue: [], playlists: [], volume: 0.7 });
+  _ensureObj("globalIndex", { byHash: new Map(), byId: new Map() });
+  if (!(STATE.globalIndex.byHash instanceof Map)) STATE.globalIndex.byHash = new Map();
+  if (!(STATE.globalIndex.byId instanceof Map)) STATE.globalIndex.byId = new Map();
+  _ensureObj("globalThread", { councilQueue: [], acceptedContributions: [] });
+  if (!Array.isArray(STATE.globalThread.councilQueue)) STATE.globalThread.councilQueue = [];
+  if (!Array.isArray(STATE.globalThread.acceptedContributions)) STATE.globalThread.acceptedContributions = [];
+  _ensureArr("logs");
+  _ensureObj("queues", { notifications: [], macroProposals: [], synthesis: [] });
+
+  // Personas: always an Array (hydration may produce a Map)
+  if (STATE.personas instanceof Map) STATE.personas = Array.from(STATE.personas.values());
+  if (!Array.isArray(STATE.personas)) STATE.personas = [];
+
+  structuredLog("info", "state_fields_initialized", { maps: 30, arrays: 14, objects: 7 });
+}
+
 const SEED_INFO = { ok:false, loaded:false, count:0, path:"./dtus.js", error:null, source:"none" };
 
 async function tryLoadSeedDTUs() {
@@ -8329,8 +8375,8 @@ register("worldmodel", "list_entities", (ctx, input = {}) => {
 
   if (type) entities = entities.filter(e => e.type === type);
   if (search) {entities = entities.filter(e =>
-    e.name.toLowerCase().includes(search) ||
-    e.description.toLowerCase().includes(search)
+    (e.name || "").toLowerCase().includes(search) ||
+    (e.description || "").toLowerCase().includes(search)
   );}
 
   entities = entities
@@ -31731,6 +31777,9 @@ app.get("/api/v1/docs", (req, res) => {
   });
 });
 
+// Ensure entities Map exists (not in STATE initializer — added by entity system)
+if (!STATE.entities) STATE.entities = new Map();
+
 // --- Capability 6: PERSONAL AI AGENT ---
 
 function createPersonalAgent(userId) {
@@ -40762,7 +40811,11 @@ const DEFAULT_PERSONAS = [
   { id: "sage", name: "The Sage", brain: "conscious", style: "philosophical and reflective", domains: ["philosophy", "psychology", "metacognition"], avatar: "book" },
 ];
 
-if (!STATE.personas) {
+// Ensure STATE.personas is always an Array (hydration may leave it as a Map)
+if (STATE.personas instanceof Map) {
+  STATE.personas = Array.from(STATE.personas.values());
+}
+if (!STATE.personas || !Array.isArray(STATE.personas) || STATE.personas.length === 0) {
   STATE.personas = DEFAULT_PERSONAS.map(p => ({
     ...p,
     stats: { queries: 0, helpfulness: 0, lastActive: null },
@@ -40831,7 +40884,8 @@ async function askPersona(personaId, question, options = {}) {
 
 // Agent Persona API routes
 app.get("/api/personas", (_req, res) => {
-  res.json({ ok: true, personas: STATE.personas.map(p => ({ ...p, stats: p.stats })) });
+  const personas = Array.isArray(STATE.personas) ? STATE.personas : [];
+  res.json({ ok: true, personas: personas.map(p => ({ ...p, stats: p.stats })) });
 });
 
 app.post("/api/personas/:id/ask", async (req, res) => {
@@ -40846,7 +40900,7 @@ app.post("/api/personas/:id/ask", async (req, res) => {
 });
 
 app.put("/api/personas/:id", (req, res) => {
-  const persona = STATE.personas.find(p => p.id === req.params.id);
+  const persona = Array.isArray(STATE.personas) ? STATE.personas.find(p => p.id === req.params.id) : null;
   if (!persona) return res.status(404).json({ ok: false, error: "Persona not found" });
   if (req.body.customInstructions !== undefined) persona.customInstructions = req.body.customInstructions;
   if (req.body.active !== undefined) persona.active = req.body.active;
