@@ -54,7 +54,7 @@ interface SoundSystemAPI {
 
 /* ── Soundscape definitions ────────────────────────────────────── */
 
-const SOUNDSCAPE_BEDS: Record<DistrictSoundscape, SoundscapeBed> = {
+const _SOUNDSCAPE_BEDS: Record<DistrictSoundscape, SoundscapeBed> = {
   forge: {
     label: 'The Forge',
     layers: ['hammering-rhythmic', 'furnace-roar', 'anvil-ring', 'bellows-hiss'],

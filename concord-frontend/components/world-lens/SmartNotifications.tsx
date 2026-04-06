@@ -2,8 +2,8 @@
 
 import React, { useState, useMemo, useCallback } from 'react';
 import {
-  Bell, BellOff, Brain, BarChart3, Clock, Filter, Settings,
-  ChevronDown, ChevronUp, ChevronRight, X, Check, Info,
+  Bell, BellOff, Brain, BarChart3, Clock, Settings,
+  ChevronRight, X, Info,
   Zap, Mail, Archive, Calendar, GripVertical, ToggleLeft,
   ToggleRight, TrendingUp, Eye, MousePointer, Trash2,
   HelpCircle, Sparkles, AlertCircle, MessageSquare, Coins,

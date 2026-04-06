@@ -29,7 +29,7 @@ interface StressTestPanelProps {
   buildingCount: number;
 }
 
-export default function StressTestPanel({ districtId, buildingCount }: StressTestPanelProps) {
+export default function StressTestPanel({ districtId: _districtId, buildingCount }: StressTestPanelProps) {
   const [scenario, setScenario] = useState<ScenarioType>('earthquake');
   const [magnitude, setMagnitude] = useState(5);
   const [running, setRunning] = useState(false);
