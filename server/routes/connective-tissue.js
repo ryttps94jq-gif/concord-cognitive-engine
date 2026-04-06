@@ -245,34 +245,57 @@ export default function connectiveTissueRoutes({ db, requireAuth }) {
 
   // ── EMERGENT / BOT AUTH ────────────────────────────────────────────
 
-  router.post("/emergent/register", requireAuth(), (req, res) => {
-    const result = registerEmergent(db, req.body);
-    res.json(result);
+  router.post("/emergent/register", requireAuth(), async (req, res) => {
+    try {
+      const result = await registerEmergent(db, req.body);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
   });
 
-  router.post("/bot/register", requireAuth(), (req, res) => {
-    const result = registerBot(db, req.body);
-    res.json(result);
+  router.post("/bot/register", requireAuth(), async (req, res) => {
+    try {
+      const result = await registerBot(db, req.body);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
   });
 
-  router.post("/bot/auth", requireAuth(), (req, res) => {
-    const result = authenticateBot(db, req.body.apiKey);
-    res.json(result);
+  router.post("/bot/auth", requireAuth(), async (req, res) => {
+    try {
+      if (!req.body.apiKey) {
+        return res.status(400).json({ error: "Missing required field: apiKey" });
+      }
+      const result = await authenticateBot(db, req.body.apiKey);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
   });
 
-  router.get("/entity/:entityId/access/:lensId", (req, res) => {
-    const result = checkLensAccess(db, req.params.entityId, req.params.lensId);
-    res.json(result);
+  router.get("/entity/:entityId/access/:lensId", async (req, res) => {
+    try {
+      const result = await checkLensAccess(db, req.params.entityId, req.params.lensId);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
   });
 
-  router.get("/entities", (req, res) => {
-    const { substrate, status, limit, offset } = req.query;
-    const result = listEntities(db, {
-      substrate, status,
-      limit: parseInt(limit) || 50,
-      offset: parseInt(offset) || 0,
-    });
-    res.json(result);
+  router.get("/entities", async (req, res) => {
+    try {
+      const { substrate, status, limit, offset } = req.query;
+      const result = await listEntities(db, {
+        substrate, status,
+        limit: parseInt(limit) || 50,
+        offset: parseInt(offset) || 0,
+      });
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
   });
 
   return router;

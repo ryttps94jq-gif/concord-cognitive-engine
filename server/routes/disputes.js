@@ -109,7 +109,7 @@ export default function createDisputeRouter({ db, requireAuth, adminOnly }) {
       // Auto-escalation: if amount < threshold, schedule auto-refund
       const autoRefundEligible = amount > 0 && amount < AUTO_REFUND_THRESHOLD_CC;
 
-      res.status(201).json({
+      return res.status(201).json({
         ok: true,
         disputeId: result.disputeId,
         status: "open",
@@ -121,7 +121,7 @@ export default function createDisputeRouter({ db, requireAuth, adminOnly }) {
         reviewTime: result.reviewTime,
       });
     } catch (err) {
-      res.status(500).json({ ok: false, error: "create_dispute_failed", message: err.message });
+      return res.status(500).json({ ok: false, error: "create_dispute_failed", message: err.message });
     }
   });
 
@@ -145,9 +145,9 @@ export default function createDisputeRouter({ db, requireAuth, adminOnly }) {
         canRespond: d.reported_user_id === userId && d.status === "open",
       }));
 
-      res.json({ ok: true, disputes: enriched, total: enriched.length });
+      return res.json({ ok: true, disputes: enriched, total: enriched.length });
     } catch (err) {
-      res.status(500).json({ ok: false, error: "fetch_disputes_failed", message: err.message });
+      return res.status(500).json({ ok: false, error: "fetch_disputes_failed", message: err.message });
     }
   });
 
@@ -174,9 +174,9 @@ export default function createDisputeRouter({ db, requireAuth, adminOnly }) {
           return (b.opened_at || "").localeCompare(a.opened_at || "");
         });
 
-      res.json({ ok: true, queue, total: queue.length });
+      return res.json({ ok: true, queue, total: queue.length });
     } catch (err) {
-      res.status(500).json({ ok: false, error: "fetch_queue_failed", message: err.message });
+      return res.status(500).json({ ok: false, error: "fetch_queue_failed", message: err.message });
     }
   });
 
@@ -266,7 +266,7 @@ export default function createDisputeRouter({ db, requireAuth, adminOnly }) {
         }),
       });
 
-      res.json({
+      return res.json({
         ok: true,
         disputeId: req.params.id,
         status: "under_review",
@@ -274,7 +274,7 @@ export default function createDisputeRouter({ db, requireAuth, adminOnly }) {
         ...updateResult,
       });
     } catch (err) {
-      res.status(500).json({ ok: false, error: "seller_respond_failed", message: err.message });
+      return res.status(500).json({ ok: false, error: "seller_respond_failed", message: err.message });
     }
   });
 
@@ -352,7 +352,7 @@ export default function createDisputeRouter({ db, requireAuth, adminOnly }) {
         }),
       });
 
-      res.json({
+      return res.json({
         ok: true,
         disputeId: req.params.id,
         status: "resolved",
@@ -362,7 +362,7 @@ export default function createDisputeRouter({ db, requireAuth, adminOnly }) {
         ...updateResult,
       });
     } catch (err) {
-      res.status(500).json({ ok: false, error: "resolve_failed", message: err.message });
+      return res.status(500).json({ ok: false, error: "resolve_failed", message: err.message });
     }
   });
 
@@ -393,7 +393,7 @@ export default function createDisputeRouter({ db, requireAuth, adminOnly }) {
         // Table may not exist
       }
 
-      res.json({
+      return res.json({
         ok: true,
         dispute: {
           ...dispute,
@@ -402,7 +402,7 @@ export default function createDisputeRouter({ db, requireAuth, adminOnly }) {
         },
       });
     } catch (err) {
-      res.status(500).json({ ok: false, error: "fetch_dispute_failed", message: err.message });
+      return res.status(500).json({ ok: false, error: "fetch_dispute_failed", message: err.message });
     }
   });
 

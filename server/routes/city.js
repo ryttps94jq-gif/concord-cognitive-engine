@@ -205,11 +205,11 @@ export default function createCityRoutes({ requireAuth } = {}) {
   router.get("/:id/players", (req, res) => {
     try {
       const players = getCityPlayers(req.params.id);
-      res.json({ ok: true, cityId: req.params.id, count: players.length, players });
+      return res.json({ ok: true, cityId: req.params.id, count: players.length, players });
     } catch (err) {
       logger.warn?.("[city-route] players error:", err.message);
       const status = err.message.includes("not found") ? 404 : 500;
-      res.status(status).json({ ok: false, error: err.message });
+      return res.status(status).json({ ok: false, error: err.message });
     }
   });
 
