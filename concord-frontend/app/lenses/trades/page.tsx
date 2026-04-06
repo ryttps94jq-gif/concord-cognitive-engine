@@ -58,6 +58,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
+import { showToast } from '@/components/common/Toasts';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
@@ -448,10 +449,12 @@ export default function TradesLensPage() {
           });
         } catch (invoiceErr) {
           console.error('Invoice DTU creation failed:', invoiceErr);
+          showToast('error', 'Invoice creation failed');
         }
       }
     } catch (err) {
       console.error('Action failed:', err);
+      showToast('error', 'Action failed');
     }
   };
 
@@ -2066,6 +2069,7 @@ export default function TradesLensPage() {
         setInvNotes('');
       } catch (err) {
         console.error('Invoice creation failed:', err);
+        showToast('error', 'Invoice creation failed');
       } finally {
         setInvCreating(false);
       }

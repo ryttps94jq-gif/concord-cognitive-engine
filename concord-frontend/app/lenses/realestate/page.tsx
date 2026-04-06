@@ -20,6 +20,7 @@ import {
 const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { ErrorState } from '@/components/common/EmptyState';
+import { showToast } from '@/components/common/Toasts';
 import { cn } from '@/lib/utils';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -478,6 +479,7 @@ export default function RealEstateLensPage() {
       setActionResult(result.result as Record<string, unknown>);
     } catch (err) {
       console.error('Action failed:', err);
+      showToast('error', 'Action failed');
     }
   };
 

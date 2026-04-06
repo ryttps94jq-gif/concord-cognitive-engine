@@ -14,6 +14,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
+import { useUIStore } from '@/store/ui';
 import type { DTU } from '@/lib/api/generated-types';
 import { useOfflineFirstDTU } from '@/hooks/useOfflineFirst';
 import { DTUIntegrityBadge } from './DTUIntegrityBadge';
@@ -222,6 +223,7 @@ export function DTUDetailView({ dtuId, onClose, onNavigate }: DTUDetailViewProps
       URL.revokeObjectURL(url);
     } catch (e) {
       console.error('DTU download failed:', e);
+      useUIStore.getState().addToast({ type: 'error', message: 'Failed to download DTU' });
     } finally {
       setDownloading(false);
     }

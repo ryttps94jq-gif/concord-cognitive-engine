@@ -38,6 +38,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { ErrorState } from '@/components/common/EmptyState';
+import { showToast } from '@/components/common/Toasts';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
@@ -339,6 +340,7 @@ export default function ScienceLensPage() {
       setActionResult(result.result as unknown as Record<string, unknown>);
     } catch (err) {
       console.error('Action failed:', err);
+      showToast('error', 'Action failed');
     }
   };
 

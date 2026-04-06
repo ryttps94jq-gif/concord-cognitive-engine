@@ -15,6 +15,7 @@ import {
   Wifi, Signal, Globe, Cable, AlertTriangle, Activity, Gauge, Antenna, Zap,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
+import { showToast } from '@/components/common/Toasts';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
@@ -111,6 +112,7 @@ export default function TelecommunicationsLensPage() {
       await runAction.mutateAsync({ id: targetId, action });
     } catch (err) {
       console.error('Action failed:', err);
+      showToast('error', 'Action failed');
     }
   }, [items, runAction]);
 

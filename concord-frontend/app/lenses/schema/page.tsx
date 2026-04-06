@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { FileCode, Plus, Check, X, Database, Code, FileJson, Tag } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { ErrorState } from '@/components/common/EmptyState';
+import { showToast } from '@/components/common/Toasts';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -32,6 +33,7 @@ export default function SchemaLensPage() {
     },
     onError: (err) => {
       console.error('Schema creation failed:', err instanceof Error ? err.message : err);
+      showToast('error', 'Schema creation failed');
     },
   });
 

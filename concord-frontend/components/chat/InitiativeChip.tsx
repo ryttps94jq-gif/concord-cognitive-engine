@@ -575,7 +575,8 @@ export function InitiativeList({
   compact = false,
   className,
 }: InitiativeListProps) {
-  const visible = initiatives.slice(0, maxVisible);
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? initiatives : initiatives.slice(0, maxVisible);
   const overflow = initiatives.length - maxVisible;
 
   if (visible.length === 0) return null;
@@ -596,9 +597,9 @@ export function InitiativeList({
         <div className="text-center">
           <button
             className="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors"
-            onClick={() => {}}
+            onClick={() => setShowAll((prev) => !prev)}
           >
-            +{overflow} more initiative{overflow !== 1 ? 's' : ''}
+            {showAll ? 'Show fewer' : `+${overflow} more initiative${overflow !== 1 ? 's' : ''}`}
           </button>
         </div>
       )}

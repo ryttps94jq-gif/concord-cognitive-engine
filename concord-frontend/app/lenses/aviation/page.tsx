@@ -16,6 +16,7 @@ import {
   Wind, Thermometer, Eye, Droplets, Layers,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
+import { showToast } from '@/components/common/Toasts';
 import { cn } from '@/lib/utils';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -394,6 +395,7 @@ export default function AviationLensPage() {
       setActionResult(result.result as Record<string, unknown>);
     } catch (err) {
       console.error('Action failed:', err);
+      showToast('error', 'Action failed');
     }
   };
 
