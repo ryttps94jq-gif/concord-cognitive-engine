@@ -144,7 +144,7 @@ export function useLensDTUs(options: LensDTUOptions) {
   });
 
   // ---- Derived collections ----
-  const contextDTUs: DTU[] = contextQuery.data?.dtus ?? [];
+  const contextDTUs: DTU[] = useMemo(() => contextQuery.data?.dtus ?? [], [contextQuery.data?.dtus]);
 
   const hyperDTUs = useMemo(
     () => contextDTUs.filter((d) => d.tier === 'hyper'),

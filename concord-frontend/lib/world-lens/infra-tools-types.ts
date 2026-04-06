@@ -72,7 +72,7 @@ export interface CompatibilityReport {
 export interface ValidationRequest {
   structure: {
     members: DTUStructuralMember[];
-    connections: any[];
+    connections: Record<string, unknown>[];
   };
   environment: {
     seismicZone: number;
@@ -101,7 +101,7 @@ export interface ValidationResponse {
       suggestion?: string;
     }
   >;
-  memberDetails: any[];
+  memberDetails: Record<string, unknown>[];
 }
 
 export interface DTUStructuralMember {
@@ -110,9 +110,9 @@ export interface DTUStructuralMember {
   material: string;
   length?: number;
   height?: number;
-  crossSection: any;
-  supports: any;
-  loads: any[];
+  crossSection: Record<string, unknown>;
+  supports: Record<string, unknown>;
+  loads: Record<string, unknown>[];
 }
 
 // ── DTU Protocol ───────────────────────────────────────────────────────────
@@ -156,7 +156,7 @@ export interface DTUValidationState {
   status: 'validated' | 'experimental' | 'unvalidated' | 'superseded';
   engine: string;
   timestamp: string;
-  results: Record<string, any>;
+  results: Record<string, unknown>;
   overallPass: boolean;
   hash: string;
 }
@@ -180,7 +180,7 @@ export interface BrainRequest {
   task: string;
   context: {
     systemPrompt?: string;
-    conversationHistory?: any[];
+    conversationHistory?: Record<string, unknown>[];
   };
   parameters: {
     maxTokens?: number;
@@ -312,8 +312,8 @@ export interface GeneratedNPC {
   name: string;
   occupation: string;
   personality: string[];
-  schedule: any[];
-  relationships: any[];
+  schedule: Record<string, unknown>[];
+  relationships: Record<string, unknown>[];
   systemPrompt: string;
   greetings: string[];
   age: number;
@@ -340,10 +340,10 @@ export interface TerrainGenerationConfig {
     depth: number;
   };
   features: {
-    river?: any;
-    hills?: any;
+    river?: Record<string, unknown>;
+    hills?: Record<string, unknown>;
     creek?: boolean;
-    flatland?: any;
+    flatland?: Record<string, unknown>;
   };
   geology: {
     soilTypes: string[];
@@ -365,7 +365,7 @@ export interface RegistryPackage {
   citations: number;
   downloads: number;
   validationStatus: string;
-  performance: Record<string, any>;
+  performance: Record<string, unknown>;
   thumbnail: string;
   publishedAt: string;
   tags: string[];
@@ -398,7 +398,7 @@ export interface TraceSpan {
   operationName: string;
   startTime: string;
   endTime?: string;
-  attributes: Record<string, any>;
+  attributes: Record<string, unknown>;
   status: string;
 }
 
@@ -430,8 +430,8 @@ export interface AutoRepairDiagnosis {
 // ── Test ───────────────────────────────────────────────────────────────────
 
 export interface SimulationTestConfig {
-  environment: any;
-  load: any;
+  environment: Record<string, unknown>;
+  load: Record<string, unknown>;
   test: string;
 }
 
@@ -491,10 +491,10 @@ export interface LensSection {
   id: string;
   title: string;
   type: 'knowledge' | 'interactive' | 'assessment';
-  content: any;
-  dataSources: any[];
-  interactives: any[];
-  dtuConnections: any[];
+  content: unknown;
+  dataSources: Record<string, unknown>[];
+  interactives: Record<string, unknown>[];
+  dtuConnections: Record<string, unknown>[];
   learningOutcomes: string[];
 }
 

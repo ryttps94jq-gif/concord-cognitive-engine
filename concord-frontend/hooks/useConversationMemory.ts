@@ -43,12 +43,12 @@ interface ConversationMemoryState {
 // ── Constants ───────────────────────────────────────────────────────────────
 
 const WINDOW_THRESHOLD = 50;
-const ACTIVE_WINDOW = 30;
+const _ACTIVE_WINDOW = 30;
 
 // ── Hook ────────────────────────────────────────────────────────────────────
 
 export function useConversationMemory(): ConversationMemoryState {
-  const { activeSessionId, activeMessages, addMessage, getActiveWindow } = useSessionStore();
+  const { activeSessionId, addMessage, getActiveWindow } = useSessionStore();
   const [stats, setStats] = useState<MemoryStats | null>(null);
   const [isCompressing, setIsCompressing] = useState(false);
   const [error, setError] = useState<string | null>(null);

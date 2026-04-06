@@ -25,7 +25,7 @@ import type {
 
 const SAFETY_FACTOR = 1.5;
 const GRAVITY = 9.81; // m/s²
-const AIR_DENSITY = 1.225; // kg/m³
+const _AIR_DENSITY = 1.225; // kg/m³
 const GREEN_THRESHOLD = 0.7;
 const WIND_PRESSURE_COEFF = 0.613; // 0.5 * air_density for dynamic pressure
 

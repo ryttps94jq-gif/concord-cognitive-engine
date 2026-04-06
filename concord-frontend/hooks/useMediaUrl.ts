@@ -240,6 +240,7 @@ export function useMediaUrl(
         setIsLoading(false);
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- scheduleRefresh is defined after this callback; stable via ref
   }, [artifactHash, signed, quality, userId, expiresIn, enabled, buildDirectUrl]);
 
   /**

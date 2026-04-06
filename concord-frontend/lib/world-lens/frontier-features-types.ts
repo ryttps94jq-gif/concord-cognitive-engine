@@ -85,7 +85,7 @@ export interface SensorReading {
   timestamp: string;
   data: Record<string, number | string>;
   anomalyDetected: boolean;
-  anomalyDetails?: any;
+  anomalyDetails?: Record<string, unknown>;
 }
 
 export interface AnomalyAlert {
@@ -132,7 +132,7 @@ export interface ShellOutput {
   output: string;
   error?: string;
   exitCode: number;
-  data?: any;
+  data?: unknown;
 }
 
 export interface ShellCompletion {
@@ -167,8 +167,8 @@ export interface NotebookCell {
     | 'lens_query'
     | 'code'
     | 'publish';
-  content: any;
-  output?: any;
+  content: unknown;
+  output?: unknown;
   executedAt?: string;
 }
 
@@ -321,10 +321,10 @@ export interface TwinAssessment {
   id: string;
   twinId: string;
   timestamp: string;
-  predictedState: any;
-  actualState: any;
+  predictedState: Record<string, unknown>;
+  actualState: Record<string, unknown>;
   deviationScore: number;
-  anomalies: any[];
+  anomalies: Record<string, unknown>[];
   recommendations: string[];
 }
 
@@ -406,7 +406,7 @@ export interface ConcordAgent {
   ownerId: string;
   name: string;
   type: AgentType;
-  config: any;
+  config: Record<string, unknown>;
   status: 'active' | 'paused' | 'error' | 'quota_exceeded';
   lastRunAt?: string;
   runCount: number;
@@ -418,7 +418,7 @@ export interface AgentLog {
   id: string;
   agentId: string;
   action: string;
-  details?: any;
+  details?: Record<string, unknown>;
   result: 'success' | 'failure' | 'skipped';
   createdAt: string;
 }
@@ -443,7 +443,7 @@ export interface StandardRule {
   section: string;
   title: string;
   type: string;
-  parameters: any;
+  parameters: Record<string, unknown>;
   validationMapping?: {
     test: string;
     parameter: string;
@@ -455,23 +455,23 @@ export interface StandardRule {
 export interface StandardComplianceResult {
   standard: string;
   compliance: 'COMPLIANT' | 'NON-COMPLIANT';
-  sectionResults: any[];
+  sectionResults: Record<string, unknown>[];
 }
 
 // ── Feature 15: Diff ────────────────────────────────────────────────────────
 
 export interface DTUDiff {
-  added: any[];
-  removed: any[];
+  added: unknown[];
+  removed: unknown[];
   modified: {
     memberId: string;
     field: string;
-    oldValue: any;
-    newValue: any;
+    oldValue: unknown;
+    newValue: unknown;
   }[];
   unchangedCount: number;
   summary: string;
-  validationDelta?: any;
+  validationDelta?: Record<string, unknown>;
 }
 
 export interface DTUDiffVisualOverlay {

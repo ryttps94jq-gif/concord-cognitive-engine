@@ -112,7 +112,7 @@ export const energyModule: DomainModule = {
     const windOutput = 0.5 * rho * (sweptArea || 50) * Math.pow(windSpeed || 8, 3) * Cp;
 
     // Battery
-    const { batteryCapacity, chargeRate, dischargeRate, cycleLife } = params;
+    const { batteryCapacity: _batteryCapacity, chargeRate: _chargeRate, dischargeRate: _dischargeRate, cycleLife } = params;
     const batteryLifeYears = (cycleLife || 5000) / 365;
 
     return { solarOutput, windOutput, batteryLifeYears: batteryLifeYears || 0, totalGeneration: solarOutput + windOutput };
@@ -152,7 +152,7 @@ export const transportModule: DomainModule = {
   description: 'Road networks, rail, bridges, traffic flow',
   validate: () => [],
   calculate: (params) => {
-    const { lanes, throughputPerLane, bridgeSpan, vehicleWeight } = params;
+    const { lanes, throughputPerLane, bridgeSpan: _bridgeSpan, vehicleWeight } = params;
     const roadCapacity = (lanes || 2) * (throughputPerLane || 1800); // vehicles/hour
     const bridgeLoad = (vehicleWeight || 3500) * 9.81; // N
     return { roadCapacity, bridgeLoad };
@@ -291,7 +291,7 @@ export const disasterModule: DomainModule = {
   description: 'Earthquake, hurricane, flood, fire stress tests',
   validate: () => [],
   calculate: (params) => {
-    const { earthquakeMagnitude, windCategory, rainfallMm, fireOriginBldg } = params;
+    const { earthquakeMagnitude, windCategory, rainfallMm, fireOriginBldg: _fireOriginBldg } = params;
     const seismicAccel = 0.05 * Math.pow(2, (earthquakeMagnitude || 5) - 3);
     const windSpeed = 33 + ((windCategory || 1) - 1) * 20; // m/s for hurricane category
     const floodDepth = Math.max(0, ((rainfallMm || 50) - 30) * 0.01); // m, simplified
@@ -324,7 +324,7 @@ export const socialModule: DomainModule = {
 export const governanceModule: DomainModule = {
   id: 'governance', name: 'Governance & Policy', priority: 14,
   description: 'Building codes, policy DTUs, district governance',
-  validate: () => [], calculate: (p) => ({ compliance: 1 }),
+  validate: () => [], calculate: (_p) => ({ compliance: 1 }),
 };
 
 export const miningModule: DomainModule = {
@@ -341,7 +341,7 @@ export const communicationsModule: DomainModule = {
   id: 'communications', name: 'Communications & Networking', priority: 16,
   description: 'Cell towers, fiber, data centers, network topology',
   validate: () => [], calculate: (p) => {
-    const { towerHeight, frequency, bandwidth, distance } = p;
+    const { towerHeight, frequency: _frequency, bandwidth, distance } = p;
     const coverageRadius = Math.sqrt(2 * 6371000 * (towerHeight || 30)) / 1000; // km
     const latency = (distance || 10) * 1000 / (2e8) * 1000; // ms
     return { coverageRadius, latency, bandwidth: bandwidth || 1000 };
@@ -376,7 +376,7 @@ export const roboticsModule: DomainModule = {
   id: 'robotics', name: 'Robotics & Automation', priority: 19,
   description: 'Industrial robots, assembly lines, safety zones, warehousing',
   validate: () => [], calculate: (p) => {
-    const { reachEnvelope, payloadCapacity, cycleTime, robotCount } = p;
+    const { reachEnvelope, payloadCapacity: _payloadCapacity, cycleTime, robotCount } = p;
     const throughput = (robotCount || 1) * 3600 / (cycleTime || 10); // units/hour
     return { throughput, safetyRadius: (reachEnvelope || 2) * 1.5 };
   },

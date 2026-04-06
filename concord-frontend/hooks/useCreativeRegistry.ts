@@ -49,7 +49,7 @@ interface RegistryResponse {
 }
 
 export function useCreativeRegistry(domain: string, contentType?: string) {
-  const qc = useQueryClient();
+  const _qc = useQueryClient();
 
   const { data, isLoading, refetch } = useQuery<RegistryResponse>({
     queryKey: ['creative-registry', domain, contentType],
