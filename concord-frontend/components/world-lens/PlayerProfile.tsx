@@ -259,7 +259,7 @@ export default function PlayerProfile({
             const meta = DOMAIN_META[r.domain];
             return (
               <div key={r.domain} className="flex flex-col items-center gap-0.5">
-                {React.createElement(meta.icon, { className: 'w-3.5 h-3.5', style: { color: meta.color } })}
+                <span style={{ color: meta.color }}>{React.createElement(meta.icon, { className: 'w-3.5 h-3.5' })}</span>
                 <span className="text-[9px] text-white/40">{meta.label}</span>
                 <span className="text-[10px] font-medium text-white/70">{r.score}</span>
               </div>

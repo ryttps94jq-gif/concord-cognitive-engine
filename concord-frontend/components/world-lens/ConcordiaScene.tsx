@@ -200,13 +200,13 @@ export default function ConcordiaScene({
       }
 
       renderer = new THREE.WebGLRenderer({
-        canvas,
+        canvas: canvas!,
         antialias: settings.antialias,
         powerPreference: 'high-performance',
         alpha: false,
       });
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, settings.pixelRatio));
-      renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+      renderer.setSize(canvas!.clientWidth, canvas!.clientHeight);
       renderer.shadowMap.enabled = true;
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -220,7 +220,7 @@ export default function ConcordiaScene({
       sceneRef.current = scene;
 
       // ── Camera ──────────────────────────────────────────────────
-      const aspect = canvas.clientWidth / canvas.clientHeight;
+      const aspect = canvas!.clientWidth / canvas!.clientHeight;
       camera = new THREE.PerspectiveCamera(55, aspect, 0.5, 5000);
       camera.position.set(200, 150, 200);
       camera.lookAt(0, 0, 0);

@@ -227,7 +227,7 @@ export default function AvatarSystem3D({
         default:
           hairGeom = new THREE.SphereGeometry(dims.headRadius * 1.05, 16, 8);
       }
-      const hair = new THREE.Mesh(hairGeom, hairMat);
+      const hair = new THREE.Mesh(hairGeom as THREE.BufferGeometry, hairMat);
       hair.position.copy(head.position);
       hair.position.y += dims.headRadius * 0.3;
       if (appearance.hairStyle === 'ponytail') {

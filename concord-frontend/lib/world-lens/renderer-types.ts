@@ -249,7 +249,7 @@ export interface MaterialPBRMap {
   opacity: number;
 }
 
-export type MaterialCategory =
+export type RendererMaterialCategory =
   | 'usb-smooth-matte'
   | 'brick'
   | 'stone'
@@ -269,7 +269,7 @@ export type MaterialCategory =
  * - concrete: gray, rough
  * - glass: transparent with Fresnel effect
  */
-export type MaterialAppearance = Record<MaterialCategory, MaterialPBRMap>;
+export type MaterialAppearance = Record<RendererMaterialCategory, MaterialPBRMap>;
 
 export interface BuildingInterior {
   loaded: boolean;

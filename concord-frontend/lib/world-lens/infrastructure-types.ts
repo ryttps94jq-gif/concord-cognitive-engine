@@ -96,7 +96,7 @@ export interface CircuitBreakerConfig {
 }
 
 /** Rate limiting configuration. */
-export interface RateLimitConfig {
+export interface InfraRateLimitConfig {
   windowMs: number;
   maxRequests: number;
   keyGenerator: string;
@@ -111,7 +111,7 @@ export interface InfrastructureLayerConfig {
   cache: CacheConfig;
   edgeCache: EdgeCacheConfig;
   circuitBreaker: CircuitBreakerConfig;
-  rateLimit: RateLimitConfig;
+  rateLimit: InfraRateLimitConfig;
 }
 
 // =============================================================================

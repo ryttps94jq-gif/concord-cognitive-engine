@@ -132,7 +132,7 @@ export type ChatChannelType =
   | 'event';
 
 /** A unified chat channel that aggregates messages of a given scope. */
-export interface ChatChannel {
+export interface SocialChatChannel {
   id: string;
   type: ChatChannelType;
   participants: string[];

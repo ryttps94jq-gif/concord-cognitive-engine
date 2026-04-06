@@ -4,7 +4,7 @@ import React, { useState, useCallback } from 'react';
 import {
   X, TrendingUp, Award, Star, Coins, ChevronRight,
   Lock, Unlock, Trophy, Users, Building2, Cpu, Zap,
-  Compass, GraduationCap, Landmark, Pickaxe,
+  Compass, GraduationCap, Landmark, Hammer,
 } from 'lucide-react';
 
 /* ── Types ─────────────────────────────────────────────────────── */
@@ -85,7 +85,7 @@ const TIER_COLORS: Record<TierName, string> = {
 
 const DOMAIN_META: Record<ReputationDomain, { label: string; icon: React.ComponentType<{ className?: string }>; color: string }> = {
   structural:     { label: 'Structural',     icon: Building2,      color: 'text-blue-400' },
-  materials:      { label: 'Materials',      icon: Pickaxe,        color: 'text-orange-400' },
+  materials:      { label: 'Materials',      icon: Hammer,        color: 'text-orange-400' },
   infrastructure: { label: 'Infrastructure', icon: Cpu,            color: 'text-cyan-400' },
   energy:         { label: 'Energy',         icon: Zap,            color: 'text-yellow-400' },
   architecture:   { label: 'Architecture',   icon: Landmark,       color: 'text-purple-400' },

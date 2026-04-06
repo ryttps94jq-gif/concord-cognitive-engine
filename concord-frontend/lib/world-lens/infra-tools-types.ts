@@ -71,7 +71,7 @@ export interface CompatibilityReport {
 
 export interface ValidationRequest {
   structure: {
-    members: StructuralMember[];
+    members: DTUStructuralMember[];
     connections: any[];
   };
   environment: {
@@ -104,7 +104,7 @@ export interface ValidationResponse {
   memberDetails: any[];
 }
 
-export interface StructuralMember {
+export interface DTUStructuralMember {
   id: string;
   type: 'beam' | 'column' | 'wall' | 'slab' | 'truss' | 'connection';
   material: string;

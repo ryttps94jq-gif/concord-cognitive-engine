@@ -336,7 +336,7 @@ export interface VoiceTranscription {
   language: string;
 }
 
-export interface VoiceIntent {
+export interface FrontierVoiceIntent {
   command: string;
   args: string[];
   confidence: number;

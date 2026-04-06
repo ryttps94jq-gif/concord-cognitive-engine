@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import {
-  Store, GraduationCap, Factory, Landmark, TreePine, Telescope,
+  Store, GraduationCap, Factory, Landmark, TreePine, Search,
   Zap, Mountain, Ship, Swords, Globe, Users, ChevronRight,
   Activity, TrendingUp, Bell,
 } from 'lucide-react';
@@ -44,7 +44,7 @@ const CONCORDIA_DISTRICTS: ConcordiaDistrict[] = [
   },
   {
     id: 'observatory', name: 'The Observatory', description: 'Science — telescopes, physics labs, astronomy',
-    lens: 'physics', icon: Telescope, color: '#06B6D4', buildingCount: 8, population: 400, activeUsers: 12,
+    lens: 'physics', icon: Search, color: '#06B6D4', buildingCount: 8, population: 400, activeUsers: 12,
   },
   {
     id: 'grid', name: 'The Grid', description: 'Infrastructure — power plants, water treatment, telecom',
@@ -141,7 +141,7 @@ export default function ConcordiaHub({ onDistrictSelect, onNavigateToLens }: Con
                   : 'border-white/10 hover:border-white/20 hover:bg-white/5'
               }`}
             >
-              <Icon className="w-5 h-5 mb-1" style={{ color: d.color }} />
+              <span style={{ color: d.color }}><Icon className="w-5 h-5 mb-1" /></span>
               <p className="text-xs font-medium text-white">{d.name}</p>
               <p className="text-[9px] text-gray-500 mt-0.5 line-clamp-2">{d.description}</p>
               <div className="flex items-center justify-between mt-2 text-[9px] text-gray-600">
@@ -162,7 +162,7 @@ export default function ConcordiaHub({ onDistrictSelect, onNavigateToLens }: Con
           <div className={`${panel} p-4`}>
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                <Icon className="w-5 h-5" style={{ color: d.color }} />
+                <span style={{ color: d.color }}><Icon className="w-5 h-5" /></span>
                 <h3 className="text-sm font-semibold text-white">{d.name}</h3>
               </div>
               <button
