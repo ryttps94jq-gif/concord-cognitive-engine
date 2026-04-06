@@ -10,7 +10,7 @@ vi.mock('@/hooks/useAuth', () => ({
 
 // Mock OAuthButtons
 vi.mock('@/components/auth/OAuthButtons', () => ({
-  OAuthButtons: ({ labelPrefix, onError, className }: { labelPrefix?: string; onError?: (e: string) => void; className?: string }) =>
+  OAuthButtons: ({ labelPrefix, onError: _onError, className }: { labelPrefix?: string; onError?: (e: string) => void; className?: string }) =>
     React.createElement('div', { 'data-testid': 'oauth-buttons', className }, [
       React.createElement('button', { key: 'google', onClick: () => {} }, `${labelPrefix || 'Continue with'} Google`),
       React.createElement('button', { key: 'apple', onClick: () => {} }, `${labelPrefix || 'Continue with'} Apple`),

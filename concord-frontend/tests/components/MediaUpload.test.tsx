@@ -6,7 +6,7 @@ import React from 'react';
 // (Proxy-based mock causes vitest to hang during module collection)
 vi.mock('lucide-react', () => {
   const createIcon = (name: string) => {
-    const Component = (props: any) => {
+    const Component = (props: Record<string, unknown>) => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const React = require('react');
       return React.createElement('span', { 'data-testid': `icon-${name}`, ...props });
@@ -40,11 +40,11 @@ vi.mock('framer-motion', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const React = require('react');
   const createMotionComponent = (tag: string) => {
-    const Comp = React.forwardRef((props: any, ref: any) => {
+    const Comp = React.forwardRef((props: Record<string, unknown>, ref: unknown) => {
       const {
-        initial, animate, exit, transition, whileHover, whileTap, whileFocus,
-        whileInView, whileDrag, variants, layout, layoutId, onAnimationComplete,
-        onAnimationStart, drag, dragConstraints, dragElastic,
+        initial: _initial, animate: _animate, exit: _exit, transition: _transition, whileHover: _whileHover, whileTap: _whileTap, whileFocus: _whileFocus,
+        whileInView: _whileInView, whileDrag: _whileDrag, variants: _variants, layout: _layout, layoutId: _layoutId, onAnimationComplete: _onAnimationComplete,
+        onAnimationStart: _onAnimationStart, drag: _drag, dragConstraints: _dragConstraints, dragElastic: _dragElastic,
         ...rest
       } = props;
       return React.createElement(tag, { ...rest, ref });
@@ -62,7 +62,7 @@ vi.mock('framer-motion', () => {
       section: createMotionComponent('section'),
       input: createMotionComponent('input'),
     },
-    AnimatePresence: ({ children }: any) => React.createElement(React.Fragment, null, children),
+    AnimatePresence: ({ children }: Record<string, unknown>) => React.createElement(React.Fragment, null, children),
   };
 });
 
@@ -77,18 +77,18 @@ vi.mock('@/lib/api/client', () => ({
 }));
 
 // Mock @tanstack/react-query — capture mutationFn so tests can trigger it
-let capturedMutationOpts: any = null;
+let _capturedMutationOpts: Record<string, unknown> | null = null;
 vi.mock('@tanstack/react-query', () => ({
-  useMutation: (opts: any) => {
-    capturedMutationOpts = opts;
+  useMutation: (opts: Record<string, unknown>) => {
+    _capturedMutationOpts = opts;
     return {
       mutate: () => {
-        opts.mutationFn().then(
-          (data: any) => opts.onSuccess?.(data),
-          (err: any) => opts.onError?.(err),
+        (opts.mutationFn as () => Promise<unknown>)().then(
+          (data: unknown) => (opts.onSuccess as ((d: unknown) => void) | undefined)?.(data),
+          (err: unknown) => (opts.onError as ((e: unknown) => void) | undefined)?.(err),
         );
       },
-      mutateAsync: opts.mutationFn,
+      mutateAsync: opts.mutationFn as () => Promise<unknown>,
       isLoading: false,
       isPending: false,
       isError: false,
@@ -97,7 +97,7 @@ vi.mock('@tanstack/react-query', () => ({
     };
   },
   QueryClient: vi.fn(),
-  QueryClientProvider: ({ children }: any) => children,
+  QueryClientProvider: ({ children }: Record<string, unknown>) => children,
 }));
 
 import { MediaUpload } from '@/components/media/MediaUpload';

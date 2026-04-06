@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 // Mock lucide-react icons used by UserProfile component
 vi.mock('lucide-react', () => {
   const createIcon = (name: string) => {
-    const Component = (props: any) => {
+    const Component = (props: Record<string, unknown>) => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const React = require('react');
       return React.createElement('span', { 'data-testid': `icon-${name}`, ...props });

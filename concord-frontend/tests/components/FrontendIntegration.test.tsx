@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 
 /**
  * Frontend Integration Tests
@@ -75,7 +75,7 @@ describe('Frontend Integration', () => {
 
   describe('Auth Timeout', () => {
     it('auth timeout fires after 10 seconds', async () => {
-      const TIMEOUT_MS = 10000;
+      const _TIMEOUT_MS = 10000;
       let timedOut = false;
 
       const timeout = setTimeout(() => {

@@ -5,7 +5,7 @@ import React from 'react';
 // Mock lucide-react — use explicit named exports (Proxy causes vitest hang)
 vi.mock('lucide-react', () => {
   const createIcon = (name: string) => {
-    const Component = (props: any) => {
+    const Component = (props: Record<string, unknown>) => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const React = require('react');
       return React.createElement('span', { 'data-testid': `icon-${name}`, ...props });
@@ -48,11 +48,11 @@ vi.mock('framer-motion', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const React = require('react');
   const createMotionComponent = (tag: string) => {
-    const Comp = React.forwardRef((props: any, ref: any) => {
+    const Comp = React.forwardRef((props: Record<string, unknown>, ref: unknown) => {
       const {
-        initial, animate, exit, transition, whileHover, whileTap, whileFocus,
-        whileInView, whileDrag, variants, layout, layoutId, onAnimationComplete,
-        onAnimationStart, drag, dragConstraints, dragElastic,
+        initial: _initial, animate: _animate, exit: _exit, transition: _transition, whileHover: _whileHover, whileTap: _whileTap, whileFocus: _whileFocus,
+        whileInView: _whileInView, whileDrag: _whileDrag, variants: _variants, layout: _layout, layoutId: _layoutId, onAnimationComplete: _onAnimationComplete,
+        onAnimationStart: _onAnimationStart, drag: _drag, dragConstraints: _dragConstraints, dragElastic: _dragElastic,
         ...rest
       } = props;
       return React.createElement(tag, { ...rest, ref });
@@ -68,7 +68,7 @@ vi.mock('framer-motion', () => {
       a: createMotionComponent('a'),
       p: createMotionComponent('p'),
     },
-    AnimatePresence: ({ children }: any) => React.createElement(React.Fragment, null, children),
+    AnimatePresence: ({ children }: Record<string, unknown>) => React.createElement(React.Fragment, null, children),
   };
 });
 
@@ -179,12 +179,12 @@ describe('UniversalPlayer', () => {
     // UniversalPlayer accesses mediaDTU.liked in useState, which crashes
     // when mediaDTU is undefined. Wrapping in error boundary to verify
     // the component mounts without throwing unrecoverable errors.
-    const ErrorBoundary = ({ children }: { children: React.ReactNode }) => {
+    const _ErrorBoundary = ({ children }: { children: React.ReactNode }) => {
       const [hasError, setHasError] = React.useState(false);
       if (hasError) return React.createElement('div', { 'data-testid': 'error-boundary' }, 'Error caught');
       return React.createElement(
         ErrorBoundaryClass,
-        { onError: () => setHasError(true) } as any,
+        { onError: () => setHasError(true) } as Record<string, unknown>,
         children,
       );
     };
@@ -208,7 +208,7 @@ describe('UniversalPlayer', () => {
     }
 
     const { container } = render(
-      React.createElement(ErrorBoundaryClass, { onError: () => {} } as any,
+      React.createElement(ErrorBoundaryClass, { onError: () => {} } as Record<string, unknown>,
         React.createElement(UniversalPlayer, { mediaDTU: undefined as never })
       )
     );
@@ -232,7 +232,7 @@ describe('UniversalPlayer', () => {
     }
 
     const { container } = render(
-      React.createElement(ErrorBoundaryClass, {} as any,
+      React.createElement(ErrorBoundaryClass, {} as Record<string, unknown>,
         React.createElement(UniversalPlayer, { mediaDTU: null as never })
       )
     );
