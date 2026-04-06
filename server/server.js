@@ -12374,20 +12374,41 @@ async function callBrain(brainName, prompt, options = {}) {
   }
 
   // Tool-awareness addendum for callBrain — opt-in via options.enableTools
+  // Each brain gets its own tool catalog based on its role
   const _brainToolsEnabled = Boolean(options.enableTools && STATE.__chicken3?.toolsEnabled);
+  const _sharedToolRules = `
+Rules for tool use:
+- Only call a tool when the task genuinely requires it.
+- After the tool call marker, continue your response naturally. You will receive the tool results and can then give a final answer.
+- Do NOT fabricate tool results. If you need real-time data, call a tool.`;
+  const _brainToolCatalogs = {
+    conscious: `- web_search: Search the web for current information. Params: {"query": "search terms"}
+- create_dtu: Create a new DTU from the conversation. Params: {"title": "...", "summary": "...", "tags": ["tag1"]}
+- run_lens_action: Invoke a lens tool. Params: {"domain": "shield", "action": "scan", "params": {...}}
+- search_dtus: Search the DTU database. Params: {"query": "search terms", "domain": "optional domain", "limit": 10}`,
+    subconscious: `- web_search: Search the web for external information to compare against internal knowledge. Params: {"query": "search terms"}
+- create_dtu: Create a new DTU. Params: {"title": "...", "summary": "...", "tags": ["tag1"]}
+- search_dtus: Search DTUs by properties, tags, domain, or natural language. Params: {"query": "...", "domain": "optional", "limit": 10}
+- detect_trends: Analyze recent DTU patterns. Params: {"domain": "domain or 'all'"}
+- find_cross_domain_links: Find connections between domains. Params: {"domainA": "...", "domainB": "..."}`,
+    utility: `- search_dtus: Search the DTU database. Params: {"query": "...", "domain": "optional", "limit": 10}
+- get_lens_data: Retrieve data from any knowledge lens. Params: {"lensId": "lens name", "query": "what to look up"}
+- classify_content: Classify text by domain, category, sentiment, or intent. Params: {"content": "...", "classifyBy": "domain|category|sentiment|intent"}
+- quick_validate: Run a structural validation check on a DTU. Params: {"dtuId": "..."}`,
+    repair: `- read_error_log: Read recent error logs. Params: {"severity": "error|warn|all", "lines": 50}
+- check_service_health: Check health of system services. Params: {"service": "backend|ollama|database|all"}
+- run_integrity_check: Run integrity checks on data stores. Params: {"target": "dtus|database|seeds|all"}
+- memory_diagnostic: Run memory diagnostics. Params: {}
+- fix_dtu_integrity: Repair broken DTU hashes and citations. Params: {"scope": "broken-only|recent|all"}`,
+  };
   const _brainToolPrompt = _brainToolsEnabled ? `
 
 You have access to the following tools. To use a tool, include a tool call marker in your response EXACTLY like this (one per line, you may use multiple):
 [TOOL_CALL: {"tool": "tool_name", "params": {...}}]
 
 Available tools:
-- web_search: Search the web for current information. Params: {"query": "search terms"}
-- create_dtu: Create a new DTU (Decision/Thought Unit) from the conversation. Params: {"title": "DTU title", "summary": "brief summary", "tags": ["tag1", "tag2"]}
-
-Rules for tool use:
-- Only call a tool when the task genuinely requires it (e.g., sourcing current info, saving a finding).
-- After the tool call marker, continue your response naturally. You will receive the tool results and can then give a final answer.
-- Do NOT fabricate tool results. If you need real-time data, call web_search.` : "";
+${_brainToolCatalogs[brainName] || _brainToolCatalogs.conscious}
+${_sharedToolRules}` : "";
 
   const _doBrainCall = async () => {
     const start = Date.now();
@@ -12498,6 +12519,118 @@ Rules for tool use:
               _brainToolResults.push(dr?.ok
                 ? { tool: "create_dtu", ok: true, dtuId: dr.id || dr.dtu?.id, title: tc.params.title }
                 : { tool: "create_dtu", ok: false, error: dr?.error || "create_dtu failed" });
+            } else if (tc.tool === "search_dtus") {
+              const query = String(tc.params.query || "");
+              const domain = tc.params.domain ? String(tc.params.domain) : undefined;
+              const limit = Math.min(Number(tc.params.limit) || 10, 25);
+              const allDtus = dtusArray();
+              const matches = allDtus.filter(d => {
+                if (domain && d.domain !== domain && !d.tags?.includes(domain)) return false;
+                const text = `${d.title || ""} ${d.tags?.join(" ") || ""} ${d.human?.summary || ""}`.toLowerCase();
+                return query.toLowerCase().split(/\s+/).some(w => text.includes(w));
+              }).slice(0, limit).map(d => ({ id: d.id, title: d.title, domain: d.domain, tier: d.tier, tags: d.tags?.slice(0, 5) }));
+              _brainToolResults.push({ tool: "search_dtus", ok: true, result: JSON.stringify(matches).slice(0, MAX_TOOL_RESULT_LEN), count: matches.length });
+            } else if (tc.tool === "detect_trends") {
+              const domain = String(tc.params.domain || "all");
+              const allDtus = dtusArray();
+              const recent = allDtus.filter(d => {
+                const age = Date.now() - new Date(d.createdAt || 0).getTime();
+                return age < 7 * 24 * 60 * 60 * 1000; // last 7 days
+              });
+              const domainCounts = {};
+              recent.forEach(d => { domainCounts[d.domain || "unknown"] = (domainCounts[d.domain || "unknown"] || 0) + 1; });
+              const trending = Object.entries(domainCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
+              _brainToolResults.push({ tool: "detect_trends", ok: true, result: JSON.stringify({ totalRecent: recent.length, trending, domain }).slice(0, MAX_TOOL_RESULT_LEN) });
+            } else if (tc.tool === "find_cross_domain_links") {
+              const { domainA, domainB } = tc.params;
+              const allDtus = dtusArray();
+              const aDtus = allDtus.filter(d => d.domain === domainA);
+              const bDtus = allDtus.filter(d => d.domain === domainB);
+              const sharedTags = new Set();
+              const aTagSet = new Set(aDtus.flatMap(d => d.tags || []));
+              bDtus.forEach(d => (d.tags || []).forEach(t => { if (aTagSet.has(t)) sharedTags.add(t); }));
+              _brainToolResults.push({ tool: "find_cross_domain_links", ok: true, result: JSON.stringify({ domainA, domainB, sharedTags: [...sharedTags], aCount: aDtus.length, bCount: bDtus.length }).slice(0, MAX_TOOL_RESULT_LEN) });
+            } else if (tc.tool === "get_lens_data") {
+              const lensId = String(tc.params.lensId || "");
+              const query = String(tc.params.query || "");
+              try {
+                const lr = await runMacro("lens", "run", { id: lensId, action: "analyze", params: { query } }, _brainToolCtx);
+                _brainToolResults.push({ tool: "get_lens_data", ok: true, result: JSON.stringify(lr).slice(0, MAX_TOOL_RESULT_LEN) });
+              } catch (_le) {
+                _brainToolResults.push({ tool: "get_lens_data", ok: false, error: `Lens ${lensId}: ${_le?.message || _le}` });
+              }
+            } else if (tc.tool === "classify_content") {
+              const content = String(tc.params.content || "").slice(0, 2000);
+              const classifyBy = String(tc.params.classifyBy || "domain");
+              // Use utility brain for classification (but NOT with tools to prevent recursion)
+              try {
+                const cr = await callBrain("utility", `Classify the following ${classifyBy}. Return ONLY a JSON object with keys "label" and "confidence" (0-1). Content:\n${content}`, { maxTokens: 100, temperature: 0.1 });
+                _brainToolResults.push({ tool: "classify_content", ok: true, result: (cr.content || "").slice(0, MAX_TOOL_RESULT_LEN) });
+              } catch (_ce) {
+                _brainToolResults.push({ tool: "classify_content", ok: false, error: String(_ce?.message || _ce) });
+              }
+            } else if (tc.tool === "quick_validate") {
+              const dtuId = String(tc.params.dtuId || "");
+              const dtu = STATE.dtus?.get(dtuId);
+              if (!dtu) {
+                _brainToolResults.push({ tool: "quick_validate", ok: false, error: "DTU not found" });
+              } else {
+                const checks = { hasTitle: !!dtu.title, hasTags: (dtu.tags?.length || 0) > 0, hasTier: !!dtu.tier, hasContent: !!(dtu.human?.summary || dtu.content), hasSource: !!dtu.source };
+                const pass = Object.values(checks).every(Boolean);
+                _brainToolResults.push({ tool: "quick_validate", ok: true, result: JSON.stringify({ dtuId, pass, checks }).slice(0, MAX_TOOL_RESULT_LEN) });
+              }
+            } else if (tc.tool === "read_error_log") {
+              const severity = String(tc.params.severity || "error");
+              const lines = Math.min(Number(tc.params.lines) || 50, 200);
+              const logs = (STATE.logs || []).filter(l => severity === "all" || l.level === severity).slice(-lines);
+              _brainToolResults.push({ tool: "read_error_log", ok: true, result: JSON.stringify(logs.map(l => ({ level: l.level, msg: l.message, ts: l.timestamp }))).slice(0, MAX_TOOL_RESULT_LEN) });
+            } else if (tc.tool === "check_service_health") {
+              const mem = process.memoryUsage();
+              const health = {
+                backend: { status: "running", uptime: process.uptime(), memMB: Math.round(mem.heapUsed / 1024 / 1024) },
+                database: { status: db ? "connected" : "disconnected" },
+                ollama: { conscious: BRAIN?.conscious?.stats || {}, subconscious: BRAIN?.subconscious?.stats || {}, utility: BRAIN?.utility?.stats || {}, repair: BRAIN?.repair?.stats || {} },
+              };
+              _brainToolResults.push({ tool: "check_service_health", ok: true, result: JSON.stringify(health).slice(0, MAX_TOOL_RESULT_LEN) });
+            } else if (tc.tool === "run_integrity_check") {
+              const target = String(tc.params.target || "all");
+              const results = {};
+              if (target === "dtus" || target === "all") {
+                const total = STATE.dtus?.size || 0;
+                const noTitle = dtusArray().filter(d => !d.title).length;
+                const noTier = dtusArray().filter(d => !d.tier).length;
+                results.dtus = { total, noTitle, noTier, healthy: total - noTitle - noTier };
+              }
+              if (target === "database" || target === "all") {
+                results.database = db ? { status: "ok", tables: db.prepare("SELECT count(*) as c FROM sqlite_master WHERE type='table'").get().c } : { status: "disconnected" };
+              }
+              _brainToolResults.push({ tool: "run_integrity_check", ok: true, result: JSON.stringify(results).slice(0, MAX_TOOL_RESULT_LEN) });
+            } else if (tc.tool === "memory_diagnostic") {
+              const mem = process.memoryUsage();
+              _brainToolResults.push({ tool: "memory_diagnostic", ok: true, result: JSON.stringify({ rss: `${Math.round(mem.rss / 1024 / 1024)} MB`, heap: `${Math.round(mem.heapUsed / 1024 / 1024)}/${Math.round(mem.heapTotal / 1024 / 1024)} MB`, external: `${Math.round(mem.external / 1024 / 1024)} MB`, dtuCount: STATE.dtus?.size || 0, sessionCount: STATE.sessions?.size || 0 }) });
+            } else if (tc.tool === "fix_dtu_integrity") {
+              const scope = String(tc.params.scope || "broken-only");
+              const allDtus = dtusArray();
+              let fixed = 0;
+              allDtus.forEach(d => {
+                if (!d.tier) { d.tier = "regular"; fixed++; }
+                if (!d.title && d.human?.summary) { d.title = d.human.summary.slice(0, 80); fixed++; }
+              });
+              if (fixed > 0) saveStateDebounced();
+              _brainToolResults.push({ tool: "fix_dtu_integrity", ok: true, result: JSON.stringify({ scope, scanned: allDtus.length, fixed }) });
+            } else if (tc.tool === "run_lens_action") {
+              const { domain: ld, action: la, params: lp } = tc.params;
+              const handler = LENS_ACTIONS?.get(`${ld}.${la}`);
+              if (!handler) {
+                _brainToolResults.push({ tool: "run_lens_action", ok: false, error: `No handler for ${ld}.${la}` });
+              } else {
+                try {
+                  const lr = await handler(lp || {}, _brainToolCtx);
+                  _brainToolResults.push({ tool: "run_lens_action", ok: true, result: JSON.stringify(lr).slice(0, MAX_TOOL_RESULT_LEN) });
+                } catch (_le) {
+                  _brainToolResults.push({ tool: "run_lens_action", ok: false, error: String(_le?.message || _le) });
+                }
+              }
             } else {
               _brainToolResults.push({ tool: tc.tool, ok: false, error: `Unknown tool: ${tc.tool}` });
             }
@@ -12512,7 +12645,7 @@ Rules for tool use:
           if (!r.ok) return `[TOOL_RESULT: ${r.tool}] Error: ${r.error}`;
           if (r.tool === "web_search") return `[TOOL_RESULT: web_search] ${r.result}`;
           if (r.tool === "create_dtu") return `[TOOL_RESULT: create_dtu] Created DTU "${r.title}" (id: ${r.dtuId})`;
-          return `[TOOL_RESULT: ${r.tool}] ${JSON.stringify(r).slice(0, 4000)}`;
+          return `[TOOL_RESULT: ${r.tool}] ${r.result || JSON.stringify(r).slice(0, 4000)}`;
         }).join("\n\n");
 
         // Strip tool call markers from original response
@@ -12744,6 +12877,7 @@ async function consciousChat(userMessage, lens = null, options = {}) {
         temperature: 0.3,
         maxTokens: 500,
         timeout: 15000,
+        enableTools: true,
       });
 
       if (result.ok && result.content) {
@@ -13128,6 +13262,7 @@ async function repairLensCall(action, domain, data) {
     temperature: repParams.temperature,
     maxTokens: repParams.maxTokens,
     timeout: repParams.timeout,
+    enableTools: true,
   });
 
   if (result.ok && result.content) {
@@ -13206,6 +13341,7 @@ async function entityExploreLens(entity, lens) {
     temperature: 0.8,
     maxTokens: 400,
     timeout: 30000,
+    enableTools: true,
   });
 
   if (result.ok && result.content) {
