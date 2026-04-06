@@ -514,59 +514,86 @@ export type ConcordPackageScope =
   | 'moderate'
   | 'lens';
 
+/**
+ * Master configuration object that wires together every infra tool.
+ * Typically loaded once at application startup from a JSON / env config.
+ */
 export interface InfraToolsConfig {
+  /** CPM — package manager settings */
   cpm: {
     registryUrl: string;
     cacheDir: string;
     defaultManifest: Partial<CpmManifest>;
   };
+
+  /** Validation API connection */
   validation: {
     endpoint: string;
     timeout: number;
     retries: number;
   };
+
+  /** DTU Protocol defaults */
   dtu: {
     schemaVersion: string;
     defaultLicense: string;
     hashAlgorithm: string;
   };
+
+  /** Brain as a Service routing */
   baas: {
     endpoint: string;
     defaultBrain: BrainType;
     maxTokens: number;
     temperature: number;
   };
+
+  /** Concord Identity / OAuth */
   cid: {
     oauthEndpoint: string;
     clientId: string;
     defaultScopes: OAuthScope[];
   };
+
+  /** Real-time sync layer */
   sync: {
     server: SyncServerConfig;
     reconnectInterval: number;
     maxRetries: number;
   };
+
+  /** Procedural generation engine */
   procgen: {
     defaultCulture: string;
     maxNPCBatch: number;
     terrainResolution: number;
   };
+
+  /** Package registry search & browse */
   registry: {
     endpoint: string;
     defaultPageSize: number;
     cacheTTL: number;
   };
+
+  /** Observability & auto-repair */
   observe: ObserveConfig;
+
+  /** Simulation test runner */
   test: {
     parallelism: number;
     timeout: number;
     reportDir: string;
   };
+
+  /** Content moderation */
   moderate: {
     defaultPolicy: ModerationPolicy;
     autoFlag: boolean;
     reviewEndpoint: string;
   };
+
+  /** World Lens educational layers */
   lens: {
     maxSections: number;
     defaultDifficulty: LensDefinition['metadata']['difficulty'];
