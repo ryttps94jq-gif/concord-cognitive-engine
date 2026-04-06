@@ -60,6 +60,30 @@ const nextConfig = {
     // Keep strict checks by default; allow CI Docker build to opt out explicitly.
     ignoreDuringBuilds: process.env.CI_SKIP_LINT_IN_BUILD === '1',
   },
+  // Proxy API and socket requests to the backend server in production.
+  // The Cloudflare tunnel routes to the frontend (port 3000); these rewrites
+  // forward /api/* and /socket.io/* to the backend on port 5050.
+  async rewrites() {
+    const backendUrl = process.env.BACKEND_URL || 'http://127.0.0.1:5050';
+    return [
+      {
+        source: '/api/:path*',
+        destination: `${backendUrl}/api/:path*`,
+      },
+      {
+        source: '/socket.io/:path*',
+        destination: `${backendUrl}/socket.io/:path*`,
+      },
+      {
+        source: '/health',
+        destination: `${backendUrl}/health`,
+      },
+      {
+        source: '/ready',
+        destination: `${backendUrl}/ready`,
+      },
+    ];
+  },
   // WebXR opts for AR lens
   webpack: (config, { isServer }) => {
     if (!isServer) {

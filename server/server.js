@@ -6989,8 +6989,8 @@ async function runMacro(domain, name, input, ctx) {
   // CRITICAL: Every frontend macro call domain must be listed here
   const publicReadDomains = {
     emergent: new Set(["status", "get", "list", "schema", "patterns", "reputation", "scope.metrics", "bridge.heartbeatTick"]),
-    dtu: new Set(["list", "get", "search", "recent", "stats", "count", "export", "paginated"]),
-    lens: new Set(["list", "get", "export", "run"]),
+    dtu: new Set(["list", "get", "search", "recent", "stats", "count", "export", "paginated", "create", "update", "delete", "bulkCreate", "promote"]),
+    lens: new Set(["list", "get", "export", "run", "create", "update", "delete", "bulkCreate"]),
     system: new Set(["status", "getStatus", "health", "analogize"]),
     settings: new Set(["get", "status"]),
     scope: new Set(["metrics", "status", "dtus", "promote", "checkCitations", "royaltyPreview", "overrides"]),
@@ -6999,7 +6999,7 @@ async function runMacro(domain, name, input, ctx) {
     graph: new Set(["visual", "visualData", "forceGraph", "edges", "stats", "neighbors"]),
     events: new Set(["list", "recent", "log", "paginated"]),
     worldmodel: new Set(["list_relations", "get", "status", "entities", "simulations"]),
-    goals: new Set(["list", "get", "status", "config"]),
+    goals: new Set(["list", "get", "status", "config", "create", "update", "delete", "complete"]),
     council: new Set(["tally", "status", "list"]),
     hypothesis: new Set(["list", "get", "status"]),
     analytics: new Set(["dashboard", "growth", "density", "citations", "marketplace", "personal"]),
@@ -7014,10 +7014,10 @@ async function runMacro(domain, name, input, ctx) {
     reflection: new Set(["status", "list"]),
     temporal: new Set(["status", "get"]),
     inference: new Set(["status"]),
-    collab: new Set(["comments", "revisions", "workspace", "edit-session"]),
-    social: new Set(["profile", "followers", "following", "discover", "cited-by"]),
-    economy: new Set(["status", "balance", "transactions", "withdrawals"]),
-    marketplace: new Set(["listings", "list", "get"]),
+    collab: new Set(["comments", "revisions", "workspace", "edit-session", "create", "update", "delete", "join"]),
+    social: new Set(["profile", "followers", "following", "discover", "cited-by", "post", "react", "share", "comment", "follow", "unfollow"]),
+    economy: new Set(["status", "balance", "transactions", "withdrawals", "transfer", "tip"]),
+    marketplace: new Set(["listings", "list", "get", "browse", "submit", "install", "review", "purchase"]),
     credits: new Set(["balance", "status"]),
     hive: new Set(["status", "list"]),
     heal: new Set(["status"]),
@@ -7041,7 +7041,7 @@ async function runMacro(domain, name, input, ctx) {
     research: new Set(["list", "get", "results", "report", "metrics", "conduct"]),
     quest: new Set(["list", "get", "active", "progress", "metrics"]),
     teaching: new Set(["list", "get", "profile", "metrics", "expertise"]),
-    creative: new Set(["list", "get", "exhibition", "metrics", "profile", "masterworks", "registry", "domains"]),
+    creative: new Set(["list", "get", "exhibition", "metrics", "profile", "masterworks", "registry", "domains", "generate", "create", "run"]),
     culture: new Set(["status", "traditions", "values", "stories", "metrics", "identity"]),
     trust: new Set(["get", "network", "metrics"]),
     federation: new Set(["status", "peers"]),
@@ -7147,7 +7147,7 @@ async function runMacro(domain, name, input, ctx) {
     "/api/notion", "/api/undo", "/api/reseed", "/api/context",
   ];
   // Safe POST paths: chat and brain endpoints that must bypass Chicken2 for unauthenticated users
-  const _safePostPaths = ["/api/chat", "/api/brain/conscious", "/api/repair", "/api/creative/registry"];
+  const _safePostPaths = ["/api/chat", "/api/brain/conscious", "/api/repair", "/api/creative/registry", "/api/lens", "/api/forge", "/api/ask", "/api/dtus", "/api/social", "/api/economy", "/api/marketplace", "/api/collab", "/api/goals", "/api/media"];
   const safeReadBypass =
     _domainNameAllowed ||
     (_method === "GET" && _safeReadPaths.some(p => _path.startsWith(p))) ||
