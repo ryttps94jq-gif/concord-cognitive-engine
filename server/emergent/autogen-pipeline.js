@@ -78,6 +78,22 @@ export function ensurePipelineState(STATE) {
       },
     };
   }
+  // Ensure metrics sub-object exists even if pipeline state was deserialized without it
+  if (!STATE._autogenPipeline.metrics) {
+    STATE._autogenPipeline.metrics = {
+      totalRuns: 0,
+      byIntent: {},
+      byVariant: {},
+      candidatesProduced: 0,
+      candidatesRejected: 0,
+      shadowsCreated: 0,
+      ollamaShapings: 0,
+      ollamaFailures: 0,
+      cloudEscalations: 0,
+      noveltyRejects: 0,
+      patchProposals: 0,
+    };
+  }
   return STATE._autogenPipeline;
 }
 

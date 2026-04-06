@@ -1138,18 +1138,17 @@ if (AUTH_MODE_RAW && !AUTH_MODE_VALUES.has(AUTH_MODE_RAW)) {
 }
 
 // SECURITY: JWT_SECRET must be set in production
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET && NODE_ENV === "production" && AUTH_USES_JWT) {
+const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString("hex");
+if (!process.env.JWT_SECRET && NODE_ENV === "production" && AUTH_USES_JWT) {
   console.error("\n[FATAL] JWT_SECRET environment variable is required in production.");
   console.error("[FATAL] Generate one with: openssl rand -hex 64");
   console.error("[FATAL] Add it to your .env file or environment variables.\n");
   process.exit(1);
 }
-// In development, generate a temporary secret (will change on restart)
-const EFFECTIVE_JWT_SECRET = JWT_SECRET || crypto.randomBytes(64).toString("hex");
-if (!JWT_SECRET) {
-  console.warn("[Auth] WARNING: No JWT_SECRET set. Using temporary secret - sessions will not persist across restarts.");
+if (!process.env.JWT_SECRET) {
+  structuredLog("warn", "auth_jwt_generated", { message: "No JWT_SECRET env var — generated random secret. Sessions will not persist across restarts." });
 }
+const EFFECTIVE_JWT_SECRET = JWT_SECRET;
 
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 const BCRYPT_ROUNDS = Number(process.env.BCRYPT_ROUNDS || 12);
@@ -3485,6 +3484,10 @@ function initDatabase() {
 }
 
 const _DB_READY = initDatabase();
+const DB_AVAILABLE = _DB_READY && db !== null;
+if (!DB_AVAILABLE) {
+  structuredLog("info", "db_unavailable", { message: "Database not available — features requiring persistent storage will use fallback or be disabled." });
+}
 
 // ---- "Everything Real": Run schema migrations after DB init ----
 if (db) {
@@ -10955,7 +10958,7 @@ function initLLMPipeline() {
   const ollamaUrl = process.env.OLLAMA_URL || process.env.BRAIN_CONSCIOUS_URL || process.env.OLLAMA_HOST || "http://ollama:11434";
   LLM_PIPELINE.providers.ollama.url = ollamaUrl;
   // Use BRAIN_CONSCIOUS_MODEL if set; fall back to OLLAMA_MODEL; last resort llama3.2
-  LLM_PIPELINE.providers.ollama.model = process.env.OLLAMA_MODEL || process.env.BRAIN_CONSCIOUS_MODEL || "qwen2.5:7b";
+  LLM_PIPELINE.providers.ollama.model = process.env.OLLAMA_MODEL || process.env.BRAIN_CONSCIOUS_MODEL || "concord-conscious:latest";
   LLM_PIPELINE.providers.ollama.enabled = Boolean(ollamaUrl);
 
   LLM_PIPELINE.providers.openai.enabled = Boolean(OPENAI_API_KEY);
@@ -11425,7 +11428,7 @@ Heal well.`,
 const BRAIN = {
   conscious: {
     url: process.env.BRAIN_CONSCIOUS_URL || process.env.OLLAMA_HOST || "http://ollama-conscious:11434",
-    model: process.env.BRAIN_CONSCIOUS_MODEL || "concord-conscious:14b",
+    model: process.env.BRAIN_CONSCIOUS_MODEL || "concord-conscious:latest",
     role: "chat, deep reasoning, complex queries",
     systemPrompt: BRAIN_IDENTITY.conscious,
     enabled: false,
@@ -11433,7 +11436,7 @@ const BRAIN = {
   },
   subconscious: {
     url: process.env.BRAIN_SUBCONSCIOUS_URL || "http://ollama-subconscious:11434",
-    model: process.env.BRAIN_SUBCONSCIOUS_MODEL || "qwen2.5:7b",
+    model: process.env.BRAIN_SUBCONSCIOUS_MODEL || "qwen2.5:7b-instruct-q4_K_M",
     role: "autogen, dream, evolution, synthesis, birth",
     systemPrompt: BRAIN_IDENTITY.subconscious,
     enabled: false,
@@ -16778,7 +16781,7 @@ let localReply = formatCrispResponse({
     : (process.env.OLLAMA_HOST || "http://ollama-conscious:11434");
   const brainModel = BRAIN.conscious.enabled
     ? BRAIN.conscious.model
-    : (process.env.BRAIN_CONSCIOUS_MODEL || "qwen2.5:7b");
+    : (process.env.BRAIN_CONSCIOUS_MODEL || "concord-conscious:latest");
 
   // ===== UNIFIED CONTEXT ENGINE: Retrieve DTUs across all tiers =====
   // Pull context from the unified context engine spanning regular + MEGA + HYPER tiers
@@ -24229,7 +24232,7 @@ register("search", "reindex", (_ctx, _input) => {
 
 // ---- Local LLM Support (Ollama) ----
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || process.env.BRAIN_CONSCIOUS_URL || process.env.OLLAMA_HOST || "http://ollama-conscious:11434";
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || process.env.BRAIN_CONSCIOUS_MODEL || "qwen2.5:7b";
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || process.env.BRAIN_CONSCIOUS_MODEL || "concord-conscious:latest";
 // Auto-enable if any Ollama URL or brain is configured
 const OLLAMA_ENABLED = process.env.OLLAMA_ENABLED === "true" || process.env.OLLAMA_ENABLED === "1" || Boolean(process.env.BRAIN_CONSCIOUS_URL) || Boolean(process.env.OLLAMA_HOST);
 
@@ -38440,7 +38443,11 @@ app.get("/api/intelligence/dashboard", asyncHandler(async (_req, res) => {
 structuredLog("info", "module_loaded", { detail: "Semantic Intelligence Layer: embeddings, cache, distillation, precompute, model optimizer, affect, economics" });
 
 // ── "Everything Real": Register durable DB-backed endpoints ──────────────────
-registerDurableEndpoints(app, db);
+if (DB_AVAILABLE) {
+  registerDurableEndpoints(app, db);
+} else {
+  structuredLog("info", "durable_endpoints_skipped", { message: "Database not available — durable endpoints disabled." });
+}
 
 // ── Guidance Layer v1: events, SSE, inspector, undo, suggestions ─────────────
 registerGuidanceEndpoints(app, db);
