@@ -671,7 +671,7 @@ export default function ChatLensPage() {
           setIsStreaming(false);
           setStreamingContent('');
           return {
-            reply: accumulated,
+            reply: accumulated || (finalOut as Record<string, unknown>)?.reply as string || '',
             refs: (finalOut as Record<string, unknown>)?.refs,
             sources: (finalOut as Record<string, unknown>)?.sources,
             webAugmented: (finalOut as Record<string, unknown>)?.webAugmented,

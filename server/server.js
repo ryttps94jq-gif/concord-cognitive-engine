@@ -3286,7 +3286,7 @@ const STATE = {
     mode: "full_blast",
     thresholdOverlap: 0.95,
     thresholdHomeostasis: 0.80,
-    thresholdSuffering: 0.65,
+    thresholdSuffering: 0.95,
     hardFails: { inversionVacuum: true, negativeValence: true, genesisViolation: true },
     logs: [],
     lastProof: null,
@@ -6893,7 +6893,7 @@ function inLatticeReality({ type="macro", domain="", name="", input=null, ctx=nu
   const rd = _c2repairDominance();
   // 5) suffering boundary check
   const suffering = Number(STATE.__chicken2?.metrics?.suffering ?? 0);
-  const sThr = Number(cfg.thresholdSuffering ?? 0.65);
+  const sThr = Number(cfg.thresholdSuffering ?? 0.95);
   if (suffering > sThr){
     cfg.metrics.rejections++;
     return { ok:false, severity:"quarantine", reason:"suffering_boundary_exceeded", meta:{ suffering, threshold: sThr } };
@@ -7149,10 +7149,8 @@ async function runMacro(domain, name, input, ctx) {
   // Safe POST paths: chat and brain endpoints that must bypass Chicken2 for unauthenticated users
   const _safePostPaths = ["/api/chat", "/api/brain/conscious", "/api/repair", "/api/creative/registry"];
   const safeReadBypass =
-    (_method === "GET" && (
-      _safeReadPaths.some(p => _path.startsWith(p)) ||
-      _domainNameAllowed
-    )) ||
+    _domainNameAllowed ||
+    (_method === "GET" && _safeReadPaths.some(p => _path.startsWith(p))) ||
     (_method === "POST" && _safePostPaths.some(p => _path.startsWith(p))) ||
     (domain === "chat" && (name === "respond" || name === "feedback"));
 
@@ -7166,10 +7164,8 @@ async function runMacro(domain, name, input, ctx) {
 
       // Inner safeReadBypass: reuses same path list (Gate 3 of 3, inner)
       const safeReadBypass =
-        (reqMethod === "GET" && (
-          _safeReadPaths.some(p => reqPath.startsWith(p)) ||
-          _domainNameAllowed
-        )) ||
+        _domainNameAllowed ||
+        (reqMethod === "GET" && _safeReadPaths.some(p => reqPath.startsWith(p))) ||
         (reqMethod === "POST" && _safePostPaths.some(p => reqPath.startsWith(p))) ||
         (domain === "chat" && (name === "respond" || name === "feedback"));
 

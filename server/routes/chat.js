@@ -51,7 +51,7 @@ export default function registerChatRoutes(app, {
       // This preserves existing clients while enabling event-stream when desired.
       if (wantsStream) {
         enforceEthosInvariant("chat_stream");
-        if (!STATE.__chicken3?.streamingEnabled) throw new Error("streaming disabled");
+        if (!STATE.__chicken3?.streamingEnabled) wantsStream = false; // Fall through to non-streaming response
 
         res.set({
           "Content-Type": "text/event-stream",
@@ -153,7 +153,14 @@ export default function registerChatRoutes(app, {
     const errorId = uid("err");
     try {
       enforceEthosInvariant("chat_stream");
-      if (!STATE.__chicken3?.streamingEnabled) throw new Error("streaming disabled");
+      if (!STATE.__chicken3?.streamingEnabled) {
+        // Streaming not enabled — return standard JSON response instead of throwing
+        req.body = enforceRequestInvariants(req, req.body || {});
+        req._concordMode = req.body.mode || "chat";
+        const fallbackCtx = makeCtx(req);
+        const fallbackOut = await runMacro("chat","respond", req.body, fallbackCtx);
+        return res.json(fallbackOut);
+      }
       req.body = enforceRequestInvariants(req, req.body || {});
       req._concordMode = req.body.mode || "chat";
       const ctx = makeCtx(req);
@@ -168,7 +175,7 @@ export default function registerChatRoutes(app, {
       const out = await runMacro("chat","respond", req.body, ctx);
       kernelTick({ type: "USER_MSG", meta: { path: req.path, stream: true }, signals: { benefit: out?.ok?0.2:0, error: out?.ok?0:0.2 } });
 
-      const content = String(out?.content || out?.answer || out?.text || "");
+      const content = String(out?.reply || out?.content || out?.answer || out?.text || "");
       // Deterministic chunking (local-first). If you later add true token-streaming LLM, swap this chunker.
       const step = clamp(Number(req.body?.chunkSize || 220), 40, 1200);
       for (let i = 0; i < content.length; i += step) {
