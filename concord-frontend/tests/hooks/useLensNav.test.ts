@@ -29,7 +29,7 @@ describe('useLensNav', () => {
     mockedGetLensById.mockReturnValue({
       id: 'chat',
       name: 'Chat',
-      icon: vi.fn() as any,
+      icon: vi.fn() as unknown,
       description: 'Chat lens',
       category: 'core',
       showInSidebar: true,
@@ -91,7 +91,7 @@ describe('useLensNav', () => {
     mockedGetLensById.mockReturnValue({
       id: 'board',
       name: 'Board',
-      icon: vi.fn() as any,
+      icon: vi.fn() as unknown,
       description: 'Board',
       category: 'core',
       showInSidebar: true,

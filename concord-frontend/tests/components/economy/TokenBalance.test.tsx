@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+// QueryClient and QueryClientProvider are used via the mock below
 import { TokenBalance } from '@/components/economy/TokenBalance';
 
 // ── Mock API ─────────────────────────────────────────────────────────
@@ -12,7 +12,7 @@ vi.mock('@tanstack/react-query', async () => {
   const actual = await vi.importActual('@tanstack/react-query');
   return {
     ...actual,
-    useQuery: (opts: { queryKey: unknown[] }) => ({
+    useQuery: (_opts: { queryKey: unknown[] }) => ({
       data: mockBalanceData,
       isLoading: mockIsLoading,
       isError: false,

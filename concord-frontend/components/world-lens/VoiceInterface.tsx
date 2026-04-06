@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Mic, MicOff, Volume2, VolumeX, Settings, ChevronDown,
   ChevronUp, Brain, CheckCircle, XCircle, MessageSquare,
-  Radio, Clock, Loader2, Wand2, AlertCircle, Trash2,
+  Radio, Clock, Loader2, AlertCircle, Trash2,
 } from 'lucide-react';
 
 /* ── Types ─────────────────────────────────────────────────────── */
@@ -157,7 +157,7 @@ export default function VoiceInterface({
   const [commandHistory, setCommandHistory] = useState<VoiceCommand[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
-  const [wakeWordActive, setWakeWordActive] = useState(false);
+  const [wakeWordActive, _setWakeWordActive] = useState(false);
   const [npcMode, setNpcMode] = useState(false);
 
   const holdTimerRef = useRef<NodeJS.Timeout | null>(null);

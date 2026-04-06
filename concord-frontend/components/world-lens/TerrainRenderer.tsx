@@ -337,7 +337,7 @@ export default function TerrainRenderer({
 
           // Vertex color splatting for zone boundaries
           const colors = new Float32Array(posAttr.count * 3);
-          const baseColor = new THREE.Color(matConfig.color);
+          const _baseColor = new THREE.Color(matConfig.color);
           for (let i = 0; i < posAttr.count; i++) {
             const vx = posAttr.getX(i) + chunkWorldX;
             const vz = posAttr.getZ(i) + chunkWorldZ;

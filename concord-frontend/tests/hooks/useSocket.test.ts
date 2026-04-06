@@ -264,7 +264,7 @@ describe('useSocket', () => {
 
     // The hook registers 'connect', 'disconnect', 'connect_error' + all forwarded events
     // On unmount, it calls socket.off() for each individually (shared singleton — no disconnect)
-    const onCallCount = mockSocketInstance.on.mock.calls.length;
+    const _onCallCount = mockSocketInstance.on.mock.calls.length;
 
     unmount();
 
