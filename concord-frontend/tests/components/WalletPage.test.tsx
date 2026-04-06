@@ -24,10 +24,9 @@ vi.mock('@/hooks/useLensNav', () => ({
 }));
 
 // Mock next/navigation
+const mockSearchParams = new URLSearchParams();
 vi.mock('next/navigation', () => ({
-  useSearchParams: vi.fn(() => ({
-    get: vi.fn(() => null),
-  })),
+  useSearchParams: vi.fn(() => mockSearchParams),
   useRouter: vi.fn(() => ({
     push: vi.fn(),
     replace: vi.fn(),
@@ -99,7 +98,7 @@ describe('WalletPage', () => {
           data: { balance: 1250, totalCredits: 2000, totalDebits: 750, tokens: 1250 },
         });
       }
-      if (url.includes('transactions')) {
+      if (url.includes('history') || url.includes('transactions')) {
         return Promise.resolve({
           data: {
             transactions: [

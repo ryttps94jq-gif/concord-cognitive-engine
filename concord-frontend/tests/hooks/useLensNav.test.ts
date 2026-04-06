@@ -52,8 +52,8 @@ describe('useLensNav', () => {
   });
 
   it('warns in development when lens is not in registry', () => {
-    const originalDev = import.meta.env.DEV;
-    import.meta.env.DEV = true;
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     mockedGetLensById.mockReturnValue(undefined);
@@ -65,12 +65,12 @@ describe('useLensNav', () => {
     );
 
     warnSpy.mockRestore();
-    import.meta.env.DEV = originalDev;
+    process.env.NODE_ENV = originalEnv;
   });
 
   it('does not warn in production when lens is not in registry', () => {
-    const originalDev = import.meta.env.DEV;
-    import.meta.env.DEV = false;
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     mockedGetLensById.mockReturnValue(undefined);
@@ -80,12 +80,12 @@ describe('useLensNav', () => {
     expect(warnSpy).not.toHaveBeenCalled();
 
     warnSpy.mockRestore();
-    import.meta.env.DEV = originalDev;
+    process.env.NODE_ENV = originalEnv;
   });
 
   it('does not warn when lens exists in registry', () => {
-    const originalDev = import.meta.env.DEV;
-    import.meta.env.DEV = true;
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     mockedGetLensById.mockReturnValue({
@@ -105,7 +105,7 @@ describe('useLensNav', () => {
     expect(warnSpy).not.toHaveBeenCalled();
 
     warnSpy.mockRestore();
-    import.meta.env.DEV = originalDev;
+    process.env.NODE_ENV = originalEnv;
   });
 
   it('updates when lensSlug changes', () => {

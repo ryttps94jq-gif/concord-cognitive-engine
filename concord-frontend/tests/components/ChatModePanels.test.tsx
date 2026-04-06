@@ -239,11 +239,12 @@ describe('ConnectPanel', () => {
 // ── ChatPanel ────────────────────────────────────────────────────────────────
 
 describe('ChatPanel', () => {
-  it('renders null (empty state for free-form chat)', () => {
+  it('renders lens indicator for free-form chat', () => {
     const { container } = render(
       <ChatPanel currentLens="healthcare" onSendMessage={vi.fn()} />
     );
-    expect(container.innerHTML).toBe('');
+    expect(container.innerHTML).not.toBe('');
+    expect(container.textContent).toContain('healthcare');
   });
 });
 

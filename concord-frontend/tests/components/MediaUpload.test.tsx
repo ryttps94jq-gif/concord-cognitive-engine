@@ -66,6 +66,18 @@ vi.mock('framer-motion', () => {
   };
 });
 
+// Mock next/image
+vi.mock('next/image', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const React = require('react');
+  const NextImage = React.forwardRef((props: Record<string, unknown>, ref: unknown) => {
+    const { fill: _fill, priority: _priority, ...rest } = props;
+    return React.createElement('img', { ...rest, ref });
+  });
+  NextImage.displayName = 'NextImage';
+  return { __esModule: true, default: NextImage };
+});
+
 // Mock the api client
 vi.mock('@/lib/api/client', () => ({
   api: {
@@ -99,6 +111,17 @@ vi.mock('@tanstack/react-query', () => ({
   QueryClient: vi.fn(),
   QueryClientProvider: ({ children }: Record<string, unknown>) => children,
 }));
+
+// Polyfill File.prototype.arrayBuffer for jsdom
+if (!File.prototype.arrayBuffer) {
+  File.prototype.arrayBuffer = function () {
+    return new Promise<ArrayBuffer>((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as ArrayBuffer);
+      reader.readAsArrayBuffer(this);
+    });
+  };
+}
 
 import { MediaUpload } from '@/components/media/MediaUpload';
 import { api } from '@/lib/api/client';

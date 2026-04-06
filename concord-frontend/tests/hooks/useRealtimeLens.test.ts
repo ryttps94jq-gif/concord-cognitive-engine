@@ -94,12 +94,13 @@ describe('useRealtimeLens', () => {
       expect(result.current.insights).toEqual([]);
     });
 
-    it('returns isLive based on socket connection', () => {
+    it('returns isLive as false before receiving data', () => {
       const { result } = renderHook(() => useRealtimeLens('finance'), {
         wrapper: createWrapper(),
       });
 
-      expect(result.current.isLive).toBe(true);
+      // isLive requires both isConnected AND hasReceivedData
+      expect(result.current.isLive).toBe(false);
     });
 
     it('returns null lastUpdated initially', () => {
