@@ -12693,6 +12693,9 @@ ${_sharedToolRules}` : "";
     }
     // ── End tool-call handling ──
 
+    // Notify event bus of successful brain response
+    try { eventBus.emit("brain.responded", { brain: brainName, tokens: result.tokens }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+
     return result;
   };
 
@@ -15906,6 +15909,9 @@ register("dtu", "create", async (ctx, input) => {
   await pipelineCommitDTU(ctx, dtu, { op: 'dtu.create', allowRewrite: true });
   ctx.log("dtu.create", `Created DTU: ${title}`, { id: dtu.id, tier, tags, source, score: gate.score });
 
+  // Notify event bus of DTU creation
+  try { eventBus.emit("dtu.created", { id: dtu.id, title: dtu.title, domain: dtu.domain, creatorId: dtu.authorId || source }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+
   // Async embedding generation (NEVER blocks DTU creation — Rule #1)
   embedDTU(dtu).catch(() => {});
 
@@ -15970,6 +15976,10 @@ register("dtu", "update", (ctx, input) => {
 
   upsertDTU(updated, { broadcast: true });
   ctx.log("dtu.update", `Updated DTU: ${updated.title}`, { id, version: updated._version });
+
+  // Notify event bus of DTU update
+  try { eventBus.emit("dtu.updated", { id, title: updated.title }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+
   return { ok: true, dtu: updated };
 }, { description: "Update an existing DTU" });
 
@@ -16017,6 +16027,10 @@ register("dtu", "delete", (ctx, input) => {
   }
 
   ctx.log("dtu.delete", `Deleted DTU: ${dtu.title}`, { id });
+
+  // Notify event bus of DTU composting
+  try { eventBus.emit("dtu.composted", { id }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+
   return { ok: true, deleted: { id, title: dtu.title } };
 }, { description: "Delete a DTU by id" });
 
@@ -41059,6 +41073,9 @@ async function startDreamCycle() {
     ds.currentPhase = DREAM_PHASES[i];
     ds.progress = i / DREAM_PHASES.length;
 
+    // Notify event bus of dream phase start
+    try { eventBus.emit("dream.phase", { phase: DREAM_PHASES[i].id, entityId: ds.entityId || "system" }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+
     try {
       switch (DREAM_PHASES[i].id) {
         case "replay": await dreamPhaseReplay(); break;
@@ -45458,6 +45475,11 @@ function setupEventBusWebSocketBridge(wss) {
     "circuit.open": "circuit_event",
     "circuit.closed": "circuit_event",
     "health.critical": "health_alert",
+    "bridge.organism.response": "organism:response",
+    "bridge.debate.initiate": "debate:initiated",
+    "bridge.organism.birth": "organism:birth",
+    "bridge.organism.denied": "organism:denied",
+    "bridge.organism.death": "organism:death",
   };
 
   for (const [eventType, wsType] of Object.entries(eventToWsType)) {
