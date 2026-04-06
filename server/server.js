@@ -34732,6 +34732,118 @@ app.post("/api/undo", (req, res) => {
   }
 });
 
+// Events log — threads lens expects conversations from chat sessions
+app.get("/api/events/log", (req, res) => {
+  try {
+    const type = req.query.type;
+    const limit = Math.min(Number(req.query.limit) || 20, 100);
+
+    if (type === "chat") {
+      // Build conversation list from STATE.sessions
+      const conversations = [];
+      for (const [sessionId, sess] of (STATE.sessions || new Map())) {
+        const msgs = sess.messages || [];
+        if (msgs.length === 0) continue;
+        const userMsgs = msgs.filter(m => m.role === "user");
+        const lastMsg = msgs[msgs.length - 1];
+        conversations.push({
+          id: sessionId,
+          title: userMsgs[0]?.content?.slice(0, 80) || "Untitled",
+          summary: userMsgs.slice(-1)[0]?.content?.slice(0, 120) || "",
+          lastMessage: lastMsg?.content?.slice(0, 200) || "",
+          messageCount: msgs.length,
+          createdAt: sess.createdAt || msgs[0]?.ts || nowISO(),
+          updatedAt: lastMsg?.ts || sess.createdAt || nowISO(),
+        });
+      }
+      conversations.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+      return res.json({ ok: true, conversations: conversations.slice(0, limit) });
+    }
+
+    // Generic event log
+    const events = (STATE.logs || []).slice(-limit).reverse().map(log => ({
+      id: log.id || uid("evt"),
+      type: log.domain || "system",
+      action: log.action || "event",
+      message: log.message || "",
+      timestamp: log.ts || log.timestamp || nowISO(),
+    }));
+    return res.json({ ok: true, events });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+// Lattice beacon — resonance lens boundary scan
+app.get("/api/lattice/beacon", (_req, res) => {
+  try {
+    const dtus = dtusArray();
+    const total = dtus.length;
+    const hyper = dtus.filter(d => d.tier === "hyper").length;
+    const mega = dtus.filter(d => d.tier === "mega").length;
+    const regular = total - hyper - mega;
+    const domains = new Set(dtus.map(d => d.domain).filter(Boolean));
+    const recentDtus = dtus.filter(d => {
+      const ts = d.updatedAt || d.createdAt;
+      return ts && (Date.now() - new Date(ts).getTime()) < 86400000;
+    });
+
+    // Compute boundary signals
+    const orphanCount = dtus.filter(d => !d.lineage?.parents?.length && !d.lineage?.children?.length).length;
+    const avgTags = total > 0 ? dtus.reduce((s, d) => s + (d.tags?.length || 0), 0) / total : 0;
+
+    return res.json({
+      ok: true,
+      boundary: {
+        totalDTUs: total, hyperCount: hyper, megaCount: mega, regularCount: regular,
+        domainCount: domains.size, domains: [...domains].slice(0, 50),
+        orphanCount, avgTagsPerDTU: Math.round(avgTags * 100) / 100,
+        recentActivity: recentDtus.length,
+        health: orphanCount < total * 0.3 ? "healthy" : orphanCount < total * 0.6 ? "moderate" : "sparse",
+      },
+      readings: [{ timestamp: nowISO(), total, hyper, mega, regular, domains: domains.size }],
+      scannedAt: nowISO(),
+    });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+// System health — guidance panel + resonance lens
+app.get("/api/system/health", (_req, res) => {
+  try {
+    const dtus = dtusArray();
+    const total = dtus.length;
+    const sessions = STATE.sessions?.size || 0;
+    const brainStatus = typeof getBrainStatus === "function" ? getBrainStatus() : {};
+    const uptime = process.uptime();
+
+    return res.json({
+      ok: true,
+      health: {
+        status: "operational",
+        uptime: Math.floor(uptime),
+        dtuCount: total,
+        sessionCount: sessions,
+        brains: brainStatus,
+        memory: { rss: process.memoryUsage().rss, heap: process.memoryUsage().heapUsed },
+        growth: {
+          dtusLast24h: dtus.filter(d => {
+            const ts = d.createdAt;
+            return ts && (Date.now() - new Date(ts).getTime()) < 86400000;
+          }).length,
+          dtusLast7d: dtus.filter(d => {
+            const ts = d.createdAt;
+            return ts && (Date.now() - new Date(ts).getTime()) < 604800000;
+          }).length,
+        },
+      },
+    });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
 app.post("/api/autocrawl", asyncHandler(async (req, res) => {
   try {
     const { url, makeGlobal, declaredSourceType, tags } = req.body || {};

@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
+import { showToast } from '@/components/common/Toasts';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useState, useMemo, useCallback } from 'react';
@@ -338,27 +339,31 @@ export default function PaperLensPage() {
   }, []);
 
   const handleCreate = useCallback(async () => {
-    switch (activeTab) {
-      case 'papers':
-        await createArtifact({ title: newTitle || 'Untitled Paper', data: { wordCount: 0, excerpt: '', content: '', sections: PAPER_SECTIONS.map(h => ({ heading: h, body: '' })) }, meta: { tags: [] } });
-        break;
-      case 'hypotheses':
-        await createArtifact({ title: newTitle || 'Untitled Hypothesis', data: { statement: newStatement, status: 'proposed', confidence: 50, linkedEvidence: [], linkedExperiments: [], rationale: '' }, meta: { tags: [] } });
-        break;
-      case 'evidence':
-        await createArtifact({ title: newTitle || 'Untitled Evidence', data: { source: newSource, strength: newStrength, type: newEvidenceType, summary: '', linkedHypotheses: [] }, meta: { tags: [] } });
-        break;
-      case 'experiments':
-        await createArtifact({ title: newTitle || 'Untitled Experiment', data: { status: 'planned', methodology: newMethodology, results: '', conclusions: '', linkedHypothesis: '', linkedEvidence: [] }, meta: { tags: [] } });
-        break;
-      case 'bibliography':
-        await createArtifact({ title: newTitle || 'Untitled Citation', data: { doi: newDoi, authors: newAuthors, year: parseInt(newYear) || undefined, journal: newJournal, citedByCount: 0 }, meta: { tags: [] } });
-        break;
-      default:
-        break;
+    try {
+      switch (activeTab) {
+        case 'papers':
+          await createArtifact({ title: newTitle || 'Untitled Paper', data: { wordCount: 0, excerpt: '', content: '', sections: PAPER_SECTIONS.map(h => ({ heading: h, body: '' })) }, meta: { tags: [] } });
+          break;
+        case 'hypotheses':
+          await createArtifact({ title: newTitle || 'Untitled Hypothesis', data: { statement: newStatement, status: 'proposed', confidence: 50, linkedEvidence: [], linkedExperiments: [], rationale: '' }, meta: { tags: [] } });
+          break;
+        case 'evidence':
+          await createArtifact({ title: newTitle || 'Untitled Evidence', data: { source: newSource, strength: newStrength, type: newEvidenceType, summary: '', linkedHypotheses: [] }, meta: { tags: [] } });
+          break;
+        case 'experiments':
+          await createArtifact({ title: newTitle || 'Untitled Experiment', data: { status: 'planned', methodology: newMethodology, results: '', conclusions: '', linkedHypothesis: '', linkedEvidence: [] }, meta: { tags: [] } });
+          break;
+        case 'bibliography':
+          await createArtifact({ title: newTitle || 'Untitled Citation', data: { doi: newDoi, authors: newAuthors, year: parseInt(newYear) || undefined, journal: newJournal, citedByCount: 0 }, meta: { tags: [] } });
+          break;
+        default:
+          break;
+      }
+      setCreateModalOpen(false);
+      resetCreateForm();
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Failed to create item');
     }
-    setCreateModalOpen(false);
-    resetCreateForm();
   }, [activeTab, newTitle, newStatement, newSource, newStrength, newEvidenceType, newMethodology, newDoi, newAuthors, newYear, newJournal, createArtifact]);
 
   const resetCreateForm = () => {
