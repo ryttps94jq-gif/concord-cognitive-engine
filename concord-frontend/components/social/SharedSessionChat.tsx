@@ -7,6 +7,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { showToast } from '@/components/common/Toasts';
 import { useSocket } from '@/hooks/useSocket';
 import {
   sharedSessionDetails,
@@ -97,7 +98,7 @@ export function SharedSessionChat({ sessionId, currentUserId, onEnd }: SharedSes
           setMessages(loaded);
         }
       }
-    }).catch(err => console.error('[SharedSession] Failed to load messages:', err));
+    }).catch(err => { console.error('[SharedSession] Failed to load messages:', err); showToast('error', 'Failed to load messages'); });
   }, [sessionId]);
 
   // WebSocket event listeners

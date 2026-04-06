@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
+import { showToast } from '@/components/common/Toasts';
 
 interface ArtifactInfo {
   type: string;
@@ -45,7 +46,7 @@ function WaveformDisplay({ dtuId }: { dtuId: string }) {
     fetch(`/api/artifact/${dtuId}/thumbnail`)
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setPeaks(data); })
-      .catch(err => console.error('[ArtifactRenderer] Failed to load waveform:', err));
+      .catch(err => { console.error('[ArtifactRenderer] Failed to load waveform:', err); showToast('error', 'Failed to load content'); });
   }, [dtuId]);
 
   if (!peaks.length) return <div className="h-12 bg-zinc-900 rounded animate-pulse" />;
@@ -237,7 +238,7 @@ function CSVTablePreview({ dtuId, filename, downloadUrl }: { dtuId: string; file
         );
         setRows(parsed.slice(0, 100));
       })
-      .catch(err => console.error('[ArtifactRenderer] Failed to load CSV data:', err));
+      .catch(err => { console.error('[ArtifactRenderer] Failed to load CSV data:', err); showToast('error', 'Failed to load content'); });
   }, [dtuId]);
 
   if (!rows.length) return <div className="h-32 bg-zinc-900 rounded animate-pulse" />;

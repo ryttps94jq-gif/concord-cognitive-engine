@@ -17,6 +17,7 @@ import {
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { ErrorState } from '@/components/common/EmptyState';
+import { showToast } from '@/components/common/Toasts';
 import { useLensDTUs } from '@/hooks/useLensDTUs';
 import { LensContextPanel } from '@/components/lens/LensContextPanel';
 import { FeedbackWidget } from '@/components/feedback/FeedbackWidget';
@@ -829,6 +830,7 @@ export default function GraphLensPage() {
           refetch3();
         }).catch(err => {
           console.warn('[Graph] Failed to persist edge:', err);
+          showToast('error', 'Failed to save edge');
         });
       }
       return;

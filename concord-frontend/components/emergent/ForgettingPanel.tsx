@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Trash2, Play, Clock, Eye } from 'lucide-react';
 import { apiHelpers } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
+import { showToast } from '@/components/common/Toasts';
 
 interface ForgettingStatus {
   running: boolean;
@@ -33,7 +34,7 @@ export function ForgettingPanel() {
   useEffect(() => {
     apiHelpers.forgetting.status().then((resp) => {
       setStatus(resp.data);
-    }).catch(err => console.error('[Forgetting] Failed to load status:', err));
+    }).catch(err => { console.error('[Forgetting] Failed to load status:', err); showToast('error', 'Failed to load forgetting status'); });
   }, []);
 
   const loadHistory = async () => {

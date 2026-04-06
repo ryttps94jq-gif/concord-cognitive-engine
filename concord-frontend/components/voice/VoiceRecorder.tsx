@@ -13,6 +13,7 @@ import {
   Volume2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { showToast } from '@/components/common/Toasts';
 
 interface VoiceRecorderProps {
   onTranscribe?: (audioBlob: Blob) => Promise<string>;
@@ -57,7 +58,7 @@ export function VoiceRecorder({
 
       // Close any previous AudioContext before creating a new one
       if (audioContextRef.current) {
-        audioContextRef.current.close().catch((e) => console.error('[VoiceRecorder] Failed to close AudioContext:', e));
+        audioContextRef.current.close().catch((e) => { console.error('[VoiceRecorder] Failed to close AudioContext:', e); showToast('error', 'Audio error'); });
       }
 
       // Set up audio analyzer for visualization
@@ -101,7 +102,7 @@ export function VoiceRecorder({
           cancelAnimationFrame(animationFrameRef.current);
         }
         if (audioContextRef.current) {
-          audioContextRef.current.close().catch((e) => console.error('[VoiceRecorder] Failed to close AudioContext:', e));
+          audioContextRef.current.close().catch((e) => { console.error('[VoiceRecorder] Failed to close AudioContext:', e); showToast('error', 'Audio error'); });
           audioContextRef.current = null;
         }
         setAudioLevel(0);
@@ -176,7 +177,7 @@ export function VoiceRecorder({
       if (timerRef.current) clearInterval(timerRef.current);
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
       if (audioContextRef.current) {
-        audioContextRef.current.close().catch((e) => console.error('[VoiceRecorder] Failed to close AudioContext:', e));
+        audioContextRef.current.close().catch((e) => { console.error('[VoiceRecorder] Failed to close AudioContext:', e); showToast('error', 'Audio error'); });
         audioContextRef.current = null;
       }
       if (audioUrl) URL.revokeObjectURL(audioUrl);
