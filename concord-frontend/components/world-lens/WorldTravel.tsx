@@ -2,10 +2,9 @@
 
 import React, { useState } from 'react';
 import {
-  Train, Search, Star, StarOff, Clock, Users, Globe, ArrowRight,
+  Train, Search, Star, Users, Globe, ArrowRight,
   Bookmark, BookmarkCheck, Home, Sparkles, Filter, ChevronDown,
-  X, Eye, Lock, Building2, Gamepad2, Palette, Swords, TreePine,
-  Check, XCircle, MapPin, ExternalLink,
+  X, Eye, Lock, Building2, Palette, Swords, TreePine,
 } from 'lucide-react';
 
 /* ── Types ─────────────────────────────────────────────────────── */

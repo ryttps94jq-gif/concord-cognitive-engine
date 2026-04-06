@@ -512,7 +512,7 @@ describe('createUndoableAction', () => {
     const action = createUndoableAction(
       'set value',
       () => { value = 42; return 42; },
-      (result) => { value = 0; },
+      (_result) => { value = 0; },
     );
 
     await action();

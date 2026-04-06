@@ -160,7 +160,7 @@ export default function VoiceInterface({
   const [wakeWordActive, _setWakeWordActive] = useState(false);
   const [npcMode, setNpcMode] = useState(false);
 
-  const holdTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const _holdTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const isNPCNearby = !!sessionState?.nearNPC;
 
