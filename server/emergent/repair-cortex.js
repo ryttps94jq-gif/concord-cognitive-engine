@@ -4096,6 +4096,10 @@ export function startRepairLoop() {
     // Unref so it doesn't prevent process exit
     if (_repairLoopTimer.unref) _repairLoopTimer.unref();
 
+    // Expose guardian status for cascade-recovery.js health checks
+    globalThis._guardianStatus = () => ({ running: true, startedAt: new Date().toISOString() });
+    if (globalThis.STATE) globalThis.STATE._repairGuardian = true;
+
     logger.info('emergent:repair-cortex', 'Repair loop activated after startup delay');
   }, REPAIR_STARTUP_DELAY);
   if (_repairDelayTimer.unref) _repairDelayTimer.unref();

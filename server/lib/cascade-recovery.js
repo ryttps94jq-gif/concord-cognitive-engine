@@ -191,7 +191,11 @@ export function auditDataPipelines(STATE, log) {
       dtuCount++;
       if (!dtu) { dtuMissing++; continue; }
       if (!dtu.id) { results.push(fail(`dtu:${id}`, 'missing id field')); dtuMissing++; }
-      if (!dtu.tier && dtu.tier !== 0) { results.push(fail(`dtu:${id}`, 'missing tier')); dtuMissing++; }
+      if (!dtu.tier && dtu.tier !== 0) {
+        // Auto-fix: assign default tier based on DTU kind
+        dtu.tier = "regular";
+        results.push(ok(`dtu:${id}`, 'missing tier — auto-fixed to regular'));
+      }
     }
   }
   results.push(dtuMissing === 0

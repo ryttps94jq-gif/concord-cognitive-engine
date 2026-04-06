@@ -6653,6 +6653,7 @@ function seedGenesisRealityAnchor(){
       id,
       title: "Genesis Reality Anchor v1",
       kind: "genesis",
+      tier: "regular",
       scope: "global",  // Scope Separation: genesis anchor is canonical Global knowledge
       createdAt: nowISO(),
       updatedAt: nowISO(),

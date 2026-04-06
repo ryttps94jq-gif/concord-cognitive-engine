@@ -1154,6 +1154,7 @@ export function createBeaconDTU() {
   return {
     id,
     type: "MESH_BEACON",
+    tier: "regular",
     subtype: "presence",
     created: now,
     source: "concord-mesh",
