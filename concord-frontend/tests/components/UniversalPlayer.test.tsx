@@ -179,16 +179,6 @@ describe('UniversalPlayer', () => {
     // UniversalPlayer accesses mediaDTU.liked in useState, which crashes
     // when mediaDTU is undefined. Wrapping in error boundary to verify
     // the component mounts without throwing unrecoverable errors.
-    const _ErrorBoundary = ({ children }: { children: React.ReactNode }) => {
-      const [hasError, setHasError] = React.useState(false);
-      if (hasError) return React.createElement('div', { 'data-testid': 'error-boundary' }, 'Error caught');
-      return React.createElement(
-        ErrorBoundaryClass,
-        { onError: () => setHasError(true) } as Record<string, unknown>,
-        children,
-      );
-    };
-
     // Use a class-based error boundary since hooks can't catch render errors
     class ErrorBoundaryClass extends React.Component<
       { children: React.ReactNode; onError: () => void },
