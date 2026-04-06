@@ -66,14 +66,14 @@
       "label": "Part 7: Cognition, Psychology, Language (361-420)",
       "count": 60,
       "sizeKB": 155.6,
-      "sha256": "d06d4abae61184867b098aab057fbb0c5e4a8ce9fe1ed3ceb039a5fd51b76fbf"
+      "sha256": "ea0112bb98b94fbf85eb7e49794299dc3c29fdc67af6e04fc93c4c20ed424645"
     },
     {
       "file": "dtus-part8.json",
       "label": "Part 8: Meta-Closure, Recursive Self-Application (421-480)",
       "count": 60,
       "sizeKB": 122.3,
-      "sha256": "321d74bce56ef6e3a9f56e7bf79e49eb4f02e69b5bb88a7acef005f65eab297d"
+      "sha256": "e8e2cca67f4c37f9499e6425baba88cc6eb598238c45dabc35fcb63c83b664d4"
     },
     {
       "file": "dtus-unassigned.json",

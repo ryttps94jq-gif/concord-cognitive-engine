@@ -32,13 +32,15 @@ function LoginForm() {
         await api.get('/api/auth/csrf-token').catch(() => {});
         // Connect WebSocket now that we have a session cookie
         connectSocket();
-        // Small delay to ensure cookies propagate before navigation
-        await new Promise(r => setTimeout(r, 100));
+        // Record login timestamp so HomeClient won't redirect back during auth check race
+        localStorage.setItem('concord_login_ts', String(Date.now()));
         // Redirect to the page they were trying to reach, or home
         // Validate redirect is a relative path to prevent open redirect attacks
         const from = searchParams.get('from');
         const safeRedirect = from && from.startsWith('/') && !from.startsWith('//') ? from : '/';
-        router.push(safeRedirect);
+        // Use hard navigation (not router.push) so the browser sends cookies
+        // with the request headers — prevents middleware redirect loop
+        window.location.href = safeRedirect;
       } else {
         setError(res.data?.error || 'Login failed');
       }

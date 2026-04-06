@@ -12,6 +12,7 @@ const PUBLIC_PATHS = new Set([
   '/login',
   '/register',
   '/forgot-password',
+  '/onboarding',
 ]);
 
 const PUBLIC_PREFIXES = [
@@ -21,6 +22,7 @@ const PUBLIC_PREFIXES = [
   '/legal/',
   '/dtu/',
   '/lens/',
+  '/lenses/',
   '/newsletter/',
   '/profile/',
   '/manifest.json',

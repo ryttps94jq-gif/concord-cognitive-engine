@@ -101,6 +101,19 @@ export function HomeClient() {
 
       Promise.race([authCheck, timeout]).then((result) => {
         if (result === 'failed') {
+          // Don't redirect if user literally just logged in (race condition window)
+          const loginTs = Number(localStorage.getItem('concord_login_ts') || '0');
+          if (Date.now() - loginTs < 5000) {
+            // Within 5s of login — retry once before giving up
+            api.get('/api/auth/me').then(() => {
+              setAuthChecked(true);
+            }).catch(() => {
+              try { localStorage.removeItem('concord_entered'); } catch {}
+              try { localStorage.removeItem('concord_login_ts'); } catch {}
+              window.location.href = '/login';
+            });
+            return;
+          }
           // Not authenticated — redirect to login
           try { localStorage.removeItem('concord_entered'); } catch {}
           window.location.href = '/login';
