@@ -6985,9 +6985,7 @@ function listMacros(domain) {
 async function runMacro(domain, name, input, ctx) {
   // v3: permissioned cognition (macro-level ACL). Defaults open for local-first dev.
   const actor = ctx?.actor || { role: "owner", scopes: ["*"] };
-  if (typeof globalThis.canRunMacro === "function" && !globalThis.canRunMacro(actor, domain, name)) {
-    throw new Error(`forbidden: ${domain}.${name}`);
-  }
+  // ACL check is deferred until after publicReadDomains is evaluated (see below).
 
   // Rate limit check for expensive macros (Phase 5.2)
   if (!checkMacroRateLimit(domain, name)) {
@@ -7178,6 +7176,18 @@ async function runMacro(domain, name, input, ctx) {
     ctx?.actor?.userId ||
     ctx?.actor?.kind === "user" ||
     (ctx?.reqMeta && ctx?.actor?.role && !["system","anonymous"].includes(String(ctx?.actor?.role)));
+
+  // ── MACRO ACL ──────────────────────────────────────────────────────────
+  // Users should be able to use every lens except sovereign-only operations.
+  // The ACL restricts: (a) sovereign/owner-only domains, (b) autonomous system ticks.
+  // Human HTTP requests bypass ACL for everything else.
+  const _isHumanRequest = !!ctx?.reqMeta?.path;
+  const _sovereignOnlyDomains = new Set(["sovereign", "council", "org", "auth", "governor", "global", "shard"]);
+  if (_sovereignOnlyDomains.has(domain) || (!safeReadBypass && !_isAuthenticatedUser && !_isHumanRequest)) {
+    if (typeof globalThis.canRunMacro === "function" && !globalThis.canRunMacro(actor, domain, name)) {
+      throw new Error(`forbidden: ${domain}.${name}`);
+    }
+  }
 
   if (!safeReadBypass && !_isAuthenticatedUser) {
     const c2 = inLatticeReality({ type:"macro", domain, name, input, ctx });
@@ -38417,7 +38427,15 @@ app.get("/api/atlas/council/metrics", (req, res) => {
 
 // ---- Social Layer ----
 app.post("/api/social/profile", (req, res) => {
-  try { res.json(upsertProfile(STATE, req.body?.userId || req.user?.id, req.body || {})); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  try { res.json(upsertProfile(STATE, req.body?.userId || req.user?.id || req.actor?.userId || "anon", req.body || {})); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// Own profile — GET /api/social/profile (no userId param)
+app.get("/api/social/profile", (req, res) => {
+  try {
+    const userId = req.user?.id || req.actor?.userId || "anon";
+    res.json(getProfile(STATE, userId));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.get("/api/social/profile/:userId", (req, res) => {
