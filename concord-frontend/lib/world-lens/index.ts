@@ -37,3 +37,9 @@ export * from './premium-features-types';
 
 // ── Infrastructure ────────────────────────────────────────────────
 export * from './infrastructure-types';
+
+// ── Infrastructure Tools (@concord/* packages) ────────────────────
+export * from './infra-tools-types';
+
+// ── Frontier Features (16 modules) ────────────────────────────────
+export * from './frontier-features-types';
