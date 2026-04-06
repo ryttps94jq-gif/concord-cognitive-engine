@@ -10291,10 +10291,10 @@ function queryDTUsAdvanced(query) {
             case "tier":
               return (dtu.tier || "regular") === cleanValue;
             case "title":
-              dtuValue = (dtu.title || "").toLowerCase();
+              dtuValue = String(dtu.title || "").toLowerCase();
               break;
             case "content":
-              dtuValue = (dtu.content || "").toLowerCase();
+              dtuValue = String(dtu.content || "").toLowerCase();
               break;
             case "created": case "createdat":
               dtuValue = dtu.createdAt;
@@ -10671,8 +10671,8 @@ async function detectContradictions(dtuId) {
     if (candidate.id === dtuId) continue;
 
     // Simple heuristic: check for negation words
-    const dtuLower = (dtu.content || "").toLowerCase();
-    const candLower = (candidate.content || "").toLowerCase();
+    const dtuLower = String(dtu.content || "").toLowerCase();
+    const candLower = String(candidate.content || "").toLowerCase();
 
     const negationPatterns = [
       { pattern: /\bnot\b/, antiPattern: /\bis\b/ },
@@ -17277,10 +17277,6 @@ Rules for tool use:
     const _grcSystemPrompt = GRC_MODULE
       ? getGRCSystemPrompt({ dtus: _dtuTitles, mode })
       : "";
-    const system =
-`You are ConcordOS. Be natural, concise but not dry. Use DTUs as memory. Never pretend features exist.
-Mode: ${mode}.${_affectGuidance ? `\nTone: ${_affectGuidance}` : ""}
-When helpful, reference DTU titles in plain language (do not dump ids unless asked).${_grcSystemPrompt ? `\n\n${_grcSystemPrompt}` : ""}${_toolSystemPrompt}`;
     // Use fused context from quality pipeline if available; otherwise fall back to enriched focus (all tiers)
     const dtuContext = (_fusedContext && _fusedContext.fusedContext)
       ? _fusedContext.fusedContext
@@ -17288,9 +17284,30 @@ When helpful, reference DTU titles in plain language (do not dump ids unless ask
     const _pipelineMeta = (_qualityPipelineResult && _fusedContext)
       ? `\n[Pipeline: ${_fusedContext.meta.patternsApplied.join("+")} | intent=${_qualityPipelineResult.queryIntent}]`
       : "";
-    const messages = [
-      { role: "user", content: `User prompt:\n${prompt}\n\nRelevant DTUs:\n${dtuContext}${_pipelineMeta}\n\nRespond naturally and propose next actions.` }
-    ];
+    // Build the full conscious prompt with identity, personality, memory, and context
+    const _consciousParams = getConsciousParams({ exchange_count: (sess.messages || []).length });
+    const system = buildConsciousPrompt({
+      dtu_count: STATE.dtus?.size || 0,
+      domain_count: Object.keys(STATE.domains || {}).length || _enrichedFocus.reduce((s, d) => { s.add(d.domain); return s; }, new Set()).size,
+      lens: currentLens || mode || "general",
+      context: dtuContext,
+      webContext: "",
+      conversation_history: (sess.messages || []).slice(-20),
+      personality_state: STATE.personality || null,
+      active_wants: STATE.wants?.active || [],
+      crossDomainContext: sess.crossDomainContext || {},
+      sessionLensHistory: (sess.lensHistory || []).map(l => ({ lens: l.lens || l })),
+      entityStateBlock: _entityBlock || "",
+      affectGuidance: _affectGuidance,
+      grcPrompt: _grcSystemPrompt,
+    }) + _toolSystemPrompt;
+    // Build messages with conversation history for continuity
+    const _recentHistory = (sess.messages || []).slice(-10, -1); // last 10 turns, excluding current
+    const messages = [];
+    for (const msg of _recentHistory) {
+      messages.push({ role: msg.role === "assistant" ? "assistant" : "user", content: String(msg.content || "").slice(0, 1500) });
+    }
+    messages.push({ role: "user", content: `${prompt}${_pipelineMeta ? `\n${_pipelineMeta}` : ""}` });
     const _llmSpan = startSpan("llm.chat", { mode, sessionId, promptLength: prompt.length });
     const r = await ctx.llm.chat({
       system, messages, temperature: _llmTemp, maxTokens: _llmMaxTokens,
@@ -17346,12 +17363,27 @@ When helpful, reference DTU titles in plain language (do not dump ids unless ask
     // When no LLM provider is wired into the macro context, call BRAIN.conscious directly via fetch.
     // This ensures the chat lens always attempts the conscious brain before settling for localReply.
     try {
-      const _dtuTitlesDirect = _enrichedFocus.map(d => d.title || d.id).filter(Boolean);
-      const _directSystem = `You are ConcordOS. Be natural, concise but not dry. Use DTUs as memory. Never pretend features exist.\nMode: ${mode}.\nWhen helpful, reference DTU titles in plain language (do not dump ids unless asked).${_toolSystemPrompt}`;
       const _directDtuContext = _enrichedFocus.map(d => `TITLE: ${d.title}\nTIER: ${d.tier}\nTAGS: ${(d.tags||[]).join(", ")}\nCRETI:\n${buildCretiText(d)}\n---`).join("\n");
+      const _directParams = getConsciousParams({ exchange_count: (sess.messages || []).length });
+      const _directSystem = buildConsciousPrompt({
+        dtu_count: STATE.dtus?.size || 0,
+        domain_count: Object.keys(STATE.domains || {}).length,
+        lens: currentLens || mode || "general",
+        context: _directDtuContext,
+        conversation_history: (sess.messages || []).slice(-20),
+        personality_state: STATE.personality || null,
+        active_wants: STATE.wants?.active || [],
+        crossDomainContext: sess.crossDomainContext || {},
+        sessionLensHistory: (sess.lensHistory || []).map(l => ({ lens: l.lens || l })),
+        entityStateBlock: _entityBlock || "",
+        affectGuidance: "",
+      }) + _toolSystemPrompt;
+      // Include conversation history in messages
+      const _directHistory = (sess.messages || []).slice(-10, -1);
       const _directMessages = [
         { role: "system", content: _directSystem },
-        { role: "user", content: `User prompt:\n${prompt}\n\nRelevant DTUs:\n${_directDtuContext}\n\nRespond naturally and propose next actions.` }
+        ..._directHistory.map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content || "").slice(0, 1500) })),
+        { role: "user", content: prompt }
       ];
       const _directAc = new AbortController();
       const _directTimeout = setTimeout(() => _directAc.abort(), 120000);
@@ -17363,7 +17395,7 @@ When helpful, reference DTU titles in plain language (do not dump ids unless ask
           model: brainModel,
           messages: _directMessages,
           stream: false,
-          options: { temperature: 0.5, num_predict: 700 }
+          options: { temperature: _directParams.temperature || 0.75, num_predict: _directParams.maxTokens || 1500 }
         }),
         signal: _directAc.signal
       }).finally(() => clearTimeout(_directTimeout));
@@ -22642,13 +22674,19 @@ for (const d of [
   "lattice","backpressure","emergent",
 ]) allowDomain(d, _ACL_MEMBER);
 
-// Admin-level domains (system management)
+// Admin-level domains (system management — backend-only infrastructure)
 for (const d of [
-  "admin","automation","autotag","backup","cache","db","graph","schema",
-  "integration","webhook","jobs","perf","log","llm","plugin","source","abstraction",
-  "evolution","audit","verify","experiment","synth","harness","crawl","ingest",
-  "export","import","redis","sync","system","repair",
+  "admin","automation","backup","db",
+  "integration","webhook","log","llm","plugin","source","abstraction",
+  "audit","experiment","synth","harness","crawl",
+  "import","redis","sync","repair",
 ]) allowDomain(d, _ACL_ADMIN);
+
+// Viewer-readable domains (frontend needs these for page loads)
+for (const d of [
+  "graph","schema","cache","perf","jobs","ingest","export","autotag",
+  "evolution","system","verify",
+]) allowDomain(d, _ACL_PUB);
 
 // Owner-only domains (sensitive infrastructure)
 for (const d of [
@@ -24761,7 +24799,7 @@ function queryDTUs(queryString, { limit = 50 } = {}) {
     results = results.filter(dtu => {
       const dtuValue = cond.field === "tier" ? dtu.tier :
                        cond.field === "tag" || cond.field === "tags" ? (dtu.tags || []).join(",").toLowerCase() :
-                       cond.field === "title" ? (dtu.title || "").toLowerCase() :
+                       cond.field === "title" ? String(dtu.title || "").toLowerCase() :
                        cond.field === "crispness" ? (dtu.meta?.crispness || 0) :
                        cond.field === "id" ? dtu.id :
                        cond.field === "source" ? (dtu.source || "") :
@@ -41131,7 +41169,7 @@ function antiEntropyScan() {
     }
 
     // 3. Duplicate detection (by normalized title)
-    const normalizedTitle = (dtu.title || "").toLowerCase().trim();
+    const normalizedTitle = String(dtu.title || "").toLowerCase().trim();
     if (normalizedTitle.length > 5) {
       if (!titleSet.has(normalizedTitle)) titleSet.set(normalizedTitle, []);
       titleSet.get(normalizedTitle).push(dtu.id);
@@ -43186,7 +43224,7 @@ function updateCognitiveDigitalTwin(userId) {
     recency: /just|recently|latest|new|current/i,
   };
   for (const dtu of recentDTUs.slice(0, 100)) {
-    const text = (dtu.content || dtu.title || "").toLowerCase();
+    const text = String(dtu.content || dtu.title || "").toLowerCase();
     if (biasPatterns.anchoring.test(text)) anchoringSignals++;
     if (biasPatterns.confirmation.test(text)) confirmationSignals++;
     if (biasPatterns.recency.test(text)) recencySignals++;
@@ -48146,7 +48184,7 @@ function ensureTransferEngine() {
 function classifyDomain(dtu) {
   if (!dtu) return DOMAIN_TYPES.GENERAL;
 
-  const text = [dtu.title, dtu.human?.summary, ...(dtu.tags || [])].join(" ").toLowerCase();
+  const text = [String(dtu.title || ""), String(dtu.human?.summary || ""), ...(dtu.tags || [])].join(" ").toLowerCase();
 
   const domainKeywords = {
     [DOMAIN_TYPES.TECHNICAL]: ["code", "programming", "software", "api", "algorithm", "data", "system", "server", "database"],
@@ -51329,8 +51367,8 @@ function autoUpdateWorldModel(dtu) {
     const _extraction = extractEntitiesFromDtu(dtu);
 
     // 2. Extract relations from DTU content
-    const text = buildCretiText(dtu).toLowerCase();
-    const title = (dtu.title || "").toLowerCase();
+    const text = String(buildCretiText(dtu) || "").toLowerCase();
+    const title = String(dtu.title || "").toLowerCase();
     const tags = Array.isArray(dtu.tags) ? dtu.tags : [];
 
     // Auto-detect relations between existing entities mentioned in this DTU
