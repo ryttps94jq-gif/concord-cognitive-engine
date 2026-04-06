@@ -13,6 +13,7 @@ import {
   ChevronRight, FileText, Headphones,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
+import { showToast } from '@/components/common/Toasts';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
@@ -242,7 +243,7 @@ export default function DailyLensPage() {
             privacy: 'private',
             duration,
             data: base64,
-          }).catch(err => console.error('[Daily] Upload failed:', err));
+          }).catch(err => { console.error('[Daily] Upload failed:', err); showToast('error', 'Upload failed'); });
         };
         reader.readAsDataURL(blob);
       };

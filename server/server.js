@@ -11536,7 +11536,8 @@ globalThis._concordMACROS = MACROS;
 globalThis._concordBRAIN = BRAIN;
 globalThis._concordSTATE = STATE;
 globalThis._repairObserve = observe;
-setTimeout(() => startRepairLoop(), 10000);
+// Stagger: repair loop at T+180s (4th autonomous task, 45s after global tick)
+setTimeout(() => startRepairLoop(), 180_000);
 
 // ── Ghost Fleet: Wire 18 Dormant Emergent Modules ─────────────────────────
 // Every module lazy-loaded, macros registered, ticks wired. Silent failure everywhere.
@@ -12248,13 +12249,13 @@ async function initGhostFleet() {
   return GHOST_FLEET_STATUS;
 }
 
-// Launch Ghost Fleet 30 seconds after boot — server responds to HTTP immediately,
-// ghost fleet modules load one-at-a-time with 2s gaps between each.
+// Stagger: ghost fleet at T+225s (5th autonomous task, 45s after repair loop)
+// Modules load one-at-a-time with 2s gaps between each.
 setTimeout(() => {
   initGhostFleet().catch(err => {
     structuredLog("error", "ghost_fleet_init_error", { error: err.message });
   });
-}, 30000);
+}, 225_000);
 
 // ── Artifact Garbage Collection Timer (weekly) ──────────────────────────
 // Starts after a short delay so STATE and db are fully ready
@@ -22269,6 +22270,7 @@ function startJobWorker() {
   if (_jobTimer.unref) _jobTimer.unref();
   log("jobs.worker", "Job worker started", { everyMs: _JOB_POLL_MS });
 }
+// Stagger: job worker starts at T+0s (lightweight, local only)
 startJobWorker();
 
 
@@ -22741,6 +22743,8 @@ function startHeartbeat() {
   //   :30-:39 synthesis, :40-:49 birth, :50-:59 exploration
   const explorationMs = 900_000; // 15 min — exploration is long-haul, no need to rush
   let explorationTimer = null;
+  // Stagger: exploration starts 45s after heartbeat so brain has time to process
+  setTimeout(() => {
   explorationTimer = setInterval(async () => {
     if (!STATE.settings.heartbeatEnabled) return;
     if (STATE.settings.explorationEnabled === false) return;
@@ -22942,11 +22946,14 @@ function startHeartbeat() {
     }
   }, explorationMs);
   log("heartbeat", "Exploration window timer started", { intervalMs: explorationMs });
+  }, 45_000); // Close exploration stagger — starts 45s after heartbeat
 
   // ── Global Scope Tick (15 minutes — slow, deliberate synthesis) ──
   // Global tick can: generate DTU candidates from existing Global DTUs, update resonance.
   // Global tick cannot: ingest local or marketplace DTUs, respond to local activity.
   const globalMs = clamp(Number(STATE.settings.globalTickMs || 900000), 300000, 3600000);
+  // Stagger: global tick starts 90s after heartbeat so brain has processed exploration
+  setTimeout(() => {
   globalTickTimer = setInterval(async () => {
     if (!STATE.settings.heartbeatEnabled) return;
     try {
@@ -23013,10 +23020,12 @@ function startHeartbeat() {
     } catch (err) { console.error('[system] Global scope tick error:', err); }
   }, globalMs);
   log("heartbeat", "Global scope tick started", { ms: globalMs });
+  }, 90_000); // Close global tick stagger — starts 90s after heartbeat
 
   // Marketplace: ❌ No heartbeat — marketplace never generates DTUs, never mutates knowledge
 }
-startHeartbeat();
+// Stagger: heartbeat starts at T+45s (LLM-heavy, needs breathing room)
+setTimeout(() => startHeartbeat(), 45_000);
 
 // ---- Operations Endpoints (extracted to routes/operations.js) ----
 registerOperationRoutes(app, {
@@ -23043,7 +23052,8 @@ function startWeeklyCouncil() {
   }, weekMs);
   log("council.weekly", "Weekly Council scheduler started", { everyMs: weekMs });
 }
-startWeeklyCouncil();
+// Stagger: weekly council at T+270s (6th autonomous task, 45s after ghost fleet)
+setTimeout(() => startWeeklyCouncil(), 270_000);
 
 
 // ---- listen ----
@@ -24085,7 +24095,10 @@ function _startGovernorHeartbeat() {
 // ===== END GOVERNOR =====
 
 // Start Chicken3 services on boot (additive)
-try { startChicken3Cron(); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+// Stagger: chicken3 cron at T+315s (7th autonomous task, 45s after weekly council)
+setTimeout(() => {
+  try { startChicken3Cron(); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+}, 315_000);
 try { startChicken3Federation(); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 // ===== END CHICKEN3: Cron + Federation =====
 

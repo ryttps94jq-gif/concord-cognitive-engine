@@ -21,6 +21,7 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { showToast } from '@/components/common/Toasts';
 
 type AnimTab = 'projects' | 'timeline' | 'assets' | 'render' | 'stats';
 type AnimType = '2d' | '3d' | 'motion-graphics' | 'stop-motion' | 'pixel' | 'vector';
@@ -248,9 +249,9 @@ export default function AnimationPage() {
                 <div className="flex items-center justify-between">
                   <h2 className="text-lg font-semibold">{selectedProject.title}</h2>
                   <div className="flex gap-2">
-                    <button className="p-2 bg-white/5 rounded hover:bg-white/10"><Play className="w-4 h-4" /></button>
-                    <button className="p-2 bg-white/5 rounded hover:bg-white/10"><Pause className="w-4 h-4" /></button>
-                    <button className="p-2 bg-white/5 rounded hover:bg-white/10"><RotateCcw className="w-4 h-4" /></button>
+                    <button onClick={() => showToast('info', 'Coming soon')} className="p-2 bg-white/5 rounded hover:bg-white/10"><Play className="w-4 h-4" /></button>
+                    <button onClick={() => showToast('info', 'Coming soon')} className="p-2 bg-white/5 rounded hover:bg-white/10"><Pause className="w-4 h-4" /></button>
+                    <button onClick={() => showToast('info', 'Coming soon')} className="p-2 bg-white/5 rounded hover:bg-white/10"><RotateCcw className="w-4 h-4" /></button>
                   </div>
                 </div>
                 <div className="bg-white/5 border border-white/10 rounded-lg p-4">

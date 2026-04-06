@@ -35,6 +35,7 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { showToast } from '@/components/common/Toasts';
 
 // DAW engine
 import {
@@ -341,7 +342,7 @@ export default function StudioLensPage() {
       title: proj.title,
       data: proj as unknown as Record<string, unknown>,
       meta: { status: 'active', tags: [proj.key, `${proj.bpm}bpm`, proj.genre].filter(Boolean) as string[] },
-    }).catch(err => console.error('Failed to persist project:', err instanceof Error ? err.message : err));
+    }).catch(err => { console.error('Failed to persist project:', err instanceof Error ? err.message : err); showToast('error', 'Failed to create project'); });
   }, [newTitle, newBpm, newKey, newGenre, createLensItem]);
 
   // ---- Transport controls ----
@@ -755,7 +756,7 @@ export default function StudioLensPage() {
     updateLensItem(project.id, {
       title: project.title,
       data: project as unknown as Record<string, unknown>,
-    }).catch(err => console.error('Failed to save project:', err instanceof Error ? err.message : err));
+    }).catch(err => { console.error('Failed to save project:', err instanceof Error ? err.message : err); showToast('error', 'Failed to save project'); });
   }, [project, updateLensItem]);
 
   // ---- Synth operations ----
@@ -1227,7 +1228,7 @@ export default function StudioLensPage() {
                   { icon: Target, color: 'neon-orange', title: 'Auto-Arrange', desc: 'AI arrangement suggestions' },
                   { icon: Radio, color: 'neon-blue', title: 'Reference Match', desc: 'Match reference track tone' },
                 ].map((item, i) => (
-                  <button key={i} className={`p-4 rounded-xl bg-${item.color}/10 border border-${item.color}/20 text-left hover:bg-${item.color}/20`}>
+                  <button key={i} onClick={() => showToast('info', 'Coming soon')} className={`p-4 rounded-xl bg-${item.color}/10 border border-${item.color}/20 text-left hover:bg-${item.color}/20`}>
                     <item.icon className={`w-6 h-6 text-${item.color} mb-2`} />
                     <h3 className="font-semibold text-sm">{item.title}</h3>
                     <p className="text-xs text-gray-400 mt-1">{item.desc}</p>

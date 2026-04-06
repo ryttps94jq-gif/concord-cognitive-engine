@@ -13,6 +13,7 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { showToast } from '@/components/common/Toasts';
 
 interface ForkData {
   parentId: string | null;
@@ -392,21 +393,21 @@ export default function ForkLensPage() {
               Merge Tools
             </h3>
             <div className="space-y-2">
-              <button className="w-full flex items-center gap-2 p-2.5 rounded bg-black/30 border border-white/10 hover:border-neon-green/40 transition-colors text-left">
+              <button onClick={() => showToast('info', 'Coming soon')} className="w-full flex items-center gap-2 p-2.5 rounded bg-black/30 border border-white/10 hover:border-neon-green/40 transition-colors text-left">
                 <GitMerge className="w-4 h-4 text-neon-green" />
                 <div>
                   <p className="text-sm text-white">Fast-Forward Merge</p>
                   <p className="text-xs text-gray-500">No conflicts, linear history</p>
                 </div>
               </button>
-              <button className="w-full flex items-center gap-2 p-2.5 rounded bg-black/30 border border-white/10 hover:border-neon-purple/40 transition-colors text-left">
+              <button onClick={() => showToast('info', 'Coming soon')} className="w-full flex items-center gap-2 p-2.5 rounded bg-black/30 border border-white/10 hover:border-neon-purple/40 transition-colors text-left">
                 <Scale className="w-4 h-4 text-neon-purple" />
                 <div>
                   <p className="text-sm text-white">Three-Way Merge</p>
                   <p className="text-xs text-gray-500">Resolve conflicts interactively</p>
                 </div>
               </button>
-              <button className="w-full flex items-center gap-2 p-2.5 rounded bg-black/30 border border-white/10 hover:border-neon-cyan/40 transition-colors text-left">
+              <button onClick={() => showToast('info', 'Coming soon')} className="w-full flex items-center gap-2 p-2.5 rounded bg-black/30 border border-white/10 hover:border-neon-cyan/40 transition-colors text-left">
                 <ArrowLeftRight className="w-4 h-4 text-neon-cyan" />
                 <div>
                   <p className="text-sm text-white">Cherry-Pick</p>

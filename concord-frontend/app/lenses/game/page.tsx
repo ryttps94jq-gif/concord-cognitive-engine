@@ -15,6 +15,7 @@ import {
   Activity, ArrowUp,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { showToast } from '@/components/common/Toasts';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -324,7 +325,7 @@ export default function GameLensPage() {
   const acceptQuest = useCallback((id: string) => {
     setQuestStatusOverrides(prev => ({ ...prev, [id]: 'accepted' as QuestStatus }));
     updateQuest(id, { data: { status: 'accepted' } as unknown as Partial<Quest> })
-      .catch(err => console.error('Failed to accept quest:', err instanceof Error ? err.message : err));
+      .catch(err => { console.error('Failed to accept quest:', err instanceof Error ? err.message : err); showToast('error', 'Failed to accept quest'); });
   }, [updateQuest]);
 
   const completeQuest = useCallback((id: string) => {
@@ -343,7 +344,7 @@ export default function GameLensPage() {
     setShopItems((prev) => prev.map((i) => (i.id === id ? { ...i, owned: true } : i)));
     setPlayerXp((prev) => prev - item.cost);
     updateShopItem(id, { data: { owned: true } as unknown as Partial<ShopItem> })
-      .catch(err => console.error('Failed to persist shop purchase:', err instanceof Error ? err.message : err))
+      .catch(err => { console.error('Failed to persist shop purchase:', err instanceof Error ? err.message : err); showToast('error', 'Purchase failed'); })
       .finally(() => setPurchasingIds(prev => { const next = new Set(prev); next.delete(id); return next; }));
   }, [shopItems, playerXp, purchasingIds, updateShopItem]);
 
@@ -370,7 +371,7 @@ export default function GameLensPage() {
     setLocalQuests((prev) => [...prev, questData]);
     createQuest({ title: questData.name, data: questData as unknown as Record<string, unknown>, meta: { status: 'active', tags: ['challenge', questData.difficulty] } })
       .then(() => { refetch2(); })
-      .catch(err => console.error('Failed to persist challenge:', err instanceof Error ? err.message : err));
+      .catch(err => { console.error('Failed to persist challenge:', err instanceof Error ? err.message : err); showToast('error', 'Challenge submission failed'); });
     setNewChallenge({ name: '', description: '', difficulty: 'medium', xpReward: 300 });
     setShowCreateChallenge(false);
   }, [newChallenge, createQuest, refetch2]);

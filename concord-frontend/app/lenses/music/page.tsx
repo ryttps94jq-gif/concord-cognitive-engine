@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
+import { showToast } from '@/components/common/Toasts';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useMusicStore } from '@/lib/music/store';
 import { getPlayer } from '@/lib/music/player';
@@ -202,7 +203,7 @@ export default function MusicLensPage() {
       data.tags = visionResult.suggestedTags;
     }
     createPlaylistItem({ title: playlistData.name!, data })
-      .catch(err => console.error('Failed to create playlist:', err instanceof Error ? err.message : err));
+      .catch(err => { console.error('Failed to create playlist:', err instanceof Error ? err.message : err); showToast('error', 'Failed to create playlist'); });
   }, [playlists.length, createPlaylistItem]);
 
   // ---- Royalty preview ----
@@ -972,7 +973,7 @@ export default function MusicLensPage() {
                       marketplaceBeats.map(beat => (
                         <div key={beat.listingId} className="flex items-center justify-between p-4 rounded-xl bg-white/[0.03] border border-white/5 hover:border-white/10 transition-colors group">
                           <div className="flex items-center gap-4 min-w-0 flex-1">
-                            <button className="w-10 h-10 rounded-lg bg-neon-cyan/10 flex items-center justify-center flex-shrink-0 group-hover:bg-neon-cyan/20 transition-colors">
+                            <button onClick={() => showToast('info', 'Coming soon')} className="w-10 h-10 rounded-lg bg-neon-cyan/10 flex items-center justify-center flex-shrink-0 group-hover:bg-neon-cyan/20 transition-colors">
                               <Play className="w-4 h-4 text-neon-cyan" />
                             </button>
                             <div className="min-w-0">

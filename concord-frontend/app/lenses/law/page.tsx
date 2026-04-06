@@ -13,6 +13,7 @@ import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { ConnectiveTissueBar } from '@/components/lens/ConnectiveTissueBar';
+import { showToast } from '@/components/common/Toasts';
 
 const JURISDICTIONS = ['US', 'EU', 'UK', 'CA', 'AU', 'INT'] as const;
 type Jurisdiction = typeof JURISDICTIONS[number];
@@ -422,7 +423,7 @@ export default function LawLensPage() {
               {['Data Processing Agreement', 'Sub-Processor Notification', 'Data Breach Response'].map((clause) => (
                 <div key={clause} className="flex items-center justify-between bg-white/5 rounded px-3 py-2">
                   <span className="text-xs text-gray-300">{clause}</span>
-                  <button className="text-[10px] text-neon-cyan hover:text-neon-cyan/80 flex items-center gap-1">
+                  <button onClick={() => showToast('info', 'Coming soon')} className="text-[10px] text-neon-cyan hover:text-neon-cyan/80 flex items-center gap-1">
                     <Copy className="w-3 h-3" />
                     Add
                   </button>
@@ -447,7 +448,7 @@ export default function LawLensPage() {
               {['IP Assignment', 'License Grant', 'Non-Compete Restriction'].map((clause) => (
                 <div key={clause} className="flex items-center justify-between bg-white/5 rounded px-3 py-2">
                   <span className="text-xs text-gray-300">{clause}</span>
-                  <button className="text-[10px] text-neon-purple hover:text-neon-purple/80 flex items-center gap-1">
+                  <button onClick={() => showToast('info', 'Coming soon')} className="text-[10px] text-neon-purple hover:text-neon-purple/80 flex items-center gap-1">
                     <Copy className="w-3 h-3" />
                     Add
                   </button>
@@ -472,7 +473,7 @@ export default function LawLensPage() {
               {['Limitation of Liability', 'Indemnification', 'Force Majeure'].map((clause) => (
                 <div key={clause} className="flex items-center justify-between bg-white/5 rounded px-3 py-2">
                   <span className="text-xs text-gray-300">{clause}</span>
-                  <button className="text-[10px] text-neon-green hover:text-neon-green/80 flex items-center gap-1">
+                  <button onClick={() => showToast('info', 'Coming soon')} className="text-[10px] text-neon-green hover:text-neon-green/80 flex items-center gap-1">
                     <Copy className="w-3 h-3" />
                     Add
                   </button>
@@ -497,7 +498,7 @@ export default function LawLensPage() {
               {['Termination for Cause', 'Auto-Renewal Terms', 'Survival Provisions'].map((clause) => (
                 <div key={clause} className="flex items-center justify-between bg-white/5 rounded px-3 py-2">
                   <span className="text-xs text-gray-300">{clause}</span>
-                  <button className="text-[10px] text-yellow-500 hover:text-yellow-500/80 flex items-center gap-1">
+                  <button onClick={() => showToast('info', 'Coming soon')} className="text-[10px] text-yellow-500 hover:text-yellow-500/80 flex items-center gap-1">
                     <Copy className="w-3 h-3" />
                     Add
                   </button>
@@ -533,10 +534,10 @@ export default function LawLensPage() {
             <p className="text-sm text-gray-500">Add clauses from the library above to start building your contract</p>
           </div>
           <div className="flex gap-2 mt-3">
-            <button className="flex-1 py-2 rounded-lg text-xs bg-neon-purple/10 border border-neon-purple/30 text-neon-purple hover:bg-neon-purple/20 transition-colors disabled:opacity-50" disabled>
+            <button onClick={() => showToast('info', 'Coming soon')} className="flex-1 py-2 rounded-lg text-xs bg-neon-purple/10 border border-neon-purple/30 text-neon-purple hover:bg-neon-purple/20 transition-colors disabled:opacity-50" disabled>
               Preview Contract
             </button>
-            <button className="flex-1 py-2 rounded-lg text-xs bg-neon-green/10 border border-neon-green/30 text-neon-green hover:bg-neon-green/20 transition-colors disabled:opacity-50" disabled>
+            <button onClick={() => showToast('info', 'Coming soon')} className="flex-1 py-2 rounded-lg text-xs bg-neon-green/10 border border-neon-green/30 text-neon-green hover:bg-neon-green/20 transition-colors disabled:opacity-50" disabled>
               Generate Document
             </button>
           </div>
