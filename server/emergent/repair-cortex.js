@@ -121,25 +121,26 @@ const GENESIS_OVERLAP_THRESHOLD = 0.95;
 // separate timers all hammering concurrently, clogging the event loop.
 // Nothing in a guardian monitor needs sub-minute detection — if the system is
 // down for 5 minutes, the guardian catching it at 4:59 vs 0:15 doesn't matter.
+// Relaxed intervals — long-haul cadence. Network volume matters more than instant detection.
 const GUARDIAN_INTERVALS = Object.freeze({
-  process_health:        300000,  // 5 minutes (was 15s)
-  database_integrity:    600000,  // 10 minutes (was 5 min)
-  state_consistency:     300000,  // 5 minutes (was 30s)
-  disk_space:            1800000, // 30 minutes (was 10 min)
-  endpoint_health:       300000,  // 5 minutes (was 30s)
-  ollama_connectivity:   300000,  // 5 minutes (was 1 min)
-  autogen_health:        600000,  // 10 minutes (was 2 min)
-  emergent_vitals:       300000,  // 5 minutes (was 30s)
-  frontend_health:       300000,  // 5 minutes (was 1 min)
-  container_health:      600000,  // 10 minutes (was 2 min)
-  nginx_health:          300000,  // 5 minutes (was 1 min)
-  websocket_health:      300000,  // 5 minutes (was 1 min)
-  event_loop_lag:        120000,  // 2 minutes (was 10s)
-  ssl_certificate:       3600000, // 1 hour — stays same
-  database_connection:   600000,  // 10 minutes (was 2 min)
-  lockfile_integrity:    1800000, // 30 minutes (was 10 min)
-  security_signature_freshness: 3600000, // 1 hour — stays same
-  security_scan_backlog:        600000,  // 10 minutes (was 5 min)
+  process_health:        600_000,   // 10 min — local memory check
+  database_integrity:    1_800_000, // 30 min — DB rarely corrupts
+  state_consistency:     900_000,   // 15 min — drift is slow
+  disk_space:            3_600_000, // 1 hour — disk fills slowly
+  endpoint_health:       900_000,   // 15 min — self-check, not urgent
+  ollama_connectivity:   900_000,   // 15 min — Ollama doesn't flap
+  autogen_health:        1_800_000, // 30 min — autogen is background work
+  emergent_vitals:       900_000,   // 15 min — entities evolve slowly
+  frontend_health:       900_000,   // 15 min — frontend doesn't disappear
+  container_health:      1_800_000, // 30 min — containers are stable
+  nginx_health:          900_000,   // 15 min — nginx is rock solid
+  websocket_health:      900_000,   // 15 min — WS reconnects handle gaps
+  event_loop_lag:        300_000,   // 5 min — lag is the only fast-moving concern
+  ssl_certificate:       7_200_000, // 2 hours — certs expire in months
+  database_connection:   1_800_000, // 30 min — DB connections are stable
+  lockfile_integrity:    3_600_000, // 1 hour — lockfiles rarely change
+  security_signature_freshness: 7_200_000, // 2 hours
+  security_scan_backlog:        1_800_000, // 30 min
 });
 
 // ── Repair Memory ───────────────────────────────────────────────────────────
@@ -3483,7 +3484,7 @@ export async function runGuardianCheck(name) {
 // Every fix attempt is tracked. Success rate determines
 // whether a pattern gets reused or deprecated.
 
-const RUNTIME_REPAIR_INTERVAL = 300000; // 5 minutes — repair doesn't need real-time cadence.
+const RUNTIME_REPAIR_INTERVAL = 900_000; // 15 minutes — repair is background, let the system breathe.
 // Was 15s which clogged the event loop with LLM repair brain calls on top of
 // 12 guardian monitors + cognitive pipeline + biological ticks. 5 min gives
 // each repair cycle time to complete and errors time to accumulate into patterns.

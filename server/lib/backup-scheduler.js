@@ -360,8 +360,8 @@ export function createBackupScheduler(db, opts = {}) {
       running = true;
       lastCheckedMinute = -1;
 
-      // Check every 30 seconds (catches the minute window reliably)
-      tickInterval = setInterval(tick, 30_000);
+      // Check every 2 minutes (backups are hourly/daily — 2min resolution is fine)
+      tickInterval = setInterval(tick, 120_000);
 
       // Run first tick immediately to check if we should backup now
       tick();

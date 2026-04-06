@@ -27,7 +27,7 @@ import logger from '../logger.js';
 const DEFAULT_DATA_DIR = path.join(process.cwd(), "data");
 const STATE_FILE = "emergent-state.json";
 const BACKUP_FILE = "emergent-state.backup.json";
-const PERSIST_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const PERSIST_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes — emergent state changes slowly
 
 let _persistTimer = null;
 let _dataDir = DEFAULT_DATA_DIR;

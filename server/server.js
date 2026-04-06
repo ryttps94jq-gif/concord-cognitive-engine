@@ -5059,11 +5059,11 @@ function metricsMiddleware(req, res, next) {
   next();
 }
 
-// Update gauges periodically
+// Update gauges periodically (30s — no need to update faster, these are scraped on demand)
 setInterval(() => {
   if (METRICS.gauges.dtuCount) METRICS.gauges.dtuCount.set(STATE.dtus.size);
   if (METRICS.gauges.activeConnections) METRICS.gauges.activeConnections.set(REALTIME.clients?.size || 0);
-}, 5000);
+}, 30_000);
 
 // ---- Backup & Restore ----
 const BACKUP_DIR = process.env.BACKUP_DIR || path.join(DATA_DIR, "backups");
@@ -6229,9 +6229,9 @@ function saveStateCritical() {
 }
 
 // ---- Periodic Safety-Net Save (crash protection) ----
-// Ensures state is persisted at least every 30s even if the debounce
+// Ensures state is persisted periodically even if the debounce
 // timer already fired and silent mutations accumulated (e.g. tick loops).
-const PERIODIC_SAVE_INTERVAL_MS = 30_000;
+const PERIODIC_SAVE_INTERVAL_MS = 120_000; // 2 min — debounced save handles immediate needs
 const _periodicSaveTimer = setInterval(() => {
   try {
     saveStateSync();
@@ -11615,13 +11615,13 @@ async function initGhostFleet() {
     });
     register("hlm", "metrics", () => hlm.getHLMMetrics());
 
-    // HLM slow interval: every 8 minutes — graph computation, no LLM but CPU-intensive
+    // HLM slow interval: every 20 minutes — graph computation, CPU-intensive
     const hlmTimer = setInterval(async () => {
       try {
         const dtus = typeof STATE.dtus?.values === 'function' ? Array.from(STATE.dtus.values()) : [];
         if (dtus.length > 0) await hlm.runHLMPass(dtus);
       } catch (e) { observe(e, "hlm_slow_interval"); }
-    }, 480000);
+    }, 1_200_000);
     if (hlmTimer.unref) hlmTimer.unref();
 
     structuredLog("info", "ghost_fleet_module_loaded", { name: "hlm-engine", macros: 9, interval: "5min" });
@@ -12209,8 +12209,8 @@ async function initGhostFleet() {
     })),
   });
 
-  // ── Secondary Heartbeat (60s) — Entity Economy + History ────────────────
-  // Heavier operations that don't need to run on the 15s governor heartbeat
+  // ── Secondary Heartbeat (5 min) — Entity Economy + History ────────────────
+  // Heavier operations that don't need to run frequently
   const secondaryTimer = setInterval(async () => {
     try {
       // Entity economy cycle (inflation/deflation, UBI, trade expiry)
@@ -12242,7 +12242,7 @@ async function initGhostFleet() {
         try { worldEvents.processRecurringEvents(); } catch (e) { observe(e, "ghost_fleet_recurring_events"); }
       }
     } catch (e) { observe(e, "ghost_fleet_secondary_heartbeat"); }
-  }, 60000);
+  }, 300_000); // 5 min
   if (secondaryTimer.unref) secondaryTimer.unref();
 
   return GHOST_FLEET_STATUS;
@@ -22241,7 +22241,7 @@ async function runJob(j) {
 }
 
 let _jobTimer = null;
-const _JOB_POLL_MS = 5000; // 5s polling — was 250ms which burned CPU scanning the full jobs Map 4x/sec
+const _JOB_POLL_MS = 15_000; // 15s polling — jobs are background work, no need to rush
 const _JOB_MAX_COMPLETED = 500; // prune completed/failed jobs beyond this count
 function startJobWorker() {
   if (_jobTimer) clearInterval(_jobTimer);
@@ -22548,8 +22548,8 @@ function startHeartbeat() {
     }
   }
 
-  // ── Local Scope Tick (GPU cadence, 10s default — organism speed, not machine speed) ──
-  const ms = clamp(Number(STATE.settings.heartbeatMs || 10000), 2000, 120000);
+  // ── Local Scope Tick (relaxed cadence — let the system breathe) ──
+  const ms = clamp(Number(STATE.settings.heartbeatMs || 60000), 15000, 300000);
   let _heartbeatTickCount = 0;
   heartbeatTimer = setInterval(async () => {
     if (!STATE.settings.heartbeatEnabled) return;
@@ -22739,7 +22739,7 @@ function startHeartbeat() {
   // HTTP requests are zero LLM compute. Only synthesis afterwards needs the subconscious brain.
   // Heartbeat windows: :00-:09 autogen, :10-:19 dream, :20-:29 evolution,
   //   :30-:39 synthesis, :40-:49 birth, :50-:59 exploration
-  const explorationMs = 240000; // check every 4 minutes — LLM-calling process needs spacing
+  const explorationMs = 900_000; // 15 min — exploration is long-haul, no need to rush
   let explorationTimer = null;
   explorationTimer = setInterval(async () => {
     if (!STATE.settings.heartbeatEnabled) return;
@@ -22943,10 +22943,10 @@ function startHeartbeat() {
   }, explorationMs);
   log("heartbeat", "Exploration window timer started", { intervalMs: explorationMs });
 
-  // ── Global Scope Tick (5 minutes — slow, deliberate synthesis) ──
+  // ── Global Scope Tick (15 minutes — slow, deliberate synthesis) ──
   // Global tick can: generate DTU candidates from existing Global DTUs, update resonance.
   // Global tick cannot: ingest local or marketplace DTUs, respond to local activity.
-  const globalMs = clamp(Number(STATE.settings.globalTickMs || 300000), 60000, 600000);
+  const globalMs = clamp(Number(STATE.settings.globalTickMs || 900000), 300000, 3600000);
   globalTickTimer = setInterval(async () => {
     if (!STATE.settings.heartbeatEnabled) return;
     try {
@@ -23344,7 +23344,7 @@ async function latticeAutonomousTick() {
 function startChicken3Cron() {
   try {
     if (!STATE.__chicken3?.enabled || !STATE.__chicken3?.cronEnabled) return { ok:false, reason:"disabled" };
-    const ms = clamp(Number(STATE.__chicken3?.cronIntervalMs ?? 300000), 15000, 3600000);
+    const ms = clamp(Number(STATE.__chicken3?.cronIntervalMs ?? 900000), 300000, 3600000);
     setInterval(() => { latticeAutonomousTick(); }, ms);
     structuredLog("info", "chicken3_cron_active", { intervalMin: (ms/60000).toFixed(2) });
     return { ok:true, intervalMs: ms };
@@ -24070,7 +24070,7 @@ function _startGovernorHeartbeat() {
   try {
     if (__governorTimer) return { ok:true, already:true };
     const s = STATE.settings || {};
-    const ms = clamp(Number(s.heartbeatMs ?? 10000), 1000, 10*60*1000);
+    const ms = clamp(Number(s.heartbeatMs ?? 60000), 15000, 10*60*1000);
     if (s.heartbeatEnabled === false) return { ok:false, reason:"heartbeat_disabled" };
     __governorTimer = setInterval(() => { governorTick("interval").catch(()=>{}); }, ms);
     structuredLog("info", "governor_heartbeat_active", { intervalSec: (ms/1000).toFixed(2) });
@@ -25047,8 +25047,8 @@ const _ALERTING = {
   }
 };
 
-// Evaluate alerts every 30 seconds
-setInterval(() => _ALERTING.evaluate(), 30000);
+// Evaluate alerts every 2 minutes — system-health checks don't need 30s cadence
+setInterval(() => _ALERTING.evaluate(), 120_000);
 
 app.get("/api/alerts", (req, res) => {
   res.json({ ok: true, alerts: _ALERTING.stats() });
@@ -38682,10 +38682,10 @@ try {
     };
   }
 
-  // Sync every 30 seconds
+  // Sync every 2 minutes — state sync is local, no rush
   setInterval(() => {
     try { syncPoolState(buildPoolSnapshot()); } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
-  }, 30000);
+  }, 120_000);
 
   // Initial sync after 5 seconds (let STATE populate)
   setTimeout(() => {
