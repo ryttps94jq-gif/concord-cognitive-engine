@@ -56,6 +56,10 @@ import { getArtifactSchema } from "./lib/artifact-schemas.js";
 import { getExemplarArtifact } from "./lib/exemplar-artifacts.js";
 import "./lib/vocabularies.js";
 import { BoundedMap } from "./lib/bounded-map.js";
+import {
+  bridgeMindSpace, bridgeSubconscious,
+  bridgeCognitiveBridge, bridgeMultiSpaceHandler
+} from "./mind-space/event-bridge.js";
 import { httpMetricsMiddleware, getActiveRequests, installGlobalMetrics } from "./lib/http-metrics.js";
 import "./lib/validators/food-validator.js";
 import "./lib/validators/fitness-validator.js";
@@ -34589,6 +34593,97 @@ app.get("/api/events", (req, res) => {
   }
 });
 
+// Paginated activity feed — merges DTU events, audit log, system logs, economy transactions
+app.get("/api/events/paginated", (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 50, 200);
+    const offset = Number(req.query.offset) || 0;
+    const domain = req.query.domain;
+    const entityType = req.query.entityType;
+    const activities = [];
+
+    // Source 1: DTU lifecycle events from thought timeline
+    for (const e of THOUGHT_TIMELINE) {
+      activities.push({
+        id: e.id, type: "dtu", action: e.action,
+        message: `DTU ${e.action}: ${e.snapshot?.title || e.dtuId}`,
+        entityId: e.dtuId, entityType: "dtu",
+        timestamp: e.timestamp, meta: e.snapshot || {}
+      });
+    }
+
+    // Source 2: audit_log from database
+    if (db) {
+      try {
+        const rows = db.prepare("SELECT id, timestamp, category, action, user_id, path, details FROM audit_log ORDER BY timestamp DESC LIMIT 500").all();
+        for (const r of rows) {
+          let det = {};
+          try { det = r.details ? JSON.parse(r.details) : {}; } catch (_) {}
+          activities.push({
+            id: r.id, type: r.category || "system", action: r.action,
+            message: `${r.action} ${r.path || ""}`.trim(),
+            entityId: r.user_id, entityType: r.category || "audit",
+            timestamp: r.timestamp, meta: det
+          });
+        }
+      } catch (_) { /* table may not exist */ }
+    }
+
+    // Source 3: Recent structured logs
+    for (const log of (STATE.logs || []).slice(-200)) {
+      activities.push({
+        id: log.id || uid("evt"), type: log.domain || "system",
+        action: log.action || "log", message: log.message || "",
+        entityId: null, entityType: log.domain || "system",
+        timestamp: log.ts || log.timestamp || nowISO(), meta: log.meta || {}
+      });
+    }
+
+    // Source 4: Economy ledger
+    if (db) {
+      try {
+        const txRows = db.prepare("SELECT id, type, amount, from_user_id, to_user_id, created_at, memo FROM economy_ledger ORDER BY created_at DESC LIMIT 200").all();
+        for (const tx of txRows) {
+          activities.push({
+            id: tx.id, type: "economy", action: tx.type,
+            message: `${tx.type}: ${tx.amount} credits${tx.memo ? " — " + tx.memo : ""}`,
+            entityId: tx.from_user_id || tx.to_user_id, entityType: "transaction",
+            timestamp: tx.created_at,
+            meta: { amount: tx.amount, from: tx.from_user_id, to: tx.to_user_id }
+          });
+        }
+      } catch (_) { /* table may not exist */ }
+    }
+
+    // Filter
+    let filtered = activities;
+    if (domain) filtered = filtered.filter(a => a.type === domain);
+    if (entityType) filtered = filtered.filter(a => a.entityType === entityType);
+
+    // Sort descending, paginate
+    filtered.sort((a, b) => (b.timestamp || "").localeCompare(a.timestamp || ""));
+    const total = filtered.length;
+    const page = filtered.slice(offset, offset + limit);
+    return res.json({ ok: true, events: page, total, limit, offset });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+// Undo endpoint — reverses a timeline event
+app.post("/api/undo", (req, res) => {
+  try {
+    const { eventId } = req.body || {};
+    if (!eventId) return res.status(400).json({ ok: false, error: "eventId required" });
+    const evt = THOUGHT_TIMELINE.find(e => e.id === eventId);
+    if (!evt) return res.status(404).json({ ok: false, error: "Event not found" });
+    _recordThoughtEvent(evt.dtuId, "undone", evt.snapshot);
+    return res.json({ ok: true, undone: eventId, action: evt.action, dtuId: evt.dtuId });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
 app.post("/api/autocrawl", asyncHandler(async (req, res) => {
   try {
     const { url, makeGlobal, declaredSourceType, tags } = req.body || {};
@@ -37486,6 +37581,114 @@ app.delete("/api/music/playlist/:id", (req, res) => {
   STATE.music.userPlaylists.delete(id);
   saveStateDebounced();
   res.json({ ok: true, deleted: id });
+});
+
+// District soundscapes — authoritative audio beds per district
+app.get("/api/music/soundscapes", (_req, res) => {
+  const soundscapes = {
+    forge: {
+      label: "The Forge",
+      layers: [
+        { soundId: "hammering-rhythmic", volume: 0.4, fadeRadius: 120, timeOfDay: "always" },
+        { soundId: "furnace-roar", volume: 0.3, fadeRadius: 200, timeOfDay: "always" },
+        { soundId: "anvil-ring", volume: 0.2, fadeRadius: 80, timeOfDay: "day" },
+        { soundId: "bellows-hiss", volume: 0.15, fadeRadius: 60, timeOfDay: "always" }
+      ]
+    },
+    academy: {
+      label: "The Academy",
+      layers: [
+        { soundId: "pages-turning", volume: 0.2, fadeRadius: 40, timeOfDay: "always" },
+        { soundId: "murmuring-voices", volume: 0.15, fadeRadius: 80, timeOfDay: "day" },
+        { soundId: "quill-scratch", volume: 0.1, fadeRadius: 30, timeOfDay: "always" },
+        { soundId: "clock-tick", volume: 0.25, fadeRadius: 60, timeOfDay: "always" }
+      ]
+    },
+    docks: {
+      label: "The Docks",
+      layers: [
+        { soundId: "waves-lapping", volume: 0.35, fadeRadius: 200, timeOfDay: "always" },
+        { soundId: "seagulls-cry", volume: 0.2, fadeRadius: 150, timeOfDay: "day" },
+        { soundId: "rope-creak", volume: 0.15, fadeRadius: 60, timeOfDay: "always" },
+        { soundId: "ship-horn-distant", volume: 0.1, fadeRadius: 300, timeOfDay: "dawn" }
+      ]
+    },
+    commons: {
+      label: "The Commons",
+      layers: [
+        { soundId: "gentle-wind", volume: 0.25, fadeRadius: 250, timeOfDay: "always" },
+        { soundId: "fountain-splash", volume: 0.3, fadeRadius: 100, timeOfDay: "always" },
+        { soundId: "birdsong", volume: 0.2, fadeRadius: 180, timeOfDay: "day" },
+        { soundId: "footsteps-grass", volume: 0.1, fadeRadius: 40, timeOfDay: "day" }
+      ]
+    },
+    exchange: {
+      label: "The Exchange",
+      layers: [
+        { soundId: "crowd-chatter", volume: 0.3, fadeRadius: 100, timeOfDay: "day" },
+        { soundId: "coins-clinking", volume: 0.15, fadeRadius: 60, timeOfDay: "always" },
+        { soundId: "paper-shuffle", volume: 0.1, fadeRadius: 40, timeOfDay: "day" },
+        { soundId: "bell-ring", volume: 0.2, fadeRadius: 150, timeOfDay: "always" }
+      ]
+    },
+    silent: { label: "Silent Zone", layers: [] },
+    music_district: {
+      label: "Music District",
+      layers: [
+        { soundId: "distant-bass", volume: 0.25, fadeRadius: 200, timeOfDay: "always" },
+        { soundId: "vinyl-crackle", volume: 0.1, fadeRadius: 40, timeOfDay: "night" },
+        { soundId: "crowd-applause", volume: 0.15, fadeRadius: 120, timeOfDay: "night" },
+        { soundId: "tuning-instruments", volume: 0.1, fadeRadius: 80, timeOfDay: "day" }
+      ]
+    },
+    central_parks: {
+      label: "Central Parks",
+      layers: [
+        { soundId: "wind-through-trees", volume: 0.3, fadeRadius: 250, timeOfDay: "always" },
+        { soundId: "water-stream", volume: 0.25, fadeRadius: 150, timeOfDay: "always" },
+        { soundId: "crickets", volume: 0.2, fadeRadius: 180, timeOfDay: "night" },
+        { soundId: "birdsong-varied", volume: 0.2, fadeRadius: 200, timeOfDay: "day" }
+      ]
+    }
+  };
+
+  // Map district IDs to soundscape IDs
+  const districtMapping = {
+    district_forge: "forge",
+    district_academy: "academy",
+    district_docks: "docks",
+    district_commons: "commons",
+    district_exchange: "exchange",
+    district_music: "music_district",
+    district_central_parks: "central_parks",
+    district_silent: "silent"
+  };
+
+  return res.json({ ok: true, soundscapes, districtMapping, crossfadeMs: 200 });
+});
+
+// Individual district soundscape
+app.get("/api/music/soundscapes/:districtId", (req, res) => {
+  const districtId = req.params.districtId;
+  // Look up in world engine districts
+  const districts = STATE.world?.districts || [];
+  const district = districts.find(d => d.id === districtId) || null;
+  const soundscapeId = districtId.replace("district_", "");
+
+  // Get the soundscape bed (reuse the same data)
+  const beds = {
+    forge: { label: "The Forge", layers: [{ soundId: "hammering-rhythmic", volume: 0.4 }, { soundId: "furnace-roar", volume: 0.3 }, { soundId: "anvil-ring", volume: 0.2 }, { soundId: "bellows-hiss", volume: 0.15 }] },
+    academy: { label: "The Academy", layers: [{ soundId: "pages-turning", volume: 0.2 }, { soundId: "murmuring-voices", volume: 0.15 }, { soundId: "quill-scratch", volume: 0.1 }, { soundId: "clock-tick", volume: 0.25 }] },
+    docks: { label: "The Docks", layers: [{ soundId: "waves-lapping", volume: 0.35 }, { soundId: "seagulls-cry", volume: 0.2 }, { soundId: "rope-creak", volume: 0.15 }, { soundId: "ship-horn-distant", volume: 0.1 }] },
+    commons: { label: "The Commons", layers: [{ soundId: "gentle-wind", volume: 0.25 }, { soundId: "fountain-splash", volume: 0.3 }, { soundId: "birdsong", volume: 0.2 }, { soundId: "footsteps-grass", volume: 0.1 }] },
+    exchange: { label: "The Exchange", layers: [{ soundId: "crowd-chatter", volume: 0.3 }, { soundId: "coins-clinking", volume: 0.15 }, { soundId: "paper-shuffle", volume: 0.1 }, { soundId: "bell-ring", volume: 0.2 }] },
+    music_district: { label: "Music District", layers: [{ soundId: "distant-bass", volume: 0.25 }, { soundId: "vinyl-crackle", volume: 0.1 }, { soundId: "crowd-applause", volume: 0.15 }, { soundId: "tuning-instruments", volume: 0.1 }] },
+    central_parks: { label: "Central Parks", layers: [{ soundId: "wind-through-trees", volume: 0.3 }, { soundId: "water-stream", volume: 0.25 }, { soundId: "crickets", volume: 0.2 }, { soundId: "birdsong-varied", volume: 0.2 }] },
+    silent: { label: "Silent Zone", layers: [] }
+  };
+
+  const bed = beds[soundscapeId] || beds.silent;
+  return res.json({ ok: true, districtId, district: district?.name || soundscapeId, soundscape: bed });
 });
 
 // AR endpoints - backed by lens artifacts tagged as AR layers
@@ -43769,6 +43972,20 @@ class ConcordEventBus {
 const eventBus = new ConcordEventBus();
 STATE._eventBus = eventBus;
 
+// ── Mind-Space Event Bridge ─────────────────────────────────────────────────
+// Expose bridge helpers so any code creating mind-space instances can wire them
+// to the global eventBus.  Usage:
+//   STATE._mindSpaceBridge.mindSpace(instance)
+//   STATE._mindSpaceBridge.subconscious(instance)
+//   STATE._mindSpaceBridge.cognitiveBridge(instance)
+//   STATE._mindSpaceBridge.multiSpaceHandler(instance)
+STATE._mindSpaceBridge = {
+  mindSpace:        (inst) => bridgeMindSpace(inst, eventBus),
+  subconscious:     (inst) => bridgeSubconscious(inst, eventBus),
+  cognitiveBridge:  (inst) => bridgeCognitiveBridge(inst, eventBus),
+  multiSpaceHandler:(inst) => bridgeMultiSpaceHandler(inst, eventBus),
+};
+
 // ── Event Bus Subscribers ────────────────────────────────────────────────────
 // Wire critical event handlers so the bus isn't fire-and-forget.
 
@@ -45480,6 +45697,32 @@ function setupEventBusWebSocketBridge(wss) {
     "bridge.organism.birth": "organism:birth",
     "bridge.organism.denied": "organism:denied",
     "bridge.organism.death": "organism:death",
+    // Mind-space bridged events
+    "mindspace.presence.participant:joined": "mindspace:participant_joined",
+    "mindspace.presence.emotion:transmitted": "mindspace:emotion_transmitted",
+    "mindspace.presence.thought:shared": "mindspace:thought_shared",
+    "mindspace.presence.presence:transitioned": "mindspace:presence_transitioned",
+    "mindspace.presence.memory:anchored": "mindspace:memory_anchored",
+    "mindspace.presence.space:closed": "mindspace:space_closed",
+    "mindspace.presence.sensory:shared": "mindspace:sensory_shared",
+    "mindspace.presence.distress:detected": "mindspace:distress_detected",
+    "mindspace.subconscious.subconscious:started": "mindspace:subconscious_started",
+    "mindspace.subconscious.subconscious:stopped": "mindspace:subconscious_stopped",
+    "mindspace.subconscious.space:added": "mindspace:space_added",
+    "mindspace.subconscious.space:removed": "mindspace:space_removed",
+    "mindspace.subconscious.focus:changed": "mindspace:focus_changed",
+    "mindspace.subconscious.focus:released": "mindspace:focus_released",
+    "mindspace.subconscious.pulse": "mindspace:subconscious_pulse",
+    "mindspace.subconscious.escalation:queued": "mindspace:escalation_queued",
+    "mindspace.subconscious.escalation:processed": "mindspace:escalation_processed",
+    "mindspace.subconscious.escalation:failed": "mindspace:escalation_failed",
+    "mindspace.bridge.bridge:initialized": "mindspace:bridge_initialized",
+    "mindspace.bridge.space:opened": "mindspace:space_opened",
+    "mindspace.bridge.space:backgrounded": "mindspace:space_backgrounded",
+    "mindspace.bridge.interface:upgraded": "mindspace:interface_upgraded",
+    "mindspace.bridge.bridge:shutdown": "mindspace:bridge_shutdown",
+    "mindspace.multi.attention:shifted": "mindspace:attention_shifted",
+    "mindspace.multi.escalation:failed": "mindspace:multi_escalation_failed",
   };
 
   for (const [eventType, wsType] of Object.entries(eventToWsType)) {
