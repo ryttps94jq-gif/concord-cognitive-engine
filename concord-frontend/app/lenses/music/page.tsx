@@ -1343,7 +1343,7 @@ export default function MusicLensPage() {
                   onClick={() => {
                     const player = getPlayer();
                     if (nowPlaying.playbackState === 'playing') player.pause();
-                    else player.play().catch((e) => console.error('[Music] Playback failed:', e));
+                    else player.play().catch((e) => { console.error('[Music] Playback failed:', e); showToast('error', 'Playback failed'); });
                   }}
                   className="p-2 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 text-white hover:brightness-110 transition shadow-lg shadow-purple-500/25"
                 >

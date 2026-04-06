@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
+import { showToast } from '@/components/common/Toasts';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useMusicStore } from '@/lib/music/store';
 import { getPlayer } from '@/lib/music/player';
@@ -126,7 +127,7 @@ export default function PodcastLensPage() {
       if (nowPlaying.playbackState === 'playing') {
         player.pause();
       } else {
-        player.play().catch((e) => console.error('[Podcast] Playback failed:', e));
+        player.play().catch((e) => { console.error('[Podcast] Playback failed:', e); showToast('error', 'Playback failed'); });
       }
       return;
     }

@@ -73,6 +73,7 @@ import type { Initiative } from './InitiativeChip';
 import ChatRouteOverlay from './ChatRouteOverlay';
 import ForgeCard from './ForgeCard';
 import { ConfidenceBadge } from '@/components/common/ConfidenceBadge';
+import { showToast } from '@/components/common/Toasts';
 
 // ── Types ──────────────────────────────────────────────────────
 
@@ -887,7 +888,7 @@ export function PersistentChatRail({
             }}
             onRespond={(id) => {
               // Report response to backend
-              fetch(`/api/initiative/${id}/respond`, { method: 'POST' }).catch(err => console.error('[Initiative] Failed to respond:', err));
+              fetch(`/api/initiative/${id}/respond`, { method: 'POST' }).catch(err => { console.error('[Initiative] Failed to respond:', err); showToast('error', 'Failed to save'); });
               setServerInitiatives(prev => prev.filter(i => i.id !== id));
             }}
             maxVisible={2}
