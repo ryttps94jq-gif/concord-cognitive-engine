@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Moon, Send, Sparkles, Clock } from 'lucide-react';
 import { apiHelpers } from '@/lib/api/client';
+import { useUIStore } from '@/store/ui';
 import { getSocket } from '@/lib/realtime/socket';
 
 interface DreamEntry {
@@ -52,7 +53,7 @@ export function DreamPanel() {
         const hist = await apiHelpers.dream.history(10);
         setDreams(hist.data?.dreams || []);
       }
-    } catch { /* silent */ }
+    } catch (e) { console.error('[Dream] Failed to capture dream:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to capture dream' }); }
     setCapturing(false);
   };
 

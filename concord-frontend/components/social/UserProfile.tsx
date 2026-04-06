@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { cn, formatRelativeTime, formatNumber } from '@/lib/utils';
 import { api } from '@/lib/api/client';
+import { useUIStore } from '@/store/ui';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -337,7 +338,7 @@ export function UserProfile({
       await navigator.clipboard.writeText(`${window.location.origin}/profile/${userId}`);
       setLinkCopied(true);
       setTimeout(() => setLinkCopied(false), 2000);
-    } catch {}
+    } catch (e) { console.error('[UserProfile] Failed to copy link:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to copy profile link' }); }
   }, [userId]);
 
   // ── Content tabs ─────────────────────────────────────────────────────

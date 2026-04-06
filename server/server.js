@@ -4607,6 +4607,8 @@ function requireRole(...roles) {
 // unless AUTH_MODE=public, where anonymous writes are intentionally allowed.
 const WRITE_AUTH_PUBLIC_PATHS = ["/api/auth/login", "/api/auth/register", "/api/auth/csrf-token", "/health", "/ready", "/metrics", "/api/chat", "/api/lens"];
 function productionWriteAuthMiddleware(req, res, next) {
+  // Authenticated users can write to any endpoint
+  if (req.user?.id) return next();
   if (NODE_ENV !== "production") return next();
   // AUTH_MODE=public explicitly allows anonymous access — skip write-auth gate
   if (AUTH_MODE === "public") return next();
@@ -4862,7 +4864,10 @@ if (z) {
 // Validation middleware factory
 function validate(schemaName, source = "body") {
   return (req, res, next) => {
-    if (!z || !schemas[schemaName]) return next();
+    if (!z || !schemas[schemaName]) {
+      structuredLog("warn", "validation_skip", { schema: schemaName, reason: !z ? "zod_missing" : "schema_missing" });
+      return next();
+    }
     const data = source === "query" ? req.query : req.body;
     const result = schemas[schemaName].safeParse(data);
     if (!result.success) {
@@ -5301,7 +5306,7 @@ setInterval(() => _SLIDING_WINDOW.cleanup(), 300000);
 // Prevents double-submit via Idempotency-Key header
 const _IDEMPOTENCY = {
   store: new Map(), // key -> { response, status, createdAt }
-  TTL_MS: 24 * 60 * 60 * 1000, // 24 hours
+  TTL_MS: 5 * 60 * 1000, // 5 minutes
   MAX_ENTRIES: 10000,
 
   cleanup() {
@@ -5317,18 +5322,20 @@ const _IDEMPOTENCY = {
   }
 };
 
-setInterval(() => _IDEMPOTENCY.cleanup(), 3600000);
+setInterval(() => _IDEMPOTENCY.cleanup(), 300000); // cleanup every 5 minutes
 
 function idempotencyMiddleware(req, res, next) {
   const key = req.headers["idempotency-key"];
   if (!key || req.method === "GET") return next();
 
   const existing = _IDEMPOTENCY.store.get(key);
-  if (existing) {
+  if (existing && (Date.now() - existing.createdAt < _IDEMPOTENCY.TTL_MS)) {
     // Return cached response for duplicate request
     res.setHeader("X-Idempotent-Replayed", "true");
     return res.status(existing.status).json(existing.response);
   }
+  // If expired, delete it and proceed normally
+  if (existing) _IDEMPOTENCY.store.delete(key);
 
   // Intercept response to cache it
   const originalJson = res.json.bind(res);
@@ -10963,23 +10970,33 @@ function initLLMPipeline() {
   });
 }
 
-// Call Ollama (local)
+// Call Ollama (local) — uses /api/chat with system message when provided
 async function callOllama(prompt, options = {}) {
   const { url, model } = LLM_PIPELINE.providers.ollama;
   if (!url) return { ok: false, error: "Ollama not configured" };
 
   try {
-    const payload = {
-      model: options.model || model,
-      prompt: prompt,
-      stream: false,
-      options: {
-        temperature: options.temperature || 0.7,
-        num_predict: options.maxTokens || 500
-      }
-    };
+    const useModel = options.model || model;
+    const systemContent = options.system || "";
+    const useChat = !!systemContent;
+    const payload = useChat
+      ? {
+          model: useModel,
+          messages: [
+            { role: "system", content: systemContent },
+            { role: "user", content: prompt },
+          ],
+          stream: false,
+          options: { temperature: options.temperature || 0.7, num_predict: options.maxTokens || 500 },
+        }
+      : {
+          model: useModel,
+          prompt,
+          stream: false,
+          options: { temperature: options.temperature || 0.7, num_predict: options.maxTokens || 500 },
+        };
 
-    const response = await fetch(`${url}/api/generate`, {
+    const response = await fetch(`${url}/api/${useChat ? "chat" : "generate"}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -10993,9 +11010,9 @@ async function callOllama(prompt, options = {}) {
     const data = await response.json();
     return {
       ok: true,
-      content: data.response || "",
+      content: data.message?.content || data.response || "",
       source: "ollama",
-      model: model,
+      model: useModel,
       tokens: data.eval_count || 0
     };
   } catch (e) {
@@ -26176,14 +26193,14 @@ app.get("/api/graph/visual", async (req, res) => {
   try {
     res.json(await runMacro("graph", "visualData", { tier: req.query.tier, limit: req.query.limit, includeEdges: req.query.includeEdges !== "false" }, makeCtx(req)));
   } catch (e) {
-    res.json({ ok: true, nodes: [], links: [], edges: [] });
+    res.status(500).json({ ok: false, error: String(e?.message || e), nodes: [], links: [], edges: [] });
   }
 });
 app.get("/api/graph/force", async (req, res) => {
   try {
     res.json(await runMacro("graph", "forceGraph", { centerNode: req.query.centerNode, depth: req.query.depth, maxNodes: req.query.maxNodes }, makeCtx(req)));
   } catch (e) {
-    res.json({ ok: true, nodes: [], links: [] });
+    res.status(500).json({ ok: false, error: String(e?.message || e), nodes: [], links: [] });
   }
 });
 
@@ -31102,66 +31119,65 @@ async function buildSovereignContext(query, lens, maxDTUs, sessionId, userId) {
 // ── Sovereignty Resolution Endpoint (chat consent flow) ─────────────────────
 
 app.post("/api/chat/sovereignty-resolve", requireAuth(), async (req, res) => {
-  const userId = req.user?.id || req.actor?.userId;
-  if (!userId) return res.status(401).json({ ok: false, error: "Auth required" });
+  try {
+    const userId = req.user?.id || req.actor?.userId;
+    if (!userId) return res.status(401).json({ ok: false, error: "Auth required" });
 
-  const { sessionId, choice, globalDTUIds, originalPrompt, lens, remember } = req.body;
+    const { sessionId, choice, globalDTUIds, originalPrompt, lens, remember } = req.body;
 
-  if (!["sync_temp", "sync_permanent", "skip"].includes(choice)) {
-    return res.status(400).json({ ok: false, error: "Invalid choice" });
-  }
-
-  // If user wants to remember this preference
-  if (remember) {
-    const user = AUTH.users.get(userId);
-    if (user) {
-      if (!user.sovereignty) user.sovereignty = { mode: null, selectedDomains: [], globalAssistConsent: "ask", setupCompleted: false };
-      if (choice === "sync_temp") user.sovereignty.globalAssistConsent = "always_temp";
-      else if (choice === "sync_permanent") user.sovereignty.globalAssistConsent = "always_permanent";
-      else if (choice === "skip") user.sovereignty.globalAssistConsent = "never";
+    if (!["sync_temp", "sync_permanent", "skip"].includes(choice)) {
+      return res.status(400).json({ ok: false, error: "Invalid choice" });
     }
-  }
 
-  let context = "";
-
-  if (choice === "sync_temp") {
-    const globalDTUs = (globalDTUIds || []).map(id => STATE.dtus.get(id)).filter(Boolean);
-    const localResults = await scopedEmbeddingSearch(originalPrompt, userId, { limit: 10, minScore: 0.4 });
-    context = formatSovereignContext(Array.isArray(localResults) ? localResults : []) +
-      "\n\nGLOBAL COMMONS CONTEXT (temporary):\n" +
-      formatSovereignContext(globalDTUs);
-  } else if (choice === "sync_permanent") {
-    const syncedIds = [];
-    for (const gId of (globalDTUIds || [])) {
-      const globalDTU = STATE.dtus.get(gId);
-      if (globalDTU && globalDTU.scope === "global") {
-        const copy = {
-          ...JSON.parse(JSON.stringify(globalDTU)),
-          id: uid("dtu"),
-          ownerId: userId,
-          scope: "synced_global",
-          syncedFrom: gId,
-          syncedAt: nowISO(),
-        };
-        STATE.dtus.set(copy.id, copy);
-        syncedIds.push(copy.id);
+    // If user wants to remember this preference
+    if (remember) {
+      const user = AUTH.users.get(userId);
+      if (user) {
+        if (!user.sovereignty) user.sovereignty = { mode: null, selectedDomains: [], globalAssistConsent: "ask", setupCompleted: false };
+        if (choice === "sync_temp") user.sovereignty.globalAssistConsent = "always_temp";
+        else if (choice === "sync_permanent") user.sovereignty.globalAssistConsent = "always_permanent";
+        else if (choice === "skip") user.sovereignty.globalAssistConsent = "never";
       }
     }
-    if (syncedIds.length > 0) await reindexUserDTUs(userId);
-    const localResults = await scopedEmbeddingSearch(originalPrompt, userId, { limit: 10, minScore: 0.4 });
-    context = formatSovereignContext(Array.isArray(localResults) ? localResults : []);
-  } else {
-    const localResults = await scopedEmbeddingSearch(originalPrompt, userId, { limit: 10, minScore: 0.4 });
-    context = formatSovereignContext(Array.isArray(localResults) ? localResults : []);
-  }
 
-  // Call the brain with the resolved context
-  try {
+    let context = "";
+
+    if (choice === "sync_temp") {
+      const globalDTUs = (globalDTUIds || []).map(id => STATE.dtus.get(id)).filter(Boolean);
+      const localResults = await scopedEmbeddingSearch(originalPrompt, userId, { limit: 10, minScore: 0.4 });
+      context = formatSovereignContext(Array.isArray(localResults) ? localResults : []) +
+        "\n\nGLOBAL COMMONS CONTEXT (temporary):\n" +
+        formatSovereignContext(globalDTUs);
+    } else if (choice === "sync_permanent") {
+      const syncedIds = [];
+      for (const gId of (globalDTUIds || [])) {
+        const globalDTU = STATE.dtus.get(gId);
+        if (globalDTU && globalDTU.scope === "global") {
+          const copy = {
+            ...JSON.parse(JSON.stringify(globalDTU)),
+            id: uid("dtu"),
+            ownerId: userId,
+            scope: "synced_global",
+            syncedFrom: gId,
+            syncedAt: nowISO(),
+          };
+          STATE.dtus.set(copy.id, copy);
+          syncedIds.push(copy.id);
+        }
+      }
+      if (syncedIds.length > 0) await reindexUserDTUs(userId);
+      const localResults = await scopedEmbeddingSearch(originalPrompt, userId, { limit: 10, minScore: 0.4 });
+      context = formatSovereignContext(Array.isArray(localResults) ? localResults : []);
+    } else {
+      const localResults = await scopedEmbeddingSearch(originalPrompt, userId, { limit: 10, minScore: 0.4 });
+      context = formatSovereignContext(Array.isArray(localResults) ? localResults : []);
+    }
+
     const result = await consciousChat(originalPrompt, lens, { overrideContext: context });
     saveStateDebounced();
     res.json({ ok: true, ...result, sovereignty: { choice, synced: choice === "sync_permanent" } });
   } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
 });
 
@@ -31180,76 +31196,84 @@ function getUserEntities(userId) {
 if (!STATE.councilProposals) STATE.councilProposals = new Map();
 
 app.post("/api/council/propose-promotion", requireAuth(), async (req, res) => {
-  const userId = req.user?.id || req.actor?.userId;
-  if (!userId) return res.status(401).json({ ok: false, error: "Auth required" });
+  try {
+    const userId = req.user?.id || req.actor?.userId;
+    if (!userId) return res.status(401).json({ ok: false, error: "Auth required" });
 
-  const { dtuId, reason } = req.body;
-  const dtu = STATE.dtus.get(dtuId);
-  if (!dtu) return res.status(404).json({ ok: false, error: "DTU not found" });
-  if (dtu.ownerId !== userId) return res.status(403).json({ ok: false, error: "Not your DTU" });
-  if (dtu.scope !== "personal") return res.status(400).json({ ok: false, error: "Only personal DTUs can be promoted" });
+    const { dtuId, reason } = req.body;
+    const dtu = STATE.dtus.get(dtuId);
+    if (!dtu) return res.status(404).json({ ok: false, error: "DTU not found" });
+    if (dtu.ownerId !== userId) return res.status(403).json({ ok: false, error: "Not your DTU" });
+    if (dtu.scope !== "personal") return res.status(400).json({ ok: false, error: "Only personal DTUs can be promoted" });
 
-  if (dtu.meta?.qualityScore && dtu.meta.qualityScore < 0.7) {
-    return res.status(400).json({ ok: false, error: "DTU must pass quality gate (score >= 0.7)" });
+    if (dtu.meta?.qualityScore && dtu.meta.qualityScore < 0.7) {
+      return res.status(400).json({ ok: false, error: "DTU must pass quality gate (score >= 0.7)" });
+    }
+
+    const proposal = {
+      id: uid("proposal"),
+      type: "promotion_to_global",
+      dtuId,
+      proposedBy: userId,
+      reason: reason || "",
+      status: "pending",
+      votes: {},
+      createdAt: nowISO(),
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    };
+
+    STATE.councilProposals.set(proposal.id, proposal);
+    if (REALTIME?.io) REALTIME.io.emit("council:proposal", { proposal });
+    saveStateDebounced();
+    res.json({ ok: true, proposal });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
-
-  const proposal = {
-    id: uid("proposal"),
-    type: "promotion_to_global",
-    dtuId,
-    proposedBy: userId,
-    reason: reason || "",
-    status: "pending",
-    votes: {},
-    createdAt: nowISO(),
-    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-  };
-
-  STATE.councilProposals.set(proposal.id, proposal);
-  if (REALTIME?.io) REALTIME.io.emit("council:proposal", { proposal });
-  saveStateDebounced();
-  res.json({ ok: true, proposal });
 });
 
 app.post("/api/council/vote", requireAuth(), (req, res) => {
-  const userId = req.user?.id || req.actor?.userId;
-  const { proposalId, vote } = req.body;
-  if (!["approve", "reject"].includes(vote)) return res.status(400).json({ ok: false, error: "Vote must be approve or reject" });
+  try {
+    const userId = req.user?.id || req.actor?.userId;
+    const { proposalId, vote } = req.body;
+    if (!["approve", "reject"].includes(vote)) return res.status(400).json({ ok: false, error: "Vote must be approve or reject" });
 
-  const proposal = STATE.councilProposals?.get(proposalId);
-  if (!proposal || proposal.status !== "pending") return res.status(404).json({ ok: false, error: "Proposal not found or closed" });
-  if (proposal.proposedBy === userId) return res.status(400).json({ ok: false, error: "Cannot vote on own proposal" });
+    const proposal = STATE.councilProposals?.get(proposalId);
+    if (!proposal || proposal.status !== "pending") return res.status(404).json({ ok: false, error: "Proposal not found or closed" });
+    if (proposal.proposedBy === userId) return res.status(400).json({ ok: false, error: "Cannot vote on own proposal" });
 
-  proposal.votes[userId] = vote;
+    proposal.votes[userId] = vote;
 
-  // Check thresholds
-  const votes = Object.values(proposal.votes);
-  const approvals = votes.filter(v => v === "approve").length;
-  const rejections = votes.filter(v => v === "reject").length;
+    // Check thresholds
+    const votes = Object.values(proposal.votes);
+    const approvals = votes.filter(v => v === "approve").length;
+    const rejections = votes.filter(v => v === "reject").length;
 
-  if (approvals >= 3 && rejections <= 1) {
-    const dtu = STATE.dtus.get(proposal.dtuId);
-    if (dtu) {
-      const globalCopy = {
-        ...JSON.parse(JSON.stringify(dtu)),
-        id: uid("dtu"),
-        scope: "global",
-        promotedFrom: dtu.id,
-        promotedBy: proposal.proposedBy,
-        promotedAt: nowISO(),
-      };
-      STATE.dtus.set(globalCopy.id, globalCopy);
-      proposal.status = "approved";
-      proposal.globalDtuId = globalCopy.id;
-      if (REALTIME?.io) REALTIME.io.emit("council:vote", { proposal, result: "approved" });
+    if (approvals >= 3 && rejections <= 1) {
+      const dtu = STATE.dtus.get(proposal.dtuId);
+      if (dtu) {
+        const globalCopy = {
+          ...JSON.parse(JSON.stringify(dtu)),
+          id: uid("dtu"),
+          scope: "global",
+          promotedFrom: dtu.id,
+          promotedBy: proposal.proposedBy,
+          promotedAt: nowISO(),
+        };
+        STATE.dtus.set(globalCopy.id, globalCopy);
+        proposal.status = "approved";
+        proposal.globalDtuId = globalCopy.id;
+        if (REALTIME?.io) REALTIME.io.emit("council:vote", { proposal, result: "approved" });
+      }
+    } else if (rejections > 2) {
+      proposal.status = "rejected";
+      if (REALTIME?.io) REALTIME.io.emit("council:vote", { proposal, result: "rejected" });
     }
-  } else if (rejections > 2) {
-    proposal.status = "rejected";
-    if (REALTIME?.io) REALTIME.io.emit("council:vote", { proposal, result: "rejected" });
-  }
 
-  saveStateDebounced();
-  res.json({ ok: true, proposal });
+    saveStateDebounced();
+    res.json({ ok: true, proposal });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 app.get("/api/council/proposals", (req, res) => {
@@ -31263,41 +31287,49 @@ app.get("/api/council/proposals", (req, res) => {
 // ── Unsync & Sovereignty Management ─────────────────────────────────────────
 
 app.post("/api/sovereignty/unsync", requireAuth(), validate("sovereigntyUnsync"), async (req, res) => {
-  const userId = req.user?.id || req.actor?.userId;
-  if (!userId) return res.status(401).json({ ok: false, error: "Auth required" });
+  try {
+    const userId = req.user?.id || req.actor?.userId;
+    if (!userId) return res.status(401).json({ ok: false, error: "Auth required" });
 
-  const { domain } = req.body; // null = unsync ALL
+    const { domain } = req.body; // null = unsync ALL
 
-  let removed = 0;
-  for (const [id, dtu] of STATE.dtus) {
-    if (dtu.ownerId === userId && dtu.scope === "synced_global") {
-      if (!domain || dtu.domain === domain) {
-        STATE.dtus.delete(id);
-        removed++;
+    let removed = 0;
+    for (const [id, dtu] of STATE.dtus) {
+      if (dtu.ownerId === userId && dtu.scope === "synced_global") {
+        if (!domain || dtu.domain === domain) {
+          STATE.dtus.delete(id);
+          removed++;
+        }
       }
     }
-  }
 
-  if (removed > 0) await reindexUserDTUs(userId);
-  saveStateDebounced();
-  res.json({ ok: true, removed, domain: domain || "all" });
+    if (removed > 0) await reindexUserDTUs(userId);
+    saveStateDebounced();
+    res.json({ ok: true, removed, domain: domain || "all" });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 app.put("/api/sovereignty/preferences", requireAuth(), validate("sovereigntyPreferences"), async (req, res) => {
-  const userId = req.user?.id || req.actor?.userId;
-  if (!userId) return res.status(401).json({ ok: false, error: "Auth required" });
+  try {
+    const userId = req.user?.id || req.actor?.userId;
+    if (!userId) return res.status(401).json({ ok: false, error: "Auth required" });
 
-  const user = AUTH.users.get(userId);
-  if (!user) return res.status(404).json({ ok: false });
+    const user = AUTH.users.get(userId);
+    if (!user) return res.status(404).json({ ok: false });
 
-  const { globalAssistConsent } = req.body;
-  if (["ask", "always_temp", "always_permanent", "never"].includes(globalAssistConsent)) {
-    if (!user.sovereignty) user.sovereignty = { mode: null, selectedDomains: [], globalAssistConsent: "ask", setupCompleted: false };
-    user.sovereignty.globalAssistConsent = globalAssistConsent;
+    const { globalAssistConsent } = req.body;
+    if (["ask", "always_temp", "always_permanent", "never"].includes(globalAssistConsent)) {
+      if (!user.sovereignty) user.sovereignty = { mode: null, selectedDomains: [], globalAssistConsent: "ask", setupCompleted: false };
+      user.sovereignty.globalAssistConsent = globalAssistConsent;
+    }
+
+    saveStateDebounced();
+    res.json({ ok: true, sovereignty: user.sovereignty });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
-
-  saveStateDebounced();
-  res.json({ ok: true, sovereignty: user.sovereignty });
 });
 
 app.get("/api/sovereignty/status", requireAuth(), async (req, res) => {
@@ -31334,38 +31366,42 @@ app.get("/api/sovereignty/status", requireAuth(), async (req, res) => {
 // ── Marketplace Scope Rules ─────────────────────────────────────────────────
 
 app.post("/api/marketplace/submit", requireAuth(), (req, res) => {
-  const userId = req.user?.id || req.actor?.userId;
-  if (!userId) return res.status(401).json({ ok: false, error: "Auth required" });
+  try {
+    const userId = req.user?.id || req.actor?.userId;
+    if (!userId) return res.status(401).json({ ok: false, error: "Auth required" });
 
-  const { dtuId, price } = req.body;
-  const dtu = STATE.dtus.get(dtuId);
-  if (!dtu) return res.status(404).json({ ok: false, error: "DTU not found" });
-  if (dtu.ownerId !== userId) return res.status(403).json({ ok: false, error: "Not your DTU" });
-  if (dtu.scope !== "personal") return res.status(400).json({ ok: false, error: "Can only list personal DTUs" });
+    const { dtuId, price } = req.body;
+    const dtu = STATE.dtus.get(dtuId);
+    if (!dtu) return res.status(404).json({ ok: false, error: "DTU not found" });
+    if (dtu.ownerId !== userId) return res.status(403).json({ ok: false, error: "Not your DTU" });
+    if (dtu.scope !== "personal") return res.status(400).json({ ok: false, error: "Can only list personal DTUs" });
 
-  const listing = {
-    id: uid("listing"),
-    sourceDtuId: dtuId,
-    sellerId: userId,
-    scope: "marketplace",
-    title: dtu.title,
-    domain: dtu.domain,
-    description: dtu.human?.summary || "",
-    artifact: dtu.artifact ? { ...dtu.artifact } : null,
-    qualityTier: dtu.meta?.qualityTier,
-    qualityScore: dtu.meta?.qualityScore,
-    price: Number(price || 0),
-    currency: "concord_coin",
-    listedAt: nowISO(),
-    downloads: 0,
-    ratings: [],
-    status: "active",
-  };
+    const listing = {
+      id: uid("listing"),
+      sourceDtuId: dtuId,
+      sellerId: userId,
+      scope: "marketplace",
+      title: dtu.title,
+      domain: dtu.domain,
+      description: dtu.human?.summary || "",
+      artifact: dtu.artifact ? { ...dtu.artifact } : null,
+      qualityTier: dtu.meta?.qualityTier,
+      qualityScore: dtu.meta?.qualityScore,
+      price: Number(price || 0),
+      currency: "concord_coin",
+      listedAt: nowISO(),
+      downloads: 0,
+      ratings: [],
+      status: "active",
+    };
 
-  if (!STATE.marketplaceListings) STATE.marketplaceListings = new Map();
-  STATE.marketplaceListings.set(listing.id, listing);
-  saveStateDebounced();
-  res.json({ ok: true, listing });
+    if (!STATE.marketplaceListings) STATE.marketplaceListings = new Map();
+    STATE.marketplaceListings.set(listing.id, listing);
+    saveStateDebounced();
+    res.json({ ok: true, listing });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 // ============================================================================
@@ -31542,14 +31578,18 @@ app.get("/api/brief/morning", requireAuth(), async (req, res) => {
 
 // Prediction dismiss
 app.post("/api/brief/dismiss", requireAuth(), validate("briefDismiss"), (req, res) => {
-  const { dtuId } = req.validated || req.body;
-  const dtu = STATE.dtus.get(dtuId);
-  if (dtu && dtu.ownerId === req.user.id) {
-    dtu.meta = dtu.meta || {};
-    dtu.meta.preGenConsumed = true;
-    saveStateDebounced();
+  try {
+    const { dtuId } = req.validated || req.body;
+    const dtu = STATE.dtus.get(dtuId);
+    if (dtu && dtu.ownerId === req.user.id) {
+      dtu.meta = dtu.meta || {};
+      dtu.meta.preGenConsumed = true;
+      saveStateDebounced();
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
-  res.json({ ok: true });
 });
 
 // --- Capability 2: AUTONOMOUS END-TO-END PIPELINES ---
@@ -31715,9 +31755,13 @@ async function collabScopedSearch(query, userId, collabId, opts = {}) {
 }
 
 app.post("/api/collab/create", requireAuth(), validate("collabCreate"), async (req, res) => {
-  const { inviteeId, domains, description } = req.validated || req.body;
-  const session = createCollabSession(req.user.id, inviteeId, domains || [], description || "");
-  res.json({ ok: true, session: { ...session, sharedDTUIds: [...session.sharedDTUIds] } });
+  try {
+    const { inviteeId, domains, description } = req.validated || req.body;
+    const session = createCollabSession(req.user.id, inviteeId, domains || [], description || "");
+    res.json({ ok: true, session: { ...session, sharedDTUIds: [...session.sharedDTUIds] } });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 app.post("/api/collab/:id/accept", requireAuth(), async (req, res) => {
@@ -31730,14 +31774,18 @@ app.post("/api/collab/:id/accept", requireAuth(), async (req, res) => {
 });
 
 app.post("/api/collab/:id/close", requireAuth(), (req, res) => {
-  const session = COLLAB_SESSIONS.get(req.params.id);
-  if (!session) return res.status(404).json({ ok: false });
-  if (session.initiator !== req.user.id && session.invitee !== req.user.id) {
-    return res.status(403).json({ ok: false });
+  try {
+    const session = COLLAB_SESSIONS.get(req.params.id);
+    if (!session) return res.status(404).json({ ok: false });
+    if (session.initiator !== req.user.id && session.invitee !== req.user.id) {
+      return res.status(403).json({ ok: false });
+    }
+    session.status = "closed";
+    session.closedAt = nowISO();
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
-  session.status = "closed";
-  session.closedAt = nowISO();
-  res.json({ ok: true });
 });
 
 app.get("/api/collab/active", requireAuth(), (req, res) => {
@@ -31819,20 +31867,24 @@ app.post("/api/v1/lens/:domain/:action", requireApiKey(), async (req, res) => {
 });
 
 app.post("/api/v1/keys/create", requireAuth(), validate("apiV1KeyCreate"), (req, res) => {
-  const key = {
-    id: generateRequestId(),
-    userId: req.user.id,
-    key: `ck_${crypto.randomBytes(32).toString("hex")}`,
-    name: req.body.name || "Default",
-    permissions: req.body.permissions || ["read", "execute"],
-    rateLimit: 60,
-    active: true,
-    createdAt: nowISO(),
-  };
-  STATE.apiKeys = STATE.apiKeys || new Map();
-  STATE.apiKeys.set(key.id, key);
-  saveStateDebounced();
-  res.json({ ok: true, key: key.key, id: key.id });
+  try {
+    const key = {
+      id: generateRequestId(),
+      userId: req.user.id,
+      key: `ck_${crypto.randomBytes(32).toString("hex")}`,
+      name: req.body.name || "Default",
+      permissions: req.body.permissions || ["read", "execute"],
+      rateLimit: 60,
+      active: true,
+      createdAt: nowISO(),
+    };
+    STATE.apiKeys = STATE.apiKeys || new Map();
+    STATE.apiKeys.set(key.id, key);
+    saveStateDebounced();
+    res.json({ ok: true, key: key.key, id: key.id });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 app.get("/api/v1/keys", requireAuth(), (req, res) => {
@@ -31844,11 +31896,15 @@ app.get("/api/v1/keys", requireAuth(), (req, res) => {
 });
 
 app.delete("/api/v1/keys/:keyId", requireAuth(), (req, res) => {
-  const key = STATE.apiKeys?.get(req.params.keyId);
-  if (!key || key.userId !== req.user.id) return res.status(404).json({ ok: false });
-  key.active = false;
-  saveStateDebounced();
-  res.json({ ok: true });
+  try {
+    const key = STATE.apiKeys?.get(req.params.keyId);
+    if (!key || key.userId !== req.user.id) return res.status(404).json({ ok: false });
+    key.active = false;
+    saveStateDebounced();
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 app.get("/api/v1/artifact/:dtuId/download", requireApiKey(), async (req, res) => {
@@ -31989,12 +32045,16 @@ async function agentTick(agentId) {
 }
 
 app.post("/api/agent/create", requireAuth(), (req, res) => {
-  const userId = req.user.id;
-  const existing = Array.from(STATE.entities.values())
-    .find(e => e.ownerId === userId && e.type === "personal_agent");
-  if (existing) return res.json({ ok: true, agent: existing, existing: true });
-  const agent = createPersonalAgent(userId);
-  res.json({ ok: true, agent });
+  try {
+    const userId = req.user.id;
+    const existing = Array.from(STATE.entities.values())
+      .find(e => e.ownerId === userId && e.type === "personal_agent");
+    if (existing) return res.json({ ok: true, agent: existing, existing: true });
+    const agent = createPersonalAgent(userId);
+    res.json({ ok: true, agent });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 app.get("/api/agent/status", requireAuth(), (req, res) => {
@@ -32006,105 +32066,125 @@ app.get("/api/agent/status", requireAuth(), (req, res) => {
 });
 
 app.post("/api/agent/tick", requireAuth(), async (req, res) => {
-  const userId = req.user.id;
-  const agent = Array.from(STATE.entities.values())
-    .find(e => e.ownerId === userId && e.type === "personal_agent");
-  if (!agent) return res.status(404).json({ ok: false, error: "No agent found" });
-  const insights = await agentTick(agent.id);
-  res.json({ ok: true, insights });
+  try {
+    const userId = req.user.id;
+    const agent = Array.from(STATE.entities.values())
+      .find(e => e.ownerId === userId && e.type === "personal_agent");
+    if (!agent) return res.status(404).json({ ok: false, error: "No agent found" });
+    const insights = await agentTick(agent.id);
+    res.json({ ok: true, insights });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 app.put("/api/agent/config", requireAuth(), validate("agentConfig"), (req, res) => {
-  const userId = req.user.id;
-  const agent = Array.from(STATE.entities.values())
-    .find(e => e.ownerId === userId && e.type === "personal_agent");
-  if (!agent) return res.status(404).json({ ok: false });
-  if (req.body.name) agent.name = req.body.name;
-  if (req.body.watchedLenses) agent.watchedLenses = req.body.watchedLenses;
-  if (req.body.priorities) agent.priorities = req.body.priorities;
-  if (typeof req.body.proactiveActions === "boolean") agent.proactiveActions = req.body.proactiveActions;
-  saveStateDebounced();
-  res.json({ ok: true, agent });
+  try {
+    const userId = req.user.id;
+    const agent = Array.from(STATE.entities.values())
+      .find(e => e.ownerId === userId && e.type === "personal_agent");
+    if (!agent) return res.status(404).json({ ok: false });
+    if (req.body.name) agent.name = req.body.name;
+    if (req.body.watchedLenses) agent.watchedLenses = req.body.watchedLenses;
+    if (req.body.priorities) agent.priorities = req.body.priorities;
+    if (typeof req.body.proactiveActions === "boolean") agent.proactiveActions = req.body.proactiveActions;
+    saveStateDebounced();
+    res.json({ ok: true, agent });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 // --- Capability 7: KNOWLEDGE INHERITANCE ---
 
 app.post("/api/inheritance/create-bequest", requireAuth(), validate("inheritanceBequest"), (req, res) => {
-  const userId = req.user.id;
-  const { recipientEmail, domains, message } = req.validated || req.body;
-  if (!recipientEmail) return res.status(400).json({ ok: false, error: "recipientEmail required" });
+  try {
+    const userId = req.user.id;
+    const { recipientEmail, domains, message } = req.validated || req.body;
+    if (!recipientEmail) return res.status(400).json({ ok: false, error: "recipientEmail required" });
 
-  const bequest = {
-    id: generateRequestId(),
-    grantorId: userId,
-    recipientEmail,
-    domains: domains === "all" ? null : (domains || null),
-    message: message || "",
-    status: "active",
-    createdAt: nowISO(),
-    claimedAt: null,
-    claimedBy: null,
-  };
+    const bequest = {
+      id: generateRequestId(),
+      grantorId: userId,
+      recipientEmail,
+      domains: domains === "all" ? null : (domains || null),
+      message: message || "",
+      status: "active",
+      createdAt: nowISO(),
+      claimedAt: null,
+      claimedBy: null,
+    };
 
-  STATE.bequests = STATE.bequests || new Map();
-  STATE.bequests.set(bequest.id, bequest);
-  saveStateDebounced();
-  res.json({ ok: true, bequestId: bequest.id });
+    STATE.bequests = STATE.bequests || new Map();
+    STATE.bequests.set(bequest.id, bequest);
+    saveStateDebounced();
+    res.json({ ok: true, bequestId: bequest.id });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 app.post("/api/inheritance/claim", requireAuth(), validate("inheritanceClaim"), async (req, res) => {
-  const userId = req.user.id;
-  const user = STATE.users?.get(userId);
-  const { bequestId } = req.body;
+  try {
+    const userId = req.user.id;
+    const user = STATE.users?.get(userId);
+    const { bequestId } = req.body;
 
-  const bequest = STATE.bequests?.get(bequestId);
-  if (!bequest) return res.status(404).json({ ok: false, error: "Not found" });
-  if (bequest.status !== "active") return res.status(400).json({ ok: false, error: "Already claimed or revoked" });
-  if (user?.email && bequest.recipientEmail !== user.email) {
-    return res.status(403).json({ ok: false, error: "Not your bequest" });
+    const bequest = STATE.bequests?.get(bequestId);
+    if (!bequest) return res.status(404).json({ ok: false, error: "Not found" });
+    if (bequest.status !== "active") return res.status(400).json({ ok: false, error: "Already claimed or revoked" });
+    if (user?.email && bequest.recipientEmail !== user.email) {
+      return res.status(403).json({ ok: false, error: "Not your bequest" });
+    }
+
+    let inherited = 0;
+    for (const [, dtu] of STATE.dtus) {
+      if (dtu.ownerId !== bequest.grantorId) continue;
+      if (dtu.scope !== "personal" && dtu.scope !== "synced_global") continue;
+      if (bequest.domains && !bequest.domains.includes(dtu.domain)) continue;
+
+      const copy = {
+        ...JSON.parse(JSON.stringify(dtu)),
+        id: generateRequestId(),
+        ownerId: userId,
+        scope: "personal",
+        meta: {
+          ...(dtu.meta || {}),
+          inheritedFrom: bequest.grantorId,
+          inheritedAt: nowISO(),
+          bequestId,
+        },
+      };
+      STATE.dtus.set(copy.id, copy);
+      inherited++;
+    }
+
+    await reindexUserDTUs(userId);
+
+    bequest.status = "claimed";
+    bequest.claimedAt = nowISO();
+    bequest.claimedBy = userId;
+    saveStateDebounced();
+
+    res.json({ ok: true, inherited, message: bequest.message });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
-
-  let inherited = 0;
-  for (const [, dtu] of STATE.dtus) {
-    if (dtu.ownerId !== bequest.grantorId) continue;
-    if (dtu.scope !== "personal" && dtu.scope !== "synced_global") continue;
-    if (bequest.domains && !bequest.domains.includes(dtu.domain)) continue;
-
-    const copy = {
-      ...JSON.parse(JSON.stringify(dtu)),
-      id: generateRequestId(),
-      ownerId: userId,
-      scope: "personal",
-      meta: {
-        ...(dtu.meta || {}),
-        inheritedFrom: bequest.grantorId,
-        inheritedAt: nowISO(),
-        bequestId,
-      },
-    };
-    STATE.dtus.set(copy.id, copy);
-    inherited++;
-  }
-
-  await reindexUserDTUs(userId);
-
-  bequest.status = "claimed";
-  bequest.claimedAt = nowISO();
-  bequest.claimedBy = userId;
-  saveStateDebounced();
-
-  res.json({ ok: true, inherited, message: bequest.message });
 });
 
 app.post("/api/inheritance/revoke", requireAuth(), validate("inheritanceRevoke"), (req, res) => {
-  const { bequestId } = req.validated || req.body;
-  const bequest = STATE.bequests?.get(bequestId);
-  if (!bequest || bequest.grantorId !== req.user.id) {
-    return res.status(403).json({ ok: false });
+  try {
+    const { bequestId } = req.validated || req.body;
+    const bequest = STATE.bequests?.get(bequestId);
+    if (!bequest || bequest.grantorId !== req.user.id) {
+      return res.status(403).json({ ok: false });
+    }
+    bequest.status = "revoked";
+    saveStateDebounced();
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
-  bequest.status = "revoked";
-  saveStateDebounced();
-  res.json({ ok: true });
 });
 
 app.get("/api/inheritance/bequests", requireAuth(), (req, res) => {
@@ -32117,63 +32197,75 @@ app.get("/api/inheritance/bequests", requireAuth(), (req, res) => {
 // --- Capability 8: CONCORD FOR ORGANIZATIONS ---
 
 app.post("/api/org/create", requireAuth(), validate("orgCreate"), (req, res) => {
-  const { name, domains } = req.validated || req.body;
+  try {
+    const { name, domains } = req.validated || req.body;
 
-  const org = {
-    id: generateRequestId(),
-    name,
-    ownerId: req.user.id,
-    domains: domains || [],
-    members: [{ userId: req.user.id, role: "admin", joinedAt: nowISO() }],
-    createdAt: nowISO(),
-  };
+    const org = {
+      id: generateRequestId(),
+      name,
+      ownerId: req.user.id,
+      domains: domains || [],
+      members: [{ userId: req.user.id, role: "admin", joinedAt: nowISO() }],
+      createdAt: nowISO(),
+    };
 
-  STATE.orgs = STATE.orgs || new Map();
-  STATE.orgs.set(org.id, org);
-  saveStateDebounced();
-  res.json({ ok: true, org });
+    STATE.orgs = STATE.orgs || new Map();
+    STATE.orgs.set(org.id, org);
+    saveStateDebounced();
+    res.json({ ok: true, org });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 app.post("/api/org/:orgId/invite", requireAuth(), validate("orgInvite"), (req, res) => {
-  const org = STATE.orgs?.get(req.params.orgId);
-  if (!org) return res.status(404).json({ ok: false });
-  const member = org.members.find(m => m.userId === req.user.id);
-  if (!member || member.role !== "admin") {
-    return res.status(403).json({ ok: false, error: "Admin only" });
+  try {
+    const org = STATE.orgs?.get(req.params.orgId);
+    if (!org) return res.status(404).json({ ok: false });
+    const member = org.members.find(m => m.userId === req.user.id);
+    if (!member || member.role !== "admin") {
+      return res.status(403).json({ ok: false, error: "Admin only" });
+    }
+
+    const invite = {
+      id: generateRequestId(),
+      orgId: org.id,
+      email: req.body.email,
+      role: req.body.role || "member",
+      status: "pending",
+      createdAt: nowISO(),
+    };
+
+    STATE.orgInvites = STATE.orgInvites || new Map();
+    STATE.orgInvites.set(invite.id, invite);
+    saveStateDebounced();
+    res.json({ ok: true, invite });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
-
-  const invite = {
-    id: generateRequestId(),
-    orgId: org.id,
-    email: req.body.email,
-    role: req.body.role || "member",
-    status: "pending",
-    createdAt: nowISO(),
-  };
-
-  STATE.orgInvites = STATE.orgInvites || new Map();
-  STATE.orgInvites.set(invite.id, invite);
-  saveStateDebounced();
-  res.json({ ok: true, invite });
 });
 
 app.post("/api/org/:orgId/join", requireAuth(), validate("orgJoin"), (req, res) => {
-  const { inviteId } = req.validated || req.body;
-  const invite = STATE.orgInvites?.get(inviteId);
-  if (!invite || invite.status !== "pending") return res.status(404).json({ ok: false });
+  try {
+    const { inviteId } = req.validated || req.body;
+    const invite = STATE.orgInvites?.get(inviteId);
+    if (!invite || invite.status !== "pending") return res.status(404).json({ ok: false });
 
-  const org = STATE.orgs?.get(invite.orgId);
-  if (!org) return res.status(404).json({ ok: false });
+    const org = STATE.orgs?.get(invite.orgId);
+    if (!org) return res.status(404).json({ ok: false });
 
-  const user = STATE.users?.get(req.user.id);
-  if (user?.email && invite.email !== user.email) {
-    return res.status(403).json({ ok: false, error: "Invite not for this user" });
+    const user = STATE.users?.get(req.user.id);
+    if (user?.email && invite.email !== user.email) {
+      return res.status(403).json({ ok: false, error: "Invite not for this user" });
+    }
+
+    org.members.push({ userId: req.user.id, role: invite.role, joinedAt: nowISO() });
+    invite.status = "accepted";
+    saveStateDebounced();
+    res.json({ ok: true, org });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
-
-  org.members.push({ userId: req.user.id, role: invite.role, joinedAt: nowISO() });
-  invite.status = "accepted";
-  saveStateDebounced();
-  res.json({ ok: true, org });
 });
 
 async function orgScopedSearch(query, userId, orgId, opts = {}) {
@@ -32186,26 +32278,30 @@ async function orgScopedSearch(query, userId, orgId, opts = {}) {
 }
 
 app.post("/api/org/:orgId/promote", requireAuth(), validate("orgPromote"), (req, res) => {
-  const { dtuId } = req.validated || req.body;
-  const org = STATE.orgs?.get(req.params.orgId);
-  if (!org) return res.status(404).json({ ok: false });
-  const isMember = org.members.some(m => m.userId === req.user.id);
-  if (!isMember) return res.status(403).json({ ok: false });
+  try {
+    const { dtuId } = req.validated || req.body;
+    const org = STATE.orgs?.get(req.params.orgId);
+    if (!org) return res.status(404).json({ ok: false });
+    const isMember = org.members.some(m => m.userId === req.user.id);
+    if (!isMember) return res.status(403).json({ ok: false });
 
-  const dtu = STATE.dtus.get(dtuId);
-  if (!dtu || dtu.ownerId !== req.user.id) return res.status(403).json({ ok: false });
+    const dtu = STATE.dtus.get(dtuId);
+    if (!dtu || dtu.ownerId !== req.user.id) return res.status(403).json({ ok: false });
 
-  const orgCopy = {
-    ...JSON.parse(JSON.stringify(dtu)),
-    id: generateRequestId(),
-    scope: "org_global",
-    orgId: org.id,
-    promotedBy: req.user.id,
-    promotedAt: nowISO(),
-  };
-  STATE.dtus.set(orgCopy.id, orgCopy);
-  saveStateDebounced();
-  res.json({ ok: true, dtuId: orgCopy.id });
+    const orgCopy = {
+      ...JSON.parse(JSON.stringify(dtu)),
+      id: generateRequestId(),
+      scope: "org_global",
+      orgId: org.id,
+      promotedBy: req.user.id,
+      promotedAt: nowISO(),
+    };
+    STATE.dtus.set(orgCopy.id, orgCopy);
+    saveStateDebounced();
+    res.json({ ok: true, dtuId: orgCopy.id });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 app.get("/api/org/list", requireAuth(), (req, res) => {
@@ -32659,51 +32755,59 @@ RULES:
 // --- Shared Session Endpoints ---
 
 app.post("/api/shared-session/create", requireAuth(), validate("sharedSessionCreate"), (req, res) => {
-  const { inviteUserIds, sharingDomains, sharingLevel } = req.validated || req.body;
-  const session = createSharedSession(req.user.id);
+  try {
+    const { inviteUserIds, sharingDomains, sharingLevel } = req.validated || req.body;
+    const session = createSharedSession(req.user.id);
 
-  session.participants[0].sharingDomains = sharingDomains || [];
-  session.participants[0].sharingLevel = sharingLevel || "query";
+    session.participants[0].sharingDomains = sharingDomains || [];
+    session.participants[0].sharingLevel = sharingLevel || "query";
 
-  for (const inviteeId of (inviteUserIds || [])) {
-    realtimeEmit("shared-session:invite", {
-      userId: inviteeId,
-      sessionId: session.id,
-      from: req.user.id,
-      fromName: req.user.displayName || req.user.name || "User",
-    });
+    for (const inviteeId of (inviteUserIds || [])) {
+      realtimeEmit("shared-session:invite", {
+        userId: inviteeId,
+        sessionId: session.id,
+        from: req.user.id,
+        fromName: req.user.displayName || req.user.name || "User",
+      });
+    }
+
+    res.json({ ok: true, session: { ...session, sharedDTUs: [...session.sharedDTUs] } });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
-
-  res.json({ ok: true, session: { ...session, sharedDTUs: [...session.sharedDTUs] } });
 });
 
 app.post("/api/shared-session/:id/join", requireAuth(), validate("sharedSessionJoin"), (req, res) => {
-  const session = SHARED_SESSIONS.get(req.params.id);
-  if (!session) return res.status(404).json({ ok: false, error: "Session not found" });
-  if (session.status !== "active") return res.status(400).json({ ok: false, error: "Session not active" });
-  if (session.participants.length >= session.maxParticipants) {
-    return res.status(400).json({ ok: false, error: "Session full" });
+  try {
+    const session = SHARED_SESSIONS.get(req.params.id);
+    if (!session) return res.status(404).json({ ok: false, error: "Session not found" });
+    if (session.status !== "active") return res.status(400).json({ ok: false, error: "Session not active" });
+    if (session.participants.length >= session.maxParticipants) {
+      return res.status(400).json({ ok: false, error: "Session full" });
+    }
+    if (session.participants.some(p => p.userId === req.user.id)) {
+      return res.json({ ok: true, session: { ...session, sharedDTUs: [...session.sharedDTUs] }, alreadyJoined: true });
+    }
+
+    const { sharingDomains, sharingLevel } = req.body;
+    session.participants.push({
+      userId: req.user.id,
+      joinedAt: nowISO(),
+      sharingDomains: sharingDomains || [],
+      sharingLevel: sharingLevel || "query",
+    });
+
+    realtimeEmit("shared-session:joined", {
+      sessionId: session.id,
+      userId: req.user.id,
+      userName: req.user.displayName || req.user.name || "User",
+      participantCount: session.participants.length,
+    });
+
+    res.json({ ok: true, session: { ...session, sharedDTUs: [...session.sharedDTUs] } });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
-  if (session.participants.some(p => p.userId === req.user.id)) {
-    return res.json({ ok: true, session: { ...session, sharedDTUs: [...session.sharedDTUs] }, alreadyJoined: true });
-  }
-
-  const { sharingDomains, sharingLevel } = req.body;
-  session.participants.push({
-    userId: req.user.id,
-    joinedAt: nowISO(),
-    sharingDomains: sharingDomains || [],
-    sharingLevel: sharingLevel || "query",
-  });
-
-  realtimeEmit("shared-session:joined", {
-    sessionId: session.id,
-    userId: req.user.id,
-    userName: req.user.displayName || req.user.name || "User",
-    participantCount: session.participants.length,
-  });
-
-  res.json({ ok: true, session: { ...session, sharedDTUs: [...session.sharedDTUs] } });
 });
 
 app.get("/api/shared-session/:id/invite-details", requireAuth(), (req, res) => {
@@ -32821,67 +32925,71 @@ app.post("/api/shared-session/:id/chat", requireAuth(), validate("sharedSessionC
 // --- Share DTU Into Session ---
 
 app.post("/api/shared-session/:id/share-dtu", requireAuth(), validate("sharedSessionShareDtu"), (req, res) => {
-  const { dtuId } = req.validated || req.body;
-  const userId = req.user.id;
-  const session = SHARED_SESSIONS.get(req.params.id);
+  try {
+    const { dtuId } = req.validated || req.body;
+    const userId = req.user.id;
+    const session = SHARED_SESSIONS.get(req.params.id);
 
-  if (!session) return res.status(404).json({ ok: false });
-  if (!session.participants.some(p => p.userId === userId)) {
-    return res.status(403).json({ ok: false, error: "Not in session" });
+    if (!session) return res.status(404).json({ ok: false });
+    if (!session.participants.some(p => p.userId === userId)) {
+      return res.status(403).json({ ok: false, error: "Not in session" });
+    }
+
+    const dtu = STATE.dtus.get(dtuId);
+    if (!dtu || dtu.ownerId !== userId) {
+      return res.status(403).json({ ok: false, error: "Not your DTU" });
+    }
+
+    if (!session.sharedDTUs.includes(dtuId)) {
+      session.sharedDTUs.push(dtuId);
+    }
+
+    const userName = (STATE.users?.get(userId) || AUTH.users?.get(userId))?.displayName || "User";
+    realtimeEmit("shared-session:dtu-shared", {
+      sessionId: session.id,
+      userId,
+      userName,
+      dtuId,
+      dtuTitle: dtu.title,
+      dtuDomain: dtu.domain,
+      hasArtifact: !!dtu.artifact,
+    });
+
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
-
-  const dtu = STATE.dtus.get(dtuId);
-  if (!dtu || dtu.ownerId !== userId) {
-    return res.status(403).json({ ok: false, error: "Not your DTU" });
-  }
-
-  if (!session.sharedDTUs.includes(dtuId)) {
-    session.sharedDTUs.push(dtuId);
-  }
-
-  const userName = (STATE.users?.get(userId) || AUTH.users?.get(userId))?.displayName || "User";
-  realtimeEmit("shared-session:dtu-shared", {
-    sessionId: session.id,
-    userId,
-    userName,
-    dtuId,
-    dtuTitle: dtu.title,
-    dtuDomain: dtu.domain,
-    hasArtifact: !!dtu.artifact,
-  });
-
-  res.json({ ok: true });
 });
 
 // --- Artifact Production in Shared Sessions ---
 
 app.post("/api/shared-session/:id/run-action", requireAuth(), validate("sharedSessionRunAction"), async (req, res) => {
-  const { lens, action, primarySubstrate } = req.validated || req.body;
-  const userId = req.user.id;
-  const session = SHARED_SESSIONS.get(req.params.id);
-
-  if (!session) return res.status(404).json({ ok: false });
-  if (!session.participants.some(p => p.userId === userId)) {
-    return res.status(403).json({ ok: false, error: "Not in session" });
-  }
-
-  const primaryUserId = primarySubstrate || userId;
-
-  // Build context from primary substrate + supporting context from others
-  const primaryContext = await scopedEmbeddingSearch(action, primaryUserId, { limit: 10, minScore: 0.3 });
-  const supportingContext = [];
-
-  for (const p of session.participants) {
-    if (p.userId === primaryUserId) continue;
-    if (p.sharingLevel === "none") continue;
-    const results = await scopedEmbeddingSearch(action, p.userId, { limit: 3, minScore: 0.4 });
-    const filtered = p.sharingDomains.length > 0
-      ? results.filter(r => p.sharingDomains.includes(r.domain))
-      : results;
-    supportingContext.push(...filtered);
-  }
-
   try {
+    const { lens, action, primarySubstrate } = req.validated || req.body;
+    const userId = req.user.id;
+    const session = SHARED_SESSIONS.get(req.params.id);
+
+    if (!session) return res.status(404).json({ ok: false });
+    if (!session.participants.some(p => p.userId === userId)) {
+      return res.status(403).json({ ok: false, error: "Not in session" });
+    }
+
+    const primaryUserId = primarySubstrate || userId;
+
+    // Build context from primary substrate + supporting context from others
+    const primaryContext = await scopedEmbeddingSearch(action, primaryUserId, { limit: 10, minScore: 0.3 });
+    const supportingContext = [];
+
+    for (const p of session.participants) {
+      if (p.userId === primaryUserId) continue;
+      if (p.sharingLevel === "none") continue;
+      const results = await scopedEmbeddingSearch(action, p.userId, { limit: 3, minScore: 0.4 });
+      const filtered = p.sharingDomains.length > 0
+        ? results.filter(r => p.sharingDomains.includes(r.domain))
+        : results;
+      supportingContext.push(...filtered);
+    }
+
     const result = await runMacro(lens, action, {
       userId: primaryUserId,
       overrideContext: formatSharedContext([...primaryContext, ...supportingContext]),
@@ -32910,97 +33018,105 @@ app.post("/api/shared-session/:id/run-action", requireAuth(), validate("sharedSe
     }
 
     res.json({ ok: true, result });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
 });
 
 // --- Save Shared Artifact to Own Substrate ---
 
 app.post("/api/shared-session/:id/save-artifact", requireAuth(), validate("sharedSessionSaveArtifact"), async (req, res) => {
-  const { dtuId } = req.validated || req.body;
-  const userId = req.user.id;
-  const session = SHARED_SESSIONS.get(req.params.id);
+  try {
+    const { dtuId } = req.validated || req.body;
+    const userId = req.user.id;
+    const session = SHARED_SESSIONS.get(req.params.id);
 
-  if (!session) return res.status(404).json({ ok: false });
-  if (!session.sharedArtifacts.includes(dtuId)) {
-    return res.status(400).json({ ok: false, error: "Not a session artifact" });
+    if (!session) return res.status(404).json({ ok: false });
+    if (!session.sharedArtifacts.includes(dtuId)) {
+      return res.status(400).json({ ok: false, error: "Not a session artifact" });
+    }
+
+    const sourceDtu = STATE.dtus.get(dtuId);
+    if (!sourceDtu) return res.status(404).json({ ok: false });
+
+    const copy = {
+      ...JSON.parse(JSON.stringify(sourceDtu)),
+      id: generateRequestId(),
+      ownerId: userId,
+      scope: "personal",
+      meta: {
+        ...(sourceDtu.meta || {}),
+        savedFromSession: session.id,
+        savedAt: nowISO(),
+        originalOwner: sourceDtu.ownerId,
+      },
+    };
+
+    STATE.dtus.set(copy.id, copy);
+    await reindexUserDTUs(userId);
+    saveStateDebounced();
+
+    res.json({ ok: true, dtuId: copy.id });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
-
-  const sourceDtu = STATE.dtus.get(dtuId);
-  if (!sourceDtu) return res.status(404).json({ ok: false });
-
-  const copy = {
-    ...JSON.parse(JSON.stringify(sourceDtu)),
-    id: generateRequestId(),
-    ownerId: userId,
-    scope: "personal",
-    meta: {
-      ...(sourceDtu.meta || {}),
-      savedFromSession: session.id,
-      savedAt: nowISO(),
-      originalOwner: sourceDtu.ownerId,
-    },
-  };
-
-  STATE.dtus.set(copy.id, copy);
-  await reindexUserDTUs(userId);
-  saveStateDebounced();
-
-  res.json({ ok: true, dtuId: copy.id });
 });
 
 // --- Session End and Summary ---
 
 app.post("/api/shared-session/:id/end", requireAuth(), async (req, res) => {
-  const session = SHARED_SESSIONS.get(req.params.id);
-  if (!session) return res.status(404).json({ ok: false });
+  try {
+    const session = SHARED_SESSIONS.get(req.params.id);
+    if (!session) return res.status(404).json({ ok: false });
 
-  const isParticipant = session.participants.some(p => p.userId === req.user.id);
-  if (!isParticipant) return res.status(403).json({ ok: false });
+    const isParticipant = session.participants.some(p => p.userId === req.user.id);
+    if (!isParticipant) return res.status(403).json({ ok: false });
 
-  session.status = "ended";
-  session.endedAt = nowISO();
+    session.status = "ended";
+    session.endedAt = nowISO();
 
-  // Generate summary DTU for each participant
-  const lensesUsed = [...new Set(session.messages.map(m => m.lens).filter(Boolean))];
-  for (const participant of session.participants) {
-    const summaryDTU = {
-      id: generateRequestId(),
-      ownerId: participant.userId,
-      scope: "personal",
-      domain: "social",
-      tier: "DTU",
-      title: `Shared session: ${session.messages.length} messages with ${session.participants.length} participants`,
-      human: {
-        summary: `Collaborative session covering ${lensesUsed.join(", ") || "general"}. ${session.sharedArtifacts.length} artifacts produced. ${session.sharedDTUs.length} DTUs shared.`,
+    // Generate summary DTU for each participant
+    const lensesUsed = [...new Set(session.messages.map(m => m.lens).filter(Boolean))];
+    for (const participant of session.participants) {
+      const summaryDTU = {
+        id: generateRequestId(),
+        ownerId: participant.userId,
+        scope: "personal",
+        domain: "social",
+        tier: "DTU",
+        title: `Shared session: ${session.messages.length} messages with ${session.participants.length} participants`,
+        human: {
+          summary: `Collaborative session covering ${lensesUsed.join(", ") || "general"}. ${session.sharedArtifacts.length} artifacts produced. ${session.sharedDTUs.length} DTUs shared.`,
+        },
+        meta: {
+          sessionId: session.id,
+          sessionType: "shared_instance",
+          participants: session.participants.map(p => p.userId),
+          artifactsProduced: session.sharedArtifacts.length,
+          messageCount: session.messages.length,
+        },
+        created: nowISO(),
+      };
+      STATE.dtus.set(summaryDTU.id, summaryDTU);
+    }
+
+    const durationMs = new Date(session.endedAt).getTime() - new Date(session.createdAt).getTime();
+
+    realtimeEmit("shared-session:ended", {
+      sessionId: session.id,
+      summary: {
+        durationMs,
+        messages: session.messages.length,
+        artifacts: session.sharedArtifacts.length,
+        participants: session.participants.length,
       },
-      meta: {
-        sessionId: session.id,
-        sessionType: "shared_instance",
-        participants: session.participants.map(p => p.userId),
-        artifactsProduced: session.sharedArtifacts.length,
-        messageCount: session.messages.length,
-      },
-      created: nowISO(),
-    };
-    STATE.dtus.set(summaryDTU.id, summaryDTU);
+    });
+
+    saveStateDebounced();
+    res.json({ ok: true, summary: { durationMs, messages: session.messages.length, artifacts: session.sharedArtifacts.length } });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
-
-  const durationMs = new Date(session.endedAt).getTime() - new Date(session.createdAt).getTime();
-
-  realtimeEmit("shared-session:ended", {
-    sessionId: session.id,
-    summary: {
-      durationMs,
-      messages: session.messages.length,
-      artifacts: session.sharedArtifacts.length,
-      participants: session.participants.length,
-    },
-  });
-
-  saveStateDebounced();
-  res.json({ ok: true, summary: { durationMs, messages: session.messages.length, artifacts: session.sharedArtifacts.length } });
 });
 
 // --- List Active Shared Sessions ---
@@ -34049,8 +34165,8 @@ register("redis", "stats", async (_ctx, _input) => {
 });
 
 app.get("/api/db/status", async (req, res) => res.json(await runMacro("db", "status", {}, makeCtx(req))));
-app.post("/api/db/migrate", async (req, res) => res.json(await runMacro("db", "migrate", {}, makeCtx(req))));
-app.post("/api/db/sync", async (req, res) => res.json(await runMacro("db", "syncToPostgres", req.body, makeCtx(req))));
+app.post("/api/db/migrate", async (req, res) => { try { res.json(await runMacro("db", "migrate", {}, makeCtx(req))); } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); } });
+app.post("/api/db/sync", async (req, res) => { try { res.json(await runMacro("db", "syncToPostgres", req.body, makeCtx(req))); } catch (e) { res.status(500).json({ ok: false, error: String(e?.message || e) }); } });
 // Database lens endpoints (query/tables/indexes) — graceful stubs when no DB connected
 app.post("/api/db/query", (req, res) => {
   const q = String(req.body?.query || "").trim();
@@ -34107,8 +34223,12 @@ app.get("/api/dtus/:id/versions", (req, res) => {
 });
 
 app.post("/api/dtus/:id/restore", validate("dtuRestore"), (req, res) => {
-  const result = restoreDTUVersion(req.params.id, Number(req.body.version));
-  res.json(result);
+  try {
+    const result = restoreDTUVersion(req.params.id, Number(req.body.version));
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 // ---- Wave 2: Templates Endpoints ----
@@ -34128,13 +34248,21 @@ app.post("/api/templates/:id/create", asyncHandler(async (req, res) => {
 
 // ---- Wave 2: Import/Export Endpoints ----
 app.post("/api/import/obsidian", (req, res) => {
-  const result = importFromObsidian(req.body.files || []);
-  res.json(result);
+  try {
+    const result = importFromObsidian(req.body.files || []);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 app.post("/api/import/roam", (req, res) => {
-  const result = importFromRoam(req.body.data || req.body);
-  res.json(result);
+  try {
+    const result = importFromRoam(req.body.data || req.body);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 app.get("/api/export/markdown", (req, res) => {
@@ -34159,8 +34287,12 @@ app.get("/api/export/json", (req, res) => {
 
 // ---- Wave 2: Query Endpoint ----
 app.post("/api/query", (req, res) => {
-  const result = queryDTUsAdvanced(req.body.query || "");
-  res.json(result);
+  try {
+    const result = queryDTUsAdvanced(req.body.query || "");
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 // ---- Wave 3: AI Endpoints ----
@@ -34234,20 +34366,32 @@ app.get("/api/srs/due", (req, res) => {
 });
 
 app.post("/api/srs/:dtuId/add", (req, res) => {
-  const result = addToSRS(req.params.dtuId);
-  res.json(result);
+  try {
+    const result = addToSRS(req.params.dtuId);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 app.post("/api/srs/:dtuId/review", (req, res) => {
-  const result = reviewSRSCard(req.params.dtuId, Number(req.body.quality));
-  res.json(result);
+  try {
+    const result = reviewSRSCard(req.params.dtuId, Number(req.body.quality));
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 // ---- Wave 4: Workspace Endpoints ----
 app.post("/api/workspaces", (req, res) => {
-  const userId = req.user?.id || "anonymous";
-  const result = createWorkspace(userId, req.body.name, req.body.description);
-  res.json(result);
+  try {
+    const userId = req.user?.id || "anonymous";
+    const result = createWorkspace(userId, req.body.name, req.body.description);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 app.get("/api/workspaces", (req, res) => {
@@ -34270,13 +34414,21 @@ app.get("/api/workspaces/:id/dtus", (req, res) => {
 });
 
 app.post("/api/workspaces/:id/dtus", (req, res) => {
-  const result = addDTUToWorkspace(req.params.id, req.body.dtuId);
-  res.json(result);
+  try {
+    const result = addDTUToWorkspace(req.params.id, req.body.dtuId);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 app.post("/api/workspaces/:id/members", (req, res) => {
-  const result = addWorkspaceMember(req.params.id, req.body.userId, req.body.role);
-  res.json(result);
+  try {
+    const result = addWorkspaceMember(req.params.id, req.body.userId, req.body.role);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 // ---- Wave 4: Comments Endpoints ----
@@ -34286,27 +34438,43 @@ app.get("/api/dtus/:id/comments", (req, res) => {
 });
 
 app.post("/api/dtus/:id/comments", validate("dtuComment"), (req, res) => {
-  const userId = req.user?.id || "anonymous";
-  const result = addComment(req.params.id, userId, req.body.content, req.body.parentId);
-  res.json(result);
+  try {
+    const userId = req.user?.id || "anonymous";
+    const result = addComment(req.params.id, userId, req.body.content, req.body.parentId);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 app.post("/api/comments/:id/resolve", (req, res) => {
-  const result = resolveComment(req.params.id, req.body.resolved !== false);
-  res.json(result);
+  try {
+    const result = resolveComment(req.params.id, req.body.resolved !== false);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 app.post("/api/comments/:id/react", (req, res) => {
-  const userId = req.user?.id || "anonymous";
-  const result = addReaction(req.params.id, userId, req.body.emoji);
-  res.json(result);
+  try {
+    const userId = req.user?.id || "anonymous";
+    const result = addReaction(req.params.id, userId, req.body.emoji);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 // ---- Wave 4: Share Links Endpoints ----
 app.post("/api/dtus/:id/share", (req, res) => {
-  const userId = req.user?.id || "anonymous";
-  const result = createShareLink(req.params.id, userId, req.body);
-  res.json(result);
+  try {
+    const userId = req.user?.id || "anonymous";
+    const result = createShareLink(req.params.id, userId, req.body);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 // POST /api/dtus/:id/vote — up/down vote a DTU (forum)
@@ -34370,10 +34538,14 @@ app.get("/api/config/shortcuts", (req, res) => {
 });
 
 app.put("/api/config/shortcuts", (req, res) => {
-  const userId = req.user?.id;
-  if (!userId) return res.status(401).json({ ok: false, error: "Auth required" });
-  const result = setUserShortcut(userId, req.body.key, req.body.action);
-  res.json(result);
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ ok: false, error: "Auth required" });
+    const result = setUserShortcut(userId, req.body.key, req.body.action);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 app.get("/api/manifest.json", (req, res) => {
@@ -34390,9 +34562,13 @@ app.get("/api/onboarding", (req, res) => {
 });
 
 app.post("/api/onboarding/complete", (req, res) => {
-  const userId = req.user?.id || req.body.userId || "anonymous";
-  const result = completeOnboardingStep(userId, req.body.stepId);
-  res.json(result);
+  try {
+    const userId = req.user?.id || req.body.userId || "anonymous";
+    const result = completeOnboardingStep(userId, req.body.stepId);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 // ---- Wave 6: Developer Endpoints ----
@@ -34457,8 +34633,12 @@ app.get("/api/docs/openapi.yaml", (req, res) => {
 // GET/POST /api/plugins already registered above (lines ~17993-18001).
 
 app.delete("/api/plugins/:id", requireRole("owner", "admin"), (req, res) => {
-  const result = unregisterPlugin(req.params.id);
-  res.json(result);
+  try {
+    const result = unregisterPlugin(req.params.id);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 app.get("/api/cli/help", (req, res) => {
@@ -34493,13 +34673,21 @@ app.get("/api/timeline/diff", (req, res) => {
 
 // ---- Wave 7: Public Lattice Endpoints ----
 app.post("/api/dtus/:id/publish", requireRole("owner", "admin", "member"), (req, res) => {
-  const result = publishDTU(req.params.id);
-  res.json(result);
+  try {
+    const result = publishDTU(req.params.id);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 app.delete("/api/dtus/:id/publish", requireRole("owner", "admin", "member"), (req, res) => {
-  const result = unpublishDTU(req.params.id);
-  res.json(result);
+  try {
+    const result = unpublishDTU(req.params.id);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 app.get("/api/public", (req, res) => {
@@ -35510,8 +35698,12 @@ function installTheme(themeId) {
 // ---- Wave 11: UX Endpoints ----
 // Database endpoints require authentication
 app.post("/api/databases", requireAuth(), (req, res) => {
-  const result = createDatabase(req.body.name, req.body.schema || []);
-  res.json(result);
+  try {
+    const result = createDatabase(req.body.name, req.body.schema || []);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 app.get("/api/databases/:id", requireAuth(), (req, res) => {
@@ -35521,8 +35713,12 @@ app.get("/api/databases/:id", requireAuth(), (req, res) => {
 });
 
 app.post("/api/databases/:id/rows", requireAuth(), (req, res) => {
-  const result = addDatabaseRow(req.params.id, req.body);
-  res.json(result);
+  try {
+    const result = addDatabaseRow(req.params.id, req.body);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 app.get("/api/databases/:id/query", requireAuth(), (req, res) => {
@@ -35531,8 +35727,12 @@ app.get("/api/databases/:id/query", requireAuth(), (req, res) => {
 });
 
 app.post("/api/databases/:id/views", requireAuth(), (req, res) => {
-  const result = addDatabaseView(req.params.id, req.body);
-  res.json(result);
+  try {
+    const result = addDatabaseView(req.params.id, req.body);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 app.get("/api/daily", (req, res) => {
@@ -35556,11 +35756,15 @@ app.get("/api/views/kanban", (req, res) => {
 });
 
 app.post("/api/embed/parse", (req, res) => {
-  const result = parseEmbed(req.body.url);
-  if (result.ok) {
-    result.html = generateEmbedHtml(result);
+  try {
+    const result = parseEmbed(req.body.url);
+    if (result.ok) {
+      result.html = generateEmbedHtml(result);
+    }
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
-  res.json(result);
 });
 
 // ---- Wave 12: AI Depth Endpoints ----
@@ -35599,8 +35803,12 @@ app.post("/api/ai/auto-tag", asyncHandler(async (req, res) => {
 
 // ---- Wave 13: Capture Endpoints ----
 app.post("/api/capture/email", (req, res) => {
-  const result = processEmailToDTU(req.body);
-  res.json(result);
+  try {
+    const result = processEmailToDTU(req.body);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 app.post("/api/feeds", asyncHandler(async (req, res) => {
@@ -35632,8 +35840,12 @@ app.post("/api/feeds/:id/import", asyncHandler(async (req, res) => {
 }));
 
 app.post("/api/reminders", (req, res) => {
-  const result = createReminder(req.body.dtuId, req.body.reminderAt, req.body.message);
-  res.json(result);
+  try {
+    const result = createReminder(req.body.dtuId, req.body.reminderAt, req.body.message);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 app.get("/api/reminders/due", (req, res) => {
@@ -35641,7 +35853,11 @@ app.get("/api/reminders/due", (req, res) => {
 });
 
 app.post("/api/reminders/:id/complete", (req, res) => {
-  res.json(completeReminder(req.params.id));
+  try {
+    res.json(completeReminder(req.params.id));
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 // ---- Wave 14: Enterprise Endpoints ----
@@ -35661,13 +35877,21 @@ app.get("/api/admin/audit", requireRole("owner", "admin"), (req, res) => {
 });
 
 app.post("/api/admin/sso", requireRole("owner"), (req, res) => {
-  res.json(configureSSOProvider(req.body));
+  try {
+    res.json(configureSSOProvider(req.body));
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 app.post("/api/workspaces/:id/templates", (req, res) => {
-  const userId = req.user?.id || "anonymous";
-  const result = createTeamTemplate(req.params.id, req.body, userId);
-  res.json(result);
+  try {
+    const userId = req.user?.id || "anonymous";
+    const result = createTeamTemplate(req.params.id, req.body, userId);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 app.get("/api/workspaces/:id/templates", (req, res) => {
@@ -35675,11 +35899,19 @@ app.get("/api/workspaces/:id/templates", (req, res) => {
 });
 
 app.put("/api/workspaces/:id/templates/:templateId", (req, res) => {
-  res.json(updateTeamTemplate(req.params.templateId, req.body));
+  try {
+    res.json(updateTeamTemplate(req.params.templateId, req.body));
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 app.delete("/api/workspaces/:id/templates/:templateId", (req, res) => {
-  res.json(deleteTeamTemplate(req.params.templateId));
+  try {
+    res.json(deleteTeamTemplate(req.params.templateId));
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 // ---- Wave 15: Ecosystem Endpoints ----
@@ -35693,8 +35925,12 @@ app.get("/api/sdk/types", (req, res) => {
 });
 
 app.post("/api/webhooks/register", (req, res) => {
-  const result = registerWebhook(req.body.url, req.body.events);
-  res.json(result);
+  try {
+    const result = registerWebhook(req.body.url, req.body.events);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 // GET /api/webhooks already registered above (line ~21631) via macro.
@@ -35705,7 +35941,11 @@ app.get("/api/themes/marketplace", (req, res) => {
 });
 
 app.post("/api/themes/:id/install", (req, res) => {
-  res.json(installTheme(req.params.id));
+  try {
+    res.json(installTheme(req.params.id));
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 structuredLog("info", "module_loaded", { detail: "Waves 11-15: All enhancement APIs loaded" });
@@ -35726,20 +35966,24 @@ app.get("/api/entities", (req, res) => {
 });
 
 app.post("/api/entities", (req, res) => {
-  const { name, type = "worker" } = req.body;
-  const id = uid("entity");
-  const entity = {
-    id,
-    name: name || `Entity ${id}`,
-    type,
-    status: "active",
-    workspace: "main",
-    forks: 0,
-    createdAt: nowISO(),
-    lastActive: nowISO()
-  };
-  ENTITIES.set(id, entity);
-  res.json({ ok: true, entity });
+  try {
+    const { name, type = "worker" } = req.body;
+    const id = uid("entity");
+    const entity = {
+      id,
+      name: name || `Entity ${id}`,
+      type,
+      status: "active",
+      workspace: "main",
+      forks: 0,
+      createdAt: nowISO(),
+      lastActive: nowISO()
+    };
+    ENTITIES.set(id, entity);
+    res.json({ ok: true, entity });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 app.get("/api/entities/:id", (req, res) => {
@@ -35749,13 +35993,17 @@ app.get("/api/entities/:id", (req, res) => {
 });
 
 app.post("/api/entities/:id/fork", (req, res) => {
-  const parent = ENTITIES.get(req.params.id);
-  if (!parent) return res.status(404).json({ ok: false, error: "Entity not found" });
-  const id = uid("entity");
-  const fork = { ...parent, id, name: `${parent.name} (Fork)`, forks: 0, createdAt: nowISO() };
-  ENTITIES.set(id, fork);
-  parent.forks++;
-  res.json({ ok: true, entity: fork });
+  try {
+    const parent = ENTITIES.get(req.params.id);
+    if (!parent) return res.status(404).json({ ok: false, error: "Entity not found" });
+    const id = uid("entity");
+    const fork = { ...parent, id, name: `${parent.name} (Fork)`, forks: 0, createdAt: nowISO() };
+    ENTITIES.set(id, fork);
+    parent.forks++;
+    res.json({ ok: true, entity: fork });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 // Personal Library - user's DTUs and artifacts
@@ -35888,79 +36136,103 @@ app.get("/api/physics/simulation", (req, res) => {
 });
 
 app.post("/api/physics/toggle", (req, res) => {
-  const ps = ensurePhysicsState();
-  ps.enabled = !ps.enabled;
-  res.json({ ok: true, enabled: ps.enabled });
+  try {
+    const ps = ensurePhysicsState();
+    ps.enabled = !ps.enabled;
+    res.json({ ok: true, enabled: ps.enabled });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 app.post("/api/physics/params", (req, res) => {
-  const ps = ensurePhysicsState();
-  const { gravity, friction, timeStep, restitution } = req.body;
-  if (typeof gravity === 'number') ps.params.gravity = gravity;
-  if (typeof friction === 'number') ps.params.friction = Math.max(0, Math.min(1, friction));
-  if (typeof timeStep === 'number' && timeStep > 0) ps.params.timeStep = timeStep;
-  if (typeof restitution === 'number') ps.params.restitution = Math.max(0, Math.min(1, restitution));
-  res.json({ ok: true, params: ps.params });
+  try {
+    const ps = ensurePhysicsState();
+    const { gravity, friction, timeStep, restitution } = req.body;
+    if (typeof gravity === 'number') ps.params.gravity = gravity;
+    if (typeof friction === 'number') ps.params.friction = Math.max(0, Math.min(1, friction));
+    if (typeof timeStep === 'number' && timeStep > 0) ps.params.timeStep = timeStep;
+    if (typeof restitution === 'number') ps.params.restitution = Math.max(0, Math.min(1, restitution));
+    res.json({ ok: true, params: ps.params });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 app.post("/api/physics/bodies", (req, res) => {
-  const ps = ensurePhysicsState();
-  const { label, mass, position, velocity } = req.body;
-  const id = `body_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  const body = {
-    id,
-    label: label || id,
-    mass: typeof mass === 'number' && mass > 0 ? mass : 1.0,
-    position: { x: position?.x || 0, y: position?.y || 0, z: position?.z || 0 },
-    velocity: { x: velocity?.x || 0, y: velocity?.y || 0, z: velocity?.z || 0 },
-    forces: [],
-    createdAt: nowISO(),
-  };
-  ps.bodies.set(id, body);
-  res.json({ ok: true, body });
+  try {
+    const ps = ensurePhysicsState();
+    const { label, mass, position, velocity } = req.body;
+    const id = `body_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const body = {
+      id,
+      label: label || id,
+      mass: typeof mass === 'number' && mass > 0 ? mass : 1.0,
+      position: { x: position?.x || 0, y: position?.y || 0, z: position?.z || 0 },
+      velocity: { x: velocity?.x || 0, y: velocity?.y || 0, z: velocity?.z || 0 },
+      forces: [],
+      createdAt: nowISO(),
+    };
+    ps.bodies.set(id, body);
+    res.json({ ok: true, body });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 app.delete("/api/physics/bodies/:id", (req, res) => {
-  const ps = ensurePhysicsState();
-  if (!ps.bodies.has(req.params.id)) return res.status(404).json({ ok: false, error: "body not found" });
-  ps.bodies.delete(req.params.id);
-  res.json({ ok: true });
+  try {
+    const ps = ensurePhysicsState();
+    if (!ps.bodies.has(req.params.id)) return res.status(404).json({ ok: false, error: "body not found" });
+    ps.bodies.delete(req.params.id);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 app.post("/api/physics/step", (req, res) => {
-  const ps = ensurePhysicsState();
-  if (!ps.enabled) return res.json({ ok: false, error: "simulation not enabled" });
-  const dt = ps.params.timeStep;
-  const g = ps.params.gravity;
-  const friction = ps.params.friction;
-  for (const body of ps.bodies.values()) {
-    // Apply gravity (downward on y-axis)
-    body.velocity.y -= g * dt;
-    // Apply friction damping
-    body.velocity.x *= (1 - friction * dt);
-    body.velocity.z *= (1 - friction * dt);
-    // Integrate position
-    body.position.x += body.velocity.x * dt;
-    body.position.y += body.velocity.y * dt;
-    body.position.z += body.velocity.z * dt;
-    // Simple ground collision at y=0
-    if (body.position.y < 0) {
-      body.position.y = 0;
-      body.velocity.y = -body.velocity.y * ps.params.restitution;
+  try {
+    const ps = ensurePhysicsState();
+    if (!ps.enabled) return res.json({ ok: false, error: "simulation not enabled" });
+    const dt = ps.params.timeStep;
+    const g = ps.params.gravity;
+    const friction = ps.params.friction;
+    for (const body of ps.bodies.values()) {
+      // Apply gravity (downward on y-axis)
+      body.velocity.y -= g * dt;
+      // Apply friction damping
+      body.velocity.x *= (1 - friction * dt);
+      body.velocity.z *= (1 - friction * dt);
+      // Integrate position
+      body.position.x += body.velocity.x * dt;
+      body.position.y += body.velocity.y * dt;
+      body.position.z += body.velocity.z * dt;
+      // Simple ground collision at y=0
+      if (body.position.y < 0) {
+        body.position.y = 0;
+        body.velocity.y = -body.velocity.y * ps.params.restitution;
+      }
     }
+    ps.stepCount++;
+    ps.lastStepAt = nowISO();
+    res.json({ ok: true, stepCount: ps.stepCount, bodyCount: ps.bodies.size });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
-  ps.stepCount++;
-  ps.lastStepAt = nowISO();
-  res.json({ ok: true, stepCount: ps.stepCount, bodyCount: ps.bodies.size });
 });
 
 app.post("/api/physics/reset", (req, res) => {
-  const ps = ensurePhysicsState();
-  ps.bodies.clear();
-  ps.stepCount = 0;
-  ps.lastStepAt = null;
-  ps.enabled = false;
-  res.json({ ok: true });
+  try {
+    const ps = ensurePhysicsState();
+    ps.bodies.clear();
+    ps.stepCount = 0;
+    ps.lastStepAt = null;
+    ps.enabled = false;
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 // Resonance
@@ -36279,8 +36551,12 @@ app.get("/api/anon/messages", (req, res) => {
 });
 
 app.post("/api/anon/rotate", (req, res) => {
-  const id = uid("anon");
-  res.json({ ok: true, newAnonId: id });
+  try {
+    const id = uid("anon");
+    res.json({ ok: true, newAnonId: id });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 // ── Sovereign Audit Endpoints (v3.0) ──
@@ -41010,7 +41286,7 @@ app.get("/api/personas", (_req, res) => {
     const personas = Array.isArray(STATE.personas) ? STATE.personas : [];
     res.json({ ok: true, personas: personas.map(p => ({ ...p, stats: p.stats })) });
   } catch (e) {
-    res.json({ ok: true, personas: [] });
+    res.status(500).json({ ok: false, error: String(e?.message || e), personas: [] });
   }
 });
 
@@ -42086,7 +42362,7 @@ app.get("/api/twin", (req, res) => {
     if (!twin) twin = updateCognitiveDigitalTwin(userId);
     res.json({ ok: true, twin });
   } catch (e) {
-    res.json({ ok: true, twin: { userId: req.query.userId || "default", insights: [], patterns: [] } });
+    res.status(500).json({ ok: false, error: String(e?.message || e), twin: { userId: req.query.userId || "default", insights: [], patterns: [] } });
   }
 });
 
@@ -53065,7 +53341,7 @@ app.post('/api/artistry/studio/vocal/analyze', asyncHandler(async (req, res) => 
     const parsed = safeJSONParse(brainResult?.content || "{}");
     res.json({ ok: true, analysis: { trackId, trackName: track.name, clipCount: track.clips.length, ...parsed, note: "AI metadata analysis — connect audio DSP engine for waveform-level analysis" } });
   } catch (e) {
-    res.json({ ok: true, analysis: { trackId, trackName: track.name, clipCount: track.clips.length, suggestions: ["Add compression for consistent dynamics", "Apply de-essing to reduce sibilance", "Use reverb to create depth"], note: "Metadata-based recommendations — connect audio DSP engine for detailed analysis" } });
+    res.status(500).json({ ok: false, error: String(e?.message || e), analysis: { trackId, trackName: track.name, clipCount: track.clips.length, suggestions: ["Add compression for consistent dynamics", "Apply de-essing to reduce sibilance", "Use reverb to create depth"], note: "Metadata-based recommendations — connect audio DSP engine for detailed analysis" } });
   }
 }));
 

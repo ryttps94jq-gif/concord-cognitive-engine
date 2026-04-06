@@ -14,6 +14,7 @@ import {
   FileText, Settings,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useUIStore } from '@/store/ui';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -241,7 +242,7 @@ export default function GameDesignPage() {
                           <span className={cn('px-1.5 py-0.5 rounded', proj.status === 'released' ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400')}>{proj.status || 'concept'}</span>
                         </div>
                       </div>
-                      <button onClick={e => { e.stopPropagation(); removeProject(proj.id).catch(() => {}); refetch(); }} className="p-1 hover:bg-white/10 rounded text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
+                      <button onClick={e => { e.stopPropagation(); removeProject(proj.id).then(() => refetch()).catch((err) => { console.error('[GameDesign] Failed to delete project:', err); useUIStore.getState().addToast({ type: 'error', message: 'Failed to delete project' }); }); }} className="p-1 hover:bg-white/10 rounded text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
                     {proj.description && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{proj.description}</p>}
                     {/* Dev phase progress */}
@@ -280,7 +281,7 @@ export default function GameDesignPage() {
               </h2>
               <button onClick={() => {
                 if (selectedProject) {
-                  updateProject(selectedProject.id, { data: { gddContent } as unknown as Partial<GameDesignProject> }).catch(() => {});
+                  updateProject(selectedProject.id, { data: { gddContent } as unknown as Partial<GameDesignProject> }).catch((err) => { console.error('[GameDesign] Failed to save GDD:', err); useUIStore.getState().addToast({ type: 'error', message: 'Failed to save game design document' }); });
                 }
               }} className="px-3 py-1.5 text-xs bg-emerald-500/20 rounded-lg hover:bg-emerald-500/30 flex items-center gap-1">
                 <Save className="w-3 h-3" /> Save
@@ -328,7 +329,7 @@ export default function GameDesignPage() {
                     <h3 className="font-medium text-sm">{mech.name}</h3>
                     <div className="flex items-center gap-2">
                       <span className={cn('text-[10px] px-1.5 py-0.5 rounded', mech.complexity === 'high' ? 'bg-red-500/20 text-red-400' : mech.complexity === 'medium' ? 'bg-amber-500/20 text-amber-400' : 'bg-green-500/20 text-green-400')}>{mech.complexity}</span>
-                      <button onClick={() => removeMechanic(mech.id).catch(() => {})} className="p-0.5 hover:text-red-400 text-gray-600 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => removeMechanic(mech.id).catch((err) => { console.error('[GameDesign] Failed to delete mechanic:', err); useUIStore.getState().addToast({ type: 'error', message: 'Failed to delete mechanic' }); })} className="p-0.5 hover:text-red-400 text-gray-600 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
                   </div>
                   <div className="text-xs text-gray-500 mt-1">{mech.category}</div>

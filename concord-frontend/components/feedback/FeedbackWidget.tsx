@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useUIStore } from '@/store/ui';
 
 interface FeedbackWidgetProps {
   targetType: "dtu" | "lens" | "entity" | "system";
@@ -17,20 +18,21 @@ export function FeedbackWidget({ targetType, targetId }: FeedbackWidgetProps) {
   const handleQuick = async (type: "like" | "dislike") => {
     setSubmitting(true);
     try {
-      await fetch("/api/feedback/submit", {
+      const res = await fetch("/api/feedback/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ targetType, targetId, feedbackType: type }),
       });
+      if (!res.ok) throw new Error(`Request failed: ${res.status}`);
       setSubmitted(type);
-    } catch {}
+    } catch (e) { console.error('[Feedback] Failed to submit feedback:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to submit feedback' }); }
     setSubmitting(false);
   };
 
   const handleDetailed = async () => {
     setSubmitting(true);
     try {
-      await fetch("/api/feedback/submit", {
+      const res = await fetch("/api/feedback/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -41,10 +43,11 @@ export function FeedbackWidget({ targetType, targetId }: FeedbackWidgetProps) {
           context: { lens: targetId, timestamp: new Date().toISOString() },
         }),
       });
+      if (!res.ok) throw new Error(`Request failed: ${res.status}`);
       setSubmitted("detailed");
       setExpanded(false);
       setDescription("");
-    } catch {}
+    } catch (e) { console.error('[Feedback] Failed to submit detailed feedback:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to submit feedback' }); }
     setSubmitting(false);
   };
 

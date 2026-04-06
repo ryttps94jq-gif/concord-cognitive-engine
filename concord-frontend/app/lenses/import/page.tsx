@@ -7,6 +7,7 @@ import { motion } from 'framer-motion';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { apiHelpers, exportSubstrate, importSubstrate } from '@/lib/api/client';
+import { useUIStore } from '@/store/ui';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -271,7 +272,7 @@ export default function ImportLens() {
       a.download = `substrate-export-${new Date().toISOString().slice(0, 10)}.gz`;
       a.click();
       URL.revokeObjectURL(url);
-    } catch { /* silent */ }
+    } catch (e) { console.error('[Import] Failed to export substrate:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to export substrate' }); }
     finally { setImporting(false); }
   };
 

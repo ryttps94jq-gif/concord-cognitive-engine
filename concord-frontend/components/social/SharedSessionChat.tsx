@@ -17,6 +17,7 @@ import {
   sharedSessionRunAction,
 } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
+import { useUIStore } from '@/store/ui';
 import {
   Users,
   Send,
@@ -194,7 +195,9 @@ export function SharedSessionChat({ sessionId, currentUserId, onEnd }: SharedSes
 
     try {
       await sharedSessionChat(sessionId, content);
-    } catch {
+    } catch (e) {
+      console.error('[SharedSession] Failed to send message:', e);
+      useUIStore.getState().addToast({ type: 'error', message: 'Failed to send message' });
       setIsSending(false);
     }
   }, [input, isSending, sessionId, currentUserId, sessionStatus]);
@@ -208,21 +211,21 @@ export function SharedSessionChat({ sessionId, currentUserId, onEnd }: SharedSes
         content: 'Artifact saved to your substrate.',
         ts: new Date().toISOString(),
       }]);
-    } catch { /* silent */ }
+    } catch (e) { console.error('[SharedSession] Failed to save artifact:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to save artifact' }); }
   };
 
   // Share a DTU into the session
   const handleShareDTU = async (dtuId: string) => {
     try {
       await shareSessionDTU(sessionId, dtuId);
-    } catch { /* silent */ }
+    } catch (e) { console.error('[SharedSession] Failed to share DTU:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to share DTU' }); }
   };
 
   // Run a lens action in the shared session
   const handleRunAction = async (lens: string, action: string, primarySubstrate?: string) => {
     try {
       await sharedSessionRunAction(sessionId, lens, action, primarySubstrate);
-    } catch { /* silent */ }
+    } catch (e) { console.error('[SharedSession] Failed to run action:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to run action' }); }
   };
 
   // End session
@@ -230,7 +233,7 @@ export function SharedSessionChat({ sessionId, currentUserId, onEnd }: SharedSes
     try {
       await endSharedSession(sessionId);
       onEnd?.();
-    } catch { /* silent */ }
+    } catch (e) { console.error('[SharedSession] Failed to end session:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to end session' }); }
   };
 
   return (

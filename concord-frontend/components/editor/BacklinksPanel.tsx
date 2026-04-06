@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Link2, ChevronRight, Brain, Search, ArrowUpRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api/client';
+import { useUIStore } from '@/store/ui';
 
 interface Backlink {
   id: string;
@@ -312,7 +313,7 @@ export function UnlinkedMentions({ dtuId, className }: UnlinkedMentionsProps) {
     let cancelled = false;
     api.get(`/api/dtus/${dtuId}/unlinked-mentions`)
       .then(r => { if (!cancelled) setMentions(r.data?.mentions || []); })
-      .catch(() => {})
+      .catch((e) => { console.error('[BacklinksPanel] Failed to fetch unlinked mentions:', e); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [dtuId]);

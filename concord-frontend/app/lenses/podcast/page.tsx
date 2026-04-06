@@ -126,7 +126,7 @@ export default function PodcastLensPage() {
       if (nowPlaying.playbackState === 'playing') {
         player.pause();
       } else {
-        player.play().catch(() => {});
+        player.play().catch((e) => console.error('[Podcast] Playback failed:', e));
       }
       return;
     }

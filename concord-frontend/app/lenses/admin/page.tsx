@@ -24,6 +24,7 @@ import {
   ChevronDown
 } from 'lucide-react';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { useUIStore } from '@/store/ui';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -808,7 +809,7 @@ export default function AdminDashboardPage() {
                     )}
                   </div>
                   <button
-                    onClick={() => orgPromote(org.id, '').catch(() => {})}
+                    onClick={() => orgPromote(org.id, '').catch((e) => { console.error('[Admin] Failed to promote org:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to promote organization' }); })}
                     className="text-xs px-3 py-1.5 rounded-md bg-neon-blue/20 text-neon-blue hover:bg-neon-blue/30 font-medium transition-colors"
                   >
                     Promote
@@ -1259,7 +1260,7 @@ function ApiKeysPanel() {
       setCreatedKey(data?.key || data?.apiKey || null);
       setNewKeyName('');
       refetch();
-    } catch { /* silent */ }
+    } catch (e) { console.error('[Admin] Failed to create API key:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to create API key' }); }
     finally { setCreating(false); }
   }, [newKeyName, refetch]);
 

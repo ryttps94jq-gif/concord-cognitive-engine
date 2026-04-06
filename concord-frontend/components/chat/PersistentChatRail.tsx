@@ -25,6 +25,7 @@ import { useSocket } from '@/hooks/useSocket';
 import { useSessionId, resetSessionId } from '@/hooks/useSessionId';
 import { api, executePipeline } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
+import { useUIStore } from '@/store/ui';
 import { SovereigntyPrompt } from '@/components/sovereignty/SovereigntyPrompt';
 import { SkeletonChat } from '@/components/common/Skeleton';
 import { PipelineProgress } from '@/components/pipeline/PipelineProgress';
@@ -1028,7 +1029,7 @@ export function PersistentChatRail({
                             content,
                             sessionId,
                           });
-                        } catch {}
+                        } catch (e) { console.error('[Chat] Failed to forge DTU:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to forge DTU' }); }
                       }}
                     />
                   )}
@@ -1047,17 +1048,17 @@ export function PersistentChatRail({
                     onSave={async (forgeDtu) => {
                       try {
                         await api.post('/api/chat/forge/save', { dtu: forgeDtu });
-                      } catch {}
+                      } catch (e) { console.error('[Chat] Failed to save forged DTU:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to save artifact' }); }
                     }}
                     onDelete={async (dtuId) => {
                       try {
                         await api.post('/api/chat/forge/delete', { dtuId });
-                      } catch {}
+                      } catch (e) { console.error('[Chat] Failed to delete forged DTU:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to delete artifact' }); }
                     }}
                     onList={async (forgeDtu) => {
                       try {
                         await api.post('/api/chat/forge/list', { dtu: forgeDtu });
-                      } catch {}
+                      } catch (e) { console.error('[Chat] Failed to list forged DTU:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to list artifact' }); }
                     }}
                     onIterate={async (forgeDtu, instruction) => {
                       try {
@@ -1070,7 +1071,7 @@ export function PersistentChatRail({
                         if (iterRes.data?.ok) {
                           sendMessage(`Iterate on the forged artifact: ${instruction}`);
                         }
-                      } catch {}
+                      } catch (e) { console.error('[Chat] Failed to iterate on artifact:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to iterate on artifact' }); }
                     }}
                   />
                 </div>
@@ -1168,7 +1169,7 @@ export function PersistentChatRail({
                         steps: pp.steps,
                       });
                     }
-                  } catch { /* silent */ }
+                  } catch (e) { console.error('[Chat] Pipeline execution failed:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to run pipeline' }); }
                 }}
                 className="px-3 py-2 rounded-lg text-sm bg-blue-500/20 border border-blue-500/30 text-blue-300 hover:bg-blue-500/30 transition-colors"
               >

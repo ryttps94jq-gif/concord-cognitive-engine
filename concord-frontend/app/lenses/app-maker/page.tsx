@@ -44,7 +44,7 @@ export default function AppMakerLens() {
     try {
       const resp = await apiHelpers.apps.list();
       setApps(resp.data?.apps || []);
-    } catch { /* silent */ }
+    } catch (e) { console.error('[AppMaker] Failed to load apps:', e); }
     setLoading(false);
   };
 
@@ -63,7 +63,7 @@ export default function AppMakerLens() {
       });
       setNewName('');
       await loadApps();
-    } catch { /* silent */ }
+    } catch (e) { console.error('[AppMaker] Failed to create app:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to create app' }); }
     setCreating(false);
   };
 
@@ -71,7 +71,7 @@ export default function AppMakerLens() {
     try {
       await apiHelpers.apps.promote(id);
       await loadApps();
-    } catch { /* silent */ }
+    } catch (e) { console.error('[AppMaker] Failed to promote app:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to promote app' }); }
   };
 
   const validateApp = async (id: string) => {
@@ -83,7 +83,7 @@ export default function AppMakerLens() {
       } else {
         alert(`Violations:\n${(data.violations || []).join('\n')}`);
       }
-    } catch { /* silent */ }
+    } catch (e) { console.error('[AppMaker] Failed to validate app:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to validate app' }); }
   };
 
   const templates = [

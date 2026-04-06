@@ -152,8 +152,8 @@ export default function CreativeWritingPage() {
         refetch();
         setAutoSaved(true);
         setTimeout(() => setAutoSaved(false), 2000);
-      } catch {
-        // silent auto-save failure
+      } catch (e) {
+        console.error('[CreativeWriting] Auto-save failed:', e);
       }
     }, 5000);
     return () => {

@@ -3,6 +3,7 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useMutation } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
+import { useUIStore } from '@/store/ui';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
@@ -248,7 +249,7 @@ function RealityExplorerSection() {
     try {
       const resp = await apiHelpers.explore.run(domain, constraintObj);
       setResults(resp.data);
-    } catch { /* silent */ }
+    } catch (e) { console.error('[Lab] Exploration failed:', e); useUIStore.getState().addToast({ type: 'error', message: 'Exploration failed' }); }
     setLoading(false);
   };
 

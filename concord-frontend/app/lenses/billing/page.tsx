@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
+import { useUIStore } from '@/store/ui';
 import { motion } from 'framer-motion';
 import {
   Coins, Check, Zap, Crown,
@@ -431,7 +432,7 @@ export default function BillingPage() {
                   try {
                     const resp = await apiHelpers.economy.createTaxSummary({ year: new Date().getFullYear() });
                     alert(`Tax Summary DTU created: ${(resp.data as Record<string, unknown>)?.dtuId || 'success'}`);
-                  } catch { /* silent */ }
+                  } catch (e) { console.error('[Billing] Failed to create tax summary:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to create tax summary' }); }
                 }}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 transition-colors"
               >

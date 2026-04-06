@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, exportSubstrate } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
+import { useUIStore } from '@/store/ui';
 import {
   Shield, Lock, Globe, Trash2, Settings,
   Database, RefreshCw, AlertTriangle, Download,
@@ -70,7 +71,7 @@ export function SovereigntyDashboard() {
       a.download = `substrate-export-${new Date().toISOString().slice(0, 10)}.gz`;
       a.click();
       URL.revokeObjectURL(url);
-    } catch { /* silent */ }
+    } catch (e) { console.error('[Sovereignty] Failed to export substrate:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to export substrate' }); }
     finally { setExporting(false); }
   };
 

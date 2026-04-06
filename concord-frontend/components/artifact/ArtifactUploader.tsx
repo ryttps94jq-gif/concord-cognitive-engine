@@ -30,6 +30,7 @@ export function ArtifactUploader({ lens, onUploadComplete, acceptTypes, multi = 
         formData.append("title", fileArray[0].name);
 
         const res = await fetch("/api/artifact/upload-multi", { method: "POST", body: formData });
+        if (!res.ok) throw new Error(`Request failed: ${res.status}`);
         const data = await res.json();
         if (data.ok) onUploadComplete(data.dtuId);
         else setError(data.error || "Upload failed");
@@ -39,6 +40,7 @@ export function ArtifactUploader({ lens, onUploadComplete, acceptTypes, multi = 
         formData.append("title", fileArray[0].name);
 
         const res = await fetch("/api/artifact/upload", { method: "POST", body: formData });
+        if (!res.ok) throw new Error(`Request failed: ${res.status}`);
         const data = await res.json();
         if (data.ok) onUploadComplete(data.dtuId);
         else setError(data.error || "Upload failed");

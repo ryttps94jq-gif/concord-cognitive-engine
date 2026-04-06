@@ -8,6 +8,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Bot, RefreshCw } from 'lucide-react';
 import { agentStatus, agentTick } from '@/lib/api/client';
+import { useUIStore } from '@/store/ui';
 
 interface AgentInsight {
   type: 'meeting_prep' | 'overdue_alert' | 'workout_adjustment' | 'meal_reminder';
@@ -58,7 +59,7 @@ export function PersonalAgentPanel({ socket, onAction }: PersonalAgentPanelProps
     try {
       const data = await agentTick();
       if (data?.insights) setInsights(data.insights);
-    } catch { /* silent */ }
+    } catch (e) { console.error('[Agent] Failed to fetch insights:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to refresh agent insights' }); }
     finally { setTicking(false); }
   }, []);
 

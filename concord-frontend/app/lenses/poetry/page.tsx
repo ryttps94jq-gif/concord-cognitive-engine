@@ -12,6 +12,7 @@ import {
   Hash, Music, Layers, Moon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useUIStore } from '@/store/ui';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -422,7 +423,7 @@ export default function PoetryPage() {
                       </div>
                       <div className="flex gap-1">
                         <button onClick={e => { e.stopPropagation(); openPoem(poem); }} className="p-1 hover:bg-white/10 rounded"><Edit2 className="w-3.5 h-3.5" /></button>
-                        <button onClick={e => { e.stopPropagation(); removePoem(poem.id).catch(() => {}); refetch(); }} className="p-1 hover:bg-white/10 rounded text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
+                        <button onClick={e => { e.stopPropagation(); removePoem(poem.id).then(() => refetch()).catch((err) => { console.error('[Poetry] Failed to delete poem:', err); useUIStore.getState().addToast({ type: 'error', message: 'Failed to delete poem' }); }); }} className="p-1 hover:bg-white/10 rounded text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div>
                     </div>
                     {poem.content && (

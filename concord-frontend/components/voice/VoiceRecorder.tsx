@@ -57,7 +57,7 @@ export function VoiceRecorder({
 
       // Close any previous AudioContext before creating a new one
       if (audioContextRef.current) {
-        audioContextRef.current.close().catch(() => {});
+        audioContextRef.current.close().catch((e) => console.error('[VoiceRecorder] Failed to close AudioContext:', e));
       }
 
       // Set up audio analyzer for visualization
@@ -101,7 +101,7 @@ export function VoiceRecorder({
           cancelAnimationFrame(animationFrameRef.current);
         }
         if (audioContextRef.current) {
-          audioContextRef.current.close().catch(() => {});
+          audioContextRef.current.close().catch((e) => console.error('[VoiceRecorder] Failed to close AudioContext:', e));
           audioContextRef.current = null;
         }
         setAudioLevel(0);
@@ -176,7 +176,7 @@ export function VoiceRecorder({
       if (timerRef.current) clearInterval(timerRef.current);
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
       if (audioContextRef.current) {
-        audioContextRef.current.close().catch(() => {});
+        audioContextRef.current.close().catch((e) => console.error('[VoiceRecorder] Failed to close AudioContext:', e));
         audioContextRef.current = null;
       }
       if (audioUrl) URL.revokeObjectURL(audioUrl);
