@@ -258,7 +258,7 @@ function validateSeismic(
   // Lateral acceleration as % of gravity based on seismic zone
   const seismicCoeff = getSeismicCoefficient(seismicZone);
 
-  let maxMagnitude = seismicZone;
+  const maxMagnitude = seismicZone;
 
   for (const member of members) {
     const mat = matMap.get(member.materialId);
