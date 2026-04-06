@@ -23145,48 +23145,40 @@ import createUniversalExportRouter from "./routes/universal-export.js";
 import logger from './logger.js';
 app.use(createUniversalExportRouter(STATE, runMacro, makeCtx));
 
-// ===== ACCOUNT LIFECYCLE (GDPR delete, export, terms, disputes) =====
+// ===== DB-DEPENDENT ROUTES (guarded — these crash on null db) =====
 import createAccountLifecycleRouter from "./routes/account-lifecycle.js";
 import { adminOnly as economyAdminOnly } from "./economy/guards.js";
-app.use("/api/account", createAccountLifecycleRouter({ db, requireAuth, adminOnly: economyAdminOnly }));
-
-// ===== CONSENT MANAGEMENT =====
 import createConsentRouter from "./routes/consent.js";
-app.use("/api/consent", createConsentRouter({ db, requireAuth }));
-
-// ===== DISPUTE RESOLUTION =====
 import createDisputeRouter from "./routes/disputes.js";
-app.use("/api/disputes", createDisputeRouter({ db, requireAuth, adminOnly: economyAdminOnly }));
-
-// ===== LEGAL / DMCA =====
 import registerLegalRoutes from "./routes/legal.js";
-registerLegalRoutes(app, { db, requireAuth, requireRole, structuredLog, auditLog });
-
-// ===== REPAIR ENHANCED (predictive repair, diagnostics) =====
 import registerRepairEnhancedRoutes from "./routes/repair-enhanced.js";
-registerRepairEnhancedRoutes(app, { db, requireRole, log: structuredLog });
-
-// ===== INITIATIVE ENGINE (proactive suggestions, double-text) =====
 import registerInitiativeRoutes from "./routes/initiative.js";
-registerInitiativeRoutes(app, { db });
-
-// ===== PASSWORD RESET / EMAIL VERIFICATION =====
-import createPasswordResetRouter from "./routes/password-reset.js";
-app.use("/api/auth", createPasswordResetRouter({ AuthDB, hashPassword, authRateLimiter }));
-
-// ===== TRANSPARENCY REPORTS =====
 import createTransparencyRouter from "./routes/transparency.js";
-app.use("/api", createTransparencyRouter({ db, adminOnly: economyAdminOnly }));
-
-// ===== BACKUP MANAGEMENT =====
 import registerBackupRoutes from "./routes/backup.js";
 import { createBackupScheduler } from "./lib/backup-scheduler.js";
-const backupScheduler = db ? createBackupScheduler(db, { dataDir: DATA_DIR }) : null;
-registerBackupRoutes(app, { requireRole, backupScheduler, db });
-
-// ===== CODE ENGINE (code ingestion, pattern analysis) =====
 import registerCodeEngineRoutes from "./routes/code-engine.js";
-registerCodeEngineRoutes(app, { db, requireAuth });
+
+if (db) {
+  app.use("/api/account", createAccountLifecycleRouter({ db, requireAuth, adminOnly: economyAdminOnly }));
+  app.use("/api/consent", createConsentRouter({ db, requireAuth }));
+  app.use("/api/disputes", createDisputeRouter({ db, requireAuth, adminOnly: economyAdminOnly }));
+  registerLegalRoutes(app, { db, requireAuth, requireRole, structuredLog, auditLog });
+  registerRepairEnhancedRoutes(app, { db, requireRole, log: structuredLog });
+  registerInitiativeRoutes(app, { db });
+  app.use("/api", createTransparencyRouter({ db, adminOnly: economyAdminOnly }));
+  const backupScheduler = createBackupScheduler(db, { dataDir: DATA_DIR });
+  registerBackupRoutes(app, { requireRole, backupScheduler, db });
+  registerCodeEngineRoutes(app, { db, requireAuth });
+  structuredLog("info", "db_routes_registered", { count: 9, routes: ["account","consent","disputes","legal","repair-enhanced","initiative","transparency","backup","code-engine"] });
+} else {
+  // Backup routes handle null scheduler/db gracefully — register anyway for status endpoint
+  registerBackupRoutes(app, { requireRole, backupScheduler: null, db: null });
+  structuredLog("info", "db_routes_skipped", { message: "Database not available — 8 DB-dependent route modules disabled." });
+}
+
+// ===== PASSWORD RESET / EMAIL VERIFICATION (uses AuthDB, not SQLite db) =====
+import createPasswordResetRouter from "./routes/password-reset.js";
+app.use("/api/auth", createPasswordResetRouter({ AuthDB, hashPassword, authRateLimiter }));
 
 // ===== SPECIES API =====
 app.get("/api/species/registry", (_req, res) => res.json({ ok: true, registry: getSpeciesRegistry() }));
