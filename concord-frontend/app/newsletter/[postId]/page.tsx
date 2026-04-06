@@ -15,7 +15,7 @@ interface NewsletterPageProps {
 export async function generateMetadata({ params }: NewsletterPageProps): Promise<Metadata> {
   const { postId } = await params;
   // Fetch post metadata for OG tags
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5050';
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
   let title = 'Newsletter';
   let description = 'A newsletter post from Concord';
 
@@ -50,7 +50,7 @@ export async function generateMetadata({ params }: NewsletterPageProps): Promise
 }
 
 async function getPost(postId: string) {
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5050';
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
   try {
     const res = await fetch(`${baseUrl}/api/social/post/${postId}`, {
       next: { revalidate: 60 },

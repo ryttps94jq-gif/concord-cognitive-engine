@@ -161,13 +161,24 @@ export default function configureMiddleware(app, deps) {
       if (NODE_ENV === "production") {
         // Production fallback: allow same-host origins (different ports/protocols).
         // This handles the common case where ALLOWED_ORIGINS isn't set but the frontend
-        // is on the same host. Log a warning so the operator knows to set the env var.
+        // is on the same host. Also infers the host from common env vars or the request.
         try {
           const originUrl = new URL(origin);
-          const serverHost = process.env.SERVER_HOST || process.env.HOSTNAME || "";
+          const serverHost = process.env.SERVER_HOST || process.env.HOSTNAME || process.env.DOMAIN || "";
           if (serverHost && originUrl.hostname === serverHost) {
             console.warn("[CORS] WARNING: Allowing same-host origin without ALLOWED_ORIGINS:", origin, "— Set ALLOWED_ORIGINS for production.");
             return callback(null, true);
+          }
+          // Fallback: if NEXT_PUBLIC_API_URL is set, extract its hostname
+          const apiUrl = process.env.NEXT_PUBLIC_API_URL || process.env.API_URL || "";
+          if (apiUrl) {
+            try {
+              const apiHost = new URL(apiUrl).hostname;
+              if (originUrl.hostname === apiHost) {
+                console.warn("[CORS] WARNING: Allowing origin matching API_URL:", origin);
+                return callback(null, true);
+              }
+            } catch { /* invalid API_URL, continue */ }
           }
         } catch (_e) { logger.debug('index', 'invalid origin URL, fall through to reject', { error: _e?.message }); }
         console.error("[CORS] REJECTED: No ALLOWED_ORIGINS configured in production. Origin:", origin, "— Set ALLOWED_ORIGINS=https://your-frontend-domain");

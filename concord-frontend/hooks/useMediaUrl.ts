@@ -54,7 +54,7 @@ interface UseMediaUrlReturn {
 
 // ── Constants ──────────────────────────────────────────────────────────
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5050';
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 /** Refresh signed URLs 5 minutes before they expire. */
 const REFRESH_BUFFER_MS = 5 * 60 * 1000;

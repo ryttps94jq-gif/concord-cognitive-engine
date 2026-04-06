@@ -436,33 +436,40 @@ export async function backfillEmbeddings(dtusMap, { onProgress = null } = {}) {
 
   let embedded = 0, errors = 0;
 
-  for (let i = 0; i < unembedded.length; i += BACKFILL_BATCH_SIZE) {
-    const batch = unembedded.slice(i, i + BACKFILL_BATCH_SIZE);
+  // Process in small groups of 10, yielding after each group so HTTP
+  // requests can be served during backfill.  Each embedDTU() is an
+  // Ollama HTTP call (~100-500ms), so 10 at a time keeps latency under
+  // 5 seconds per group while still making progress.
+  const YIELD_EVERY = 10;
 
-    for (const dtu of batch) {
-      try {
-        await embedDTU(dtu);
-        if (embeddingCache.has(dtu.id)) {
-          embedded++;
-        }
-      } catch {
-        errors++;
+  for (let i = 0; i < unembedded.length; i++) {
+    try {
+      await embedDTU(unembedded[i]);
+      if (embeddingCache.has(unembedded[i].id)) {
+        embedded++;
       }
+    } catch {
+      errors++;
     }
 
-    embeddingState.stats.backfillProgress = Math.min(i + batch.length, unembedded.length);
-    if (onProgress) {
-      onProgress({
-        progress: embeddingState.stats.backfillProgress,
-        total: unembedded.length,
-        embedded,
-        errors,
-      });
+    // Yield to event loop every YIELD_EVERY DTUs — lets HTTP respond
+    if ((i + 1) % YIELD_EVERY === 0) {
+      embeddingState.stats.backfillProgress = i + 1;
+      if (onProgress) {
+        onProgress({
+          progress: i + 1,
+          total: unembedded.length,
+          embedded,
+          errors,
+        });
+      }
+      await new Promise(r => setTimeout(r, 10));
     }
 
-    // Yield to event loop between batches + force GC if available
-    if (global.gc) global.gc();
-    await new Promise(r => { setTimeout(r, 50); });
+    // GC every BACKFILL_BATCH_SIZE DTUs to keep RSS stable
+    if ((i + 1) % BACKFILL_BATCH_SIZE === 0 && global.gc) {
+      global.gc();
+    }
   }
 
   embeddingState.stats.backfillComplete = true;

@@ -17,6 +17,10 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: 5050,
+        ALLOWED_ORIGINS: 'https://concord-os.org',
+        COOKIE_DOMAIN: 'concord-os.org',
+        TRUST_PROXY: '1',
+        OLLAMA_MODEL: 'concord-conscious',
       },
       // Crash-loop detection: stop restarting after 15 rapid failures
       max_restarts: 15,
@@ -36,8 +40,8 @@ module.exports = {
     },
     {
       name: 'concord-frontend',
-      script: 'npm',
-      args: 'start',
+      script: 'node',
+      args: '.next/standalone/server.js',
       cwd: `${__dirname}/concord-frontend`,
       instances: 1,
       exec_mode: 'fork',
@@ -46,10 +50,42 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: 3000,
+        HOSTNAME: '0.0.0.0',
       },
       // Logging
       error_file: '../logs/frontend-error.log',
       out_file: '../logs/frontend-out.log',
+      merge_logs: true,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+    },
+    {
+      name: 'ollama',
+      script: 'ollama',
+      args: 'serve',
+      instances: 1,
+      exec_mode: 'fork',
+      watch: false,
+      max_memory_restart: '8G',
+      env: {
+        OLLAMA_HOST: '0.0.0.0:11434',
+      },
+      // Logging
+      error_file: 'logs/ollama-error.log',
+      out_file: 'logs/ollama-out.log',
+      merge_logs: true,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+    },
+    {
+      name: 'cloudflared',
+      script: 'cloudflared',
+      args: 'tunnel run concord',
+      instances: 1,
+      exec_mode: 'fork',
+      watch: false,
+      autorestart: true,
+      // Logging
+      error_file: 'logs/cloudflared-error.log',
+      out_file: 'logs/cloudflared-out.log',
       merge_logs: true,
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
     },

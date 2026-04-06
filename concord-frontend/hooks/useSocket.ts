@@ -23,7 +23,7 @@ import type { SocketEvent } from '@/lib/realtime/socket';
 import type { DTU } from '@/lib/types/dtu';
 import type { SystemAlert, AttentionAllocation, FocusOverride, Dream, Promotion } from '@/lib/types/system';
 
-const _SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5050';
+const _SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || process.env.NEXT_PUBLIC_API_URL || '';
 
 // ── All events to forward to the event bus ─────────────────────
 const FORWARDED_EVENTS: SocketEvent[] = [

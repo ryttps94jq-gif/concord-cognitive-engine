@@ -27,7 +27,7 @@ import type {
   CreateApiKeyRequest,
 } from './generated-types';
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5050';
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 /**
  * FE-004: Runtime validation of API base URL.

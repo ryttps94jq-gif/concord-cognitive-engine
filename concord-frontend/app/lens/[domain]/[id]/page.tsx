@@ -9,7 +9,7 @@ import { redirect } from 'next/navigation';
  * Redirects authenticated users to the actual lens page.
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5050';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://concord-os.org';
 
 async function fetchArtifact(domain: string, id: string) {

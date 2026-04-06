@@ -614,7 +614,7 @@ export default function ChatLensPage() {
       setAttachments([]);
       setQuotedMessage(null);
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5050';
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
 
       // Abort any previous in-flight request and create a new controller
       chatAbortControllerRef.current?.abort();
@@ -710,7 +710,7 @@ export default function ChatLensPage() {
       const assistantMsg: Message = {
         id: `asst-${Date.now()}`,
         role: 'assistant',
-        content: (data.reply || data.answer || data.content || data.text || data.response || (data.error ? `Error: ${data.error}` : 'The conscious brain is not responding. Check that the Ollama service is running.')) + toolInfo,
+        content: (data.reply || data.out?.reply || data.answer || data.content || data.text || data.response || (data.error ? `Error: ${data.error}` : 'The conscious brain is not responding. Check that the Ollama service is running.')) + toolInfo,
         timestamp: new Date().toISOString(),
         refs: data.refs,
         sources: data.sources as Message['sources'],

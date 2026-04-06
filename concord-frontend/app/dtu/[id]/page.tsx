@@ -9,7 +9,7 @@ import { PublicDTUView } from './PublicDTUView';
  * Server-side data fetch for SEO + generateMetadata.
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5050';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
 
 async function fetchDTU(id: string) {
   try {
