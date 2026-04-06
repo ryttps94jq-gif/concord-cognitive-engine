@@ -59,7 +59,7 @@ describe('LENS_MANIFESTS', () => {
     const allowedCategories = [
       'knowledge', 'creative', 'system', 'social', 'productivity',
       'finance', 'healthcare', 'trades', 'operations', 'agriculture',
-      'government', 'services',
+      'government', 'services', 'lifestyle',
     ];
     for (const m of LENS_MANIFESTS) {
       expect(allowedCategories).toContain(m.category);

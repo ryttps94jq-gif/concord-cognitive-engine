@@ -43,6 +43,18 @@ vi.mock('@/components/common/EmptyState', () => ({
   ),
 }));
 
+vi.mock('@/components/lens/UniversalActions', () => ({
+  UniversalActions: () => <div data-testid="universal-actions" />,
+}));
+
+vi.mock('@/components/chat/PersistentChatRail', () => ({
+  PersistentChatRail: () => <div data-testid="chat-rail" />,
+}));
+
+vi.mock('@/components/lens/ConnectiveTissueBar', () => ({
+  ConnectiveTissueBar: () => <div data-testid="connective-tissue" />,
+}));
+
 // Mock lucide-react — use importOriginal to get all exports, then override with simple components
 vi.mock('lucide-react', async (importOriginal) => {
   const React = await import('react');

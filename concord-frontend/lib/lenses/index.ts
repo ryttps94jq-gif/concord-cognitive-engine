@@ -156,3 +156,26 @@ export {
   getFleetParityReport,
   getFleetSummary,
 } from './domain-bridge';
+
+// Cross-Domain Service (cross-lens data sharing & correlation)
+export {
+  type CrossDomainQuery,
+  type CrossDomainResult,
+  type CrossDomainArtifact,
+  type GraphNode,
+  type GraphEdge,
+  type CitationNode,
+  DOMAIN_CORRELATIONS,
+  CrossDomainService,
+} from './cross-domain-service';
+
+// World Lens Feed Service (unified activity feed across all lenses)
+export {
+  type FeedItem,
+  type FeedFilter,
+  type TrendingDomain,
+  type DomainActivityTimeline,
+  type RoyaltyFlow,
+  type GlobalStats,
+  WorldLensFeedService,
+} from './world-lens-feed-service';

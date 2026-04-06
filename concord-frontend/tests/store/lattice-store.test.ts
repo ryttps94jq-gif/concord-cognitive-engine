@@ -434,6 +434,7 @@ describe('Lattice Store', () => {
         mega: 1,
         hyper: 1,
         shadow: 2,
+        archive: 0,
       });
     });
 
@@ -444,6 +445,7 @@ describe('Lattice Store', () => {
         mega: 0,
         hyper: 0,
         shadow: 0,
+        archive: 0,
       });
     });
   });

@@ -16,9 +16,10 @@ vi.mock('next/navigation', () => ({
   }),
 }));
 
-// Mock lucide-react — explicit named exports (Proxy crashes vitest)
-vi.mock('lucide-react', async () => {
+// Mock lucide-react — use importOriginal to get all exports, then override with simple components
+vi.mock('lucide-react', async (importOriginal) => {
   const React = await import('react');
+  const actual = await importOriginal<Record<string, unknown>>();
   const makeMockIcon = (name: string) => {
     const Icon = React.forwardRef<SVGSVGElement, Record<string, unknown>>((props, ref) =>
       React.createElement('span', { 'data-testid': `icon-${name}`, ref, ...props })
@@ -26,15 +27,13 @@ vi.mock('lucide-react', async () => {
     Icon.displayName = name;
     return Icon;
   };
-  const iconNames = [
-    'Search', 'Bell', 'User', 'Command', 'Activity', 'Zap', 'Menu', 'LogOut',
-    'Settings', 'Shield', 'Brain', 'Radio', 'DollarSign', 'Coins', 'Plus',
-    'Wallet', 'ChevronDown', 'Globe', 'ChevronRight', 'ArrowRight', 'Clock',
-    'Sparkles', 'TrendingDown', 'RefreshCw', 'Home', 'X',
-  ];
-  const mocks: Record<string, unknown> = { __esModule: true };
-  for (const n of iconNames) mocks[n] = makeMockIcon(n);
-  return mocks;
+  const overrides: Record<string, unknown> = {};
+  for (const key of Object.keys(actual)) {
+    if (key[0] >= 'A' && key[0] <= 'Z' && key !== 'createLucideIcon' && key !== 'default') {
+      overrides[key] = makeMockIcon(key);
+    }
+  }
+  return { ...actual, ...overrides };
 });
 
 // Mock API client
