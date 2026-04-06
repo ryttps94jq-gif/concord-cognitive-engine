@@ -433,6 +433,7 @@ export default function PlayerProfile({
         <div className="flex items-start gap-4">
           <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center text-2xl font-bold text-white/50 shrink-0">
             {profile.avatar ? (
+              // eslint-disable-next-line @next/next/no-img-element
               <img src={profile.avatar} alt={profile.displayName} className="w-full h-full rounded-full object-cover" />
             ) : (
               profile.displayName.charAt(0)

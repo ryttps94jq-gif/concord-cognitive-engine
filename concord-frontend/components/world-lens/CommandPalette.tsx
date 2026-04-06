@@ -249,6 +249,7 @@ export default function CommandPalette({
         onClose();
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [flatResults, selectedIndex, mathResult, query, onClose],
   );
 

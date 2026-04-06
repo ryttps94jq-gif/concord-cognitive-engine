@@ -699,10 +699,11 @@ export default function AvatarSystem3D({
 
     const cleanupPromise = init();
 
+    const mixers = mixersRef.current;
     return () => {
       disposed = true;
       cleanupPromise.then((cleanup) => cleanup?.());
-      mixersRef.current.clear();
+      mixers.clear();
 
       if (avatarGroupRef.current) {
         const group = avatarGroupRef.current as {

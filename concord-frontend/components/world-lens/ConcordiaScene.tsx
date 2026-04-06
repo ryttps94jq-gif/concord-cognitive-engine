@@ -165,6 +165,7 @@ export default function ConcordiaScene({
     if (!canvas) return;
 
     let disposed = false;
+    const buildingMap = buildingMapRef.current;
     let THREE: typeof import('three');
     let renderer: InstanceType<typeof import('three').WebGLRenderer>;
     let scene: InstanceType<typeof import('three').Scene>;
@@ -398,7 +399,7 @@ export default function ConcordiaScene({
       sceneRef.current = null;
       cameraRef.current = null;
       layersRef.current = {};
-      buildingMapRef.current.clear();
+      buildingMap.clear();
       setIsReady(false);
     };
   }, [districtId, quality, onBuildingClick, onTerrainClick]);

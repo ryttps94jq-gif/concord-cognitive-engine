@@ -115,7 +115,7 @@ describe('MediaUpload', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    capturedMutationOpts = null;
+    _capturedMutationOpts = null;
     mockedApi.post.mockResolvedValue({
       data: { ok: true, artifactHash: 'test-hash', id: 'dtu-1' },
     });

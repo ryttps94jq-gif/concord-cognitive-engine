@@ -248,12 +248,12 @@ export default function DTUDiffViewer() {
   const leftVersion = VERSIONS[leftIdx];
   const rightVersion = VERSIONS[rightIdx];
 
-  const diffRows = useMemo(() => buildDiffRows(leftVersion, rightVersion), [leftIdx, rightIdx]);
+  const diffRows = useMemo(() => buildDiffRows(leftVersion, rightVersion), [leftVersion, rightVersion]);
   const validationRows = useMemo(
     () => buildValidationRows(leftVersion, rightVersion),
-    [leftIdx, rightIdx]
+    [leftVersion, rightVersion]
   );
-  const summary = useMemo(() => buildSummary(leftVersion, rightVersion), [leftIdx, rightIdx]);
+  const summary = useMemo(() => buildSummary(leftVersion, rightVersion), [leftVersion, rightVersion]);
 
   const visibleRows = useMemo(
     () => (showUnchanged ? diffRows : diffRows.filter((r) => r.status !== 'unchanged')),

@@ -564,9 +564,10 @@ export default function BuildingRenderer3D({
 
     buildAllBuildings();
 
+    const instancedMeshes = instancedMeshesRef.current;
     return () => {
       disposed = true;
-      instancedMeshesRef.current.clear();
+      instancedMeshes.clear();
       if (buildingGroupRef.current) {
         const group = buildingGroupRef.current as {
           traverse: (cb: (obj: unknown) => void) => void;
