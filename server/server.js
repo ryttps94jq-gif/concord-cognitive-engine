@@ -16862,6 +16862,126 @@ let localReply = formatCrispResponse({
   let llmUsed = false;
   const semanticUsed = Boolean(semanticEnhancement && semanticEnhancement.confidence > 0.4);
 
+  // ===== TOOL CALLING INFRASTRUCTURE =====
+  // Determine whether tools are available for this session.
+  // Guarded by Chicken3 toolsEnabled (global) + session toolsOptIn (per-session).
+  const _toolFlags = _c3sessionFlags(ctx);
+  const _toolsAvailable = Boolean(STATE.__chicken3?.toolsEnabled && _toolFlags.toolsOptIn);
+
+  // Tool descriptions injected into the system prompt when tools are enabled
+  const _toolSystemPrompt = _toolsAvailable ? `
+
+You have access to the following tools. To use a tool, include a tool call marker in your response EXACTLY like this (one per line, you may use multiple):
+[TOOL_CALL: {"tool": "tool_name", "params": {...}}]
+
+Available tools:
+- web_search: Search the web for current information. Params: {"query": "search terms"}
+- create_dtu: Create a new DTU (Decision/Thought Unit) from the conversation. Params: {"title": "DTU title", "summary": "brief summary", "tags": ["tag1", "tag2"]}
+- run_lens_action: Invoke a lens domain action. Params: {"domain": "domain_name", "action": "action_name", "params": {}}
+
+Rules for tool use:
+- Only call a tool when the user's request genuinely requires it (e.g., they ask for current info, ask you to search, or ask to create/save something).
+- After the tool call marker, continue your response naturally. You will receive the tool results and can then give a final answer.
+- Do NOT fabricate tool results. If you need real-time data, call web_search.` : "";
+
+  // Parse tool calls from brain response text
+  const _parseToolCalls = (text) => {
+    const calls = [];
+    const re = /\[TOOL_CALL:\s*(\{[\s\S]*?\})\s*\]/g;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      try {
+        const parsed = JSON.parse(m[1]);
+        if (parsed && parsed.tool) {
+          calls.push({ tool: String(parsed.tool), params: parsed.params || {}, raw: m[0] });
+        }
+      } catch (_e) {
+        logger.debug("chat_tools", "Failed to parse tool call JSON", { raw: m[1], error: _e?.message });
+      }
+    }
+    return calls;
+  };
+
+  // Strip tool call markers from the visible response
+  const _stripToolCalls = (text) => {
+    return text.replace(/\[TOOL_CALL:\s*\{[\s\S]*?\}\s*\]/g, "").replace(/\n{3,}/g, "\n\n").trim();
+  };
+
+  // Execute a single tool call and return its result
+  const _executeToolCall = async (call) => {
+    const MAX_TOOL_RESULT_LEN = 12000;
+    try {
+      switch (call.tool) {
+        case "web_search": {
+          const searchResult = await runMacro("tools", "web_search", {
+            query: String(call.params.query || ""),
+            sessionId,
+          }, ctx);
+          if (!searchResult?.ok) {
+            return { tool: call.tool, ok: false, error: searchResult?.error || "web_search failed" };
+          }
+          return {
+            tool: call.tool, ok: true,
+            result: (searchResult.summary || searchResult.text || "").slice(0, MAX_TOOL_RESULT_LEN),
+            source: searchResult.source || "unknown",
+          };
+        }
+        case "create_dtu": {
+          const dtuResult = await runMacro("dtu", "create", {
+            title: String(call.params.title || "Untitled"),
+            human: { summary: String(call.params.summary || ""), bullets: [] },
+            tags: Array.isArray(call.params.tags) ? call.params.tags : [],
+            tier: "regular",
+            source: "chat_tool",
+            sessionId,
+          }, ctx);
+          if (!dtuResult?.ok) {
+            return { tool: call.tool, ok: false, error: dtuResult?.error || "create_dtu failed" };
+          }
+          return { tool: call.tool, ok: true, dtuId: dtuResult.id || dtuResult.dtu?.id, title: call.params.title };
+        }
+        case "run_lens_action": {
+          const domain = String(call.params.domain || "");
+          const action = String(call.params.action || "");
+          const key = `${domain}.${action}`;
+          const handler = LENS_ACTIONS.get(key);
+          if (!handler) {
+            return { tool: call.tool, ok: false, error: `Unknown lens action: ${key}` };
+          }
+          const lensResult = await handler(ctx, null, call.params.params || {});
+          return { tool: call.tool, ok: true, result: lensResult };
+        }
+        default:
+          return { tool: call.tool, ok: false, error: `Unknown tool: ${call.tool}` };
+      }
+    } catch (e) {
+      return { tool: call.tool, ok: false, error: String(e?.message || e) };
+    }
+  };
+
+  // Execute all parsed tool calls (sequentially to avoid blast radius)
+  const _executeToolCalls = async (calls) => {
+    const results = [];
+    for (const call of calls.slice(0, 5)) { // cap at 5 tool calls per turn
+      const result = await _executeToolCall(call);
+      results.push(result);
+      ctx.log("chat_tools", "Tool executed", { tool: call.tool, ok: result.ok, error: result.error || null });
+    }
+    return results;
+  };
+
+  // Format tool results into a message for the follow-up brain call
+  const _formatToolResults = (results) => {
+    return results.map(r => {
+      if (!r.ok) return `[TOOL_RESULT: ${r.tool}] Error: ${r.error}`;
+      if (r.tool === "web_search") return `[TOOL_RESULT: web_search] ${r.result}`;
+      if (r.tool === "create_dtu") return `[TOOL_RESULT: create_dtu] Created DTU "${r.title}" (id: ${r.dtuId})`;
+      if (r.tool === "run_lens_action") return `[TOOL_RESULT: run_lens_action] ${JSON.stringify(r.result).slice(0, 4000)}`;
+      return `[TOOL_RESULT: ${r.tool}] ${JSON.stringify(r).slice(0, 4000)}`;
+    }).join("\n\n");
+  };
+  // ===== END TOOL CALLING INFRASTRUCTURE =====
+
   if (llm && ctx.llm.enabled) {
     // Affect-modulated LLM parameters
     const _llmTemp = clamp(
@@ -16887,7 +17007,7 @@ let localReply = formatCrispResponse({
     const system =
 `You are ConcordOS. Be natural, concise but not dry. Use DTUs as memory. Never pretend features exist.
 Mode: ${mode}.${_affectGuidance ? `\nTone: ${_affectGuidance}` : ""}
-When helpful, reference DTU titles in plain language (do not dump ids unless asked).${_grcSystemPrompt ? `\n\n${_grcSystemPrompt}` : ""}`;
+When helpful, reference DTU titles in plain language (do not dump ids unless asked).${_grcSystemPrompt ? `\n\n${_grcSystemPrompt}` : ""}${_toolSystemPrompt}`;
     // Use fused context from quality pipeline if available; otherwise fall back to enriched focus (all tiers)
     const dtuContext = (_fusedContext && _fusedContext.fusedContext)
       ? _fusedContext.fusedContext
@@ -16954,7 +17074,7 @@ When helpful, reference DTU titles in plain language (do not dump ids unless ask
     // This ensures the chat lens always attempts the conscious brain before settling for localReply.
     try {
       const _dtuTitlesDirect = _enrichedFocus.map(d => d.title || d.id).filter(Boolean);
-      const _directSystem = `You are ConcordOS. Be natural, concise but not dry. Use DTUs as memory. Never pretend features exist.\nMode: ${mode}.\nWhen helpful, reference DTU titles in plain language (do not dump ids unless asked).`;
+      const _directSystem = `You are ConcordOS. Be natural, concise but not dry. Use DTUs as memory. Never pretend features exist.\nMode: ${mode}.\nWhen helpful, reference DTU titles in plain language (do not dump ids unless asked).${_toolSystemPrompt}`;
       const _directDtuContext = _enrichedFocus.map(d => `TITLE: ${d.title}\nTIER: ${d.tier}\nTAGS: ${(d.tags||[]).join(", ")}\nCRETI:\n${buildCretiText(d)}\n---`).join("\n");
       const _directMessages = [
         { role: "system", content: _directSystem },
@@ -37721,6 +37841,12 @@ app.delete("/api/social/notifications/:id", (req, res) => {
     res.status(404).json({ ok: false, error: "Notification not found" });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
+
+// ---- Social Groups (DB-backed) ----
+if (db) {
+  const { default: createSocialGroupRoutes } = await import("./routes/social-groups.js");
+  app.use("/api/social", createSocialGroupRoutes({ db, requireAuth }));
+}
 
 // ---- Collaboration ----
 app.post("/api/collab/workspace", (req, res) => {
