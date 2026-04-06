@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -51,12 +51,12 @@ vi.mock('framer-motion', () => ({
 
 // Mock sub-components
 vi.mock('@/components/wallet/PurchaseFlow', () => ({
-  PurchaseFlow: ({ onClose }: { onClose?: () => void }) =>
+  PurchaseFlow: ({ onClose: _onClose }: { onClose?: () => void }) =>
     React.createElement('div', { 'data-testid': 'purchase-flow' }, 'Purchase Flow'),
 }));
 
 vi.mock('@/components/wallet/WithdrawFlow', () => ({
-  WithdrawFlow: ({ onClose }: { onClose?: () => void }) =>
+  WithdrawFlow: ({ onClose: _onClose }: { onClose?: () => void }) =>
     React.createElement('div', { 'data-testid': 'withdraw-flow' }, 'Withdraw Flow'),
 }));
 

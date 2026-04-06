@@ -3,8 +3,8 @@
 import React, { useState, useCallback } from 'react';
 import {
   Settings, Monitor, Volume2, Gamepad2, Bell, Lock, Globe, Eye,
-  Sun, Cloud, Users, Sparkles, Trees, Music, Headphones,
-  VolumeX, MessageSquare, Save, X, RotateCcw, Keyboard,
+  Sun, Cloud, Users, Sparkles, Trees, Headphones,
+  Save, X, RotateCcw, Keyboard,
 } from 'lucide-react';
 
 /* ── Types ─────────────────────────────────────────────────────── */
@@ -112,7 +112,7 @@ const SUPPORTED_LANGUAGES = [
   { code: 'hi', name: '\u0939\u093f\u0928\u094d\u0926\u0940' },
 ];
 
-const DEFAULT_KEYBINDINGS: KeyBinding[] = [
+const _DEFAULT_KEYBINDINGS: KeyBinding[] = [
   { action: 'Move Forward', key: 'W' },
   { action: 'Move Back', key: 'S' },
   { action: 'Move Left', key: 'A' },

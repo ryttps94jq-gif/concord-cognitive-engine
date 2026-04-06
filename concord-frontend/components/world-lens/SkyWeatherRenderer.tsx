@@ -181,7 +181,7 @@ export default function SkyWeatherRenderer({
   const skyGroupRef = useRef<unknown>(null);
   const sunLightRef = useRef<unknown>(null);
   const ambientLightRef = useRef<unknown>(null);
-  const particleSystemRef = useRef<unknown>(null);
+  const _particleSystemRef = useRef<unknown>(null);
 
   useEffect(() => {
     let disposed = false;

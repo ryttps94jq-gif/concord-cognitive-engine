@@ -49,19 +49,19 @@ vi.mock('framer-motion', () => {
   return {
     motion: {
       // eslint-disable-next-line react/display-name
-      div: React.forwardRef(({ children }: any, ref: any) =>
+      div: React.forwardRef(({ children }: Record<string, unknown>, ref: unknown) =>
         React.createElement('div', { ref }, children)
       ),
       // eslint-disable-next-line react/display-name
-      button: React.forwardRef(({ children }: any, ref: any) =>
+      button: React.forwardRef(({ children }: Record<string, unknown>, ref: unknown) =>
         React.createElement('button', { ref }, children)
       ),
       // eslint-disable-next-line react/display-name
-      span: React.forwardRef(({ children }: any, ref: any) =>
+      span: React.forwardRef(({ children }: Record<string, unknown>, ref: unknown) =>
         React.createElement('span', { ref }, children)
       ),
     },
-    AnimatePresence: ({ children }: any) => React.createElement(React.Fragment, null, children),
+    AnimatePresence: ({ children }: Record<string, unknown>) => React.createElement(React.Fragment, null, children),
   };
 });
 
@@ -142,7 +142,7 @@ describe('UserProfile', () => {
     queryClient.clear();
   });
 
-  function renderUserProfile(props: Record<string, any> = {}) {
+  function renderUserProfile(props: Record<string, unknown> = {}) {
     return render(
       React.createElement(QueryClientProvider, { client: queryClient },
         React.createElement(UserProfile, { userId: 'user-123', currentUserId: 'current-user', ...props })

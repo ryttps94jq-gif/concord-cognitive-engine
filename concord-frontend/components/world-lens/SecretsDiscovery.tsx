@@ -339,7 +339,7 @@ export default function SecretsDiscovery({ children, userId: _userId }: SecretsD
   }, [journal]);
 
   const getNearbySecrets = useCallback(
-    (district: string, cellId?: string) => {
+    (district: string, _cellId?: string) => {
       const terrainFeatures = TERRAIN_FEATURES_DB[district] || [];
       const npcSecrets = NPC_SECRETS_DB.filter((n) => {
         const npcDistrict = n.npcId.split('-')[1];
