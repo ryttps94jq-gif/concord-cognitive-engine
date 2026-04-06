@@ -23145,6 +23145,49 @@ import createUniversalExportRouter from "./routes/universal-export.js";
 import logger from './logger.js';
 app.use(createUniversalExportRouter(STATE, runMacro, makeCtx));
 
+// ===== ACCOUNT LIFECYCLE (GDPR delete, export, terms, disputes) =====
+import createAccountLifecycleRouter from "./routes/account-lifecycle.js";
+import { adminOnly as economyAdminOnly } from "./economy/guards.js";
+app.use("/api/account", createAccountLifecycleRouter({ db, requireAuth, adminOnly: economyAdminOnly }));
+
+// ===== CONSENT MANAGEMENT =====
+import createConsentRouter from "./routes/consent.js";
+app.use("/api/consent", createConsentRouter({ db, requireAuth }));
+
+// ===== DISPUTE RESOLUTION =====
+import createDisputeRouter from "./routes/disputes.js";
+app.use("/api/disputes", createDisputeRouter({ db, requireAuth, adminOnly: economyAdminOnly }));
+
+// ===== LEGAL / DMCA =====
+import registerLegalRoutes from "./routes/legal.js";
+registerLegalRoutes(app, { db, requireAuth, requireRole, structuredLog, auditLog });
+
+// ===== REPAIR ENHANCED (predictive repair, diagnostics) =====
+import registerRepairEnhancedRoutes from "./routes/repair-enhanced.js";
+registerRepairEnhancedRoutes(app, { db, requireRole, log: structuredLog });
+
+// ===== INITIATIVE ENGINE (proactive suggestions, double-text) =====
+import registerInitiativeRoutes from "./routes/initiative.js";
+registerInitiativeRoutes(app, { db });
+
+// ===== PASSWORD RESET / EMAIL VERIFICATION =====
+import createPasswordResetRouter from "./routes/password-reset.js";
+app.use("/api/auth", createPasswordResetRouter({ AuthDB, hashPassword, authRateLimiter }));
+
+// ===== TRANSPARENCY REPORTS =====
+import createTransparencyRouter from "./routes/transparency.js";
+app.use("/api", createTransparencyRouter({ db, adminOnly: economyAdminOnly }));
+
+// ===== BACKUP MANAGEMENT =====
+import registerBackupRoutes from "./routes/backup.js";
+import { createBackupScheduler } from "./lib/backup-scheduler.js";
+const backupScheduler = db ? createBackupScheduler(db, { dataDir: DATA_DIR }) : null;
+registerBackupRoutes(app, { requireRole, backupScheduler, db });
+
+// ===== CODE ENGINE (code ingestion, pattern analysis) =====
+import registerCodeEngineRoutes from "./routes/code-engine.js";
+registerCodeEngineRoutes(app, { db, requireAuth });
+
 // ===== SPECIES API =====
 app.get("/api/species/registry", (_req, res) => res.json({ ok: true, registry: getSpeciesRegistry() }));
 app.get("/api/species/census", (_req, res) => res.json({ ok: true, ...getSpeciesCensus(STATE) }));
