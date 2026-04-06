@@ -5,7 +5,7 @@
  * using nomic-embed-text (137MB, CPU, millisecond inference).
  *
  * Core API:
- *   embed(text)                         → Float64Array
+ *   embed(text)                         → Float32Array (was Float64, halved for memory)
  *   cosineSimilarity(vecA, vecB)        → number
  *   findSimilar(queryVec, candidates, topK) → DTU[]
  *   findCrossDomainConnections(dtuId, limit) → DTU[]
@@ -26,12 +26,12 @@ const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || "nomic-embed-text";
 const EMBEDDING_FALLBACK_MODEL = "all-minilm";
 const EMBEDDING_DIMENSION = 768; // nomic-embed-text default
 const MAX_IN_MEMORY = 150_000;   // GPU can handle larger in-memory sets
-const BACKFILL_BATCH_SIZE = 200; // 4x faster backfill on GPU
+const BACKFILL_BATCH_SIZE = 50;   // Smaller batches to limit RSS growth
 const EMBED_TIMEOUT_MS = 5_000;  // GPU embeds are much faster
 
 // ── State ──────────────────────────────────────────────────────────────────
 
-/** @type {Map<string, Float64Array>} In-memory embedding cache (dtuId → vector) */
+/** @type {Map<string, Float32Array>} In-memory embedding cache (dtuId → vector) */
 const embeddingCache = new Map();
 
 /** @type {{ available: boolean, model: string|null, dimension: number, ollamaUrl: string|null }} */
@@ -145,7 +145,7 @@ export async function initEmbeddings({ db = null, ollamaUrls = [], structuredLog
  * Returns null if the embedding model is unavailable.
  *
  * @param {string} text
- * @returns {Promise<Float64Array|null>}
+ * @returns {Promise<Float32Array|null>}
  */
 export async function embed(text) {
   if (!embeddingState.available || !embeddingState.ollamaUrl) return null;
@@ -192,7 +192,7 @@ export async function embed(text) {
       embeddingState.stats.totalEmbedded
     );
 
-    return new Float64Array(vec);
+    return new Float32Array(vec);
   } catch (e) {
     embeddingState.stats.totalErrors++;
     if (_log) _log("warn", "embed_error", { error: String(e?.message || e) });
@@ -204,8 +204,8 @@ export async function embed(text) {
  * Cosine similarity between two embedding vectors.
  * Returns 0 if inputs are invalid.
  *
- * @param {Float64Array|number[]} vecA
- * @param {Float64Array|number[]} vecB
+ * @param {Float32Array|number[]} vecA
+ * @param {Float32Array|number[]} vecB
  * @returns {number} Similarity in [-1, 1]
  */
 export function cosineSimilarity(vecA, vecB) {
@@ -226,8 +226,8 @@ export function cosineSimilarity(vecA, vecB) {
  * Find the top-K most similar DTUs to a query embedding.
  * Applies tier weighting: HYPER 3x, MEGA 2x, regular 1x.
  *
- * @param {Float64Array} queryVec
- * @param {{ id: string, tier?: string, embedding?: Float64Array }[]} candidates
+ * @param {Float32Array} queryVec
+ * @param {{ id: string, tier?: string, embedding?: Float32Array }[]} candidates
  * @param {number} topK
  * @returns {{ id: string, score: number, tier?: string }[]}
  */
@@ -326,7 +326,7 @@ export async function findCrossDomainConnections(dtuId, allDTUs, limit = 5) {
  * Called after DTU creation (fire-and-forget).
  *
  * @param {string} dtuId
- * @param {Float64Array} vec
+ * @param {Float32Array} vec
  */
 export function storeEmbedding(dtuId, vec) {
   if (!dtuId || !vec) return;
@@ -351,7 +351,7 @@ export function storeEmbedding(dtuId, vec) {
  * Get a cached embedding for a DTU.
  *
  * @param {string} dtuId
- * @returns {Float64Array|null}
+ * @returns {Float32Array|null}
  */
 export function getEmbedding(dtuId) {
   return embeddingCache.get(dtuId) || null;
@@ -460,8 +460,9 @@ export async function backfillEmbeddings(dtusMap, { onProgress = null } = {}) {
       });
     }
 
-    // Yield to event loop between batches
-    await new Promise(r => { setTimeout(r, 10); });
+    // Yield to event loop between batches + force GC if available
+    if (global.gc) global.gc();
+    await new Promise(r => { setTimeout(r, 50); });
   }
 
   embeddingState.stats.backfillComplete = true;
@@ -563,10 +564,10 @@ function _loadEmbeddingsFromDb() {
     for (const row of rows) {
       if (row.embedding && loaded < MAX_IN_MEMORY) {
         try {
-          const vec = new Float64Array(
+          const vec = new Float32Array(
             row.embedding.buffer,
             row.embedding.byteOffset,
-            row.embedding.byteLength / Float64Array.BYTES_PER_ELEMENT
+            row.embedding.byteLength / Float32Array.BYTES_PER_ELEMENT
           );
           embeddingCache.set(row.dtu_id, vec);
           loaded++;
@@ -591,10 +592,10 @@ function _loadEmbeddingsFromDb() {
           for (const row of legacyRows) {
             if (row.embedding && migrated < MAX_IN_MEMORY) {
               try {
-                const vec = new Float64Array(
+                const vec = new Float32Array(
                   row.embedding.buffer,
                   row.embedding.byteOffset,
-                  row.embedding.byteLength / Float64Array.BYTES_PER_ELEMENT
+                  row.embedding.byteLength / Float32Array.BYTES_PER_ELEMENT
                 );
                 embeddingCache.set(row.id, vec);
                 // Migrate to new table
@@ -619,6 +620,32 @@ function _loadEmbeddingsFromDb() {
   }
 }
 
+/**
+ * Trim embedding cache to a target size.
+ * Evicts oldest entries (FIFO via Map insertion order).
+ * @param {number} targetSize - Max entries to keep (default: half of MAX_IN_MEMORY)
+ * @returns {{ before: number, after: number }} Cache sizes before/after trim
+ */
+export function trimEmbeddingCache(targetSize = Math.floor(MAX_IN_MEMORY / 2)) {
+  const before = embeddingCache.size;
+  if (before <= targetSize) return { before, after: before };
+  const toRemove = before - targetSize;
+  let removed = 0;
+  for (const key of embeddingCache.keys()) {
+    if (removed >= toRemove) break;
+    embeddingCache.delete(key);
+    removed++;
+  }
+  return { before, after: embeddingCache.size };
+}
+
+/**
+ * Get current embedding cache size.
+ */
+export function getEmbeddingCacheSize() {
+  return embeddingCache.size;
+}
+
 // ── Exports ────────────────────────────────────────────────────────────────
 
 export default {
@@ -636,4 +663,6 @@ export default {
   getEmbeddingStatus,
   isEmbeddingAvailable,
   getEmbeddingModel,
+  trimEmbeddingCache,
+  getEmbeddingCacheSize,
 };

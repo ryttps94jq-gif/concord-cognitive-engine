@@ -271,6 +271,7 @@ import {
   initEmbeddings, embed, cosineSimilarity, findSimilar, semanticSearch,
   findCrossDomainConnections, embedDTU, storeEmbedding, getEmbedding,
   removeEmbedding, backfillEmbeddings, getEmbeddingStatus, isEmbeddingAvailable,
+  trimEmbeddingCache, getEmbeddingCacheSize,
 } from "./embeddings.js";
 import {
   initSemanticCache, semanticCacheCheck, recordCacheSatisfaction,
@@ -876,10 +877,15 @@ function clearTrackedInterval(id) {
   _activeTimers.delete(id);
 }
 
-/** Memory-aware setInterval: skips tick if heap exceeds threshold (default 3GB) */
+/** Memory-aware setInterval: skips tick if heap exceeds threshold or memory ceiling paused */
 const _THROTTLE_HEAP_LIMIT = 3 * 1024 * 1024 * 1024;
 function throttledInterval(fn, ms, name) {
   const id = setInterval(async () => {
+    // Check RSS-based memory ceiling (native memory awareness)
+    if (globalThis.__memoryPaused?.()) {
+      structuredLog("warn", "task_skipped_rss", { name });
+      return;
+    }
     const heap = process.memoryUsage().heapUsed;
     if (heap > _THROTTLE_HEAP_LIMIT) {
       structuredLog("warn", "task_skipped_memory", { name, heapMB: Math.round(heap / 1024 / 1024) });
@@ -3393,6 +3399,8 @@ function initDatabase() {
     db = new Database(DB_PATH);
     db.pragma("journal_mode = WAL"); // Better performance
     db.pragma("foreign_keys = ON");
+    db.pragma("mmap_size = 67108864");   // Cap mmap at 64MB to prevent RSS bloat
+    db.pragma("cache_size = -8000");     // 8MB page cache (negative = KB)
 
     // Create tables
     db.exec(`
@@ -6151,7 +6159,8 @@ function saveStateDebounced() {
     clearTimeout(_saveTimer);
     _saveTimer = setTimeout(() => {
       try {
-        const data = JSON.stringify(_serializeState(), null, USE_SQLITE_STATE ? 0 : 2);
+        // Always use compact JSON (no pretty-print) to halve string memory
+        const data = JSON.stringify(_serializeState());
 
         if (USE_SQLITE_STATE) {
           // SQLite: single-row upsert inside WAL transaction — crash-safe
@@ -6163,6 +6172,8 @@ function saveStateDebounced() {
           fs.writeFileSync(tmpPath, data, "utf-8");
           fs.renameSync(tmpPath, STATE_PATH);
         }
+        // Nudge GC to reclaim the temporary JSON string faster
+        if (global.gc) global.gc();
       } catch (e) {
         structuredLog("error", "state_save_failed", { error: String(e?.message || e) });
         if (!USE_SQLITE_STATE) {
@@ -6183,7 +6194,7 @@ function saveStateDebounced() {
 function saveStateSync() {
   try {
     clearTimeout(_saveTimer);
-    const data = JSON.stringify(_serializeState(), null, USE_SQLITE_STATE ? 0 : 2);
+    const data = JSON.stringify(_serializeState());
     if (USE_SQLITE_STATE && db) {
       const stmt = db.prepare("INSERT OR REPLACE INTO state_snapshots (id, data, version, saved_at) VALUES (1, ?, ?, ?)");
       stmt.run(data, VERSION, nowISO());
@@ -6192,6 +6203,7 @@ function saveStateSync() {
       fs.writeFileSync(tmpPath, data, "utf-8");
       fs.renameSync(tmpPath, STATE_PATH);
     }
+    if (global.gc) global.gc();
   } catch (e) {
     structuredLog("error", "state_sync_save_failed", { error: String(e?.message || e) });
   }
@@ -6233,6 +6245,48 @@ process.on("beforeExit", () => {
 });
 
 const STATE_DISK = loadStateFromDisk();
+
+// === MEMORY DIAGNOSTIC — tracks native + heap memory post-load ===
+{
+  const memAfterLoad = process.memoryUsage();
+  console.log('[MEM-DIAG] After state load:', Math.round(memAfterLoad.rss / 1024 / 1024), 'MB RSS,',
+    Math.round(memAfterLoad.heapUsed / 1024 / 1024), 'MB heap,',
+    Math.round(memAfterLoad.external / 1024 / 1024), 'MB external,',
+    Math.round(memAfterLoad.arrayBuffers / 1024 / 1024), 'MB arrayBuffers');
+
+  // Log large STATE keys
+  const stateKeys = Object.keys(STATE);
+  for (const key of stateKeys) {
+    try {
+      const val = STATE[key];
+      let size = 0;
+      if (val instanceof Map) size = JSON.stringify(Array.from(val.values())).length;
+      else if (Array.isArray(val)) size = JSON.stringify(val).length;
+      else if (val && typeof val === 'object') size = JSON.stringify(val).length;
+      if (size > 100000) {
+        console.log('[MEM-DIAG] STATE.' + key + ':', Math.round(size / 1024), 'KB');
+      }
+    } catch(_e) {
+      console.log('[MEM-DIAG] STATE.' + key + ': [circular or too large]');
+    }
+  }
+
+  // Track memory growth every 5 seconds for 2 minutes
+  let memChecks = 0;
+  const memTracker = setInterval(() => {
+    memChecks++;
+    const mem = process.memoryUsage();
+    console.log('[MEM-DIAG] +' + (memChecks * 5) + 's:',
+      Math.round(mem.rss / 1024 / 1024), 'MB RSS,',
+      Math.round(mem.heapUsed / 1024 / 1024), 'MB heap,',
+      Math.round(mem.external / 1024 / 1024), 'MB ext,',
+      Math.round(mem.arrayBuffers / 1024 / 1024), 'MB arrBuf');
+    if (memChecks >= 24) {
+      clearInterval(memTracker);
+      console.log('[MEM-DIAG] Tracking complete');
+    }
+  }, 5000);
+}
 
 // ---- Wrap STATE.dtus with write-through SQLite store ----
 // After state is loaded from disk, upgrade STATE.dtus from a plain Map
@@ -34985,7 +35039,7 @@ function getAdminStats() {
         mega: dtus.filter(d => d.tier === "mega").length,
         hyper: dtus.filter(d => d.tier === "hyper").length
       },
-      storageUsed: JSON.stringify(STATE).length,
+      storageUsed: (STATE.dtus?.size || 0) * 2048 + (STATE.sessions?.size || 0) * 512, // Estimate — avoids JSON.stringify(STATE) memory spike
       auditLogSize: AUDIT_LOG.length,
       activeFeatures: {
         auth: AUTH_MODE !== "public",
@@ -38159,6 +38213,71 @@ try {
   structuredLog("info", "module_loaded", { detail: `Worker Pool: ${getPoolStats().poolSize} workers initialized` });
 } catch (e) {
   console.warn("[Concord] Worker pool failed to initialize:", e.message);
+}
+
+// ── Memory Ceiling Monitor ──────────────────────────────────────────────────
+// Tracks RSS (not just heap) every 30s. Native memory (mmap, ArrayBuffers,
+// worker V8 isolates) is the primary bloat source — heap alone misses it.
+{
+  const MEM_WARN_MB  = 2048;  // 2GB — start trimming caches
+  const MEM_CRIT_MB  = 3072;  // 3GB — pause background tasks
+  let _backgroundPaused = false;
+
+  function trimCaches() {
+    // 1. Trim embedding cache (biggest native memory consumer — Float32Arrays)
+    const embedTrim = trimEmbeddingCache(25_000); // Keep only 25k vectors
+    // 2. Trim session history
+    if (STATE.sessions?.size > 200) {
+      const sessionKeys = Array.from(STATE.sessions.keys());
+      const toRemove = sessionKeys.slice(0, sessionKeys.length - 200);
+      for (const k of toRemove) STATE.sessions.delete(k);
+    }
+    // 3. Trim logs
+    if (STATE.logs?.length > 200) STATE.logs.splice(0, STATE.logs.length - 200);
+    // 4. Force GC if exposed
+    if (global.gc) global.gc();
+    return { embedBefore: embedTrim.before, embedAfter: embedTrim.after };
+  }
+
+  function pauseBackgroundTasks() {
+    if (_backgroundPaused) return;
+    _backgroundPaused = true;
+    structuredLog("warn", "memory_ceiling_pause", { detail: "Background tasks paused due to high RSS" });
+  }
+
+  function resumeBackgroundTasks() {
+    if (!_backgroundPaused) return;
+    _backgroundPaused = false;
+    structuredLog("info", "memory_ceiling_resume", { detail: "Background tasks resumed — RSS below threshold" });
+  }
+
+  // Expose pause state for throttledInterval and other background schedulers
+  globalThis.__memoryPaused = () => _backgroundPaused;
+
+  const memMonitorId = setInterval(() => {
+    const mem = process.memoryUsage();
+    const rssMB = Math.round(mem.rss / 1024 / 1024);
+    const heapMB = Math.round(mem.heapUsed / 1024 / 1024);
+    const extMB = Math.round(mem.external / 1024 / 1024);
+    const abMB = Math.round(mem.arrayBuffers / 1024 / 1024);
+
+    if (rssMB >= MEM_CRIT_MB) {
+      structuredLog("error", "memory_critical", { rssMB, heapMB, extMB, abMB, embeddingCacheSize: getEmbeddingCacheSize() });
+      const result = trimCaches();
+      pauseBackgroundTasks();
+      structuredLog("warn", "memory_trim_result", { rssMB, ...result });
+    } else if (rssMB >= MEM_WARN_MB) {
+      structuredLog("warn", "memory_warning", { rssMB, heapMB, extMB, abMB, embeddingCacheSize: getEmbeddingCacheSize() });
+      const result = trimCaches();
+      resumeBackgroundTasks();
+      structuredLog("info", "memory_trim_result", { rssMB, ...result });
+    } else {
+      resumeBackgroundTasks();
+    }
+  }, 30_000);
+
+  _activeTimers.add(memMonitorId);
+  structuredLog("info", "module_loaded", { detail: `Memory ceiling monitor: warn=${MEM_WARN_MB}MB, critical=${MEM_CRIT_MB}MB` });
 }
 
 // ---- Three-Brain Cognitive Architecture API ----

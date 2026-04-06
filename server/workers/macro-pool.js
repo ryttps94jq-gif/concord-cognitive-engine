@@ -22,7 +22,7 @@ import logger from '../logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const POOL_SIZE = Math.max(2, os.cpus().length - 1);
+const POOL_SIZE = Math.min(2, Math.max(1, os.cpus().length - 1)); // Cap at 2 to limit RSS
 
 // Heavy macro domains — these get offloaded to workers
 const HEAVY_DOMAINS = new Set([
