@@ -38582,6 +38582,71 @@ app.get("/api/social/trending", (req, res) => {
   try { res.json(computeTrending(STATE, Number(req.query.limit || 20))); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
+// Social analytics + trending extensions
+app.get("/api/social/analytics/creator", (req, res) => {
+  try {
+    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+    const profile = getProfile(STATE, userId);
+    const dtus = dtusArray().filter(d => d.createdBy === userId || d.userId === userId);
+    res.json({ ok: true, creator: { userId, totalDTUs: dtus.length, profile, engagement: { views: dtus.reduce((s, d) => s + (d.views || 0), 0), votes: dtus.reduce((s, d) => s + (d.votes || 0), 0) } } });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+app.get("/api/social/topics/trending", (_req, res) => {
+  try {
+    const tagCount = new Map();
+    for (const dtu of dtusArray().slice(-500)) { for (const t of (dtu.tags || [])) { tagCount.set(t, (tagCount.get(t) || 0) + 1); } }
+    const topics = [...tagCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20).map(([tag, count]) => ({ tag, count }));
+    res.json({ ok: true, topics });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+app.get("/api/social/trending/creators", (_req, res) => {
+  try {
+    const creators = new Map();
+    for (const dtu of dtusArray().slice(-500)) {
+      const uid = dtu.createdBy || dtu.userId;
+      if (uid) creators.set(uid, (creators.get(uid) || 0) + 1);
+    }
+    const top = [...creators.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20).map(([userId, dtuCount]) => ({ userId, dtuCount }));
+    res.json({ ok: true, creators: top });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// Platform status
+app.get("/api/platform/status", (_req, res) => {
+  try {
+    res.json({ ok: true, platform: { status: "operational", version: VERSION, uptime: Math.floor(process.uptime()), brains: typeof getBrainStatus === "function" ? getBrainStatus() : {}, dtus: STATE.dtus?.size || 0, sessions: STATE.sessions?.size || 0 } });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// Loaf status
+app.get("/api/loaf/status", (_req, res) => {
+  try {
+    res.json({ ok: true, loaf: { enabled: !!STATE.loaf, timelines: STATE.loaf?.timelines?.size || 0, branches: STATE.loaf?.branches?.size || 0 } });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// Consent update
+app.post("/api/consent/update", (req, res) => {
+  try {
+    const { userId, action, granted } = req.body || {};
+    if (!action) return res.status(400).json({ ok: false, error: "action required" });
+    if (!STATE.consent) STATE.consent = new Map();
+    const key = `${userId || "anon"}:${action}`;
+    STATE.consent.set(key, { granted: !!granted, updatedAt: nowISO() });
+    res.json({ ok: true, consent: { action, granted: !!granted } });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// Substrate status
+app.get("/api/substrate/status", (_req, res) => {
+  try {
+    const dtus = dtusArray();
+    const tiers = { hyper: 0, mega: 0, regular: 0, shadow: 0 };
+    for (const d of dtus) tiers[d.tier || "regular"] = (tiers[d.tier || "regular"] || 0) + 1;
+    res.json({ ok: true, substrate: { total: dtus.length, tiers, domains: new Set(dtus.map(d => d.domain).filter(Boolean)).size } });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 app.get("/api/social/discover/:userId", (req, res) => {
   try { res.json(discoverUsers(STATE, req.params.userId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
