@@ -2,8 +2,8 @@
 
 import React from 'react';
 import {
-  Building2, Cog, Code2, Sparkles, Box, Layers, Eye, EyeOff,
-  RotateCw, ZoomIn, ZoomOut, Cloud, Shield, Map,
+  Cog, Code2, Sparkles, Eye, EyeOff,
+  RotateCw, ZoomIn, ZoomOut, Cloud, Shield,
 } from 'lucide-react';
 import type { CreationMode } from '@/lib/world-lens/types';
 

@@ -4,8 +4,8 @@ import React, { useState, useCallback } from 'react';
 import {
   X, ScrollText, MapPin, Hammer, PackageCheck, MessageSquare,
   ShieldAlert, Search as SearchIcon, Wrench, CheckCircle2, Circle,
-  ChevronRight, Star, Coins, Award, Trophy, Clock, Filter,
-  ArchiveRestore, AlertCircle, Sparkles, Users,
+  Star, Coins, Trophy, Filter,
+  AlertCircle, Sparkles,
 } from 'lucide-react';
 
 /* ── Types ─────────────────────────────────────────────────────── */

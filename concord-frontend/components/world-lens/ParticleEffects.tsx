@@ -4,12 +4,11 @@ import React, {
   useRef,
   useEffect,
   useCallback,
-  useState,
   createContext,
   useContext,
 } from 'react';
 
-const panel = 'bg-black/80 backdrop-blur-sm border border-white/10 rounded-lg';
+const _panel = 'bg-black/80 backdrop-blur-sm border border-white/10 rounded-lg';
 
 // ── Types ──────────────────────────────────────────────────────────
 

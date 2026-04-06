@@ -2,9 +2,9 @@
 
 import React, { useState } from 'react';
 import {
-  User, Shield, Award, Star, Heart, MessageSquare, UserPlus,
-  UserCheck, ExternalLink, Clock, Eye, Quote, Coins, Globe,
-  ChevronRight, X, Trophy, Compass, Zap, BookOpen, Hammer,
+  Shield, Heart, MessageSquare, UserPlus,
+  UserCheck, Eye, Quote, Coins, Globe,
+  Compass, Zap, BookOpen, Hammer,
   FlaskConical, Building2, GraduationCap, Map,
 } from 'lucide-react';
 
@@ -224,7 +224,7 @@ export default function PlayerProfile({
   profile = SEED_PROFILE,
   portfolio = SEED_PORTFOLIO,
   badges = SEED_BADGES,
-  followers,
+  followers: _followers,
   friends = SEED_FRIENDS,
   visitorLog = SEED_VISITOR_LOG,
   isOwnProfile = false,

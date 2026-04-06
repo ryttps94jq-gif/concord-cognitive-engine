@@ -104,7 +104,7 @@ export default function InventoryPanel({
   onEquip,
   onUnequip,
   onUse,
-  onDrop,
+  onDrop: _onDrop,
   onClose,
 }: InventoryPanelProps) {
   const [activeCategory, setActiveCategory] = useState<ItemCategory | 'all'>('all');

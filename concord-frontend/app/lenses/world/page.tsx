@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
@@ -30,7 +30,7 @@ import type {
 import type { ConcordiaDistrict } from '@/components/world-lens/ConcordiaHub';
 
 import {
-  Globe, Building2, ChevronDown, Layers, Map as MapIcon,
+  Globe, ChevronDown, Layers, Map as MapIcon,
 } from 'lucide-react';
 
 // ── View Modes ──────────────────────────────────────────────────────
@@ -81,7 +81,7 @@ export default function WorldLensPage() {
   }, []);
 
   // DTU persistence
-  const { items: buildingItems, create: createBuilding } = useLensData('world', 'building', {
+  const { items: _buildingItems, create: createBuilding } = useLensData('world', 'building', {
     seed: [],
     enabled: true,
   });

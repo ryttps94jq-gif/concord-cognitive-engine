@@ -2,10 +2,10 @@
 
 import React, { useState } from 'react';
 import {
-  Users, Paintbrush, Hammer, Eye, MessageSquare, CheckCircle2,
-  Circle, ArrowRight, AlertTriangle, ThumbsUp, GraduationCap,
-  X, ChevronRight, ClipboardList, Layers, Send, Percent,
-  UserCheck, AlertCircle,
+  Paintbrush, Hammer, Eye, MessageSquare,
+  AlertTriangle, ThumbsUp, GraduationCap,
+  ClipboardList, Layers, Send, Percent,
+  UserCheck,
 } from 'lucide-react';
 
 /* ── Types ─────────────────────────────────────────────────────── */

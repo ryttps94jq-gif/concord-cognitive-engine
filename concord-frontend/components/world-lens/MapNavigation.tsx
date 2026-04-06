@@ -3,7 +3,7 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import {
   Map, MapPin, Navigation, ZoomIn, ZoomOut, Layers, Eye, EyeOff,
-  ChevronRight, Crosshair, Users, X,
+  ChevronRight, Crosshair, Users,
 } from 'lucide-react';
 
 const panel = 'bg-black/80 backdrop-blur-sm border border-white/10 rounded-lg';
@@ -76,7 +76,7 @@ const infraColors: Record<InfraLayer, { color: string; label: string }> = {
   data: { color: 'text-purple-400', label: 'Data' },
 };
 
-const infraBgColors: Record<InfraLayer, string> = {
+const _infraBgColors: Record<InfraLayer, string> = {
   water: 'bg-blue-400',
   power: 'bg-yellow-400',
   drainage: 'bg-green-400',

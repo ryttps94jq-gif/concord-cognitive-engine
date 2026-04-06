@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import {
   Store, GraduationCap, Factory, Landmark, TreePine, Search,
   Zap, Mountain, Ship, Swords, Globe, Users, ChevronRight,
-  Activity, TrendingUp, Bell,
+  Activity,
 } from 'lucide-react';
 
 const panel = 'bg-black/80 backdrop-blur-sm border border-white/10 rounded-lg';

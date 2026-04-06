@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Search, Navigation, Building2, Zap, Users, Settings,
-  Eye, Brain, ArrowUp, ArrowDown, CornerDownLeft, X,
+  Eye, Brain, ArrowUp, ArrowDown, CornerDownLeft,
   Clock, Calculator, Command, Map, Hammer, Activity,
   Hash, Globe, Layers, Star, ChevronRight,
 } from 'lucide-react';

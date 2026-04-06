@@ -37,7 +37,7 @@ interface JournalEntry {
   location?: { district: string; cell?: string };
 }
 
-interface FamousStructureMatch {
+interface _FamousStructureMatch {
   structureName: string;
   matchPercentage: number;
   description: string;
@@ -166,7 +166,7 @@ interface SecretsDiscoveryProps {
   userId?: string;
 }
 
-export default function SecretsDiscovery({ children, userId }: SecretsDiscoveryProps) {
+export default function SecretsDiscovery({ children, userId: _userId }: SecretsDiscoveryProps) {
   const [journal, setJournal] = useState<JournalEntry[]>([]);
   const [activeNotification, setActiveNotification] = useState<Discovery | null>(null);
   const [showJournal, setShowJournal] = useState(false);
@@ -213,7 +213,7 @@ export default function SecretsDiscovery({ children, userId }: SecretsDiscoveryP
           if (!proportions) return null;
 
           const { width, height, depth } = proportions;
-          const wRatio = 1;
+          const _wRatio = 1;
           const hRatio = height / width;
           const dRatio = depth / width;
 

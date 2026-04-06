@@ -3,8 +3,8 @@
 import React from 'react';
 import {
   Building2, Droplets, Zap, Leaf, Box, ChevronRight, CheckCircle2,
-  AlertTriangle, XCircle, Users, Quote, Shield, Thermometer,
-  Wind, Activity, Flame, Sun,
+  AlertTriangle, XCircle, Quote, Shield, Thermometer,
+  Wind, Activity, Flame,
 } from 'lucide-react';
 import type {
   PlacedBuildingDTU, InfrastructureDTU, ValidationReport,
@@ -64,7 +64,7 @@ export default function InspectorPanel({
   selectedTerrain,
   validationReport,
   citations,
-  materials,
+  materials: _materials,
   onClose,
 }: InspectorPanelProps) {
   const hasSelection = selectedBuilding || selectedInfra || selectedTerrain;

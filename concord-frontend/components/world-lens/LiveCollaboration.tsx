@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
-  Users, GitBranch, GitMerge, GitFork, Lock, Unlock,
-  Eye, Clock, CheckCircle, AlertTriangle, ChevronDown,
+  Users, GitBranch, GitMerge, GitFork, Lock,
+  Eye, CheckCircle, AlertTriangle, ChevronDown,
   ChevronUp, Undo2, History, Circle, ArrowRight,
-  Loader2, Shield, X, Check, Diff,
+  Loader2, Shield, Diff,
 } from 'lucide-react';
 
 /* ── Types ─────────────────────────────────────────────────────── */
@@ -203,7 +203,7 @@ export default function LiveCollaboration({
   participants,
   editHistory,
   conflicts,
-  onEdit,
+  onEdit: _onEdit,
   onResolve,
   onFork,
   onMerge,

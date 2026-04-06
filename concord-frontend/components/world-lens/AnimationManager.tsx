@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useCallback, useRef, useState, useEffect } from 'react';
+import React, { createContext, useContext, useCallback, useRef, useState } from 'react';
 
 const panel = 'bg-black/80 backdrop-blur-sm border border-white/10 rounded-lg';
 

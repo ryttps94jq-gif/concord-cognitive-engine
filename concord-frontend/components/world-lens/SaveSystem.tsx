@@ -2,9 +2,9 @@
 
 import React, { useState } from 'react';
 import {
-  Save, Check, Loader2, Clock, Cloud, CloudOff, Download, Upload,
-  User, Package, TrendingUp, Globe, Building2, Users, CloudRain,
-  DollarSign, Cpu, RefreshCw, Info, ChevronDown, ChevronUp,
+  Save, Check, Loader2, Clock, Cloud, Download, Upload,
+  Globe,
+  Cpu, Info, ChevronDown, ChevronUp,
 } from 'lucide-react';
 
 /* ── Types ─────────────────────────────────────────────────────── */

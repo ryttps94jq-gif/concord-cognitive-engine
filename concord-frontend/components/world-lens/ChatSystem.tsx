@@ -3,8 +3,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   MessageSquare, Send, Mic, MicOff, Volume2, VolumeX,
-  Radio, Users, Building2, Megaphone, Hash, Smile,
-  Check, CheckCheck, ChevronDown, X, Circle,
+  Radio, Building2, Megaphone, Smile,
+  CheckCheck, ChevronDown, Circle,
 } from 'lucide-react';
 
 /* ── Types ─────────────────────────────────────────────────────── */

@@ -3,8 +3,8 @@
 import React, { useState } from 'react';
 import {
   Calendar, Clock, MapPin, Users, Plus, ChevronLeft, ChevronRight,
-  X, Check, Sparkles, Trophy, BookOpen, Coins, PartyPopper,
-  Building2, Map, Wind, Eye, ArrowRight, History,
+  X, Check,
+  ArrowRight, History,
 } from 'lucide-react';
 
 /* ── Types ─────────────────────────────────────────────────────── */

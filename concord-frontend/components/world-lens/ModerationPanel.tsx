@@ -5,7 +5,6 @@ import {
   Shield, Flag, Undo2, Users, Ban, Eye, FileText, Zap,
   Clock, AlertTriangle, X, Check, ChevronDown, ChevronUp,
   Building2, User, Bot, Box, Trash2, VolumeX, LogOut,
-  Plus, Minus,
 } from 'lucide-react';
 
 /* ── Types ─────────────────────────────────────────────────────── */
@@ -115,7 +114,7 @@ export default function ModerationPanel({
   onBan,
   onPermissionChange,
 }: ModerationPanelProps) {
-  const [activeSection, setActiveSection] = useState<string>('report');
+  const [_activeSection, _setActiveSection] = useState<string>('report');
   const [reportTargetType, setReportTargetType] = useState<ReportTargetType>('building');
   const [reportDescription, setReportDescription] = useState('');
   const [newBanUser, setNewBanUser] = useState('');

@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   MapPin, Loader2, Building2, Users, Zap, Cloud, Network,
-  ChevronRight, Sparkles,
+  Sparkles,
 } from 'lucide-react';
 
 const panel = 'bg-black/80 backdrop-blur-sm border border-white/10 rounded-lg';
@@ -184,7 +184,7 @@ function AssemblyProgress({ phase, progress }: { phase: AssemblyPhase; progress:
         const Icon = cfg.icon;
         const isActive = i === currentIdx;
         const isDone = i < currentIdx;
-        const isFuture = i > currentIdx;
+        const _isFuture = i > currentIdx;
         const phaseProgress = isDone ? 1 : isActive ? progress : 0;
 
         return (

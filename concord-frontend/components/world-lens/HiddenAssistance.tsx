@@ -175,7 +175,7 @@ const panel = 'bg-black/80 backdrop-blur-sm border border-white/10 rounded-lg';
 
 export default function HiddenAssistance({
   children,
-  expertiseLevel = 'beginner',
+  expertiseLevel: _expertiseLevel = 'beginner',
   enabled = true,
 }: HiddenAssistanceProps) {
   const [buildCount, setBuildCount] = useState(0);
@@ -186,7 +186,7 @@ export default function HiddenAssistance({
   const isNewUser = buildCount < TUTORIAL_BUILD_COUNT;
 
   const checkNearMiss = useCallback(
-    (category: string, score: number, details?: Record<string, number>): NearMissResult => {
+    (category: string, score: number, _details?: Record<string, number>): NearMissResult => {
       if (!enabled) return { isNearMiss: false, score, suggestion: null, encouragement: null };
 
       const passingScore = 1.0;
@@ -221,7 +221,7 @@ export default function HiddenAssistance({
   );
 
   const getSuggestion = useCallback(
-    (context: string, currentConfig?: Record<string, unknown>): Suggestion | null => {
+    (context: string, _currentConfig?: Record<string, unknown>): Suggestion | null => {
       if (!enabled) return null;
 
       // Context-specific suggestions

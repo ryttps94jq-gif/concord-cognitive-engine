@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { Search, Star, Quote, ShieldCheck, GitFork, ChevronDown } from 'lucide-react';
+import { Search, Quote, ShieldCheck } from 'lucide-react';
 import type { MarketplaceEntry, ComponentCategory } from '@/lib/world-lens/types';
 
 const panel = 'bg-black/80 backdrop-blur-sm border border-white/10 rounded-lg';

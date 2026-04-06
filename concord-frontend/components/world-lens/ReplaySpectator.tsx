@@ -68,7 +68,7 @@ const SPEED_OPTIONS = [0.5, 1, 2, 4, 8];
 
 export default function ReplaySpectator({
   mode = 'replay',
-  recording = null,
+  recording: _recording = null,
   replay = SEED_REPLAY,
   spectatorCount = 23,
   onPlay,

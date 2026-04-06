@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import {
   Bell, Quote, Coins, Compass, Calendar, Monitor, MessageSquare,
-  Shield, Trophy, Check, CheckCheck, Settings, Filter, X,
+  Shield, Trophy, Check, CheckCheck, Settings, Filter,
   ChevronRight, Sparkles, ExternalLink,
 } from 'lucide-react';
 

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Clock, Building2, Users, Zap, Droplets, Leaf } from 'lucide-react';
+import { Clock, Building2, Users, Zap, Leaf } from 'lucide-react';
 import type { DistrictSnapshot } from '@/lib/world-lens/types';
 
 const panel = 'bg-black/80 backdrop-blur-sm border border-white/10 rounded-lg';
@@ -20,7 +20,7 @@ interface DistrictTimelineProps {
   districtId: string;
 }
 
-export default function DistrictTimeline({ districtId }: DistrictTimelineProps) {
+export default function DistrictTimeline({ districtId: _districtId }: DistrictTimelineProps) {
   const [selectedWeek, setSelectedWeek] = useState(SEED_SNAPSHOTS.length - 1);
   const snapshot = SEED_SNAPSHOTS[selectedWeek];
   const maxPop = Math.max(...SEED_SNAPSHOTS.map(s => s.populationCapacity), 1);

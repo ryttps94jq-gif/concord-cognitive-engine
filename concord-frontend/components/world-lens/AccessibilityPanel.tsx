@@ -3,7 +3,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   Eye, Type, Ear, Keyboard, Zap, MessageSquare, Hand, Gauge,
-  Contrast, RotateCcw, Circle, Triangle, Square, Diamond,
+  Contrast, RotateCcw, Circle, Triangle, Square,
 } from 'lucide-react';
 
 /* ── Types ─────────────────────────────────────────────────────── */
@@ -49,7 +49,7 @@ const COLORBLIND_PREVIEWS: Record<ColorblindMode, { pass: string; warn: string; 
   achromatopsia: { pass: 'bg-gray-300',  warn: 'bg-gray-500',  fail: 'bg-gray-700' },
 };
 
-const VALIDATION_SHAPES: React.ComponentType<{ className?: string }>[] = [Circle, Triangle, Square];
+const _VALIDATION_SHAPES: React.ComponentType<{ className?: string }>[] = [Circle, Triangle, Square];
 
 const KEYBOARD_SHORTCUTS = [
   { key: 'Tab',       action: 'Navigate between UI elements' },
