@@ -12336,8 +12336,9 @@ setTimeout(async () => {
  * Call a specific brain (Ollama instance).
  * @param {"conscious"|"subconscious"|"utility"} brainName
  * @param {string} prompt
- * @param {object} options - { system, temperature, maxTokens, timeout }
- * @returns {Promise<{ok:boolean, content?:string, source:string, model:string, tokens?:number, error?:string}>}
+ * @param {object} options - { system, temperature, maxTokens, timeout, enableTools }
+ *   enableTools: when true, injects tool-awareness system prompt and handles [TOOL_CALL: ...] markers
+ * @returns {Promise<{ok:boolean, content?:string, source:string, model:string, tokens?:number, error?:string, toolResults?:Array}>}
  */
 async function callBrain(brainName, prompt, options = {}) {
   const brain = BRAIN[brainName];
@@ -12372,10 +12373,26 @@ async function callBrain(brainName, prompt, options = {}) {
     }
   }
 
+  // Tool-awareness addendum for callBrain — opt-in via options.enableTools
+  const _brainToolsEnabled = Boolean(options.enableTools && STATE.__chicken3?.toolsEnabled);
+  const _brainToolPrompt = _brainToolsEnabled ? `
+
+You have access to the following tools. To use a tool, include a tool call marker in your response EXACTLY like this (one per line, you may use multiple):
+[TOOL_CALL: {"tool": "tool_name", "params": {...}}]
+
+Available tools:
+- web_search: Search the web for current information. Params: {"query": "search terms"}
+- create_dtu: Create a new DTU (Decision/Thought Unit) from the conversation. Params: {"title": "DTU title", "summary": "brief summary", "tags": ["tag1", "tag2"]}
+
+Rules for tool use:
+- Only call a tool when the task genuinely requires it (e.g., sourcing current info, saving a finding).
+- After the tool call marker, continue your response naturally. You will receive the tool results and can then give a final answer.
+- Do NOT fabricate tool results. If you need real-time data, call web_search.` : "";
+
   const _doBrainCall = async () => {
     const start = Date.now();
     // Use /api/chat with proper system message — never concatenate system into prompt
-    const systemContent = options.system || brain.systemPrompt || "";
+    const systemContent = (options.system || brain.systemPrompt || "") + _brainToolPrompt;
     const messages = [
       ...(systemContent ? [{ role: "system", content: systemContent }] : []),
       { role: "user", content: prompt },
@@ -12444,6 +12461,104 @@ async function callBrain(brainName, prompt, options = {}) {
         }
       }
     } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+
+    // ── Tool-call handling for callBrain (opt-in via options.enableTools) ──
+    if (_brainToolsEnabled && result.ok && result.content) {
+      const _toolRe = /\[TOOL_CALL:\s*(\{[\s\S]*?\})\s*\]/g;
+      const _toolCalls = [];
+      let _tm;
+      while ((_tm = _toolRe.exec(result.content)) !== null) {
+        try {
+          const parsed = JSON.parse(_tm[1]);
+          if (parsed && parsed.tool) {
+            _toolCalls.push({ tool: String(parsed.tool), params: parsed.params || {}, raw: _tm[0] });
+          }
+        } catch (_pe) { logger.debug("callBrain.tools", "Failed to parse tool call JSON", { raw: _tm[1] }); }
+      }
+
+      if (_toolCalls.length > 0) {
+        const MAX_TOOL_RESULT_LEN = 12000;
+        const _brainToolCtx = makeInternalCtx(`brain.${brainName}.tools`);
+        const _brainToolResults = [];
+
+        for (const tc of _toolCalls.slice(0, 3)) { // cap at 3 tool calls per brain turn
+          try {
+            if (tc.tool === "web_search") {
+              const sr = await runMacro("tools", "web_search", { query: String(tc.params.query || ""), sessionId: options._sessionId || "internal" }, _brainToolCtx);
+              _brainToolResults.push(sr?.ok
+                ? { tool: "web_search", ok: true, result: (sr.summary || sr.text || "").slice(0, MAX_TOOL_RESULT_LEN), source: sr.source || "unknown" }
+                : { tool: "web_search", ok: false, error: sr?.error || "web_search failed" });
+            } else if (tc.tool === "create_dtu") {
+              const dr = await runMacro("dtu", "create", {
+                title: String(tc.params.title || "Untitled"),
+                human: { summary: String(tc.params.summary || ""), bullets: [] },
+                tags: Array.isArray(tc.params.tags) ? tc.params.tags : [],
+                tier: "regular", source: `brain.${brainName}.tool`, sessionId: options._sessionId || "internal",
+              }, _brainToolCtx);
+              _brainToolResults.push(dr?.ok
+                ? { tool: "create_dtu", ok: true, dtuId: dr.id || dr.dtu?.id, title: tc.params.title }
+                : { tool: "create_dtu", ok: false, error: dr?.error || "create_dtu failed" });
+            } else {
+              _brainToolResults.push({ tool: tc.tool, ok: false, error: `Unknown tool: ${tc.tool}` });
+            }
+            structuredLog("debug", "callBrain_tool_executed", { brain: brainName, tool: tc.tool, ok: _brainToolResults[_brainToolResults.length - 1].ok });
+          } catch (_te) {
+            _brainToolResults.push({ tool: tc.tool, ok: false, error: String(_te?.message || _te) });
+          }
+        }
+
+        // Format tool results and make a follow-up brain call
+        const _toolResultsText = _brainToolResults.map(r => {
+          if (!r.ok) return `[TOOL_RESULT: ${r.tool}] Error: ${r.error}`;
+          if (r.tool === "web_search") return `[TOOL_RESULT: web_search] ${r.result}`;
+          if (r.tool === "create_dtu") return `[TOOL_RESULT: create_dtu] Created DTU "${r.title}" (id: ${r.dtuId})`;
+          return `[TOOL_RESULT: ${r.tool}] ${JSON.stringify(r).slice(0, 4000)}`;
+        }).join("\n\n");
+
+        // Strip tool call markers from original response
+        const _strippedContent = result.content.replace(/\[TOOL_CALL:\s*\{[\s\S]*?\}\s*\]/g, "").replace(/\n{3,}/g, "\n\n").trim();
+
+        // Follow-up call with tool results (no enableTools to prevent recursion)
+        const _followUpMessages = [
+          ...(systemContent ? [{ role: "system", content: systemContent }] : []),
+          { role: "user", content: prompt },
+          { role: "assistant", content: _strippedContent },
+          { role: "user", content: `Tool results:\n${_toolResultsText}\n\nPlease integrate these results into your final response.` },
+        ];
+        const _followUpPayload = {
+          model: brain.model,
+          messages: _followUpMessages,
+          stream: false,
+          options: { temperature: options.temperature || 0.7, num_predict: options.maxTokens || 500 },
+        };
+
+        try {
+          const _fuResponse = await fetch(`${brain.url}/api/chat`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(_followUpPayload),
+            signal: AbortSignal.timeout(options.timeout || 120000),
+          });
+          if (_fuResponse.ok) {
+            const _fuData = await _fuResponse.json();
+            brain.stats.requests++;
+            brain.stats.totalMs += (Date.now() - start);
+            brain.stats.lastCallAt = nowISO();
+            if (_fuData.message?.content) {
+              result.content = _fuData.message.content.trim();
+              result.tokens = (result.tokens || 0) + (_fuData.eval_count || 0);
+            }
+          }
+        } catch (_fuErr) {
+          structuredLog("warn", "callBrain_tool_followup_failed", { brain: brainName, error: String(_fuErr?.message || _fuErr) });
+          // Fall back to stripped content without tool markers
+          result.content = _strippedContent;
+        }
+
+        result.toolResults = _brainToolResults;
+      }
+    }
+    // ── End tool-call handling ──
 
     return result;
   };
@@ -12858,11 +12973,15 @@ async function subconsciousTask(taskType, domain = null) {
   });
   const subcParams = getSubconsciousParams(taskType);
 
+  // Enable tools for autogen tasks so the brain can web_search for sourcing
+  const _enableSubcTools = (taskType === "autogen" || taskType === "synthesis");
+
   const result = await callBrain("subconscious", prompt, {
     system,
     temperature: subcParams.temperature,
     maxTokens: subcParams.maxTokens,
     timeout: subcParams.timeout,
+    enableTools: _enableSubcTools,
   });
 
   if (result.ok && result.content) {
@@ -23039,6 +23158,7 @@ function startHeartbeat() {
               temperature: 0.8,
               maxTokens: 400,
               timeout: 30000,
+              enableTools: true, // allow web_search during exploration synthesis
             });
 
             if (result.ok && result.content) {
@@ -36765,38 +36885,63 @@ function computeAchievements(userId) {
 app.get("/api/game/profile", (req, res) => {
   const userId = req.user?.id || "anon";
   const profile = getGameProfile(userId);
-  // Calculate XP from DTU count
+  // Calculate XP from DTU count plus quest completions
   const dtuCount = dtusArray().filter(d => d.authorId === userId || d.source === userId).length;
-  profile.xp = dtuCount * 10;
+  const megaCount = dtusArray().filter(d => d.tier === "mega" && (d.authorId === userId || d.source === userId)).length;
+  const hyperCount = dtusArray().filter(d => d.tier === "hyper" && (d.authorId === userId || d.source === userId)).length;
+  const voteCount = Array.from(STATE.councilVotes?.values() || []).flat().filter(v => v.voterId === userId).length;
+  profile.xp = (dtuCount * 10) + (megaCount * 50) + (hyperCount * 100) + (voteCount * 5) + ((profile.questsCompleted || 0) * 100);
   profile.level = Math.floor(Math.sqrt(profile.xp / 100)) + 1;
-  profile.badges = computeAchievements(userId).filter(a => a.earned).map(a => a.id);
+  const achievements = computeAchievements(userId);
+  profile.badges = achievements.filter(a => a.earned).map(a => a.id);
+  profile.stats = { dtus: dtuCount, megas: megaCount, hypers: hyperCount, votes: voteCount, questsCompleted: profile.questsCompleted || 0 };
+  profile.lastActivityAt = profile.lastActivityAt || null;
   res.json({ ok: true, profile });
 });
 
 app.get("/api/game/achievements", (req, res) => {
   const userId = req.user?.id || "anon";
-  res.json({ ok: true, achievements: computeAchievements(userId) });
+  const achievements = computeAchievements(userId);
+  const earned = achievements.filter(a => a.earned).length;
+  const total = achievements.length;
+  res.json({ ok: true, achievements, summary: { earned, total, completionPct: total > 0 ? Math.round((earned / total) * 100) : 0 } });
 });
 
 app.get("/api/game/challenges", (req, res) => {
   // Generate challenges from current system state
+  const userId = req.user?.id || "anon";
   const dtuCount = STATE.dtus.size;
+  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+  const todayDtus = dtusArray().filter(d => (d.authorId === userId || d.source === userId) && new Date(d.createdAt) >= todayStart).length;
+  const todayVotes = Array.from(STATE.councilVotes?.values() || []).flat().filter(v => v.voterId === userId && new Date(v.timestamp) >= todayStart).length;
   const challenges = [
-    { id: "daily_create", name: "Daily Creator", description: "Create 3 DTUs today", target: 3, reward: 30 },
-    { id: "tag_master", name: "Tag Master", description: "Add tags to 5 DTUs", target: 5, reward: 25 },
-    { id: "vote_today", name: "Civic Duty", description: "Cast a council vote today", target: 1, reward: 15 },
+    { id: "daily_create", name: "Daily Creator", description: "Create 3 DTUs today", target: 3, progress: Math.min(todayDtus, 3), reward: 30 },
+    { id: "tag_master", name: "Tag Master", description: "Add tags to 5 DTUs", target: 5, progress: Math.min(dtusArray().filter(d => (d.authorId === userId || d.source === userId) && d.tags?.length > 0).length, 5), reward: 25 },
+    { id: "vote_today", name: "Civic Duty", description: "Cast a council vote today", target: 1, progress: Math.min(todayVotes, 1), reward: 15 },
   ];
-  if (dtuCount > 10) challenges.push({ id: "mega_merge", name: "Mega Merge", description: "Promote DTUs into a MEGA", target: 1, reward: 50 });
+  if (dtuCount > 10) challenges.push({ id: "mega_merge", name: "Mega Merge", description: "Promote DTUs into a MEGA", target: 1, progress: 0, reward: 50 });
   res.json({ ok: true, challenges });
 });
 
 app.get("/api/game/leaderboard", (req, res) => {
-  // Build leaderboard from game profiles
+  // Build leaderboard from game profiles, recomputing XP live
+  if (!STATE.gameProfiles) STATE.gameProfiles = new Map();
+  // Ensure all known users are represented
+  const knownUsers = new Set(Array.from(STATE.gameProfiles.keys()));
+  dtusArray().forEach(d => { if (d.authorId) knownUsers.add(d.authorId); if (d.source) knownUsers.add(d.source); });
+  for (const uid of knownUsers) {
+    if (!STATE.gameProfiles.has(uid)) getGameProfile(uid);
+    const p = STATE.gameProfiles.get(uid);
+    const userDtus = dtusArray().filter(d => d.authorId === uid || d.source === uid);
+    p.xp = (userDtus.length * 10) + (userDtus.filter(d => d.tier === "mega").length * 50) + (userDtus.filter(d => d.tier === "hyper").length * 100) + ((p.questsCompleted || 0) * 100);
+    p.level = Math.floor(Math.sqrt(p.xp / 100)) + 1;
+    p.badges = computeAchievements(uid).filter(a => a.earned).map(a => a.id);
+  }
   const entries = Array.from(STATE.gameProfiles.values())
-    .map(p => ({ userId: p.userId, xp: p.xp || 0, level: p.level || 1, badges: (p.badges || []).length }))
+    .map(p => ({ userId: p.userId, xp: p.xp || 0, level: p.level || 1, badges: (p.badges || []).length, badgeList: p.badges || [] }))
     .sort((a, b) => b.xp - a.xp)
     .slice(0, 20);
-  res.json({ ok: true, leaderboard: entries });
+  res.json({ ok: true, leaderboard: entries, totalPlayers: STATE.gameProfiles.size });
 });
 
 // POST /api/game/quests/:questId/complete — mark a quest complete and grant XP
@@ -37124,9 +37269,10 @@ app.get("/api/growth/organs", (req, res) => {
 
 // Music - ambient/focus mode with real state tracking
 if (!STATE.music) STATE.music = { playing: false, currentTrack: null, queue: [], playlists: [], volume: 0.7 };
+if (!STATE.music.userPlaylists) STATE.music.userPlaylists = new Map();
 
 app.get("/api/music/current", (req, res) => {
-  res.json({ ok: true, track: STATE.music.currentTrack, playing: STATE.music.playing, volume: STATE.music.volume });
+  res.json({ ok: true, track: STATE.music.currentTrack, playing: STATE.music.playing, volume: STATE.music.volume, queueLength: STATE.music.queue.length });
 });
 
 app.get("/api/music/playlists", (req, res) => {
@@ -37136,7 +37282,8 @@ app.get("/api/music/playlists", (req, res) => {
     { id: "nature", name: "Nature Sounds", tracks: 0, type: "ambient", builtin: true },
     { id: "silence", name: "Silence", tracks: 0, type: "silence", builtin: true },
   ];
-  res.json({ ok: true, playlists: [...builtIn, ...STATE.music.playlists] });
+  const userPlaylists = Array.from(STATE.music.userPlaylists.values());
+  res.json({ ok: true, playlists: [...builtIn, ...userPlaylists], userPlaylistCount: userPlaylists.length });
 });
 
 app.get("/api/music/queue", (req, res) => {
@@ -37150,6 +37297,45 @@ app.post("/api/music/toggle", (req, res) => {
   saveStateDebounced();
   realtimeEmit("music:toggle", { playing: STATE.music.playing, track: STATE.music.currentTrack });
   res.json({ ok: true, playing: STATE.music.playing, track: STATE.music.currentTrack });
+});
+
+app.post("/api/music/playlist", (req, res) => {
+  try {
+    const { name, tracks, type } = req.body || {};
+    if (!name) return res.status(400).json({ ok: false, error: "Playlist name is required" });
+    const id = `user_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const playlist = { id, name, tracks: tracks || [], type: type || "custom", builtin: false, createdAt: new Date().toISOString() };
+    STATE.music.userPlaylists.set(id, playlist);
+    saveStateDebounced();
+    res.json({ ok: true, playlist });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+app.put("/api/music/playlist/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    const existing = STATE.music.userPlaylists.get(id);
+    if (!existing) return res.status(404).json({ ok: false, error: "Playlist not found" });
+    if (req.body?.name) existing.name = req.body.name;
+    if (req.body?.tracks) existing.tracks = req.body.tracks;
+    if (req.body?.type) existing.type = req.body.type;
+    existing.updatedAt = new Date().toISOString();
+    STATE.music.userPlaylists.set(id, existing);
+    saveStateDebounced();
+    res.json({ ok: true, playlist: existing });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+app.delete("/api/music/playlist/:id", (req, res) => {
+  const { id } = req.params;
+  if (!STATE.music.userPlaylists.has(id)) return res.status(404).json({ ok: false, error: "Playlist not found" });
+  STATE.music.userPlaylists.delete(id);
+  saveStateDebounced();
+  res.json({ ok: true, deleted: id });
 });
 
 // AR endpoints - backed by lens artifacts tagged as AR layers
@@ -43432,6 +43618,22 @@ STATE._eventBus = eventBus;
 
 // ── Event Bus Subscribers ────────────────────────────────────────────────────
 // Wire critical event handlers so the bus isn't fire-and-forget.
+
+eventBus.on("pulse.update", (evt) => {
+  const { component, status, score, metrics } = evt.payload || {};
+  structuredLog("info", "pulse_update", { component, status, score });
+  // Broadcast health pulse to connected clients for real-time dashboard
+  if (typeof realtimeEmit === "function") {
+    realtimeEmit("health:pulse", { component, status, score, metrics, timestamp: Date.now() });
+  }
+  // Track degraded components for aggregate monitoring
+  if (status === "degraded" || status === "critical") {
+    if (!STATE._healthAlerts) STATE._healthAlerts = [];
+    STATE._healthAlerts.push({ component, status, score, timestamp: Date.now() });
+    // Keep only last 200 alerts
+    if (STATE._healthAlerts.length > 200) STATE._healthAlerts = STATE._healthAlerts.slice(-200);
+  }
+});
 
 eventBus.on("health.critical", (evt) => {
   const { component, status } = evt.payload || {};
