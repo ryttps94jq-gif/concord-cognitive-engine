@@ -106,6 +106,8 @@ import { checkSpontaneousContent } from "./prompts/spontaneous.js";
 // ── Chat Router + Forge Pipeline ─────────────────────────────────────────
 import { routeMessage as chatRouterRoute, buildLensChain, emitResonanceSignal, shouldOfferForge, detectEmergentRoute, recordRouteMetric, getRouterMetrics, ACTION_TYPES as CHAT_ACTION_TYPES } from "./lib/chat-router.js";
 import { initializeManifests, getManifestStats, registerUserLens, registerEmergentLens } from "./lib/lens-manifest.js";
+import { DOMAIN_RULES, validateArtifact, computeFields, getValidTransitions, scoreArtifact, getDomainSchema } from "./lib/domain-logic.js";
+import { EXTENDED_DOMAIN_RULES } from "./lib/domain-logic-extended.js";
 import { accumulate as accumulateSessionContext, getContextSnapshot, getAccumulatorMetrics, cleanupExpiredSessions as cleanupAccumulatorSessions } from "./lib/session-context-accumulator.js";
 import { detectForge, runForgePipeline, saveForgedDTU, deleteForgedDTU, saveAndList, iterateForge, recordForgeMetric, getForgeMetrics, recordEmergentContribution } from "./lib/inline-dtu-forge.js";
 import { initializeShield, scanContent as shieldScanContent, scanHashAgainstLattice, runAnalysisPipeline as shieldAnalyze, classifyWithYARA, runProphet as shieldProphet, runSurgeon as shieldSurgeon, runGuardian as shieldGuardian, propagateThreatToLattice, shieldHeartbeatTick, computeSecurityScore, detectShieldIntent, performSweep, processUserReport, getThreatFeed, getFirewallRules, getPredictions, getShieldMetrics, queueScan as shieldQueueScan, createThreatDTU, THREAT_SUBTYPES, SCAN_MODES } from "./lib/concord-shield.js";
@@ -513,6 +515,13 @@ function detectContentInjection(text) {
   } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   return { injected: matched.length > 0, patterns: matched };
 }
+
+// Merge extended domain rules into main registry
+try {
+  for (const [k, v] of EXTENDED_DOMAIN_RULES) {
+    if (!DOMAIN_RULES.has(k)) DOMAIN_RULES.set(k, v);
+  }
+} catch (_e) { console.warn("[DomainLogic] Failed to merge extended rules:", _e?.message); }
 
 // ---- Rate Limiting for Expensive Macros (Phase 5.2) ----
 const _macroRateLimits = new Map();
@@ -27177,7 +27186,8 @@ register("lens", "list", (ctx, input={}) => {
   artifacts.sort((a,b) => (b.updatedAt||b.createdAt||"").localeCompare(a.updatedAt||a.createdAt||""));
   const total = artifacts.length;
   artifacts = artifacts.slice(offset, offset + limit);
-  return { ok: true, artifacts, total, domain, type };
+  const _domainRule = DOMAIN_RULES.get(domain);
+  return { ok: true, artifacts, total, domain, type, schema: _domainRule ? { types: _domainRule.types, validStatuses: _domainRule.validStatuses } : null };
 });
 
 register("lens", "get", (ctx, input={}) => {
@@ -27204,22 +27214,32 @@ register("lens", "create", (ctx, input={}) => {
     return { ok: false, error: "scope_denied", warnings: scopeCheck.warnings };
   }
 
+  // Domain-specific validation
+  const validation = validateArtifact(domain, type, data, meta);
+  if (!validation.ok) {
+    return { ok: false, error: "validation_failed", errors: validation.errors, warnings: validation.warnings };
+  }
+
+  // Apply domain defaults and compute fields
+  const enrichedData = computeFields(domain, type, { ...data });
+
   const id = uid("lart");
   const artifact = {
     id, domain, type,
     ownerId: ctx.actor?.userId || "anon",
     title: title || `New ${type}`,
-    data,
+    data: enrichedData,
     meta: { tags: meta.tags || [], status: meta.status || "draft", visibility: meta.visibility || "private", scope: meta.scope || "local", ...meta },
     createdAt: nowISO(),
     updatedAt: nowISO(),
     version: 1,
+    qualityScore: scoreArtifact(domain, type, enrichedData),
   };
   STATE.lensArtifacts.set(id, artifact);
   _lensDomainIndexAdd(domain, id);
   saveStateDebounced();
   _lensEmitDTU(ctx, domain, "create", type, artifact);
-  return { ok: true, artifact, scopeWarnings: scopeCheck?.warnings?.length ? scopeCheck.warnings : undefined };
+  return { ok: true, artifact, warnings: validation.warnings?.length ? validation.warnings : undefined, scopeWarnings: scopeCheck?.warnings?.length ? scopeCheck.warnings : undefined };
 });
 
 register("lens", "update", (ctx, input={}) => {
@@ -27227,12 +27247,24 @@ register("lens", "update", (ctx, input={}) => {
   if (!id) return { ok: false, error: "id required" };
   const artifact = STATE.lensArtifacts.get(id);
   if (!artifact) return { ok: false, error: "not found" };
+  // Validate status transitions if status is changing
+  if (meta?.status && meta.status !== artifact.meta?.status) {
+    const validNext = getValidTransitions(artifact.domain, artifact.meta?.status || "draft");
+    if (validNext.length > 0 && !validNext.includes(meta.status)) {
+      return { ok: false, error: "invalid_transition", current: artifact.meta?.status, validTransitions: validNext };
+    }
+  }
+
   const before = { title: artifact.title, data: { ...artifact.data } };
   if (title !== undefined) artifact.title = title;
-  if (data !== undefined) artifact.data = { ...artifact.data, ...data };
+  if (data !== undefined) {
+    const merged = { ...artifact.data, ...data };
+    artifact.data = computeFields(artifact.domain, artifact.type, merged);
+  }
   if (meta !== undefined) artifact.meta = { ...artifact.meta, ...meta };
   artifact.updatedAt = nowISO();
   artifact.version = (artifact.version || 1) + 1;
+  artifact.qualityScore = scoreArtifact(artifact.domain, artifact.type, artifact.data);
   saveStateDebounced();
   _lensEmitDTU(ctx, artifact.domain, "update", artifact.type, artifact, { claims: [`updated from v${artifact.version-1}`], before });
   return { ok: true, artifact };
@@ -28333,6 +28365,15 @@ app.get("/api/lens/:domain/:id/export", async (req, res) => {
     const msg = String(e?.message || e);
     const status = msg.startsWith("forbidden") ? 403 : 500;
     res.status(status).json({ ok: false, error: msg });
+  }
+});
+// Domain schema — returns validation rules and field requirements for a domain
+app.get("/api/lens/:domain/schema", (req, res) => {
+  try {
+    const schema = getDomainSchema(req.params.domain);
+    return res.json({ ok: true, domain: req.params.domain, schema });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
 });
 app.post("/api/lens/:domain/bulk", async (req, res) => {
