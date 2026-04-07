@@ -40,6 +40,14 @@ import quantum from './quantum.js';
 import art from './art.js';
 import platform from './platform.js';
 import neuro from './neuro.js';
+import physics from './physics.js';
+import chem from './chem.js';
+import hypothesis from './hypothesis.js';
+import timeline from './timeline.js';
+import ethics from './ethics.js';
+import debug from './debug.js';
+import lab from './lab.js';
+import research from './research.js';
 
 export default [
   healthcare,
@@ -73,4 +81,12 @@ export default [
   art,
   platform,
   neuro,
+  physics,
+  chem,
+  hypothesis,
+  timeline,
+  ethics,
+  debug,
+  lab,
+  research,
 ];

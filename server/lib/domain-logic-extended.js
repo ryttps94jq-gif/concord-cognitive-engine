@@ -358,4 +358,206 @@ EXTENDED_DOMAIN_RULES.set("neuro", {
   },
 });
 
+// === Physics ===
+EXTENDED_DOMAIN_RULES.set("physics", {
+  types: ["simulation", "experiment", "model", "problem-set", "derivation"],
+  validStatuses: ["draft", "configuring", "running", "completed", "verified", "archived"],
+  transitions: {
+    draft: ["configuring", "archived"],
+    configuring: ["running", "draft", "archived"],
+    running: ["completed", "configuring"],
+    completed: ["verified", "configuring", "archived"],
+    verified: ["archived"],
+    archived: [],
+  },
+  requiredFields: {},
+  computedFields: (type, data) => {
+    data.bodyCount = (data.bodies || []).length;
+    data.hasOrbit = !!data.orbit || !!data.stateVector;
+    return data;
+  },
+  scoring: (type, data) => {
+    const hasBodies = (data.bodies || []).length > 0;
+    const hasState = !!data.state || !!data.orbit;
+    return Math.round(((hasBodies ? 0.4 : 0) + (hasState ? 0.3 : 0) + 0.1) * 100) / 100;
+  },
+});
+
+// === Chemistry ===
+EXTENDED_DOMAIN_RULES.set("chem", {
+  types: ["compound", "reaction", "solution", "mixture", "analysis"],
+  validStatuses: ["draft", "proposed", "balanced", "verified", "published", "archived"],
+  transitions: {
+    draft: ["proposed", "archived"],
+    proposed: ["balanced", "draft", "archived"],
+    balanced: ["verified", "proposed", "archived"],
+    verified: ["published", "archived"],
+    published: ["archived"],
+    archived: [],
+  },
+  requiredFields: {},
+  computedFields: (type, data) => {
+    data.hasFormula = !!data.formula;
+    data.standardCount = (data.standards || []).length;
+    return data;
+  },
+  scoring: (type, data) => {
+    const hasFormula = !!data.formula;
+    const hasReaction = !!(data.reactants || data.products);
+    return Math.round(((hasFormula ? 0.4 : 0) + (hasReaction ? 0.3 : 0) + 0.1) * 100) / 100;
+  },
+});
+
+// === Hypothesis (Statistical Testing) ===
+EXTENDED_DOMAIN_RULES.set("hypothesis", {
+  types: ["test", "experiment", "ab-test", "inference", "power-analysis"],
+  validStatuses: ["draft", "designing", "collecting", "analyzing", "concluded", "archived"],
+  transitions: {
+    draft: ["designing", "archived"],
+    designing: ["collecting", "draft", "archived"],
+    collecting: ["analyzing", "designing", "archived"],
+    analyzing: ["concluded", "collecting", "archived"],
+    concluded: ["archived"],
+    archived: [],
+  },
+  requiredFields: {},
+  computedFields: (type, data) => {
+    data.hasSample = !!data.sample;
+    data.hasResult = !!data.posterior || !!data.control;
+    return data;
+  },
+  scoring: (type, data) => {
+    const hasSample = !!data.sample;
+    const hasResult = !!data.posterior;
+    return Math.round(((hasSample ? 0.4 : 0) + (hasResult ? 0.3 : 0) + 0.1) * 100) / 100;
+  },
+});
+
+// === Timeline (Temporal Analysis) ===
+EXTENDED_DOMAIN_RULES.set("timeline", {
+  types: ["project", "event-stream", "schedule", "gantt", "time-series"],
+  validStatuses: ["draft", "planning", "active", "tracking", "completed", "archived"],
+  transitions: {
+    draft: ["planning", "archived"],
+    planning: ["active", "draft", "archived"],
+    active: ["tracking", "completed", "archived"],
+    tracking: ["completed", "active", "archived"],
+    completed: ["archived"],
+    archived: [],
+  },
+  requiredFields: {},
+  computedFields: (type, data) => {
+    data.taskCount = (data.tasks || []).length;
+    data.eventCount = (data.events || data.series || []).length;
+    return data;
+  },
+  scoring: (type, data) => {
+    const tasks = (data.tasks || []).length;
+    const events = (data.events || data.series || []).length;
+    return Math.round((Math.min((tasks + events) / 10, 1) * 0.6 + 0.1) * 100) / 100;
+  },
+});
+
+// === Ethics ===
+EXTENDED_DOMAIN_RULES.set("ethics", {
+  types: ["assessment", "framework", "policy", "audit", "case-study"],
+  validStatuses: ["draft", "under-review", "assessed", "approved", "archived"],
+  transitions: {
+    draft: ["under-review", "archived"],
+    "under-review": ["assessed", "draft", "archived"],
+    assessed: ["approved", "under-review", "archived"],
+    approved: ["archived"],
+    archived: [],
+  },
+  requiredFields: {},
+  computedFields: (type, data) => {
+    data.stakeholderCount = (data.stakeholders || []).length;
+    data.hasAction = !!data.action;
+    return data;
+  },
+  scoring: (type, data) => {
+    const stakeholders = (data.stakeholders || []).length;
+    const hasAction = !!data.action;
+    return Math.round((Math.min(stakeholders / 5, 1) * 0.4 + (hasAction ? 0.3 : 0) + 0.1) * 100) / 100;
+  },
+});
+
+// === Debug ===
+EXTENDED_DOMAIN_RULES.set("debug", {
+  types: ["session", "incident", "trace", "profile", "crash-report"],
+  validStatuses: ["draft", "investigating", "root-caused", "fixed", "verified", "archived"],
+  transitions: {
+    draft: ["investigating", "archived"],
+    investigating: ["root-caused", "draft", "archived"],
+    "root-caused": ["fixed", "investigating", "archived"],
+    fixed: ["verified", "archived"],
+    verified: ["archived"],
+    archived: [],
+  },
+  requiredFields: {},
+  computedFields: (type, data) => {
+    data.logCount = (data.logs || []).length;
+    data.errorCount = (data.errors || []).length;
+    data.traceCount = (data.traces || data.stackTraces || []).length;
+    return data;
+  },
+  scoring: (type, data) => {
+    const logs = (data.logs || []).length;
+    const errors = (data.errors || []).length;
+    return Math.round((Math.min((logs + errors) / 20, 1) * 0.5 + 0.1) * 100) / 100;
+  },
+});
+
+// === Lab (Laboratory) ===
+EXTENDED_DOMAIN_RULES.set("lab", {
+  types: ["experiment", "assay", "calibration", "sample-batch", "protocol"],
+  validStatuses: ["draft", "prepared", "running", "analyzing", "reported", "archived"],
+  transitions: {
+    draft: ["prepared", "archived"],
+    prepared: ["running", "draft", "archived"],
+    running: ["analyzing", "prepared", "archived"],
+    analyzing: ["reported", "running", "archived"],
+    reported: ["archived"],
+    archived: [],
+  },
+  requiredFields: {},
+  computedFields: (type, data) => {
+    data.standardCount = (data.standards || []).length;
+    data.sampleCount = (data.samples || []).length;
+    data.controlCount = (data.controls || []).length;
+    return data;
+  },
+  scoring: (type, data) => {
+    const standards = (data.standards || []).length;
+    const samples = (data.samples || []).length;
+    const hasCalibration = !!data.calibration;
+    return Math.round((Math.min(standards / 5, 1) * 0.3 + Math.min(samples / 10, 1) * 0.2 + (hasCalibration ? 0.3 : 0) + 0.1) * 100) / 100;
+  },
+});
+
+// === Research ===
+EXTENDED_DOMAIN_RULES.set("research", {
+  types: ["study", "review", "meta-analysis", "proposal", "dataset"],
+  validStatuses: ["draft", "in-progress", "peer-review", "published", "retracted", "archived"],
+  transitions: {
+    draft: ["in-progress", "archived"],
+    "in-progress": ["peer-review", "draft", "archived"],
+    "peer-review": ["published", "in-progress", "archived"],
+    published: ["retracted", "archived"],
+    retracted: ["archived"],
+    archived: [],
+  },
+  requiredFields: { study: ["title"] },
+  computedFields: (type, data) => {
+    data.paperCount = (data.papers || []).length;
+    data.hasMethodology = !!data.methodology;
+    return data;
+  },
+  scoring: (type, data) => {
+    const papers = (data.papers || []).length;
+    const hasMeth = !!data.methodology;
+    return Math.round((Math.min(papers / 10, 1) * 0.3 + (hasMeth ? 0.4 : 0) + 0.1) * 100) / 100;
+  },
+});
+
 export { EXTENDED_DOMAIN_RULES };
