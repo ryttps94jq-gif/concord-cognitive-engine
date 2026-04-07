@@ -32,6 +32,14 @@ import science from './science.js';
 import security from './security.js';
 import services from './services.js';
 import insurance from './insurance.js';
+import crypto from './crypto.js';
+import code from './code.js';
+import math from './math.js';
+import bio from './bio.js';
+import quantum from './quantum.js';
+import art from './art.js';
+import platform from './platform.js';
+import neuro from './neuro.js';
 
 export default [
   healthcare,
@@ -57,4 +65,12 @@ export default [
   security,
   services,
   insurance,
+  crypto,
+  code,
+  math,
+  bio,
+  quantum,
+  art,
+  platform,
+  neuro,
 ];
