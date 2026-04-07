@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
 
 // Mock lucide-react icons for jsdom environment
-vi.mock('lucide-react', async (importOriginal) => {
+vi.mock('lucide-react', async (_importOriginal) => {
   const makeMockIcon = (name: string) => {
-    const Icon = React.forwardRef<SVGSVGElement, any>((props, ref) =>
+    const Icon = React.forwardRef<SVGSVGElement, Record<string, unknown>>((props, ref) =>
       React.createElement('span', { 'data-testid': `icon-${name}`, ref, ...props })
     );
     Icon.displayName = name;

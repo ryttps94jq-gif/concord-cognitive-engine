@@ -270,7 +270,7 @@ describe('ConnectPanel', () => {
 // ── ChatPanel ─────────────────────────────────────────────────────────────────
 
 describe('ChatPanel', () => {
-  it('renders null (minimal mode)', () => {
+  it('renders lens indicator (minimal mode)', () => {
     const { container } = render(
       <ChatPanel
         currentLens="general"
@@ -278,7 +278,8 @@ describe('ChatPanel', () => {
         onLensNavigate={vi.fn()}
       />
     );
-    expect(container.innerHTML).toBe('');
+    expect(container.innerHTML).not.toBe('');
+    expect(container.textContent).toContain('general');
   });
 });
 

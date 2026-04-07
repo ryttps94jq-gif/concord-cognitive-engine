@@ -628,7 +628,7 @@ function init({ register, STATE, helpers }) {
               try { mod.triggerEmotionalResponse(input.speakerId, otherId, interactionType, 0.5); } catch (_e) { logger.debug('emergent:index', 'silent catch', { error: _e?.message }); }
             }
           }
-        }).catch(() => {});
+        }).catch(e => logger.warn?.('[emergent] async op failed:', e?.message));
       } catch (_e) { logger.debug('emergent:index', 'silent catch', { error: _e?.message }); }
     }
     return result;
@@ -2673,18 +2673,47 @@ function init({ register, STATE, helpers }) {
     return runProphet(projectRoot);
   }, { description: "Run pre-build prophet scan", public: false });
 
+  let _lastLatticeAudit = 0;
+  const LATTICE_AUDIT_COOLDOWN = 5 * 60 * 1000; // 5 minutes between audits
+  let _latticeAuditFailCount = 0;
+
   register("emergent", "repair.agent.tick", async (_ctx) => {
     const guardianResult = await repairAgentTick();
 
     // ── Lattice Health Audit ──────────────────────────────────────────────
     // Scans for structural issues: stale DTUs, orphaned lineage, low quality, contradictions
+    // Cooldown: only run once every 5 minutes; back off on repeated failures
     const audit = { staleDtus: [], orphanedLineage: [], lowQuality: [], contradictions: [] };
+    const auditCooldown = LATTICE_AUDIT_COOLDOWN * Math.max(1, _latticeAuditFailCount);
+    if (Date.now() - _lastLatticeAudit < auditCooldown) {
+      return { ...guardianResult, audit, skipped: true };
+    }
+    _lastLatticeAudit = Date.now();
     try {
       const now = Date.now();
       const sevenDays = 7 * 24 * 60 * 60 * 1000;
-      const allIds = new Set(STATE.dtus.keys());
 
-      for (const [id, dtu] of STATE.dtus) {
+      // Safe iteration: STATE.dtus may be a Map, DTU store (has .entries()), Array, or plain Object
+      let dtusIterable;
+      if (!STATE.dtus) {
+        dtusIterable = new Map();
+      } else if (STATE.dtus instanceof Map) {
+        dtusIterable = STATE.dtus;
+      } else if (typeof STATE.dtus.entries === 'function') {
+        // DTU store or Map-like object with .entries() method
+        dtusIterable = new Map(STATE.dtus.entries());
+      } else if (Array.isArray(STATE.dtus)) {
+        dtusIterable = new Map(STATE.dtus.map(d => [d.id, d]));
+      } else if (typeof STATE.dtus === 'object') {
+        dtusIterable = new Map(Object.entries(STATE.dtus));
+      } else {
+        dtusIterable = new Map();
+      }
+
+      const allIds = new Set(dtusIterable.keys());
+
+      for (const [id, dtu] of dtusIterable) {
+        if (!dtu || typeof dtu !== 'object') continue;
         // Stale: 7+ days old with no lineage connections
         const updatedAt = dtu.updatedAt ? new Date(dtu.updatedAt).getTime() : 0;
         const createdAt = dtu.createdAt ? new Date(dtu.createdAt).getTime() : 0;
@@ -2714,7 +2743,8 @@ function init({ register, STATE, helpers }) {
 
       // Contradiction detection: DTUs with directly opposing claims (simple keyword heuristic)
       const claimMap = [];
-      for (const [id, dtu] of STATE.dtus) {
+      for (const [id, dtu] of dtusIterable) {
+        if (!dtu || typeof dtu !== 'object') continue;
         for (const claim of (dtu.core?.claims || [])) {
           if (typeof claim === "string" && claim.length > 10) {
             claimMap.push({ id, title: dtu.title, claim: claim.toLowerCase() });
@@ -2741,8 +2771,10 @@ function init({ register, STATE, helpers }) {
       if (totalIssues > 0) {
         console.warn(`[REPAIR] Lattice audit: ${audit.staleDtus.length} stale, ${audit.orphanedLineage.length} orphaned, ${audit.lowQuality.length} low-quality, ${audit.contradictions.length} contradictions`);
       }
+      _latticeAuditFailCount = 0; // Reset on success
     } catch (e) {
-      console.error("[REPAIR] Lattice audit error:", e.message);
+      _latticeAuditFailCount = Math.min(_latticeAuditFailCount + 1, 6); // Cap at 6 → 30min max backoff
+      console.error("[REPAIR] Lattice audit error:", e.message, `(backoff: ${_latticeAuditFailCount}x cooldown)`);
     }
 
     return { ...guardianResult, audit };
@@ -2759,9 +2791,9 @@ function init({ register, STATE, helpers }) {
       .catch(() => { /* silent */ });
   } catch (_e) { logger.debug('emergent:index', 'silent', { error: _e?.message }); }
 
-  // Start guardian monitors (continuous runtime self-repair)
+  // Guardian monitors are started by startRepairLoop() — don't double-start here
   try {
-    startGuardian();
+    // startGuardian() — removed: called from startRepairLoop() which already delays properly
     if (helpers?.log) {
       helpers.log("emergent.init", "[Repair Cortex] Guardian monitors started — organ 169 active");
     }

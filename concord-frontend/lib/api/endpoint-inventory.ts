@@ -79,7 +79,8 @@ export const ENDPOINT_INVENTORY: EndpointEntry[] = [
   { method: 'POST', path: '/api/chat/feedback', usedBy: ['chat'], helperKey: 'chat.feedback' },
 
   // ── Cognitive / Reseed ──────────────────────────────────────
-  { method: 'GET', path: '/api/cognitive/status', usedBy: ['resonance'], helperKey: 'cognitive.status' },
+  { method: 'GET', path: '/api/cognitive/status', usedBy: ['resonance', 'command-center'], helperKey: 'cognitive.status' },
+  { method: 'GET', path: '/api/loaf/status', usedBy: ['command-center'], helperKey: 'loaf.status' },
   { method: 'POST', path: '/api/reseed', usedBy: ['admin'], helperKey: 'reseed.run' },
 
   // ── Simulations ─────────────────────────────────────────────

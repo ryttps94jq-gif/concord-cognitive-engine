@@ -57,7 +57,31 @@ export class RepairBoundary extends Component<Props, State> {
     const strategy = this.selectRecoveryStrategy(error);
     const delay = 1000 * Math.pow(2, this.state.retryCount);
 
-    if (strategy === 'retry_render' || strategy === 'reload_lens') {
+    if (strategy === 'clear_cache_retry') {
+      try {
+        // Clear relevant cached data from localStorage
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && (key.startsWith('concord-') || key.startsWith('cache-'))) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach((key) => localStorage.removeItem(key));
+        // Clear all sessionStorage as it is session-scoped cache
+        sessionStorage.clear();
+      } catch {
+        // Storage access may fail in some environments
+      }
+      setTimeout(() => {
+        this.setState((prev) => ({
+          hasError: false,
+          error: null,
+          retryCount: prev.retryCount + 1,
+          autoRecovering: false,
+        }));
+      }, delay);
+    } else if (strategy === 'retry_render' || strategy === 'reload_lens') {
       setTimeout(() => {
         this.setState((prev) => ({
           hasError: false,

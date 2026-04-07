@@ -18,6 +18,7 @@
  */
 
 import express from "express";
+import logger from "../logger.js";
 import {
   publishArtifact,
   publishDerivativeArtifact,
@@ -56,7 +57,7 @@ import { QUEST_REWARD_POLICY } from "../lib/creative-marketplace-constants.js";
  * Create the creative marketplace router.
  * @param {{ db: object }} deps
  */
-export default function createCreativeMarketplaceRouter({ db, requireAuth }) {
+export default function createCreativeMarketplaceRouter({ db, requireAuth, detectWashTrading }) {
   const router = express.Router();
 
   // Auth for writes: POST/PUT/DELETE/PATCH require authentication
@@ -136,8 +137,27 @@ export default function createCreativeMarketplaceRouter({ db, requireAuth }) {
   // ── Purchase ────────────────────────────────────────────────────────
 
   router.post("/artifacts/:id/purchase", (req, res) => {
+    const { buyerId } = req.body;
+
+    // ── Wash Trading Detection (Category 1: Adversarial) ───────────────
+    // Look up the artifact to get the seller/creator before purchase
+    if (typeof detectWashTrading === "function" && buyerId) {
+      const artifact = getArtifact(db, req.params.id);
+      if (artifact?.creator_id) {
+        const washResult = detectWashTrading(buyerId, artifact.creator_id, req);
+        if (washResult.suspicious) {
+          logger.warn("[CreativeMarketplace] Wash trade suspected", {
+            buyerId,
+            sellerId: artifact.creator_id,
+            artifactId: req.params.id,
+            reasons: washResult.reasons,
+          });
+        }
+      }
+    }
+
     const result = purchaseArtifact(db, {
-      buyerId: req.body.buyerId,
+      buyerId,
       artifactId: req.params.id,
       requestId: req.body.requestId,
       ip: req.ip,

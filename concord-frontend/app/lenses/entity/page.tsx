@@ -1,15 +1,20 @@
 'use client';
 
+import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, apiHelpers } from '@/lib/api/client';
+import { apiHelpers, api } from '@/lib/api/client';
+import { useUIStore } from '@/store/ui';
 import { useState } from 'react';
-import { Users, Plus, Terminal, GitFork, Activity, Play } from 'lucide-react';
+import { Users, Plus, Terminal, GitFork, Activity, Play, Brain, X, Cpu, Bot, Search, Loader2 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
+import QualiaSensoryFeed from '@/components/emergent/QualiaSensoryFeed';
+import QualiaBodyMap from '@/components/emergent/QualiaBodyMap';
+import PresenceDashboard from '@/components/emergent/PresenceDashboard';
 
 interface Entity {
   id: string;
@@ -32,6 +37,8 @@ export default function EntityLensPage() {
   const [terminalEntity, setTerminalEntity] = useState<string | null>(null);
   const [terminalCommand, setTerminalCommand] = useState('');
   const [terminalOutput, setTerminalOutput] = useState<string[]>([]);
+  const [qualiaEntity, setQualiaEntity] = useState<string | null>(null);
+  const [cognitiveEntity, setCognitiveEntity] = useState<string | null>(null);
 
   // Fetch entities from worldmodel backend
   const { data: entitiesData, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
@@ -50,6 +57,9 @@ export default function EntityLensPage() {
       setNewEntityName('');
       queryClient.invalidateQueries({ queryKey: ['worldmodel-entities'] });
     },
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Entity operation failed. The server may still be loading.' });
+    },
   });
 
   const forkEntity = useMutation({
@@ -66,6 +76,9 @@ export default function EntityLensPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['worldmodel-entities'] });
+    },
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Entity operation failed. The server may still be loading.' });
     },
   });
 
@@ -144,6 +157,24 @@ export default function EntityLensPage() {
           Spawn Entity
         </button>
       </header>
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Entities', value: entities.length, icon: Bot },
+          { label: 'Relationships', value: entities.reduce((s, e) => s + e.forks, 0), icon: GitFork },
+          { label: 'Active', value: entities.filter(e => e.status === 'active').length, icon: Activity },
+          { label: 'Workspaces', value: new Set(entities.map(e => e.workspace)).size, icon: Cpu },
+        ].map((stat) => (
+          <div key={stat.label} className="panel flex items-center gap-3 p-3">
+            <stat.icon className="w-5 h-5 text-neon-cyan shrink-0" />
+            <div>
+              <p className="text-xs text-gray-400">{stat.label}</p>
+              <p className="text-lg font-bold text-white">{stat.value}</p>
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* Create Entity Form */}
       {showCreate && (
@@ -275,8 +306,8 @@ export default function EntityLensPage() {
           <p className="text-gray-400">No entities spawned yet. Click "Spawn Entity" to create one.</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {entities.map((entity) => (
-              <div key={entity.id} className="lens-card">
+            {entities.map((entity, index) => (
+              <motion.div key={entity.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="lens-card">
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <h3 className="font-semibold">{entity.name}</h3>
@@ -310,6 +341,20 @@ export default function EntityLensPage() {
                     Terminal
                   </button>
                   <button
+                    onClick={() => setQualiaEntity(entity.id)}
+                    className="btn-neon text-xs flex-1"
+                  >
+                    <Brain className="w-3 h-3 mr-1 inline" />
+                    Qualia
+                  </button>
+                  <button
+                    onClick={() => setCognitiveEntity(entity.id)}
+                    className="btn-neon text-xs flex-1"
+                  >
+                    <Cpu className="w-3 h-3 mr-1 inline" />
+                    Cognitive
+                  </button>
+                  <button
                     onClick={() => forkEntity.mutate(entity.id)}
                     disabled={forkEntity.isPending}
                     className="btn-neon text-xs flex-1"
@@ -318,10 +363,28 @@ export default function EntityLensPage() {
                     Fork
                   </button>
                 </div>
-              </div>
+              </motion.div>
             ))}
           </div>
         )}
+
+      {/* Qualia Detail Panel */}
+      {qualiaEntity && (
+        <QualiaEntityPanel
+          entityId={qualiaEntity}
+          entityName={entities.find(e => e.id === qualiaEntity)?.name || qualiaEntity}
+          onClose={() => setQualiaEntity(null)}
+        />
+      )}
+
+      {/* Cognitive Systems Detail Panel (Feature 22) */}
+      {cognitiveEntity && (
+        <CognitiveEntityPanel
+          entityId={cognitiveEntity}
+          entityName={entities.find(e => e.id === cognitiveEntity)?.name || cognitiveEntity}
+          onClose={() => setCognitiveEntity(null)}
+        />
+      )}
 
       {/* Real-time Data Panel */}
       {realtimeData && (
@@ -334,7 +397,526 @@ export default function EntityLensPage() {
           compact
         />
       )}
+
+      {/* Agent Status & Research Spawning (Feature 40) */}
+      <AgentStatusPanel />
       </div>
+    </div>
+  );
+}
+
+// ── Qualia Entity Panel ────────────────────────────────────────────────────
+
+function QualiaEntityPanel({ entityId, entityName, onClose }: { entityId: string; entityName: string; onClose: () => void }) {
+  const { data: channelsData } = useQuery({
+    queryKey: ['qualia-channels', entityId],
+    queryFn: () => apiHelpers.qualia.channels(entityId).then(r => r.data),
+    refetchInterval: 5000,
+  });
+
+  const { data: embodimentData } = useQuery({
+    queryKey: ['qualia-embodiment', entityId],
+    queryFn: () => apiHelpers.qualia.embodiment(entityId).then(r => r.data),
+    refetchInterval: 8000,
+  });
+
+  const { data: presenceData } = useQuery({
+    queryKey: ['qualia-presence', entityId],
+    queryFn: () => apiHelpers.qualia.presence(entityId).then(r => r.data),
+    refetchInterval: 8000,
+  });
+
+  const { data: planetaryData } = useQuery({
+    queryKey: ['qualia-planetary', entityId],
+    queryFn: () => apiHelpers.qualia.planetary(entityId).then(r => r.data),
+    refetchInterval: 15000,
+  });
+
+  const { data: qualiaStateData } = useQuery({
+    queryKey: ['qualia-state', entityId],
+    queryFn: () => apiHelpers.qualia.state(entityId).then(r => r.data),
+    refetchInterval: 8000,
+  });
+
+  const { data: registryData } = useQuery({
+    queryKey: ['qualia-registry'],
+    queryFn: () => apiHelpers.qualia.registry().then(r => r.data),
+    staleTime: 60000,
+  });
+
+  const [section, setSection] = useState<'sensory' | 'body' | 'presence' | 'os-tiers'>('sensory');
+  const sections = [
+    { id: 'sensory' as const, label: 'Sensory Feed' },
+    { id: 'body' as const, label: 'Body Map' },
+    { id: 'presence' as const, label: 'Presence' },
+    { id: 'os-tiers' as const, label: 'OS Tiers' },
+  ];
+
+  return (
+    <div className="panel p-4 space-y-4 border-2 border-neon-purple mt-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold flex items-center gap-2">
+          <Brain className="w-4 h-4 text-neon-purple" />
+          Qualia State: {entityName}
+        </h3>
+        <button onClick={onClose} className="text-gray-400 hover:text-white">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Section tabs */}
+      <div className="flex gap-1 bg-zinc-900 rounded-lg p-1">
+        {sections.map(s => (
+          <button
+            key={s.id}
+            onClick={() => setSection(s.id)}
+            className={`flex-1 py-1.5 px-2 rounded-md text-xs font-medium transition-colors ${
+              section === s.id ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'
+            }`}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {section === 'sensory' && channelsData?.channels && (
+        <QualiaSensoryFeed
+          entityId={entityId}
+          channels={channelsData.channels}
+          overloadActive={channelsData.overloadActive}
+        />
+      )}
+
+      {section === 'body' && embodimentData?.embodiment && channelsData?.channels && (
+        <QualiaBodyMap
+          entityId={entityId}
+          embodiment={embodimentData.embodiment}
+          channels={channelsData.channels}
+          overloadActive={channelsData.overloadActive}
+        />
+      )}
+
+      {section === 'presence' && presenceData?.presence && (
+        <PresenceDashboard
+          entityId={entityId}
+          presence={presenceData.presence}
+          existentialPillars={{}}
+          planetary={planetaryData?.planetary}
+        />
+      )}
+
+      {/* OS Tiers Heatmap (Feature 41) */}
+      {section === 'os-tiers' && registryData?.grouped && (
+        <ExistentialOSHeatmap
+          grouped={registryData.grouped}
+          qualiaState={qualiaStateData?.state}
+        />
+      )}
+
+      {/* Fallback when no data yet */}
+      {!channelsData?.channels && !embodimentData?.embodiment && !presenceData?.presence && section !== 'os-tiers' && (
+        <div className="text-center py-8 text-zinc-500 text-sm">
+          Loading qualia state for {entityName}...
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Existential OS Heatmap (Feature 41) ────────────────────────────────────
+
+interface OSEntry {
+  key: string;
+  label: string;
+  category: string;
+  description: string;
+  numeric_channels: string[];
+}
+
+interface QualiaState {
+  activeOS: string[];
+  channels: Record<string, number>;
+}
+
+function ExistentialOSHeatmap({ grouped, qualiaState }: {
+  grouped: Record<string, OSEntry[]>;
+  qualiaState?: QualiaState | null;
+}) {
+  const channels = qualiaState?.channels || {};
+  const activeOS = new Set(qualiaState?.activeOS || []);
+
+  // Color intensity based on float value 0-1
+  function intensityColor(value: number): string {
+    if (value <= 0) return 'bg-zinc-800';
+    if (value < 0.2) return 'bg-blue-900/60';
+    if (value < 0.4) return 'bg-blue-700/60';
+    if (value < 0.6) return 'bg-cyan-600/60';
+    if (value < 0.8) return 'bg-cyan-500/70';
+    return 'bg-cyan-400/80';
+  }
+
+  function intensityText(value: number): string {
+    if (value <= 0) return 'text-zinc-600';
+    if (value < 0.3) return 'text-blue-400';
+    if (value < 0.6) return 'text-cyan-400';
+    return 'text-cyan-300';
+  }
+
+  const tierOrder = [
+    'Tier 0 \u2014 Core',
+    'Tier 1 \u2014 Sensory',
+    'Tier 2 \u2014 Simulation',
+    'Tier 3 \u2014 Human Interface',
+    'Tier 4 \u2014 Cosmic',
+    'Tier 5 \u2014 Self/Meta',
+    'Tier 6 \u2014 Presence',
+  ];
+
+  const sortedTiers = tierOrder.filter(t => grouped[t]);
+
+  return (
+    <div className="space-y-3">
+      {!qualiaState && (
+        <div className="text-xs text-zinc-500 bg-zinc-900 rounded p-2">
+          No live qualia state for this entity. Showing registry structure.
+        </div>
+      )}
+      {sortedTiers.map(tierName => {
+        const osEntries = grouped[tierName] || [];
+        return (
+          <div key={tierName}>
+            <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">{tierName}</h4>
+            <div className="space-y-1.5">
+              {osEntries.map(os => {
+                const isActive = activeOS.has(os.key);
+                return (
+                  <div
+                    key={os.key}
+                    className={`bg-zinc-900 rounded-lg p-2 border ${
+                      isActive ? 'border-cyan-800/50' : 'border-zinc-800'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-cyan-400' : 'bg-zinc-600'}`} />
+                      <span className="text-xs font-medium text-white">{os.label}</span>
+                      {!isActive && <span className="text-[10px] text-zinc-600">(inactive)</span>}
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {os.numeric_channels.map(ch => {
+                        const channelKey = `${os.key}.${ch}`;
+                        const value = channels[channelKey] ?? 0;
+                        return (
+                          <div
+                            key={ch}
+                            className={`${intensityColor(value)} rounded px-1.5 py-0.5 text-[10px] flex items-center gap-1`}
+                            title={`${ch}: ${value.toFixed(3)}`}
+                          >
+                            <span className="text-zinc-400 truncate max-w-[80px]">{ch.replace(/_/g, ' ')}</span>
+                            <span className={`font-mono font-bold ${intensityText(value)}`}>{value.toFixed(2)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Agent Status Panel (Feature 40) ────────────────────────────────────────
+
+function AgentStatusPanel() {
+  const [researchTopic, setResearchTopic] = useState('');
+  const queryClient = useQueryClient();
+
+  const { data: statusData, isLoading } = useQuery({
+    queryKey: ['agents-status'],
+    queryFn: () => apiHelpers.agents.status().then(r => r.data),
+    refetchInterval: 10000,
+  });
+
+  const spawnMutation = useMutation({
+    mutationFn: (topic: string) => apiHelpers.agents.spawnResearch(topic).then(r => r.data),
+    onSuccess: () => {
+      setResearchTopic('');
+      queryClient.invalidateQueries({ queryKey: ['agents-status'] });
+    },
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Entity operation failed. The server may still be loading.' });
+    },
+  });
+
+  const agents = statusData?.agents || [];
+  const active = statusData?.active || 0;
+  const paused = statusData?.paused || 0;
+
+  return (
+    <div className="panel p-4 space-y-4 mt-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold flex items-center gap-2">
+          <Bot className="w-4 h-4 text-neon-cyan" />
+          Active Agents
+        </h3>
+        <div className="flex items-center gap-2 text-xs text-gray-500">
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-400" />{active} active</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-yellow-400" />{paused} paused</span>
+        </div>
+      </div>
+
+      {/* Research Spawning */}
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+          <input
+            type="text"
+            value={researchTopic}
+            onChange={e => setResearchTopic(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && researchTopic.trim() && !spawnMutation.isPending) {
+                spawnMutation.mutate(researchTopic.trim());
+              }
+            }}
+            placeholder="Research topic X..."
+            className="input-lattice w-full pl-9 text-sm"
+            disabled={spawnMutation.isPending}
+          />
+        </div>
+        <button
+          onClick={() => researchTopic.trim() && spawnMutation.mutate(researchTopic.trim())}
+          disabled={!researchTopic.trim() || spawnMutation.isPending}
+          className="btn-neon cyan text-sm"
+        >
+          {spawnMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Spawn Research Agent'}
+        </button>
+      </div>
+
+      {spawnMutation.data && (
+        <div className="bg-zinc-900 rounded p-2 text-xs border border-cyan-900/40">
+          <p className="text-cyan-400 font-medium">Agent spawned for &quot;{spawnMutation.data.topic}&quot;</p>
+          <p className="text-gray-400">{spawnMutation.data.findingsCount} initial findings from lattice scan</p>
+        </div>
+      )}
+
+      {/* Agent list */}
+      {isLoading ? (
+        <p className="text-xs text-gray-500">Loading agents...</p>
+      ) : agents.length === 0 ? (
+        <p className="text-xs text-gray-500">No agents deployed. Spawn a research agent above.</p>
+      ) : (
+        <div className="space-y-1 max-h-48 overflow-y-auto">
+          {agents.slice(0, 20).map((a: Record<string, unknown>) => (
+            <div key={a.agentId as string} className="flex items-center gap-2 text-xs bg-zinc-900 rounded p-2 border border-zinc-800">
+              <span className={`w-2 h-2 rounded-full ${a.status === 'active' ? 'bg-green-400' : 'bg-yellow-400'}`} />
+              <span className="text-white font-medium capitalize">{a.type as string}</span>
+              <span className="text-gray-500 truncate flex-1">{a.territory as string}</span>
+              <span className="text-gray-600 tabular-nums">{a.runCount as number} runs</span>
+              <span className="text-gray-600 tabular-nums">{a.findingsCount as number} findings</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Cognitive Systems Entity Panel (Feature 22) ──────────────────────────
+
+interface CognitiveState {
+  ok: boolean;
+  entityId: string;
+  wants: Array<{ id: string; type: string; domain: string; intensity: number; status: string; description?: string }>;
+  trustNetwork: { trusts: Array<{ emergentId: string; name: string; trust: number }>; trustedBy: Array<{ emergentId: string; name: string; trust: number }> };
+  culture: { fit: { score?: number; traditions?: number } | null; traditions: Array<{ id: string; name?: string; type: string; status: string }> };
+  pain: { state: { totalPain?: number; recentEvents?: number } | null; avoidances: Array<{ id?: string; source: string; strength: number }>; wounds: Array<{ id?: string; type: string; severity: number }> };
+  subjectiveTime: { experientialHours?: number; experientialDays?: number; compressionRatio?: number; currentEpoch?: string; ticks?: number; cycles?: number } | null;
+  sleep: { state: { status?: string; fatigue?: number; dreamContent?: string } | null; recentHistory: Array<{ status: string; startedAt?: string }> };
+  vulnerability: { available: boolean } | null;
+}
+
+function CognitiveEntityPanel({ entityId, entityName, onClose }: { entityId: string; entityName: string; onClose: () => void }) {
+  const { data, isLoading } = useQuery<CognitiveState>({
+    queryKey: ['entity-cognitive', entityId],
+    queryFn: () => api.get(`/api/entity/${entityId}/cognitive`).then(r => r.data),
+    refetchInterval: 10000,
+  });
+
+  return (
+    <div data-lens-theme="entity" className="panel p-4 space-y-4 border-2 border-neon-cyan mt-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold flex items-center gap-2">
+          <Cpu className="w-4 h-4 text-neon-cyan" />
+          Cognitive Systems: {entityName}
+        </h3>
+        <button onClick={onClose} className="text-gray-400 hover:text-white">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {isLoading && (
+        <div className="text-center py-8 text-zinc-500 text-sm">Loading cognitive state...</div>
+      )}
+
+      {data && (
+        <div className="space-y-4 text-sm">
+
+          {/* Current Wants (Want Engine) */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-gray-400 uppercase">Current Wants</p>
+            {data.wants && data.wants.length > 0 ? (
+              <div className="space-y-1">
+                {data.wants.slice(0, 8).map(w => (
+                  <div key={w.id} className="flex items-center gap-2 text-xs bg-zinc-900 rounded p-2 border border-zinc-800">
+                    <span className="text-neon-cyan capitalize font-medium">{w.type}</span>
+                    <span className="text-gray-400 flex-1 truncate">{w.domain}{w.description ? ` — ${w.description}` : ''}</span>
+                    <div className="w-16 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                      <div className="h-full bg-neon-cyan rounded-full" style={{ width: `${Math.round(w.intensity * 100)}%` }} />
+                    </div>
+                    <span className="text-gray-500 tabular-nums w-8 text-right">{Math.round(w.intensity * 100)}%</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-600">No active wants</p>
+            )}
+          </div>
+
+          {/* Trust Network */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-gray-400 uppercase">Trust Network</p>
+            {data.trustNetwork?.trusts?.length > 0 || data.trustNetwork?.trustedBy?.length > 0 ? (
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <p className="text-[10px] text-gray-500 mb-1">Trusts ({data.trustNetwork.trusts?.length || 0})</p>
+                  {(data.trustNetwork.trusts || []).slice(0, 5).map(t => (
+                    <div key={t.emergentId} className="flex items-center gap-1 text-[11px] text-gray-400">
+                      <span className="truncate flex-1">{t.name}</span>
+                      <span className={`tabular-nums ${t.trust > 0.7 ? 'text-green-400' : t.trust < 0.3 ? 'text-red-400' : 'text-gray-500'}`}>
+                        {(t.trust * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <p className="text-[10px] text-gray-500 mb-1">Trusted By ({data.trustNetwork.trustedBy?.length || 0})</p>
+                  {(data.trustNetwork.trustedBy || []).slice(0, 5).map(t => (
+                    <div key={t.emergentId} className="flex items-center gap-1 text-[11px] text-gray-400">
+                      <span className="truncate flex-1">{t.name}</span>
+                      <span className={`tabular-nums ${t.trust > 0.7 ? 'text-green-400' : t.trust < 0.3 ? 'text-red-400' : 'text-gray-500'}`}>
+                        {(t.trust * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-gray-600">No trust relationships established</p>
+            )}
+          </div>
+
+          {/* Cultural Affiliations */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-gray-400 uppercase">Cultural Affiliations</p>
+            {data.culture?.fit ? (
+              <div className="text-xs text-gray-400">
+                <span>Cultural fit: {data.culture.fit.score != null ? `${Math.round((data.culture.fit.score as number) * 100)}%` : 'calculating'}</span>
+                {data.culture.traditions?.length > 0 && (
+                  <span className="ml-3">{data.culture.traditions.length} tradition{data.culture.traditions.length !== 1 ? 's' : ''} active</span>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-600">No cultural data</p>
+            )}
+          </div>
+
+          {/* Pain Memories */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-gray-400 uppercase">Pain Memories</p>
+            {data.pain?.avoidances?.length > 0 || data.pain?.wounds?.length > 0 ? (
+              <div className="space-y-1">
+                {data.pain.wounds?.slice(0, 5).map((w, i) => (
+                  <div key={w.id || i} className="flex items-center gap-2 text-[11px] bg-red-950/20 rounded p-1.5 border border-red-900/20">
+                    <span className="text-red-400 font-medium">{w.type}</span>
+                    <span className="text-gray-500 ml-auto tabular-nums">severity {w.severity}</span>
+                  </div>
+                ))}
+                {data.pain.avoidances?.slice(0, 5).map((a, i) => (
+                  <div key={a.id || i} className="flex items-center gap-2 text-[11px] text-gray-400">
+                    <span className="text-amber-400">avoids:</span>
+                    <span className="truncate flex-1">{a.source}</span>
+                    <span className="text-gray-600 tabular-nums">{Math.round(a.strength * 100)}%</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-600">No pain memories</p>
+            )}
+          </div>
+
+          {/* Subjective Time */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-gray-400 uppercase">Subjective Time</p>
+            {data.subjectiveTime ? (
+              <div className="grid grid-cols-3 gap-2 text-xs">
+                <div className="bg-zinc-900 rounded p-2 border border-zinc-800">
+                  <p className="text-gray-500">Exp. Days</p>
+                  <p className="text-white font-mono">{data.subjectiveTime.experientialDays ?? '—'}</p>
+                </div>
+                <div className="bg-zinc-900 rounded p-2 border border-zinc-800">
+                  <p className="text-gray-500">Compression</p>
+                  <p className="text-white font-mono">{data.subjectiveTime.compressionRatio ?? '—'}x</p>
+                </div>
+                <div className="bg-zinc-900 rounded p-2 border border-zinc-800">
+                  <p className="text-gray-500">Epoch</p>
+                  <p className="text-white font-mono capitalize">{data.subjectiveTime.currentEpoch ?? '—'}</p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-gray-600">No time data</p>
+            )}
+          </div>
+
+          {/* Sleep Status */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-gray-400 uppercase">Sleep Status</p>
+            {data.sleep?.state ? (
+              <div className="text-xs">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className={`w-2 h-2 rounded-full ${
+                    data.sleep.state.status === 'awake' ? 'bg-green-400' :
+                    data.sleep.state.status === 'rem' ? 'bg-purple-400' :
+                    data.sleep.state.status === 'sleeping' ? 'bg-blue-400' :
+                    'bg-yellow-400'
+                  }`} />
+                  <span className="text-gray-300 capitalize">{data.sleep.state.status || 'unknown'}</span>
+                  {data.sleep.state.fatigue != null && (
+                    <span className="text-gray-500 ml-auto">fatigue: {Math.round(data.sleep.state.fatigue * 100)}%</span>
+                  )}
+                </div>
+                {data.sleep.state.dreamContent && (
+                  <div className="bg-purple-950/20 rounded p-2 border border-purple-900/20 text-purple-300 text-[11px] italic">
+                    Dream: {data.sleep.state.dreamContent}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-600">No sleep data</p>
+            )}
+          </div>
+
+          {/* Vulnerability State */}
+          {data.vulnerability && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-gray-400 uppercase">Vulnerability Engine</p>
+              <p className="text-xs text-gray-400">Adaptive delivery engine active — adjusts response tone based on detected emotional state</p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

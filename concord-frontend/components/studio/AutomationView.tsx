@@ -48,7 +48,7 @@ export function AutomationView({
   onRemoveLane,
   onToggleLane,
   onAddPoint,
-  onUpdatePoint: _onUpdatePoint,
+  onUpdatePoint,
   onDeletePoint,
 }: AutomationViewProps) {
   const [tool, setTool] = useState<AutoTool>('draw');
@@ -89,12 +89,30 @@ export function AutomationView({
     }
   }, [tool, track, beatWidth, laneHeight, lanes, projectId, onAddPoint]);
 
-  const handlePointClick = useCallback((e: React.MouseEvent, laneId: string, pointId: string) => {
+  const [draggingPoint, setDraggingPoint] = useState<{ laneId: string; pointId: string } | null>(null);
+
+  const handlePointMouseDown = useCallback((e: React.MouseEvent, laneId: string, pointId: string) => {
     e.stopPropagation();
     if (tool === 'erase' && track) {
       onDeletePoint(track.id, laneId, pointId);
+    } else if (tool === 'select') {
+      setDraggingPoint({ laneId, pointId });
     }
   }, [tool, track, onDeletePoint]);
+
+  const handlePointDrag = useCallback((e: React.MouseEvent, laneId: string) => {
+    if (!draggingPoint || draggingPoint.laneId !== laneId || !track) return;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const beat = Math.max(0, x / beatWidth);
+    const value = Math.max(0, Math.min(1, 1 - (y / laneHeight)));
+    onUpdatePoint(track.id, laneId, draggingPoint.pointId, { beat, value });
+  }, [draggingPoint, track, beatWidth, laneHeight, onUpdatePoint]);
+
+  const handlePointDragEnd = useCallback(() => {
+    setDraggingPoint(null);
+  }, []);
 
   if (!track) {
     return (
@@ -198,6 +216,9 @@ export function AutomationView({
                   className="relative bg-black/20 cursor-crosshair"
                   style={{ height: laneHeight, width: totalWidth, minWidth: '100%' }}
                   onClick={(e) => handleCanvasClick(e, lane.id)}
+                  onMouseMove={(e) => handlePointDrag(e, lane.id)}
+                  onMouseUp={handlePointDragEnd}
+                  onMouseLeave={handlePointDragEnd}
                 >
                   {/* Beat grid */}
                   {Array.from({ length: Math.ceil(lengthBeats / 4) }).map((_, i) => (
@@ -253,7 +274,7 @@ export function AutomationView({
                         backgroundColor: lane.color || LANE_COLORS[laneIdx % LANE_COLORS.length],
                         borderColor: 'white',
                       }}
-                      onClick={(e) => handlePointClick(e, lane.id, point.id)}
+                      onMouseDown={(e) => handlePointMouseDown(e, lane.id, point.id)}
                       title={`Beat: ${point.beat.toFixed(2)} | Value: ${(point.value * 100).toFixed(0)}%`}
                     />
                   ))}

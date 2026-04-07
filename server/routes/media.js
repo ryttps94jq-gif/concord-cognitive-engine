@@ -48,6 +48,102 @@ import {
  * @param {{ STATE: object }} deps - Dependencies injected from server.js
  * @returns {Router}
  */
+// ── MIME Allowlist & Magic Bytes Validation ─────────────────────────────────
+// Category 1 (Adversarial): Reject disallowed file types and detect MIME spoofing
+// by comparing declared Content-Type against actual file magic bytes.
+
+const ALLOWED_UPLOAD_MIMES = new Set([
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
+  'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/flac', 'audio/aac',
+  'video/mp4', 'video/webm',
+  'application/pdf',
+  'text/plain', 'text/markdown', 'text/csv',
+  'application/json',
+  'application/octet-stream', // fallback for unknown binary
+]);
+
+const MAGIC_BYTE_SIGNATURES = {
+  'image/jpeg':  [[0xFF, 0xD8, 0xFF]],
+  'image/png':   [[0x89, 0x50, 0x4E, 0x47]],
+  'image/gif':   [[0x47, 0x49, 0x46, 0x38]],
+  'image/webp':  [[0x52, 0x49, 0x46, 0x46]], // RIFF header
+  'audio/mpeg':  [[0xFF, 0xFB], [0xFF, 0xF3], [0xFF, 0xF2], [0x49, 0x44, 0x33]], // MP3 + ID3
+  'audio/ogg':   [[0x4F, 0x67, 0x67, 0x53]],
+  'audio/flac':  [[0x66, 0x4C, 0x61, 0x43]],
+  'video/mp4':   [[0x00, 0x00, 0x00], [0x66, 0x74, 0x79, 0x70]], // ftyp
+  'application/pdf': [[0x25, 0x50, 0x44, 0x46]],
+};
+
+/**
+ * Validate a MIME type against the allowlist and optionally check magic bytes.
+ * @param {string} mimeType - Declared MIME type
+ * @param {string|Buffer|null} dataOrBuffer - Base64 string or Buffer of file data (first bytes suffice)
+ * @returns {{ ok: boolean, error?: string }}
+ */
+function validateMediaMimeType(mimeType, dataOrBuffer) {
+  if (!ALLOWED_UPLOAD_MIMES.has(mimeType)) {
+    return { ok: false, error: `File type not allowed: ${mimeType}` };
+  }
+  const rules = MAGIC_BYTE_SIGNATURES[mimeType];
+  if (rules && dataOrBuffer) {
+    const buf = typeof dataOrBuffer === 'string'
+      ? Buffer.from(dataOrBuffer.slice(0, 100), 'base64')
+      : (Buffer.isBuffer(dataOrBuffer) ? dataOrBuffer.slice(0, 100) : null);
+    if (buf && buf.length >= 2) {
+      const matches = rules.some(magic =>
+        magic.every((byte, i) => i < buf.length && buf[i] === byte)
+      );
+      if (!matches) {
+        return { ok: false, error: 'File content does not match declared MIME type (magic bytes mismatch)' };
+      }
+    }
+  }
+  return { ok: true };
+}
+
+/**
+ * Validate a URL to prevent SSRF attacks.
+ * Rejects private IPs, localhost, and non-http(s) schemes.
+ */
+function validateUrl(urlString) {
+  let parsed;
+  try {
+    parsed = new URL(urlString);
+  } catch {
+    return { ok: false, error: "Invalid URL" };
+  }
+
+  // Only allow http and https schemes
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return { ok: false, error: `Disallowed URL scheme: ${parsed.protocol}` };
+  }
+
+  // Reject localhost
+  const hostname = parsed.hostname.toLowerCase();
+  if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]" || hostname === "0.0.0.0") {
+    return { ok: false, error: "URLs pointing to localhost are not allowed" };
+  }
+
+  // Reject private/reserved IP ranges
+  // IPv4 pattern check
+  const ipv4Match = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipv4Match) {
+    const [, a, b, c] = ipv4Match.map(Number);
+    if (
+      a === 10 ||                              // 10.0.0.0/8
+      a === 127 ||                             // 127.0.0.0/8
+      (a === 172 && b >= 16 && b <= 31) ||     // 172.16.0.0/12
+      (a === 192 && b === 168) ||              // 192.168.0.0/16
+      (a === 169 && b === 254) ||              // 169.254.0.0/16 (link-local)
+      a === 0                                  // 0.0.0.0/8
+    ) {
+      return { ok: false, error: "URLs pointing to private/reserved IP addresses are not allowed" };
+    }
+  }
+
+  return { ok: true };
+}
+
 export default function createMediaRouter({ STATE }) {
   const router = Router();
 
@@ -77,8 +173,8 @@ export default function createMediaRouter({ STATE }) {
    *   - data: string (base64-encoded file data, optional)
    */
   router.post("/upload", asyncHandler(async (req, res) => {
-    const authorId = req.user?.id || req.body.authorId;
-    if (!authorId) throw new ValidationError("authorId is required");
+    const authorId = req.user?.id;
+    if (!authorId) return res.status(401).json({ ok: false, error: "Authentication required" });
 
     const {
       title,
@@ -94,9 +190,16 @@ export default function createMediaRouter({ STATE }) {
       tags,
       privacy,
       tier,
+      data,
     } = req.body;
 
     if (!title) throw new ValidationError("title is required");
+
+    // ── MIME allowlist + magic bytes validation ──────────────────────────
+    if (mimeType) {
+      const mimeCheck = validateMediaMimeType(mimeType, data || null);
+      if (!mimeCheck.ok) throw new ValidationError(mimeCheck.error);
+    }
 
     // Auto-detect media type from MIME if not specified
     const resolvedMediaType = mediaType || (mimeType ? detectMediaType(mimeType) : null);
@@ -166,6 +269,10 @@ export default function createMediaRouter({ STATE }) {
 
     if (!url) throw new ValidationError("url is required");
     if (!title) throw new ValidationError("title is required");
+
+    // SSRF protection: validate the URL before storing
+    const urlCheck = validateUrl(url);
+    if (!urlCheck.ok) throw new ValidationError(urlCheck.error);
 
     // In production, we would fetch the URL, determine MIME type, file size, etc.
     // Here we create the media DTU with the URL as a storage reference.

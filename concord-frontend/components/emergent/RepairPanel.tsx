@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Wrench, Play, Zap, Activity, AlertTriangle } from 'lucide-react';
+import { Wrench, Zap, Activity } from 'lucide-react';
 import { apiHelpers } from '@/lib/api/client';
+import { useUIStore } from '@/store/ui';
 
 interface RepairStatus {
   ok: boolean;
@@ -26,7 +27,7 @@ export function RepairPanel() {
     try {
       const resp = await apiHelpers.repairExtended.fullStatus();
       setStatus(resp.data);
-    } catch { /* silent */ }
+    } catch (e) { console.error('[RepairPanel] Failed to load status:', e); }
   };
 
   const forceCycle = async () => {
@@ -34,7 +35,7 @@ export function RepairPanel() {
     try {
       await apiHelpers.repairExtended.forceCycle();
       await loadStatus();
-    } catch { /* silent */ }
+    } catch (e) { console.error('[RepairPanel] Failed to force repair cycle:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to force repair cycle' }); }
     setForcing(false);
   };
 

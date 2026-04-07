@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   BarChart3, Palette, Wrench, Shield, Compass, BookOpen,
   Send, Loader2, MessageSquare, ChevronDown, ChevronUp,
+  PlusCircle, Settings,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -51,6 +52,20 @@ export function AgentPersonas({ className }: { className?: string }) {
     queryFn: () => api.get('/api/personas').then(r => r.data),
   });
 
+  const createAgentMutation = useMutation({
+    mutationFn: () => api.post('/api/agent/create').then(r => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['personas'] });
+    },
+  });
+
+  const configureAgentMutation = useMutation({
+    mutationFn: (config: Record<string, unknown>) => api.put('/api/agent/config', config).then(r => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['personas'] });
+    },
+  });
+
   const askMutation = useMutation({
     mutationFn: ({ personaId, q }: { personaId: string; q: string }) =>
       api.post(`/api/personas/${personaId}/ask`, { question: q }),
@@ -88,14 +103,24 @@ export function AgentPersonas({ className }: { className?: string }) {
             <p className="text-xs text-gray-500">{personas.filter(p => p.active).length} experts available</p>
           </div>
         </div>
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="p-1.5 rounded-lg hover:bg-lattice-deep text-gray-400 hover:text-white transition-colors"
-          aria-label={expanded ? 'Collapse agent personas' : 'Expand agent personas'}
-          aria-expanded={expanded}
-        >
-          {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => createAgentMutation.mutate()}
+            disabled={createAgentMutation.isPending}
+            className="p-1.5 rounded-lg hover:bg-lattice-deep text-gray-400 hover:text-neon-cyan transition-colors disabled:opacity-50"
+            title="Create new agent"
+          >
+            {createAgentMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlusCircle className="w-4 h-4" />}
+          </button>
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="p-1.5 rounded-lg hover:bg-lattice-deep text-gray-400 hover:text-white transition-colors"
+            aria-label={expanded ? 'Collapse agent personas' : 'Expand agent personas'}
+            aria-expanded={expanded}
+          >
+            {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+        </div>
       </div>
 
       {/* Persona grid */}
@@ -186,9 +211,19 @@ export function AgentPersonas({ className }: { className?: string }) {
                       <p className="text-[10px] text-gray-500">{persona.style}</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-xs text-gray-400">{persona.domains.join(', ')}</p>
-                    <p className="text-[10px] text-gray-500">{persona.brain} brain</p>
+                  <div className="flex items-center gap-2">
+                    <div className="text-right">
+                      <p className="text-xs text-gray-400">{persona.domains.join(', ')}</p>
+                      <p className="text-[10px] text-gray-500">{persona.brain} brain</p>
+                    </div>
+                    <button
+                      onClick={() => configureAgentMutation.mutate({ personaId: persona.id, active: !persona.active })}
+                      disabled={configureAgentMutation.isPending}
+                      className="p-1 rounded hover:bg-lattice-surface text-gray-500 hover:text-neon-cyan transition-colors disabled:opacity-50"
+                      title={`Configure ${persona.name}`}
+                    >
+                      {configureAgentMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Settings className="w-3.5 h-3.5" />}
+                    </button>
                   </div>
                 </div>
               ))}

@@ -99,12 +99,12 @@ export default function DevConsolePage() {
   useEffect(() => {
     api.get('/api/sovereign/pulse')
       .then((r) => setPulse(r.data))
-      .catch(() => {});
+      .catch((e) => console.error('[Dev] Failed to fetch pulse:', e));
 
     const interval = setInterval(() => {
       api.get('/api/sovereign/pulse')
         .then((r) => setPulse(r.data))
-        .catch(() => {});
+        .catch((e) => console.error('[Dev] Failed to fetch pulse:', e));
     }, 15000);
 
     return () => clearInterval(interval);

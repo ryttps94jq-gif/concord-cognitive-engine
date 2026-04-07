@@ -4,9 +4,10 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
-import { api, apiHelpers } from '@/lib/api/client';
+import { apiHelpers, api } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
 import { cn } from '@/lib/utils';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Users,
@@ -230,12 +231,19 @@ export default function CollabLensPage() {
     seed: INITIAL_HISTORY.map(h => ({ title: h.sessionName, data: h as unknown as Record<string, unknown> })),
   });
 
+  // Fetch active collaborations from the API
+  const { data: activeCollabsData } = useQuery({
+    queryKey: ['active-collabs'],
+    queryFn: () => api.get('/api/collab/active').then(r => r.data),
+    refetchInterval: 30000,
+  });
+
   const [activeTab, setActiveTab] = useState<MainTab>('active');
   const [filterPill, setFilterPill] = useState<FilterPill>('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [activeSession, setActiveSession] = useState<CollabSession | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   const sessions: CollabSession[] = sessionItems.map(i => i.data as unknown as CollabSession);
   const invitations: Invitation[] = invitationItems.map(i => i.data as unknown as Invitation);
@@ -297,7 +305,7 @@ export default function CollabLensPage() {
     );
   }
   return (
-    <div className="p-6 space-y-5 max-w-[1440px] mx-auto">
+    <div data-lens-theme="collab" className="p-6 space-y-5 max-w-[1440px] mx-auto">
       {/* Header */}
       <header className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-3">
@@ -505,11 +513,47 @@ export default function CollabLensPage() {
         )}
       </AnimatePresence>
 
+      {/* Active Collaborations from API */}
+      {activeCollabsData?.collabs?.length > 0 && (
+        <div className="panel p-4 space-y-3">
+          <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+            <Users className="w-4 h-4 text-neon-blue" />
+            Active Collaborations ({activeCollabsData.collabs.length})
+          </h3>
+          <div className="space-y-2 max-h-64 overflow-y-auto">
+            {activeCollabsData.collabs.map((collab: { id: string; name?: string; description?: string; domains?: string[]; participants?: number; status?: string }) => (
+              <div key={collab.id} className="flex items-center justify-between p-3 bg-black/30 rounded-lg border border-white/5">
+                <div className="min-w-0">
+                  <p className="text-sm text-white font-medium truncate">{collab.name ?? collab.id}</p>
+                  {collab.description && <p className="text-xs text-gray-500 truncate">{collab.description}</p>}
+                  {collab.domains && (
+                    <div className="flex gap-1 mt-1">
+                      {collab.domains.map((d: string) => (
+                        <span key={d} className="text-[10px] px-1.5 py-0.5 rounded bg-neon-blue/10 text-neon-blue">{d}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={() => api.post(`/api/collab/${collab.id}/close`).then(r => r.data).catch((err) => { console.error('[Collab] Failed to close collaboration:', err); useUIStore.getState().addToast({ type: 'error', message: 'Failed to close collaboration' }); })}
+                  className="text-xs px-3 py-1.5 rounded-md bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors font-medium shrink-0 ml-3"
+                >
+                  Close
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <RealtimeDataPanel data={realtimeInsights} />
+      <UniversalActions domain="collab" artifactId={null} compact />
+
       {/* Lens Features */}
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />
@@ -686,7 +730,9 @@ function ActiveSessionView({ session, onLeave }: { session: CollabSession; onLea
           </div>
         </div>
         <button
-          onClick={onLeave}
+          onClick={() => {
+            api.post(`/api/collab/${session.id}/close`).then(r => r.data).then(() => onLeave()).catch((err) => { console.error('[Collab] Failed to leave session:', err); useUIStore.getState().addToast({ type: 'error', message: 'Failed to leave session' }); });
+          }}
           className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors font-medium"
         >
           <LogOut className="w-3.5 h-3.5" />
@@ -913,13 +959,17 @@ function InvitationCard({ invitation }: { invitation: Invitation }) {
       </div>
       <div className="flex items-center gap-2 shrink-0">
         <button
-          onClick={() => setResponded('declined')}
+          onClick={() => {
+            api.post(`/api/collab/${invitation.id}/close`).then(r => r.data).then(() => setResponded('declined')).catch((err) => { console.error('[Collab] Failed to decline invitation:', err); useUIStore.getState().addToast({ type: 'error', message: 'Failed to decline invitation' }); });
+          }}
           className="text-xs px-3 py-1.5 rounded-md bg-lattice-surface border border-lattice-border text-gray-400 hover:text-red-400 hover:border-red-500/30 transition-colors"
         >
           Decline
         </button>
         <button
-          onClick={() => setResponded('accepted')}
+          onClick={() => {
+            api.post(`/api/collab/${invitation.id}/accept`).then(r => r.data).then(() => setResponded('accepted')).catch((err) => { console.error('[Collab] Failed to accept invitation:', err); useUIStore.getState().addToast({ type: 'error', message: 'Failed to accept invitation' }); });
+          }}
           className="text-xs px-3 py-1.5 rounded-md bg-neon-blue/20 text-neon-blue hover:bg-neon-blue/30 font-medium transition-colors"
         >
           Accept
@@ -999,6 +1049,9 @@ function CreateSessionModal({ onClose }: { onClose: () => void }) {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['artistry-collab-sessions'] });
+      queryClient.invalidateQueries({ queryKey: ['active-collabs'] });
+      // Also register the collaboration via the createCollab API
+      api.post('/api/collab/create', { inviteeId: '', domains: [form.type], description: form.description || form.name }).then(r => r.data).catch((err) => { console.error('[Collab] Failed to register collaboration:', err); });
       onClose();
     },
     onError: (err) => {

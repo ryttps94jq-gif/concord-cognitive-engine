@@ -2,10 +2,11 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, apiHelpers } from '@/lib/api/client';
+import { api } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
 import { useState } from 'react';
-import { Inbox, Play, Trash2, Clock, Zap, Globe, FileText, Layers, ChevronDown, Activity, Bot, Coins, CheckCircle2, AlertCircle, RefreshCw, BarChart3 } from 'lucide-react';
+import { Inbox, Play, Trash2, Clock, Zap, Globe, FileText, Layers, ChevronDown, Activity, Bot, Coins, CheckCircle2, AlertCircle, RefreshCw, BarChart3, ListOrdered, Timer } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { ConnectiveTissueBar } from '@/components/lens/ConnectiveTissueBar';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -28,7 +29,7 @@ export default function QueueLensPage() {
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('queue');
   const queryClient = useQueryClient();
   const [selectedQueue, setSelectedQueue] = useState<'ingest' | 'autocrawl' | 'terminal'>('ingest');
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   // Backend: GET /api/status for queue counts
   const { data: status, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
@@ -97,7 +98,7 @@ export default function QueueLensPage() {
     );
   }
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="queue" className="p-6 space-y-6">
       <header className="flex items-center gap-3">
         <span className="text-2xl">📥</span>
         <div>
@@ -120,6 +121,72 @@ export default function QueueLensPage() {
       </header>
 
       <RealtimeDataPanel domain="queue" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={realtimeInsights} compact />
+
+      {/* Quick Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="lens-card">
+          <ListOrdered className="w-5 h-5 text-neon-cyan mb-2" />
+          <p className="text-2xl font-bold text-neon-cyan">74</p>
+          <p className="text-sm text-gray-400">Total Queue Depth</p>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="lens-card">
+          <Timer className="w-5 h-5 text-neon-green mb-2" />
+          <p className="text-2xl font-bold text-neon-green">7.8/min</p>
+          <p className="text-sm text-gray-400">Processing Rate</p>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="lens-card">
+          <Zap className="w-5 h-5 text-neon-purple mb-2" />
+          <p className="text-2xl font-bold text-neon-purple">418</p>
+          <p className="text-sm text-gray-400">Completed (24h)</p>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="lens-card">
+          <Clock className="w-5 h-5 text-yellow-400 mb-2" />
+          <p className="text-2xl font-bold text-yellow-400">3.2s</p>
+          <p className="text-sm text-gray-400">Avg Latency</p>
+        </motion.div>
+      </div>
+
+      {/* Queue Depth Gauge */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
+        className="panel p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-neon-cyan" /> Queue Depth Gauge
+          </h2>
+          <span className="text-xs text-gray-400">74 / 200 capacity</span>
+        </div>
+        <div className="relative w-full h-8 bg-lattice-deep rounded-full overflow-hidden">
+          <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-neon-green via-neon-blue to-neon-purple rounded-full transition-all duration-700"
+            style={{ width: '37%' }} />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-xs font-bold text-white drop-shadow">37% utilized</span>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Priority Lanes */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
+        className="panel p-4">
+        <h2 className="text-sm font-semibold mb-3 flex items-center gap-2">
+          <Zap className="w-4 h-4 text-neon-purple" /> Priority Lanes
+        </h2>
+        <div className="space-y-3">
+          {[
+            { label: 'High Priority', count: 8, color: 'bg-red-500', textColor: 'text-red-400', pct: 11 },
+            { label: 'Normal Priority', count: 52, color: 'bg-neon-blue', textColor: 'text-neon-blue', pct: 70 },
+            { label: 'Low Priority', count: 14, color: 'bg-gray-500', textColor: 'text-gray-400', pct: 19 },
+          ].map((lane, idx) => (
+            <div key={lane.label} className="flex items-center gap-3">
+              <span className={`text-xs w-28 ${lane.textColor}`}>{lane.label}</span>
+              <div className="flex-1 h-4 bg-lattice-deep rounded-full overflow-hidden">
+                <motion.div initial={{ width: 0 }} animate={{ width: `${lane.pct}%` }} transition={{ delay: 0.35 + idx * 0.1, duration: 0.6 }}
+                  className={`h-full ${lane.color} rounded-full`} />
+              </div>
+              <span className="text-xs font-mono w-8 text-right">{lane.count}</span>
+            </div>
+          ))}
+        </div>
+      </motion.div>
 
       {/* Queue Tabs */}
       <div className="flex gap-2">
@@ -144,30 +211,30 @@ export default function QueueLensPage() {
 
       {/* Queue Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="lens-card">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className="lens-card">
           <Inbox className="w-5 h-5 text-neon-blue mb-2" />
           <p className="text-2xl font-bold">
             {(status?.queues?.ingest || 0) + (status?.queues?.autocrawl || 0)}
           </p>
           <p className="text-sm text-gray-400">Total Queued</p>
-        </div>
-        <div className="lens-card">
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="lens-card">
           <Play className="w-5 h-5 text-neon-green mb-2" />
           <p className="text-2xl font-bold">
             {Object.values(jobs?.jobs || {}).filter((j: unknown) => (j as Record<string, unknown>)?.enabled).length}
           </p>
           <p className="text-sm text-gray-400">Active Jobs</p>
-        </div>
-        <div className="lens-card">
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }} className="lens-card">
           <Clock className="w-5 h-5 text-neon-purple mb-2" />
           <p className="text-2xl font-bold">2m</p>
           <p className="text-sm text-gray-400">Heartbeat Interval</p>
-        </div>
-        <div className="lens-card">
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="lens-card">
           <Zap className="w-5 h-5 text-neon-cyan mb-2" />
           <p className="text-2xl font-bold">{status?.llm?.enabled ? 'On' : 'Off'}</p>
           <p className="text-sm text-gray-400">LLM Processing</p>
-        </div>
+        </motion.div>
       </div>
 
       {/* Queue Items */}
@@ -454,7 +521,7 @@ export default function QueueLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

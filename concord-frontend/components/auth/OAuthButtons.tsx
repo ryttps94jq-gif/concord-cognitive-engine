@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Loader2 } from 'lucide-react';
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5050';
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 interface OAuthButtonsProps {
   /** Optional label prefix. Default: "Continue with" */

@@ -48,15 +48,52 @@ export interface ConflictRecord {
   createdAt: string;
 }
 
+// Chat session for multi-session conversation workspace
+export interface ChatSession {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  pinned: boolean;
+  archived: boolean;
+  folder?: string;
+  messageCount: number;
+  lastMessagePreview?: string;
+  compressionCount: number;
+}
+
+// Session message — stored per-session in IndexedDB
+export interface SessionMessage {
+  id: string;
+  sessionId: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: string;
+  imageBase64?: string;
+  meta?: Record<string, unknown>;
+}
+
 // Offline database using Dexie
 class ConcordDB extends Dexie {
   dtus!: Table<DTURecord, string>;
   pendingActions!: Table<PendingAction, string>;
   chatMessages!: Table<ChatMessage, string>;
   conflicts!: Table<ConflictRecord, string>;
+  chatSessions!: Table<ChatSession, string>;
+  sessionMessages!: Table<SessionMessage, string>;
 
   constructor() {
     super('ConcordDB');
+
+    // Schema version 3: adds chatSessions + sessionMessages tables
+    this.version(3).stores({
+      dtus: 'id, tier, timestamp, parentId, synced',
+      pendingActions: 'id, type, entity, timestamp, fingerprint',
+      chatMessages: 'id, role, timestamp, synced',
+      conflicts: 'id, entityType, entityId, resolution, createdAt',
+      chatSessions: 'id, pinned, archived, updatedAt, folder',
+      sessionMessages: 'id, sessionId, role, timestamp',
+    });
 
     // Schema version 2: adds conflicts table, fingerprint+quarantine on pendingActions
     this.version(2).stores({

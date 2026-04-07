@@ -23,7 +23,7 @@ export function DTUImportZone({
 
   const handleFile = useCallback(async (file: File) => {
     if (!file.name.endsWith('.dtu')) {
-      setResult('Only .dtu files are supported');
+      setResult('Only .dtu, .mega.dtu, and .hyper.dtu files are supported');
       setTimeout(() => setResult(null), 3000);
       return;
     }
@@ -49,7 +49,7 @@ export function DTUImportZone({
       setImporting(false);
       setTimeout(() => setResult(null), 3000);
     }
-  }, [api, domain, onImport]);
+  }, [domain, onImport]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -86,7 +86,7 @@ export function DTUImportZone({
         <input
           ref={fileInputRef}
           type="file"
-          accept=".dtu"
+          accept=".dtu,.mega.dtu,.hyper.dtu"
           onChange={handleInputChange}
           className="hidden"
         />
@@ -107,7 +107,7 @@ export function DTUImportZone({
       <input
         ref={fileInputRef}
         type="file"
-        accept=".dtu"
+        accept=".dtu,.mega.dtu,.hyper.dtu"
         onChange={handleInputChange}
         className="hidden"
       />
@@ -120,7 +120,7 @@ export function DTUImportZone({
           <svg className="w-6 h-6 mx-auto text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
           </svg>
-          <p className="text-xs text-zinc-400">Drop .dtu file or click to import</p>
+          <p className="text-xs text-zinc-400">Drop .dtu / .mega.dtu / .hyper.dtu file or click to import</p>
         </div>
       )}
     </div>

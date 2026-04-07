@@ -17,7 +17,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowDownToLine,
-  Wallet,
   ShieldCheck,
   ExternalLink,
   Loader2,
@@ -99,7 +98,7 @@ export function WithdrawFlow({
     queryKey: ['wallet-balance'],
     queryFn: () =>
       api
-        .get('/api/billing/balance')
+        .get('/api/economy/balance')
         .then((r) => r.data as { balance: number }),
     enabled: externalBalance === undefined,
     retry: false,
@@ -110,7 +109,7 @@ export function WithdrawFlow({
     queryKey: ['wallet-withdrawals'],
     queryFn: () =>
       api
-        .get('/api/billing/withdrawals')
+        .get('/api/economy/withdrawals')
         .then(
           (r) =>
             r.data as {
@@ -181,7 +180,7 @@ export function WithdrawFlow({
     setErrorMessage('');
 
     try {
-      const res = await api.post('/api/billing/withdraw', {
+      const res = await api.post('/api/economy/withdraw', {
         amount: parsedAmount,
       });
 

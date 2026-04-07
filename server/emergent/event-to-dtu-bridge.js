@@ -102,6 +102,13 @@ export const DTU_WORTHY_EVENTS = Object.freeze({
   // Weather/climate
   "weather:alert":            { domain: "environment",    confidence: 0.85 },
   "climate:report":           { domain: "environment",    confidence: 0.8  },
+
+  // Security intelligence events
+  "security:threat_detected": { domain: "security",       confidence: 0.95 },
+  "security:fix_applied":     { domain: "security",       confidence: 0.9  },
+  "security:signature_updated": { domain: "security",     confidence: 0.8  },
+  "security:cve_ingested":    { domain: "security",       confidence: 0.85 },
+  "security:false_positive":  { domain: "security",       confidence: 0.7  },
 });
 
 /**

@@ -2,7 +2,7 @@ import { io, Socket } from 'socket.io-client';
 import { updateClockOffset } from '../offline/db';
 
 // Socket URL: uses NEXT_PUBLIC_SOCKET_URL in production, falls back to API server port (5050) for local dev
-const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:5050';
+const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || '';
 
 let socket: Socket | null = null;
 
@@ -44,13 +44,13 @@ export function getSocket(): Socket {
 
     // Connection event handlers
     socket.on('connect', () => {
-      console.log('[Socket] Connected:', socket?.id);
+      console.debug('[Socket] Connected:', socket?.id);
       // Reset sequence tracking on reconnect
       Object.keys(_lastSeq).forEach(k => delete _lastSeq[k]);
     });
 
     socket.on('disconnect', (reason) => {
-      console.log('[Socket] Disconnected:', reason);
+      console.debug('[Socket] Disconnected:', reason);
     });
 
     socket.on('connect_error', (error) => {
@@ -63,7 +63,7 @@ export function getSocket(): Socket {
 
     // Handle hello message from server
     socket.on('hello', (data) => {
-      console.log('[Socket] Server hello:', data);
+      console.debug('[Socket] Server hello:', data);
       // ---- Clock Normalization (Category 4: Offline Sync) ----
       if (data?.ts) {
         updateClockOffset(data.ts);
@@ -178,7 +178,18 @@ export type SocketEvent =
   | 'government:update'
   | 'insurance:update'
   | 'lens:dtu_generated'
-  | 'agent:domain_insight';
+  | 'agent:domain_insight'
+  // Per-user tick events
+  | 'user:tick'
+  // Spontaneous initiative events (proactive messages from Concord)
+  | 'initiative:new'
+  // Chat tool execution results
+  | 'chat:tool_result'
+  // Feed Manager real-time DTU events
+  | 'feed:new-dtu'
+  // City / World lens events
+  | 'city:positions' | 'city:stream-started' | 'city:stream-ended'
+  | 'city:stream-dtu-created' | 'city:stream-sale';
 
 // ---- Enriched Event Payload (Category 2+5: Concurrency + Observability) ----
 interface EnrichedPayload {

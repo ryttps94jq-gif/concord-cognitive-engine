@@ -540,6 +540,42 @@ export default function createSovereignRouter({ STATE, makeCtx, runMacro, saveSt
           break;
         }
 
+        // ��─ Federation Toggle ───────────────────────────────────────
+        case "federation-policy": {
+          try {
+            const enable = data?.enabled !== false && target !== "disable";
+            if (S.__chicken3) {
+              S.__chicken3.federationEnabled = enable;
+              result = { ok: true, federationEnabled: enable };
+            } else {
+              result = { ok: false, error: "__chicken3 not initialized" };
+            }
+          } catch (e) {
+            result = { ok: false, error: String(e?.message || e) };
+          }
+          break;
+        }
+
+        // ── Bulk Settings Update ───────────────────────────────────────
+        case "settings": {
+          try {
+            const allowed = ["autogenEnabled", "dreamEnabled", "evolutionEnabled", "synthEnabled",
+              "heartbeatEnabled", "speculativeGateEnabled", "canonicalOnly", "includeMegasInBase",
+              "requireHypothesisLabels", "requireTestsWhenUncertain"];
+            let updated = 0;
+            for (const [key, val] of Object.entries(data || {})) {
+              if (allowed.includes(key) && typeof val === "boolean") {
+                S.settings[key] = val;
+                updated++;
+              }
+            }
+            result = { ok: true, updated, settings: S.settings };
+          } catch (e) {
+            result = { ok: false, error: String(e?.message || e) };
+          }
+          break;
+        }
+
         case "lineage": {
           if (!target) return res.json({ ok: false, error: "target (entity id) required" });
           try {

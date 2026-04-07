@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
-import { Headphones, Send } from 'lucide-react';
+import { Headphones, Send, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { DAWTrack, MasterBus } from '@/lib/daw/types';
 
@@ -49,7 +49,7 @@ function ChannelStrip({
   onUpdate,
   onToggleEffect,
   onAddEffect,
-  onRemoveEffect: _onRemoveEffect,
+  onRemoveEffect,
 }: {
   track: DAWTrack;
   isSelected: boolean;
@@ -157,12 +157,18 @@ function ChannelStrip({
           <div
             key={fx.id}
             className={cn(
-              'px-1 py-0.5 rounded text-[8px] truncate cursor-pointer',
+              'px-1 py-0.5 rounded text-[8px] truncate cursor-pointer flex items-center gap-0.5 group/fx',
               fx.enabled ? 'bg-neon-purple/20 text-neon-purple' : 'bg-white/5 text-gray-600'
             )}
             onClick={e => { e.stopPropagation(); onToggleEffect(fx.id); }}
           >
-            {fx.name}
+            <span className="flex-1 truncate">{fx.name}</span>
+            <button
+              onClick={e => { e.stopPropagation(); onRemoveEffect(fx.id); }}
+              className="opacity-0 group-hover/fx:opacity-100 p-0.5 text-gray-500 hover:text-red-400"
+            >
+              <X className="w-2 h-2" />
+            </button>
           </div>
         ))}
         {track.effectChain.length > 4 && (
@@ -189,7 +195,7 @@ export function MixerView({
   onToggleEffect,
   onAddEffect,
   onRemoveEffect,
-  onMasterVolumeChange: _onMasterVolumeChange,
+  onMasterVolumeChange,
 }: MixerViewProps) {
   return (
     <div className="flex-1 overflow-x-auto p-3">
@@ -233,10 +239,23 @@ export function MixerView({
           {/* Master fader */}
           <div className="flex items-stretch gap-1 h-28">
             <VUMeter value={masterBus.volume - 5 + Math.random() * 6} />
-            <div className="w-3 bg-white/10 rounded-full relative">
+            <div
+              className="w-3 bg-white/10 rounded-full relative cursor-ns-resize"
+              onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const y = 1 - (e.clientY - rect.top) / rect.height;
+                const db = Math.round((y * 66 - 60) * 10) / 10;
+                onMasterVolumeChange(Math.max(-60, Math.min(6, db)));
+              }}
+            >
               <div
                 className="absolute bottom-0 w-full bg-gradient-to-t from-neon-green to-neon-cyan rounded-full transition-all"
                 style={{ height: `${((masterBus.volume + 60) / 66) * 100}%` }}
+              />
+              {/* Master fader thumb */}
+              <div
+                className="absolute left-1/2 -translate-x-1/2 w-4 h-1.5 bg-white/80 rounded-full shadow"
+                style={{ bottom: `${((masterBus.volume + 60) / 66) * 100}%` }}
               />
             </div>
             <VUMeter value={masterBus.volume - 6 + Math.random() * 6} />

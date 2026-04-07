@@ -1,16 +1,16 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Download, FileJson, FileSpreadsheet, FileText, ChevronDown } from 'lucide-react';
+import { Download, FileJson, FileSpreadsheet, ChevronDown } from 'lucide-react';
 import { apiHelpers } from '@/lib/api/client';
 import { motion, AnimatePresence } from 'framer-motion';
+import { downloadFile } from '@/lib/utils';
 
 interface ExportMenuProps {
   domain: string;
-  domainLabel: string;
 }
 
-export function ExportMenu({ domain, domainLabel }: ExportMenuProps) {
+export function ExportMenu({ domain }: ExportMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [exporting, setExporting] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -67,15 +67,7 @@ export function ExportMenu({ domain, domainLabel }: ExportMenuProps) {
         extension = 'csv';
       }
 
-      const blob = new Blob([content], { type: mimeType });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${domain}-export-${new Date().toISOString().slice(0, 10)}.${extension}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      downloadFile(content, `${domain}-export-${new Date().toISOString().slice(0, 10)}.${extension}`, mimeType);
     } catch (err) {
       console.error('Export failed:', err);
     } finally {

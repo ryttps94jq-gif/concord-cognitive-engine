@@ -3,8 +3,9 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useMutation } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
-import { useState } from 'react';
-import { Shield, Send, RefreshCw, Eye, EyeOff, Lock } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
+import { Shield, Send, RefreshCw, Eye, EyeOff, Lock, Timer, ShieldCheck } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -28,12 +29,29 @@ export default function AnonLensPage() {
   const [recipient, setRecipient] = useState('');
   const [showMessages, setShowMessages] = useState(true);
   const [ephemeral, setEphemeral] = useState(false);
+  const [sessionSeconds, setSessionSeconds] = useState(0);
+
+  // Session timer
+  useEffect(() => {
+    const interval = setInterval(() => setSessionSeconds((s) => s + 1), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const formatTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
+  };
 
   const { items: messageItems, isLoading, isError: isError, error: error, refetch: refetch, create: createMessage } = useLensData<Record<string, unknown>>('anon', 'message', { seed: [] });
   const messages = messageItems.map(i => ({ id: i.id, ...(i.data || {}) })) as unknown as AnonMessage[];
 
   const { items: identityItems, isError: isError2, error: error2, refetch: refetch2, create: createIdentity, remove: removeIdentity } = useLensData<Record<string, unknown>>('anon', 'identity', { seed: [] });
   const identity = identityItems.length > 0 ? identityItems[0].data : null;
+
+  // Anonymity level based on identity rotation and message count
+  const anonymityLevel = identity ? (identityItems.length > 0 && (identity as Record<string, unknown>).rotatedAt ? 'high' : 'medium') : 'low';
+  const anonymityColors = { low: 'text-red-400 bg-red-400/20', medium: 'text-amber-400 bg-amber-400/20', high: 'text-neon-green bg-neon-green/20' };
 
   const sendMessage = useMutation({
     mutationFn: (payload: { content: string; recipient: string; ephemeral: boolean }) =>
@@ -77,7 +95,7 @@ export default function AnonLensPage() {
     );
   }
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="anon" className="p-6 space-y-6">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-2xl">👤</span>
@@ -108,6 +126,52 @@ export default function AnonLensPage() {
 
       {/* AI Actions */}
       <UniversalActions domain="anon" artifactId={messageItems[0]?.id} compact />
+
+      {/* Stat Cards Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { icon: EyeOff, color: 'text-neon-purple', value: messages?.length || 0, label: 'Messages' },
+          { icon: Lock, color: 'text-neon-green', value: messages?.filter((m: AnonMessage) => m.encrypted).length || 0, label: 'Encrypted' },
+          { icon: Timer, color: 'text-neon-cyan', value: formatTime(sessionSeconds), label: 'Session Time' },
+          { icon: ShieldCheck, color: anonymityLevel === 'high' ? 'text-neon-green' : anonymityLevel === 'medium' ? 'text-amber-400' : 'text-red-400', value: anonymityLevel.toUpperCase(), label: 'Anonymity Level' },
+        ].map((stat, i) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.08 }}
+            className="lens-card"
+          >
+            <stat.icon className={`w-5 h-5 ${stat.color} mb-2`} />
+            <p className="text-2xl font-bold">{stat.value}</p>
+            <p className="text-sm text-gray-400">{stat.label}</p>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Anonymity Level Indicator */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.35 }}
+        className="panel p-4 flex items-center gap-4"
+      >
+        <div className="flex items-center gap-2">
+          <EyeOff className="w-5 h-5 text-neon-purple" />
+          <span className="text-sm font-semibold">Anonymity Status</span>
+        </div>
+        <div className="flex-1 flex items-center gap-3">
+          {['low', 'medium', 'high'].map((level) => (
+            <div key={level} className={`flex-1 h-2 rounded-full ${anonymityLevel === level || (anonymityLevel === 'high' && level !== 'high') || (anonymityLevel === 'medium' && level === 'low') ? (level === 'low' ? 'bg-red-400' : level === 'medium' ? 'bg-amber-400' : 'bg-neon-green') : 'bg-lattice-deep'}`} />
+          ))}
+        </div>
+        <span className={`text-xs px-2 py-0.5 rounded ${anonymityColors[anonymityLevel]}`}>{anonymityLevel}</span>
+        <div className="flex items-center gap-1.5 ml-2 px-2 py-1 rounded bg-neon-green/10 border border-neon-green/20">
+          <Lock className="w-3 h-3 text-neon-green" />
+          <span className="text-xs text-neon-green font-mono">E2E</span>
+        </div>
+      </motion.div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Identity Panel */}
         <div className="panel p-4 space-y-4">
@@ -218,8 +282,8 @@ export default function AnonLensPage() {
                   No messages yet. Your inbox is secure and empty.
                 </p>
               ) : showMessages ? (
-                messages?.map((msg: AnonMessage) => (
-                  <div key={msg.id} className="lens-card">
+                messages?.map((msg: AnonMessage, i: number) => (
+                  <motion.div key={msg.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="lens-card">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs text-gray-400">
                         {new Date(msg.timestamp).toLocaleString()}
@@ -234,7 +298,7 @@ export default function AnonLensPage() {
                         Expires: {new Date(msg.expiresAt).toLocaleString()}
                       </p>
                     )}
-                  </div>
+                  </motion.div>
                 ))
               ) : (
                 <p className="text-center py-8 text-gray-500">

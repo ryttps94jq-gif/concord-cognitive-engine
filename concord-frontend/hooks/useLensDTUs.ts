@@ -4,10 +4,10 @@
  * useLensDTUs — Universal lens DTU hook
  *
  * Provides DTU context for any lens by combining:
- *   - Context DTUs (regular + MEGA + HYPER) via POST /api/macro/context/query
- *   - Domain-specific DTUs via GET /api/dtu/list
- *   - createDTU mutation via POST /api/macro/dtu/create
- *   - publishToMarketplace mutation via POST /api/macro/marketplace/list
+ *   - Context DTUs (regular + MEGA + HYPER) via POST /api/macros/run (context.query)
+ *   - Domain-specific DTUs via GET /api/dtus
+ *   - createDTU mutation via POST /api/dtus
+ *   - publishToMarketplace mutation via POST /api/dtus/:id/publish
  *
  * Exposes tier-split collections and a computed tier distribution for
  * display in LensContextPanel or any lens-specific UI.
@@ -108,14 +108,18 @@ export function useLensDTUs(options: LensDTUOptions) {
 
   // ---- Context DTUs query (regular + MEGA + HYPER) ----
   const contextBody = useMemo(
-    () => ({ lens, tags, limit }),
+    () => ({ query: lens, primaryDomain: lens, lens, tags, limit }),
     [lens, tags, limit],
   );
 
   const contextQuery = useQuery<ContextQueryResponse>({
     queryKey: ['lensDTUs', 'context', lens, { tags, limit }],
     queryFn: async () => {
-      const { data } = await api.post('/api/macro/context/query', contextBody);
+      const { data } = await api.post('/api/macros/run', {
+        domain: 'context',
+        name: 'query',
+        input: contextBody,
+      });
       return data as ContextQueryResponse;
     },
     enabled,
@@ -128,7 +132,7 @@ export function useLensDTUs(options: LensDTUOptions) {
   const domainQuery = useQuery<DomainListResponse>({
     queryKey: ['lensDTUs', 'domain', domain ?? lens],
     queryFn: async () => {
-      const { data } = await api.get('/api/dtu/list', {
+      const { data } = await api.get('/api/dtus', {
         params: { scope: domain ?? lens, limit },
       });
       return data as DomainListResponse;
@@ -140,7 +144,7 @@ export function useLensDTUs(options: LensDTUOptions) {
   });
 
   // ---- Derived collections ----
-  const contextDTUs: DTU[] = contextQuery.data?.dtus ?? [];
+  const contextDTUs: DTU[] = useMemo(() => contextQuery.data?.dtus ?? [], [contextQuery.data?.dtus]);
 
   const hyperDTUs = useMemo(
     () => contextDTUs.filter((d) => d.tier === 'hyper'),
@@ -189,14 +193,20 @@ export function useLensDTUs(options: LensDTUOptions) {
         activeContext = JSON.parse(sessionStorage.getItem(`lens_context_${lens}`) || '[]');
       } catch { /* silent */ }
 
-      const { data } = await api.post('/api/macro/dtu/create', {
-        ...input,
-        lens,
-        domain: lens,
-        contextAtCreation: activeContext,
+      const { data } = await api.post('/api/dtus', {
+        title: input.title,
+        content: input.content,
+        tags: input.tags || [],
+        source: input.source || lens,
         parents: input.parents || [],
-        citationType: input.citationType || 'reference',
-        artifactSourcesUsed: input.artifactSourcesUsed || [],
+        meta: {
+          ...(input.meta || {}),
+          lens,
+          domain: lens,
+          contextAtCreation: activeContext,
+          citationType: input.citationType || 'reference',
+          artifactSourcesUsed: input.artifactSourcesUsed || [],
+        },
       });
       return data as CreateDTUResponse;
     },
@@ -214,8 +224,10 @@ export function useLensDTUs(options: LensDTUOptions) {
   // ---- Publish to marketplace mutation ----
   const publishMut = useMutation<PublishResponse, Error, PublishInput>({
     mutationFn: async (input) => {
-      const { data } = await api.post('/api/macro/marketplace/list', {
-        ...input,
+      const { data } = await api.post(`/api/dtus/${input.dtuId}/publish`, {
+        price: input.price,
+        description: input.description,
+        license: input.license,
         lens,
       });
       return data as PublishResponse;

@@ -1,6 +1,7 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -23,6 +24,7 @@ import {
   Layers
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
+import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
@@ -239,7 +241,7 @@ const PRESETS: Preset[] = [
 export default function PhysicsLensPage() {
   useLensNav('physics');
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('physics');
-  const isError = false; const error = null as Error | null; const refetch = () => {};
+  const { items: savedSims, create: saveSim, remove: removeSim, isError, error, refetch } = useLensData<Record<string, unknown>>('physics', 'simulation', { noSeed: true });
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>(0);
@@ -264,10 +266,10 @@ export default function PhysicsLensPage() {
   // UI state
   const [tool, setTool] = useState<Tool>('select');
   const [selectedBody, setSelectedBody] = useState<string | null>(null);
-  const [selectedConstraint, _setSelectedConstraint] = useState<string | null>(null);
+  const [selectedConstraint, setSelectedConstraint] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showPresets, setShowPresets] = useState(false);
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
   const [dragStart, setDragStart] = useState<Vector2D | null>(null);
   const [draggingBody, setDraggingBody] = useState<string | null>(null);
   const [constraintStart, setConstraintStart] = useState<string | null>(null);
@@ -290,7 +292,7 @@ export default function PhysicsLensPage() {
     return mag > 0 ? { x: v.x / mag, y: v.y / mag } : { x: 0, y: 0 };
   };
 
-  const _dot = (a: Vector2D, b: Vector2D) => a.x * b.x + a.y * b.y;
+  const dot = (a: Vector2D, b: Vector2D) => a.x * b.x + a.y * b.y;
 
   // Physics simulation step
   const simulate = useCallback(() => {
@@ -426,7 +428,7 @@ export default function PhysicsLensPage() {
                 // Elastic collision
                 const dvx = a.velocity.x - b.velocity.x;
                 const dvy = a.velocity.y - b.velocity.y;
-                const dvn = dvx * nx + dvy * ny;
+                const dvn = dot({ x: dvx, y: dvy }, { x: nx, y: ny });
 
                 if (dvn > 0) continue; // Moving apart
 
@@ -752,9 +754,26 @@ export default function PhysicsLensPage() {
       const body = findBodyAt(pos);
       if (body) {
         setSelectedBody(body.id);
+        setSelectedConstraint(null);
         setDraggingBody(body.id);
       } else {
         setSelectedBody(null);
+        // Check if clicking near a constraint line
+        const clickedConstraint = constraints.find(c => {
+          const bA = bodies.find(b => b.id === c.bodyA || b.name === c.bodyA);
+          const bB = bodies.find(b => b.id === c.bodyB || b.name === c.bodyB);
+          if (!bA || !bB) return false;
+          const dx = bB.position.x - bA.position.x;
+          const dy = bB.position.y - bA.position.y;
+          const lenSq = dx * dx + dy * dy;
+          if (lenSq === 0) return false;
+          const t = Math.max(0, Math.min(1, dot({ x: pos.x - bA.position.x, y: pos.y - bA.position.y }, { x: dx, y: dy }) / lenSq));
+          const projX = bA.position.x + t * dx;
+          const projY = bA.position.y + t * dy;
+          const distSq = (pos.x - projX) ** 2 + (pos.y - projY) ** 2;
+          return distSq < 64; // 8px threshold
+        });
+        setSelectedConstraint(clickedConstraint?.id || null);
       }
     } else if (tool === 'spring') {
       const body = findBodyAt(pos);
@@ -966,7 +985,59 @@ export default function PhysicsLensPage() {
     );
   }
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="physics" className="p-6 space-y-6">
+      {/* Stat Cards Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: 'Bodies', value: bodies.length, color: 'text-violet-400', bg: 'bg-violet-500/10', icon: Circle },
+          { label: 'Constraints', value: constraints.length, color: 'text-cyan-400', bg: 'bg-cyan-500/10', icon: Link2 },
+          { label: 'Force Fields', value: forceFields.filter(f => f.active).length, color: 'text-amber-400', bg: 'bg-amber-500/10', icon: Magnet },
+          { label: 'Time Scale', value: `${settings.timeScale}x`, color: 'text-emerald-400', bg: 'bg-emerald-500/10', icon: Gauge },
+        ].map((s, i) => (
+          <motion.div
+            key={s.label}
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: i * 0.06 }}
+            className={`${s.bg} border border-white/5 rounded-lg p-3 flex items-center gap-3`}
+          >
+            <s.icon className={`w-4 h-4 ${s.color}`} />
+            <div>
+              <p className="text-lg font-bold font-mono">{s.value}</p>
+              <p className="text-[10px] text-gray-500 uppercase">{s.label}</p>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Equation Reference Card */}
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3 }}
+        className="flex items-center gap-4 px-4 py-2 bg-white/[0.02] border border-white/5 rounded-lg overflow-x-auto"
+      >
+        <span className="text-[10px] text-gray-500 uppercase tracking-wider flex-shrink-0">Constants</span>
+        {[
+          { sym: 'g', val: `${settings.gravity.y.toFixed(1)} m/s\u00B2`, label: 'Gravity' },
+          { sym: '\u03BC', val: settings.airFriction.toFixed(3), label: 'Air Friction' },
+          { sym: 'F', val: `F = ma`, label: 'Newton 2' },
+          { sym: 'E', val: `\u00BD mv\u00B2`, label: 'Kinetic Energy' },
+        ].map((eq, _i) => (
+          <div key={eq.label} className="flex items-center gap-2 flex-shrink-0 px-2 py-1 bg-white/[0.03] rounded">
+            <span className="text-sm font-mono font-bold text-violet-400">{eq.sym}</span>
+            <span className="text-xs text-gray-400 font-mono">{eq.val}</span>
+          </div>
+        ))}
+        {/* Experiment status badge */}
+        <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
+          <span className={`w-2 h-2 rounded-full ${isRunning ? 'bg-green-400 animate-pulse' : 'bg-gray-600'}`} />
+          <span className={`text-xs font-medium ${isRunning ? 'text-green-400' : 'text-gray-500'}`}>
+            {isRunning ? 'Simulating' : 'Paused'}
+          </span>
+        </div>
+      </motion.div>
+
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-2xl">⚛️</span>
@@ -1421,18 +1492,63 @@ export default function PhysicsLensPage() {
               )}
             </div>
           </div>
+
+          {/* Saved Simulations */}
+          <div className="panel p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">Saved Simulations ({savedSims.length})</h3>
+              <button
+                onClick={() => saveSim({ title: `Sim ${new Date().toLocaleTimeString()}`, data: { bodies, constraints, forceFields, settings } as unknown as Record<string, unknown> })}
+                className="text-xs px-2 py-1 bg-neon-purple/20 text-neon-purple rounded hover:bg-neon-purple/30 flex items-center gap-1"
+                disabled={bodies.length === 0}
+              >
+                <Download className="w-3 h-3" /> Save
+              </button>
+            </div>
+            <div className="space-y-1 max-h-48 overflow-auto">
+              {savedSims.map(sim => (
+                <div
+                  key={sim.id}
+                  className="flex items-center justify-between text-sm py-1.5 px-2 rounded hover:bg-white/5 cursor-pointer group"
+                  onClick={() => {
+                    const d = sim.data as Record<string, unknown>;
+                    if (d.bodies) setBodies(d.bodies as Body[]);
+                    if (d.constraints) setConstraints(d.constraints as Constraint[]);
+                    if (d.forceFields) setForceFields(d.forceFields as ForceField[]);
+                    if (d.settings) setSettings(d.settings as SimSettings);
+                  }}
+                >
+                  <span className="text-gray-300 truncate">{sim.title}</span>
+                  <button
+                    onClick={e => { e.stopPropagation(); removeSim(sim.id); }}
+                    className="text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+              {savedSims.length === 0 && (
+                <p className="text-gray-500 text-sm text-center py-4">
+                  No saved simulations yet.
+                </p>
+              )}
+            </div>
+          </div>
         </div>
 
       {/* Real-time Data Panel */}
       {realtimeData && (
-        <RealtimeDataPanel
-          domain="physics"
-          data={realtimeData}
-          isLive={isLive}
-          lastUpdated={lastUpdated}
-          insights={realtimeInsights}
-          compact
-        />
+        <>
+          <UniversalActions domain="physics" artifactId={null} compact />
+          <RealtimeDataPanel
+            domain="physics"
+            data={realtimeData}
+            isLive={isLive}
+            lastUpdated={lastUpdated}
+            insights={realtimeInsights}
+            compact
+          />
+        </>
       )}
       </div>
 
@@ -1440,7 +1556,7 @@ export default function PhysicsLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

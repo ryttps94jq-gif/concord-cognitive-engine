@@ -176,14 +176,14 @@ test.describe('Wallet Page', () => {
 
   test('empty transaction state shows message', async ({ page }) => {
     // Mock empty transaction response
-    await page.route('**/api/billing/transactions*', (route) =>
+    await page.route('**/api/economy/history*', (route) =>
       route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({ transactions: [], total: 0 }),
       })
     );
-    await page.route('**/api/billing/balance', (route) =>
+    await page.route('**/api/economy/balance', (route) =>
       route.fulfill({
         status: 200,
         contentType: 'application/json',

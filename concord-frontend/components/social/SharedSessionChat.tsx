@@ -7,9 +7,18 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { showToast } from '@/components/common/Toasts';
 import { useSocket } from '@/hooks/useSocket';
-import { api } from '@/lib/api/client';
+import {
+  sharedSessionDetails,
+  sharedSessionChat,
+  saveSharedArtifact,
+  endSharedSession,
+  shareSessionDTU,
+  sharedSessionRunAction,
+} from '@/lib/api/client';
 import { cn } from '@/lib/utils';
+import { useUIStore } from '@/store/ui';
 import {
   Users,
   Send,
@@ -52,12 +61,17 @@ interface SharedSessionChatProps {
 }
 
 export function SharedSessionChat({ sessionId, currentUserId, onEnd }: SharedSessionChatProps) {
-  const { on, off, emit } = useSocket({ autoConnect: true });
+  const { on, off } = useSocket({ autoConnect: true });
   const [messages, setMessages] = useState<SharedMessage[]>([]);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [sessionStatus, setSessionStatus] = useState<'active' | 'ended'>('active');
+  const [shareDtuId, setShareDtuId] = useState('');
+  const [showShareInput, setShowShareInput] = useState(false);
+  const [showActionMenu, setShowActionMenu] = useState(false);
+  const [actionLens, setActionLens] = useState('');
+  const [actionName, setActionName] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -68,8 +82,7 @@ export function SharedSessionChat({ sessionId, currentUserId, onEnd }: SharedSes
 
   // Load session details
   useEffect(() => {
-    api.get(`/api/shared-session/${sessionId}`).then(res => {
-      const data = res.data;
+    sharedSessionDetails(sessionId).then(data => {
       if (data.ok) {
         setParticipants(data.session.participants);
         setSessionStatus(data.session.status);
@@ -85,7 +98,7 @@ export function SharedSessionChat({ sessionId, currentUserId, onEnd }: SharedSes
           setMessages(loaded);
         }
       }
-    }).catch(() => {});
+    }).catch(err => { console.error('[SharedSession] Failed to load messages:', err); showToast('error', 'Failed to load messages'); });
   }, [sessionId]);
 
   // WebSocket event listeners
@@ -182,30 +195,46 @@ export function SharedSessionChat({ sessionId, currentUserId, onEnd }: SharedSes
     }]);
 
     try {
-      await api.post(`/api/shared-session/${sessionId}/chat`, { message: content });
-    } catch {
+      await sharedSessionChat(sessionId, content);
+    } catch (e) {
+      console.error('[SharedSession] Failed to send message:', e);
+      useUIStore.getState().addToast({ type: 'error', message: 'Failed to send message' });
       setIsSending(false);
     }
   }, [input, isSending, sessionId, currentUserId, sessionStatus]);
 
   // Save artifact
-  const saveArtifact = async (dtuId: string) => {
+  const handleSaveArtifact = async (dtuId: string) => {
     try {
-      await api.post(`/api/shared-session/${sessionId}/save-artifact`, { dtuId });
+      await saveSharedArtifact(sessionId, dtuId);
       setMessages(prev => [...prev, {
         type: 'system',
         content: 'Artifact saved to your substrate.',
         ts: new Date().toISOString(),
       }]);
-    } catch { /* silent */ }
+    } catch (e) { console.error('[SharedSession] Failed to save artifact:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to save artifact' }); }
+  };
+
+  // Share a DTU into the session
+  const handleShareDTU = async (dtuId: string) => {
+    try {
+      await shareSessionDTU(sessionId, dtuId);
+    } catch (e) { console.error('[SharedSession] Failed to share DTU:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to share DTU' }); }
+  };
+
+  // Run a lens action in the shared session
+  const handleRunAction = async (lens: string, action: string, primarySubstrate?: string) => {
+    try {
+      await sharedSessionRunAction(sessionId, lens, action, primarySubstrate);
+    } catch (e) { console.error('[SharedSession] Failed to run action:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to run action' }); }
   };
 
   // End session
-  const endSession = async () => {
+  const handleEndSession = async () => {
     try {
-      await api.post(`/api/shared-session/${sessionId}/end`);
+      await endSharedSession(sessionId);
       onEnd?.();
-    } catch { /* silent */ }
+    } catch (e) { console.error('[SharedSession] Failed to end session:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to end session' }); }
   };
 
   return (
@@ -235,7 +264,7 @@ export function SharedSessionChat({ sessionId, currentUserId, onEnd }: SharedSes
 
         {sessionStatus === 'active' && (
           <button
-            onClick={endSession}
+            onClick={handleEndSession}
             className="mt-4 py-2 text-xs rounded-lg bg-red-500/10 border
               border-red-500/30 text-red-400 hover:bg-red-500/20 transition-colors"
           >
@@ -282,7 +311,7 @@ export function SharedSessionChat({ sessionId, currentUserId, onEnd }: SharedSes
                   </div>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => msg.dtuId && saveArtifact(msg.dtuId)}
+                      onClick={() => msg.dtuId && handleSaveArtifact(msg.dtuId)}
                       className="text-xs px-2 py-1 rounded bg-cyan-500/10
                         text-cyan-400 border border-cyan-500/30 flex items-center gap-1
                         hover:bg-cyan-500/20 transition-colors"
@@ -328,7 +357,74 @@ export function SharedSessionChat({ sessionId, currentUserId, onEnd }: SharedSes
 
         {/* Input */}
         {sessionStatus === 'active' ? (
-          <div className="border-t border-zinc-800 p-4">
+          <div className="border-t border-zinc-800 p-4 space-y-2">
+            {/* Share DTU inline form */}
+            {showShareInput && (
+              <div className="flex gap-2">
+                <input
+                  value={shareDtuId}
+                  onChange={e => setShareDtuId(e.target.value)}
+                  className="flex-1 bg-zinc-800 rounded-lg px-3 py-1.5 text-xs
+                    text-zinc-200 border border-zinc-700
+                    focus:border-cyan-500/50 outline-none placeholder-zinc-600"
+                  placeholder="Enter DTU ID to share..."
+                />
+                <button
+                  onClick={() => {
+                    if (shareDtuId.trim()) {
+                      handleShareDTU(shareDtuId.trim());
+                      setShareDtuId('');
+                      setShowShareInput(false);
+                    }
+                  }}
+                  disabled={!shareDtuId.trim()}
+                  className="px-3 py-1.5 rounded-lg bg-cyan-500/10 text-cyan-400
+                    border border-cyan-500/30 text-xs disabled:opacity-30
+                    hover:bg-cyan-500/20 transition-colors"
+                >
+                  Share
+                </button>
+              </div>
+            )}
+
+            {/* Run Action inline form */}
+            {showActionMenu && (
+              <div className="flex gap-2">
+                <input
+                  value={actionLens}
+                  onChange={e => setActionLens(e.target.value)}
+                  className="flex-1 bg-zinc-800 rounded-lg px-3 py-1.5 text-xs
+                    text-zinc-200 border border-zinc-700
+                    focus:border-cyan-500/50 outline-none placeholder-zinc-600"
+                  placeholder="Lens (e.g. health)"
+                />
+                <input
+                  value={actionName}
+                  onChange={e => setActionName(e.target.value)}
+                  className="flex-1 bg-zinc-800 rounded-lg px-3 py-1.5 text-xs
+                    text-zinc-200 border border-zinc-700
+                    focus:border-cyan-500/50 outline-none placeholder-zinc-600"
+                  placeholder="Action name"
+                />
+                <button
+                  onClick={() => {
+                    if (actionLens.trim() && actionName.trim()) {
+                      handleRunAction(actionLens.trim(), actionName.trim());
+                      setActionLens('');
+                      setActionName('');
+                      setShowActionMenu(false);
+                    }
+                  }}
+                  disabled={!actionLens.trim() || !actionName.trim()}
+                  className="px-3 py-1.5 rounded-lg bg-purple-500/10 text-purple-400
+                    border border-purple-500/30 text-xs disabled:opacity-30
+                    hover:bg-purple-500/20 transition-colors"
+                >
+                  Run
+                </button>
+              </div>
+            )}
+
             <div className="flex gap-2">
               <input
                 ref={inputRef}
@@ -341,6 +437,30 @@ export function SharedSessionChat({ sessionId, currentUserId, onEnd }: SharedSes
                 placeholder="Message the group..."
                 disabled={isSending}
               />
+              <button
+                onClick={() => setShowShareInput(prev => !prev)}
+                className={cn(
+                  'px-3 py-2 rounded-lg border text-sm transition-colors',
+                  showShareInput
+                    ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/50'
+                    : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:text-cyan-400 hover:border-cyan-500/30'
+                )}
+                title="Share DTU"
+              >
+                <Share2 className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setShowActionMenu(prev => !prev)}
+                className={cn(
+                  'px-3 py-2 rounded-lg border text-sm transition-colors',
+                  showActionMenu
+                    ? 'bg-purple-500/20 text-purple-400 border-purple-500/50'
+                    : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:text-purple-400 hover:border-purple-500/30'
+                )}
+                title="Run Action"
+              >
+                <Zap className="w-4 h-4" />
+              </button>
               <button
                 onClick={sendMessage}
                 disabled={isSending || !input.trim()}

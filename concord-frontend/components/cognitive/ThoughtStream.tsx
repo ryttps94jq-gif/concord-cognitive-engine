@@ -65,7 +65,7 @@ export function ThoughtStream({
   useEffect(() => {
     if (!realtime || isPaused) return;
 
-    const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5050';
+    const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || process.env.NEXT_PUBLIC_API_URL || '';
     let socket: ReturnType<typeof import('socket.io-client').io> | null = null;
     let disposed = false;
 

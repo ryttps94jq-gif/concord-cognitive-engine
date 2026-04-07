@@ -3,7 +3,9 @@
 import { useState, useEffect } from 'react';
 import { Moon, Send, Sparkles, Clock } from 'lucide-react';
 import { apiHelpers } from '@/lib/api/client';
+import { useUIStore } from '@/store/ui';
 import { getSocket } from '@/lib/realtime/socket';
+import { showToast } from '@/components/common/Toasts';
 
 interface DreamEntry {
   id: string;
@@ -23,7 +25,7 @@ export function DreamPanel() {
   useEffect(() => {
     apiHelpers.dream.history(10).then((resp) => {
       setDreams(resp.data?.dreams || []);
-    }).catch(() => {});
+    }).catch(err => { console.error('[Dream] Failed to load history:', err); showToast('error', 'Failed to load dream history'); });
 
     const socket = getSocket();
     const handler = (data: { id: string; title: string; convergence: boolean }) => {
@@ -31,7 +33,7 @@ export function DreamPanel() {
       // Refresh list
       apiHelpers.dream.history(10).then((resp) => {
         setDreams(resp.data?.dreams || []);
-      }).catch(() => {});
+      }).catch(err => { console.error('[Dream] Failed to refresh history:', err); showToast('error', 'Failed to load dream history'); });
     };
     socket.on('dream:captured', handler);
     return () => { socket.off('dream:captured', handler); };
@@ -52,7 +54,7 @@ export function DreamPanel() {
         const hist = await apiHelpers.dream.history(10);
         setDreams(hist.data?.dreams || []);
       }
-    } catch { /* silent */ }
+    } catch (e) { console.error('[Dream] Failed to capture dream:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to capture dream' }); }
     setCapturing(false);
   };
 
@@ -109,6 +111,12 @@ export function DreamPanel() {
             <div key={d.id} className="bg-lattice-deep rounded p-2 text-xs flex items-center justify-between">
               <div className="flex-1 truncate">
                 <span className="text-gray-300">{d.title}</span>
+                {d.capturedAt && (
+                  <span className="text-gray-600 ml-2 flex items-center gap-0.5 inline-flex">
+                    <Clock className="w-2.5 h-2.5" />
+                    {new Date(d.capturedAt).toLocaleTimeString()}
+                  </span>
+                )}
               </div>
               {d.convergence && (
                 <span className="text-green-400 flex items-center gap-1 ml-2">

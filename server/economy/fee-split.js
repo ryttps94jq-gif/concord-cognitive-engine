@@ -23,6 +23,9 @@ function nowISO() {
   return new Date().toISOString().replace("T", " ").replace("Z", "");
 }
 
+// Payroll cap: $150,000/year. Excess redirected to reserves.
+const ANNUAL_PAYROLL_CAP = 150_000;
+
 /**
  * Distribute a fee payment across the 80/10/10 split.
  * Called after every fee collection event.
@@ -39,10 +42,27 @@ function nowISO() {
 export function distributeFee(db, { feeAmount, sourceTxId, refId, requestId, ip }) {
   if (!feeAmount || feeAmount <= 0) return { ok: false, error: "invalid_fee_amount" };
 
-  const reservesAmount = Math.round(feeAmount * FEE_SPLIT.RESERVES * 100) / 100;
+  let reservesAmount = Math.round(feeAmount * FEE_SPLIT.RESERVES * 100) / 100;
   const operatingAmount = Math.round(feeAmount * FEE_SPLIT.OPERATING_COSTS * 100) / 100;
   // Payroll gets the remainder to avoid rounding drift
-  const payrollAmount = Math.round((feeAmount - reservesAmount - operatingAmount) * 100) / 100;
+  let payrollAmount = Math.round((feeAmount - reservesAmount - operatingAmount) * 100) / 100;
+
+  // Payroll cap enforcement: $150,000/year — excess redirected to reserves
+  const yearStart = `${new Date().getFullYear()}-01-01`;
+  const ytdPayroll = db.prepare(`
+    SELECT COALESCE(SUM(CAST(ROUND(net * 100) AS INTEGER)), 0) AS total_cents
+    FROM economy_ledger
+    WHERE to_user_id = ? AND type = 'FEE' AND status = 'complete'
+      AND created_at >= ?
+  `).get(PAYROLL_ACCOUNT_ID, yearStart)?.total_cents || 0;
+  const ytdPayrollDollars = ytdPayroll / 100;
+
+  if (ytdPayrollDollars + payrollAmount > ANNUAL_PAYROLL_CAP) {
+    const remaining = Math.max(0, Math.round((ANNUAL_PAYROLL_CAP - ytdPayrollDollars) * 100) / 100);
+    const overflow = Math.round((payrollAmount - remaining) * 100) / 100;
+    reservesAmount = Math.round((reservesAmount + overflow) * 100) / 100;
+    payrollAmount = remaining;
+  }
 
   const batchId = generateTxId();
 

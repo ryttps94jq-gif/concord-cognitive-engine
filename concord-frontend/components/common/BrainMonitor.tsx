@@ -161,10 +161,29 @@ export function BrainMonitor() {
     retry: 1,
   });
 
-  if (isLoading || !data) return null;
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-1.5 px-2 py-1 rounded-full lattice-surface border lattice-border text-xs">
+        <Activity className="w-3 h-3 text-lattice-text-secondary animate-pulse" />
+        <span className="text-lattice-text-secondary">Loading...</span>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <button
+        onClick={() => refetch()}
+        className="flex items-center gap-1.5 px-2 py-1 rounded-full lattice-surface border lattice-border text-xs hover:bg-white/5 transition-colors"
+      >
+        <Activity className="w-3 h-3 text-red-400" />
+        <span className="text-red-400">Offline</span>
+      </button>
+    );
+  }
 
   const modeLabel = data.mode === 'four_brain' ? 'Four-Brain' : data.mode === 'three_brain' ? 'Three-Brain' : data.mode === 'partial' ? 'Partial' : 'Fallback';
-  const modeColor = (data.mode === 'four_brain' || data.mode === 'three_brain') ? 'text-neon-green' : data.mode === 'partial' ? 'text-yellow-400' : 'text-red-400';
+  const modeColor = (data.mode === 'four_brain' || data.mode === 'three_brain') ? 'text-neon-green' : data.mode === 'partial' ? 'text-amber-400' : 'text-red-400';
   const totalBrains = data.brains.repair ? 4 : 3;
 
   if (!expanded) {

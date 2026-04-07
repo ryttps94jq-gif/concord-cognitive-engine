@@ -65,8 +65,14 @@ Recent context: ${historyStr}`;
 
       if (result.ok && result.content) {
         try {
-          const parsed = JSON.parse(result.content.trim());
-          if (typeof parsed.valence === "number") {
+          // Forgiving JSON extraction — small models return sloppy JSON with markdown
+          const clean = result.content.replace(/```json|```/g, "").trim();
+          let parsed;
+          try { parsed = JSON.parse(clean); } catch {
+            const jsonMatch = clean.match(/\{[\s\S]*\}/);
+            if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);
+          }
+          if (parsed && typeof parsed.valence === "number") {
             return {
               valence: _clamp(parsed.valence, -1, 1),
               arousal: _clamp(parsed.arousal ?? affect.arousal, 0, 1),

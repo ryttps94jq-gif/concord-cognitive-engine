@@ -5,7 +5,7 @@ import React from 'react';
 // Mock lucide-react icons for jsdom environment
 vi.mock('lucide-react', async () => {
   const makeMockIcon = (name: string) => {
-    const Icon = React.forwardRef<SVGSVGElement, any>((props, ref) =>
+    const Icon = React.forwardRef<SVGSVGElement, Record<string, unknown>>((props, ref) =>
       React.createElement('span', { 'data-testid': `icon-${name}`, ref, ...props })
     );
     Icon.displayName = name;

@@ -164,9 +164,21 @@ export function MetabolismPanel({ className }: { className?: string }) {
                 <h4 className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">
                   Archived DTUs ({(data.excreted || data.excretedDTUs || []).length})
                 </h4>
-                <p className="text-xs text-gray-500">
-                  These DTUs were archived due to inactivity. Click to resurrect.
-                </p>
+                <div className="space-y-1 mt-2">
+                  {(data.excreted || data.excretedDTUs || []).slice(0, 5).map((dtu: { id: string; title?: string }) => (
+                    <div key={dtu.id} className="flex items-center justify-between p-2 bg-lattice-deep rounded-lg">
+                      <span className="text-xs text-gray-400 truncate">{dtu.title || dtu.id}</span>
+                      <button
+                        onClick={() => resurrectDTU.mutate(dtu.id)}
+                        disabled={resurrectDTU.isPending}
+                        className="flex items-center gap-1 text-[10px] text-neon-cyan hover:text-neon-cyan/80 transition-colors disabled:opacity-50"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        Resurrect
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </motion.div>

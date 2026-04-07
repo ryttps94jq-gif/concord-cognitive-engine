@@ -32,7 +32,7 @@ export default function AllLensesPage() {
   const total = Object.values(grouped).reduce((sum, ls) => sum + ls.length, 0);
 
   return (
-    <div className="p-6 space-y-5">
+    <div data-lens-theme="all" className="p-6 space-y-5">
       <header>
         <p className="text-xs uppercase text-gray-400 tracking-wider">Lens Hub</p>
         <h1 className="text-3xl font-bold text-gradient-neon">All Lenses</h1>

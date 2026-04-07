@@ -4,9 +4,14 @@ import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api/client';
 import { disconnectSocket } from '@/lib/realtime/socket';
-import { User, LogOut, Settings, Shield } from 'lucide-react';
+import { User, LogOut, Settings, Shield, Zap } from 'lucide-react';
 
-export function UserMenu() {
+interface UserMenuProps {
+  powerMode?: boolean;
+  onTogglePowerMode?: () => void;
+}
+
+export function UserMenu({ powerMode, onTogglePowerMode }: UserMenuProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -80,6 +85,27 @@ export function UserMenu() {
             <Settings className="w-4 h-4" />
             Settings
           </button>
+          {onTogglePowerMode && (
+            <button
+              onClick={() => {
+                onTogglePowerMode();
+              }}
+              className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-300 hover:bg-lattice-elevated transition-colors"
+              role="menuitem"
+            >
+              <Zap className={`w-4 h-4 ${powerMode ? 'text-neon-blue' : ''}`} />
+              Power Mode
+              <span
+                className={`ml-auto text-xs px-1.5 py-0.5 rounded ${
+                  powerMode
+                    ? 'bg-neon-blue/20 text-neon-blue'
+                    : 'bg-lattice-elevated text-gray-500'
+                }`}
+              >
+                {powerMode ? 'ON' : 'OFF'}
+              </span>
+            </button>
+          )}
           <div className="border-t border-lattice-border" />
           <button
             onClick={handleLogout}

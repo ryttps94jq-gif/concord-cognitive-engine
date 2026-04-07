@@ -66,6 +66,14 @@ export const LICENSE_TYPES = Object.freeze({
     transferable: true,
     description: "Completely open — no restrictions",
   },
+  "personal-use": {
+    name: "Personal Use",
+    derivativeAllowed: false,
+    commercialAllowed: false,
+    attributionRequired: true,
+    transferable: false,
+    description: "Personal use only — no derivatives, no commercial use, no transfer",
+  },
 });
 
 // ── Valid actions for permission checks ───────────────────────────────

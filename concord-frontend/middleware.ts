@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 /**
- * Auth + CSP middleware — enforces authentication and sets Content-Security-Policy
- * with a per-request nonce for script integrity.
+ * Auth middleware — enforces authentication via cookie check.
+ * CSP nonce generation was removed because it blocks Next.js inline scripts
+ * in production builds. Security headers are handled at the reverse-proxy layer.
  */
 
 const PUBLIC_PATHS = new Set([
@@ -11,6 +12,7 @@ const PUBLIC_PATHS = new Set([
   '/login',
   '/register',
   '/forgot-password',
+  '/onboarding',
 ]);
 
 const PUBLIC_PREFIXES = [
@@ -18,60 +20,30 @@ const PUBLIC_PREFIXES = [
   '/_next/',
   '/icons/',
   '/legal/',
+  '/dtu/',
+  '/lens/',
+  '/lenses/',
+  '/newsletter/',
+  '/profile/',
   '/manifest.json',
   '/robots.txt',
   '/favicon.ico',
 ];
 
-function generateNonce(): string {
-  const array = new Uint8Array(16);
-  crypto.getRandomValues(array);
-  return btoa(String.fromCharCode(...array));
-}
-
-function buildCspHeader(nonce: string): string {
-  const isDev = process.env.NODE_ENV !== 'production';
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5050';
-  const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'ws://localhost:5050';
-  return [
-    "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}'${isDev ? " 'unsafe-eval'" : ''}`,
-    "style-src 'self' 'unsafe-inline'",
-    `connect-src 'self' ${apiUrl} ${socketUrl} ws: wss:`,
-    "img-src 'self' data: blob:",
-    "font-src 'self' data:",
-    "media-src 'self' blob:",
-    "worker-src 'self' blob:",
-    "frame-src 'self'",
-    "object-src 'none'",
-    "base-uri 'self'",
-  ].join('; ');
-}
-
-function applySecurityHeaders(response: NextResponse, nonce: string): NextResponse {
-  response.headers.set('Content-Security-Policy', buildCspHeader(nonce));
-  response.headers.set('x-nonce', nonce);
-  return response;
-}
-
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const nonce = generateNonce();
 
   // Allow public paths through
   if (PUBLIC_PATHS.has(pathname)) {
-    return applySecurityHeaders(NextResponse.next(), nonce);
+    return NextResponse.next();
   }
 
   // Allow public prefixes through
   if (PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
-    return applySecurityHeaders(NextResponse.next(), nonce);
+    return NextResponse.next();
   }
 
   // Check for session cookie (httpOnly cookie set by backend on login).
-  // Only concord_auth and concord_refresh are set by the backend (server.js).
-  // Legacy cookie names (token, connect.sid, concord_session) were removed —
-  // they were never set by the server and only existed in test mocks.
   const hasSession =
     request.cookies.has('concord_auth') ||
     request.cookies.has('concord_refresh');
@@ -82,15 +54,13 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  return applySecurityHeaders(NextResponse.next(), nonce);
+  return NextResponse.next();
 }
 
 export const config = {
   matcher: [
     /*
      * Match all paths except static files and images.
-     * This ensures middleware runs on page navigations but not on
-     * static asset requests (which Next.js handles separately).
      */
     '/((?!_next/static|_next/image|favicon.ico|icons/).*)',
   ],

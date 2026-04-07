@@ -1,5 +1,6 @@
 'use client';
 
+import { motion } from 'framer-motion';
 import { useState, useMemo, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -7,6 +8,7 @@ import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { api, apiHelpers } from '@/lib/api/client';
 import { ds } from '@/lib/design-system';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
 import {
@@ -280,22 +282,22 @@ export default function CouncilLensPage() {
   const queryClient = useQueryClient();
 
   // ----- Lens persistence (auto-seeds on first use, derives local data) -----
-  const { items: proposalLensItems, isLoading: _proposalsLoading, isError, error, refetch, create: createProposalItem, update: updateProposalItem, remove: _removeProposalItem } = useLensData<Record<string, unknown>>('council', 'proposal', {
+  const { items: proposalLensItems, isLoading: _proposalsLoading, isError, error, refetch, create: createProposalItem, update: updateProposalItem, remove: removeProposalItem } = useLensData<Record<string, unknown>>('council', 'proposal', {
     seed: INITIAL_PROPOSALS.map(p => ({ title: p.title, data: p as unknown as Record<string, unknown> })),
   });
-  const { items: budgetLensItems, create: createBudgetItem, update: updateBudgetItem, remove: _removeBudgetItem } = useLensData<Record<string, unknown>>('council', 'budget', {
+  const { items: budgetLensItems, create: createBudgetItem, update: updateBudgetItem, remove: removeBudgetItem } = useLensData<Record<string, unknown>>('council', 'budget', {
     seed: INITIAL_BUDGET_ITEMS.map(b => ({ title: b.description, data: b as unknown as Record<string, unknown> })),
   });
-  const { items: stakeholderLensItems, create: _createStakeholderItem, update: updateStakeholderItem, remove: _removeStakeholderItem } = useLensData<Record<string, unknown>>('council', 'stakeholder', {
+  const { items: stakeholderLensItems, create: createStakeholderItem, update: updateStakeholderItem, remove: removeStakeholderItem } = useLensData<Record<string, unknown>>('council', 'stakeholder', {
     seed: INITIAL_STAKEHOLDERS.map(s => ({ title: s.name, data: s as unknown as Record<string, unknown> })),
   });
-  const { items: committeeLensItems, create: createCommitteeItem, update: _updateCommitteeItem, remove: _removeCommitteeItem } = useLensData<Record<string, unknown>>('council', 'committee', {
+  const { items: committeeLensItems, create: createCommitteeItem, update: updateCommitteeItem, remove: removeCommitteeItem } = useLensData<Record<string, unknown>>('council', 'committee', {
     seed: INITIAL_COMMITTEES.map(c => ({ title: c.name, data: c as unknown as Record<string, unknown> })),
   });
-  const { items: auditLensItems, create: createAuditItem, update: _updateAuditItem, remove: _removeAuditItem } = useLensData<Record<string, unknown>>('council', 'audit', {
+  const { items: auditLensItems, create: createAuditItem, update: updateAuditItem, remove: removeAuditItem } = useLensData<Record<string, unknown>>('council', 'audit', {
     seed: INITIAL_AUDIT.map(a => ({ title: a.action, data: a as unknown as Record<string, unknown> })),
   });
-  const { items: debateLensItems, create: createDebateItem, update: updateDebateItem, remove: _removeDebateItem } = useLensData<Record<string, unknown>>('council', 'debate', {
+  const { items: debateLensItems, create: createDebateItem, update: updateDebateItem, remove: removeDebateItem } = useLensData<Record<string, unknown>>('council', 'debate', {
     seed: INITIAL_DEBATES.map(d => ({ title: d.topic, data: d as unknown as Record<string, unknown> })),
   });
 
@@ -315,7 +317,6 @@ export default function CouncilLensPage() {
   const [showCreateBudgetItem, setShowCreateBudgetItem] = useState(false);
   const [showCreateCommittee, setShowCreateCommittee] = useState(false);
   const [showCreateDebate, setShowCreateDebate] = useState(false);
-  const [_showCallVote, _setShowCallVote] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<ProposalStatus | 'all'>('all');
   const [budgetScenario, setBudgetScenario] = useState<'current' | 'proposed' | 'alternative' | 'all'>('all');
@@ -343,11 +344,8 @@ export default function CouncilLensPage() {
     queryFn: () => api.get('/api/dtus').then(r => r.data),
   });
 
-  const _debateMutation = useMutation({
-    mutationFn: async (params: { dtuA: string; dtuB: string; topic: string }) => {
-      const dtus: DTU[] = dtusData?.dtus || [];
-      const dtuA = dtus.find((d: DTU) => d.id === params.dtuA);
-      const dtuB = dtus.find((d: DTU) => d.id === params.dtuB);
+  const debateMutation = useMutation({
+    mutationFn: async (_params: { dtuA: string; dtuB: string; topic: string }) => {
       const res = await apiHelpers.council.reviewGlobal();
       return res.data;
     },
@@ -362,7 +360,7 @@ export default function CouncilLensPage() {
   const runArtifact = useRunArtifact('council');
 
   const personas: Persona[] = personasData?.personas || [];
-  const _dtus: DTU[] = dtusData?.dtus?.slice(0, 50) || [];
+  const dtus: DTU[] = useMemo(() => dtusData?.dtus?.slice(0, 50) || [], [dtusData]);
 
   // ----- Computed -----
   const selectedProposal = selectedProposalId ? proposals.find(p => p.id === selectedProposalId) || null : null;
@@ -539,9 +537,13 @@ export default function CouncilLensPage() {
     };
     createDebateItem({ title: d.topic, data: d as unknown as Record<string, unknown> });
     addAuditEntry({ actor: 'Council Chair', action: 'Started debate', target: d.id, details: d.topic, category: 'debate' });
+    // Trigger AI council review for the debate
+    if (dtus.length >= 2) {
+      debateMutation.mutate({ dtuA: dtus[0].id, dtuB: dtus[1].id, topic: d.topic });
+    }
     setShowCreateDebate(false);
     setNewDebate({ topic: '', timePerSpeaker: 300 });
-  }, [newDebate, addAuditEntry, createDebateItem]);
+  }, [newDebate, addAuditEntry, createDebateItem, debateMutation, dtus]);
 
   const handleAddDebatePoint = useCallback((debateId: string, type: 'point' | 'counterpoint' | 'motion') => {
     if (!debatePointText.trim()) return;
@@ -682,11 +684,11 @@ export default function CouncilLensPage() {
         )}
 
         <div className="space-y-3">
-          {filteredProposals.map(p => {
+          {filteredProposals.map((p, index) => {
             const sc = STATUS_CONFIG[p.status];
             const voteCount = Object.keys(p.votes).length;
             return (
-              <div key={p.id} onClick={() => setSelectedProposalId(p.id)} className={cn(ds.panelHover, 'cursor-pointer')}>
+              <motion.div key={p.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} onClick={() => setSelectedProposalId(p.id)} className={cn(ds.panelHover, 'cursor-pointer')}>
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -713,7 +715,7 @@ export default function CouncilLensPage() {
                   </div>
                   <ChevronRight className="w-5 h-5 text-gray-600 flex-shrink-0 mt-1" />
                 </div>
-              </div>
+              </motion.div>
             );
           })}
         </div>
@@ -755,6 +757,9 @@ export default function CouncilLensPage() {
             {p.coSponsors.length > 0 && <span>Co-sponsors: {p.coSponsors.map(c => stakeholderName(c)).join(', ')}</span>}
             <span>Created: {formatDate(p.createdAt)}</span>
             <span>Updated: {formatDate(p.updatedAt)}</span>
+            <button onClick={() => { removeProposalItem(p.id); setSelectedProposalId(null); }} className="ml-auto text-red-400 hover:text-red-300 text-xs flex items-center gap-1">
+              <X className="w-3 h-3" /> Remove
+            </button>
           </div>
 
       {/* Real-time Enhancement Toolbar */}
@@ -1019,6 +1024,7 @@ export default function CouncilLensPage() {
                     <button onClick={() => handleConcludeDebate(d.id)} className={cn(ds.btnSecondary, 'text-xs')}><Gavel className="w-3.5 h-3.5" />Conclude</button>
                   </>
                 )}
+                <button onClick={() => removeDebateItem(d.id)} className={cn(ds.btnSecondary, 'text-xs text-red-400 hover:text-red-300')}><X className="w-3.5 h-3.5" />Remove</button>
               </div>
             </div>
 
@@ -1146,6 +1152,7 @@ export default function CouncilLensPage() {
                       <button onClick={() => handleApproveBudgetItem(b.id, false)} className="p-1 text-red-400 hover:bg-red-500/20 rounded"><XCircle className="w-4 h-4" /></button>
                     </div>
                   )}
+                  <button onClick={() => { removeBudgetItem(b.id); addAuditEntry({ actor: 'Council Chair', action: 'Removed budget item', target: b.id, details: b.description, category: 'budget' }); }} className="p-1 text-red-400 hover:bg-red-500/20 rounded" title="Remove item"><Minus className="w-4 h-4" /></button>
                 </div>
               </div>
             ))}
@@ -1175,6 +1182,7 @@ export default function CouncilLensPage() {
                       <button onClick={() => handleApproveBudgetItem(b.id, false)} className="p-1 text-red-400 hover:bg-red-500/20 rounded"><XCircle className="w-4 h-4" /></button>
                     </div>
                   )}
+                  <button onClick={() => { removeBudgetItem(b.id); addAuditEntry({ actor: 'Council Chair', action: 'Removed budget item', target: b.id, details: b.description, category: 'budget' }); }} className="p-1 text-red-400 hover:bg-red-500/20 rounded" title="Remove item"><Minus className="w-4 h-4" /></button>
                 </div>
               </div>
             ))}
@@ -1244,6 +1252,8 @@ export default function CouncilLensPage() {
                     {entry.details && <p className="text-xs text-gray-500 mt-0.5">{entry.details}</p>}
                   </div>
                   <span className={cn('px-1.5 py-0.5 rounded text-[9px] capitalize', catColors[entry.category] || 'text-gray-500', 'bg-lattice-surface flex-shrink-0')}>{entry.category}</span>
+                  <button onClick={(e) => { e.stopPropagation(); const newDetails = window.prompt('Update audit details:', entry.details || ''); if (newDetails !== null) { updateAuditItem(entry.id, { data: { ...entry, details: newDetails } as unknown as Record<string, unknown> }); } }} className="text-gray-400 hover:text-white flex-shrink-0 ml-1" title="Edit details"><PenLine className="w-3 h-3" /></button>
+                  <button onClick={(e) => { e.stopPropagation(); removeAuditItem(entry.id); }} className="text-red-400 hover:text-red-300 flex-shrink-0 ml-1"><X className="w-3 h-3" /></button>
                 </div>
               );
             })}
@@ -1321,17 +1331,29 @@ export default function CouncilLensPage() {
                   </button>
                 )}
               </div>
-              <p className="text-[10px] text-gray-600 mt-2">Joined: {formatDate(s.joinedAt)}</p>
+              <div className="flex items-center justify-between mt-2">
+                <p className="text-[10px] text-gray-600">Joined: {formatDate(s.joinedAt)}</p>
+                <button onClick={() => removeStakeholderItem(s.id)} className="text-red-400 hover:text-red-300 text-[10px] flex items-center gap-0.5"><X className="w-3 h-3" />Remove</button>
+              </div>
             </div>
           ))}
         </div>
+
+        {/* Add Stakeholder */}
+        <button onClick={() => createStakeholderItem({ title: 'New Stakeholder', data: { name: 'New Stakeholder', role: 'observer', votingWeight: 1, votingHistory: {}, committees: [], conflicts: [], delegatedTo: null, joinedAt: new Date().toISOString() } as unknown as Record<string, unknown> })} className={ds.btnSecondary}><Plus className="w-4 h-4" />Add Stakeholder</button>
 
         {/* Committees */}
         <h2 className={cn(ds.heading2, 'flex items-center gap-2 mt-6')}><Layers className="w-5 h-5 text-purple-400" />Committees</h2>
         <div className={ds.grid2}>
           {committees.map(c => (
             <div key={c.id} className={ds.panel}>
-              <h3 className={cn(ds.heading3, 'mb-1')}>{c.name}</h3>
+              <div className="flex items-center justify-between mb-1">
+                <h3 className={ds.heading3}>{c.name}</h3>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => updateCommitteeItem(c.id, { data: { ...c, description: c.description } as unknown as Record<string, unknown> })} className="text-gray-500 hover:text-white text-[10px]"><PenLine className="w-3 h-3" /></button>
+                  <button onClick={() => removeCommitteeItem(c.id)} className="text-red-400 hover:text-red-300 text-[10px]"><X className="w-3 h-3" /></button>
+                </div>
+              </div>
               <p className={cn(ds.textMuted, 'mb-3')}>{c.description}</p>
               <div className="space-y-1.5">
                 {c.members.map(mid => {
@@ -1354,7 +1376,7 @@ export default function CouncilLensPage() {
 
   // ===== MAIN RENDER =====
   return (
-    <div className={ds.pageContainer}>
+    <div data-lens-theme="council" className={ds.pageContainer}>
       {/* Header */}
       <header>
         <div className="flex items-center justify-between">
@@ -1373,6 +1395,24 @@ export default function CouncilLensPage() {
           </div>
         </div>
       </header>
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+        {[
+          { label: 'Proposals', value: proposals.length, icon: FileText },
+          { label: 'Active Votes', value: proposals.filter(p => p.status === 'voting').length, icon: Vote },
+          { label: 'Participation', value: `${stakeholders.length > 0 ? Math.round((stakeholders.filter(s => s.votingWeight > 0).length / stakeholders.length) * 100) : 0}%`, icon: Users },
+          { label: 'Committees', value: committees.length, icon: Layers },
+        ].map((stat) => (
+          <div key={stat.label} className={ds.panel + ' flex items-center gap-3 p-3'}>
+            <stat.icon className="w-5 h-5 text-neon-purple shrink-0" />
+            <div>
+              <p className="text-xs text-gray-400">{stat.label}</p>
+              <p className="text-lg font-bold text-white">{stat.value}</p>
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* Dashboard Stats */}
       <div className={ds.grid4}>
@@ -1411,7 +1451,7 @@ export default function CouncilLensPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 border-b border-lattice-border overflow-x-auto">
+      <div className="flex items-center gap-1 border-b border-lattice-border flex-wrap">
         {TABS.map(tab => {
           const Icon = tab.icon;
           return (
@@ -1597,6 +1637,7 @@ export default function CouncilLensPage() {
           </div>
 
       {/* Real-time Data Panel */}
+      <UniversalActions domain="council" artifactId={null} compact />
       {realtimeData && (
         <RealtimeDataPanel
           domain="council"

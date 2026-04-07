@@ -1,4 +1,8 @@
 /**
+ * @deprecated These extended helpers are re-exported from client.ts but have no
+ * production consumers yet. Import from '@/lib/api/client' when wiring new pages.
+ * If still unused after feature integration, consider consolidating into client.ts.
+ *
  * Extended API helpers for previously unreachable backend endpoints.
  *
  * The backend has 963 endpoints. The original client.ts covers ~300.
@@ -138,6 +142,9 @@ export const adminApi = {
     history: () => api.get('/api/admin/promotion/history'),
     approve: (id: string) => api.post(`/api/admin/promotion/${id}/approve`),
     reject: (id: string, reason?: string) => api.post(`/api/admin/promotion/${id}/reject`, { reason }),
+    shadowPending: () => api.get('/api/dtus/shadow/pending'),
+    promoteShadow: (id: string, force?: boolean) => api.post(`/api/dtus/${id}/promote`, { force: !!force }),
+    promotionQueue: () => api.get('/api/dtus/promotion/queue'),
   },
 };
 
@@ -147,7 +154,7 @@ export const dtusApi = {
   get: (id: string) => api.get(`/api/dtus/${id}`),
   delete: (id: string) => api.delete(`/api/dtus/${id}`),
   search: (query: string) => api.get('/api/dtus/search', { params: { q: query } }),
-  export: (id: string) => api.get(`/api/dtus/${id}/export`),
+  export: (id: string) => api.get(`/api/dtus/${id}/export.dtu`),
   lineage: (id: string) => api.get(`/api/dtus/${id}/lineage`),
   children: (id: string) => api.get(`/api/dtus/${id}/children`),
   tags: (id: string) => api.get(`/api/dtus/${id}/tags`),
@@ -182,16 +189,14 @@ export const collabApi = {
 
 export const socialApi = {
   profile: (userId?: string) => api.get(userId ? `/api/social/profile/${userId}` : '/api/social/profile'),
-  updateProfile: (data: unknown) => api.put('/api/social/profile', data),
+  updateProfile: (data: unknown) => api.post('/api/social/profile', data),
   followers: (userId: string) => api.get(`/api/social/followers/${userId}`),
   following: (userId: string) => api.get(`/api/social/following/${userId}`),
-  follow: (userId: string) => api.post(`/api/social/follow/${userId}`),
-  unfollow: (userId: string) => api.post(`/api/social/unfollow/${userId}`),
+  follow: (userId: string) => api.post('/api/social/follow', { followedId: userId }),
+  unfollow: (userId: string) => api.post('/api/social/unfollow', { followedId: userId }),
   feed: () => api.get('/api/social/feed'),
-  timeline: (userId: string) => api.get(`/api/social/timeline/${userId}`),
-  search: (query: string) => api.get('/api/social/search', { params: { q: query } }),
-  block: (userId: string) => api.post(`/api/social/block/${userId}`),
-  unblock: (userId: string) => api.post(`/api/social/unblock/${userId}`),
+  discover: (userId: string) => api.get(`/api/social/discover/${userId}`),
+  trending: (limit?: number) => api.get('/api/social/trending', { params: { limit } }),
   notifications: () => api.get('/api/social/notifications'),
 };
 

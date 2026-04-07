@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { useState, useRef, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api/client';
@@ -15,6 +15,9 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const pageLoadTime = useRef(Date.now());
+  const [honeypot, setHoneypot] = useState('');
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -34,7 +37,11 @@ export default function RegisterPage() {
     try {
       // Fetch CSRF token first
       await api.get('/api/auth/csrf-token');
-      const res = await api.post('/api/auth/register', { username, email, password });
+      const res = await api.post('/api/auth/register', {
+        username, email, password,
+        _t: pageLoadTime.current,
+        ...(honeypot && { website: honeypot }),
+      });
       if (res.data?.ok) {
         // Registration auto-sets auth cookies, redirect to onboarding for universe setup
         localStorage.setItem('concord_entered', 'true');
@@ -68,11 +75,21 @@ export default function RegisterPage() {
             <span className="text-3xl font-bold text-white">Concordos</span>
           </Link>
           <p className="text-gray-400 mt-3">Create your sovereign account</p>
+          <div className="flex items-center justify-center gap-3 mt-4 text-xs font-semibold">
+            <span className="px-2.5 py-1 rounded bg-neon-cyan/10 border border-neon-cyan/20 text-neon-cyan">No ads</span>
+            <span className="px-2.5 py-1 rounded bg-neon-blue/10 border border-neon-blue/20 text-neon-blue">No subscriptions</span>
+            <span className="px-2.5 py-1 rounded bg-neon-purple/10 border border-neon-purple/20 text-neon-purple">No data extraction</span>
+            <span className="px-2.5 py-1 rounded bg-neon-green/10 border border-neon-green/20 text-neon-green">Free</span>
+          </div>
         </div>
 
         {/* Form card */}
         <div className="bg-lattice-surface border border-lattice-border rounded-2xl p-8">
           <form onSubmit={handleSubmit} className="space-y-5" aria-describedby={error ? "register-error" : undefined}>
+            {/* Honeypot — hidden from real users, bots auto-fill it */}
+            <div className="absolute -left-[9999px]" aria-hidden="true">
+              <input type="text" name="website" tabIndex={-1} autoComplete="off" value={honeypot} onChange={(e) => setHoneypot(e.target.value)} />
+            </div>
             {error && (
               <div id="register-error" role="alert" aria-live="assertive" className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
                 {error}
@@ -165,9 +182,25 @@ export default function RegisterPage() {
               />
             </div>
 
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={agreedToTerms}
+                onChange={(e) => setAgreedToTerms(e.target.checked)}
+                required
+                className="mt-1 rounded border-lattice-border bg-lattice-deep accent-neon-cyan"
+              />
+              <span className="text-xs text-gray-400">
+                I agree to the{' '}
+                <Link href="/legal/terms" target="_blank" className="text-neon-cyan hover:underline">Terms of Service</Link>
+                {' '}and{' '}
+                <Link href="/legal/privacy" target="_blank" className="text-neon-cyan hover:underline">Privacy Policy</Link>
+              </span>
+            </label>
+
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !agreedToTerms}
               className="w-full py-3 bg-gradient-to-r from-neon-cyan to-neon-blue rounded-lg text-white font-semibold hover:shadow-lg hover:shadow-neon-cyan/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {loading ? (

@@ -16,6 +16,9 @@ import { useMeshStatus } from '../../hooks/useMeshStatus';
 import { useIdentity } from '../../hooks/useIdentity';
 import { ConnectionIndicator } from '../components/ConnectionIndicator';
 
+// Base URL for the Concord backend. Override with EXPO_PUBLIC_API_URL in .env.
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:5050';
+
 interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -47,16 +50,54 @@ export function ChatScreen() {
     setIsGenerating(true);
 
     try {
-      // Brain router decides: local or server
-      // For now, placeholder response
+      let replyContent: string;
+      let routedTo: 'local' | 'server';
+
+      if (connectionState === 'offline') {
+        // Offline: brain router would handle local inference. Not yet wired.
+        replyContent = '[Offline — local inference not yet available on this device]';
+        routedTo = 'local';
+      } else {
+        // Online: call the backend chat API, matching the frontend pattern.
+        routedTo = 'server';
+        const response = await fetch(`${API_BASE_URL}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: userMessage.content }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Server responded with ${response.status}`);
+        }
+
+        const data = await response.json();
+        // Accept any of the reply field names the server may use.
+        replyContent =
+          data.reply ??
+          data.answer ??
+          data.content ??
+          data.text ??
+          data.response ??
+          (data.error ? `Error: ${data.error}` : 'No response from server.');
+      }
+
       const assistantMessage: ChatMessage = {
         id: `msg_${Date.now()}_resp`,
         role: 'assistant',
-        content: 'Processing...',
+        content: replyContent,
         timestamp: Date.now(),
-        routedTo: connectionState === 'offline' ? 'local' : 'server',
+        routedTo,
       };
       setMessages(prev => [...prev, assistantMessage]);
+    } catch (error) {
+      const errorMessage: ChatMessage = {
+        id: `msg_${Date.now()}_err`,
+        role: 'assistant',
+        content: `Failed to get response: ${error instanceof Error ? error.message : String(error)}`,
+        timestamp: Date.now(),
+        routedTo: 'server',
+      };
+      setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsGenerating(false);
     }

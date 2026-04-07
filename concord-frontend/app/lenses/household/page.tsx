@@ -1,5 +1,6 @@
 'use client';
 
+import { motion } from 'framer-motion';
 import { useState, useMemo, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
@@ -168,7 +169,7 @@ export default function HouseholdLensPage() {
   const [statusFilter, setStatusFilter] = useState<Status | 'all'>('all');
   const [showEditor, setShowEditor] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
   const [calendarView, setCalendarView] = useState<'week' | 'month'>('week');
   const [calendarOffset, setCalendarOffset] = useState(0);
   const [mealWeekOffset, setMealWeekOffset] = useState(0);
@@ -198,7 +199,7 @@ export default function HouseholdLensPage() {
   const { items: maintenanceItems } = useLensData<MaintenanceItem>('household', 'MaintenanceItem', { noSeed: true });
   const { items: calendarItems } = useLensData<CalendarEvent>('household', 'CalendarEvent', { noSeed: true });
   const { items: budgetItems } = useLensData<BudgetEntry>('household', 'BudgetEntry', { noSeed: true });
-  const { items: _emergencyItems } = useLensData<EmergencyContact>('household', 'EmergencyContact', { noSeed: true });
+  const { items: emergencyItems } = useLensData<EmergencyContact>('household', 'EmergencyContact', { noSeed: true });
   const { items: petItems } = useLensData<Pet>('household', 'Pet', { noSeed: true });
 
   const runAction = useRunArtifact('household');
@@ -510,6 +511,29 @@ export default function HouseholdLensPage() {
           )}
         </div>
       </div>
+
+      {/* Emergency Contacts */}
+      <div className={ds.panel}>
+        <h3 className={cn(ds.heading3, 'mb-3 flex items-center gap-2')}><Shield className="w-5 h-5 text-red-400" /> Emergency Contacts</h3>
+        {emergencyItems.length === 0 ? (
+          <p className={ds.textMuted}>No emergency contacts on file. Add contacts in the Emergency tab.</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {emergencyItems.slice(0, 6).map(ec => {
+              const d = ec.data as unknown as EmergencyContact;
+              return (
+                <div key={ec.id} className="flex items-center gap-3 p-2 rounded-lg bg-red-500/5 border border-red-500/10">
+                  <Shield className="w-4 h-4 text-red-400 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-white truncate">{ec.title || d.name}</p>
+                    <p className={ds.textMuted}>{d.relationship}{d.phone ? ` - ${d.phone}` : ''}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 
@@ -655,7 +679,7 @@ export default function HouseholdLensPage() {
         </div>
 
         {/* Fairness Meter */}
-        {Object.keys(chorePointsByPerson).length > 0 && (
+        {Object.keys(chorePointsByPerson).length > 0 ? (
           <div className={ds.panel}>
             <h3 className={cn(ds.heading3, 'mb-4 flex items-center gap-2')}><Award className="w-5 h-5 text-yellow-400" /> Fairness Meter</h3>
             <div className="space-y-4">
@@ -683,6 +707,10 @@ export default function HouseholdLensPage() {
               ))}
             </div>
           </div>
+        ) : (
+          <div className="text-center py-6 text-gray-500 text-sm border border-dashed border-white/10 rounded-lg">
+            <p>No chore assignments yet. Assign chores to see point distribution.</p>
+          </div>
         )}
 
         {/* Chore Cards with completion toggle */}
@@ -694,11 +722,11 @@ export default function HouseholdLensPage() {
           </div>
         ) : (
           <div className={ds.grid3}>
-            {filtered.map(item => {
+            {filtered.map((item, index) => {
               const d = item.data as unknown as Chore;
               const isComplete = item.meta.status === 'completed';
               return (
-                <div key={item.id} className={cn(ds.panelHover, isComplete && 'opacity-60')}>
+                <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className={cn(ds.panelHover, isComplete && 'opacity-60')}>
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex items-center gap-2">
                       <button onClick={() => toggleChoreComplete(item)} className={cn(
@@ -729,7 +757,7 @@ export default function HouseholdLensPage() {
                     <button className={cn(ds.btnGhost, ds.btnSmall)} onClick={() => openEdit(item)}><Edit3 className="w-3.5 h-3.5" /></button>
                     <button className={cn(ds.btnDanger, ds.btnSmall)} onClick={() => handleDelete(item.id)}><Trash2 className="w-3.5 h-3.5" /></button>
                   </div>
-                </div>
+                </motion.div>
               );
             })}
           </div>
@@ -1007,7 +1035,7 @@ export default function HouseholdLensPage() {
   /*  BUDGET / EXPENSE TAB                                             */
   /* ================================================================ */
   const renderBudget = () => {
-    const { byCategory, totalBudgeted, totalSpent: _totalSpent } = monthlyBudget;
+    const { byCategory, totalBudgeted, totalSpent } = monthlyBudget;
     const savingsItems = budgetItems.filter(i => (i.data as unknown as BudgetEntry).category === 'Savings');
     const incomeItems = budgetItems.filter(i => (i.data as unknown as BudgetEntry).entryType === 'income');
     const totalIncome = incomeItems.reduce((sum, i) => sum + ((i.data as unknown as BudgetEntry).amount || 0), 0);
@@ -1029,8 +1057,9 @@ export default function HouseholdLensPage() {
             <p className={cn(ds.heading2, 'text-green-400')}>{formatCurrency(totalIncome)}</p>
           </div>
           <div className={cn(ds.panel, 'border-l-4 border-l-red-400')}>
-            <p className={ds.textMuted}>Total Budgeted</p>
-            <p className={cn(ds.heading2, 'text-red-400')}>{formatCurrency(totalBudgeted)}</p>
+            <p className={ds.textMuted}>Total Spent</p>
+            <p className={cn(ds.heading2, 'text-red-400')}>{formatCurrency(totalSpent)}</p>
+            <p className="text-xs text-gray-500 mt-1">{formatCurrency(totalBudgeted)} budgeted</p>
           </div>
           <div className={cn(ds.panel, 'border-l-4 border-l-neon-cyan')}>
             <p className={ds.textMuted}>Remaining</p>
@@ -1242,7 +1271,7 @@ export default function HouseholdLensPage() {
             })}
 
             {/* Pet medical info */}
-            {petItems.length > 0 && (
+            {petItems.length > 0 ? (
               <>
                 <h3 className={cn(ds.heading3, 'flex items-center gap-2 mt-6')}><Dog className="w-5 h-5 text-orange-400" /> Pet Info</h3>
                 {petItems.map(p => {
@@ -1273,6 +1302,10 @@ export default function HouseholdLensPage() {
                   );
                 })}
               </>
+            ) : (
+              <div className="text-center py-6 text-gray-500 text-sm border border-dashed border-white/10 rounded-lg">
+                <p>No pets registered yet. Add your pets to track care schedules.</p>
+              </div>
             )}
           </div>
         )}
@@ -1558,7 +1591,7 @@ export default function HouseholdLensPage() {
   }
 
   return (
-    <div className={ds.pageContainer}>
+    <div data-lens-theme="household" className={ds.pageContainer}>
       {/* Header */}
       <header className={ds.sectionHeader}>
         <div className="flex items-center gap-3">
@@ -1574,12 +1607,30 @@ export default function HouseholdLensPage() {
       </header>
 
 
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Rooms', value: maintenanceItems.length, icon: Home },
+          { label: 'Chores Pending', value: choreItems.filter(c => c.meta?.status !== 'completed').length, icon: CheckSquare },
+          { label: 'Bills Due', value: items.filter(i => (i.data as unknown as Record<string, unknown>).type === 'BudgetEntry' && i.meta?.status === 'planned').length, icon: CreditCard },
+          { label: 'Family', value: familyItems.length, icon: Users },
+        ].map((stat) => (
+          <div key={stat.label} className={ds.panel + ' flex items-center gap-3 p-3'}>
+            <stat.icon className="w-5 h-5 text-neon-cyan shrink-0" />
+            <div>
+              <p className="text-xs text-gray-400">{stat.label}</p>
+              <p className="text-lg font-bold text-white">{stat.value}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* AI Actions */}
       <UniversalActions domain="household" artifactId={familyItems[0]?.id} compact />
       <RealtimeDataPanel domain="household" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <DTUExportButton domain="household" data={{}} compact />
       {/* Mode tabs */}
-      <nav className="flex items-center gap-1 border-b border-lattice-border pb-4 overflow-x-auto">
+      <nav className="flex items-center gap-1 border-b border-lattice-border pb-4 flex-wrap">
         {MODE_TABS.map(tab => {
           const Icon = tab.icon;
           return (
@@ -1680,7 +1731,7 @@ export default function HouseholdLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

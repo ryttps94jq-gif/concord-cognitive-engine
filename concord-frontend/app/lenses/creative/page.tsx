@@ -1,5 +1,6 @@
 'use client';
 
+import { motion } from 'framer-motion';
 import { useState, useMemo, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
@@ -138,7 +139,7 @@ export default function CreativeLensPage() {
   useLensNav('creative');
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('creative');
 
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
   const [mode, setMode] = useState<ModeTab>('dashboard');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -251,7 +252,7 @@ export default function CreativeLensPage() {
   const formConfig: Record<string, { key: string; label: string; type: 'input' | 'textarea' | 'select'; options?: string[] }[]> = {
     projects: [
       { key: 'client', label: 'Client', type: 'input' },
-      { key: 'projectType', label: 'Project Type', type: 'select', options: ['Video', 'Audio', 'Design', 'Writing', 'Branding', 'Campaign', 'Film', 'Social Media', 'Web', 'Print / Digital', 'Other'] },
+      { key: 'projectType', label: 'Project Type', type: 'select', options: PROJECT_TYPES.map(pt => pt.label) },
       { key: 'budget', label: 'Budget ($)', type: 'input' },
       { key: 'deadline', label: 'Deadline', type: 'input' },
       { key: 'lead', label: 'Project Lead', type: 'input' },
@@ -425,6 +426,20 @@ export default function CreativeLensPage() {
         </div>
       </div>
 
+      {/* Revision Alert Row */}
+      {pendingRevisions > 0 && (
+        <div className={cn(ds.panel, 'flex items-center gap-3 border-amber-400/20')}>
+          <RotateCcw className="w-5 h-5 text-amber-400 flex-shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-amber-400">{pendingRevisions} Pending Revision{pendingRevisions !== 1 ? 's' : ''}</p>
+            <p className={cn(ds.textMuted, 'text-xs')}>Revisions awaiting feedback review</p>
+          </div>
+          <button onClick={() => setMode('revisions')} className={cn(ds.btnSecondary, ds.btnSmall)}>
+            View Revisions
+          </button>
+        </div>
+      )}
+
       {/* Second KPI Row */}
       <div className={ds.grid3}>
         <div className={ds.panel}>
@@ -563,7 +578,7 @@ export default function CreativeLensPage() {
   // ---------------------------------------------------------------------------
   const renderProjects = () => (
     <div className={ds.grid2}>
-      {filtered.map(item => {
+      {filtered.map((item, index) => {
         const d = item.data as Record<string, unknown>;
         const milestones = parseSafe<{ name: string; date: string; done: boolean }[]>(d.milestones, []);
         const team = parseSafe<string[]>(d.teamMembers, []);
@@ -577,7 +592,7 @@ export default function CreativeLensPage() {
         const profitMargin = budget > 0 ? (budget - spent) / budget : 0;
 
         return (
-          <div key={item.id} className={ds.panelHover} onClick={() => openDetail(item)}>
+          <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className={ds.panelHover} onClick={() => openDetail(item)}>
             {/* Header */}
             <div className="flex items-start justify-between mb-3">
               <div className="min-w-0">
@@ -653,7 +668,7 @@ export default function CreativeLensPage() {
                 <button onClick={e => { e.stopPropagation(); remove(item.id); }} className={cn(ds.btnGhost, 'hover:text-red-400')}><Trash2 className="w-3.5 h-3.5" /></button>
               </div>
             </div>
-          </div>
+          </motion.div>
         );
       })}
     </div>
@@ -830,7 +845,7 @@ export default function CreativeLensPage() {
     return (
       <div className="space-y-4">
         {/* Status board view */}
-        <div className="flex gap-3 overflow-x-auto pb-2">
+        <div className="flex gap-3 flex-wrap pb-2">
           {shotStatuses.map(status => {
             const shots = filtered.filter(i => i.meta?.status === status);
             return (
@@ -985,7 +1000,7 @@ export default function CreativeLensPage() {
   // ---------------------------------------------------------------------------
   const renderBudget = () => {
     const categories = ['talent', 'equipment', 'location', 'post_production', 'licensing'];
-    const _projectBudgets = allProjects.map(p => {
+    const projectBudgets = allProjects.map(p => {
       const d = p.data as Record<string, unknown>;
       const projectLines = filtered.filter(l => (l.data as Record<string, unknown>).project === String(d.client) + ' ' + p.title || String((l.data as Record<string, unknown>).project).includes(String(d.client)));
       const lineEstimated = projectLines.reduce((s, l) => s + Number((l.data as Record<string, unknown>).estimated || 0), 0);
@@ -1048,6 +1063,28 @@ export default function CreativeLensPage() {
             })}
           </div>
         </div>
+
+        {/* Per-project budget breakdown */}
+        {projectBudgets.length > 0 && (
+          <div className={ds.panel}>
+            <h3 className={cn(ds.heading3, 'mb-3')}>Per-Project Budgets</h3>
+            <div className="space-y-3">
+              {projectBudgets.map(pb => {
+                const pct = pb.lineEstimated > 0 ? pb.lineActual / pb.lineEstimated : 0;
+                return (
+                  <div key={pb.id} className="flex items-center gap-3">
+                    <span className="w-40 text-sm text-gray-300 truncate">{pb.title}</span>
+                    <div className="flex-1 bg-lattice-elevated rounded-full h-3">
+                      <div className={cn('h-3 rounded-full transition-all', pct > 1 ? 'bg-red-400' : pct > 0.8 ? 'bg-amber-400' : 'bg-neon-cyan')} style={{ width: `${Math.min(pct * 100, 100)}%` }} />
+                    </div>
+                    <span className="w-24 text-right text-sm text-gray-300">{fmtCurrency(pb.lineActual)}</span>
+                    <span className={cn('w-24 text-right text-xs text-gray-500')}>/ {fmtCurrency(pb.lineEstimated)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Line items table */}
         <div className={ds.panel}>
@@ -1354,7 +1391,7 @@ export default function CreativeLensPage() {
   // Main Render
   // ---------------------------------------------------------------------------
   return (
-    <div className={ds.pageContainer}>
+    <div data-lens-theme="creative" className={ds.pageContainer}>
       {/* Header */}
       <header className={ds.sectionHeader}>
         <div className="flex items-center gap-3">
@@ -1386,10 +1423,28 @@ export default function CreativeLensPage() {
       </header>
 
 
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Projects', value: allProjects.length, icon: Palette },
+          { label: 'Assets', value: allAssets.length, icon: Camera },
+          { label: 'Collaborators', value: new Set(allProjects.flatMap(p => (Array.isArray((p.data as Record<string, unknown>).teamMembers) ? (p.data as Record<string, unknown>).teamMembers as string[] : []))).size, icon: Users },
+          { label: 'In Review', value: allProofs.filter(p => p.meta?.status === 'pending_review').length, icon: Eye },
+        ].map((stat) => (
+          <div key={stat.label} className={ds.panel + ' flex items-center gap-3 p-3'}>
+            <stat.icon className="w-5 h-5 text-neon-purple shrink-0" />
+            <div>
+              <p className="text-xs text-gray-400">{stat.label}</p>
+              <p className="text-lg font-bold text-white">{stat.value}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* AI Actions */}
       <UniversalActions domain="creative" artifactId={allProjects[0]?.id} compact />
       {/* Mode Tabs */}
-      <nav className="flex items-center gap-1 border-b border-lattice-border pb-3 overflow-x-auto">
+      <nav className="flex items-center gap-1 border-b border-lattice-border pb-3 flex-wrap">
         {MODE_TABS.map(tab => {
           const Icon = tab.icon;
           return (
@@ -1548,7 +1603,7 @@ export default function CreativeLensPage() {
         <section>
           <h2 className={cn(ds.heading2, 'mb-3')}>Pipeline</h2>
           <div className={ds.panel}>
-            <div className="flex items-center gap-2 overflow-x-auto pb-2">
+            <div className="flex items-center gap-2 flex-wrap pb-2">
               {(mode === 'shotlist'
                 ? ['planned', 'scheduled', 'in_progress', 'captured', 'review', 'final']
                 : mode === 'proofs'
@@ -1622,7 +1677,7 @@ export default function CreativeLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

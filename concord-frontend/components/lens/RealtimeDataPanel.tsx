@@ -1,22 +1,57 @@
 'use client';
 
+// React import (hooks used by consumers)
+
 interface RealtimeDataPanelProps {
-  domain: string;
-  data: Record<string, unknown> | null;
-  isLive: boolean;
-  lastUpdated: string | null;
+  domain?: string;
+  data: Array<{ domain: string; insight: string; confidence: number; timestamp: string }> | Record<string, unknown> | null;
+  isLive?: boolean;
+  lastUpdated?: string | null;
   insights?: Array<{ insight: string; confidence: number; timestamp: string }>;
   compact?: boolean;
 }
 
 export function RealtimeDataPanel({
-  domain,
+  domain = 'general',
   data,
-  isLive,
-  lastUpdated,
+  isLive = false,
+  lastUpdated = null,
   insights,
   compact,
 }: RealtimeDataPanelProps) {
+  // When data is an array of insight objects, render them directly
+  if (Array.isArray(data)) {
+    if (data.length === 0) {
+      return (
+        <div className="p-3 rounded-lg bg-zinc-800/50 text-xs text-zinc-500">
+          No realtime insights yet
+        </div>
+      );
+    }
+    return (
+      <div className="rounded-lg bg-zinc-800/50 overflow-hidden">
+        <div className="px-3 py-2 bg-zinc-700/50 flex items-center justify-between">
+          <span className="text-xs font-medium text-zinc-300">Realtime Insights</span>
+          {lastUpdated && (
+            <span className="text-[10px] text-zinc-500">
+              {new Date(lastUpdated).toLocaleTimeString()}
+            </span>
+          )}
+        </div>
+        <div className="p-3 space-y-1 text-xs">
+          {data.slice(-5).map((item, idx) => (
+            <div key={idx} className="flex items-center justify-between">
+              <span className="text-zinc-400 truncate flex-1">{item.insight}</span>
+              <span className="text-zinc-600 ml-2 shrink-0">
+                {item.domain} · {(item.confidence * 100).toFixed(0)}%
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   if (!data && !insights?.length) {
     return (
       <div className="p-3 rounded-lg bg-zinc-800/50 text-xs text-zinc-500">

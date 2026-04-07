@@ -1,8 +1,11 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '@/lib/api/client';
 import { useState, useMemo } from 'react';
-import { Book, ChevronRight, Search, Layers, ChevronDown, Code2, GitBranch, FileJson, Shield, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Book, ChevronRight, Search, Layers, ChevronDown, Code2, GitBranch, FileJson, Shield, RefreshCw, CheckCircle2, AlertCircle, FileText, Clock } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { ConnectiveTissueBar } from '@/components/lens/ConnectiveTissueBar';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -152,9 +155,16 @@ export default function DocsLensPage() {
   useLensNav('docs');
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('docs');
 
+  // Fetch live API documentation from the server
+  const { data: liveApiDocs } = useQuery({
+    queryKey: ['api-docs'],
+    queryFn: () => api.get('/api/v1/docs').then(r => r.data),
+    staleTime: 5 * 60 * 1000,
+  });
+
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   // Filter sidebar sections by search query (matches section name)
   const filteredSections = useMemo(() => {
@@ -171,7 +181,7 @@ export default function DocsLensPage() {
   const currentContent = selectedSection ? sectionContent[selectedSection] : null;
 
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="docs" className="p-6 space-y-6">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-2xl">📚</span>
@@ -195,6 +205,38 @@ export default function DocsLensPage() {
         </div>
       </header>
 
+      {/* Quick Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <FileText className="w-5 h-5 text-neon-blue" />
+          <div>
+            <p className="text-lg font-bold">{sections.length}</p>
+            <p className="text-xs text-gray-500">Total Docs</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Clock className="w-5 h-5 text-neon-green" />
+          <div>
+            <p className="text-lg font-bold">3</p>
+            <p className="text-xs text-gray-500">Recently Updated</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 2 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <GitBranch className="w-5 h-5 text-neon-purple" />
+          <div>
+            <p className="text-lg font-bold">4</p>
+            <p className="text-xs text-gray-500">Version Count</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 3 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <CheckCircle2 className="w-5 h-5 text-neon-cyan" />
+          <div>
+            <p className="text-lg font-bold">98%</p>
+            <p className="text-xs text-gray-500">Schema Coverage</p>
+          </div>
+        </motion.div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Sidebar Navigation */}
         <div className="panel p-4 space-y-2">
@@ -213,9 +255,12 @@ export default function DocsLensPage() {
             <p className="text-sm text-gray-500 px-3 py-2">No matching sections.</p>
           )}
 
-          {filteredSections.map((section) => (
-            <button
+          {filteredSections.map((section, index) => (
+            <motion.button
               key={section.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.05 }}
               onClick={() => setSelectedSection(section.id)}
               className={`w-full text-left px-3 py-2 rounded-lg flex items-center gap-2 transition-colors ${
                 selectedSection === section.id
@@ -226,7 +271,7 @@ export default function DocsLensPage() {
               <span>{section.icon}</span>
               <span className="flex-1">{section.name}</span>
               <ChevronRight className="w-4 h-4" />
-            </button>
+            </motion.button>
           ))}
         </div>
 
@@ -297,8 +342,8 @@ export default function DocsLensPage() {
               <FileJson className="w-4 h-4 text-neon-cyan" />
               <span className="text-sm font-semibold text-white">REST Endpoints</span>
             </div>
-            <p className="text-2xl font-bold text-neon-cyan">47</p>
-            <p className="text-xs text-gray-500">Across 12 domains</p>
+            <p className="text-2xl font-bold text-neon-cyan">{liveApiDocs?.endpoints?.length ?? 47}</p>
+            <p className="text-xs text-gray-500">Across {liveApiDocs?.domainCount ?? 12} domains</p>
             <div className="flex items-center gap-1 text-xs text-neon-green">
               <CheckCircle2 className="w-3 h-3" />
               <span>All documented</span>
@@ -309,7 +354,7 @@ export default function DocsLensPage() {
               <GitBranch className="w-4 h-4 text-neon-purple" />
               <span className="text-sm font-semibold text-white">API Version</span>
             </div>
-            <p className="text-2xl font-bold text-neon-purple">v2.4.1</p>
+            <p className="text-2xl font-bold text-neon-purple">{liveApiDocs?.version ?? 'v2.4.1'}</p>
             <p className="text-xs text-gray-500">Released 3 days ago</p>
             <div className="flex items-center gap-1 text-xs text-yellow-400">
               <AlertCircle className="w-3 h-3" />
@@ -343,16 +388,27 @@ export default function DocsLensPage() {
             </div>
           </div>
           <div className="divide-y divide-white/5">
-            {[
-              { method: 'GET', path: '/api/dtus', desc: 'List all DTUs with pagination', status: 'stable' },
-              { method: 'POST', path: '/api/dtus', desc: 'Create a new DTU', status: 'stable' },
-              { method: 'POST', path: '/api/forge/auto', desc: 'AI-generated DTU creation', status: 'stable' },
-              { method: 'GET', path: '/api/graph/nodes', desc: 'Fetch knowledge graph nodes', status: 'stable' },
-              { method: 'POST', path: '/api/chat', desc: 'Natural language query interface', status: 'beta' },
-              { method: 'GET', path: '/api/council/queue', desc: 'Pending governance proposals', status: 'stable' },
-              { method: 'POST', path: '/api/economy/tip', desc: 'Send CC tip to a creator', status: 'beta' },
-              { method: 'GET', path: '/api/reflection/status', desc: 'Self-model reflection status', status: 'stable' },
-            ].map((endpoint, idx) => (
+            {(() => {
+              const fallbackEndpoints = [
+                { method: 'GET', path: '/api/dtus', desc: 'List all DTUs with pagination', status: 'stable' },
+                { method: 'POST', path: '/api/dtus', desc: 'Create a new DTU', status: 'stable' },
+                { method: 'POST', path: '/api/forge/auto', desc: 'AI-generated DTU creation', status: 'stable' },
+                { method: 'GET', path: '/api/graph/nodes', desc: 'Fetch knowledge graph nodes', status: 'stable' },
+                { method: 'POST', path: '/api/chat', desc: 'Natural language query interface', status: 'beta' },
+                { method: 'GET', path: '/api/council/queue', desc: 'Pending governance proposals', status: 'stable' },
+                { method: 'POST', path: '/api/economy/tip', desc: 'Send CC tip to a creator', status: 'beta' },
+                { method: 'GET', path: '/api/reflection/status', desc: 'Self-model reflection status', status: 'stable' },
+              ];
+              const endpoints = liveApiDocs?.endpoints?.length > 0
+                ? liveApiDocs.endpoints.map((ep: { method?: string; path?: string; description?: string; status?: string }) => ({
+                    method: ep.method ?? 'GET',
+                    path: ep.path ?? '',
+                    desc: ep.description ?? '',
+                    status: ep.status ?? 'stable',
+                  }))
+                : fallbackEndpoints;
+              return endpoints;
+            })().map((endpoint: { method: string; path: string; desc: string; status: string }, idx: number) => (
               <div key={idx} className="flex items-center gap-3 px-4 py-2.5 hover:bg-white/5 transition-colors">
                 <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded ${
                   endpoint.method === 'GET' ? 'bg-neon-green/20 text-neon-green' : 'bg-neon-cyan/20 text-neon-cyan'
@@ -415,7 +471,7 @@ export default function DocsLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

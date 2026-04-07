@@ -1,8 +1,33 @@
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { updateClockOffset } from '../offline/db';
 import { useUIStore } from '@/store/ui';
+import { fromAxiosError } from '@/lib/errors';
+import type {
+  CreateDTURequest,
+  UpdateDTURequest,
+  ChatRequest,
+  VoteRequest,
+  CredibilityRequest,
+  ForgeManualRequest,
+  ForgeHybridRequest,
+  ForgeAutoRequest,
+  ForgeFromSourceRequest,
+  GraphQueryRequest,
+  GraphVisualParams,
+  GraphForceParams,
+  PersonaSpeakRequest,
+  PersonaAnimateRequest,
+  PluginSubmitRequest,
+  PluginInstallRequest,
+  PluginReviewRequest,
+  CreateWebhookRequest,
+  CreateAutomationRequest,
+  LoginRequest,
+  RegisterRequest,
+  CreateApiKeyRequest,
+} from './generated-types';
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5050';
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 /**
  * FE-004: Runtime validation of API base URL.
@@ -40,7 +65,7 @@ const RETRY_STATUS_CODES = new Set([502, 503, 504]);
 const RETRY_BASE_DELAY_MS = 1000;
 
 api.interceptors.response.use(undefined, async (error: AxiosError) => {
-  const config = error.config as InternalAxiosRequestConfig & { _retryCount?: number };
+  const config = error.config as InternalAxiosRequestConfig & { _retryCount?: number; _retried?: boolean };
   if (!config) return Promise.reject(error);
 
   const status = error.response?.status;
@@ -49,6 +74,7 @@ api.interceptors.response.use(undefined, async (error: AxiosError) => {
 
   if (isRetryable && retryCount < MAX_RETRIES) {
     config._retryCount = retryCount + 1;
+    config._retried = true; // Signal to downstream interceptors that this request was already retried
     const delay = RETRY_BASE_DELAY_MS * Math.pow(2, retryCount); // 1s, 2s, 4s
     console.warn(`[API] Retrying ${config.method?.toUpperCase()} ${config.url} (attempt ${config._retryCount}/${MAX_RETRIES}) after ${delay}ms`);
     await new Promise(resolve => setTimeout(resolve, delay));
@@ -132,12 +158,13 @@ api.interceptors.response.use(
 
       // SECURITY: Handle CSRF token expiration
       // Guard against infinite 403 retry loops with _csrfRetried flag
+      // Also skip CSRF retry if the request was already retried by the transient-error interceptor
       if (status === 403) {
-        const config = error.config as InternalAxiosRequestConfig & { _csrfRetried?: boolean };
+        const config = error.config as InternalAxiosRequestConfig & { _csrfRetried?: boolean; _retried?: boolean };
         const data = error.response.data as { code?: string };
         const isStateChanging = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(config?.method?.toUpperCase() || '');
 
-        if (data?.code === 'CSRF_FAILED' && isStateChanging && !config?._csrfRetried) {
+        if (data?.code === 'CSRF_FAILED' && isStateChanging && !config?._csrfRetried && !config?._retried) {
           // Refresh CSRF token and retry once
           try {
             await api.get('/api/auth/csrf-token');
@@ -160,9 +187,14 @@ api.interceptors.response.use(
         if (requestUrl.includes('/api/auth/me') || requestUrl.includes('/api/auth/csrf-token')) {
           return Promise.reject(error);
         }
+        // Don't redirect on background GET fetches — a stale query or
+        // transient 401 shouldn't force navigation away from the page.
+        // Only redirect on user-initiated mutations or explicit nav.
+        const isBackgroundFetch = error.config?.method?.toUpperCase() === 'GET';
+        if (isBackgroundFetch) {
+          return Promise.reject(error);
+        }
         // Don't redirect on public pages that don't require auth.
-        // These pages may trigger incidental API calls (e.g. via shared
-        // components) but should never force a login redirect.
         const path = window.location.pathname;
         const isPublicPage =
           path.startsWith('/legal/') ||
@@ -199,16 +231,28 @@ api.interceptors.response.use(
         (error.response?.headers?.['X-Request-ID'] as string | undefined);
       const reason = data?.reason || data?.error || (error.response?.status === 401 ? 'Login required' : error.message);
 
-      // Record error in store (deduplication handled by store)
-      useUIStore.getState().addRequestError({
-        path: error.config?.url,
-        method: error.config?.method?.toUpperCase(),
-        status: error.response?.status,
-        code: data?.code,
-        requestId,
-        message: data?.error || error.message,
-        reason,
-      });
+      // Filter out expected errors that are not system failures:
+      // - 404 on resource lookups (DTU, entity, inspect) = expected for missing resources
+      // - 401 on /api/auth/me = expected when not logged in
+      // - Failed WebSocket connections = expected during reconnection
+      const requestPath = error.config?.url || '';
+      const requestStatus = error.response?.status;
+      const isExpected404 = requestStatus === 404 && /\/(dtus|entity|inspect|dtu_view)\//.test(requestPath);
+      const isExpectedAuth = requestStatus === 401 && /\/api\/auth\/me/.test(requestPath);
+      const isExpectedError = isExpected404 || isExpectedAuth;
+
+      // Only record unexpected errors in the store
+      if (!isExpectedError) {
+        useUIStore.getState().addRequestError({
+          path: error.config?.url,
+          method: error.config?.method?.toUpperCase(),
+          status: error.response?.status,
+          code: data?.code,
+          requestId,
+          message: data?.error || error.message,
+          reason,
+        });
+      }
 
       // Surface API errors as toasts — but throttle to avoid flooding the UI.
       // Only show toasts for user-facing errors, not background fetch failures.
@@ -234,7 +278,7 @@ api.interceptors.response.use(
         }
       }
     }
-    return Promise.reject(error);
+    return Promise.reject(fromAxiosError(error));
   }
 );
 
@@ -270,19 +314,25 @@ export const apiHelpers = {
     syncFromGlobal: (dtuId: string) =>
       api.post('/api/dtus/sync-from-global', { dtuId }),
 
-    create: (data: {
-      title?: string;
-      content: string;
-      tags?: string[];
-      source?: string;
-      parents?: string[];
-      isGlobal?: boolean;
-      meta?: Record<string, unknown>;
-      declaredSourceType?: string;
-    }) => api.post('/api/dtus', data),
+    create: (data: CreateDTURequest) => api.post('/api/dtus', data),
 
-    update: (id: string, patch: Record<string, unknown>) =>
+    update: (id: string, patch: UpdateDTURequest) =>
       api.patch(`/api/dtus/${id}`, patch),
+
+    get: (id: string) => api.get(`/api/dtus/${id}`),
+    delete: (id: string) => api.delete(`/api/dtus/${id}`),
+    search: (query: string) => api.get('/api/dtus/search', { params: { q: query } }),
+    lineage: (id: string) => api.get(`/api/dtus/${id}/lineage`),
+    stats: () => api.get('/api/dtus/stats'),
+    children: (id: string) => api.get(`/api/dtus/${id}/children`),
+    myDtus: (params?: { limit?: number; offset?: number }) =>
+      api.get('/api/dtus/mine', { params }),
+
+    // .dtu file format export/import
+    exportDtu: (id: string) =>
+      api.get(`/api/dtus/${id}/export.dtu`, { responseType: 'blob' }),
+    importDtu: (data: ArrayBuffer) =>
+      api.post('/api/dtus/import', data, { headers: { 'Content-Type': 'application/octet-stream' } }),
   },
 
   // Ingest operations
@@ -323,11 +373,11 @@ export const apiHelpers = {
 
   // Chat operations
   chat: {
-    send: (message: string, mode: string = 'overview') =>
-      api.post('/api/chat', { message, mode }),
+    send: (message: string, mode: ChatRequest['mode'] = 'overview') =>
+      api.post('/api/chat?full=1', { message, mode } satisfies ChatRequest),
 
-    ask: (message: string, mode: string = 'overview') =>
-      api.post('/api/ask', { message, mode }),
+    ask: (message: string, mode: ChatRequest['mode'] = 'overview') =>
+      api.post('/api/ask?full=1', { message, mode } satisfies ChatRequest),
 
     feedback: (data: { sessionId: string; rating: 'up' | 'down' | number; messageIndex?: number; comment?: string }) =>
       api.post('/api/chat/feedback', data),
@@ -338,6 +388,11 @@ export const apiHelpers = {
   // Cognitive status (combined)
   cognitive: {
     status: () => api.get('/api/cognitive/status'),
+  },
+
+  // LOAF system status (aggregated)
+  loaf: {
+    status: () => api.get('/api/loaf/status'),
   },
 
   // Dream mode (synthesis + capture pipeline)
@@ -356,13 +411,13 @@ export const apiHelpers = {
 
   // Forge (DTU creation modes)
   forge: {
-    manual: (data: { title?: string; content: string; tags?: string[]; source?: string }) =>
+    manual: (data: ForgeManualRequest) =>
       api.post('/api/forge/manual', data),
-    hybrid: (data: { title?: string; content: string; tags?: string[]; source?: string }) =>
+    hybrid: (data: ForgeHybridRequest) =>
       api.post('/api/forge/hybrid', data),
-    auto: (data: { prompt: string; tags?: string[] }) =>
+    auto: (data: ForgeAutoRequest) =>
       api.post('/api/forge/auto', data),
-    fromSource: (data: { url?: string; text?: string; tags?: string[] }) =>
+    fromSource: (data: ForgeFromSourceRequest) =>
       api.post('/api/forge/fromSource', data),
   },
 
@@ -378,20 +433,20 @@ export const apiHelpers = {
     list: () => api.get('/api/personas'),
 
     speak: (personaId: string, text: string) =>
-      api.post(`/api/personas/${personaId}/speak`, { text }),
+      api.post(`/api/personas/${personaId}/speak`, { text } satisfies PersonaSpeakRequest),
 
-    animate: (personaId: string, kind: string = 'talk') =>
-      api.post(`/api/personas/${personaId}/animate`, { kind }),
+    animate: (personaId: string, kind: PersonaAnimateRequest['kind'] = 'talk') =>
+      api.post(`/api/personas/${personaId}/animate`, { kind } satisfies PersonaAnimateRequest),
   },
 
   // Council (review + proposal voting)
   council: {
     reviewGlobal: () => api.post('/api/council/review-global', {}),
     weekly: () => api.post('/api/council/weekly', {}),
-    vote: (data: { dtuId?: string; proposalId?: string; vote: 'approve' | 'reject'; reason?: string }) =>
+    vote: (data: VoteRequest & { proposalId?: string }) =>
       api.post('/api/council/vote', data),
     tally: (dtuId: string) => api.get(`/api/council/tally/${dtuId}`),
-    credibility: (data: { dtuId: string }) =>
+    credibility: (data: CredibilityRequest) =>
       api.post('/api/council/credibility', data),
     proposePromotion: (dtuId: string, reason?: string) =>
       api.post('/api/council/propose-promotion', { dtuId, reason }),
@@ -420,6 +475,22 @@ export const apiHelpers = {
   // Note: Marketplace is defined in v4.0 APIs section below
 
   // Global feed
+  universe: {
+    stats: () => api.get('/api/universe/stats'),
+    dtus: (params?: { domain?: string; limit?: number }) => api.get('/api/universe/dtus', { params }),
+    initialize: (data: { mode: string; domains?: string[] }) => api.post('/api/universe/initialize', data),
+    preferences: (prefs: Record<string, unknown>) => api.put('/api/universe/preferences', prefs),
+  },
+
+  globalTimeline: {
+    browse: (params?: { domain?: string; search?: string; page?: number }) => api.get('/api/global/browse', { params }),
+    submit: (data: { dtuId: string; reason?: string }) => api.post('/api/global/submit', data),
+    sync: (data: { dtuIds: string[] }) => api.post('/api/global/sync', data),
+    review: (data: { submissionId: string; action: string; reason?: string }) => api.post('/api/global/review', data),
+    queue: () => api.get('/api/global/queue'),
+    contributions: () => api.get('/api/global/contributions'),
+  },
+
   global: {
     feed: () => api.get('/api/global/feed'),
     // "Everything Real" paginated endpoints
@@ -614,6 +685,28 @@ export const apiHelpers = {
       api.post('/api/stripe/connect/onboard', { user_id: userId }),
     connectStatus: (userId?: string) =>
       api.get('/api/stripe/connect/status', { params: { user_id: userId } }),
+
+    // Merit Credit Score
+    meritScore: (userId: string) =>
+      api.get(`/api/economy/merit-score/${userId}`),
+
+    // Royalty Cascade Visualization
+    royaltyCascade: (dtuId: string) =>
+      api.get(`/api/economy/royalty-cascade/${dtuId}`),
+    creatorRoyalties: (creatorId: string, params?: { limit?: number; offset?: number }) =>
+      api.get(`/api/economy/royalties/creator/${creatorId}`, { params }),
+
+    // Admin Treasury Dashboard
+    adminTreasury: () =>
+      api.get('/api/admin/treasury'),
+
+    // Invoice DTU creation
+    createInvoice: (data: { lineItems: Array<{ description: string; quantity: number; unitPrice: number }>; taxRate?: number; dueDate?: string; payerName?: string; payeeName?: string; notes?: string; currency?: string }) =>
+      api.post('/api/economy/invoice', data),
+
+    // Tax summary DTU generation
+    createTaxSummary: (data?: { year?: number }) =>
+      api.post('/api/economy/tax-summary', data || {}),
   },
 
   // Macros
@@ -634,22 +727,49 @@ export const apiHelpers = {
     listings: () => api.get('/api/marketplace/listings'),
     browse: (params?: { search?: string; category?: string; page?: number }) =>
       api.get('/api/marketplace/browse', { params }),
-    submit: (data: { name: string; githubUrl: string; description?: string; category?: string }) =>
+    submit: (data: PluginSubmitRequest) =>
       api.post('/api/marketplace/submit', data),
-    install: (data: { pluginId?: string; fromGithub?: boolean; githubUrl?: string }) =>
+    install: (data: PluginInstallRequest) =>
       api.post('/api/marketplace/install', data),
     installed: () => api.get('/api/marketplace/installed'),
-    review: (data: { pluginId: string; rating: number; comment?: string }) =>
+    review: (data: PluginReviewRequest) =>
       api.post('/api/marketplace/review', data),
   },
 
   // Graph Queries
   graph: {
-    query: (dsl: string) => api.post('/api/graph/query', { dsl }),
-    visual: (params?: { tier?: string; limit?: number }) =>
+    query: (dsl: string) => api.post('/api/graph/query', { dsl } satisfies GraphQueryRequest),
+    visual: (params?: GraphVisualParams & { includeShadow?: boolean }) =>
       api.get('/api/graph/visual', { params }),
-    force: (params?: { centerNode?: string; depth?: number; maxNodes?: number }) =>
+    force: (params?: GraphForceParams) =>
       api.get('/api/graph/force', { params }),
+  },
+
+  // Feature 44: Prediction Markets (wired to LOAF hypothesis market)
+  predictions: {
+    list: (params?: { state?: string; domain?: string }) =>
+      api.get('/api/predictions', { params }),
+    create: (data: { claim: string; evidence?: Array<{ text: string; confidence?: number }>; domain?: string }) =>
+      api.post('/api/predictions', data),
+    resolve: (id: string) =>
+      api.post(`/api/predictions/${id}/resolve`, {}),
+    leaderboard: (params?: { limit?: number }) =>
+      api.get('/api/predictions/leaderboard', { params }),
+  },
+
+  // Feature 45: Plugin Manager
+  plugins: {
+    list: () => api.get('/api/plugins'),
+    get: (pluginId: string) => api.get(`/api/plugins/${pluginId}`),
+    metrics: () => api.get('/api/plugins/metrics'),
+    remove: (pluginId: string) => api.delete(`/api/plugins/${pluginId}`),
+  },
+
+  // Feature 46: Macro Explorer
+  adminMacros: {
+    all: () => api.get('/api/admin/macros'),
+    domains: () => api.get('/api/macros/domains'),
+    byDomain: (domain: string) => api.get(`/api/macros/${domain}`),
   },
 
   // Schema System
@@ -696,7 +816,7 @@ export const apiHelpers = {
   // Automations
   automations: {
     list: () => api.get('/api/automations'),
-    create: (data: { name: string; trigger: unknown; actions: unknown[] }) =>
+    create: (data: CreateAutomationRequest) =>
       api.post('/api/automations', data),
     run: (id: string, triggerData?: unknown) =>
       api.post(`/api/automations/${id}/run`, triggerData || {}),
@@ -860,6 +980,8 @@ export const apiHelpers = {
   agents: {
     list: () => api.get('/api/agents'),
     get: (id: string) => api.get(`/api/agents/${id}`),
+    status: () => api.get('/api/agents/status'),
+    spawnResearch: (topic: string) => api.post('/api/agents/spawn-research', { topic }),
     create: (data: { name: string; type?: string; config?: Record<string, unknown> }) =>
       api.post('/api/agents', data),
     enable: (id: string) => api.post(`/api/agents/${id}/enable`, {}),
@@ -1032,10 +1154,10 @@ export const apiHelpers = {
 
   // Auth - uses httpOnly cookies (token also returned for non-browser clients)
   auth: {
-    login: (data: { username?: string; email?: string; password: string }) =>
+    login: (data: LoginRequest) =>
       api.post('/api/auth/login', data),
 
-    register: (data: { username: string; email: string; password: string }) =>
+    register: (data: RegisterRequest) =>
       api.post('/api/auth/register', data),
 
     logout: () => api.post('/api/auth/logout', {}),
@@ -1048,7 +1170,7 @@ export const apiHelpers = {
     // API key management (for programmatic access)
     apiKeys: {
       list: () => api.get('/api/auth/api-keys'),
-      create: (data: { name: string; scopes: string[] }) =>
+      create: (data: CreateApiKeyRequest) =>
         api.post('/api/auth/api-keys', data),
       delete: (id: string) => api.delete(`/api/auth/api-keys/${id}`),
     },
@@ -1233,6 +1355,57 @@ export const apiHelpers = {
     },
   },
 
+  // ---- Film Studio API ----
+  filmStudio: {
+    constants: () => api.get('/api/film-studio/constants'),
+    create: (data: Record<string, unknown>) => api.post('/api/film-studio/films', data),
+    get: (id: string) => api.get(`/api/film-studio/films/${id}`),
+    update: (id: string, data: Record<string, unknown>) => api.put(`/api/film-studio/films/${id}`, data),
+    preview: (id: string) => api.get(`/api/film-studio/films/${id}/preview`),
+    previewAnalytics: (id: string) => api.get(`/api/film-studio/films/${id}/preview/analytics`),
+    components: (id: string) => api.get(`/api/film-studio/films/${id}/components`),
+    createComponent: (id: string, data: Record<string, unknown>) => api.post(`/api/film-studio/films/${id}/components`, data),
+    crew: (id: string) => api.get(`/api/film-studio/films/${id}/crew`),
+    addCrew: (id: string, data: Record<string, unknown>) => api.post(`/api/film-studio/films/${id}/crew`, data),
+    discover: (params?: Record<string, unknown>) => api.get('/api/film-studio/discover', { params }),
+    remixes: (id: string) => api.get(`/api/film-studio/films/${id}/remixes`),
+    createRemix: (id: string, data: Record<string, unknown>) => api.post(`/api/film-studio/films/${id}/remixes`, data),
+    series: (id: string) => api.get(`/api/film-studio/films/${id}/series`),
+    createSeries: (data: Record<string, unknown>) => api.post('/api/film-studio/series', data),
+    watchParty: {
+      create: (data: Record<string, unknown>) => api.post('/api/film-studio/watch-parties', data),
+      join: (id: string) => api.post(`/api/film-studio/watch-parties/${id}/join`),
+    },
+    analytics: (id: string) => api.get(`/api/film-studio/films/${id}/analytics`),
+    gift: (data: Record<string, unknown>) => api.post('/api/film-studio/gift', data),
+  },
+
+  // ---- Media Upload API ----
+  media: {
+    upload: (data: Record<string, unknown>) => api.post('/api/media/upload', data),
+    uploadUrl: (data: Record<string, unknown>) => api.post('/api/media/upload/url', data),
+    get: (id: string) => api.get(`/api/media/${id}`),
+    stream: (id: string) => api.get(`/api/media/${id}/stream`),
+    thumbnail: (id: string) => api.get(`/api/media/${id}/thumbnail`),
+    transcode: (id: string, data: Record<string, unknown>) => api.post(`/api/media/${id}/transcode`, data),
+    feed: (params?: Record<string, unknown>) => api.get('/api/media/feed', { params }),
+    view: (id: string) => api.post(`/api/media/${id}/view`),
+    like: (id: string) => api.post(`/api/media/${id}/like`),
+    comment: (id: string, data: Record<string, unknown>) => api.post(`/api/media/${id}/comment`, data),
+    comments: (id: string) => api.get(`/api/media/${id}/comments`),
+    delete: (id: string) => api.delete(`/api/media/${id}`),
+  },
+
+  // ---- Game API ----
+  game: {
+    profile: () => api.get('/api/game/profile'),
+    achievements: () => api.get('/api/game/achievements'),
+    challenges: () => api.get('/api/game/challenges'),
+    leaderboard: () => api.get('/api/game/leaderboard'),
+    completeQuest: (questId: string, xpReward?: number) =>
+      api.post(`/api/game/quests/${questId}/complete`, { xpReward: xpReward || 100 }),
+  },
+
   // ---- Generic Lens Artifact API + Manifest ----
   lens: {
     list: (domain: string, params?: { type?: string; search?: string; tags?: string; status?: string; limit?: number; offset?: number }) =>
@@ -1411,6 +1584,86 @@ export const apiHelpers = {
       api.post('/api/social/cite', { citedDtuId, citingDtuId }),
     getCitedBy: (dtuId: string) => api.get(`/api/social/cited-by/${dtuId}`),
     metrics: () => api.get('/api/social/metrics'),
+    // Posts
+    createPost: (data: Record<string, unknown>) => api.post('/api/social/post', data),
+    getPost: (postId: string) => api.get(`/api/social/post/${postId}`),
+    deletePost: (postId: string) => api.delete(`/api/social/post/${postId}`),
+    getUserPosts: (userId: string, params?: Record<string, unknown>) =>
+      api.get(`/api/social/posts/${userId}`, { params }),
+    // Reactions, Comments, Shares
+    react: (data: { postId: string; type?: string }) => api.post('/api/social/react', data),
+    getReactions: (postId: string) => api.get(`/api/social/reactions/${postId}`),
+    comment: (data: { postId: string; content: string; parentCommentId?: string }) =>
+      api.post('/api/social/comment', data),
+    deleteComment: (postId: string, commentId: string) =>
+      api.delete(`/api/social/comment/${postId}/${commentId}`),
+    getComments: (postId: string, params?: Record<string, unknown>) =>
+      api.get(`/api/social/comments/${postId}`, { params }),
+    share: (data: { postId: string; commentary?: string }) => api.post('/api/social/share', data),
+    getShares: (postId: string) => api.get(`/api/social/shares/${postId}`),
+    // Bookmarks
+    bookmark: (data: { postId: string }) => api.post('/api/social/bookmark', data),
+    getBookmarks: (params?: Record<string, unknown>) => api.get('/api/social/bookmarks', { params }),
+    // Feeds
+    getForYouFeed: (params?: Record<string, unknown>) => api.get('/api/social/feed/foryou', { params }),
+    getFollowingFeed: (params?: Record<string, unknown>) => api.get('/api/social/feed/following', { params }),
+    getExploreFeed: (params?: Record<string, unknown>) => api.get('/api/social/feed/explore', { params }),
+    // DMs
+    sendDM: (data: { toUserId: string; content: string; mediaUrl?: string }) =>
+      api.post('/api/social/dm', data),
+    getConversations: () => api.get('/api/social/dm/conversations'),
+    getMessages: (conversationId: string, params?: Record<string, unknown>) =>
+      api.get(`/api/social/dm/${conversationId}`, { params }),
+    markDMRead: (conversationId: string) => api.post(`/api/social/dm/${conversationId}/read`),
+    // Notifications
+    getNotifications: (params?: Record<string, unknown>) =>
+      api.get('/api/social/notifications', { params }),
+    markNotificationRead: (id: string) => api.post(`/api/social/notifications/${id}/read`),
+    markAllNotificationsRead: () => api.post('/api/social/notifications/read-all'),
+    getUnreadCount: () => api.get('/api/social/notifications/count'),
+    deleteNotification: (id: string) => api.delete(`/api/social/notifications/${id}`),
+    // Stories
+    getStories: (params?: Record<string, unknown>) => api.get('/api/social/stories', { params }),
+    viewStory: (storyId: string) => api.post(`/api/social/stories/${storyId}/view`),
+    // Polls
+    votePoll: (data: { postId: string; optionIndex: number }) => api.post('/api/social/poll/vote', data),
+    getPollResults: (postId: string) => api.get(`/api/social/poll/${postId}`),
+    // Topics
+    getTrendingTopics: (params?: Record<string, unknown>) =>
+      api.get('/api/social/topics/trending', { params }),
+    getPostsByTopic: (topic: string, params?: Record<string, unknown>) =>
+      api.get(`/api/social/topics/${topic}`, { params }),
+    // Groups
+    createGroup: (data: Record<string, unknown>) => api.post('/api/social/group', data),
+    joinGroup: (groupId: string) => api.post(`/api/social/group/${groupId}/join`),
+    leaveGroup: (groupId: string) => api.post(`/api/social/group/${groupId}/leave`),
+    getGroupFeed: (groupId: string, params?: Record<string, unknown>) =>
+      api.get(`/api/social/group/${groupId}/feed`, { params }),
+    postToGroup: (groupId: string, data: Record<string, unknown>) =>
+      api.post(`/api/social/group/${groupId}/post`, data),
+    listGroups: (params?: Record<string, unknown>) => api.get('/api/social/groups', { params }),
+    getGroupMembers: (groupId: string) => api.get(`/api/social/group/${groupId}/members`),
+    // Analytics
+    getCreatorAnalytics: () => api.get('/api/social/analytics/creator'),
+    getPostAnalytics: (postId: string) => api.get(`/api/social/analytics/post/${postId}`),
+    // Streak
+    getStreak: () => api.get('/api/social/streak'),
+    // Commerce
+    tagListing: (data: { postId: string; listingId: string }) =>
+      api.post('/api/social/commerce/tag', data),
+    getPostSales: (postId: string) => api.get(`/api/social/commerce/post/${postId}/sales`),
+    getPostEarnings: (postId: string) => api.get(`/api/social/commerce/post/${postId}/earnings`),
+    // Pin
+    pin: (data: { postId: string }) => api.post('/api/social/pin', data),
+    unpin: (postId: string) => api.delete(`/api/social/pin/${postId}`),
+    getPinnedPosts: (userId: string) => api.get(`/api/social/pins/${userId}`),
+    // Watch time
+    recordWatchTime: (data: { postId: string; durationMs: number }) =>
+      api.post('/api/social/watchtime', data),
+    // Scheduling
+    schedulePost: (data: Record<string, unknown>) => api.post('/api/social/schedule', data),
+    getScheduledPosts: () => api.get('/api/social/scheduled'),
+    cancelScheduledPost: (postId: string) => api.delete(`/api/social/scheduled/${postId}`),
   },
 
   collab: {
@@ -1474,7 +1727,7 @@ export const apiHelpers = {
   },
 
   webhooks: {
-    register: (data: Record<string, unknown>) => api.post('/api/webhooks', data),
+    register: (data: CreateWebhookRequest) => api.post('/api/webhooks', data),
     list: () => api.get('/api/webhooks'),
     get: (id: string) => api.get(`/api/webhooks/${id}`),
     delete: (id: string) => api.delete(`/api/webhooks/${id}`),
@@ -1558,6 +1811,28 @@ export const apiHelpers = {
     /** Birth a new entity */
     birth: (species?: string, lineage?: string) =>
       api.post('/api/entity-growth/birth', { species, lineage }),
+
+    /** Get full entity profile with body, emotions, economy, death risk */
+    fullProfile: (entityId: string) => api.get(`/api/entity-growth/${entityId}/full-profile`),
+
+    /** Get entity earnings (Feature 6: Marketplace Participation) */
+    earnings: (entityId: string) => api.get(`/api/entity/${entityId}/earnings`),
+
+    /** Get entity lifecycle events (Feature 8: Lifecycle Display) */
+    lifecycle: (entityId: string) => api.get(`/api/entity/${entityId}/lifecycle`),
+
+    /** Entity creates a social post (Feature 12: Cross-Substrate Social) */
+    createPost: (entityId: string, content: string, tags?: string[]) =>
+      api.post(`/api/entity/${entityId}/post`, { content, tags }),
+  },
+
+  /** Death Registry & Memorials */
+  deaths: {
+    /** List all death records */
+    registry: () => api.get('/api/deaths/registry'),
+
+    /** Get all memorials for deceased entities */
+    memorials: () => api.get('/api/deaths/memorials'),
   },
 
   exploration: {
@@ -1714,6 +1989,84 @@ export const apiHelpers = {
     reject: (id: string, reason: string) =>
       api.post(`/api/admin/promotion/${id}/reject`, { reason }),
     history: () => api.get('/api/admin/promotion/history'),
+    /** Shadow DTU promotion endpoints */
+    shadowPending: () => api.get('/api/dtus/shadow/pending'),
+    promoteShadow: (id: string, force?: boolean) =>
+      api.post(`/api/dtus/${id}/promote`, { force: !!force }),
+    promotionQueue: () => api.get('/api/dtus/promotion/queue'),
+  },
+
+  /** Breakthrough Clusters */
+  breakthrough: {
+    list: () => api.get('/api/breakthrough/list'),
+    status: (clusterId: string) => api.get(`/api/breakthrough/status/${clusterId}`),
+    metrics: () => api.get('/api/breakthrough/metrics'),
+    dtus: (clusterId: string) => api.get(`/api/breakthrough/dtus/${clusterId}`),
+    init: (clusterId: string) => api.post(`/api/breakthrough/init/${clusterId}`, {}),
+    research: (clusterId: string) => api.post(`/api/breakthrough/research/${clusterId}`, {}),
+  },
+
+  /** Entity Emergence Detection */
+  entityEmergence: {
+    status: () => api.get('/api/entity-emergence/status'),
+    scan: () => api.get('/api/entity-emergence/scan'),
+  },
+
+  /** Meta-Derivation Engine */
+  metaDerivation: {
+    status: () => api.get('/api/meta-derivation/status'),
+    invariants: () => api.get('/api/meta-derivation/invariants'),
+    convergences: () => api.get('/api/meta-derivation/convergences'),
+  },
+
+  /** Culture Layer */
+  culture: {
+    status: () => api.get('/api/culture/status'),
+  },
+
+  /** Foundation — Sovereignty modules */
+  foundation: {
+    status: () => api.get('/api/foundation/status'),
+    senseReadings: (limit = 50) => api.get('/api/foundation/sense/readings', { params: { limit } }),
+    sensePatterns: () => api.get('/api/foundation/sense/patterns'),
+    energyMap: () => api.get('/api/foundation/energy/map'),
+    energyGrid: () => api.get('/api/foundation/energy/grid'),
+    spectrumMap: () => api.get('/api/foundation/spectrum/map'),
+    spectrumAvailable: (limit = 50) => api.get('/api/foundation/spectrum/available', { params: { limit } }),
+    emergencyStatus: () => api.get('/api/foundation/emergency/status'),
+    neuralReadiness: () => api.get('/api/foundation/neural/readiness'),
+    protocolStats: () => api.get('/api/foundation/protocol/stats'),
+  },
+
+  /** Atlas Tomography — Spatial mapping and signals */
+  atlasTomography: {
+    tile: (lat: number, lng: number) => api.get('/api/atlas/tile', { params: { lat, lng } }),
+    coverage: () => api.get('/api/atlas/coverage'),
+    material: (lat: number, lng: number) => api.get('/api/atlas/material', { params: { lat, lng } }),
+    volume: (bounds: { lat_min: number; lat_max: number; lng_min: number; lng_max: number }, tier = 'PUBLIC') =>
+      api.get('/api/atlas/volume', { params: { ...bounds, tier } }),
+    subsurface: (bounds: { lat_min: number; lat_max: number; lng_min: number; lng_max: number }) =>
+      api.get('/api/atlas/subsurface', { params: bounds }),
+    change: (params?: Record<string, unknown>) => api.get('/api/atlas/change', { params }),
+    live: () => api.get('/api/atlas/live'),
+    signalsTaxonomy: (category = 'all', limit = 50) =>
+      api.get('/api/atlas/signals/taxonomy', { params: { category, limit } }),
+    signalsUnknown: (limit = 50) => api.get('/api/atlas/signals/unknown', { params: { limit } }),
+    signalsAnomalies: (limit = 50) => api.get('/api/atlas/signals/anomalies', { params: { limit } }),
+    signalsSpectrum: () => api.get('/api/atlas/signals/spectrum'),
+  },
+
+  /** Qualia — Sensory / Body / Presence */
+  qualia: {
+    state: (entityId: string) => api.get(`/api/qualia/state/${entityId}`),
+    summary: (entityId: string) => api.get(`/api/qualia/summary/${entityId}`),
+    all: () => api.get('/api/qualia/all'),
+    registry: () => api.get('/api/qualia/registry'),
+    channels: (entityId: string) => api.get(`/api/qualia/senses/channels/${entityId}`),
+    presence: (entityId: string) => api.get(`/api/qualia/presence/${entityId}`),
+    embodiment: (entityId: string) => api.get(`/api/qualia/embodiment/${entityId}`),
+    planetary: (entityId: string) => api.get(`/api/qualia/planetary/${entityId}`),
+    senses: (entityId: string) => api.get(`/api/qualia/senses/${entityId}`),
   },
 
   // ═══════════════════════════════════════════════════════════════
@@ -1747,6 +2100,11 @@ export const apiHelpers = {
       api.post('/api/marketplace/purchaseWithRoyalties', { dtuId }),
     royalties: (userId?: string) =>
       api.get(userId ? `/api/marketplace/royalties/${userId}` : '/api/marketplace/royalties'),
+    megaComponents: (id: string) => api.get(`/api/marketplace/mega/${id}/components`),
+    deltaPrice: (id: string, userId: string) =>
+      api.get(`/api/marketplace/${id}/delta-price`, { params: { userId } }),
+    purchase: (id: string, data: { buyerId: string; requestId?: string }) =>
+      api.post(`/api/marketplace/${id}/purchase`, data),
   },
 
   /** Cognitive dreams */
@@ -1768,6 +2126,16 @@ export const apiHelpers = {
   marketplaceSubmit: {
     submit: (dtuId: string, price?: number) =>
       api.post('/api/marketplace/submit', { dtuId, price }),
+  },
+
+  /** User bookmarks — persist across sessions */
+  bookmarks: {
+    list: (domain?: string) =>
+      api.get('/api/user/bookmarks', { params: domain ? { domain } : {} }).then(r => r.data),
+    create: (data: { targetId: string; targetType: string; domain: string; metadata?: Record<string, unknown> }) =>
+      api.post('/api/user/bookmarks', data).then(r => r.data),
+    remove: (id: string) =>
+      api.delete(`/api/user/bookmarks/${id}`).then(r => r.data),
   },
 };
 
@@ -1898,3 +2266,11 @@ export const sharedSessionDetails = (sessionId: string) =>
   api.get(`/api/shared-session/${sessionId}`).then(r => r.data);
 
 export default api;
+
+// Re-export extended API helpers — these cover atlas, admin, brain, RBAC,
+// compliance, physics, onboarding, species, federation, quests, plugins, etc.
+export {
+  atlasApi, adminApi, dtusApi, collabApi, socialApi, rbacApi,
+  complianceApi, aiApi, brainApi, speciesApi, federationApi,
+  questApi, onboardingApi, physicsApi, analyticsApi, systemApi, pluginsApi,
+} from './helpers-extended';

@@ -10,13 +10,14 @@
 import { useState } from 'react';
 import {
   Coins, Gift, Search, GitFork, Award, Upload,
-  Star, ChevronDown, X, Sparkles, Target,
+  X, Sparkles, Target, ExternalLink,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   useTip, useCreateDTU, usePostBounty, useForkDTU,
   useMeritCredit, useDTUSearch,
 } from '@/hooks/useConnectiveTissue';
+import { DTUDetailView } from '@/components/dtu/DTUDetailView';
 
 interface ConnectiveTissueBarProps {
   lensId: string;
@@ -28,11 +29,13 @@ export function ConnectiveTissueBar({ lensId, userId, className }: ConnectiveTis
   const [activePanel, setActivePanel] = useState<string | null>(null);
   const [tipAmount, setTipAmount] = useState('1');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedDtuId, setSelectedDtuId] = useState<string | null>(null);
 
   const tipMutation = useTip();
   const createDTUMutation = useCreateDTU();
   const postBountyMutation = usePostBounty();
   const forkMutation = useForkDTU();
+  const { data: searchData } = useDTUSearch({ query: searchQuery, lensId });
   const { data: meritData } = useMeritCredit(userId || '');
 
   const togglePanel = (panel: string) => {
@@ -134,6 +137,21 @@ export function ConnectiveTissueBar({ lensId, userId, className }: ConnectiveTis
             <Target className="w-4 h-4 text-neon-purple" />
             <span className="text-gray-300">95% creator share on all sales</span>
           </div>
+          <button
+            onClick={() => {
+              if (!userId) return;
+              createDTUMutation.mutate({
+                lensId,
+                creatorId: userId,
+                title: 'New DTU',
+                content: 'New DTU',
+              });
+            }}
+            disabled={createDTUMutation.isPending}
+            className="mt-2 px-3 py-1 bg-neon-cyan/20 text-neon-cyan rounded text-sm hover:bg-neon-cyan/30 transition"
+          >
+            {createDTUMutation.isPending ? 'Publishing...' : 'Publish'}
+          </button>
         </Panel>
       )}
 
@@ -142,19 +160,7 @@ export function ConnectiveTissueBar({ lensId, userId, className }: ConnectiveTis
           <p className="text-xs text-gray-400 mb-2">
             Escrow CC for someone to solve your problem. Answer becomes a sellable DTU.
           </p>
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              className="flex-1 px-2 py-1 bg-black/40 border border-white/10 rounded text-sm text-white"
-              placeholder="What do you need?"
-            />
-            <input
-              type="number"
-              min="1"
-              className="w-20 px-2 py-1 bg-black/40 border border-white/10 rounded text-sm text-white"
-              placeholder="CC"
-            />
-          </div>
+          <BountyForm lensId={lensId} userId={userId} postBountyMutation={postBountyMutation} />
         </Panel>
       )}
 
@@ -169,9 +175,27 @@ export function ConnectiveTissueBar({ lensId, userId, className }: ConnectiveTis
               placeholder="Search across all lenses..."
             />
           </div>
-          <p className="text-xs text-gray-500 mt-1">
-            Results ranked by CRETI score. Filter by lens, tier, or price.
-          </p>
+          {searchData?.data?.results && searchData.data.results.length > 0 ? (
+            <div className="mt-2 space-y-1 max-h-40 overflow-y-auto">
+              {searchData.data.results.map((r: { id: string; title?: string; score?: number }) => (
+                <button
+                  key={r.id}
+                  onClick={() => setSelectedDtuId(r.id)}
+                  className="w-full text-xs text-gray-300 flex items-center justify-between p-1.5 rounded bg-white/5 hover:bg-white/10 transition-colors cursor-pointer"
+                >
+                  <span className="truncate text-neon-cyan">{r.title || r.id}</span>
+                  <span className="flex items-center gap-1 flex-shrink-0 ml-2">
+                    {r.score !== undefined && <span className="text-gray-500">{r.score.toFixed(2)}</span>}
+                    <ExternalLink className="w-3 h-3 text-gray-500" />
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-500 mt-1">
+              Results ranked by CRETI score. Filter by lens, tier, or price.
+            </p>
+          )}
         </Panel>
       )}
 
@@ -181,7 +205,25 @@ export function ConnectiveTissueBar({ lensId, userId, className }: ConnectiveTis
             Create a derivative work. The original creator automatically earns
             royalties from all sales of your fork.
           </p>
+          <button
+            onClick={() => {
+              forkMutation.mutate({ forkerId: userId || 'anonymous', originalDtuId: 'target_dtu', lensId });
+            }}
+            disabled={forkMutation.isPending}
+            className="mt-2 px-3 py-1 bg-yellow-400/20 text-yellow-400 rounded text-sm hover:bg-yellow-400/30 transition"
+          >
+            {forkMutation.isPending ? 'Forking...' : 'Fork Selected DTU'}
+          </button>
         </Panel>
+      )}
+
+      {/* DTU Detail View modal */}
+      {selectedDtuId && (
+        <DTUDetailView
+          dtuId={selectedDtuId}
+          onClose={() => setSelectedDtuId(null)}
+          onNavigate={(id) => setSelectedDtuId(id)}
+        />
       )}
     </div>
   );
@@ -213,6 +255,50 @@ function ActionButton({
       <Icon className={cn("w-3.5 h-3.5", color)} />
       <span>{label}</span>
     </button>
+  );
+}
+
+function BountyForm({ lensId, userId, postBountyMutation }: { lensId: string; userId?: string; postBountyMutation: ReturnType<typeof usePostBounty> }) {
+  const [bountyDesc, setBountyDesc] = useState('');
+  const [bountyAmount, setBountyAmount] = useState('');
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          value={bountyDesc}
+          onChange={e => setBountyDesc(e.target.value)}
+          className="flex-1 px-2 py-1 bg-black/40 border border-white/10 rounded text-sm text-white"
+          placeholder="What do you need?"
+        />
+        <input
+          type="number"
+          min="1"
+          value={bountyAmount}
+          onChange={e => setBountyAmount(e.target.value)}
+          className="w-20 px-2 py-1 bg-black/40 border border-white/10 rounded text-sm text-white"
+          placeholder="CC"
+        />
+      </div>
+      <button
+        onClick={() => {
+          if (!bountyDesc.trim() || !userId) return;
+          postBountyMutation.mutate({
+            lensId,
+            posterId: userId || 'anonymous',
+            title: bountyDesc.trim().slice(0, 60),
+            description: bountyDesc.trim(),
+            amount: parseFloat(bountyAmount) || 1,
+          });
+          setBountyDesc('');
+          setBountyAmount('');
+        }}
+        disabled={postBountyMutation.isPending || !bountyDesc.trim()}
+        className="px-3 py-1 bg-neon-purple/20 text-neon-purple rounded text-sm hover:bg-neon-purple/30 transition disabled:opacity-50"
+      >
+        {postBountyMutation.isPending ? 'Posting...' : 'Post Bounty'}
+      </button>
+    </div>
   );
 }
 

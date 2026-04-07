@@ -42,9 +42,21 @@ import { DISTRICTS } from "./districts.js";
  * activation/working-set pipeline so different lenses get the context
  * shape they need.
  */
+/**
+ * Canonical tier weights — HYPER and MEGA DTUs are preferentially cited.
+ * These weights are applied as score multipliers during context assembly.
+ */
+export const TIER_WEIGHTS = Object.freeze({
+  hyper: 2.0,
+  mega: 1.5,
+  regular: 1.0,
+  shadow: 0.6,
+  archive: 0.3,
+});
+
 export const CONTEXT_PROFILES = Object.freeze({
   research: {
-    tierMultiplier: { hyper: 1.5, mega: 1.2, regular: 1.0, shadow: 0.5 },
+    tierMultiplier: { ...TIER_WEIGHTS },
     decayRate: 0.001,
     maxWorkingSet: 50,
     spreadDecay: 0.6,
@@ -52,7 +64,7 @@ export const CONTEXT_PROFILES = Object.freeze({
     activationBonuses: {},
   },
   chat: {
-    tierMultiplier: { hyper: 1.0, mega: 1.0, regular: 1.0, shadow: 0.8 },
+    tierMultiplier: { ...TIER_WEIGHTS },
     decayRate: 0.005,        // faster decay — conversational context is short-term
     maxWorkingSet: 30,
     spreadDecay: 0.6,
@@ -60,7 +72,7 @@ export const CONTEXT_PROFILES = Object.freeze({
     activationBonuses: {},
   },
   thread: {
-    tierMultiplier: { hyper: 1.0, mega: 1.0, regular: 1.0, shadow: 1.0 },
+    tierMultiplier: { ...TIER_WEIGHTS },
     decayRate: 0.001,
     maxWorkingSet: 50,
     spreadDecay: 0.6,
@@ -68,7 +80,7 @@ export const CONTEXT_PROFILES = Object.freeze({
     activationBonuses: {},
   },
   explorer: {
-    tierMultiplier: { hyper: 1.0, mega: 1.0, regular: 1.0, shadow: 1.0 },
+    tierMultiplier: { ...TIER_WEIGHTS },
     decayRate: 0.001,
     maxWorkingSet: 100,
     spreadDecay: 0.4,        // lower decay → activation spreads further
@@ -76,7 +88,7 @@ export const CONTEXT_PROFILES = Object.freeze({
     activationBonuses: {},
   },
   marketplace: {
-    tierMultiplier: { hyper: 1.0, mega: 1.0, regular: 1.0, shadow: 0.5 },
+    tierMultiplier: { ...TIER_WEIGHTS, shadow: 0.5 },
     decayRate: 0.001,
     maxWorkingSet: 50,
     spreadDecay: 0.6,
@@ -306,10 +318,11 @@ function tokenize(text) {
 // ── Tier Multiplier Application ────────────────────────────────────────────
 
 function applyTierMultiplier(STATE, dtuId, score, profile) {
-  const dtu = STATE.dtus?.get(dtuId);
+  // Check both canonical and shadow stores
+  const dtu = STATE.dtus?.get(dtuId) || STATE.shadowDtus?.get(dtuId);
   if (!dtu || !profile.tierMultiplier) return score;
 
-  const tier = dtu.tier || dtu.meta?.tier || "regular";
+  const tier = (dtu.tier || dtu.meta?.tier || "regular").toLowerCase();
   const multiplier = profile.tierMultiplier[tier] || 1.0;
   return Math.min(1.0, score * multiplier);
 }

@@ -2,6 +2,7 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Atom, Zap, Waves, RotateCcw, Play, Shuffle, Loader2, Layers, ChevronDown } from 'lucide-react';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { apiHelpers } from '@/lib/api/client';
@@ -20,11 +21,44 @@ interface SimResultData {
   gates: string[];
 }
 
+// Compute probability amplitudes from a measurement outcome
+// For a uniform superposition, each basis state has equal probability 1/2^n
+// We display the top amplitudes weighted toward the measured state
+function computeAmplitudes(result: string, qubits: number): { state: string; prob: number; phase: number }[] {
+  const totalStates = 2 ** qubits;
+  const displayCount = Math.min(totalStates, 8);
+  const amplitudes: { state: string; prob: number; phase: number }[] = [];
+  const measuredVal = parseInt(result, 2);
+
+  for (let i = 0; i < displayCount; i++) {
+    const stateStr = i.toString(2).padStart(qubits, '0');
+    const isMeasured = i === measuredVal;
+    // Collapsed: measured state = 1.0, others = 0
+    amplitudes.push({
+      state: stateStr,
+      prob: isMeasured ? 1.0 : 0.0,
+      phase: isMeasured ? 0 : Math.random() * 360,
+    });
+  }
+  return amplitudes;
+}
+
+// Pre-measurement: equal superposition
+function computeSuperpositionAmplitudes(qubits: number): { state: string; prob: number }[] {
+  const totalStates = 2 ** qubits;
+  const displayCount = Math.min(totalStates, 8);
+  const prob = 1 / totalStates;
+  return Array.from({ length: displayCount }, (_, i) => ({
+    state: i.toString(2).padStart(qubits, '0'),
+    prob,
+  }));
+}
+
 export default function QuantumLensPage() {
   useLensNav('quantum');
   const [qubits, setQubits] = useState(4);
   const [result, setResult] = useState<string | null>(null);
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
   const { latestData: realtimeData, isLive, lastUpdated, insights } = useRealtimeLens('quantum');
 
   const { items: circuitItems, isLoading: circuitsLoading, isError: isError, error: error, refetch: refetch, create: saveResult } = useLensData<SimResultData>('quantum', 'sim-result', {
@@ -89,7 +123,7 @@ export default function QuantumLensPage() {
     );
   }
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="quantum" className="p-6 space-y-6">
       <header className="flex items-center gap-3">
         <span className="text-2xl">\u269B\uFE0F</span>
         <div>
@@ -144,12 +178,40 @@ export default function QuantumLensPage() {
               min="1"
               max="8"
               value={qubits}
-              onChange={(e) => setQubits(Number(e.target.value))}
+              onChange={(e) => { setQubits(Number(e.target.value)); setResult(null); }}
               className="w-32"
             />
             <span className="font-mono">{qubits}</span>
           </label>
         </div>
+
+        {/* Text-based circuit diagram */}
+        <div className="mb-4 p-3 bg-black/40 rounded-lg border border-white/10 font-mono text-xs overflow-x-auto">
+          <p className="text-gray-500 mb-2 text-[10px] uppercase tracking-wider">Circuit Diagram</p>
+          {Array.from({ length: qubits }, (_, qi) => (
+            <div key={qi} className="flex items-center gap-0 text-gray-300 mb-1 whitespace-nowrap">
+              <span className="text-neon-purple w-10 shrink-0">q[{qi}]:</span>
+              <span className="text-gray-600">─</span>
+              <span className="px-1 py-0 border border-neon-purple/50 rounded text-neon-purple bg-neon-purple/10">H</span>
+              <span className="text-gray-600">────</span>
+              {qi < qubits - 1 ? (
+                <>
+                  <span className="text-neon-cyan">●</span>
+                  <span className="text-gray-600">──</span>
+                </>
+              ) : (
+                <>
+                  <span className="text-neon-cyan px-0.5 border border-neon-cyan/50 rounded bg-neon-cyan/10">⊕</span>
+                  <span className="text-gray-600">──</span>
+                </>
+              )}
+              <span className="px-1 py-0 border border-yellow-500/50 rounded text-yellow-400 bg-yellow-500/10">M</span>
+              <span className="text-gray-600">─▶</span>
+              <span className="text-gray-500 ml-1">c[{qi}]</span>
+            </div>
+          ))}
+        </div>
+
         <div className="flex gap-2 mb-4 flex-wrap">
           {circuits.map((gate) => (
             <div key={gate.name} className="lens-card text-center p-3">
@@ -159,6 +221,30 @@ export default function QuantumLensPage() {
             </div>
           ))}
         </div>
+
+        {/* Pre-measurement amplitude bars (superposition) */}
+        {!result && (
+          <div className="mb-4">
+            <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Probability Amplitudes (pre-measurement)</p>
+            <div className="space-y-1">
+              {computeSuperpositionAmplitudes(qubits).map(({ state, prob }) => (
+                <div key={state} className="flex items-center gap-2">
+                  <span className="font-mono text-[11px] text-gray-400 w-12 shrink-0">|{state}⟩</span>
+                  <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-neon-purple/70 rounded-full"
+                      style={{ width: `${Math.round(prob * 100)}%` }}
+                    />
+                  </div>
+                  <span className="font-mono text-[11px] text-neon-purple w-10 text-right">
+                    {(prob * 100).toFixed(1)}%
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="flex gap-2">
           <button
             onClick={() => runSimulation.mutate()}
@@ -177,14 +263,82 @@ export default function QuantumLensPage() {
         </div>
       </div>
 
-      {/* Result */}
-      {result && (
-        <div className="panel p-6 text-center">
-          <h3 className="text-sm text-gray-400 mb-2">Measurement Result</h3>
-          <p className="text-4xl font-mono text-neon-cyan tracking-widest">|{result}\u27E9</p>
-          <p className="text-sm text-gray-500 mt-2">Collapsed from superposition</p>
-        </div>
-      )}
+      {/* Result + Post-measurement amplitudes */}
+      <AnimatePresence>
+        {result && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.25 }}
+            className="panel p-6 space-y-5"
+          >
+            {/* Measurement outcome */}
+            <div className="text-center">
+              <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Measurement Result</p>
+              <motion.p
+                key={result}
+                initial={{ scale: 0.85, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="text-4xl font-mono text-neon-cyan tracking-widest"
+              >
+                |{result}⟩
+              </motion.p>
+              <p className="text-sm text-gray-500 mt-2">
+                Wavefunction collapsed — {qubits}-qubit register measured
+              </p>
+            </div>
+
+            {/* Post-collapse amplitude bars */}
+            <div>
+              <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Post-Measurement Amplitudes</p>
+              <div className="space-y-1.5">
+                {computeAmplitudes(result, qubits).map(({ state, prob }) => {
+                  const isMeasured = state === result;
+                  return (
+                    <div key={state} className="flex items-center gap-2">
+                      <span className={`font-mono text-[11px] w-12 shrink-0 ${isMeasured ? 'text-neon-cyan' : 'text-gray-600'}`}>
+                        |{state}⟩
+                      </span>
+                      <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${prob * 100}%` }}
+                          transition={{ duration: 0.4, delay: 0.1 }}
+                          className={`h-full rounded-full ${isMeasured ? 'bg-neon-cyan' : 'bg-gray-700'}`}
+                        />
+                      </div>
+                      <span className={`font-mono text-[11px] w-12 text-right ${isMeasured ? 'text-neon-cyan' : 'text-gray-600'}`}>
+                        {(prob * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Bit-by-bit breakdown */}
+            <div>
+              <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Qubit Readout</p>
+              <div className="flex gap-2 flex-wrap">
+                {result.split('').map((bit, idx) => (
+                  <div key={idx} className="flex flex-col items-center gap-1">
+                    <span className="text-[10px] text-gray-500">q[{idx}]</span>
+                    <span className={`font-mono text-lg font-bold px-2 py-1 rounded border ${
+                      bit === '1'
+                        ? 'text-neon-cyan border-neon-cyan/40 bg-neon-cyan/10'
+                        : 'text-gray-400 border-gray-600/40 bg-gray-800/30'
+                    }`}>
+                      {bit}
+                    </span>
+                    <span className="text-[10px] text-gray-500">{bit === '1' ? '|1⟩' : '|0⟩'}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Recent Simulations */}
       {recentSims.length > 0 && (
@@ -211,7 +365,7 @@ export default function QuantumLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

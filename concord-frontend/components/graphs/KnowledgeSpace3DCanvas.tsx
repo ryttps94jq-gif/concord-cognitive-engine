@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, useMemo, Suspense } from 'react';
+import { useRef, useState, useMemo, useEffect, Suspense } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Html, Stars, Line } from '@react-three/drei';
 import * as THREE from 'three';
@@ -154,8 +154,19 @@ function Scene({
   selectedNodeId?: string;
 }) {
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   const { camera } = useThree();
+
+  // Focus camera on selected node when selection changes
+  useEffect(() => {
+    if (selectedNodeId) {
+      const node = nodes.find(n => n.id === selectedNodeId);
+      if (node) {
+        const [tx, ty, tz] = node.position;
+        camera.lookAt(tx, ty, tz);
+      }
+    }
+  }, [selectedNodeId, nodes, camera]);
 
   // Create position map for edges
   const positionMap = useMemo(() => {

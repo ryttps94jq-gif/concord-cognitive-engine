@@ -5,7 +5,7 @@ import AtlasOverlay from '@/components/chat/AtlasOverlay';
 describe('AtlasOverlay', () => {
   it('renders loading state', () => {
     render(<AtlasOverlay query="What is here?" result={null} loading />);
-    expect(screen.getByText('Querying Atlas...')).toBeInTheDocument();
+    expect(screen.getByText(/Querying Atlas.*\.\.\./)).toBeInTheDocument();
   });
 
   it('returns null when result is null and not loading', () => {

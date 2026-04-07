@@ -1,9 +1,10 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
-import { api, apiHelpers } from '@/lib/api/client';
+import { apiHelpers } from '@/lib/api/client';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -51,7 +52,7 @@ interface Model {
   name: string;
   type: 'classification' | 'regression' | 'clustering' | 'generation' | 'embedding' | 'transformer';
   framework: 'pytorch' | 'tensorflow' | 'sklearn' | 'custom';
-  status: 'ready' | 'training' | 'failed' | 'deploying' | 'deployed';
+  status: 'ready' | 'training' | 'trained' | 'failed' | 'deploying' | 'deployed';
   version: string;
   accuracy?: number;
   f1Score?: number;
@@ -111,130 +112,10 @@ interface Deployment {
 type Tab = 'models' | 'experiments' | 'datasets' | 'deployments' | 'playground';
 type ViewMode = 'grid' | 'list';
 
-// Seed data
-const INITIAL_MODELS: Model[] = [
-  {
-    id: 'model-1',
-    name: 'DTU Classifier v3',
-    type: 'classification',
-    framework: 'pytorch',
-    status: 'deployed',
-    version: '3.2.1',
-    accuracy: 0.942,
-    f1Score: 0.938,
-    loss: 0.156,
-    parameters: 12500000,
-    size: '48 MB',
-    lastTrained: '2026-01-28',
-    description: 'Multi-class classification model for DTU categorization',
-    tags: ['production', 'classification', 'nlp'],
-    deployedAt: '2026-01-29',
-    endpoint: '/api/ml/infer/dtu-classifier'
-  },
-  {
-    id: 'model-2',
-    name: 'Embedding Model',
-    type: 'embedding',
-    framework: 'pytorch',
-    status: 'ready',
-    version: '2.0.0',
-    accuracy: 0.891,
-    parameters: 25000000,
-    size: '95 MB',
-    lastTrained: '2026-01-20',
-    description: 'Dense vector embeddings for semantic search',
-    tags: ['embeddings', 'search']
-  },
-  {
-    id: 'model-3',
-    name: 'Sentiment Analyzer',
-    type: 'classification',
-    framework: 'tensorflow',
-    status: 'training',
-    version: '1.5.0',
-    parameters: 8000000,
-    size: '32 MB',
-    description: 'Real-time sentiment analysis for user content',
-    tags: ['nlp', 'sentiment']
-  },
-  {
-    id: 'model-4',
-    name: 'Content Generator',
-    type: 'generation',
-    framework: 'pytorch',
-    status: 'ready',
-    version: '1.0.0',
-    parameters: 175000000,
-    size: '680 MB',
-    lastTrained: '2026-01-15',
-    description: 'GPT-style model for content generation',
-    tags: ['generation', 'llm']
-  },
-  {
-    id: 'model-5',
-    name: 'Anomaly Detector',
-    type: 'clustering',
-    framework: 'sklearn',
-    status: 'ready',
-    version: '2.1.0',
-    accuracy: 0.967,
-    parameters: 50000,
-    size: '2 MB',
-    lastTrained: '2026-01-25',
-    description: 'Isolation forest for anomaly detection',
-    tags: ['anomaly', 'security']
-  }
-];
+// Seed data — empty; all data comes from the backend API
+const INITIAL_MODELS: Model[] = [];
 
-const INITIAL_EXPERIMENTS: Experiment[] = [
-  {
-    id: 'exp-1',
-    name: 'DTU Classifier Hypertuning',
-    modelId: 'model-1',
-    status: 'running',
-    hyperparams: { learningRate: 0.001, batchSize: 32, epochs: 100, dropout: 0.3 },
-    metrics: Array.from({ length: 45 }, (_, i) => ({
-      epoch: i + 1,
-      trainLoss: 2.5 - (i * 0.04) + Math.sin(i * 1.5) * 0.05,
-      valLoss: 2.6 - (i * 0.035) + Math.sin(i * 2.1) * 0.07,
-      accuracy: 0.3 + (i * 0.014) + Math.sin(i * 1.8) * 0.01,
-      learningRate: 0.001 * Math.pow(0.95, Math.floor(i / 10))
-    })),
-    startedAt: '2026-02-05T10:30:00Z'
-  },
-  {
-    id: 'exp-2',
-    name: 'Embedding Model Fine-tune',
-    modelId: 'model-2',
-    status: 'completed',
-    hyperparams: { learningRate: 0.0005, batchSize: 64, epochs: 50, embeddingDim: 768 },
-    metrics: Array.from({ length: 50 }, (_, i) => ({
-      epoch: i + 1,
-      trainLoss: 1.8 - (i * 0.03),
-      valLoss: 1.9 - (i * 0.028),
-      accuracy: 0.5 + (i * 0.008),
-      learningRate: 0.0005
-    })),
-    startedAt: '2026-02-04T14:00:00Z',
-    completedAt: '2026-02-04T18:30:00Z',
-    duration: '4h 30m'
-  },
-  {
-    id: 'exp-3',
-    name: 'Sentiment v2 Training',
-    modelId: 'model-3',
-    status: 'running',
-    hyperparams: { learningRate: 0.002, batchSize: 16, epochs: 80, hiddenSize: 512 },
-    metrics: Array.from({ length: 23 }, (_, i) => ({
-      epoch: i + 1,
-      trainLoss: 1.5 - (i * 0.05),
-      valLoss: 1.6 - (i * 0.045),
-      accuracy: 0.4 + (i * 0.02),
-      learningRate: 0.002
-    })),
-    startedAt: '2026-02-05T08:00:00Z'
-  }
-];
+const INITIAL_EXPERIMENTS: Experiment[] = [];
 
 const INITIAL_DATASETS: Dataset[] = [];
 
@@ -269,7 +150,7 @@ export default function MLLensPage() {
   const [selectedExperiment, setSelectedExperiment] = useState<Experiment | null>(null);
   const [showNewExperiment, setShowNewExperiment] = useState(false);
   const [playgroundInput, setPlaygroundInput] = useState('');
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
   const [playgroundOutput, setPlaygroundOutput] = useState<unknown>(null);
   const [playgroundModel, setPlaygroundModel] = useState<string>('');
 
@@ -508,7 +389,7 @@ export default function MLLensPage() {
     );
   }
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="ml" className="p-6 space-y-6">
       {/* Header */}
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -1011,11 +892,14 @@ export default function MLLensPage() {
         )}
       </AnimatePresence>
 
+      <RealtimeDataPanel data={realtimeInsights} />
+      <UniversalActions domain="ml" artifactId={null} compact />
+
       {/* Lens Features */}
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />
@@ -1056,7 +940,7 @@ function MetricCard({ icon, label, value, trend, color }: { icon: React.ReactNod
   );
 }
 
-function ModelCard({ model, statusConfig, typeConfig, onSelect, onDeploy: _onDeploy, isDeploying: _isDeploying }: { model: Model; statusConfig: Record<string, Record<string, unknown>>; typeConfig: Record<string, Record<string, unknown>>; onSelect: () => void; onDeploy: () => void; isDeploying?: boolean }) {
+function ModelCard({ model, statusConfig, typeConfig, onSelect, onDeploy, isDeploying }: { model: Model; statusConfig: Record<string, Record<string, unknown>>; typeConfig: Record<string, Record<string, unknown>>; onSelect: () => void; onDeploy: () => void; isDeploying?: boolean }) {
   const StatusIcon = (statusConfig[model.status]?.icon || Activity) as React.ElementType;
   const TypeIcon = (typeConfig[model.type]?.icon || Brain) as React.ElementType;
 
@@ -1102,13 +986,24 @@ function ModelCard({ model, statusConfig, typeConfig, onSelect, onDeploy: _onDep
       </div>
 
       {model.tags && (
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap gap-1 mb-3">
           {model.tags.slice(0, 3).map((tag: string) => (
             <span key={tag} className="text-xs bg-lattice-surface px-2 py-0.5 rounded text-gray-400">
               {tag}
             </span>
           ))}
         </div>
+      )}
+
+      {model.status === 'trained' && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onDeploy(); }}
+          disabled={isDeploying}
+          className="w-full mt-2 py-1.5 text-xs font-medium rounded bg-neon-green/20 text-neon-green hover:bg-neon-green/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1"
+        >
+          <Rocket className="w-3 h-3" />
+          {isDeploying ? 'Deploying...' : 'Deploy Model'}
+        </button>
       )}
     </motion.div>
   );

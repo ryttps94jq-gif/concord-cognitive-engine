@@ -301,7 +301,7 @@ test.describe('Mode Switch Behavior', () => {
     ).last();
 
     if (await chatInput.isVisible().catch(() => false)) {
-      const initialPlaceholder = await chatInput.getAttribute('placeholder').catch(() => null);
+      const _initialPlaceholder = await chatInput.getAttribute('placeholder').catch(() => null);
 
       // Switch to Explore mode
       const exploreButton = page.locator(

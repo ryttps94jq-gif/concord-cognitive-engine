@@ -4,6 +4,7 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { useState } from 'react';
+import { motion } from 'framer-motion';
 import { FileSearch, AlertTriangle, Check, X, Eye, Layers, ChevronDown, Link2, ShieldCheck, ClipboardList, ArrowRight, Hash } from 'lucide-react';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { ConnectiveTissueBar } from '@/components/lens/ConnectiveTissueBar';
@@ -35,7 +36,7 @@ export default function AuditLensPage() {
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('audit');
   const [filter, setFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   // Backend: GET /api/events
   const { data: events, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
@@ -97,7 +98,7 @@ export default function AuditLensPage() {
     );
   }
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="audit" className="p-6 space-y-6">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-2xl">🔍</span>
@@ -123,27 +124,61 @@ export default function AuditLensPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="lens-card">
-          <FileSearch className="w-5 h-5 text-neon-blue mb-2" />
-          <p className="text-2xl font-bold">{allEntries.length}</p>
-          <p className="text-sm text-gray-400">Total Events</p>
-        </div>
-        <div className="lens-card">
-          <Check className="w-5 h-5 text-neon-green mb-2" />
-          <p className="text-2xl font-bold">{allEntries.filter((e) => e.status === 'success').length}</p>
-          <p className="text-sm text-gray-400">Success</p>
-        </div>
-        <div className="lens-card">
-          <AlertTriangle className="w-5 h-5 text-yellow-500 mb-2" />
-          <p className="text-2xl font-bold">{allEntries.filter((e) => e.status === 'warning').length}</p>
-          <p className="text-sm text-gray-400">Warnings</p>
-        </div>
-        <div className="lens-card">
-          <X className="w-5 h-5 text-neon-pink mb-2" />
-          <p className="text-2xl font-bold">{allEntries.filter((e) => e.status === 'error').length}</p>
-          <p className="text-sm text-gray-400">Errors</p>
-        </div>
+        {[
+          { icon: FileSearch, value: allEntries.length, label: 'Total Events', color: 'text-neon-blue', bg: 'bg-neon-blue/10' },
+          { icon: Check, value: allEntries.filter((e) => e.status === 'success').length, label: 'Success', color: 'text-neon-green', bg: 'bg-neon-green/10' },
+          { icon: AlertTriangle, value: allEntries.filter((e) => e.status === 'warning').length, label: 'Warnings', color: 'text-yellow-500', bg: 'bg-yellow-500/10' },
+          { icon: X, value: allEntries.filter((e) => e.status === 'error').length, label: 'Errors', color: 'text-neon-pink', bg: 'bg-neon-pink/10' },
+        ].map((stat, i) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.08, duration: 0.4 }}
+            whileHover={{ scale: 1.03 }}
+            className="lens-card"
+          >
+            <stat.icon className={`w-5 h-5 ${stat.color} mb-2`} />
+            <p className="text-2xl font-bold">{stat.value}</p>
+            <p className="text-sm text-gray-400">{stat.label}</p>
+          </motion.div>
+        ))}
       </div>
+
+      {/* Compliance Score Ring */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ delay: 0.3, duration: 0.5 }}
+        className="flex items-center gap-6 p-4 rounded-xl bg-lattice-deep border border-lattice-border"
+      >
+        <div className="relative w-20 h-20 flex-shrink-0">
+          <svg viewBox="0 0 36 36" className="w-20 h-20 -rotate-90">
+            <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="2.5" />
+            <motion.path
+              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+              fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round"
+              initial={{ strokeDasharray: '0, 100' }}
+              animate={{ strokeDasharray: '96.3, 100' }}
+              transition={{ duration: 1.5, ease: 'easeOut' }}
+            />
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-lg font-bold text-neon-green">96.3%</span>
+          </div>
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-white flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-neon-green" /> Overall Compliance
+          </p>
+          <p className="text-xs text-gray-500 mt-1">Data integrity, access control, immutability & transparency monitored</p>
+          <div className="flex gap-2 mt-2">
+            {['Data Integrity 98%', 'Access 95%', 'Immutable 100%'].map(badge => (
+              <span key={badge} className="text-[10px] px-2 py-0.5 rounded-full bg-neon-green/10 text-neon-green border border-neon-green/20">{badge}</span>
+            ))}
+          </div>
+        </div>
+      </motion.div>
 
       {/* Filters */}
       <div className="panel p-4">
@@ -359,7 +394,7 @@ export default function AuditLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

@@ -40,7 +40,7 @@ export function WalletWidget({ className, compact = false }: WalletWidgetProps) 
     queryKey: ['wallet-balance'],
     queryFn: () =>
       api
-        .get('/api/billing/balance')
+        .get('/api/economy/balance')
         .then(
           (r) =>
             r.data as {

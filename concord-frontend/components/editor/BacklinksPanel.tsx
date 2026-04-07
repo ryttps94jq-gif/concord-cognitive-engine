@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Link2, ChevronRight, Brain, Search, ArrowUpRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api/client';
+import { showToast } from '@/components/common/Toasts';
 
 interface Backlink {
   id: string;
@@ -305,12 +306,16 @@ interface UnlinkedMentionsProps {
 }
 
 export function UnlinkedMentions({ dtuId, className }: UnlinkedMentionsProps) {
-  const [mentions, _setMentions] = useState<UnlinkedMention[]>([]);
+  const [mentions, setMentions] = useState<UnlinkedMention[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // In a real implementation, this would call an API to find potential links
-    setLoading(false);
+    let cancelled = false;
+    api.get(`/api/dtus/${dtuId}/unlinked-mentions`)
+      .then(r => { if (!cancelled) setMentions(r.data?.mentions || []); })
+      .catch((e) => { console.error('[BacklinksPanel] Failed to fetch unlinked mentions:', e); showToast('error', 'Failed to load mentions'); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [dtuId]);
 
   if (loading || mentions.length === 0) return null;

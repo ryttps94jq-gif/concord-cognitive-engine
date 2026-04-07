@@ -1,14 +1,13 @@
 'use client';
 
 import { useState, FormEvent, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { api, ensureCsrfToken } from '@/lib/api/client';
+import { api } from '@/lib/api/client';
 import { connectSocket } from '@/lib/realtime/socket';
 import { Brain, Lock, Eye, EyeOff } from 'lucide-react';
 
 function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -23,22 +22,24 @@ function LoginForm() {
 
     try {
       // Fetch CSRF token before login (needed for the POST itself in production)
-      await ensureCsrfToken();
+      await api.get('/api/auth/csrf-token').catch(() => {});
       const res = await api.post('/api/auth/login', { username, password });
       if (res.data?.ok) {
         // Mark as entered so HomeClient shows dashboard
         localStorage.setItem('concord_entered', 'true');
         // Eagerly refresh CSRF token now that we have a real session
-        await ensureCsrfToken();
+        await api.get('/api/auth/csrf-token').catch(() => {});
         // Connect WebSocket now that we have a session cookie
         connectSocket();
-        // Small delay to ensure cookies propagate before navigation
-        await new Promise(r => setTimeout(r, 100));
+        // Record login timestamp so HomeClient won't redirect back during auth check race
+        localStorage.setItem('concord_login_ts', String(Date.now()));
         // Redirect to the page they were trying to reach, or home
         // Validate redirect is a relative path to prevent open redirect attacks
         const from = searchParams.get('from');
         const safeRedirect = from && from.startsWith('/') && !from.startsWith('//') ? from : '/';
-        router.push(safeRedirect);
+        // Use hard navigation (not router.push) so the browser sends cookies
+        // with the request headers — prevents middleware redirect loop
+        window.location.href = safeRedirect;
       } else {
         setError(res.data?.error || 'Login failed');
       }
@@ -73,6 +74,18 @@ function LoginForm() {
         {/* Form card */}
         <div className="bg-lattice-surface border border-lattice-border rounded-2xl p-8">
           <form onSubmit={handleSubmit} className="space-y-5" aria-describedby={error ? "login-error" : undefined}>
+            {searchParams.get('verified') === 'true' && (
+              <div role="status" className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg text-green-400 text-sm">
+                Email verified! You can now sign in.
+              </div>
+            )}
+
+            {searchParams.get('reset') === 'true' && (
+              <div role="status" className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg text-green-400 text-sm">
+                Password reset! Sign in with your new password.
+              </div>
+            )}
+
             {error && (
               <div id="login-error" role="alert" aria-live="assertive" className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
                 {error}
@@ -122,6 +135,12 @@ function LoginForm() {
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
+            </div>
+
+            <div className="text-right">
+              <Link href="/forgot-password" className="text-sm text-gray-400 hover:text-neon-cyan transition-colors">
+                Forgot password?
+              </Link>
             </div>
 
             <button

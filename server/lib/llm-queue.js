@@ -1,7 +1,7 @@
 /**
  * LLM Priority Queue
  *
- * Wraps all LLM calls (Ollama / OpenAI) behind a bounded priority queue.
+ * Wraps all LLM calls (Ollama brains) behind a bounded priority queue.
  * User-facing requests take priority over background tasks (autogen, etc.).
  *
  * Priority levels (lower = higher priority):
@@ -206,5 +206,31 @@ export function createLLMQueue(opts = {}) {
     });
   }
 
-  return { enqueue, wrap, getMetrics, drain, PRIORITY };
+  /**
+   * Get queue pressure as a 0-1 float.
+   * 0 = empty, 0.75 = start shedding LOW, 0.9 = shed LOW+NORMAL, 1.0 = full.
+   */
+  function queuePressure() {
+    return totalQueued() / maxQueueDepth;
+  }
+
+  /**
+   * Proactive pressure-based rejection (call before enqueue for early shedding).
+   * @param {number} priority
+   * @returns {{ allowed: boolean, reason?: string }}
+   */
+  function checkPressure(priority) {
+    const pressure = queuePressure();
+    // At 75%+ depth, reject LOW priority
+    if (pressure >= 0.75 && priority >= PRIORITY.LOW) {
+      return { allowed: false, reason: "queue_pressure_high" };
+    }
+    // At 90%+ depth, reject LOW + NORMAL
+    if (pressure >= 0.90 && priority >= PRIORITY.NORMAL) {
+      return { allowed: false, reason: "queue_pressure_critical" };
+    }
+    return { allowed: true };
+  }
+
+  return { enqueue, wrap, getMetrics, drain, queuePressure, checkPressure, PRIORITY };
 }

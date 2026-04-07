@@ -111,7 +111,7 @@ function _getBody(entityId) {
   try {
     if (globalThis._concordBodies instanceof Map) return globalThis._concordBodies.get(entityId) || null;
     return null;
-  } catch { return null; }
+  } catch (err) { logger.debug('emergent:sleep-consolidation', '_getBody failed', { entityId, error: err?.message }); return null; }
 }
 
 function _getDTUs() {
@@ -123,7 +123,7 @@ function _getDTUs() {
     if (Array.isArray(dtus)) return dtus;
     if (dtus && typeof dtus === "object") return Object.values(dtus);
     return [];
-  } catch { return []; }
+  } catch (err) { logger.debug('emergent:sleep-consolidation', '_getDTUs failed', { error: err?.message }); return []; }
 }
 
 function _getSessions() {
@@ -135,7 +135,7 @@ function _getSessions() {
     if (Array.isArray(s)) return s;
     if (s && typeof s === "object") return Object.values(s);
     return [];
-  } catch { return []; }
+  } catch (err) { logger.debug('emergent:sleep-consolidation', '_getSessions failed', { error: err?.message }); return []; }
 }
 
 function _getTrustEdges() {
@@ -143,7 +143,7 @@ function _getTrustEdges() {
     const es = getSTATE()?.__emergent;
     if (!es || !es._trustNetwork) return new Map();
     return es._trustNetwork.edges || new Map();
-  } catch { return new Map(); }
+  } catch (err) { logger.debug('emergent:sleep-consolidation', '_getTrustEdges failed', { error: err?.message }); return new Map(); }
 }
 
 function _tagOverlap(tags1, tags2) {
@@ -155,7 +155,7 @@ function _tagOverlap(tags1, tags2) {
     for (const t of s1) { if (s2.has(t)) inter++; }
     const union = new Set([...s1, ...s2]).size;
     return union > 0 ? inter / union : 0;
-  } catch { return 0; }
+  } catch (err) { logger.debug('emergent:sleep-consolidation', '_tagOverlap failed', { error: err?.message }); return 0; }
 }
 
 function _emit(event, data) {
@@ -187,7 +187,7 @@ function _beginSleep(rec) {
             const has = Array.isArray(parts) ? parts.includes(rec.entityId) : false;
             const t = s.createdAt ? new Date(s.createdAt).getTime() : 0;
             return has && t >= wakeStart;
-          } catch { return false; }
+          } catch (err) { logger.debug('emergent:sleep-consolidation', 'session filter failed', { error: err?.message }); return false; }
         })
         .map(s => ({
           sessionId: s.id || s.sessionId,
@@ -245,7 +245,8 @@ function _computeQuality(rec) {
       consolidation_depth: r4(consolidationDepth), recovery: r4(recovery),
       dream_yield: r4(dreamYield), debt_paid: r4(debtPaid), overall: r4(clamp01(overall)),
     };
-  } catch {
+  } catch (err) {
+    logger.warn('emergent:sleep-consolidation', 'compute quality failed', { error: err?.message });
     return { consolidation_depth: 0, recovery: 0, dream_yield: 0, debt_paid: 0, overall: 0 };
   }
 }
@@ -313,7 +314,7 @@ export function initSleepState(entityId, species) {
       sleepLength: record.sleepLength, timestamp: record.createdAt,
     });
     return record;
-  } catch { return null; }
+  } catch (err) { logger.warn('emergent:sleep-consolidation', 'initSleepState failed', { entityId, error: err?.message }); return null; }
 }
 
 /**
@@ -323,7 +324,7 @@ export function initSleepState(entityId, species) {
  */
 export function getSleepState(entityId) {
   try { return entityId ? (_sleepStates.get(entityId) || null) : null; }
-  catch { return null; }
+  catch (err) { logger.debug('emergent:sleep-consolidation', 'getSleepState failed', { entityId, error: err?.message }); return null; }
 }
 
 /**
@@ -384,7 +385,7 @@ export function tickFatigue(entityId, activityLevel = 0) {
 
     const r4 = v => Math.round(v * 10000) / 10000;
     return { ok: true, fatigue: r4(rec.fatigue), sleepDebt: r4(rec.sleepDebt), state: rec.state, circadianPhase: r4(rec.circadianPhase) };
-  } catch { return { ok: false, error: "tick_failed" }; }
+  } catch (err) { logger.warn('emergent:sleep-consolidation', 'tickFatigue failed', { entityId, error: err?.message }); return { ok: false, error: "tick_failed" }; }
 }
 
 /**
@@ -449,7 +450,7 @@ export function checkSleepTransition(entityId) {
       return { ok: true, transitioned: true, from, to };
     }
     return { ok: true, transitioned: false, from, to: from };
-  } catch { return { ok: false, error: "transition_check_failed" }; }
+  } catch (err) { logger.warn('emergent:sleep-consolidation', 'checkSleepTransition failed', { entityId, error: err?.message }); return { ok: false, error: "transition_check_failed" }; }
 }
 
 /**
@@ -469,7 +470,7 @@ export function enterSleep(entityId) {
     _beginSleep(rec);
     _emit("sleep:forced_enter", { entityId, from, fatigue: rec.fatigue, timestamp: nowISO() });
     return { ok: true, state: rec.state };
-  } catch { return { ok: false, error: "enter_sleep_failed" }; }
+  } catch (err) { logger.warn('emergent:sleep-consolidation', 'enterSleep failed', { entityId, error: err?.message }); return { ok: false, error: "enter_sleep_failed" }; }
 }
 
 /**
@@ -487,7 +488,7 @@ export function wakeSleep(entityId) {
     _completeSleepCycle(rec);
     _emit("sleep:forced_wake", { entityId, from, fatigue: rec.fatigue, timestamp: nowISO() });
     return { ok: true, state: rec.state, quality: rec.lastQuality };
-  } catch { return { ok: false, error: "wake_failed" }; }
+  } catch (err) { logger.warn('emergent:sleep-consolidation', 'wakeSleep failed', { entityId, error: err?.message }); return { ok: false, error: "wake_failed" }; }
 }
 
 /**
@@ -601,7 +602,7 @@ export function runConsolidation(entityId) {
     } catch (_e) { logger.debug('emergent:sleep-consolidation', 'silent', { error: _e?.message }); }
 
     return { ok: true, consolidated, pruned, trustUpdated, patterns: patternsFound };
-  } catch { return { ok: false, error: "consolidation_failed" }; }
+  } catch (err) { logger.error('emergent:sleep-consolidation', 'runConsolidation failed', { entityId, error: err?.message }); return { ok: false, error: "consolidation_failed" }; }
 }
 
 /**
@@ -711,7 +712,7 @@ export function runREMPhase(entityId) {
     }
 
     return { ok: true, dreamsProduced: dreamDTUs.length, dreamDTUs };
-  } catch { return { ok: false, error: "rem_failed" }; }
+  } catch (err) { logger.error('emergent:sleep-consolidation', 'runREMPhase failed', { entityId, error: err?.message }); return { ok: false, error: "rem_failed" }; }
 }
 
 /**
@@ -729,7 +730,7 @@ export function computeSleepQuality(entityId) {
     }
     if (rec.lastQuality) return { ok: true, quality: rec.lastQuality, status: "last_completed" };
     return { ok: true, quality: null, status: "no_sleep_yet" };
-  } catch { return { ok: false, error: "quality_computation_failed" }; }
+  } catch (err) { logger.warn('emergent:sleep-consolidation', 'computeSleepQuality failed', { entityId, error: err?.message }); return { ok: false, error: "quality_computation_failed" }; }
 }
 
 /**
@@ -757,7 +758,7 @@ export function getSleepMetrics() {
       avgSleepQuality: qualN > 0 ? r4(qualSum / qualN) : 0,
       cumulative: { ..._metrics },
     };
-  } catch { return { ok: false, error: "metrics_failed" }; }
+  } catch (err) { logger.warn('emergent:sleep-consolidation', 'getSleepMetrics failed', { error: err?.message }); return { ok: false, error: "metrics_failed" }; }
 }
 
 /**
@@ -780,7 +781,7 @@ export function listSleepingEntities() {
       }
     }
     return result;
-  } catch { return []; }
+  } catch (err) { logger.warn('emergent:sleep-consolidation', 'listSleepingEntities failed', { error: err?.message }); return []; }
 }
 
 /**
@@ -806,7 +807,7 @@ export function listDrowsyEntities() {
     }
     result.sort((a, b) => b.fatigue - a.fatigue);
     return result;
-  } catch { return []; }
+  } catch (err) { logger.warn('emergent:sleep-consolidation', 'listDrowsyEntities failed', { error: err?.message }); return []; }
 }
 
 /**
@@ -822,7 +823,7 @@ export function getSleepHistory(entityId, limit = 20) {
     if (!h || !h.length) return [];
     const cap = Math.max(1, Math.min(MAX_HISTORY, Number(limit) || 20));
     return h.slice(-cap).reverse();
-  } catch { return []; }
+  } catch (err) { logger.warn('emergent:sleep-consolidation', 'getSleepHistory failed', { entityId, error: err?.message }); return []; }
 }
 
 /**
@@ -835,5 +836,5 @@ export function isAsleep(entityId) {
     const rec = _sleepStates.get(entityId);
     if (!rec) return false;
     return rec.state === SLEEP_STATES.SLEEPING || rec.state === SLEEP_STATES.REM || rec.state === SLEEP_STATES.WAKING;
-  } catch { return false; }
+  } catch (err) { logger.debug('emergent:sleep-consolidation', 'isAsleep check failed', { entityId, error: err?.message }); return false; }
 }

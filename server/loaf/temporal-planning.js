@@ -74,7 +74,7 @@ function checkpoint(planId, stateSnapshot, description) {
   const cp = {
     id: `cp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     stepIndex: plan.steps.findIndex(s => s.state === "in_progress"),
-    stateSnapshot: (() => { try { return JSON.parse(JSON.stringify(stateSnapshot)); } catch { return stateSnapshot; } })(),
+    stateSnapshot: (() => { try { return JSON.parse(JSON.stringify(stateSnapshot)); } catch (err) { console.debug('[temporal-planning] deep clone failed', err?.message); return stateSnapshot; } })(),
     description: String(description || "").slice(0, 1000),
     createdAt: new Date().toISOString(),
   };
@@ -210,7 +210,7 @@ function createWorldModel(label, initialState, assumptions) {
   const model = {
     id,
     label: String(label).slice(0, 500),
-    state: (() => { try { return JSON.parse(JSON.stringify(initialState || {})); } catch { return { ...initialState }; } })(),
+    state: (() => { try { return JSON.parse(JSON.stringify(initialState || {})); } catch (err) { console.debug('[temporal-planning] deep clone failed', err?.message); return { ...initialState }; } })(),
     assumptions: Array.isArray(assumptions) ? assumptions.map(a => String(a).slice(0, 500)) : [],
     events: [],
     divergencePoints: [],

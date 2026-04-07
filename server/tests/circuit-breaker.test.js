@@ -216,7 +216,6 @@ describe("Breaker Registry", () => {
   it("creates pre-configured breakers", () => {
     const reg = createBreakerRegistry();
     assert.ok(reg.ollama);
-    assert.ok(reg.openai);
     assert.ok(reg.embeddings);
     assert.ok(reg.persistence);
   });
@@ -225,7 +224,6 @@ describe("Breaker Registry", () => {
     const reg = createBreakerRegistry();
     const all = reg.getAllStatus();
     assert.ok(all.ollama);
-    assert.ok(all.openai);
     assert.ok(all.embeddings);
     assert.ok(all.persistence);
     assert.equal(all.ollama.state, "closed");

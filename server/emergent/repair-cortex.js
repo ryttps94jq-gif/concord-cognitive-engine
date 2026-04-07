@@ -34,8 +34,31 @@ import { promisify } from "util";
 import fs from "fs";
 import path from "path";
 import logger from '../logger.js';
+import { queues, PRIORITIES } from '../requestQueue.js';
 
 const execAsync = promisify(execCb);
+
+// ── Security Intelligence Integration ──────────────────────────────────────
+// Injected at runtime by server.js when security tables exist.
+// The matcher is optional — repair cortex works fine without it.
+let _securityMatcher = null;
+
+/**
+ * Wire the security matcher into the repair cortex.
+ * Called once during startup when the security intelligence system is available.
+ *
+ * @param {Object} matcher - Security matcher instance from createSecurityMatcher()
+ */
+export function setSecurityMatcher(matcher) {
+  _securityMatcher = matcher;
+}
+
+/**
+ * Get the current security matcher (for external modules to check availability).
+ */
+export function getSecurityMatcher() {
+  return _securityMatcher;
+}
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -94,23 +117,30 @@ export const REPAIR_PHASES = Object.freeze({
 const MAX_BUILD_RETRIES = 3;
 const GENESIS_OVERLAP_THRESHOLD = 0.95;
 
+// Guardian intervals slowed significantly. The old 15-30s intervals meant 17
+// separate timers all hammering concurrently, clogging the event loop.
+// Nothing in a guardian monitor needs sub-minute detection — if the system is
+// down for 5 minutes, the guardian catching it at 4:59 vs 0:15 doesn't matter.
+// Relaxed intervals — long-haul cadence. Network volume matters more than instant detection.
 const GUARDIAN_INTERVALS = Object.freeze({
-  process_health:        15000,   // GPU: 15 seconds — catch problems earlier
-  database_integrity:    300000,  // 5 minutes — stays same
-  state_consistency:     30000,   // GPU: 30 seconds — faster state checks
-  disk_space:            600000,  // 10 minutes — stays same
-  endpoint_health:       30000,   // GPU: 30 seconds — faster endpoint checks
-  ollama_connectivity:   60000,   // GPU: 1 minute — catch GPU brain issues faster
-  autogen_health:        120000,  // GPU: 2 minutes — monitor autogen throughput
-  emergent_vitals:       30000,   // GPU: 30 seconds — entities are active now
-  frontend_health:       60000,   // 1 minute — stays same
-  container_health:      120000,  // 2 minutes — stays same
-  nginx_health:          60000,   // 1 minute — stays same
-  websocket_health:      60000,   // 1 minute — stays same
-  event_loop_lag:        10000,   // GPU: 10 seconds — tighter lag detection
-  ssl_certificate:       3600000, // 1 hour — stays same
-  database_connection:   120000,  // 2 minutes — stays same
-  lockfile_integrity:    600000,  // 10 minutes — stays same
+  process_health:        600_000,   // 10 min — local memory check
+  database_integrity:    1_800_000, // 30 min — DB rarely corrupts
+  state_consistency:     900_000,   // 15 min — drift is slow
+  disk_space:            3_600_000, // 1 hour — disk fills slowly
+  endpoint_health:       900_000,   // 15 min — self-check, not urgent
+  ollama_connectivity:   900_000,   // 15 min — Ollama doesn't flap
+  autogen_health:        1_800_000, // 30 min — autogen is background work
+  emergent_vitals:       900_000,   // 15 min — entities evolve slowly
+  frontend_health:       900_000,   // 15 min — frontend doesn't disappear
+  container_health:      1_800_000, // 30 min — containers are stable
+  nginx_health:          900_000,   // 15 min — nginx is rock solid
+  websocket_health:      900_000,   // 15 min — WS reconnects handle gaps
+  event_loop_lag:        300_000,   // 5 min — lag is the only fast-moving concern
+  ssl_certificate:       7_200_000, // 2 hours — certs expire in months
+  database_connection:   1_800_000, // 30 min — DB connections are stable
+  lockfile_integrity:    3_600_000, // 1 hour — lockfiles rarely change
+  security_signature_freshness: 7_200_000, // 2 hours
+  security_scan_backlog:        1_800_000, // 30 min
 });
 
 // ── Repair Memory ───────────────────────────────────────────────────────────
@@ -121,10 +151,18 @@ const _repairMemory = new Map();
 function _ensureRepairMemory() {
   try {
     const S = _getSTATE();
-    if (S && S.repairMemory instanceof Map && _repairMemory.size === 0) {
-      for (const [k, v] of S.repairMemory) {
-        _repairMemory.set(k, v);
+    if (!S || _repairMemory.size > 0) return;
+
+    // Handle both Map (runtime) and plain object (deserialized from JSON)
+    if (S.repairMemory instanceof Map) {
+      for (const [k, v] of S.repairMemory) _repairMemory.set(k, v);
+    } else if (S.repairMemory && typeof S.repairMemory === "object") {
+      // JSON.stringify(Map) produces {} or a plain object — restore from it
+      for (const [k, v] of Object.entries(S.repairMemory)) {
+        if (v && typeof v === "object") _repairMemory.set(k, v);
       }
+      // Upgrade to a real Map for future use
+      S.repairMemory = new Map(_repairMemory);
     }
   } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
 }
@@ -151,6 +189,22 @@ export function addToRepairMemory(errorPattern, fix) {
       existing.lastSeen = nowISO();
       existing.successRate = existing.successes / existing.occurrences;
     } else {
+      // Check if error matches known security vulnerability (CVE tagging)
+      let securityRelated = false;
+      let cveId = null;
+      if (_securityMatcher) {
+        try {
+          const secCheck = _securityMatcher.quickScan({ content: errorPattern });
+          if (secCheck.matched) {
+            securityRelated = true;
+            cveId = secCheck.cveId || null;
+          }
+        } catch (_) { /* non-critical */ }
+      }
+      // Also check if the fix itself is security-tagged
+      if (fix?.securityRelated) securityRelated = true;
+      if (fix?.cveId) cveId = fix.cveId;
+
       _repairMemory.set(key, {
         pattern: errorPattern,
         fix,
@@ -161,6 +215,8 @@ export function addToRepairMemory(errorPattern, fix) {
         firstSeen: nowISO(),
         lastSeen: nowISO(),
         deprecated: false,
+        securityRelated,
+        cveId,
       });
     }
     _syncRepairMemoryToSTATE();
@@ -294,6 +350,27 @@ export function observe(error, context = "unknown") {
     const diagnosis = matchErrorPattern(String(error?.message || error));
     if (diagnosis) {
       addToRepairMemory(String(error?.message || error), diagnosis.fixes?.[0]);
+    }
+
+    // Security intelligence layer — check if error matches known vulnerability
+    if (_securityMatcher) {
+      try {
+        const secResult = _securityMatcher.quickScan({
+          content: String(error?.message || error),
+          target: context,
+        });
+        if (secResult.matched && secResult.severity && (secResult.severity === "critical" || secResult.severity === "high")) {
+          // High-severity security match — create sovereign alert + tag in repair memory
+          logRepairDTU(REPAIR_PHASES.POST_BUILD, "security_threat_in_error", {
+            context,
+            severity: secResult.severity,
+            signatureId: secResult.signatureId,
+            fixId: secResult.fixId,
+            action: secResult.action,
+            layer: secResult.layer,
+          });
+        }
+      } catch (_secErr) { /* security layer never blocks observe() */ }
     }
   } catch (_e) { logger.debug('emergent:repair-cortex', 'observe() itself NEVER throws', { error: _e?.message }); }
 }
@@ -2611,7 +2688,9 @@ const GUARDIAN_MONITORS = {
         for (const ep of endpoints) {
           try {
             const start = Date.now();
-            const res = await fetch(`http://localhost:${PORT}${ep}`);
+            const res = await fetch(`http://localhost:${PORT}${ep}`, {
+              signal: AbortSignal.timeout(3000), // 3s cap — prevent self-deadlock
+            });
             results.push({
               endpoint: ep,
               status: res.status,
@@ -2643,24 +2722,37 @@ const GUARDIAN_MONITORS = {
 
   ollama_connectivity: {
     interval: GUARDIAN_INTERVALS.ollama_connectivity,
-    check: async () => {
+    _failCount: 0,
+    _backoffUntil: 0,
+    check: async function() {
+      // Back off after repeated failures — Ollama may just be uninstalled
+      if (this._backoffUntil > Date.now()) {
+        return { healthy: true, backingOff: true };
+      }
       try {
         const host = process.env.OLLAMA_HOST || "http://concord-ollama:11434";
-        const res = await fetch(`${host}/api/tags`, { signal: AbortSignal.timeout(5000) });
+        const res = await fetch(`${host}/api/tags`, { signal: AbortSignal.timeout(3000) });
         const data = await res.json();
+        this._failCount = 0;
+        clearBrainCooldown(); // Ollama is reachable
         return {
           healthy: res.ok,
           models: (data.models || []).map(m => m.name),
           modelCount: (data.models || []).length,
         };
       } catch {
-        return { healthy: false, error: "Ollama unreachable" };
+        this._failCount++;
+        if (this._failCount >= 3) {
+          this._backoffUntil = Date.now() + 600_000; // back off 10 minutes
+          enterBrainCooldown();
+        }
+        return { healthy: false, error: "Ollama unreachable", failCount: this._failCount };
       }
     },
-    repair: async (result) => {
+    repair: async function(result) {
       try {
-        if (!result.healthy) {
-          const res = await safeDockerExec("docker restart concord-ollama 2>/dev/null");
+        if (!result.healthy && !result.backingOff) {
+          const res = await safeDockerExec("docker restart concord-ollama 2>/dev/null", 10000);
           logRepairDTU(REPAIR_PHASES.POST_BUILD, res.skipped ? "ollama_restart_skipped_no_docker" : "ollama_restart", result);
         }
       } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
@@ -2745,18 +2837,26 @@ const GUARDIAN_MONITORS = {
 
   frontend_health: {
     interval: GUARDIAN_INTERVALS.frontend_health,
-    check: async () => {
+    _failCount: 0,
+    _backoffUntil: 0,
+    check: async function() {
+      // Back off for 5 minutes after 3 consecutive failures
+      if (this._backoffUntil > Date.now()) {
+        return { healthy: true, backingOff: true }; // suppress during backoff
+      }
+
       try {
         const FRONTEND_PORT = process.env.FRONTEND_PORT || 3000;
         const frontendHost = process.env.FRONTEND_HOST || "concord-frontend";
 
-        // Try internal Docker network first, then localhost
+        // Try internal Docker network first, then localhost (max 2 attempts)
         const hosts = [`http://${frontendHost}:${FRONTEND_PORT}`, `http://localhost:${FRONTEND_PORT}`];
 
         for (const base of hosts) {
           try {
             const start = Date.now();
             const res = await fetch(base, { signal: AbortSignal.timeout(5000) });
+            this._failCount = 0; // reset on success
             return {
               healthy: res.status < 500,
               statusCode: res.status,
@@ -2766,14 +2866,21 @@ const GUARDIAN_MONITORS = {
           } catch (_e) { logger.debug('emergent:repair-cortex', 'try next host', { error: _e?.message }); }
         }
 
-        return { healthy: false, error: "Frontend unreachable on all hosts" };
+        // All hosts failed
+        this._failCount++;
+        if (this._failCount >= 3) {
+          this._backoffUntil = Date.now() + 300_000; // back off 5 minutes
+          logger.info('emergent:repair-cortex', `Frontend unreachable ${this._failCount}x, backing off 5 minutes`);
+        }
+
+        return { healthy: false, error: "Frontend unreachable on all hosts", failCount: this._failCount };
       } catch {
         return { healthy: true }; // Can't check — assume OK
       }
     },
-    repair: async (result) => {
+    repair: async function(result) {
       try {
-        if (!result.healthy) {
+        if (!result.healthy && !result.backingOff) {
           // Try restarting the frontend container
           const res = await safeDockerExec("docker restart concord-frontend 2>/dev/null");
           logRepairDTU(REPAIR_PHASES.POST_BUILD, res.skipped ? "frontend_restart_skipped_no_docker" : "frontend_restart", result);
@@ -3159,6 +3266,102 @@ const GUARDIAN_MONITORS = {
       } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
     },
   },
+
+  // ── Security Intelligence Monitors ─────────────────────────────────────
+  security_signature_freshness: {
+    interval: GUARDIAN_INTERVALS.security_signature_freshness,
+    check: async () => {
+      try {
+        const S = _getSTATE();
+        const db = S?.db;
+        if (!db) return { healthy: true, reason: "no_db" };
+        const stats = db.prepare(`
+          SELECT source,
+                 MAX(updated_at) as last_update,
+                 COUNT(*) as count
+          FROM security_signatures
+          WHERE deprecated = 0
+          GROUP BY source
+        `).all();
+
+        const now = Date.now();
+        const staleThresholds = {
+          clamav: 48 * 3600 * 1000,    // 48 hours
+          yara: 7 * 24 * 3600 * 1000,  // 7 days
+          cve_feed: 48 * 3600 * 1000,  // 48 hours
+        };
+
+        const stale = [];
+        for (const row of stats) {
+          const threshold = staleThresholds[row.source];
+          if (threshold && row.last_update) {
+            const age = now - new Date(row.last_update).getTime();
+            if (age > threshold) {
+              stale.push({ source: row.source, ageHours: Math.round(age / 3600000), count: row.count });
+            }
+          }
+        }
+
+        return {
+          healthy: stale.length === 0,
+          sources: stats.map(s => ({ source: s.source, count: s.count, lastUpdate: s.last_update })),
+          stale,
+        };
+      } catch {
+        return { healthy: true, sources: [] };
+      }
+    },
+    repair: async (result) => {
+      try {
+        if (!result.healthy && result.stale?.length > 0) {
+          for (const s of result.stale) {
+            logRepairDTU(REPAIR_PHASES.POST_BUILD, "security_signatures_stale", {
+              source: s.source,
+              ageHours: s.ageHours,
+              count: s.count,
+              message: `Security signatures from ${s.source} are ${s.ageHours}h stale — refresh recommended`,
+            });
+          }
+        }
+      } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
+    },
+  },
+
+  security_scan_backlog: {
+    interval: GUARDIAN_INTERVALS.security_scan_backlog,
+    check: async () => {
+      try {
+        const S = _getSTATE();
+        const db = S?.db;
+        if (!db) return { healthy: true, reason: "no_db" };
+
+        // Count recent unresolved security events
+        const recent = db.prepare(`
+          SELECT COUNT(*) as count FROM security_events
+          WHERE event_type = 'scan_detection' AND result = 'logged'
+            AND created_at >= datetime('now', '-1 hour')
+        `).get();
+
+        const backlogCount = recent?.count || 0;
+        const healthy = backlogCount < 100;
+
+        return { healthy, backlogCount, threshold: 100 };
+      } catch {
+        return { healthy: true, backlogCount: 0 };
+      }
+    },
+    repair: async (result) => {
+      try {
+        if (!result.healthy) {
+          logRepairDTU(REPAIR_PHASES.POST_BUILD, "security_scan_backlog_high", {
+            backlogCount: result.backlogCount,
+            threshold: result.threshold,
+            message: `Security scan backlog at ${result.backlogCount} (threshold: ${result.threshold}) — may need scaling`,
+          });
+        }
+      } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
+    },
+  },
 };
 
 /**
@@ -3166,27 +3369,44 @@ const GUARDIAN_MONITORS = {
  */
 export function startGuardian() {
   try {
-    for (const [name, monitor] of Object.entries(GUARDIAN_MONITORS)) {
-      if (_guardianTimers.has(name)) continue; // Already running
+    // Delay guardian activation to match repair loop startup delay
+    const delayTimer = setTimeout(() => {
+      let stagger = 0;
+      const STAGGER_GAP = 5000; // 5 seconds between each monitor start
 
-      const timer = setInterval(async () => {
-        try {
-          const result = await monitor.check();
-          _guardianStatuses.set(name, {
-            ...result,
-            lastChecked: nowISO(),
-          });
+      for (const [name, monitor] of Object.entries(GUARDIAN_MONITORS)) {
+        if (_guardianTimers.has(name)) continue; // Already running
 
-          if (!result.healthy) {
-            await monitor.repair(result);
-          }
-        } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
-      }, monitor.interval);
+        stagger += STAGGER_GAP;
+        const monitorDelay = stagger;
 
-      // Unref so it doesn't prevent process exit
-      if (timer.unref) timer.unref();
-      _guardianTimers.set(name, timer);
-    }
+        const startTimer = setTimeout(() => {
+          const timer = setInterval(async () => {
+            // Skip if memory ceiling monitor has paused background tasks
+            if (globalThis.__memoryPaused?.()) return;
+            try {
+              const result = await monitor.check();
+              _guardianStatuses.set(name, {
+                ...result,
+                lastChecked: nowISO(),
+              });
+
+              if (!result.healthy) {
+                await monitor.repair(result);
+              }
+            } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
+          }, monitor.interval);
+
+          // Unref so it doesn't prevent process exit
+          if (timer.unref) timer.unref();
+          _guardianTimers.set(name, timer);
+        }, monitorDelay);
+        if (startTimer.unref) startTimer.unref();
+      }
+
+      logger.info('emergent:repair-cortex', 'Guardian monitors activating with staggered delays', { monitors: Object.keys(GUARDIAN_MONITORS).length, totalStaggerMs: stagger });
+    }, REPAIR_STARTUP_DELAY);
+    if (delayTimer.unref) delayTimer.unref();
 
     logRepairDTU(REPAIR_PHASES.POST_BUILD, "guardian_started", {
       monitors: Object.keys(GUARDIAN_MONITORS),
@@ -3264,9 +3484,31 @@ export async function runGuardianCheck(name) {
 // Every fix attempt is tracked. Success rate determines
 // whether a pattern gets reused or deprecated.
 
-const RUNTIME_REPAIR_INTERVAL = 15000; // GPU: 15 seconds — 1.5B repair brain runs diagnostics faster
+const RUNTIME_REPAIR_INTERVAL = 900_000; // 15 minutes — repair is background, let the system breathe.
+// Was 15s which clogged the event loop with LLM repair brain calls on top of
+// 12 guardian monitors + cognitive pipeline + biological ticks. 5 min gives
+// each repair cycle time to complete and errors time to accumulate into patterns.
 let _repairLoopTimer = null;
 let _repairLoopRunning = false;
+
+// ── Brain Availability Cooldown ───────────────────────────────────────────
+// When brain/Ollama is unreachable, stop retrying for 5 minutes.
+// Each failed call would block the event loop for up to timeout duration.
+let _brainCooldownUntil = 0;
+const BRAIN_COOLDOWN_MS = 300_000; // 5 minutes
+
+function isBrainInCooldown() {
+  return Date.now() < _brainCooldownUntil;
+}
+
+function enterBrainCooldown() {
+  _brainCooldownUntil = Date.now() + BRAIN_COOLDOWN_MS;
+  logger.info('emergent:repair-cortex', `Brain unavailable — cooldown for ${BRAIN_COOLDOWN_MS / 1000}s, skipping all LLM repair calls`);
+}
+
+function clearBrainCooldown() {
+  _brainCooldownUntil = 0;
+}
 
 // ── Deterministic Executors ─────────────────────────────────────────────────
 // These are the ACTUAL fixes. Not text descriptions. Real functions.
@@ -3553,6 +3795,9 @@ function findExecutorForDiagnosis(diagnosis) {
 // Replaces free-text tryAIFix() with structured output
 
 async function callRepairBrain(errorEntry) {
+  // COOLDOWN CHECK: If brain recently failed, skip entirely — never block event loop
+  if (isBrainInCooldown()) return null;
+
   const BRAIN = globalThis._concordBRAIN;
   if (!BRAIN?.repair?.enabled) return null;
 
@@ -3579,6 +3824,11 @@ CONFIDENCE: 0.0
 REASONING: <why>`;
 
   try {
+    // Yield to active chat — but don't wait more than 1s
+    if (queues.conscious?.active > 0 || queues.utility?.active > 0) {
+      await new Promise(r => setTimeout(r, 1000));
+    }
+
     const resp = await fetch(`${BRAIN.repair.url}/api/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -3588,9 +3838,11 @@ REASONING: <why>`;
         stream: false,
         options: { temperature: 0.1, num_predict: 200 },
       }),
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(5000), // 5s hard cap — never block event loop longer
     });
 
+    // Brain responded — clear any cooldown
+    clearBrainCooldown();
     BRAIN.repair.stats.requests++;
     const data = await resp.json();
     const text = (data.response || "").trim();
@@ -3615,6 +3867,8 @@ REASONING: <why>`;
 
     return { executor, context, confidence };
   } catch {
+    // Brain is down — enter cooldown so we don't keep blocking the event loop
+    enterBrainCooldown();
     return null;
   }
 }
@@ -3623,6 +3877,8 @@ REASONING: <why>`;
 
 async function runRepairCycle() {
   if (_repairLoopRunning) return; // No concurrent cycles
+  // Skip entire cycle if memory ceiling monitor has paused background tasks
+  if (globalThis.__memoryPaused?.()) return;
   _repairLoopRunning = true;
 
   const cycleStart = Date.now();
@@ -3773,6 +4029,8 @@ export function initSpotCheck(callBrainFn, stateFn) {
 
 async function repairBrainSpotCheck() {
   if (!_spotCheckCallBrain || !_spotCheckState) return { checked: 0 };
+  // Skip if brain is in cooldown — spot checks are not critical
+  if (isBrainInCooldown()) return { checked: 0, skipped: "brain_cooldown" };
   const STATE = typeof _spotCheckState === "function" ? _spotCheckState() : _spotCheckState;
   if (!STATE?.lensArtifacts) return { checked: 0 };
 
@@ -3818,21 +4076,39 @@ Artifact data (first 500 chars): ${JSON.stringify(artifact.data).slice(0, 500)}`
 
 // ── Loop Management ─────────────────────────────────────────────────────────
 
+const REPAIR_STARTUP_DELAY = 180_000; // 3 minutes — match ghost fleet, let server fully boot
+
+let _repairDelayTimer = null; // tracks the startup delay setTimeout
+
 export function startRepairLoop() {
   if (_repairLoopTimer) return { ok: true, status: "already_running" };
 
-  _repairLoopTimer = setInterval(async () => {
-    try {
-      await runRepairCycle();
-    } catch (e) {
-      try { observe(e, "repair_loop_tick"); } catch (_e) { logger.debug('emergent:repair-cortex', 'absolute last resort', { error: _e?.message }); }
-    }
-  }, RUNTIME_REPAIR_INTERVAL);
+  // Delay activation so the server is fully booted before repair systems fire
+  _repairDelayTimer = setTimeout(() => {
+    _repairDelayTimer = null; // delay has fired
+    _repairLoopTimer = setInterval(async () => {
+      try {
+        await runRepairCycle();
+      } catch (e) {
+        try { observe(e, "repair_loop_tick"); } catch (_e) { logger.debug('emergent:repair-cortex', 'absolute last resort', { error: _e?.message }); }
+      }
+    }, RUNTIME_REPAIR_INTERVAL);
 
-  // Unref so it doesn't prevent process exit
-  if (_repairLoopTimer.unref) _repairLoopTimer.unref();
+    // Unref so it doesn't prevent process exit
+    if (_repairLoopTimer.unref) _repairLoopTimer.unref();
 
-  // Also start Guardian monitors
+    // Expose guardian status for cascade-recovery.js health checks
+    globalThis._guardianStatus = () => ({ running: true, startedAt: new Date().toISOString() });
+    if (globalThis.STATE) globalThis.STATE._repairGuardian = true;
+
+    logger.info('emergent:repair-cortex', 'Repair loop activated after startup delay');
+  }, REPAIR_STARTUP_DELAY);
+  if (_repairDelayTimer.unref) _repairDelayTimer.unref();
+
+  // Mark as "pending" so we don't double-start (use a truthy sentinel)
+  _repairLoopTimer = { _pending: true };
+
+  // Also start Guardian monitors (with same delay)
   startGuardian();
 
   logRepairDTU(REPAIR_PHASES.POST_BUILD, "repair_loop_started", {
@@ -3844,10 +4120,16 @@ export function startRepairLoop() {
 }
 
 export function stopRepairLoop() {
-  if (_repairLoopTimer) {
-    clearInterval(_repairLoopTimer);
-    _repairLoopTimer = null;
+  // Clear the startup delay timer if it hasn't fired yet
+  if (_repairDelayTimer) {
+    clearTimeout(_repairDelayTimer);
+    _repairDelayTimer = null;
   }
+  // Clear the interval (only if it's a real timer, not the pending sentinel)
+  if (_repairLoopTimer && !_repairLoopTimer._pending) {
+    clearInterval(_repairLoopTimer);
+  }
+  _repairLoopTimer = null;
   stopGuardian();
   return { ok: true };
 }
@@ -4278,6 +4560,36 @@ const REPAIR_STRATEGIES = [
     },
   },
   {
+    // Security intelligence pattern match — deterministic, no LLM.
+    // Queries security_fixes table for matching vulnerability type using token-overlap.
+    name: "security_pattern_match",
+    match: () => Boolean(_securityMatcher),
+    apply: async (errorEntry) => {
+      try {
+        if (!_securityMatcher) return { fixed: false };
+        const errorMsg = String(errorEntry.error?.message || errorEntry.error || "");
+        const result = _securityMatcher.quickScan({ content: errorMsg, target: "repair_strategy" });
+        if (result.matched && result.fixId) {
+          const fix = _securityMatcher.findFix(result.vulnerabilityType, errorMsg);
+          if (fix && fix.after_pattern) {
+            addToRepairMemory(errorMsg, {
+              executor: "security_fix",
+              securityRelated: true,
+              fixId: fix.id,
+              cveId: fix.cve_id,
+              vulnerabilityType: fix.vulnerability_type,
+            });
+            return { fixed: true, method: "security_pattern_match", fixId: fix.id, vulnerabilityType: fix.vulnerability_type };
+          }
+        }
+        return { fixed: false };
+      } catch (_e) {
+        logger.debug('emergent:repair-cortex', 'security_pattern_match error', { error: _e?.message });
+        return { fixed: false };
+      }
+    },
+  },
+  {
     name: "null_reference_fix",
     match: (err) => /cannot read propert|is not defined|is null|is undefined/i.test(err.error.message),
     apply: async (errorEntry) => {
@@ -4294,6 +4606,7 @@ const REPAIR_STRATEGIES = [
     match: (err) => /timeout|timed out|ETIMEDOUT|ECONNRESET/i.test(err.error.message),
     apply: async (errorEntry) => {
       const S = _getSTATE();
+      if (!S) return { fixed: false, reason: "state_not_ready" };
       if (!S._repairCaches) S._repairCaches = new Map();
       const cacheKey = `timeout_cache:${errorEntry.context.module}`;
       if (!S._repairCaches.has(cacheKey)) {
@@ -4309,12 +4622,17 @@ const REPAIR_STRATEGIES = [
     name: "type_error_fix",
     match: (err) => /TypeError|is not a function|is not iterable/i.test(err.error.message),
     apply: async (errorEntry) => {
+      // Record the patch key so we can track occurrences, but do NOT claim fixed:true
+      // since this strategy cannot actually patch the calling code at runtime.
+      // Instead, escalate so the sovereign / operator is alerted.
       const patchKey = `type_guard:${errorEntry.context.module}:${errorEntry.context.function}`;
       if (!RUNTIME_PATCHES.has(patchKey)) {
-        RUNTIME_PATCHES.set(patchKey, { type: "type_guard", module: errorEntry.context.module, appliedAt: nowISO() });
-        return { fixed: true, method: "type_guard" };
+        RUNTIME_PATCHES.set(patchKey, { type: "type_guard", module: errorEntry.context.module, appliedAt: nowISO(), occurrences: 1 });
+      } else {
+        const p = RUNTIME_PATCHES.get(patchKey);
+        p.occurrences = (p.occurrences || 0) + 1;
       }
-      return { fixed: false };
+      return { fixed: false, escalate: true, method: "type_guard_logged" };
     },
   },
   {
@@ -4364,7 +4682,9 @@ const REPAIR_STRATEGIES = [
         const pathMatch = errorEntry.error.message.match(/ENOENT.*'([^']+)'/);
         if (pathMatch) {
           const S = _getSTATE();
-          for (const [id, dtu] of (S?.dtus || new Map())) {
+          const dtus = S?.dtus;
+          const dtuIterable = !dtus ? [] : typeof dtus.entries === 'function' ? dtus.entries() : dtus instanceof Map ? dtus : new Map();
+          for (const [id, dtu] of dtuIterable) {
             if (dtu.artifact?.diskPath === pathMatch[1]) {
               dtu.artifact.diskPath = null;
               return { fixed: true, method: "marked_artifact_unavailable", dtuId: id };
@@ -4379,7 +4699,7 @@ const REPAIR_STRATEGIES = [
   // The 0.5B model picks from a short list. Then deterministic strategies handle the fix.
   {
     name: "repair_brain_triage",
-    match: () => true,
+    match: () => !isBrainInCooldown(), // Skip entirely when brain is in cooldown
     apply: async (errorEntry) => {
       try {
         const BRAIN = globalThis._concordBRAIN;
@@ -4399,7 +4719,7 @@ Category:`;
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ model: brainConfig.model, messages: [{ role: "user", content: prompt }], stream: false }),
-          signal: AbortSignal.timeout(10000),
+          signal: AbortSignal.timeout(5000), // 5s hard cap
         });
         const result = await response.json();
         const category = result?.message?.content?.trim().toUpperCase().split(/\s/)[0];
@@ -4423,8 +4743,10 @@ Category:`;
             return { ...fixResult, triageCategory: category, method: `llm_triage_${category.toLowerCase()}` };
           }
         }
+        clearBrainCooldown(); // Brain responded
         return { fixed: false, triageCategory: category || "UNKNOWN" };
       } catch (err) {
+        enterBrainCooldown(); // Brain down — stop retrying
         return { fixed: false, reason: "llm_triage_failed", error: err?.message };
       }
     },
@@ -4434,7 +4756,7 @@ Category:`;
   // Borrows one inference from the utility brain (or conscious brain as fallback).
   {
     name: "deep_diagnostic",
-    match: () => true,
+    match: () => !isBrainInCooldown(), // Skip when brain is in cooldown
     apply: async (errorEntry) => {
       try {
         const BRAIN = globalThis._concordBRAIN;
@@ -4459,8 +4781,9 @@ Provide your response as JSON with no other text:
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ model: brainConfig.model, messages: [{ role: "user", content: prompt }], stream: false }),
-          signal: AbortSignal.timeout(30000),
+          signal: AbortSignal.timeout(5000), // 5s hard cap — never block event loop longer
         });
+        clearBrainCooldown(); // Brain responded
         const result = await response.json();
         const content = result?.message?.content;
         if (!content) return { fixed: false, reason: "no_llm_response" };
@@ -4497,6 +4820,7 @@ Provide your response as JSON with no other text:
           default: return { fixed: false };
         }
       } catch (err) {
+        enterBrainCooldown(); // Brain down — stop retrying
         return { fixed: false, reason: "deep_diagnostic_failed", error: err?.message };
       }
     },
@@ -4543,7 +4867,9 @@ async function _escalateToSovereign(errorEntry) {
 
 export async function processRepairQueue() {
   if (REPAIR_QUEUE.length === 0) return { processed: 0 };
-  const batch = REPAIR_QUEUE.splice(0, 20);
+  // Skip if memory ceiling monitor has paused background tasks
+  if (globalThis.__memoryPaused?.()) return { processed: 0, skipped: "memory_paused" };
+  const batch = REPAIR_QUEUE.splice(0, 10); // Process max 10 (was 20) to limit cycle duration
   let fixed = 0, escalated = 0;
 
   for (const errorEntry of batch) {
@@ -4595,7 +4921,9 @@ export async function repairCortexSelfTest() {
   const total = Object.keys(results).filter(k => typeof results[k] === "boolean").length;
   results.overall = passed === total ? "healthy" : passed > total * 0.7 ? "degraded" : "failing";
 
-  if (results.overall === "failing") throw new Error(`Repair cortex failing: ${total - passed}/${total} checks failed`);
+  if (results.overall === "failing") {
+    results.error = `Repair cortex failing: ${total - passed}/${total} checks failed`;
+  }
   return results;
 }
 

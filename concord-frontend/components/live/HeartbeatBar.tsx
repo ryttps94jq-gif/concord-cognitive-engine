@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { subscribe, connectSocket } from '@/lib/realtime/socket';
 import { Zap, Shield, Brain, Radio } from 'lucide-react';
+import { use70Lock } from '@/hooks/use70Lock';
 
 interface EmergentEntity {
   id?: string;
@@ -25,6 +26,7 @@ interface EmergentStatusData {
 
 export function HeartbeatBar() {
   const queryClient = useQueryClient();
+  const { lockPercentage } = use70Lock();
   const [liveDtuCount, setLiveDtuCount] = useState<number | null>(null);
   const [recentDtuFlash, setRecentDtuFlash] = useState(false);
 
@@ -37,7 +39,7 @@ export function HeartbeatBar() {
   });
 
   // Fetch scope metrics
-  const { data: _scopeData } = useQuery({
+  const { data: scopeData } = useQuery({
     queryKey: ['scope-metrics'],
     queryFn: () => apiHelpers.scope.metrics().then(r => r.data),
     refetchInterval: 30000,
@@ -144,11 +146,22 @@ export function HeartbeatBar() {
       {/* Sovereignty Badge */}
       <div
         className="hidden md:flex items-center gap-1 px-2 py-1 rounded-md bg-neon-green/10 text-neon-green"
-        title="70% Sovereignty Lock - Immutable core protections"
+        title={`${lockPercentage}% Sovereignty Lock - Immutable core protections`}
       >
         <Shield className="w-3.5 h-3.5" />
-        <span className="font-mono font-medium">70%</span>
+        <span className="font-mono font-medium">{lockPercentage}%</span>
       </div>
+
+      {/* Scope Metrics */}
+      {scopeData && (
+        <div
+          className="hidden lg:flex items-center gap-1.5 px-2 py-1 rounded-md bg-lattice-deep text-gray-300"
+          title={`Scope: ${(scopeData as Record<string, unknown>).local ?? 0} local · ${(scopeData as Record<string, unknown>).marketplace ?? 0} market · ${(scopeData as Record<string, unknown>).global ?? 0} global`}
+        >
+          <span className="font-mono text-xs">{String((scopeData as Record<string, unknown>).total ?? 0)}</span>
+          <span className="text-gray-500 text-xs">scope</span>
+        </div>
+      )}
 
       {/* Live Pulse */}
       <div

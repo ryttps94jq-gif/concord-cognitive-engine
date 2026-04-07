@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -35,6 +36,8 @@ import {
   ChevronRight,
   Layers,
   ChevronDown,
+  Lock,
+  AlertTriangle,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -238,7 +241,7 @@ export default function SecurityLensPage() {
   const [showEditor, setShowEditor] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   const [formTitle, setFormTitle] = useState('');
   const [formStatus, setFormStatus] = useState<string>('detected');
@@ -374,7 +377,7 @@ export default function SecurityLensPage() {
       case 'Incident':
         return (
           <>
-            <div className={ds.grid2}>
+            <div data-lens-theme="security" className={ds.grid2}>
               <div>
                 <label className={ds.label}>Severity</label>
                 <select className={ds.select} value={(formData.severity as string) || 'P3'} onChange={e => setFormData({ ...formData, severity: e.target.value })}>
@@ -813,7 +816,7 @@ export default function SecurityLensPage() {
       {/* Incident status pipeline */}
       <div className={ds.panel}>
         <h3 className={cn(ds.heading3, 'mb-4')}>Incident Pipeline</h3>
-        <div className="flex items-center gap-2 overflow-x-auto pb-2">
+        <div className="flex items-center gap-2 flex-wrap pb-2">
           {INCIDENT_STATUSES.map((s, idx) => {
             const count = incidents.filter(i => i.meta.status === s).length;
             return (
@@ -894,8 +897,8 @@ export default function SecurityLensPage() {
     return (
       <div className="flex items-center justify-center h-full p-8">
         <div className="text-center space-y-3">
-          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-sm text-gray-400">Loading...</p>
+          <div className="w-8 h-8 border-2 border-green-400 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Scanning systems...</p>
         </div>
       </div>
     );
@@ -944,7 +947,7 @@ export default function SecurityLensPage() {
       {/* AI Actions */}
       <UniversalActions domain="security" artifactId={incidents[0]?.id} compact />
       {/* Mode Tabs */}
-      <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 overflow-x-auto">
+      <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 flex-wrap">
         {MODE_TABS.map(tab => {
           const Icon = tab.icon;
           return (
@@ -963,6 +966,76 @@ export default function SecurityLensPage() {
           );
         })}
       </nav>
+
+      {/* Quick Stats & Threat Severity Badges */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { icon: Siren, label: 'Open Incidents', value: dashboardStats.totalOpenIncidents, color: 'text-red-400' },
+          { icon: Server, label: 'Assets', value: assets.length, color: 'text-blue-400' },
+          { icon: Skull, label: 'Active Threats', value: dashboardStats.activeThreats, color: 'text-orange-400' },
+          { icon: ShieldCheck, label: 'Compliance', value: `${dashboardStats.complianceScore}%`, color: 'text-green-400' },
+        ].map((stat, i) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.08 }}
+            className="lens-card"
+          >
+            <stat.icon className={`w-5 h-5 mb-2 ${stat.color}`} />
+            <p className="text-2xl font-bold">{stat.value}</p>
+            <p className="text-sm text-gray-400">{stat.label}</p>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Threat Severity Badges & Security Score Gauge */}
+      {(dashboardStats.totalOpenIncidents > 0 || incidents.length > 0) && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="panel p-4 space-y-3">
+            <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-400" /> Open by Severity
+            </h3>
+            <div className="flex gap-2 flex-wrap">
+              {SEVERITY_LIST.map(sev => {
+                const count = dashboardStats.openBySeverity[sev] || 0;
+                const sevColor = sev === 'P1' ? 'bg-red-500/20 text-red-400 border-red-500/30' :
+                  sev === 'P2' ? 'bg-orange-500/20 text-orange-400 border-orange-500/30' :
+                  sev === 'P3' ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' :
+                  sev === 'P4' ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' :
+                  'bg-green-500/20 text-green-400 border-green-500/30';
+                return (
+                  <span key={sev} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-mono ${sevColor}`}>
+                    {sev} <span className="font-bold">{count}</span>
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+          <div className="panel p-4 space-y-3">
+            <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+              <Lock className="w-4 h-4 text-green-400" /> Security Score
+            </h3>
+            <div className="flex items-center gap-4">
+              <div className="relative w-20 h-20">
+                <svg className="w-20 h-20 -rotate-90" viewBox="0 0 36 36">
+                  <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="3" />
+                  <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke={dashboardStats.complianceScore >= 80 ? '#4ade80' : dashboardStats.complianceScore >= 50 ? '#facc15' : '#f87171'} strokeWidth="3" strokeDasharray={`${dashboardStats.complianceScore}, 100`} strokeLinecap="round" />
+                </svg>
+                <span className={`absolute inset-0 flex items-center justify-center text-sm font-bold ${dashboardStats.complianceScore >= 80 ? 'text-green-400' : dashboardStats.complianceScore >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
+                  {dashboardStats.complianceScore}%
+                </span>
+              </div>
+              <div className="space-y-1 text-xs text-gray-400">
+                <p>MTTR: <span className="text-white font-mono">{dashboardStats.avgMTTR}m</span></p>
+                <p>Unpatched: <span className="text-yellow-400 font-mono">{dashboardStats.unpatchedAssets}</span></p>
+                <p>Patrols Active: <span className="text-green-400 font-mono">{dashboardStats.activePatrols}</span></p>
+                <p>Camera Alerts: <span className="text-orange-400 font-mono">{dashboardStats.alertsToday}</span></p>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {/* Search / Filter */}
       {mode !== 'Dashboard' && (
@@ -1091,7 +1164,7 @@ export default function SecurityLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

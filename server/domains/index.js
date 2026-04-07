@@ -32,6 +32,66 @@ import science from './science.js';
 import security from './security.js';
 import services from './services.js';
 import insurance from './insurance.js';
+import crypto from './crypto.js';
+import code from './code.js';
+import math from './math.js';
+import bio from './bio.js';
+import quantum from './quantum.js';
+import art from './art.js';
+import platform from './platform.js';
+import neuro from './neuro.js';
+import physics from './physics.js';
+import chem from './chem.js';
+import hypothesis from './hypothesis.js';
+import timeline from './timeline.js';
+import ethics from './ethics.js';
+import debug from './debug.js';
+import lab from './lab.js';
+import research from './research.js';
+import chat from './chat.js';
+import commandcenter from './commandcenter.js';
+import commonsense from './commonsense.js';
+import docs from './docs.js';
+import eco from './eco.js';
+import entity from './entity.js';
+import goals from './goals.js';
+import grounding from './grounding.js';
+import organ from './organ.js';
+import suffering from './suffering.js';
+import temporal from './temporal.js';
+import vote from './vote.js';
+import transfer from './transfer.js';
+import inference from './inference.js';
+import fractal from './fractal.js';
+import globalDomain from './global.js';
+import market from './market.js';
+import meta from './meta.js';
+import metacognition from './metacognition.js';
+import metalearning from './metalearning.js';
+import news from './news.js';
+import reflection from './reflection.js';
+import repos from './repos.js';
+import resonance from './resonance.js';
+import admin from './admin.js';
+import affect from './affect.js';
+import alliance from './alliance.js';
+import ar from './ar.js';
+import attention from './attention.js';
+import audit from './audit.js';
+import billing from './billing.js';
+import board from './board.js';
+import anon from './anon.js';
+import appmaker from './appmaker.js';
+import cri from './cri.js';
+import integrations from './integrations.js';
+import legacy from './legacy.js';
+import offline from './offline.js';
+import queue from './queue.js';
+import schema from './schema.js';
+import tick from './tick.js';
+import lock from './lock.js';
+import fork from './fork.js';
+import invariant from './invariant.js';
 
 export default [
   healthcare,
@@ -57,4 +117,64 @@ export default [
   security,
   services,
   insurance,
+  crypto,
+  code,
+  math,
+  bio,
+  quantum,
+  art,
+  platform,
+  neuro,
+  physics,
+  chem,
+  hypothesis,
+  timeline,
+  ethics,
+  debug,
+  lab,
+  research,
+  chat,
+  commandcenter,
+  commonsense,
+  docs,
+  eco,
+  entity,
+  goals,
+  grounding,
+  organ,
+  suffering,
+  temporal,
+  vote,
+  transfer,
+  inference,
+  fractal,
+  globalDomain,
+  market,
+  meta,
+  metacognition,
+  metalearning,
+  news,
+  reflection,
+  repos,
+  resonance,
+  admin,
+  affect,
+  alliance,
+  ar,
+  attention,
+  audit,
+  billing,
+  board,
+  anon,
+  appmaker,
+  cri,
+  integrations,
+  legacy,
+  offline,
+  queue,
+  schema,
+  tick,
+  lock,
+  fork,
+  invariant,
 ];

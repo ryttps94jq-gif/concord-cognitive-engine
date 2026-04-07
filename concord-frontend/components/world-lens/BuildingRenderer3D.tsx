@@ -1,0 +1,601 @@
+'use client';
+
+import React, { useEffect, useRef, useCallback } from 'react';
+
+// ── Types ──────────────────────────────────────────────────────────
+
+export type BuildingMaterialType =
+  | 'usb'       // Universal Standard Brick: smooth matte
+  | 'brick'     // Red brick with mortar
+  | 'stone'     // Rough gray stone
+  | 'wood'      // Warm wood grain
+  | 'steel'     // Metallic steel
+  | 'concrete'  // Gray rough concrete
+  | 'glass';    // Transparent / fresnel
+
+export type ViewMode = 'normal' | 'stress_heatmap' | 'validation';
+
+export interface BuildingDTU {
+  id: string;
+  name: string;
+  position: { x: number; y: number; z: number };
+  dimensions: { width: number; height: number; depth: number };
+  floors: number;
+  material: BuildingMaterialType;
+  style: 'colonial' | 'federal' | 'industrial' | 'modern' | 'mixed';
+  /** Structural elements specification */
+  structure: {
+    columns: { count: number; spacing: number; radius: number };
+    beams: { count: number; height: number };
+    roofType: 'flat' | 'gable' | 'hip' | 'mansard' | 'gambrel';
+    roofPitch?: number; // degrees
+    hasBasement: boolean;
+    windowRows: number;
+    windowsPerRow: number;
+  };
+  /** Optional interior definition */
+  interior?: {
+    rooms: { name: string; floor: number; width: number; depth: number }[];
+  };
+}
+
+export interface ValidationData {
+  buildingId: string;
+  /** Stress ratio: 0 = no load, 1.0 = at capacity, >1.0 = overstressed */
+  stressRatio: number;
+  /** Per-element stress for heatmap */
+  elementStress?: {
+    elementId: string;
+    type: 'column' | 'beam' | 'wall' | 'foundation';
+    stress: number;
+  }[];
+  /** Whether this building has a structural failure */
+  hasFailure: boolean;
+  failureType?: 'buckling' | 'bowing' | 'separation' | 'collapse';
+}
+
+interface BuildingRenderer3DProps {
+  buildings: BuildingDTU[];
+  materials?: Record<string, BuildingMaterialType>;
+  validationData?: ValidationData[];
+  viewMode: ViewMode;
+  onBuildingClick?: (buildingId: string) => void;
+}
+
+// ── Material Configuration ──────────────────────────────────────
+
+const PBR_MATERIAL_CONFIG: Record<BuildingMaterialType, {
+  color: number;
+  roughness: number;
+  metalness: number;
+  transparent: boolean;
+  opacity: number;
+}> = {
+  usb:      { color: 0xd4c5a9, roughness: 0.6,  metalness: 0.0,  transparent: false, opacity: 1.0 },
+  brick:    { color: 0x8b3a2a, roughness: 0.75, metalness: 0.0,  transparent: false, opacity: 1.0 },
+  stone:    { color: 0x7a7a7a, roughness: 0.85, metalness: 0.0,  transparent: false, opacity: 1.0 },
+  wood:     { color: 0xa0724a, roughness: 0.7,  metalness: 0.0,  transparent: false, opacity: 1.0 },
+  steel:    { color: 0xb0b0b8, roughness: 0.3,  metalness: 0.85, transparent: false, opacity: 1.0 },
+  concrete: { color: 0x999999, roughness: 0.9,  metalness: 0.0,  transparent: false, opacity: 1.0 },
+  glass:    { color: 0xaaddff, roughness: 0.1,  metalness: 0.2,  transparent: true,  opacity: 0.35 },
+};
+
+// ── Stress Color Mapping ────────────────────────────────────────
+
+function stressToColor(stress: number): number {
+  // blue(0) -> green(0.25) -> yellow(0.5) -> orange(0.75) -> red(1.0+)
+  if (stress <= 0.25) {
+    // Blue to green
+    const t = stress / 0.25;
+    const r = 0;
+    const g = Math.floor(t * 255);
+    const b = Math.floor((1 - t) * 255);
+    return (r << 16) | (g << 8) | b;
+  } else if (stress <= 0.5) {
+    const t = (stress - 0.25) / 0.25;
+    const r = Math.floor(t * 255);
+    const g = 255;
+    const b = 0;
+    return (r << 16) | (g << 8) | b;
+  } else if (stress <= 0.75) {
+    const t = (stress - 0.5) / 0.25;
+    const r = 255;
+    const g = Math.floor((1 - t * 0.5) * 255);
+    const b = 0;
+    return (r << 16) | (g << 8) | b;
+  } else {
+    const t = Math.min(1, (stress - 0.75) / 0.25);
+    const r = 255;
+    const g = Math.floor((1 - t) * 128);
+    const b = 0;
+    return (r << 16) | (g << 8) | b;
+  }
+}
+
+function validationEmissiveColor(stressRatio: number): { color: number; intensity: number; pulse: boolean } {
+  if (stressRatio <= 0.5) return { color: 0x000000, intensity: 0, pulse: false };
+  if (stressRatio <= 0.7) return { color: 0x00ff00, intensity: 0.3, pulse: false };
+  if (stressRatio <= 0.9) return { color: 0xffff00, intensity: 0.5, pulse: false };
+  if (stressRatio <= 1.0) return { color: 0xff8800, intensity: 0.7, pulse: false };
+  return { color: 0xff0000, intensity: 1.0, pulse: true };
+}
+
+// ── Component ────────────────────────────────────────────────────
+
+export default function BuildingRenderer3D({
+  buildings,
+  validationData,
+  viewMode,
+  onBuildingClick,
+}: BuildingRenderer3DProps) {
+  const buildingGroupRef = useRef<unknown>(null);
+  const instancedMeshesRef = useRef<Map<string, unknown>>(new Map());
+
+  // ── Render a single building from DTU ─────────────────────────
+
+  const renderFromDTU = useCallback(async (
+    dtu: BuildingDTU,
+    THREE: typeof import('three'),
+    validation?: ValidationData,
+  ) => {
+    const group = new THREE.Group();
+    group.name = `building_${dtu.id}`;
+    group.userData = { buildingId: dtu.id, dtuName: dtu.name };
+
+    const { width, height, depth } = dtu.dimensions;
+    const matType = dtu.material;
+    const matConfig = PBR_MATERIAL_CONFIG[matType];
+
+    // Base material (may be overridden for validation/heatmap modes)
+    const createMaterial = (overrides?: Partial<typeof matConfig>) => {
+      const cfg = { ...matConfig, ...overrides };
+      return new THREE.MeshStandardMaterial({
+        color: cfg.color,
+        roughness: cfg.roughness,
+        metalness: cfg.metalness,
+        transparent: cfg.transparent,
+        opacity: cfg.opacity,
+      });
+    };
+
+    // ── Foundation ──────────────────────────────────────────────
+    const foundationHeight = dtu.structure.hasBasement ? 3 : 0.5;
+    const foundationGeom = new THREE.BoxGeometry(width + 0.4, foundationHeight, depth + 0.4);
+    const foundationMat = createMaterial({ color: 0x555555, roughness: 0.9 });
+    const foundation = new THREE.Mesh(foundationGeom, foundationMat);
+    foundation.position.y = foundationHeight / 2;
+    foundation.castShadow = true;
+    foundation.receiveShadow = true;
+    foundation.userData = { elementType: 'foundation' };
+    group.add(foundation);
+
+    // ── Walls (one box per floor for LOD-friendliness) ──────────
+    const floorHeight = height / dtu.floors;
+    for (let f = 0; f < dtu.floors; f++) {
+      const wallGeom = new THREE.BoxGeometry(width, floorHeight, depth);
+      const wallMat = createMaterial();
+      const wall = new THREE.Mesh(wallGeom, wallMat);
+      wall.position.y = foundationHeight + f * floorHeight + floorHeight / 2;
+      wall.castShadow = true;
+      wall.receiveShadow = true;
+      wall.userData = { elementType: 'wall', floor: f };
+      group.add(wall);
+    }
+
+    // ── Columns ──────────────────────────────────────────────────
+    const { columns } = dtu.structure;
+    if (columns.count > 0) {
+      const colGeom = new THREE.CylinderGeometry(
+        columns.radius, columns.radius, height, 8,
+      );
+
+      // Use instanced mesh for repeated columns
+      const colMat = createMaterial({
+        color: matType === 'steel' ? 0xa0a0a8 : 0x888888,
+        metalness: matType === 'steel' ? 0.9 : 0.1,
+      });
+      const instancedColumns = new THREE.InstancedMesh(colGeom, colMat, columns.count);
+      instancedColumns.castShadow = true;
+
+      const dummy = new THREE.Object3D();
+      for (let c = 0; c < columns.count; c++) {
+        const angle = (c / columns.count) * Math.PI * 2;
+        const cx = Math.cos(angle) * (width / 2 - columns.radius);
+        const cz = Math.sin(angle) * (depth / 2 - columns.radius);
+        dummy.position.set(cx, foundationHeight + height / 2, cz);
+        dummy.updateMatrix();
+        instancedColumns.setMatrixAt(c, dummy.matrix);
+      }
+      instancedColumns.instanceMatrix.needsUpdate = true;
+      instancedColumns.userData = { elementType: 'columns' };
+      group.add(instancedColumns);
+      instancedMeshesRef.current.set(`${dtu.id}_columns`, instancedColumns);
+    }
+
+    // ── Beams (horizontal structural members per floor) ──────────
+    const { beams } = dtu.structure;
+    if (beams.count > 0) {
+      const beamGeom = new THREE.BoxGeometry(width, beams.height, 0.3);
+      const beamMat = createMaterial({
+        color: matType === 'steel' ? 0xa0a0a8 : 0x7a6040,
+        metalness: matType === 'steel' ? 0.85 : 0.0,
+      });
+      const instancedBeams = new THREE.InstancedMesh(beamGeom, beamMat, beams.count);
+
+      const dummy = new THREE.Object3D();
+      for (let b = 0; b < beams.count; b++) {
+        const floor = Math.floor(b / Math.max(1, beams.count / dtu.floors));
+        const beamZ = (b % 3 - 1) * (depth / 3);
+        dummy.position.set(0, foundationHeight + (floor + 1) * floorHeight, beamZ);
+        dummy.updateMatrix();
+        instancedBeams.setMatrixAt(b, dummy.matrix);
+      }
+      instancedBeams.instanceMatrix.needsUpdate = true;
+      instancedBeams.userData = { elementType: 'beams' };
+      group.add(instancedBeams);
+      instancedMeshesRef.current.set(`${dtu.id}_beams`, instancedBeams);
+    }
+
+    // ── Windows (instanced quads) ────────────────────────────────
+    const { windowRows, windowsPerRow } = dtu.structure;
+    const windowCount = windowRows * windowsPerRow * 2; // front + back
+    if (windowCount > 0) {
+      const winGeom = new THREE.PlaneGeometry(1.2, 1.5);
+      const winMat = new THREE.MeshStandardMaterial({
+        color: 0xaaddff,
+        roughness: 0.1,
+        metalness: 0.2,
+        transparent: true,
+        opacity: 0.4,
+      });
+      const instancedWindows = new THREE.InstancedMesh(winGeom, winMat, windowCount);
+
+      const dummy = new THREE.Object3D();
+      let wIdx = 0;
+      for (let row = 0; row < windowRows; row++) {
+        for (let col = 0; col < windowsPerRow; col++) {
+          const wx = (col / (windowsPerRow - 1 || 1) - 0.5) * (width - 2);
+          const wy = foundationHeight + (row + 0.5) * floorHeight;
+
+          // Front face
+          dummy.position.set(wx, wy, depth / 2 + 0.01);
+          dummy.rotation.set(0, 0, 0);
+          dummy.updateMatrix();
+          instancedWindows.setMatrixAt(wIdx++, dummy.matrix);
+
+          // Back face
+          dummy.position.set(wx, wy, -depth / 2 - 0.01);
+          dummy.rotation.set(0, Math.PI, 0);
+          dummy.updateMatrix();
+          instancedWindows.setMatrixAt(wIdx++, dummy.matrix);
+        }
+      }
+      instancedWindows.instanceMatrix.needsUpdate = true;
+      instancedWindows.userData = { elementType: 'windows' };
+      group.add(instancedWindows);
+      instancedMeshesRef.current.set(`${dtu.id}_windows`, instancedWindows);
+    }
+
+    // ── Roof ─────────────────────────────────────────────────────
+    const roofY = foundationHeight + height;
+    const { roofType, roofPitch = 30 } = dtu.structure;
+    const roofMat = createMaterial({ color: 0x6a4a3a, roughness: 0.8 });
+
+    switch (roofType) {
+      case 'gable': {
+        const roofHeight = Math.tan((roofPitch * Math.PI) / 180) * (width / 2);
+        const roofShape = new THREE.Shape();
+        roofShape.moveTo(-width / 2, 0);
+        roofShape.lineTo(0, roofHeight);
+        roofShape.lineTo(width / 2, 0);
+        roofShape.closePath();
+
+        const extrudeSettings = { depth: depth, bevelEnabled: false };
+        const roofGeom = new THREE.ExtrudeGeometry(roofShape, extrudeSettings);
+        const roof = new THREE.Mesh(roofGeom, roofMat);
+        roof.position.set(0, roofY, -depth / 2);
+        roof.castShadow = true;
+        roof.userData = { elementType: 'roof' };
+        group.add(roof);
+        break;
+      }
+      case 'hip': {
+        const roofHeight = Math.tan((roofPitch * Math.PI) / 180) * Math.min(width, depth) / 2;
+        const roofGeom = new THREE.ConeGeometry(
+          Math.sqrt(width * width + depth * depth) / 2,
+          roofHeight,
+          4,
+        );
+        const roof = new THREE.Mesh(roofGeom, roofMat);
+        roof.position.y = roofY + roofHeight / 2;
+        roof.rotation.y = Math.PI / 4;
+        roof.castShadow = true;
+        roof.userData = { elementType: 'roof' };
+        group.add(roof);
+        break;
+      }
+      case 'mansard': {
+        // Two-slope roof: steep lower, shallow upper
+        const lowerH = 2;
+        const upperH = 1;
+        const inset = 1;
+        // Lower steep section
+        const lowerGeom = new THREE.BoxGeometry(width - inset, lowerH, depth - inset);
+        const lower = new THREE.Mesh(lowerGeom, roofMat);
+        lower.position.y = roofY + lowerH / 2;
+        lower.castShadow = true;
+        group.add(lower);
+        // Upper shallow section
+        const upperGeom = new THREE.BoxGeometry(width - inset * 3, upperH, depth - inset * 3);
+        const upper = new THREE.Mesh(upperGeom, roofMat);
+        upper.position.y = roofY + lowerH + upperH / 2;
+        upper.castShadow = true;
+        upper.userData = { elementType: 'roof' };
+        group.add(upper);
+        break;
+      }
+      case 'gambrel': {
+        // Barn-style: two slopes per side
+        const roofHeight = 3;
+        const roofGeom = new THREE.BoxGeometry(width + 0.5, roofHeight, depth + 0.5);
+        const roof = new THREE.Mesh(roofGeom, roofMat);
+        roof.position.y = roofY + roofHeight / 2;
+        roof.castShadow = true;
+        roof.userData = { elementType: 'roof' };
+        group.add(roof);
+        break;
+      }
+      case 'flat':
+      default: {
+        const roofGeom = new THREE.BoxGeometry(width + 0.3, 0.3, depth + 0.3);
+        const roof = new THREE.Mesh(roofGeom, roofMat);
+        roof.position.y = roofY + 0.15;
+        roof.castShadow = true;
+        roof.receiveShadow = true;
+        roof.userData = { elementType: 'roof' };
+        group.add(roof);
+        break;
+      }
+    }
+
+    // ── Validation overlay (emissive glow based on stress) ──────
+    if (viewMode === 'validation' && validation) {
+      const glow = validationEmissiveColor(validation.stressRatio);
+      group.traverse((child) => {
+        const mesh = child as unknown as {
+          material?: InstanceType<typeof import('three').MeshStandardMaterial>;
+          isMesh?: boolean;
+        };
+        if (mesh.isMesh && mesh.material) {
+          mesh.material.emissive = new THREE.Color(glow.color);
+          mesh.material.emissiveIntensity = glow.intensity;
+        }
+      });
+
+      // Pulsing animation for critical stress
+      if (glow.pulse) {
+        group.userData.update = (_delta: number, elapsed: number) => {
+          const pulseIntensity = 0.5 + Math.sin(elapsed * 4) * 0.5;
+          group.traverse((child) => {
+            const mesh = child as unknown as {
+              material?: InstanceType<typeof import('three').MeshStandardMaterial>;
+              isMesh?: boolean;
+            };
+            if (mesh.isMesh && mesh.material) {
+              mesh.material.emissiveIntensity = pulseIntensity;
+            }
+          });
+        };
+      }
+    }
+
+    // ── Stress heatmap mode ─────────────────────────────────────
+    if (viewMode === 'stress_heatmap' && validation) {
+      group.traverse((child) => {
+        const mesh = child as unknown as {
+          material?: InstanceType<typeof import('three').MeshStandardMaterial>;
+          isMesh?: boolean;
+          userData?: { elementType?: string };
+        };
+        if (mesh.isMesh && mesh.material && mesh.userData?.elementType) {
+          // Find per-element stress or use overall
+          const elementStress = validation.elementStress?.find(
+            (e) => e.type === mesh.userData!.elementType,
+          );
+          const stress = elementStress?.stress ?? validation.stressRatio;
+          mesh.material.color = new THREE.Color(stressToColor(stress));
+          mesh.material.emissive = new THREE.Color(stressToColor(stress));
+          mesh.material.emissiveIntensity = 0.3;
+          mesh.material.roughness = 1.0;
+          mesh.material.metalness = 0.0;
+        }
+      });
+    }
+
+    // ── Failure deformation animation ───────────────────────────
+    if (validation?.hasFailure && validation.failureType) {
+      group.userData.update = (_delta: number, elapsed: number) => {
+        const t = Math.min(1, elapsed * 0.1); // Slow deformation over time
+
+        group.traverse((child) => {
+          const mesh = child as unknown as {
+            userData?: { elementType?: string };
+            position?: { y: number; x: number };
+            scale?: { set: (x: number, y: number, z: number) => void };
+            rotation?: { z: number };
+          };
+          if (!mesh.userData?.elementType) return;
+
+          switch (validation.failureType) {
+            case 'bowing':
+              if (mesh.userData.elementType === 'beams') {
+                const bowAmount = Math.sin(t * Math.PI) * 0.3;
+                if (mesh.scale) mesh.scale.set(1, 1 - bowAmount, 1);
+              }
+              break;
+            case 'buckling':
+              if (mesh.userData.elementType === 'columns') {
+                if (mesh.rotation) mesh.rotation.z = Math.sin(elapsed * 2) * t * 0.1;
+              }
+              break;
+            case 'separation':
+              if (mesh.userData.elementType === 'wall') {
+                if (mesh.position) mesh.position.x += Math.sin(elapsed) * t * 0.02;
+              }
+              break;
+            case 'collapse':
+              if (mesh.position) {
+                mesh.position.y -= t * 0.5;
+              }
+              if (mesh.rotation) {
+                mesh.rotation.z += t * 0.02;
+              }
+              break;
+          }
+        });
+      };
+    }
+
+    // ── Position in world ────────────────────────────────────────
+    group.position.set(dtu.position.x, dtu.position.y, dtu.position.z);
+
+    return group;
+  }, [viewMode]);
+
+  // ── Build all buildings ────────────────────────────────────────
+
+  useEffect(() => {
+    let disposed = false;
+
+    async function buildAllBuildings() {
+      const THREE = await import('three');
+      if (disposed) return;
+
+      const parentGroup = new THREE.Group();
+      parentGroup.name = 'building_renderer';
+
+      const validationMap = new Map<string, ValidationData>();
+      if (validationData) {
+        for (const v of validationData) {
+          validationMap.set(v.buildingId, v);
+        }
+      }
+
+      // Render each building from DTU
+      for (const dtu of buildings) {
+        const validation = validationMap.get(dtu.id);
+        const buildingGroup = await renderFromDTU(dtu, THREE, validation);
+        if (disposed) return;
+
+        // ── LOD wrapper ─────────────────────────────────────────
+        const lod = new THREE.LOD();
+
+        // Full detail mesh (within 50m)
+        lod.addLevel(buildingGroup, 0);
+
+        // Simplified mesh (within 200m): single box
+        const simplifiedGeom = new THREE.BoxGeometry(
+          dtu.dimensions.width,
+          dtu.dimensions.height,
+          dtu.dimensions.depth,
+        );
+        const simplifiedMat = new THREE.MeshStandardMaterial({
+          color: PBR_MATERIAL_CONFIG[dtu.material].color,
+          roughness: 0.8,
+        });
+        const simplified = new THREE.Mesh(simplifiedGeom, simplifiedMat);
+        simplified.position.y = dtu.dimensions.height / 2;
+        simplified.castShadow = true;
+        const simplifiedGroup = new THREE.Group();
+        simplifiedGroup.add(simplified);
+        lod.addLevel(simplifiedGroup, 50);
+
+        // Box proxy (within 500m): even simpler
+        const proxyGeom = new THREE.BoxGeometry(
+          dtu.dimensions.width,
+          dtu.dimensions.height,
+          dtu.dimensions.depth,
+        );
+        const proxyMat = new THREE.MeshLambertMaterial({
+          color: PBR_MATERIAL_CONFIG[dtu.material].color,
+        });
+        const proxy = new THREE.Mesh(proxyGeom, proxyMat);
+        proxy.position.y = dtu.dimensions.height / 2;
+        const proxyGroup = new THREE.Group();
+        proxyGroup.add(proxy);
+        lod.addLevel(proxyGroup, 200);
+
+        // Billboard (500m+): flat sprite
+        const billboardGeom = new THREE.PlaneGeometry(
+          dtu.dimensions.width,
+          dtu.dimensions.height,
+        );
+        const billboardMat = new THREE.MeshBasicMaterial({
+          color: PBR_MATERIAL_CONFIG[dtu.material].color,
+          transparent: true,
+          opacity: 0.6,
+        });
+        const billboard = new THREE.Mesh(billboardGeom, billboardMat);
+        billboard.position.y = dtu.dimensions.height / 2;
+        const billboardGroup = new THREE.Group();
+        billboardGroup.add(billboard);
+        lod.addLevel(billboardGroup, 500);
+
+        lod.position.set(dtu.position.x, dtu.position.y, dtu.position.z);
+        lod.userData = { buildingId: dtu.id, buildingName: dtu.name };
+
+        parentGroup.add(lod);
+      }
+
+      // ── Shadow casting optimization: only within 100m ────────
+      parentGroup.userData.update = (_delta: number, _elapsed: number) => {
+        // Could implement distance-based shadow toggle here
+        // using camera position from scene context
+      };
+
+      buildingGroupRef.current = parentGroup;
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('concordia:buildings-ready', {
+          detail: { buildingGroup: parentGroup, onBuildingClick },
+        }));
+      }
+    }
+
+    buildAllBuildings();
+
+    const instancedMeshes = instancedMeshesRef.current;
+    return () => {
+      disposed = true;
+      instancedMeshes.clear();
+      if (buildingGroupRef.current) {
+        const group = buildingGroupRef.current as {
+          traverse: (cb: (obj: unknown) => void) => void;
+        };
+        group.traverse((obj) => {
+          const mesh = obj as {
+            geometry?: { dispose: () => void };
+            material?: { dispose: () => void } | { dispose: () => void }[];
+          };
+          if (mesh.geometry) mesh.geometry.dispose();
+          if (mesh.material) {
+            const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+            mats.forEach((m) => m.dispose());
+          }
+        });
+      }
+    };
+  }, [buildings, validationData, viewMode, renderFromDTU, onBuildingClick]);
+
+  return (
+    <div
+      data-component="building-renderer-3d"
+      data-building-count={buildings.length}
+      data-view-mode={viewMode}
+      style={{ display: 'none' }}
+      aria-hidden
+    />
+  );
+}
+
+export { PBR_MATERIAL_CONFIG, stressToColor, validationEmissiveColor };

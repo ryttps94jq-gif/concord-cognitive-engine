@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 // Mock lucide-react icons used by UserProfile component
 vi.mock('lucide-react', () => {
   const createIcon = (name: string) => {
-    const Component = (props: any) => {
+    const Component = (props: Record<string, unknown>) => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const React = require('react');
       return React.createElement('span', { 'data-testid': `icon-${name}`, ...props });
@@ -49,19 +49,19 @@ vi.mock('framer-motion', () => {
   return {
     motion: {
       // eslint-disable-next-line react/display-name
-      div: React.forwardRef(({ children }: any, ref: any) =>
+      div: React.forwardRef(({ children }: Record<string, unknown>, ref: unknown) =>
         React.createElement('div', { ref }, children)
       ),
       // eslint-disable-next-line react/display-name
-      button: React.forwardRef(({ children }: any, ref: any) =>
+      button: React.forwardRef(({ children }: Record<string, unknown>, ref: unknown) =>
         React.createElement('button', { ref }, children)
       ),
       // eslint-disable-next-line react/display-name
-      span: React.forwardRef(({ children }: any, ref: any) =>
+      span: React.forwardRef(({ children }: Record<string, unknown>, ref: unknown) =>
         React.createElement('span', { ref }, children)
       ),
     },
-    AnimatePresence: ({ children }: any) => React.createElement(React.Fragment, null, children),
+    AnimatePresence: ({ children }: Record<string, unknown>) => React.createElement(React.Fragment, null, children),
   };
 });
 
@@ -129,8 +129,8 @@ describe('UserProfile', () => {
       if (url.includes('/api/social/profile/')) {
         return Promise.resolve({ data: { profile: mockProfile } });
       }
-      if (url.includes('/api/social/feed/') || url.includes('/api/media/author/')) {
-        return Promise.resolve({ data: { feed: [], media: [] } });
+      if (url.includes('/api/social/posts/') || url.includes('/api/social/feed/') || url.includes('/api/media/author/')) {
+        return Promise.resolve({ data: { posts: [], feed: [], media: [] } });
       }
       return Promise.resolve({ data: {} });
     });
@@ -142,7 +142,7 @@ describe('UserProfile', () => {
     queryClient.clear();
   });
 
-  function renderUserProfile(props: Record<string, any> = {}) {
+  function renderUserProfile(props: Record<string, unknown> = {}) {
     return render(
       React.createElement(QueryClientProvider, { client: queryClient },
         React.createElement(UserProfile, { userId: 'user-123', currentUserId: 'current-user', ...props })

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useContext } from 'react';
-import { I18nContext } from '@/components/providers/I18nProvider';
+import { I18nContext } from './context';
 import {
   t as globalT,
   formatNumber as globalFormatNumber,

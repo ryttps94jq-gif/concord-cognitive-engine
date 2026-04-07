@@ -205,14 +205,15 @@ export default function registerOAuthRoutes(app, {
 
   /**
    * Validate the OAuth state parameter against our store.
+   * Returns the state entry (including linkUserId if present) or null.
    */
   function validateState(state) {
-    if (!state) return false;
+    if (!state) return null;
     const entry = OAUTH_STATES.get(state);
-    if (!entry) return false;
+    if (!entry) return null;
     OAUTH_STATES.delete(state); // One-time use
-    if (Date.now() - entry.createdAt > STATE_TTL_MS) return false;
-    return true;
+    if (Date.now() - entry.createdAt > STATE_TTL_MS) return null;
+    return entry;
   }
 
   // ── Routes ──────────────────────────────────────────────────────────────
@@ -253,7 +254,8 @@ export default function registerOAuthRoutes(app, {
     }
 
     // Validate state parameter (CSRF protection)
-    if (!validateState(state)) {
+    const stateEntry = validateState(state);
+    if (!stateEntry) {
       structuredLog("warn", "google_oauth_invalid_state", { ip: req.ip });
       return res.redirect(302, `${FRONTEND_URL}/auth?error=invalid_state`);
     }
@@ -273,6 +275,32 @@ export default function registerOAuthRoutes(app, {
       // Check for existing OAuth connection
       const existingConnection = getOAuthConnection("google", googleUser.sub);
 
+      // ── Account linking flow ─────────────────────────────────────────
+      if (stateEntry.linkUserId) {
+        if (existingConnection) {
+          // This Google account is already linked to another user
+          return res.redirect(302, `${FRONTEND_URL}/auth?error=provider_already_linked`);
+        }
+        const linkUser = AuthDB.getUser(stateEntry.linkUserId);
+        if (!linkUser) {
+          return res.redirect(302, `${FRONTEND_URL}/auth?error=user_not_found`);
+        }
+        createOAuthConnection({
+          userId: linkUser.id,
+          provider: "google",
+          providerUserId: googleUser.sub,
+          email: googleUser.email,
+          name: googleUser.name,
+          avatarUrl: googleUser.picture,
+        });
+        auditLog("auth", "oauth_link", { userId: linkUser.id, provider: "google", ip: req.ip });
+        const linkRedirect = new URL(FRONTEND_URL);
+        linkRedirect.pathname = "/";
+        linkRedirect.searchParams.set("linked", "google");
+        return res.redirect(302, linkRedirect.toString());
+      }
+
+      // ── Standard login/register flow ─────────────────────────────────
       if (existingConnection) {
         // Existing OAuth link — log in the connected user
         const user = AuthDB.getUser(existingConnection.user_id);
@@ -338,7 +366,8 @@ export default function registerOAuthRoutes(app, {
     }
 
     // Validate state parameter
-    if (!validateState(state)) {
+    const stateEntry = validateState(state);
+    if (!stateEntry) {
       structuredLog("warn", "apple_oauth_invalid_state", { ip: req.ip });
       return res.redirect(302, `${FRONTEND_URL}/auth?error=invalid_state`);
     }
@@ -369,6 +398,31 @@ export default function registerOAuthRoutes(app, {
       // Check for existing OAuth connection
       const existingConnection = getOAuthConnection("apple", appleUser.sub);
 
+      // ── Account linking flow ─────────────────────────────────────────
+      if (stateEntry.linkUserId) {
+        if (existingConnection) {
+          return res.redirect(302, `${FRONTEND_URL}/auth?error=provider_already_linked`);
+        }
+        const linkUser = AuthDB.getUser(stateEntry.linkUserId);
+        if (!linkUser) {
+          return res.redirect(302, `${FRONTEND_URL}/auth?error=user_not_found`);
+        }
+        createOAuthConnection({
+          userId: linkUser.id,
+          provider: "apple",
+          providerUserId: appleUser.sub,
+          email: appleUser.email,
+          name: userName,
+          avatarUrl: null,
+        });
+        auditLog("auth", "oauth_link", { userId: linkUser.id, provider: "apple", ip: req.ip });
+        const linkRedirect = new URL(FRONTEND_URL);
+        linkRedirect.pathname = "/";
+        linkRedirect.searchParams.set("linked", "apple");
+        return res.redirect(302, linkRedirect.toString());
+      }
+
+      // ── Standard login/register flow ─────────────────────────────────
       if (existingConnection) {
         const user = AuthDB.getUser(existingConnection.user_id);
         if (!user) {

@@ -154,7 +154,13 @@ function reviewCandidate(candidate, bundle, votes, thresholds, es) {
   // Decision
   let decision;
   if (reasons.length === 0 && voteTally.weightedApprove >= thresholds.minApprovals) {
-    decision = "promoted";
+    // Council soft gate: council-rejected DTUs require sovereign override to promote
+    if (candidate.meta?.councilBlocked && !bundle.overrideCouncilBlock) {
+      decision = "deferred";
+      reasons.push("council_rejected_requires_sovereign_override");
+    } else {
+      decision = "promoted";
+    }
   } else if (candidate.confidenceLabel === "speculative" || voteTally.weightedReject > voteTally.weightedApprove) {
     decision = "rejected";
   } else {
@@ -285,7 +291,13 @@ export function reviewGlobalCandidate(candidate, bundle, votes, thresholds, es) 
   let decision;
   const allGatesPassed = globalGates.quorum && globalGates.threshold && globalGates.guardianApproved && globalGates.derivationDepth;
   if (reasons.length === 0 && allGatesPassed) {
-    decision = "promoted";
+    // Council soft gate: council-rejected DTUs require sovereign override to promote
+    if (candidate.meta?.councilBlocked && !bundle.overrideCouncilBlock) {
+      decision = "deferred";
+      reasons.push("council_rejected_requires_sovereign_override");
+    } else {
+      decision = "promoted";
+    }
   } else if (guardianVetoed || candidate.confidenceLabel === "speculative") {
     decision = "rejected";
   } else {

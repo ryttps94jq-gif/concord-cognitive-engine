@@ -5,6 +5,7 @@
 import express from "express";
 import crypto from "crypto";
 import logger from '../logger.js';
+import { isEmailBanned, scanUsername as scanUsernameGuard } from "../lib/content-guard.js";
 
 export default function createAuthRouter({
   AuthDB,
@@ -39,12 +40,70 @@ export default function createAuthRouter({
   // Apply stricter rate limiting to auth endpoints
   const authRateLimitMiddleware = authRateLimiter || ((req, res, next) => next());
 
+  // ── Bot Prevention: per-IP daily registration cap ──────────────────
+  const _regIpDaily = new Map(); // ip → { count, day }
+  const MAX_REGISTRATIONS_PER_IP_PER_DAY = 3;
+
+  // Cleanup stale entries from _regIpDaily every hour to prevent memory leak
+  const _regIpCleanupInterval = setInterval(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    for (const [ip, entry] of _regIpDaily) {
+      if (entry.day !== today) _regIpDaily.delete(ip);
+    }
+  }, 60 * 60 * 1000);
+  _regIpCleanupInterval.unref();
+
   router.post("/register", authRateLimitMiddleware, validate("userRegister"), (req, res) => {
     const { username, email, password } = req.validated || req.body;
+
+    // ── Bot prevention: honeypot field ──────────────────────────────
+    // Frontend must NOT fill this field; bots auto-fill hidden inputs.
+    if (req.body.website || req.body.url || req.body.phone_number) {
+      // Silently reject — looks like success to the bot
+      return res.status(201).json({ ok: true, user: { id: "ok", username } });
+    }
+
+    // ── Bot prevention: timing check ────────────────────────────────
+    // Legitimate users take ≥2 seconds to fill a 4-field form.
+    const formLoadedAt = Number(req.body._t) || 0;
+    if (formLoadedAt > 0 && (Date.now() - formLoadedAt) < 2000) {
+      return res.status(201).json({ ok: true, user: { id: "ok", username } });
+    }
+
+    // ── Bot prevention: per-IP daily cap ────────────────────────────
+    const today = new Date().toISOString().slice(0, 10);
+    const ipKey = req.ip || "unknown";
+    const ipEntry = _regIpDaily.get(ipKey);
+    if (ipEntry && ipEntry.day === today && ipEntry.count >= MAX_REGISTRATIONS_PER_IP_PER_DAY) {
+      return res.status(429).json({ ok: false, error: "Too many registrations from this network today. Try again tomorrow." });
+    }
 
     // Check if registration is allowed
     if (String(process.env.ALLOW_REGISTRATION || "true").toLowerCase() !== "true") {
       return res.status(403).json({ ok: false, error: "Registration disabled" });
+    }
+
+    // Check for banned email (re-registration prevention) and prohibited usernames
+    try {
+      if (isEmailBanned(db, email)) {
+        return res.status(403).json({ ok: false, error: "Registration not permitted" });
+      }
+      const usernameScan = scanUsernameGuard(username);
+      if (usernameScan.blocked) {
+        return res.status(400).json({ ok: false, error: "Username not permitted" });
+      }
+    } catch (_) { /* content-guard may not be available yet */ }
+
+    // ── Bot prevention: disposable email domain blocking ────────────
+    const emailDomain = email.split("@")[1]?.toLowerCase();
+    const DISPOSABLE_DOMAINS = new Set([
+      "mailinator.com", "guerrillamail.com", "tempmail.com", "throwaway.email",
+      "yopmail.com", "sharklasers.com", "guerrillamailblock.com", "grr.la",
+      "dispostable.com", "maildrop.cc", "temp-mail.org", "fakeinbox.com",
+      "trashmail.com", "getnada.com", "10minutemail.com", "minutemail.com",
+    ]);
+    if (DISPOSABLE_DOMAINS.has(emailDomain)) {
+      return res.status(400).json({ ok: false, error: "Please use a permanent email address" });
     }
 
     // Check for existing user
@@ -64,6 +123,7 @@ export default function createAuthRouter({
       passwordHash: hashPassword(password),
       role: userCount === 0 ? "owner" : "member",
       scopes: userCount === 0 ? ["*"] : ["read", "write"],
+      emailVerified: false,
       createdAt: new Date().toISOString(),
       lastLoginAt: null
     };
@@ -74,6 +134,13 @@ export default function createAuthRouter({
     }
 
     AuthDB.createUser(user);
+
+    // Track per-IP daily registrations
+    if (ipEntry && ipEntry.day === today) {
+      ipEntry.count++;
+    } else {
+      _regIpDaily.set(ipKey, { count: 1, day: today });
+    }
 
     const token = createToken(userId);
     const refreshToken = createRefreshToken(userId);

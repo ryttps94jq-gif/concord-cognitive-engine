@@ -353,6 +353,7 @@ export class DrumMachineEngine {
   async loadSample(padId: string, url: string): Promise<void> {
     try {
       const response = await fetch(url);
+      if (!response.ok) throw new Error(`Request failed: ${response.status}`);
       const arrayBuffer = await response.arrayBuffer();
       const audioBuffer = await this.ctx.decodeAudioData(arrayBuffer);
       this.buffers.set(padId, audioBuffer);

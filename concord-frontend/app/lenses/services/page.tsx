@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
+import { motion } from 'framer-motion';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { ds } from '@/lib/design-system';
@@ -28,6 +29,8 @@ import {
   Phone,
   Mail,
   DollarSign,
+  Activity,
+  TrendingUp,
   Star,
   Bell,
   Heart,
@@ -204,7 +207,7 @@ export default function ServicesLensPage() {
   const [showEditor, setShowEditor] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   const [formTitle, setFormTitle] = useState('');
   const [formStatus, setFormStatus] = useState<string>('booked');
@@ -218,8 +221,8 @@ export default function ServicesLensPage() {
 
   /* secondary data for dashboard */
   const { items: appointments } = useLensData<AppointmentData>('services', 'Appointment', { seed: [] });
-  const { items: _clients } = useLensData<ClientData>('services', 'Client', { seed: [] });
-  const { items: _serviceItems } = useLensData<ServiceItemData>('services', 'ServiceItem', { seed: [] });
+  const { items: clients } = useLensData<ClientData>('services', 'Client', { seed: [] });
+  const { items: serviceItems } = useLensData<ServiceItemData>('services', 'ServiceItem', { seed: [] });
   const { items: staff } = useLensData<StaffMemberData>('services', 'StaffMember', { seed: [] });
   const { items: transactions } = useLensData<TransactionData>('services', 'Transaction', { seed: [] });
   const { items: products } = useLensData<ProductData>('services', 'Product', { seed: [] });
@@ -326,8 +329,11 @@ export default function ServicesLensPage() {
       return d.stockLevel <= d.reorderLevel;
     }).length;
 
-    return { todaysAppts, revenueToday, noShowRate, topServices, staffUtilization, productSales, lowStock };
-  }, [appointments, transactions, staff, products]);
+    const totalClients = clients.length;
+    const totalServices = serviceItems.length;
+
+    return { todaysAppts, revenueToday, noShowRate, topServices, staffUtilization, productSales, lowStock, totalClients, totalServices };
+  }, [appointments, transactions, staff, products, clients, serviceItems]);
 
   /* ================================================================ */
   /*  Form fields                                                      */
@@ -647,6 +653,20 @@ export default function ServicesLensPage() {
         </div>
       </div>
 
+      {/* Client & Service counts */}
+      <div className={ds.grid2}>
+        <div className={ds.panel}>
+          <div className="flex items-center gap-2 mb-2"><Users className="w-5 h-5 text-neon-cyan" /><span className={ds.textMuted}>Total Clients</span></div>
+          <p className="text-3xl font-bold text-neon-cyan">{dashboardStats.totalClients}</p>
+          <p className={ds.textMuted}>Registered clients</p>
+        </div>
+        <div className={ds.panel}>
+          <div className="flex items-center gap-2 mb-2"><Sparkles className="w-5 h-5 text-pink-400" /><span className={ds.textMuted}>Service Menu</span></div>
+          <p className="text-3xl font-bold text-pink-400">{dashboardStats.totalServices}</p>
+          <p className={ds.textMuted}>Available services</p>
+        </div>
+      </div>
+
       {/* Top services */}
       <div className={ds.panel}>
         <h3 className={cn(ds.heading3, 'mb-3')}>Top Services</h3>
@@ -739,7 +759,7 @@ export default function ServicesLensPage() {
   }
 
   return (
-    <div className={ds.pageContainer}>
+    <div data-lens-theme="services" className={ds.pageContainer}>
       {/* Header */}
       <header className={ds.sectionHeader}>
         <div className="flex items-center gap-3">
@@ -772,8 +792,41 @@ export default function ServicesLensPage() {
 
       {/* AI Actions */}
       <UniversalActions domain="services" artifactId={appointments[0]?.id} compact />
+
+      {/* Quick Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 * 0.05 }} className={ds.panel + ' flex items-center gap-3'}>
+          <Scissors className="w-5 h-5 text-pink-400" />
+          <div>
+            <p className="text-lg font-bold text-white">{items.length}</p>
+            <p className="text-xs text-gray-500">Services</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1 * 0.05 }} className={ds.panel + ' flex items-center gap-3'}>
+          <Activity className="w-5 h-5 text-green-400" />
+          <div>
+            <p className="text-lg font-bold text-white">{appointments.filter(a => a.meta.status !== 'cancelled' && a.meta.status !== 'no_show').length}</p>
+            <p className="text-xs text-gray-500">Healthy</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 2 * 0.05 }} className={ds.panel + ' flex items-center gap-3'}>
+          <TrendingUp className="w-5 h-5 text-blue-400" />
+          <div>
+            <p className="text-lg font-bold text-white">{dashboardStats.noShowRate > 0 ? `${(100 - dashboardStats.noShowRate).toFixed(0)}%` : '100%'}</p>
+            <p className="text-xs text-gray-500">Avg Uptime</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 3 * 0.05 }} className={ds.panel + ' flex items-center gap-3'}>
+          <BarChart3 className="w-5 h-5 text-purple-400" />
+          <div>
+            <p className="text-lg font-bold text-white">{appointments.length + staff.length}</p>
+            <p className="text-xs text-gray-500">Endpoints</p>
+          </div>
+        </motion.div>
+      </div>
+
       {/* Tabs */}
-      <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 overflow-x-auto">
+      <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 flex-wrap">
         {MODE_TABS.map(tab => {
           const Icon = tab.icon;
           return (
@@ -920,7 +973,7 @@ export default function ServicesLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

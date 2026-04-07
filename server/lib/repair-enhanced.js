@@ -35,6 +35,10 @@ const PATTERN_CATEGORIES = Object.freeze([
   "llm",
   "state",
   "build",
+  "security",
+  "injection",
+  "malware",
+  "cve",
 ]);
 
 const SEVERITY_LEVELS = Object.freeze(["low", "medium", "high", "critical"]);
@@ -57,6 +61,10 @@ const PREDICTION_THRESHOLDS = Object.freeze({
   llm: { warn: 0.65, critical: 0.85 },
   state: { warn: 0.50, critical: 0.80 },
   build: { warn: 0.50, critical: 0.80 },
+  security: { warn: 0.40, critical: 0.70 },  // Low threshold — security spikes are urgent
+  injection: { warn: 0.30, critical: 0.60 },  // Very sensitive — injection attempts escalate fast
+  malware: { warn: 0.20, critical: 0.50 },    // Any malware spike is critical
+  cve: { warn: 0.50, critical: 0.80 },        // CVE detection rate changes
 });
 
 /** Default metric trend window in hours. */
@@ -1023,6 +1031,84 @@ export function createRepairBrain(db) {
 
   // ── Public API ───────────────────────────────────────────────────────
 
+  // ── Security Knowledge API ────────────────────────────────────────────
+
+  /**
+   * Register a security-specific pattern (wraps registerPattern with security fields).
+   * @param {Object} signature - Security signature data
+   * @returns {Object} Registered pattern
+   */
+  function registerSecurityPattern(signature) {
+    const category = signature.category || "security";
+    if (!["security", "injection", "malware", "cve"].includes(category)) {
+      throw new ValidationError(`Invalid security category: ${category}`);
+    }
+
+    return registerPattern({
+      category,
+      subcategory: signature.subcategory || signature.vulnerabilityType || "general",
+      name: signature.name || `security_${Date.now().toString(36)}`,
+      signature: signature.pattern || signature.signature || "",
+      isHealthy: false,
+      resolution: signature.resolution || signature.afterPattern || "",
+      severity: signature.severity || "high",
+      confidence: signature.confidence || 0.7,
+      sourceDtuId: signature.sourceDtuId || null,
+    });
+  }
+
+  /**
+   * Record a security outcome — tracks success/failure and false positive rates.
+   * @param {string} signatureId - Pattern ID
+   * @param {boolean} success - Whether the detection/fix was correct
+   * @param {boolean} [falsePositive=false] - Whether it was a false positive
+   */
+  function recordSecurityOutcome(signatureId, success, falsePositive = false) {
+    recordOutcome({
+      historyId: signatureId,
+      success,
+      notes: falsePositive ? "false_positive" : undefined,
+    });
+
+    // Track security-specific metrics
+    recordMetric("security_outcomes_total", 1);
+    if (success) recordMetric("security_outcomes_success", 1);
+    if (falsePositive) recordMetric("security_false_positives", 1);
+  }
+
+  /**
+   * Get aggregated security knowledge across all security categories.
+   * @param {string} [category] - Specific security category or null for all
+   * @returns {Object} Security knowledge summary
+   */
+  function getSecurityKnowledge(category) {
+    const securityCategories = category
+      ? [category]
+      : ["security", "injection", "malware", "cve"];
+
+    const knowledge = [];
+    for (const cat of securityCategories) {
+      knowledge.push(...getKnowledge(cat));
+    }
+
+    const patterns = [];
+    for (const cat of securityCategories) {
+      patterns.push(...getPatterns({ category: cat }));
+    }
+
+    return {
+      categories: securityCategories,
+      knowledgeEntries: knowledge.length,
+      patternCount: patterns.length,
+      knowledge,
+      patterns,
+      topBySuccessRate: knowledge
+        .filter(k => k.successCount + k.failureCount >= 3)
+        .sort((a, b) => b.successRate - a.successRate)
+        .slice(0, 10),
+    };
+  }
+
   return {
     PATTERN_CATEGORIES,
     SEVERITY_LEVELS,
@@ -1046,5 +1132,10 @@ export function createRepairBrain(db) {
 
     getStats,
     runHealthCheck,
+
+    // Security intelligence API
+    registerSecurityPattern,
+    recordSecurityOutcome,
+    getSecurityKnowledge,
   };
 }

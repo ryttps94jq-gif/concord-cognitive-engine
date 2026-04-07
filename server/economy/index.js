@@ -5,6 +5,7 @@
 // marketplace, fee splitting, and treasury reconciliation.
 
 import { registerEconomyRoutes } from "./routes.js";
+import { registerCreatorEconomyRoutes } from "./creator-economy-routes.js";
 
 /**
  * Register economy endpoints.
@@ -12,7 +13,8 @@ import { registerEconomyRoutes } from "./routes.js";
  */
 export function registerEconomyEndpoints(app, db, opts = {}) {
   registerEconomyRoutes(app, db, opts);
-  console.warn("[Concord Economy] All economy + Stripe + marketplace endpoints registered");
+  registerCreatorEconomyRoutes(app, db, opts);
+  console.warn("[Concord Economy] All economy + Stripe + marketplace + creator economy endpoints registered");
 }
 
 // Re-export core modules for direct use by other server modules
@@ -115,3 +117,12 @@ export {
   STORAGE_ECONOMICS, VAULT_REFERENCE_SYSTEM, BANDWIDTH_MANAGEMENT,
   CRI_CACHE, STORAGE_CONSTANTS,
 } from "./storage.js";
+
+// Rights Enforcement (v1.0)
+export {
+  ensureLicenseTables, grantLicense, revokeLicense,
+  getUserLicenses as getUserDtuLicenses, getHighestTier,
+  checkAccess, checkDerivativeRights, checkListingRights,
+  streamingGuard, downloadGuard,
+  getLicenseCount, getLicenseBreakdown, getUserAllLicenses,
+} from "./rights-enforcement.js";

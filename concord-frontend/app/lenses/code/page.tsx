@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useMutation } from '@tanstack/react-query';
-import { api, apiHelpers } from '@/lib/api/client';
+import { api } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -25,6 +25,7 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
 
 interface FileNode {
   id: string;
@@ -602,7 +603,7 @@ export default function CodeLensPage() {
   // Persist scripts to backend
   const { isLoading, isError, error, refetch, create: saveScript, items: savedScripts } = useLensData('code', 'script', { noSeed: true });
 
-  const [files, setFiles] = useState<FileNode[]>(TEMPLATE_FILES);
+  const [files, setFiles] = useState<FileNode[]>([]);
   const [tabs, setTabs] = useState<Tab[]>([
     { id: 'main', name: 'untitled.js', language: 'javascript', content: DEFAULT_CODE, isDirty: false, scriptType: 'midi' },
   ]);
@@ -615,22 +616,80 @@ export default function CodeLensPage() {
   const [showApiRef, setShowApiRef] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [outputTab, setOutputTab] = useState<'output' | 'console'>('output');
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
+  const [showForge, setShowForge] = useState(false);
+  const [forgePrompt, setForgePrompt] = useState('');
+  const [forgeResult, setForgeResult] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
 
-  const runScriptMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiHelpers.chat.ask(
-        `Analyze this ${activeScriptType} script for music production and describe what it would produce:\n\n\`\`\`javascript\n${activeTab.content}\n\`\`\``,
-        'creative'
-      );
+  // Forge App Generation mutation
+  const forgeAppMutation = useMutation({
+    mutationFn: async (description: string) => {
+      const res = await api.post('/api/lens/run', {
+        domain: 'code',
+        action: 'forge-generate',
+        input: { description, format: 'single-file-monolith' },
+      });
       return res.data;
     },
-    onSuccess: () => {
-      const result = generateScriptOutput(activeTab.scriptType || activeScriptType, activeTab.content);
-      setScriptOutput(result);
+    onSuccess: (data) => {
+      const content = typeof data?.result === 'string'
+        ? data.result
+        : typeof data?.result?.content === 'string'
+          ? data.result.content
+          : typeof data?.result?.code === 'string'
+            ? data.result.code
+            : JSON.stringify(data?.result || {}, null, 2);
+      setForgeResult(content);
+      // Also open as a new tab for editing
+      const id = `forge-${Date.now()}`;
+      const newTab: Tab = {
+        id,
+        name: `forge_app_${Date.now().toString(36)}.js`,
+        language: 'javascript',
+        content,
+        isDirty: true,
+        scriptType: 'macro',
+      };
+      setTabs(prev => [...prev, newTab]);
+      setActiveTabId(id);
+      setShowForge(false);
+    },
+    onError: (error: Record<string, unknown>) => {
+      setForgeResult(`// Forge generation error: ${String(error.message || 'Unknown error')}\n// Try describing your app in more detail.`);
+    },
+  });
+
+  const [savingOutputDTU, setSavingOutputDTU] = useState(false);
+
+  const runScriptMutation = useMutation({
+    mutationFn: async () => {
+      const res = await api.post('/api/lens/run', {
+        domain: 'code',
+        action: 'generate',
+        input: {
+          code: activeTab.content,
+          language: activeTab.language,
+          scriptType: activeTab.scriptType || activeScriptType,
+        },
+      });
+      return res.data;
+    },
+    onSuccess: (data) => {
+      const serverContent = typeof data?.result === 'string'
+        ? data.result
+        : typeof data?.result?.content === 'string'
+          ? data.result.content
+          : null;
+      const localResult = generateScriptOutput(activeTab.scriptType || activeScriptType, activeTab.content);
+      setScriptOutput({
+        log: serverContent
+          ? `[Server] ${serverContent.slice(0, 500)}\n\n${localResult.log}`
+          : localResult.log,
+        visualization: localResult.visualization,
+      });
       setConsoleLog((prev) => [
         ...prev,
         `[${new Date().toLocaleTimeString()}] Script executed successfully`,
@@ -652,6 +711,27 @@ export default function CodeLensPage() {
       setOutputTab('output');
     },
   });
+
+  const handleSaveOutputAsDTU = useCallback(async () => {
+    if (!scriptOutput) return;
+    setSavingOutputDTU(true);
+    try {
+      await saveScript({
+        title: `Output: ${activeTab.name}`,
+        data: {
+          content: activeTab.content,
+          output: scriptOutput.log,
+          language: activeTab.language,
+          scriptType: activeTab.scriptType || activeScriptType,
+        },
+        meta: { tags: ['script', 'output', activeTab.scriptType || activeScriptType], status: 'active' },
+      });
+    } catch (err) {
+      console.error('[Code] Save output failed:', err);
+    } finally {
+      setSavingOutputDTU(false);
+    }
+  }, [scriptOutput, activeTab, activeScriptType, saveScript]);
 
   const updateTabContent = useCallback((content: string) => {
     setTabs((prev) =>
@@ -795,20 +875,28 @@ export default function CodeLensPage() {
   }
 
   return (
-    <div className={`flex flex-col ${isFullscreen ? 'fixed inset-0 z-50 bg-lattice-deep' : 'h-full'}`}>
+    <div data-lens-theme="code" className={`flex flex-col font-mono ${isFullscreen ? 'fixed inset-0 z-50 bg-[#0d1117]' : 'h-full bg-[#0d1117]'}`}>
       {/* Header */}
-      <header className="flex items-center justify-between px-4 py-2 border-b border-lattice-border bg-lattice-surface/50">
+      <header className="flex items-center justify-between px-4 py-2 border-b border-green-900/40 bg-[#161b22]">
         <div className="flex items-center gap-3">
-          <span className="text-2xl">🎹</span>
+          <Terminal className="w-6 h-6 text-green-400" />
           <div>
-            <h1 className="text-lg font-bold">Script Studio</h1>
-            <p className="text-xs text-gray-400">MIDI scripting, automation & macros</p>
+            <h1 className="text-lg font-bold text-green-300 font-mono tracking-tight">Script Studio</h1>
+            <p className="text-xs text-green-600 font-mono">MIDI scripting, automation & macros</p>
           </div>
 
       {/* Real-time Enhancement Toolbar */}
       <div className="flex items-center gap-2 flex-wrap">
         <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} compact />
         <DTUExportButton domain="code" data={realtimeData || {}} compact />
+        <VisionAnalyzeButton
+          domain="code"
+          prompt="Analyze this code screenshot or error image. Identify the programming language, describe what the code does, spot any bugs or issues, and suggest fixes."
+          onResult={(res) => {
+            const comment = `// Vision Analysis Suggestion:\n// ${res.analysis.replace(/\n/g, '\n// ')}\n\n`;
+            updateTabContent(comment + (activeTab?.content || ''));
+          }}
+        />
         {realtimeAlerts.length > 0 && (
           <span className="text-xs px-2 py-0.5 rounded bg-yellow-500/10 text-yellow-400">
             {realtimeAlerts.length} alert{realtimeAlerts.length !== 1 ? 's' : ''}
@@ -819,7 +907,7 @@ export default function CodeLensPage() {
 
         <div className="flex items-center gap-2">
           {/* Script Type Selector */}
-          <div className="flex items-center gap-1 bg-lattice-deep rounded-lg p-1">
+          <div className="flex items-center gap-1 bg-[#0d1117] rounded-lg p-1 border border-green-900/20">
             {SCRIPT_TYPES.map((stype) => {
               const Icon = stype.icon;
               return (
@@ -828,8 +916,8 @@ export default function CodeLensPage() {
                   onClick={() => setActiveScriptType(stype.id)}
                   className={`p-2 rounded-md transition-colors ${
                     activeScriptType === stype.id
-                      ? 'bg-lattice-elevated ' + stype.color
-                      : 'text-gray-500 hover:text-gray-300'
+                      ? 'bg-green-900/30 ' + stype.color
+                      : 'text-gray-600 hover:text-gray-400'
                   }`}
                   title={`${stype.name}: ${stype.description}`}
                 >
@@ -842,14 +930,23 @@ export default function CodeLensPage() {
           <button
             onClick={() => runScriptMutation.mutate()}
             disabled={runScriptMutation.isPending}
-            className="btn-neon flex items-center gap-2"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-600 hover:bg-green-500 text-white font-mono text-sm font-bold shadow-lg shadow-green-900/50 transition-all hover:shadow-green-800/60"
           >
             {runScriptMutation.isPending ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
-              <Play className="w-4 h-4" />
+              <Play className="w-4 h-4 fill-current" />
             )}
             Run Script
+          </button>
+
+          <button
+            onClick={() => setShowForge(!showForge)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${showForge ? 'bg-purple-600/20 text-purple-400 border border-purple-600/30' : 'bg-lattice-elevated text-gray-300 hover:text-white'}`}
+            title="Generate Forge App"
+          >
+            <Sparkles className="w-4 h-4" />
+            Forge App
           </button>
 
           <button
@@ -858,6 +955,15 @@ export default function CodeLensPage() {
             title="API Reference"
           >
             <BookOpen className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={() => refetchDTUs()}
+            disabled={dtusLoading}
+            className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400 disabled:opacity-50"
+            title="Refresh DTUs"
+          >
+            {dtusLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
           </button>
 
           <button
@@ -871,6 +977,62 @@ export default function CodeLensPage() {
       </header>
 
 
+      {/* Forge App Generator Panel */}
+      <AnimatePresence>
+        {showForge && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden border-b border-purple-500/30"
+          >
+            <div className="p-4 bg-purple-500/5">
+              <div className="flex items-center gap-2 mb-3">
+                <Sparkles className="w-5 h-5 text-purple-400" />
+                <h3 className="text-sm font-semibold text-purple-300">Generate Forge App</h3>
+                <span className="text-[10px] px-2 py-0.5 rounded bg-purple-500/20 text-purple-400">Single-file monolith</span>
+              </div>
+              <div className="flex gap-2">
+                <textarea
+                  value={forgePrompt}
+                  onChange={e => setForgePrompt(e.target.value)}
+                  placeholder="Describe the app you want to generate... (e.g., 'A task tracker with categories, due dates, and a kanban board')"
+                  className="flex-1 bg-lattice-deep border border-purple-500/30 rounded-lg p-3 text-sm text-white placeholder-gray-600 resize-none h-20 focus:outline-none focus:border-purple-400/50"
+                />
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={() => forgeAppMutation.mutate(forgePrompt)}
+                    disabled={!forgePrompt.trim() || forgeAppMutation.isPending}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-purple-600/20 text-purple-400 border border-purple-600/30 hover:bg-purple-600/30 disabled:opacity-40 transition-colors"
+                  >
+                    {forgeAppMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-4 h-4" />
+                    )}
+                    Generate
+                  </button>
+                  <button
+                    onClick={() => setShowForge(false)}
+                    className="px-4 py-2 rounded-lg text-sm text-gray-400 hover:text-white transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+              {forgeResult && !forgeAppMutation.isPending && (
+                <div className="mt-3 p-3 bg-lattice-deep rounded-lg border border-purple-500/20">
+                  <p className="text-xs text-purple-300 mb-2">Generated app opened in new editor tab. Preview:</p>
+                  <pre className="text-xs text-gray-400 font-mono max-h-32 overflow-auto whitespace-pre-wrap">
+                    {forgeResult.slice(0, 500)}{forgeResult.length > 500 ? '...' : ''}
+                  </pre>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* AI Actions */}
       <UniversalActions domain="code" artifactId={savedScripts[0]?.id} compact />
       <div className="flex-1 flex overflow-hidden">
@@ -881,11 +1043,11 @@ export default function CodeLensPage() {
               initial={{ width: 0 }}
               animate={{ width: 240 }}
               exit={{ width: 0 }}
-              className="border-r border-lattice-border bg-lattice-surface/30 overflow-hidden"
+              className="border-r border-green-900/30 bg-[#0d1117] overflow-hidden"
             >
               <div className="w-60 h-full flex flex-col">
-                <div className="p-2 border-b border-lattice-border flex items-center justify-between">
-                  <span className="text-xs font-semibold text-gray-400 uppercase">Templates</span>
+                <div className="p-2 border-b border-green-900/30 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-green-500 uppercase font-mono tracking-wider">Explorer</span>
                   <div className="flex items-center gap-1">
                     <button onClick={handleNewTab} className="p-1 rounded hover:bg-lattice-elevated text-gray-400 hover:text-white transition-colors" title="New script">
                       <Plus className="w-4 h-4" />
@@ -896,7 +1058,17 @@ export default function CodeLensPage() {
                   </div>
                 </div>
                 <div className="flex-1 overflow-y-auto py-2">
-                  {files.map((file) => renderFileNode(file))}
+                  {files.length === 0 ? (
+                    <div className="px-3 py-4 text-center">
+                      <p className="text-xs text-gray-500 mb-2">No files yet</p>
+                      <button
+                        onClick={() => setFiles(TEMPLATE_FILES)}
+                        className="text-xs text-green-400 hover:text-green-300 underline"
+                      >
+                        Load starter templates
+                      </button>
+                    </div>
+                  ) : files.map((file) => renderFileNode(file))}
                 </div>
                 {/* DTU Context */}
                 <div className="p-3 border-t border-white/10 space-y-3">
@@ -919,7 +1091,7 @@ export default function CodeLensPage() {
         {/* Main Editor Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Tab Bar */}
-          <div className="flex items-center gap-1 px-2 py-1 bg-lattice-surface/50 border-b border-lattice-border overflow-x-auto">
+          <div className="flex items-center gap-1 px-2 py-1 bg-lattice-surface/50 border-b border-lattice-border flex-wrap">
             <button
               onClick={() => setShowFileTree(!showFileTree)}
               className="p-1.5 rounded hover:bg-lattice-elevated text-gray-400 flex-shrink-0"
@@ -1105,6 +1277,7 @@ export default function CodeLensPage() {
                                 <h4 className="text-xs font-semibold text-gray-400 uppercase mb-2">Script Log</h4>
                                 <pre className="font-mono text-xs text-green-400 whitespace-pre-wrap bg-lattice-deep rounded-lg p-3 border border-lattice-border">{scriptOutput.log}</pre>
                               </div>
+                              {scriptOutput.visualization && (
                               <div>
                                 <h4 className="text-xs font-semibold text-gray-400 uppercase mb-2">
                                   {activeScriptType === 'midi' && 'Piano Roll'}
@@ -1115,6 +1288,31 @@ export default function CodeLensPage() {
                                   {activeScriptType === 'generator' && 'Generated Output'}
                                 </h4>
                                 <pre className="font-mono text-xs text-neon-cyan whitespace-pre bg-lattice-deep rounded-lg p-3 border border-lattice-border overflow-x-auto">{scriptOutput.visualization}</pre>
+                              </div>
+                              )}
+                              <div className="flex items-center gap-2 pt-2 border-t border-lattice-border">
+                                <button
+                                  onClick={handleSaveOutputAsDTU}
+                                  disabled={savingOutputDTU}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-neon-blue/10 text-neon-blue rounded-lg text-xs hover:bg-neon-blue/20 disabled:opacity-50"
+                                >
+                                  <Save className="w-3.5 h-3.5" /> {savingOutputDTU ? 'Saving...' : 'Save as DTU'}
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    const content = `// ${activeTab.name}\n// Output:\n${scriptOutput.log}\n${scriptOutput.visualization ? `\n// Visualization:\n${scriptOutput.visualization}` : ''}`;
+                                    const blob = new Blob([content], { type: 'text/plain' });
+                                    const url = URL.createObjectURL(blob);
+                                    const a = document.createElement('a');
+                                    a.href = url;
+                                    a.download = `${activeTab.name.replace(/\.\w+$/, '')}-output.txt`;
+                                    a.click();
+                                    URL.revokeObjectURL(url);
+                                  }}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-neon-cyan/10 text-neon-cyan rounded-lg text-xs hover:bg-neon-cyan/20"
+                                >
+                                  <Download className="w-3.5 h-3.5" /> Download Output
+                                </button>
                               </div>
                             </div>
                           ) : (
@@ -1183,7 +1381,7 @@ export default function CodeLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, apiHelpers } from '@/lib/api/client';
+import { apiHelpers } from '@/lib/api/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Activity,
@@ -679,7 +679,7 @@ export default function ResonanceBoundaryPage() {
   const [thresholdOpen, setThresholdOpen] = useState(false);
   const [thresholds, setThresholds] = useState<ThresholdConfig>({ ...DEFAULT_THRESHOLDS });
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   // Fetch latest boundary scan
   const { data: scan, isLoading: scanLoading, isError: scanError, error: scanErrorObj, refetch: refetchScan } = useQuery<BoundaryScan>({
@@ -753,7 +753,7 @@ export default function ResonanceBoundaryPage() {
   }
 
   return (
-    <div className="h-[calc(100vh-4rem)] flex flex-col" style={{ background: '#050510' }}>
+    <div data-lens-theme="resonance" className="h-[calc(100vh-4rem)] flex flex-col" style={{ background: '#050510' }}>
       {/* Header */}
       <header className="flex items-center justify-between px-6 py-3 border-b border-white/5"
         style={{ background: 'rgba(5, 5, 16, 0.95)' }}>
@@ -1124,7 +1124,7 @@ export default function ResonanceBoundaryPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

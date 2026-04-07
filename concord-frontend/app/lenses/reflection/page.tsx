@@ -3,13 +3,14 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { motion } from 'framer-motion';
 import { useLensBridge } from '@/lib/hooks/use-lens-bridge';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   TrendingUp, AlertTriangle, CheckCircle2,
   Brain, Eye, Shield, BarChart3, Layers, ChevronDown,
-  BookOpen, Target, ThumbsUp, ThumbsDown, Clock, ArrowRight, Lightbulb
+  BookOpen, Target, ThumbsUp, ThumbsDown, Clock, ArrowRight, Lightbulb, Flame, CalendarDays,
 } from 'lucide-react';
 import { ConnectiveTissueBar } from '@/components/lens/ConnectiveTissueBar';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -33,7 +34,7 @@ interface Reflection {
 
 export default function ReflectionLensPage() {
   useLensNav('reflection');
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('reflection');
 
   // --- Lens Bridge ---
@@ -55,7 +56,7 @@ export default function ReflectionLensPage() {
     queryFn: () => apiHelpers.reflection.selfModel().then((r) => r.data),
   });
 
-  const reflections: Reflection[] = recent?.reflections || [];
+  const reflections: Reflection[] = useMemo(() => recent?.reflections || [], [recent]);
   const model = selfModel?.selfModel || status?.selfModel || {};
   const stats = status?.stats || {};
 
@@ -99,7 +100,7 @@ export default function ReflectionLensPage() {
     );
   }
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="reflection" className="p-6 space-y-6">
       <header className="flex items-center gap-3">
         <span className="text-2xl">🪞</span>
         <div>
@@ -124,21 +125,22 @@ export default function ReflectionLensPage() {
       {/* AI Actions */}
       <UniversalActions domain="reflection" artifactId={bridge.selectedId} compact />
 
+      {/* Stats Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="lens-card">
-          <Mirror className="w-5 h-5 text-neon-purple mb-2" />
-          <p className="text-2xl font-bold">{status?.reflections || 0}</p>
-          <p className="text-sm text-gray-400">Reflections</p>
+          <CalendarDays className="w-5 h-5 text-neon-purple mb-2" />
+          <p className="text-2xl font-bold">{status?.reflections || reflections.length}</p>
+          <p className="text-sm text-gray-400">Entries</p>
+        </div>
+        <div className="lens-card">
+          <Flame className="w-5 h-5 text-orange-400 mb-2" />
+          <p className="text-2xl font-bold">{stats.reflectionsRun || 0}</p>
+          <p className="text-sm text-gray-400">Streak Days</p>
         </div>
         <div className="lens-card">
           <TrendingUp className="w-5 h-5 text-neon-green mb-2" />
           <p className="text-2xl font-bold">{(avgQuality * 100).toFixed(0)}%</p>
-          <p className="text-sm text-gray-400">Avg Quality</p>
-        </div>
-        <div className="lens-card">
-          <Brain className="w-5 h-5 text-neon-cyan mb-2" />
-          <p className="text-2xl font-bold">{stats.insightsGenerated || 0}</p>
-          <p className="text-sm text-gray-400">Insights</p>
+          <p className="text-sm text-gray-400">Mood Avg</p>
         </div>
         <div className="lens-card">
           <Shield className="w-5 h-5 text-neon-yellow mb-2" />
@@ -248,8 +250,8 @@ export default function ReflectionLensPage() {
             <Mirror className="w-4 h-4 text-neon-green" /> Recent Reflections
           </h2>
           <div className="space-y-2 max-h-96 overflow-y-auto">
-            {reflections.map((r) => (
-              <div key={r.id} className="lens-card">
+            {reflections.map((r, index) => (
+              <motion.div key={r.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="lens-card">
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-gray-500">{new Date(r.timestamp).toLocaleString()}</span>
                   <span className={`text-sm font-bold ${r.quality > 0.7 ? 'text-neon-green' : r.quality > 0.4 ? 'text-yellow-400' : 'text-red-400'}`}>
@@ -270,7 +272,7 @@ export default function ReflectionLensPage() {
                     ))}
                   </div>
                 )}
-              </div>
+              </motion.div>
             ))}
             {reflections.length === 0 && (
               <p className="text-center py-4 text-gray-500 text-sm">No reflections recorded yet</p>
@@ -427,7 +429,7 @@ export default function ReflectionLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

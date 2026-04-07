@@ -1,5 +1,6 @@
 'use client';
 
+import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -15,6 +16,7 @@ import {
   Wind, Thermometer, Eye, Droplets, Layers,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
+import { showToast } from '@/components/common/Toasts';
 import { cn } from '@/lib/utils';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -278,7 +280,7 @@ export default function AviationLensPage() {
   useLensNav('aviation');
   const { latestData: realtimeData, isLive, lastUpdated, insights } = useRealtimeLens('aviation');
 
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
   const [activeMode, setActiveMode] = useState<ModeTab>('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -393,6 +395,7 @@ export default function AviationLensPage() {
       setActionResult(result.result as Record<string, unknown>);
     } catch (err) {
       console.error('Action failed:', err);
+      showToast('error', 'Action failed');
     }
   };
 
@@ -445,10 +448,10 @@ export default function AviationLensPage() {
   // -----------------------------------------------------------------------
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full p-8">
+      <div data-lens-theme="aviation" className="flex items-center justify-center h-full p-8">
         <div className="text-center space-y-3">
-          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-sm text-gray-400">Loading...</p>
+          <div className="w-8 h-8 border-2 border-sky-400 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Preparing flight data...</p>
         </div>
       </div>
     );
@@ -1654,12 +1657,30 @@ export default function AviationLensPage() {
       </header>
 
 
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Total Flights', value: flights.length, icon: Plane },
+          { label: 'On-Time Rate', value: `${flights.length > 0 ? Math.round((completedFlights / flights.length) * 100) : 0}%`, icon: CheckCircle },
+          { label: 'Active Routes', value: activeFlights, icon: Navigation },
+          { label: 'Fleet Ready', value: airworthyAircraft, icon: Shield },
+        ].map((stat, _i) => (
+          <div key={stat.label} className={ds.panel + ' flex items-center gap-3 p-3'}>
+            <stat.icon className="w-5 h-5 text-sky-400 shrink-0" />
+            <div>
+              <p className="text-xs text-gray-400">{stat.label}</p>
+              <p className="text-lg font-bold text-white">{stat.value}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* AI Actions */}
       <UniversalActions domain="aviation" artifactId={items[0]?.id} compact />
       <RealtimeDataPanel domain="aviation" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <DTUExportButton domain="aviation" data={{}} compact />
       {/* Mode Tabs */}
-      <div className="flex gap-1 border-b border-lattice-border pb-0 overflow-x-auto">
+      <div className="flex gap-1 border-b border-lattice-border pb-0 flex-wrap">
         {MODE_TABS.map(tab => {
           const Icon = tab.icon;
           return (
@@ -1748,7 +1769,11 @@ export default function AviationLensPage() {
                 No {MODE_TABS.find(t => t.key === activeMode)?.label.toLowerCase() || 'items'} found. Create your first entry.
               </p>
             ) : (
-              items.map(item => getCardRenderer()(item))
+              items.map((item, index) => (
+                <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }}>
+                  {getCardRenderer()(item)}
+                </motion.div>
+              ))
             )}
           </div>
         </>
@@ -1821,7 +1846,7 @@ export default function AviationLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

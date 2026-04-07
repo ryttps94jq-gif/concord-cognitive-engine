@@ -39,6 +39,7 @@ import {
   Settings2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 // marketplace-demo.ts has been deprecated — all data comes from API
 import { ErrorState } from '@/components/common/EmptyState';
 import { useLensDTUs } from '@/hooks/useLensDTUs';
@@ -52,6 +53,7 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { ProvenanceBadge } from '@/components/dtu/ProvenanceBadge';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -330,7 +332,7 @@ function ItemCard({
   }
 
   return (
-    <motion.div layout className="panel p-0 overflow-hidden hover:border-neon-purple/40 transition-colors cursor-pointer group">
+    <motion.div layout className="panel p-0 overflow-hidden hover:border-amber-500/40 hover:shadow-lg hover:shadow-amber-500/5 transition-all duration-200 cursor-pointer group">
       {/* Thumbnail */}
       <div className="relative h-36 bg-lattice-deep flex items-center justify-center">
         {audio ? (
@@ -357,7 +359,7 @@ function ItemCard({
             {item.creator.name[0]}
           </div>
           <span className="truncate">{item.creator.name}</span>
-          {item.creator.verified && <Check className="w-3 h-3 text-neon-cyan shrink-0" />}
+          {item.creator.verified && <Check className="w-3 h-3 text-amber-400 shrink-0" />}
         </div>
         <div className="flex items-center gap-1">
           {starRating(item.rating)}
@@ -371,10 +373,10 @@ function ItemCard({
           </div>
         )}
         <div className="flex items-center justify-between pt-2 border-t border-lattice-border">
-          <span className="text-neon-green font-bold text-sm">From {formatPrice(item.prices.basic)}</span>
+          <span className="text-amber-400 font-bold text-sm">From {formatPrice(item.prices.basic)}</span>
           <button onClick={(e) => { e.stopPropagation(); onAddToCart(item); }}
-            className="p-1.5 rounded-lg bg-neon-purple/20 text-neon-purple hover:bg-neon-purple/30 transition-colors">
-            <ShoppingCart className="w-3.5 h-3.5" />
+            className="px-2.5 py-1 rounded-lg bg-gradient-to-r from-amber-500/20 to-orange-500/20 text-amber-400 border border-amber-500/30 hover:from-amber-500/30 hover:to-orange-500/30 transition-all text-xs font-medium flex items-center gap-1">
+            <ShoppingCart className="w-3 h-3" /> Buy
           </button>
         </div>
       </div>
@@ -436,7 +438,8 @@ export default function MarketplaceLensPage() {
   const [showNewListing, setShowNewListing] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
+  const [showCheckoutConfirm, setShowCheckoutConfirm] = useState(false);
 
   // New listing form state
   const [newListingForm, setNewListingForm] = useState({
@@ -445,6 +448,13 @@ export default function MarketplaceLensPage() {
   });
   const [listingSubmitting, setListingSubmitting] = useState(false);
   const [listingError, setListingError] = useState<string | null>(null);
+
+  // Knowledge Pack builder state
+  const [showPackBuilder, setShowPackBuilder] = useState(false);
+  const [packForm, setPackForm] = useState({ name: '', description: '', price: '' });
+  const [packSelectedDTUs, setPackSelectedDTUs] = useState<string[]>([]);
+  const [packSubmitting, setPackSubmitting] = useState(false);
+  const [packError, setPackError] = useState<string | null>(null);
 
   const { isLoading, isError: isError, error: error, refetch: refetch } = useLensData('marketplace', 'listing', {
     noSeed: true,
@@ -608,6 +618,33 @@ export default function MarketplaceLensPage() {
     }
   }, [newListingForm, listingSubmitting, queryClient]);
 
+  // Create Knowledge Pack — bundles selected DTUs into a marketplace listing
+  const handleCreatePack = useCallback(async () => {
+    if (!packForm.name.trim() || packSelectedDTUs.length === 0 || packSubmitting) return;
+    setPackSubmitting(true);
+    setPackError(null);
+    try {
+      const resp = await api.post('/api/marketplace/pack', {
+        name: packForm.name.trim(),
+        description: packForm.description.trim(),
+        dtu_ids: packSelectedDTUs,
+        price: Number(packForm.price) || 10,
+      });
+      if (resp.data.ok) {
+        setShowPackBuilder(false);
+        setPackForm({ name: '', description: '', price: '' });
+        setPackSelectedDTUs([]);
+        queryClient.invalidateQueries({ queryKey: ['marketplace-packs'] });
+      } else {
+        setPackError(resp.data.error || 'Failed to create pack');
+      }
+    } catch (err) {
+      setPackError(err instanceof Error ? err.message : 'Failed to create pack');
+    } finally {
+      setPackSubmitting(false);
+    }
+  }, [packForm, packSelectedDTUs, packSubmitting, queryClient]);
+
   // Checkout — settles each cart item through the economy ledger
   const handleCheckout = useCallback(async () => {
     if (cart.length === 0 || checkoutLoading) return;
@@ -647,6 +684,14 @@ export default function MarketplaceLensPage() {
     if (completed.length > 0) {
       setPurchases(prev => [...completed, ...prev]);
       setCart(prev => prev.filter(c => !completed.some(p => p.item.id === c.item.id)));
+      // Refresh balance, listings, and purchase data after successful checkout
+      queryClient.invalidateQueries({ queryKey: ['economy-balance'] });
+      queryClient.invalidateQueries({ queryKey: ['wallet-balance'] });
+      queryClient.invalidateQueries({ queryKey: ['artistry-beats'] });
+      queryClient.invalidateQueries({ queryKey: ['artistry-stems'] });
+      queryClient.invalidateQueries({ queryKey: ['artistry-samples'] });
+      queryClient.invalidateQueries({ queryKey: ['artistry-art'] });
+      queryClient.invalidateQueries({ queryKey: ['artistry-purchases'] });
     }
     if (errors.length > 0) {
       setCheckoutError(errors.join('; '));
@@ -655,7 +700,7 @@ export default function MarketplaceLensPage() {
       setTab('purchases');
     }
     setCheckoutLoading(false);
-  }, [cart, checkoutLoading]);
+  }, [cart, checkoutLoading, queryClient]);
 
   // Clamp carousel index when featured items change
   useEffect(() => {
@@ -705,12 +750,12 @@ export default function MarketplaceLensPage() {
     );
   }
   return (
-    <div className="space-y-6 pb-24">
+    <div className="lens-marketplace space-y-6 pb-24" data-lens-theme="marketplace">
       {/* ---- Header ---- */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Store className="w-6 h-6 text-neon-purple" />
-          <h1 className="text-2xl font-bold">Creative Marketplace</h1>
+          <Store className="w-6 h-6 text-amber-400" />
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent">Creative Marketplace</h1>
         </div>
 
       {/* Real-time Enhancement Toolbar */}
@@ -817,7 +862,7 @@ export default function MarketplaceLensPage() {
             {CATEGORIES.map(c => (
               <button key={c.id} onClick={() => setCategory(c.id)}
                 className={cn('px-3 py-1.5 rounded-full text-sm font-medium flex items-center gap-1.5 transition-colors border',
-                  category === c.id ? 'bg-neon-purple/20 border-neon-purple/50 text-neon-purple' : 'bg-lattice-surface border-lattice-border text-gray-400 hover:text-white hover:border-gray-500')}>
+                  category === c.id ? 'bg-amber-500/20 border-amber-500/50 text-amber-400' : 'bg-lattice-surface border-lattice-border text-gray-400 hover:text-white hover:border-amber-500/30')}>
                 <c.icon className="w-3.5 h-3.5" /> {c.name}
               </button>
             ))}
@@ -897,9 +942,14 @@ export default function MarketplaceLensPage() {
           {/* Actions */}
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">Your Listings</h2>
-            <button onClick={() => setShowNewListing(true)} className="btn-neon purple flex items-center gap-2 text-sm">
-              <Plus className="w-4 h-4" /> New Listing
-            </button>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setShowPackBuilder(true)} className="btn-neon flex items-center gap-2 text-sm">
+                <Package className="w-4 h-4" /> Create Pack
+              </button>
+              <button onClick={() => setShowNewListing(true)} className="btn-neon purple flex items-center gap-2 text-sm">
+                <Plus className="w-4 h-4" /> New Listing
+              </button>
+            </div>
           </div>
 
           {/* Existing listings from API */}
@@ -990,6 +1040,94 @@ export default function MarketplaceLensPage() {
               </motion.div>
             )}
           </AnimatePresence>
+
+          {/* Knowledge Pack Builder Modal */}
+          <AnimatePresence>
+            {showPackBuilder && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+                onClick={() => setShowPackBuilder(false)}>
+                <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+                  className="bg-lattice-bg border border-lattice-border rounded-xl w-full max-w-lg p-6 space-y-4 max-h-[80vh] overflow-y-auto"
+                  onClick={e => e.stopPropagation()}>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-bold flex items-center gap-2">
+                      <Package className="w-5 h-5 text-neon-cyan" />
+                      Create Knowledge Pack
+                    </h3>
+                    <button onClick={() => setShowPackBuilder(false)} className="text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
+                  </div>
+                  <p className="text-xs text-gray-400">Bundle DTUs into a collection and list it on the marketplace.</p>
+                  <div className="space-y-3">
+                    <input placeholder="Pack Name" value={packForm.name}
+                      onChange={e => setPackForm(f => ({ ...f, name: e.target.value }))}
+                      className="w-full px-3 py-2 bg-lattice-surface border border-lattice-border rounded-lg text-sm focus:border-neon-cyan outline-none" />
+                    <textarea placeholder="Description" rows={2} value={packForm.description}
+                      onChange={e => setPackForm(f => ({ ...f, description: e.target.value }))}
+                      className="w-full px-3 py-2 bg-lattice-surface border border-lattice-border rounded-lg text-sm focus:border-neon-cyan outline-none resize-none" />
+                    <div>
+                      <label className="text-xs text-gray-400 mb-1 block">Price (CC)</label>
+                      <input type="number" placeholder="10" value={packForm.price}
+                        onChange={e => setPackForm(f => ({ ...f, price: e.target.value }))}
+                        className="w-full px-3 py-2 bg-lattice-surface border border-lattice-border rounded-lg text-sm focus:border-neon-cyan outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-400 mb-2 block">
+                        Select DTUs ({packSelectedDTUs.length} selected)
+                      </label>
+                      <div className="max-h-48 overflow-y-auto border border-lattice-border rounded-lg divide-y divide-lattice-border">
+                        {marketDTUs.length === 0 && (
+                          <p className="text-xs text-gray-500 p-3 text-center">No DTUs available. Ingest content first.</p>
+                        )}
+                        {marketDTUs.map((dtu: DTU) => {
+                          const isSelected = packSelectedDTUs.includes(dtu.id);
+                          return (
+                            <button key={dtu.id}
+                              onClick={() => {
+                                setPackSelectedDTUs(prev =>
+                                  isSelected ? prev.filter(id => id !== dtu.id) : [...prev, dtu.id]
+                                );
+                              }}
+                              className={cn(
+                                'w-full flex items-center gap-3 px-3 py-2 text-left text-sm hover:bg-lattice-elevated transition-colors',
+                                isSelected && 'bg-neon-cyan/5'
+                              )}>
+                              <span className={cn(
+                                'w-4 h-4 rounded border flex items-center justify-center shrink-0',
+                                isSelected ? 'bg-neon-cyan border-neon-cyan' : 'border-gray-600'
+                              )}>
+                                {isSelected && <Check className="w-3 h-3 text-white" />}
+                              </span>
+                              <span className="truncate flex-1 text-gray-300">{dtu.title || dtu.id.slice(0, 12)}</span>
+                              {dtu.tier && dtu.tier !== 'regular' && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-neon-purple/20 text-neon-purple">{dtu.tier}</span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                  {packError && (
+                    <p className="text-xs text-red-400 bg-red-400/10 rounded-lg px-3 py-2">{packError}</p>
+                  )}
+                  <div className="flex items-center justify-between pt-2">
+                    <span className="text-xs text-gray-500">
+                      {packSelectedDTUs.length} DTU{packSelectedDTUs.length !== 1 ? 's' : ''} in pack
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => { setShowPackBuilder(false); setPackError(null); }} className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">Cancel</button>
+                      <button onClick={handleCreatePack}
+                        disabled={!packForm.name.trim() || packSelectedDTUs.length === 0 || packSubmitting}
+                        className={cn('btn-neon text-sm', (!packForm.name.trim() || packSelectedDTUs.length === 0 || packSubmitting) && 'opacity-50 cursor-not-allowed')}>
+                        {packSubmitting ? 'Creating...' : `Create Pack (${packSelectedDTUs.length} DTUs)`}
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </motion.div>
       )}
 
@@ -1057,7 +1195,7 @@ export default function MarketplaceLensPage() {
                 {checkoutError && (
                   <p className="text-xs text-red-400 bg-red-400/10 rounded-lg px-3 py-2">{checkoutError}</p>
                 )}
-                <button onClick={handleCheckout} disabled={checkoutLoading || cart.length === 0 || userBalance < cartTotal}
+                <button onClick={() => setShowCheckoutConfirm(true)} disabled={checkoutLoading || cart.length === 0 || userBalance < cartTotal}
                   className={cn('btn-neon purple w-full py-3 text-sm font-semibold flex items-center justify-center gap-2',
                     (checkoutLoading || userBalance < cartTotal) && 'opacity-50 cursor-not-allowed')}>
                   {checkoutLoading ? (
@@ -1068,6 +1206,50 @@ export default function MarketplaceLensPage() {
                     <><Check className="w-4 h-4" /> Checkout</>
                   )}
                 </button>
+
+                {/* Checkout Confirmation Dialog */}
+                <AnimatePresence>
+                  {showCheckoutConfirm && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+                      onClick={() => setShowCheckoutConfirm(false)}>
+                      <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+                        className="bg-lattice-bg border border-lattice-border rounded-xl w-full max-w-md p-6 space-y-4"
+                        onClick={e => e.stopPropagation()}>
+                        <h3 className="text-lg font-bold">Confirm Purchase</h3>
+                        <div className="space-y-2 text-sm text-gray-400">
+                          {cart.map(ci => (
+                            <div key={ci.item.id} className="flex items-center justify-between">
+                              <span className="truncate">{ci.item.title} ({ci.license})</span>
+                              <span className="text-neon-green font-mono">{formatPrice(ci.price)}</span>
+                            </div>
+                          ))}
+                          <div className="border-t border-lattice-border pt-2 space-y-1">
+                            <div className="flex items-center justify-between text-gray-400 text-xs">
+                              <span>Platform fee ({(marketplaceFeeRate * 100).toFixed(0)}%)</span>
+                              <span>{formatPrice(Math.round(cartTotal * marketplaceFeeRate * 100) / 100)}</span>
+                            </div>
+                            <div className="flex items-center justify-between font-bold text-white">
+                              <span>Total</span>
+                              <span className="text-neon-green">{formatPrice(cartTotal)}</span>
+                            </div>
+                          </div>
+                        </div>
+                        {checkoutError && (
+                          <p className="text-xs text-red-400 bg-red-400/10 rounded-lg px-3 py-2">{checkoutError}</p>
+                        )}
+                        <div className="flex items-center justify-end gap-2 pt-2">
+                          <button onClick={() => { setShowCheckoutConfirm(false); setCheckoutError(null); }}
+                            className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">Cancel</button>
+                          <button onClick={() => { setShowCheckoutConfirm(false); handleCheckout(); }} disabled={checkoutLoading}
+                            className={cn('btn-neon purple text-sm', checkoutLoading && 'opacity-50 cursor-not-allowed')}>
+                            {checkoutLoading ? 'Processing...' : 'Confirm Purchase'}
+                          </button>
+                        </div>
+                      </motion.div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </>
           )}
@@ -1186,7 +1368,10 @@ export default function MarketplaceLensPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {marketArtifacts.slice(0, 6).map((dtu: DTU) => (
                   <div key={dtu.id} className="p-3 rounded-lg bg-lattice-surface border border-lattice-border space-y-2">
-                    <p className="text-sm font-medium truncate">{dtu.title || dtu.human?.summary || 'Untitled'}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium truncate flex-1">{dtu.title || dtu.human?.summary || 'Untitled'}</p>
+                      <ProvenanceBadge source={dtu.source} model={dtu.meta?.model as string} authority={dtu.meta?.authority as string} />
+                    </div>
                     <ArtifactRenderer dtuId={dtu.id} artifact={dtu.artifact!} mode="thumbnail" />
                     <FeedbackWidget targetType="dtu" targetId={dtu.id} />
                   </div>
@@ -1213,14 +1398,17 @@ export default function MarketplaceLensPage() {
 
       {/* Real-time Data Panel */}
       {realtimeData && (
-        <RealtimeDataPanel
-          domain="marketplace"
-          data={realtimeData}
-          isLive={isLive}
-          lastUpdated={lastUpdated}
-          insights={realtimeInsights}
-          compact
-        />
+        <>
+          <UniversalActions domain="marketplace" artifactId={null} compact />
+          <RealtimeDataPanel
+            domain="marketplace"
+            data={realtimeData}
+            isLive={isLive}
+            lastUpdated={lastUpdated}
+            insights={realtimeInsights}
+            compact
+          />
+        </>
       )}
         </div>
       )}
@@ -1229,7 +1417,7 @@ export default function MarketplaceLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

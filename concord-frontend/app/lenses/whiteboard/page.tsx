@@ -1,8 +1,9 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, apiHelpers } from '@/lib/api/client';
+import { apiHelpers } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -42,6 +43,7 @@ import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
+import { DTUDetailView } from '@/components/dtu/DTUDetailView';
 
 /* ---------- types ---------- */
 type BoardMode = 'canvas' | 'moodboard' | 'arrangement';
@@ -139,7 +141,7 @@ export default function WhiteboardLensPage() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Lens artifact persistence layer
-  const { isError: isError, error: error, refetch: refetch, items: _boardArtifacts, create: _createBoardArtifact } = useLensData('whiteboard', 'board', { noSeed: true });
+  const { isError: isError, error: error, refetch: refetch, items: boardArtifacts, create: createBoardArtifact } = useLensData('whiteboard', 'board', { noSeed: true });
 
   /* board list state */
   const [showCreate, setShowCreate] = useState(false);
@@ -151,6 +153,7 @@ export default function WhiteboardLensPage() {
   const [tool, setTool] = useState<Tool>('select');
   const [elements, setElements] = useState<Element[]>([]);
   const [selectedElement, setSelectedElement] = useState<Element | null>(null);
+  const [viewingDtuId, setViewingDtuId] = useState<string | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentElement, setCurrentElement] = useState<Element | null>(null);
   const [undoStack, setUndoStack] = useState<Element[][]>([]);
@@ -211,7 +214,11 @@ export default function WhiteboardLensPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: { title: string; linkedDtus: string[] }) => apiHelpers.whiteboard.create(data),
+    mutationFn: async (data: { title: string; linkedDtus: string[] }) => {
+      const res = await apiHelpers.whiteboard.create(data);
+      await createBoardArtifact({ title: data.title, data: { linkedDtus: data.linkedDtus, createdAt: new Date().toISOString() } as Record<string, unknown> });
+      return res;
+    },
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['whiteboards'] });
       setSelectedWbId(res.data.dtuId);
@@ -370,6 +377,18 @@ export default function WhiteboardLensPage() {
       setElements(prev => [...prev, n]);
     }
     setCurrentElement(null);
+  };
+
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    const { x, y } = getCanvasCoords(e);
+    const clicked = [...elements].reverse().find(el => {
+      const w = el.width || 100;
+      const h = el.height || 50;
+      return x >= el.x && x <= el.x + w && y >= el.y && y <= el.y + h;
+    });
+    if (clicked?.type === 'dtu' && clicked.dtuId) {
+      setViewingDtuId(clicked.dtuId);
+    }
   };
 
   const handleWheel = (e: React.WheelEvent) => {
@@ -817,7 +836,7 @@ export default function WhiteboardLensPage() {
           {isLoading ? (
             <div className="text-gray-500 text-sm">Loading...</div>
           ) : (
-            whiteboards?.whiteboards?.map((wb: Record<string, unknown>) => (
+            (whiteboards?.whiteboards && whiteboards.whiteboards.length > 0 ? whiteboards.whiteboards : boardArtifacts.map(a => ({ id: a.id, title: a.title, elementCount: 0 }))).map((wb: Record<string, unknown>) => (
               <button key={wb.id as string} onClick={() => setSelectedWbId(wb.id as string)}
                 className={`w-full text-left p-3 rounded-lg border transition-colors ${selectedWbId === wb.id ? 'border-neon-pink bg-lattice-elevated' : 'border-lattice-border hover:border-neon-pink/50'}`}>
                 <p className="font-medium truncate">{wb.title as string}</p>
@@ -920,7 +939,7 @@ export default function WhiteboardLensPage() {
                 <canvas ref={canvasRef} className="w-full h-full cursor-crosshair"
                   style={{ width: dimensions.width, height: dimensions.height }}
                   onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp}
-                  onMouseLeave={handleMouseUp} onWheel={handleWheel} />
+                  onMouseLeave={handleMouseUp} onWheel={handleWheel} onDoubleClick={handleDoubleClick} />
 
                 {/* Audio play overlay buttons (canvas-space) */}
                 {elements.filter(el => el.type === 'audio').map(el => (
@@ -1129,7 +1148,7 @@ export default function WhiteboardLensPage() {
 
                 {/* Timeline */}
                 <div className="mt-4">
-                  <div className="flex items-end gap-3 mb-6 overflow-x-auto pb-4">
+                  <div className="flex items-end gap-3 mb-6 flex-wrap pb-4">
                     {arrangement.map((sec, idx) => (
                       <motion.div key={sec.id} layout draggable
                         onDragStart={() => handleArrDragStart(idx)}
@@ -1177,7 +1196,7 @@ export default function WhiteboardLensPage() {
                   </div>
 
                   {/* Bar ruler */}
-                  <div className="flex items-center gap-0 overflow-x-auto">
+                  <div className="flex items-center gap-0 flex-wrap">
                     {arrangement.map(sec => (
                       <div key={`ruler_${sec.id}`} className="flex-shrink-0 flex" style={{ width: Math.max(sec.bars * 20, 80) + 12 }}>
                         {Array.from({ length: sec.bars }, (_, i) => (
@@ -1329,13 +1348,25 @@ export default function WhiteboardLensPage() {
 
       {/* Real-time Data Panel */}
       {realtimeData && (
-        <RealtimeDataPanel
-          domain="whiteboard"
-          data={realtimeData}
-          isLive={isLive}
-          lastUpdated={lastUpdated}
-          insights={realtimeInsights}
-          compact
+        <>
+          <UniversalActions domain="whiteboard" artifactId={null} compact />
+          <RealtimeDataPanel
+            domain="whiteboard"
+            data={realtimeData}
+            isLive={isLive}
+            lastUpdated={lastUpdated}
+            insights={realtimeInsights}
+            compact
+          />
+        </>
+      )}
+
+      {/* DTU Detail View modal (opened by double-clicking a DTU element on canvas) */}
+      {viewingDtuId && (
+        <DTUDetailView
+          dtuId={viewingDtuId}
+          onClose={() => setViewingDtuId(null)}
+          onNavigate={(id) => setViewingDtuId(id)}
         />
       )}
     </div>
@@ -1349,7 +1380,7 @@ function CreateForm({ onClose, onCreate, creating }: { onClose: () => void; onCr
     <>
       <input type="text" placeholder="Whiteboard Title" value={title} onChange={(e) => setTitle(e.target.value)}
         className="w-full px-3 py-2 bg-lattice-surface border border-lattice-border rounded mb-4" />
-      <div className="flex gap-3 justify-end">
+      <div data-lens-theme="whiteboard" className="flex gap-3 justify-end">
         <button onClick={onClose} className="px-4 py-2 bg-lattice-surface rounded-lg">Cancel</button>
         <button onClick={() => onCreate({ title, linkedDtus: [] })} disabled={creating || !title}
           className="px-4 py-2 bg-neon-pink text-black rounded-lg disabled:opacity-50">{creating ? 'Creating...' : 'Create'}</button>

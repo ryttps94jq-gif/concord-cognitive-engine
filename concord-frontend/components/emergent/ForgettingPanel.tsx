@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Trash2, Shield, Play, Clock, Eye } from 'lucide-react';
+import { Trash2, Play, Clock, Eye } from 'lucide-react';
 import { apiHelpers } from '@/lib/api/client';
+import { useUIStore } from '@/store/ui';
+import { showToast } from '@/components/common/Toasts';
 
 interface ForgettingStatus {
   running: boolean;
@@ -32,7 +34,7 @@ export function ForgettingPanel() {
   useEffect(() => {
     apiHelpers.forgetting.status().then((resp) => {
       setStatus(resp.data);
-    }).catch(() => {});
+    }).catch(err => { console.error('[Forgetting] Failed to load status:', err); showToast('error', 'Failed to load forgetting status'); });
   }, []);
 
   const loadHistory = async () => {
@@ -47,7 +49,7 @@ export function ForgettingPanel() {
       await apiHelpers.forgetting.run();
       const resp = await apiHelpers.forgetting.status();
       setStatus(resp.data);
-    } catch { /* silent */ }
+    } catch (e) { console.error('[Forgetting] Failed to run forgetting cycle:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to run forgetting cycle' }); }
     setRunning(false);
   };
 
@@ -56,7 +58,7 @@ export function ForgettingPanel() {
       const resp = await apiHelpers.forgetting.candidates();
       const data = resp.data;
       alert(`${data.candidateCount || 0} candidates for forgetting (threshold: ${data.threshold})`);
-    } catch { /* silent */ }
+    } catch (e) { console.error('[Forgetting] Failed to preview candidates:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to preview forgetting candidates' }); }
   };
 
   return (

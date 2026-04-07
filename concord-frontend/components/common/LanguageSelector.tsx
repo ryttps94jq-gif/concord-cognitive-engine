@@ -3,9 +3,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from '@/lib/i18n/useTranslation';
 import {
-  SUPPORTED_LOCALES,
-  LOCALE_NAMES,
-  RTL_LOCALES,
   type Locale,
 } from '@/lib/i18n';
 

@@ -12,6 +12,7 @@ import { createPurchase, transitionPurchase, recordSettlement } from "./purchase
 import { economyAudit } from "./audit.js";
 import { isEmergentAccount } from "./emergent-accounts.js";
 import logger from '../logger.js';
+import { canListOnMarketplace } from "../lib/source-attribution.js";
 
 function uid(prefix = "lst") {
   return `${prefix}_` + randomUUID().replace(/-/g, "").slice(0, 16);
@@ -62,6 +63,19 @@ export function createListing(db, {
   if (!title) return { ok: false, error: "missing_title" };
   if (!price || price <= 0) return { ok: false, error: "invalid_price" };
   if (!contentData) return { ok: false, error: "missing_content_data" };
+
+  // ── License Compliance Gate ──
+  // Block listings for content derived from non-commercial or all-rights-reserved sources
+  try {
+    const dtuRow = db.prepare("SELECT data FROM dtu_store WHERE id = ?").get(contentId);
+    if (dtuRow) {
+      const dtu = JSON.parse(dtuRow.data);
+      const licenseCheck = canListOnMarketplace(dtu);
+      if (!licenseCheck.allowed) {
+        return { ok: false, error: "license_blocked", reason: licenseCheck.reason };
+      }
+    }
+  } catch (_e) { /* dtu_store may not exist or source-attribution may fail; allow listing */ }
 
   // SHA-256 hash for duplicate detection
   const contentHash = hashContent(contentData);
@@ -484,7 +498,7 @@ function formatListing(row) {
 }
 
 function safeJsonParse(str) {
-  try { return JSON.parse(str); } catch { return []; }
+  try { return JSON.parse(str); } catch (err) { console.debug('[marketplace-service] JSON parse failed', err?.message); return []; }
 }
 
 export { PREVIEW_STRATEGIES };

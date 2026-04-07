@@ -3,7 +3,7 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { apiHelpers } from '@/lib/api/client';
-import { useUIStore } from '@/store/ui';
+
 import { Loading } from '@/components/common/Loading';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo } from 'react';
@@ -11,8 +11,9 @@ import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   Check, X, Users, Scale, Plus, Clock, MessageSquare,
   ThumbsUp, ThumbsDown, Minus, BarChart3, ChevronDown,
-  ChevronUp, Send, AlertCircle, Vote, Layers,
+  ChevronUp, Send, AlertCircle, Vote, Layers, TrendingUp, Percent,
 } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -90,7 +91,7 @@ export default function VoteLensPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'proposals' | 'dashboard'>('proposals');
   const [expandedProposal, setExpandedProposal] = useState<string | null>(null);
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   // Data
   const {
@@ -131,16 +132,6 @@ export default function VoteLensPage() {
       queryClient.invalidateQueries({ queryKey: ['lens', 'vote', 'list'] });
     },
     onError: (err) => console.error('castVote failed:', err instanceof Error ? err.message : err),
-  });
-
-  const reactComment = useMutation({
-    mutationFn: async ({ commentId, reaction }: { commentId: string; reaction: 'upvote' | 'downvote' }) => {
-      return apiHelpers.lens.run('vote', commentId, { action: reaction });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['lens', 'vote', 'list'] });
-    },
-    onError: (err) => useUIStore.getState().addToast({ type: 'error', message: `Reaction failed: ${err instanceof Error ? err.message : 'Unknown error'}` }),
   });
 
   // Filtered proposals
@@ -226,6 +217,39 @@ export default function VoteLensPage() {
 
       {/* AI Actions */}
       <UniversalActions domain="vote" artifactId={proposalItems[0]?.id} compact />
+
+      {/* Quick Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Scale className="w-5 h-5 text-neon-purple" />
+          <div>
+            <p className="text-lg font-bold">{stats.active}</p>
+            <p className="text-xs text-gray-500">Active Proposals</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <TrendingUp className="w-5 h-5 text-neon-cyan" />
+          <div>
+            <p className="text-lg font-bold">{stats.totalVotes}</p>
+            <p className="text-xs text-gray-500">Votes Cast</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 2 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Percent className="w-5 h-5 text-neon-green" />
+          <div>
+            <p className="text-lg font-bold">{stats.passRate}%</p>
+            <p className="text-xs text-gray-500">Pass Rate</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 3 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Users className="w-5 h-5 text-neon-blue" />
+          <div>
+            <p className="text-lg font-bold">{stats.avgParticipation}</p>
+            <p className="text-xs text-gray-500">Avg Participation</p>
+          </div>
+        </motion.div>
+      </div>
+
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="lens-card">
@@ -296,7 +320,7 @@ export default function VoteLensPage() {
                 <p className="text-sm text-gray-500 mt-1">Create the first proposal to get started.</p>
               </div>
             )}
-            {filteredProposals.map((proposal) => {
+            {filteredProposals.map((proposal, index) => {
               const totalVotes = proposal.votesFor + proposal.votesAgainst + proposal.votesAbstain;
               const quorumProgress = Math.min((totalVotes / proposal.threshold) * 100, 100);
               const quorumMet = totalVotes >= proposal.threshold;
@@ -306,7 +330,7 @@ export default function VoteLensPage() {
               const abstainPct = totalVotes > 0 ? (proposal.votesAbstain / totalVotes) * 100 : 0;
 
               return (
-                <div key={proposal.id} className="panel p-4">
+                <motion.div key={proposal.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="panel p-4">
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -443,7 +467,7 @@ export default function VoteLensPage() {
                       onRefetch={refetch}
                     />
                   )}
-                </div>
+                </motion.div>
               );
             })}
           </div>
@@ -463,11 +487,13 @@ export default function VoteLensPage() {
         />
       )}
 
+      <RealtimeDataPanel data={realtimeInsights} />
+
       {/* Lens Features */}
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />
@@ -817,7 +843,7 @@ function ResultsDashboard({
   }, [proposals]);
 
   return (
-    <div className="space-y-6">
+    <div data-lens-theme="vote" className="space-y-6">
       {/* Overview Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="lens-card">

@@ -1,10 +1,11 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useState } from 'react';
-import { Atom, Beaker, FlaskConical, Sparkles, Zap, Layers, ChevronDown } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Atom, Beaker, FlaskConical, Sparkles, Zap, Layers, ChevronDown, AlertTriangle, TestTube2 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -31,10 +32,10 @@ interface Reaction {
 export default function ChemLensPage() {
   useLensNav('chem');
 
-  const queryClient = useQueryClient();
   const [selectedCompound, setSelectedCompound] = useState<string | null>(null);
   const [reactionInput, setReactionInput] = useState('');
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
+  const [activeTab, setActiveTab] = useState<'elements' | 'reactions' | 'compounds'>('reactions');
   const { latestData: realtimeData, isLive, lastUpdated, insights } = useRealtimeLens('chem');
 
   const { items: compoundItems, isLoading, isError: isError, error: error, refetch: refetch } = useLensData<Record<string, unknown>>('chem', 'compound', { seed: [] });
@@ -62,10 +63,10 @@ export default function ChemLensPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full p-8">
+      <div data-lens-theme="chem" className="flex items-center justify-center h-full p-8">
         <div className="text-center space-y-3">
-          <div className="w-8 h-8 border-2 border-neon-purple border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-sm text-gray-400">Loading...</p>
+          <div className="w-8 h-8 border-2 border-teal-400 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading lab results...</p>
         </div>
       </div>
     );
@@ -79,7 +80,14 @@ export default function ChemLensPage() {
     );
   }
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="chem" className="p-6 space-y-6">
+      {/* Safety Disclaimer */}
+      <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3 flex items-start gap-3">
+        <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
+        <p className="text-sm text-amber-200">
+          For educational and research modeling only. Do not use simulated results for actual chemical handling. Always follow laboratory safety protocols and consult qualified chemists.
+        </p>
+      </div>
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-2xl">⚗️</span>
@@ -97,8 +105,127 @@ export default function ChemLensPage() {
       <RealtimeDataPanel domain="chem" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <DTUExportButton domain="chem" data={{}} compact />
 
+      {/* Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { icon: Atom, label: 'Compounds', value: String(compounds.length), color: 'text-neon-blue' },
+          { icon: FlaskConical, label: 'Reactions', value: String(reactions.length), color: 'text-neon-purple' },
+          { icon: Beaker, label: 'Success Rate', value: reactions.length > 0 ? `${Math.round((reactions.filter(r => r.success).length / reactions.length) * 100)}%` : '0%', color: 'text-neon-green' },
+          { icon: TestTube2, label: 'Catalysts', value: String(compounds.filter(c => c.type === 'catalyst').length), color: 'text-neon-cyan' },
+        ].map((stat, i) => (
+          <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} className="lens-card text-center">
+            <stat.icon className={`w-5 h-5 mx-auto mb-2 ${stat.color}`} />
+            <p className={`text-2xl font-bold ${stat.color}`}>{stat.value}</p>
+            <p className="text-xs text-gray-400 mt-1">{stat.label}</p>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 bg-black/30 border border-white/10 rounded-lg p-1">
+        {([
+          { key: 'elements' as const, label: 'Elements', icon: Atom },
+          { key: 'reactions' as const, label: 'Reactions', icon: FlaskConical },
+          { key: 'compounds' as const, label: 'Compounds', icon: Beaker },
+        ]).map(tab => (
+          <button key={tab.key} onClick={() => setActiveTab(tab.key)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors flex-1 justify-center ${
+              activeTab === tab.key ? 'bg-teal-500/20 text-teal-400' : 'text-gray-500 hover:text-white'
+            }`}>
+            <tab.icon className="w-4 h-4" /> {tab.label}
+          </button>
+        ))}
+      </div>
+
       {/* AI Actions */}
       <UniversalActions domain="chem" artifactId={compoundItems[0]?.id} compact />
+
+      <AnimatePresence mode="wait">
+      {activeTab === 'elements' && (
+        <motion.div key="elements" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-4">
+          {/* Mini Periodic Table Reference */}
+          <div className="panel p-4">
+            <h3 className="font-semibold mb-3 flex items-center gap-2"><Atom className="w-4 h-4 text-neon-blue" /> Periodic Table Quick Reference</h3>
+            <div className="grid grid-cols-6 md:grid-cols-9 gap-1">
+              {[
+                { sym: 'H', num: 1, name: 'Hydrogen', cat: 'nonmetal' },
+                { sym: 'He', num: 2, name: 'Helium', cat: 'noble' },
+                { sym: 'Li', num: 3, name: 'Lithium', cat: 'alkali' },
+                { sym: 'Be', num: 4, name: 'Beryllium', cat: 'alkaline' },
+                { sym: 'B', num: 5, name: 'Boron', cat: 'metalloid' },
+                { sym: 'C', num: 6, name: 'Carbon', cat: 'nonmetal' },
+                { sym: 'N', num: 7, name: 'Nitrogen', cat: 'nonmetal' },
+                { sym: 'O', num: 8, name: 'Oxygen', cat: 'nonmetal' },
+                { sym: 'F', num: 9, name: 'Fluorine', cat: 'halogen' },
+                { sym: 'Ne', num: 10, name: 'Neon', cat: 'noble' },
+                { sym: 'Na', num: 11, name: 'Sodium', cat: 'alkali' },
+                { sym: 'Mg', num: 12, name: 'Magnesium', cat: 'alkaline' },
+                { sym: 'Al', num: 13, name: 'Aluminum', cat: 'metal' },
+                { sym: 'Si', num: 14, name: 'Silicon', cat: 'metalloid' },
+                { sym: 'P', num: 15, name: 'Phosphorus', cat: 'nonmetal' },
+                { sym: 'S', num: 16, name: 'Sulfur', cat: 'nonmetal' },
+                { sym: 'Cl', num: 17, name: 'Chlorine', cat: 'halogen' },
+                { sym: 'Ar', num: 18, name: 'Argon', cat: 'noble' },
+              ].map((el, i) => {
+                const catColors: Record<string, string> = {
+                  nonmetal: 'bg-green-500/20 border-green-500/30 text-green-400',
+                  noble: 'bg-purple-500/20 border-purple-500/30 text-purple-400',
+                  alkali: 'bg-red-500/20 border-red-500/30 text-red-400',
+                  alkaline: 'bg-orange-500/20 border-orange-500/30 text-orange-400',
+                  metalloid: 'bg-teal-500/20 border-teal-500/30 text-teal-400',
+                  halogen: 'bg-yellow-500/20 border-yellow-500/30 text-yellow-400',
+                  metal: 'bg-blue-500/20 border-blue-500/30 text-blue-400',
+                };
+                return (
+                  <motion.div key={el.sym} initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.02 }}
+                    className={`p-1.5 rounded border text-center cursor-pointer hover:scale-105 transition-transform ${catColors[el.cat] || ''}`}
+                    title={el.name}>
+                    <span className="text-[10px] text-gray-500">{el.num}</span>
+                    <p className="text-sm font-bold">{el.sym}</p>
+                    <p className="text-[9px] text-gray-500 truncate">{el.name}</p>
+                  </motion.div>
+                );
+              })}
+            </div>
+            <div className="flex flex-wrap gap-3 mt-3">
+              {[
+                { cat: 'Nonmetal', color: 'bg-green-500' }, { cat: 'Noble Gas', color: 'bg-purple-500' },
+                { cat: 'Alkali Metal', color: 'bg-red-500' }, { cat: 'Alkaline Earth', color: 'bg-orange-500' },
+                { cat: 'Metalloid', color: 'bg-teal-500' }, { cat: 'Halogen', color: 'bg-yellow-500' },
+              ].map(l => (
+                <span key={l.cat} className="flex items-center gap-1 text-xs text-gray-400">
+                  <span className={`w-2 h-2 rounded-sm ${l.color}`} /> {l.cat}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Reaction Equation Display */}
+          <div className="panel p-4">
+            <h3 className="font-semibold mb-3 flex items-center gap-2"><Zap className="w-4 h-4 text-neon-purple" /> Common Reaction Equations</h3>
+            <div className="space-y-2">
+              {[
+                { eq: '2H\u2082 + O\u2082 \u2192 2H\u2082O', name: 'Water Synthesis', type: 'Combustion' },
+                { eq: 'CH\u2084 + 2O\u2082 \u2192 CO\u2082 + 2H\u2082O', name: 'Methane Combustion', type: 'Combustion' },
+                { eq: 'NaOH + HCl \u2192 NaCl + H\u2082O', name: 'Neutralization', type: 'Acid-Base' },
+                { eq: '6CO\u2082 + 6H\u2082O \u2192 C\u2086H\u2081\u2082O\u2086 + 6O\u2082', name: 'Photosynthesis', type: 'Biochemical' },
+              ].map((rxn, i) => (
+                <motion.div key={rxn.name} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.08 }}
+                  className="flex items-center justify-between p-3 bg-black/20 rounded-lg border border-white/5">
+                  <div>
+                    <p className="font-mono text-sm text-neon-cyan">{rxn.eq}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{rxn.name}</p>
+                  </div>
+                  <span className="text-xs px-2 py-0.5 rounded bg-neon-purple/20 text-neon-purple">{rxn.type}</span>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {activeTab === 'reactions' && (
+        <motion.div key="reactions" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Reaction Chamber */}
         <div className="lg:col-span-2 panel p-4 space-y-4">
@@ -196,8 +323,8 @@ export default function ChemLensPage() {
               No reactions yet. Try the reaction chamber!
             </p>
           ) : (
-            reactions?.slice(0, 6).map((reaction: Reaction) => (
-              <div key={reaction.id} className="lens-card">
+            reactions?.slice(0, 6).map((reaction: Reaction, i: number) => (
+              <motion.div key={reaction.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.05 }} className="lens-card">
                 <p className="font-mono text-sm mb-2">{reaction.formula}</p>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-gray-400">
@@ -213,17 +340,59 @@ export default function ChemLensPage() {
                     {reaction.success ? 'Success' : 'Failed'}
                   </span>
                 </div>
-              </div>
+              </motion.div>
             ))
           )}
         </div>
       </div>
+        </motion.div>
+      )}
+
+      {activeTab === 'compounds' && (
+        <motion.div key="compounds" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+          <div className="panel p-4 space-y-4">
+            <h3 className="font-semibold flex items-center gap-2">
+              <Atom className="w-4 h-4 text-neon-blue" />
+              Full Compound Library
+            </h3>
+            <div className="space-y-2 max-h-[500px] overflow-auto">
+              {compounds?.length === 0 ? (
+                <p className="text-gray-500 text-center py-8">No compounds in library. Add via reactions or import.</p>
+              ) : compounds?.map((compound: Compound, i: number) => (
+                <motion.button
+                  key={compound.id}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.03 }}
+                  onClick={() => setSelectedCompound(compound.id)}
+                  className={`w-full text-left lens-card ${selectedCompound === compound.id ? 'border-neon-cyan' : ''}`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-medium">{compound.name}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded border ${typeColors[compound.type]}`}>{compound.type}</span>
+                  </div>
+                  <p className="font-mono text-sm text-gray-400">{compound.formula}</p>
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="text-xs text-gray-500">Stability:</span>
+                    <div className="flex-1 h-1 bg-lattice-deep rounded">
+                      <motion.div initial={{ width: 0 }} animate={{ width: `${compound.stability * 100}%` }}
+                        className={`h-full rounded ${compound.stability > 0.7 ? 'bg-neon-green' : compound.stability > 0.4 ? 'bg-neon-blue' : 'bg-neon-pink'}`}
+                      />
+                    </div>
+                  </div>
+                </motion.button>
+              ))}
+            </div>
+          </div>
+        </motion.div>
+      )}
+      </AnimatePresence>
 
       {/* Lens Features */}
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

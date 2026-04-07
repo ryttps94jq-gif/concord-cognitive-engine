@@ -7,7 +7,7 @@
 
 import { useEffect } from 'react';
 import { useCreativeRegistry } from '@/hooks/useCreativeRegistry';
-import { Globe, RefreshCw, Music, Image, Code, FileText, Layers } from 'lucide-react';
+import { Globe, RefreshCw, Music, Image as ImageIcon, Code, FileText, Layers } from 'lucide-react';
 
 interface CreativeRegistryPanelProps {
   domain: string;
@@ -18,7 +18,7 @@ interface CreativeRegistryPanelProps {
 
 function ContentIcon({ type }: { type: string }) {
   if (type?.startsWith('audio/')) return <Music className="w-4 h-4 text-neon-cyan" />;
-  if (type?.startsWith('image/')) return <Image className="w-4 h-4 text-purple-400" />;
+  if (type?.startsWith('image/')) return <ImageIcon className="w-4 h-4 text-purple-400" />;
   if (type?.startsWith('text/')) return <FileText className="w-4 h-4 text-yellow-400" />;
   if (type === 'code') return <Code className="w-4 h-4 text-neon-green" />;
   return <Layers className="w-4 h-4 text-gray-400" />;
@@ -74,7 +74,16 @@ export function CreativeRegistryPanel({
           <h3 className="text-sm font-semibold text-white">Creative Global</h3>
           <span className="text-xs text-gray-500">{domain}</span>
         </div>
-        <span className="text-xs text-gray-500">{total} items</span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => handleRegistryUpdate({})}
+            className="p-1 rounded hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
+            title="Refresh registry"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+          </button>
+          <span className="text-xs text-gray-500">{total} items</span>
+        </div>
       </div>
 
       <div className="space-y-2 max-h-80 overflow-y-auto">

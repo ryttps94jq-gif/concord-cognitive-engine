@@ -85,17 +85,19 @@ export default function registerBackupRoutes(app, { requireRole, backupScheduler
     // Also count local backup files
     const localFiles = { db: 0, artifacts: 0, totalSizeBytes: 0 };
     try {
-      const { stdout } = await execFileAsync("bash", ["-c",
-        `ls -la "${process.env.DATA_DIR || "/data"}/backups/" 2>/dev/null | wc -l && ` +
-        `ls "${process.env.DATA_DIR || "/data"}/backups/"concord-*.db.gz 2>/dev/null | wc -l && ` +
-        `ls "${process.env.DATA_DIR || "/data"}/backups/"artifacts-*.tar.gz 2>/dev/null | wc -l && ` +
-        `du -sb "${process.env.DATA_DIR || "/data"}/backups/" 2>/dev/null | cut -f1`
-      ], { timeout: 5000 });
-
-      const lines = stdout.trim().split("\n");
-      localFiles.db = parseInt(lines[1], 10) || 0;
-      localFiles.artifacts = parseInt(lines[2], 10) || 0;
-      localFiles.totalSizeBytes = parseInt(lines[3], 10) || 0;
+      const fs = await import("fs/promises");
+      const backupDir = path.join(process.env.DATA_DIR || "/data", "backups");
+      const entries = await fs.readdir(backupDir);
+      localFiles.db = entries.filter(f => f.startsWith("concord-") && f.endsWith(".db.gz")).length;
+      localFiles.artifacts = entries.filter(f => f.startsWith("artifacts-") && f.endsWith(".tar.gz")).length;
+      let totalSize = 0;
+      for (const entry of entries) {
+        try {
+          const stat = await fs.stat(path.join(backupDir, entry));
+          totalSize += stat.size;
+        } catch { /* skip inaccessible files */ }
+      }
+      localFiles.totalSizeBytes = totalSize;
     } catch {
       // Non-fatal — directory may not exist yet
     }

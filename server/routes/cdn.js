@@ -15,7 +15,7 @@
 
 import { Router } from "express";
 import { asyncHandler } from "../lib/async-handler.js";
-import { ValidationError, NotFoundError, AuthorizationError } from "../lib/errors.js";
+import { ValidationError, AuthorizationError } from "../lib/errors.js";
 
 /**
  * Create the CDN routes router.
@@ -69,6 +69,19 @@ export default function createCDNRouter({ cdnManager, urlSigner, STATE }) {
       health,
       provider: providerInfo,
       stats,
+    });
+  }));
+
+  // ── GET /info — Public CDN info for frontend media URL resolution ────
+  router.get("/info", asyncHandler(async (_req, res) => {
+    const providerInfo = await cdnManager.getProviderInfo().catch(() => ({}));
+    res.json({
+      ok: true,
+      cdn: {
+        provider: providerInfo?.provider || "local",
+        configured: providerInfo?.configured || false,
+        baseUrl: providerInfo?.baseUrl || null,
+      },
     });
   }));
 

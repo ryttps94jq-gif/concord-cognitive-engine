@@ -22,7 +22,7 @@ import logger from '../logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const POOL_SIZE = Math.max(2, os.cpus().length - 1);
+const POOL_SIZE = Math.min(2, Math.max(1, os.cpus().length - 1)); // Cap at 2 to limit RSS
 
 // Heavy macro domains — these get offloaded to workers
 const HEAVY_DOMAINS = new Set([
@@ -166,10 +166,24 @@ export function shutdownPool() {
 
 // ── Internal ──────────────────────────────────────────────────────────────────
 
+const WORKER_TIMEOUT_MS = 30_000; // Kill workers that hang beyond 30s
+
 function runOnWorker(worker, task) {
   worker._busy = true;
   worker._task = task;
   worker._startTime = Date.now();
+  // Set a hard timeout: if worker doesn't respond, terminate and respawn
+  worker._timeoutTimer = setTimeout(() => {
+    if (worker._busy && worker._task === task) {
+      console.error(`[macro-pool] Worker ${worker._id} timed out on ${task.domain}.${task.name} after ${WORKER_TIMEOUT_MS}ms, terminating`);
+      _metrics.errors++;
+      task.reject(new Error(`worker_timeout: ${task.domain}.${task.name} exceeded ${WORKER_TIMEOUT_MS}ms`));
+      worker._task = null;
+      worker._busy = false;
+      // Terminate triggers handleWorkerExit which respawns
+      try { worker.terminate(); } catch (_e) { /* already dead */ }
+    }
+  }, WORKER_TIMEOUT_MS);
   worker.postMessage({
     type: "exec",
     domain: task.domain,
@@ -183,6 +197,8 @@ function handleWorkerMessage(worker, msg) {
   if (msg.type === "ready") return;
 
   if (msg.type === "exec-result") {
+    // Clear the timeout timer — worker responded in time
+    if (worker._timeoutTimer) { clearTimeout(worker._timeoutTimer); worker._timeoutTimer = null; }
     const task = worker._task;
     const latency = Date.now() - worker._startTime;
     worker._busy = false;

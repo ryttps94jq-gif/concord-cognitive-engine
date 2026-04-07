@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Activity, Focus, X } from 'lucide-react';
 import { apiHelpers } from '@/lib/api/client';
+import { useUIStore } from '@/store/ui';
 import { getSocket } from '@/lib/realtime/socket';
 
 interface AllocationEntry {
@@ -37,8 +38,13 @@ export function AttentionPanel() {
   }, []);
 
   const unfocus = async () => {
-    await apiHelpers.attentionAlloc.unfocus();
-    setFocusOverride(null);
+    try {
+      await apiHelpers.attentionAlloc.unfocus();
+      setFocusOverride(null);
+    } catch (e) {
+      console.error('Failed to clear focus override:', e);
+      useUIStore.getState().addToast({ type: 'error', message: 'Failed to clear focus override' });
+    }
   };
 
   const totalBudget = allocation.reduce((sum, a) => sum + a.budget, 0) || 1;

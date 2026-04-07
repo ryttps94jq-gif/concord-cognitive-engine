@@ -28,6 +28,7 @@ import {
   ShieldCheck,
   Activity,
   PieChart,
+  FileText,
   Target,
   Hash,
   Eye,
@@ -35,7 +36,9 @@ import {
   ClipboardList,
   Layers, ChevronDown,
 } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { ErrorState } from '@/components/common/EmptyState';
+import { showToast } from '@/components/common/Toasts';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
@@ -257,7 +260,7 @@ export default function ScienceLensPage() {
   useLensNav('science');
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('science');
 
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
   const [mode, setMode] = useState<ModeTab>('Dashboard');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -337,6 +340,7 @@ export default function ScienceLensPage() {
       setActionResult(result.result as unknown as Record<string, unknown>);
     } catch (err) {
       console.error('Action failed:', err);
+      showToast('error', 'Action failed');
     }
   };
 
@@ -874,7 +878,7 @@ export default function ScienceLensPage() {
   }
 
   return (
-    <div className={ds.pageContainer}>
+    <div data-lens-theme="science" className={ds.pageContainer}>
       {/* Header */}
       <header className={ds.sectionHeader}>
         <div className="flex items-center gap-3">
@@ -906,8 +910,41 @@ export default function ScienceLensPage() {
 
       {/* AI Actions */}
       <UniversalActions domain="science" artifactId={experiments[0]?.id} compact />
+
+      {/* Quick Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <FlaskConical className="w-5 h-5 text-neon-purple" />
+          <div>
+            <p className="text-lg font-bold">{experiments.length}</p>
+            <p className="text-xs text-gray-500">Experiments</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <BookOpen className="w-5 h-5 text-neon-green" />
+          <div>
+            <p className="text-lg font-bold">{publications.length}</p>
+            <p className="text-xs text-gray-500">Published</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 2 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <FileText className="w-5 h-5 text-neon-blue" />
+          <div>
+            <p className="text-lg font-bold">{publications.reduce((s, p) => s + ((p.data as unknown as Record<string, unknown>)?.citations as number || 0), 0)}</p>
+            <p className="text-xs text-gray-500">Citations</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 3 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <TestTubes className="w-5 h-5 text-neon-cyan" />
+          <div>
+            <p className="text-lg font-bold">{samples.length}</p>
+            <p className="text-xs text-gray-500">Samples</p>
+          </div>
+        </motion.div>
+      </div>
+
       {/* Tabs */}
-      <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 overflow-x-auto">
+      <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 flex-wrap">
         {MODE_TABS.map(tab => {
           const Icon = tab.icon;
           return (
@@ -1047,7 +1084,7 @@ export default function ScienceLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

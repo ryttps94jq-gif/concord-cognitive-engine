@@ -1,5 +1,6 @@
 'use client';
 
+import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
@@ -100,7 +101,7 @@ export default function MetacognitionLensPage() {
   const [predictionDomain, setPredictionDomain] = useState('');
   const [introspectFocus, setIntrospectFocus] = useState('');
   const [expandedPrediction, setExpandedPrediction] = useState<string | null>(null);
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   // --- Lens Bridge ---
   const bridge = useLensBridge('metacognition', 'snapshot');
@@ -346,7 +347,7 @@ export default function MetacognitionLensPage() {
   // --- Render ---
 
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="metacognition" className="p-6 space-y-6">
       {/* Header */}
       <header className="flex items-center gap-3">
         <Brain className="w-7 h-7 text-neon-purple" />
@@ -368,6 +369,24 @@ export default function MetacognitionLensPage() {
         )}
       </div>
       </header>
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+        {[
+          { label: 'Reflections', value: introspectionHistory.length, icon: BookOpen },
+          { label: 'Patterns', value: patterns.length, icon: Activity },
+          { label: 'Meta-Score', value: cal.accuracy != null ? `${(Number(cal.accuracy) * 100).toFixed(0)}%` : '--', icon: Gauge },
+          { label: 'Blind Spots', value: spots.length, icon: AlertTriangle },
+        ].map((stat) => (
+          <div key={stat.label} className="panel flex items-center gap-3 p-3">
+            <stat.icon className="w-5 h-5 text-neon-purple shrink-0" />
+            <div>
+              <p className="text-xs text-gray-400">{stat.label}</p>
+              <p className="text-lg font-bold text-white">{stat.value}</p>
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* AI Actions */}
       <UniversalActions domain="metacognition" artifactId={bridge.selectedId} compact />
@@ -540,8 +559,9 @@ export default function MetacognitionLensPage() {
                   {spots.map((spot: Record<string, unknown>, i: number) => {
                     const badge = severityBadge(spot.severity);
                     return (
-                      <div
+                      <motion.div
                         key={i}
+                        initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
                         className={`p-3 rounded-lg border-l-4 ${severityColor(spot.severity)}`}
                       >
                         <div className="flex items-start justify-between gap-2">
@@ -566,7 +586,7 @@ export default function MetacognitionLensPage() {
                             Detected: {formatTimestamp(spot.detected_at)}
                           </p>
                         )}
-                      </div>
+                      </motion.div>
                     );
                   })}
                 </div>
@@ -890,7 +910,7 @@ export default function MetacognitionLensPage() {
           </div>
 
           {/* Confidence vs Accuracy Scatter Display */}
-          {predictions.length > 0 && (
+          {predictions.length > 0 ? (
             <div className="panel p-4">
               <h2 className="font-semibold mb-4 flex items-center gap-2">
                 <BarChart3 className="w-4 h-4 text-neon-purple" />
@@ -972,6 +992,10 @@ export default function MetacognitionLensPage() {
                   Ideal calibration
                 </span>
               </div>
+            </div>
+          ) : (
+            <div className="text-center py-6 text-gray-500 text-sm border border-dashed border-white/10 rounded-lg">
+              <p>No predictions yet. Create cognitive predictions to see pattern analysis here.</p>
             </div>
           )}
 
@@ -1303,7 +1327,7 @@ export default function MetacognitionLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />
@@ -1313,7 +1337,7 @@ export default function MetacognitionLensPage() {
         </button>
         {showFeatures && (
           <div className="px-4 pb-4">
-            <LensFeaturePanel lensId="cognitive_cluster" />
+            <LensFeaturePanel lensId="metacognition" />
           </div>
         )}
       </div>

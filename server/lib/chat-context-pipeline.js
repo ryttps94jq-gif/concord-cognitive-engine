@@ -20,6 +20,7 @@
  */
 
 import { getSummaryText } from "./conversation-summarizer.js";
+import { filterByEmergentConsent } from "./consent.js";
 
 // ── Hardware Detection ───────────────────────────────────────────────────────
 
@@ -269,7 +270,12 @@ export function runContextHarvest(STATE, opts = {}) {
   const conversationSummary = getSummaryText(STATE, sessionId);
 
   // Source B: Semantic search results (passed in as retrievalHits or workingSetDtus)
-  const semanticDtus = (opts.workingSetDtus || []).slice(0, maxN);
+  // Consent gate: if caller is an emergent, filter out DTUs from users who haven't opted in
+  let candidateDtus = opts.workingSetDtus || [];
+  if (opts.isEmergent && opts.db) {
+    candidateDtus = filterByEmergentConsent(opts.db, candidateDtus);
+  }
+  const semanticDtus = candidateDtus.slice(0, maxN);
 
   // Source C: Entity state
   const entityResult = harvestEntityState(STATE);

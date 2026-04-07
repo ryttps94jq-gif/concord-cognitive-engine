@@ -5,7 +5,7 @@ import { Loader2, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { OAuthButtons } from './OAuthButtons';
 import { useAuth } from '@/hooks/useAuth';
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5050';
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 type AuthMode = 'signin' | 'signup';
 

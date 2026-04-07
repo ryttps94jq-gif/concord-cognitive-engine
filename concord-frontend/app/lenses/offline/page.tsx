@@ -5,7 +5,8 @@ import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
-import { Wifi, WifiOff, Database, RefreshCw, Upload, Download, Trash2, Loader2, Layers, ChevronDown } from 'lucide-react';
+import { Wifi, WifiOff, Database, RefreshCw, Upload, Download, Trash2, Loader2, Layers, ChevronDown, CloudOff, HardDrive } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -32,7 +33,7 @@ export default function OfflineLensPage() {
   useLensNav('offline');
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('offline');
   const [isOnline, setIsOnline] = useState(true);
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
   const qc = useQueryClient();
 
   // Fetch cache stats from the real DB status endpoint
@@ -172,7 +173,7 @@ export default function OfflineLensPage() {
     );
   }
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="offline" className="p-6 space-y-6">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-2xl">📴</span>
@@ -208,27 +209,75 @@ export default function OfflineLensPage() {
 
       {/* AI Actions */}
       <UniversalActions domain="offline" artifactId={syncItems[0]?.id} compact />
+
+      {/* Sync Status Badges & Last Sync */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}
+        className="panel p-4 flex flex-col md:flex-row items-start md:items-center gap-4"
+      >
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-green-500/15 text-green-400">
+            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" /> {pendingSync.filter(i => i.synced).length} Synced
+          </span>
+          <span className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-400">
+            <span className="w-2 h-2 rounded-full bg-amber-400" /> {pendingSync.filter(i => !i.synced).length} Pending
+          </span>
+          <span className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-red-500/15 text-red-400">
+            <CloudOff className="w-3 h-3" /> 0 Conflicts
+          </span>
+        </div>
+        <div className="flex-1" />
+        <div className="text-xs text-gray-500 flex items-center gap-2">
+          <RefreshCw className="w-3 h-3" />
+          Last sync: {lastUpdated ? new Date(lastUpdated).toLocaleTimeString() : 'Never'}
+        </div>
+      </motion.div>
+
+      {/* Offline Storage Usage Bar */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+        className="panel p-4"
+      >
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-medium flex items-center gap-2">
+            <HardDrive className="w-4 h-4 text-neon-blue" /> Offline Storage Usage
+          </span>
+          <span className="text-xs text-gray-400">{cacheStats.totalSize}</span>
+        </div>
+        <div className="relative w-full h-6 bg-lattice-deep rounded-full overflow-hidden">
+          <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-neon-blue/60 to-neon-cyan/60 rounded-full transition-all duration-700"
+            style={{ width: `${Math.min(((cacheStats.dtus + cacheStats.events) / Math.max(cacheStats.dtus + cacheStats.events + 50, 100)) * 100, 95)}%` }}
+          />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-xs font-mono text-white drop-shadow">{cacheStats.dtus} DTUs + {cacheStats.events} Events</span>
+          </div>
+        </div>
+        <div className="flex justify-between text-[10px] text-gray-600 mt-1">
+          <span>0%</span>
+          <span>Storage capacity</span>
+          <span>100%</span>
+        </div>
+      </motion.div>
+
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="lens-card">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="lens-card">
           <Database className="w-5 h-5 text-neon-blue mb-2" />
           <p className="text-2xl font-bold">{cacheStats.dtus}</p>
           <p className="text-sm text-gray-400">Cached DTUs</p>
-        </div>
-        <div className="lens-card">
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="lens-card">
           <RefreshCw className="w-5 h-5 text-neon-purple mb-2" />
           <p className="text-2xl font-bold">{pendingSync.length}</p>
           <p className="text-sm text-gray-400">Pending Sync</p>
-        </div>
-        <div className="lens-card">
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="lens-card">
           <Download className="w-5 h-5 text-neon-green mb-2" />
           <p className="text-2xl font-bold">{cacheStats.totalSize}</p>
           <p className="text-sm text-gray-400">Cache Size</p>
-        </div>
-        <div className="lens-card">
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="lens-card">
           <Upload className="w-5 h-5 text-neon-cyan mb-2" />
           <p className="text-2xl font-bold">{cacheStats.events}</p>
           <p className="text-sm text-gray-400">Cached Events</p>
-        </div>
+        </motion.div>
       </div>
 
       {/* Sync Queue */}
@@ -255,8 +304,10 @@ export default function OfflineLensPage() {
           {pendingSync.length === 0 && (
             <p className="text-sm text-gray-500 text-center py-4">No pending sync items</p>
           )}
-          {pendingSync.map((item) => (
-            <div key={item.id} className="flex items-center justify-between p-3 bg-lattice-deep rounded-lg">
+          <AnimatePresence>
+          {pendingSync.map((item, idx) => (
+            <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -100 }} transition={{ delay: idx * 0.05 }}
+              className="flex items-center justify-between p-3 bg-lattice-deep rounded-lg">
               <div className="flex items-center gap-3">
                 <span className={`w-2 h-2 rounded-full ${item.synced ? 'bg-neon-green' : 'bg-yellow-500'}`} />
                 <div>
@@ -279,8 +330,9 @@ export default function OfflineLensPage() {
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
-            </div>
+            </motion.div>
           ))}
+          </AnimatePresence>
         </div>
       </div>
 
@@ -336,7 +388,7 @@ export default function OfflineLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

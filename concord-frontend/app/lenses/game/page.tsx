@@ -2,9 +2,9 @@
 
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
+import { useLensData } from '@/lib/hooks/use-lens-data';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Trophy, Star, Zap, Target, Users, Swords, Crown,
@@ -15,6 +15,8 @@ import {
   Activity, ArrowUp,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { showToast } from '@/components/common/Toasts';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -193,16 +195,7 @@ const SKILL_TREES: Record<SkillBranch, { label: string; color: string; icon: typ
   },
 };
 
-const SHOP_ITEMS: ShopItem[] = [
-  { id: 's1', name: 'Vinyl Veteran Badge', description: 'Show your dedication to the craft', icon: '🏅', type: 'badge', cost: 500, rarity: 'common', owned: false },
-  { id: 's2', name: 'Waveform Wanderer', description: 'Title: displayed next to your name', icon: '🌊', type: 'title', cost: 800, rarity: 'rare', owned: false },
-  { id: 's3', name: 'Neon Grid Theme', description: 'Cyberpunk-inspired profile theme', icon: '🎆', type: 'theme', cost: 1200, rarity: 'rare', owned: false },
-  { id: 's4', name: 'Golden Fader Badge', description: 'The mark of a true mix engineer', icon: '🏆', type: 'badge', cost: 2000, rarity: 'epic', owned: false },
-  { id: 's5', name: 'Sub Bass Overlord', description: 'Title: for the low-end specialists', icon: '💀', type: 'title', cost: 1500, rarity: 'epic', owned: false },
-  { id: 's6', name: 'Cosmic Producer', description: 'Title: out of this world', icon: '🚀', type: 'title', cost: 3000, rarity: 'legendary', owned: false },
-  { id: 's7', name: 'Fire Emote', description: 'React with flames on community tracks', icon: '🔥', type: 'emote', cost: 300, rarity: 'common', owned: true },
-  { id: 's8', name: 'Headphone Halo Badge', description: 'A radiant symbol of critical listening', icon: '😇', type: 'badge', cost: 1800, rarity: 'epic', owned: false },
-];
+// Shop items are fetched from the backend via useLensData (see component body)
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -233,10 +226,18 @@ export default function GameLensPage() {
   useLensNav('game');
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('game');
 
-  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<MainTab>('dashboard');
   const [lbPeriod, setLbPeriod] = useState<LeaderboardPeriod>('alltime');
-  const [shopItems, setShopItems] = useState<ShopItem[]>(SHOP_ITEMS);
+  const { items: shopLensItems, update: updateShopItem } = useLensData<ShopItem>('game', 'shop-item', { noSeed: true });
+  const [shopItems, setShopItems] = useState<ShopItem[]>([]);
+  const [purchasingIds, setPurchasingIds] = useState<Set<string>>(new Set());
+
+  // Sync shop items from API
+  useEffect(() => {
+    if (shopLensItems.length > 0) {
+      setShopItems(shopLensItems.map(i => ({ ...(i.data as unknown as ShopItem), id: i.id })));
+    }
+  }, [shopLensItems]);
   const [playerXp, setPlayerXp] = useState(0);
   const [expandedBranch, setExpandedBranch] = useState<SkillBranch | null>('production');
   const [showCreateChallenge, setShowCreateChallenge] = useState(false);
@@ -244,21 +245,54 @@ export default function GameLensPage() {
   const [unlockAnim, setUnlockAnim] = useState<string | null>(null);
   const [questFilter, setQuestFilter] = useState<'all' | 'daily' | 'weekly' | 'challenge'>('all');
 
-  // Fetch achievements via useLensData (no /api/game/* backend exists)
-  const { items: achievementItems, isLoading, isError: isError, error: error, refetch: refetch } = useLensData<Achievement>('game', 'achievement', { seed: [] });
-  const achievements: Achievement[] = achievementItems.map(i => ({ ...(i.data as unknown as Achievement), id: i.id }));
+  // Fetch achievements from /api/game/achievements
+  const { data: achievementsResp, isLoading, isError: isError, error: error, refetch: refetch } = useQuery({
+    queryKey: ['game', 'achievements'],
+    queryFn: () => api.get('/api/game/achievements').then(r => r.data),
+  });
+  const achievements: Achievement[] = (achievementsResp?.achievements || INITIAL_ACHIEVEMENTS).map((a: Record<string, unknown>) => ({
+    id: a.id as string,
+    name: a.name as string || a.id as string,
+    description: a.description as string || '',
+    icon: a.icon as string || '🏆',
+    category: a.category as string || 'general',
+    unlocked: !!(a.earned || a.unlocked),
+    progress: (a.progress as number) || (a.earned ? 1 : 0),
+    maxProgress: (a.maxProgress as number) || 1,
+    xpReward: (a.xpReward as number) || 50,
+    rarity: (a.rarity as Achievement['rarity']) || 'common',
+  }));
 
-  // Fetch challenges/quests via useLensData
-  const { items: questItems, isError: isError2, error: error2, refetch: refetch2 } = useLensData<Quest>('game', 'quest', { seed: [] });
-  const quests: Quest[] = questItems.map(i => ({ ...(i.data as unknown as Quest), id: i.id }));
+  // Fetch challenges/quests from /api/game/challenges
+  const { data: challengesResp, isError: isError2, error: error2, refetch: refetch2 } = useQuery({
+    queryKey: ['game', 'challenges'],
+    queryFn: () => api.get('/api/game/challenges').then(r => r.data),
+  });
+  const { create: createQuest } = useLensData<Quest>('game', 'quest', { noSeed: true });
+  const quests: Quest[] = (challengesResp?.challenges || INITIAL_QUESTS).map((c: Record<string, unknown>) => ({
+    id: c.id as string,
+    name: c.name as string,
+    description: c.description as string,
+    icon: '⚡',
+    xpReward: (c.reward as number) || 100,
+    difficulty: 'medium' as Quest['difficulty'],
+    type: 'daily' as Quest['type'],
+    status: 'available' as QuestStatus,
+  }));
 
-  // Fetch profile via useLensData
-  const { items: profileItems, isError: isError3, error: error3, refetch: refetch3 } = useLensData<Record<string, unknown>>('game', 'profile', { seed: [] });
-  const profileData = profileItems.length > 0 ? profileItems[0].data : null;
+  // Fetch profile from /api/game/profile
+  const { data: profileResp, isError: isError3, error: error3, refetch: refetch3 } = useQuery({
+    queryKey: ['game', 'profile'],
+    queryFn: () => api.get('/api/game/profile').then(r => r.data),
+  });
+  const profileData = profileResp?.profile || null;
 
-  // Fetch leaderboard via useLensData
-  const { items: leaderboardItems, isError: isError4, error: error4, refetch: refetch4 } = useLensData<Record<string, unknown>>('game', 'leaderboard', { seed: [] });
-  const leaderboardData = leaderboardItems.map(i => i.data);
+  // Fetch leaderboard from /api/game/leaderboard
+  const { data: leaderboardResp, isError: isError4, error: error4, refetch: refetch4 } = useQuery({
+    queryKey: ['game', 'leaderboard'],
+    queryFn: () => api.get('/api/game/leaderboard').then(r => r.data),
+  });
+  const leaderboardData = (leaderboardResp?.leaderboard || INITIAL_LEADERBOARD) as Record<string, unknown>[];
 
   // Sync profile data into local state when available
   useEffect(() => {
@@ -270,7 +304,10 @@ export default function GameLensPage() {
 
   const { update: updateQuest } = useLensData<Quest>('game', 'quest', { noSeed: true });
   const completeQuestMutation = useMutation({
-    mutationFn: (questId: string) => updateQuest(questId, { data: { status: 'completed' } as unknown as Partial<Quest> }),
+    mutationFn: (questId: string) => {
+      const quest = quests.find(q => q.id === questId);
+      return api.post(`/api/game/quests/${questId}/complete`, { xpReward: quest?.xpReward || 100 }).then(r => r.data);
+    },
     onSuccess: () => { refetch2(); refetch3(); },
     onError: (err) => {
       console.error('Failed to complete quest:', err instanceof Error ? err.message : err);
@@ -287,7 +324,9 @@ export default function GameLensPage() {
   // Quest flow
   const acceptQuest = useCallback((id: string) => {
     setQuestStatusOverrides(prev => ({ ...prev, [id]: 'accepted' as QuestStatus }));
-  }, []);
+    updateQuest(id, { data: { status: 'accepted' } as unknown as Partial<Quest> })
+      .catch(err => { console.error('Failed to accept quest:', err instanceof Error ? err.message : err); showToast('error', 'Failed to accept quest'); });
+  }, [updateQuest]);
 
   const completeQuest = useCallback((id: string) => {
     const quest = quests.find((q) => q.id === id);
@@ -300,10 +339,14 @@ export default function GameLensPage() {
   // Shop purchase
   const purchaseItem = useCallback((id: string) => {
     const item = shopItems.find((i) => i.id === id);
-    if (!item || item.owned || playerXp < item.cost) return;
+    if (!item || item.owned || playerXp < item.cost || purchasingIds.has(id)) return;
+    setPurchasingIds(prev => new Set(prev).add(id));
     setShopItems((prev) => prev.map((i) => (i.id === id ? { ...i, owned: true } : i)));
     setPlayerXp((prev) => prev - item.cost);
-  }, [shopItems, playerXp]);
+    updateShopItem(id, { data: { owned: true } as unknown as Partial<ShopItem> })
+      .catch(err => { console.error('Failed to persist shop purchase:', err instanceof Error ? err.message : err); showToast('error', 'Purchase failed'); })
+      .finally(() => setPurchasingIds(prev => { const next = new Set(prev); next.delete(id); return next; }));
+  }, [shopItems, playerXp, purchasingIds, updateShopItem]);
 
   // Achievement unlock (optimistic UI - will refresh from API on next fetch)
   const [achievementOverrides, setAchievementOverrides] = useState<Record<string, boolean>>({});
@@ -324,11 +367,14 @@ export default function GameLensPage() {
   const allQuests = useMemo(() => [...effectiveQuests, ...localQuests], [effectiveQuests, localQuests]);
   const submitChallenge = useCallback(() => {
     if (!newChallenge.name.trim()) return;
-    const id = `q-custom-${Date.now()}`;
-    setLocalQuests((prev) => [...prev, { id, name: newChallenge.name, description: newChallenge.description, icon: '🎯', xpReward: newChallenge.xpReward, difficulty: newChallenge.difficulty, type: 'challenge', status: 'available' }]);
+    const questData: Quest = { id: `q-custom-${Date.now()}`, name: newChallenge.name, description: newChallenge.description, icon: '🎯', xpReward: newChallenge.xpReward, difficulty: newChallenge.difficulty, type: 'challenge', status: 'available' };
+    setLocalQuests((prev) => [...prev, questData]);
+    createQuest({ title: questData.name, data: questData as unknown as Record<string, unknown>, meta: { status: 'active', tags: ['challenge', questData.difficulty] } })
+      .then(() => { refetch2(); })
+      .catch(err => { console.error('Failed to persist challenge:', err instanceof Error ? err.message : err); showToast('error', 'Challenge submission failed'); });
     setNewChallenge({ name: '', description: '', difficulty: 'medium', xpReward: 300 });
     setShowCreateChallenge(false);
-  }, [newChallenge]);
+  }, [newChallenge, createQuest, refetch2]);
 
   // Computed
   const filteredQuests = useMemo(() => {
@@ -341,8 +387,8 @@ export default function GameLensPage() {
     return [...apiPlayers].sort((a: LeaderboardPlayer, b: LeaderboardPlayer) => b.xp - a.xp);
   }, [leaderboardData]);
 
-  const profile = (profileData || { level: 1, xp: 0, nextLevelXp: 1000, totalXpEarned: 0, achievements: 0, totalAchievements: 0, streak: 0, longestStreak: 0, questsCompleted: 0, challengesWon: 0, completionRate: 0, rank: 0, xpHistory: [] }) as unknown as GameProfile;
-  const xpHistory: XpHistoryEntry[] = (profile.xpHistory || []) as XpHistoryEntry[];
+  const profile = (profileData || INITIAL_PROFILE) as unknown as GameProfile;
+  const xpHistory: XpHistoryEntry[] = (profile.xpHistory || INITIAL_XP_HISTORY) as XpHistoryEntry[];
   const xpMax = Math.max(1, ...xpHistory.map((d: { xp: number }) => d.xp));
   const level = profile.level || 1;
   const progressPct = ((playerXp) / ((profile.nextLevelXp as number) || 1000)) * 100;
@@ -364,10 +410,10 @@ export default function GameLensPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full p-8">
+      <div data-lens-theme="game" className="flex items-center justify-center h-full p-8">
         <div className="text-center space-y-3">
-          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-sm text-gray-400">Loading...</p>
+          <div className="w-8 h-8 border-2 border-violet-400 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading game library...</p>
         </div>
       </div>
     );
@@ -437,7 +483,7 @@ export default function GameLensPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 overflow-x-auto pb-2 border-b border-lattice-border scrollbar-thin">
+      <div className="flex gap-1 flex-wrap pb-2 border-b border-lattice-border scrollbar-thin">
         {TABS.map((tab) => {
           const Icon = tab.icon;
           return (
@@ -546,7 +592,7 @@ export default function GameLensPage() {
             const BranchIcon = data.icon;
             const isExpanded = expandedBranch === branch;
             return (
-              <div key={branch} className="panel overflow-hidden">
+              <div key={branch} data-lens-theme="game" className="panel overflow-hidden">
                 <button
                   onClick={() => setExpandedBranch(isExpanded ? null : branch)}
                   className="w-full flex items-center justify-between p-4 hover:bg-lattice-surface/50 transition-colors"
@@ -760,7 +806,10 @@ export default function GameLensPage() {
               </thead>
               <tbody>
                 {sortedLeaderboard.length === 0 && (
-                  <tr><td colSpan={5} className="py-8 text-center text-gray-500">No players on the leaderboard yet</td></tr>
+                  <tr><td colSpan={5} className="py-8 text-center text-gray-500">No players on the leaderboard yet. Start a game to climb the ranks.</td></tr>
+                )}
+                {sortedLeaderboard.length === 1 && (
+                  <tr><td colSpan={6} className="py-4 text-center text-neon-cyan text-xs">🏔️ Pioneer — First on the leaderboard!</td></tr>
                 )}
                 {sortedLeaderboard.map((player, index) => (
                   <motion.tr
@@ -771,7 +820,7 @@ export default function GameLensPage() {
                     className={cn('border-b border-lattice-border/30 transition-colors', player.isCurrentUser ? 'bg-neon-purple/10' : 'hover:bg-lattice-surface/50')}
                   >
                     <td className="py-3 px-4">
-                      {index === 0 ? <Crown className="w-5 h-5 text-neon-yellow" /> : index === 1 ? <span className="text-gray-300 font-bold">2</span> : index === 2 ? <span className="text-amber-600 font-bold">3</span> : <span className="text-gray-500">#{index + 1}</span>}
+                      {sortedLeaderboard.length === 1 ? <Sparkles className="w-5 h-5 text-neon-cyan" /> : index === 0 ? <Crown className="w-5 h-5 text-neon-yellow" /> : index === 1 ? <span className="text-gray-300 font-bold">2</span> : index === 2 ? <span className="text-amber-600 font-bold">3</span> : <span className="text-gray-500">#{index + 1}</span>}
                     </td>
                     <td className="py-3 font-medium text-white text-sm">
                       {player.name}
@@ -821,10 +870,10 @@ export default function GameLensPage() {
                   ) : (
                     <button
                       onClick={() => purchaseItem(item.id)}
-                      disabled={playerXp < item.cost}
-                      className={cn('btn-neon text-xs py-1 px-3', playerXp < item.cost && 'opacity-40 cursor-not-allowed')}
+                      disabled={playerXp < item.cost || purchasingIds.has(item.id)}
+                      className={cn('btn-neon text-xs py-1 px-3', (playerXp < item.cost || purchasingIds.has(item.id)) && 'opacity-40 cursor-not-allowed')}
                     >
-                      Buy
+                      {purchasingIds.has(item.id) ? 'Buying...' : 'Buy'}
                     </button>
                   )}
                 </div>
@@ -983,6 +1032,7 @@ export default function GameLensPage() {
                 </button>
 
       {/* Real-time Data Panel */}
+      <UniversalActions domain="game" artifactId={null} compact />
       {realtimeData && (
         <RealtimeDataPanel
           domain="game"

@@ -34,11 +34,11 @@ export const EVENT_SCOPE_MAP = Object.freeze({
   "news:energy":      ["news", "energy", "environment"],
   "news:finance":     ["news", "economics", "finance"],
 
-  // Market events — economics domain only
-  "market:trade":     ["economics", "market"],
-  "market:crypto":    ["economics", "market", "crypto"],
-  "market:commodity": ["economics", "market"],
-  "market:forex":     ["economics", "market"],
+  // Market events — economics + finance lenses
+  "market:trade":     ["economics", "market", "finance"],
+  "market:crypto":    ["economics", "market", "crypto", "finance"],
+  "market:commodity": ["economics", "market", "finance"],
+  "market:forex":     ["economics", "market", "finance"],
 
   // Council/governance events — governance domain only
   "council:vote":     ["governance"],

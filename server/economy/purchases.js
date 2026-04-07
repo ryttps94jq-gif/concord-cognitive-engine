@@ -217,7 +217,7 @@ function recordTransition(db, purchaseId, fromStatus, toStatus, reason, actor, m
 }
 
 function safeJsonParse(str) {
-  try { return JSON.parse(str); } catch { return []; }
+  try { return JSON.parse(str); } catch (err) { console.debug('[purchases] JSON parse failed', err?.message); return []; }
 }
 
 export { TRANSITIONS };

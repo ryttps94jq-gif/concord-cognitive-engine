@@ -7,7 +7,8 @@ import {
   GripVertical,
   Trash2,
   Clock,
-  User
+  User,
+  Pencil
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -45,7 +46,7 @@ export function KanbanBoard({
   columns,
   onMoveCard,
   onAddCard,
-  onUpdateCard: _onUpdateCard,
+  onUpdateCard,
   onDeleteCard,
   onAddColumn,
   onDeleteColumn,
@@ -57,6 +58,8 @@ export function KanbanBoard({
   const [newCardTitle, setNewCardTitle] = useState('');
   const [addingColumn, setAddingColumn] = useState(false);
   const [newColumnTitle, setNewColumnTitle] = useState('');
+  const [editingCardId, setEditingCardId] = useState<string | null>(null);
+  const [editingCardTitle, setEditingCardTitle] = useState('');
 
   const handleDragStart = (card: KanbanCard, columnId: string) => {
     setDraggedCard({ card, columnId });
@@ -202,8 +205,42 @@ export function KanbanBoard({
                 )}
               >
                 <div className="flex items-start justify-between gap-2">
-                  <h3 className="text-sm text-white flex-1">{card.title}</h3>
+                  {editingCardId === card.id ? (
+                    <input
+                      type="text"
+                      value={editingCardTitle}
+                      onChange={(e) => setEditingCardTitle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          onUpdateCard?.(card.id, { title: editingCardTitle });
+                          setEditingCardId(null);
+                        }
+                        if (e.key === 'Escape') setEditingCardId(null);
+                      }}
+                      onBlur={() => {
+                        if (editingCardTitle.trim() && editingCardTitle !== card.title) {
+                          onUpdateCard?.(card.id, { title: editingCardTitle });
+                        }
+                        setEditingCardId(null);
+                      }}
+                      className="flex-1 text-sm text-white bg-lattice-bg border border-lattice-border rounded px-1 py-0.5 focus:outline-none focus:border-neon-cyan"
+                      autoFocus
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <h3 className="text-sm text-white flex-1">{card.title}</h3>
+                  )}
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingCardId(card.id);
+                        setEditingCardTitle(card.title);
+                      }}
+                      className="p-1 text-gray-400 hover:text-neon-cyan transition-colors"
+                    >
+                      <Pencil className="w-3 h-3" />
+                    </button>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();

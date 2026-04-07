@@ -98,8 +98,9 @@ describe("Heartbeat Integration", () => {
   });
 
   // Brain routing check
-  it("should route chat LLM to conscious brain when OpenAI unavailable", () => {
-    assert.ok(source.includes("const useConscious = !OPENAI_API_KEY && BRAIN.conscious.enabled"));
+  it("should route chat LLM to conscious brain with subconscious fallback", () => {
+    assert.ok(source.includes("const consciousAvailable = BRAIN.conscious && BRAIN.conscious.enabled"));
+    assert.ok(source.includes("const subconsciousAvailable = BRAIN.subconscious && BRAIN.subconscious.enabled"));
   });
 
   // Rate limiting check

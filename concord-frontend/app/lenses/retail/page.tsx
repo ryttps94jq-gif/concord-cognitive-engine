@@ -1,5 +1,6 @@
 'use client';
 
+import { motion } from 'framer-motion';
 import { useState, useMemo, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
@@ -247,7 +248,7 @@ export default function RetailLensPage() {
   const [showEditor, setShowEditor] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [view, setView] = useState<'library' | 'dashboard'>('library');
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   /* Sub-tab state for deep features */
   const [productSubTab, setProductSubTab] = useState<ProductSubTab>('catalog');
@@ -759,8 +760,8 @@ export default function RetailLensPage() {
 
     const breachedCount = tickets.filter(t => t.sla.breached).length;
     const urgentCount = tickets.filter(t => t.sla.urgent && !t.sla.breached).length;
-    const _onTrackCount = tickets.filter(t => !t.sla.urgent && !t.sla.breached).length;
-    const _resolvedCount = tickets.filter(t => t.status === 'resolved' || t.status === 'closed').length;
+    const onTrackCount = tickets.filter(t => !t.sla.urgent && !t.sla.breached).length;
+    const resolvedCount = tickets.filter(t => t.status === 'resolved' || t.status === 'closed').length;
     const slaCompliance = tickets.length > 0 ? Math.round(((tickets.length - breachedCount) / tickets.length) * 100) : 100;
     const avgSatisfaction = tickets.reduce((s, t) => s + (t.data.satisfactionScore || 0), 0) / (tickets.length || 1);
 
@@ -769,7 +770,7 @@ export default function RetailLensPage() {
         <div className={ds.grid4}>
           <MetricCard icon={ShieldCheck} label="SLA Compliance" value={`${slaCompliance}%`} color="green-400" subtext={`${breachedCount} breached`} />
           <MetricCard icon={AlertTriangle} label="Urgent" value={String(urgentCount)} color="yellow-400" subtext="Approaching deadline" />
-          <MetricCard icon={AlertCircle} label="Breached" value={String(breachedCount)} color="red-400" subtext="Past SLA deadline" />
+          <MetricCard icon={AlertCircle} label="On Track" value={String(onTrackCount)} color="green-400" subtext={`${resolvedCount} resolved`} />
           <MetricCard icon={ThumbsUp} label="Avg Satisfaction" value={avgSatisfaction.toFixed(1)} color="neon-cyan" subtext="out of 5.0" />
         </div>
 
@@ -885,13 +886,13 @@ export default function RetailLensPage() {
 
     const criticalProducts = products.filter(p => p.stockoutRisk === 'critical');
     const highRiskProducts = products.filter(p => p.stockoutRisk === 'high');
-    const _mediumRiskProducts = products.filter(p => p.stockoutRisk === 'medium');
+    const mediumRiskProducts = products.filter(p => p.stockoutRisk === 'medium');
 
     return (
       <div className="space-y-4">
         <div className={ds.grid4}>
           <MetricCard icon={Gauge} label="Inventory Health" value={`${inventoryHealthScore}%`} color={inventoryHealthScore >= 80 ? 'green-400' : inventoryHealthScore >= 50 ? 'yellow-400' : 'red-400'} />
-          <MetricCard icon={PackageX} label="Stockout Risk" value={String(criticalProducts.length + highRiskProducts.length)} color="red-400" subtext="products at risk" />
+          <MetricCard icon={PackageX} label="Stockout Risk" value={String(criticalProducts.length + highRiskProducts.length)} color="red-400" subtext={`${mediumRiskProducts.length} medium risk`} />
           <MetricCard icon={RefreshCw} label="Avg Turnover" value={(products.reduce((s, p) => s + (p.data.turnoverRate || 0), 0) / (products.length || 1)).toFixed(1) + 'x'} color="neon-cyan" subtext="monthly" />
           <MetricCard icon={AlertTriangle} label="Below Reorder" value={String(lowStockProducts.length)} color="yellow-400" subtext="need reordering" />
         </div>
@@ -1169,7 +1170,7 @@ export default function RetailLensPage() {
   /*  Sub-tab rendering                                                  */
   /* ------------------------------------------------------------------ */
   const renderSubTabs = (tabs: { id: string; label: string; icon: typeof Package }[], active: string, onChange: (id: string) => void) => (
-    <div className="flex items-center gap-1 mb-4 overflow-x-auto">
+    <div className="flex items-center gap-1 mb-4 flex-wrap">
       {tabs.map(tab => {
         const Icon = tab.icon;
         return (
@@ -1709,7 +1710,11 @@ export default function RetailLensPage() {
         </div>
       ) : (
         <div className={ds.grid3}>
-          {filtered.map(renderCard)}
+          {filtered.map((item, index) => (
+            <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }}>
+              {renderCard(item)}
+            </motion.div>
+          ))}
         </div>
       )}
     </>
@@ -1739,7 +1744,7 @@ export default function RetailLensPage() {
   }
 
   return (
-    <div className={ds.pageContainer}>
+    <div data-lens-theme="retail" className={ds.pageContainer}>
       {/* Header */}
       <header className={ds.sectionHeader}>
         <div className="flex items-center gap-3">
@@ -1763,12 +1768,30 @@ export default function RetailLensPage() {
       </header>
 
 
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Products', value: items.length, icon: Package },
+          { label: 'Daily Sales', value: `$${items.reduce((s, i) => s + Number((i.data as unknown as Record<string, unknown>).revenue || 0), 0).toLocaleString()}`, icon: DollarSign },
+          { label: 'Inventory', value: items.reduce((s, i) => s + Number((i.data as unknown as Record<string, unknown>).stock || (i.data as unknown as Record<string, unknown>).qty || 0), 0), icon: ShoppingBag },
+          { label: 'Active Orders', value: items.filter(i => i.meta?.status === 'active' || i.meta?.status === 'processing').length, icon: Store },
+        ].map((stat) => (
+          <div key={stat.label} className={ds.panel + ' flex items-center gap-3 p-3'}>
+            <stat.icon className="w-5 h-5 text-neon-purple shrink-0" />
+            <div>
+              <p className="text-xs text-gray-400">{stat.label}</p>
+              <p className="text-lg font-bold text-white">{stat.value}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* AI Actions */}
       <UniversalActions domain="retail" artifactId={items[0]?.id} compact />
       <RealtimeDataPanel domain="retail" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <DTUExportButton domain="retail" data={{}} compact />
       {/* Mode tabs */}
-      <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 overflow-x-auto">
+      <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 flex-wrap">
         {MODE_TABS.map(tab => {
           const Icon = tab.icon;
           return (
@@ -1839,7 +1862,7 @@ export default function RetailLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

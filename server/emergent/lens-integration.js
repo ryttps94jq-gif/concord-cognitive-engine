@@ -810,6 +810,256 @@ export function registerBuiltinEnrichers() {
 
     return { claims, tags, edges: [], summary: artifact.title, domain: "learning" };
   });
+
+  // ── Super-Lens Domain Enrichers (23 domains) ─────────────────────────────
+
+  registerLensDTUEnricher("healthcare", (artifact, action, extra) => {
+    const d = artifact.data || {};
+    const claims = [];
+    const tags = ["healthcare"];
+    if (d.prescriptions?.length) claims.push(`${d.prescriptions.length} active prescriptions`);
+    if (d.diagnosis) { claims.push(`Diagnosis: ${d.diagnosis}`); tags.push(`diagnosis:${d.diagnosis}`); }
+    if (d.patient?.age) tags.push(`age_group:${d.patient.age < 18 ? "pediatric" : d.patient.age > 65 ? "geriatric" : "adult"}`);
+    if (d.protocol) tags.push(`protocol:${d.protocol}`);
+    return { claims, tags, edges: [], summary: d.diagnosis || artifact.title, domain: "healthcare" };
+  });
+
+  registerLensDTUEnricher("accounting", (artifact, action, extra) => {
+    const d = artifact.data || {};
+    const claims = [];
+    const tags = ["accounting"];
+    if (d.accounts?.length) claims.push(`Chart of accounts: ${d.accounts.length} accounts`);
+    if (d.totalDebits != null) claims.push(`Total debits: ${d.totalDebits}`);
+    if (d.period) tags.push(`period:${d.period}`);
+    return { claims, tags, edges: [], summary: artifact.title, domain: "accounting" };
+  });
+
+  registerLensDTUEnricher("agriculture", (artifact, action, extra) => {
+    const d = artifact.data || {};
+    const claims = [];
+    const tags = ["agriculture"];
+    if (d.crop) { claims.push(`Crop: ${d.crop}`); tags.push(`crop:${d.crop}`); }
+    if (d.acreage) claims.push(`Acreage: ${d.acreage}`);
+    if (d.yield) claims.push(`Yield: ${d.yield}`);
+    if (d.soilType) tags.push(`soil:${d.soilType}`);
+    return { claims, tags, edges: [], summary: artifact.title, domain: "agriculture" };
+  });
+
+  registerLensDTUEnricher("aviation", (artifact, action, extra) => {
+    const d = artifact.data || {};
+    const claims = [];
+    const tags = ["aviation"];
+    if (d.aircraft) { claims.push(`Aircraft: ${d.aircraft}`); tags.push(`aircraft:${d.aircraft}`); }
+    if (d.flightPhase) tags.push(`phase:${d.flightPhase}`);
+    if (d.altitude != null) claims.push(`Altitude: ${d.altitude} ft`);
+    return { claims, tags, edges: [], summary: artifact.title, domain: "aviation" };
+  });
+
+  registerLensDTUEnricher("creative", (artifact, action, extra) => {
+    const d = artifact.data || {};
+    const claims = [];
+    const tags = ["creative"];
+    if (d.medium) tags.push(`medium:${d.medium}`);
+    if (d.style) tags.push(`style:${d.style}`);
+    if (d.collaborators?.length) claims.push(`${d.collaborators.length} collaborators`);
+    return { claims, tags, edges: [], summary: artifact.title, domain: "creative" };
+  });
+
+  registerLensDTUEnricher("education", (artifact, action, extra) => {
+    const d = artifact.data || {};
+    const claims = [];
+    const tags = ["education"];
+    if (d.subject) { claims.push(`Subject: ${d.subject}`); tags.push(`subject:${d.subject}`); }
+    if (d.gradeLevel) tags.push(`grade:${d.gradeLevel}`);
+    if (d.students != null) claims.push(`Students: ${d.students}`);
+    if (d.curriculum) tags.push(`curriculum:${d.curriculum}`);
+    return { claims, tags, edges: [], summary: artifact.title, domain: "education" };
+  });
+
+  registerLensDTUEnricher("environment", (artifact, action, extra) => {
+    const d = artifact.data || {};
+    const claims = [];
+    const tags = ["environment"];
+    if (d.metric) { claims.push(`Metric: ${d.metric}`); tags.push(`metric:${d.metric}`); }
+    if (d.reading != null) claims.push(`Reading: ${d.reading} ${d.unit || ""}`);
+    if (d.ecosystem) tags.push(`ecosystem:${d.ecosystem}`);
+    return { claims, tags, edges: [], summary: artifact.title, domain: "environment" };
+  });
+
+  registerLensDTUEnricher("events", (artifact, action, extra) => {
+    const d = artifact.data || {};
+    const claims = [];
+    const tags = ["events"];
+    if (d.eventType) tags.push(`event_type:${d.eventType}`);
+    if (d.date) tags.push(`date:${d.date}`);
+    if (d.attendees != null) claims.push(`Expected attendees: ${d.attendees}`);
+    if (d.venue) tags.push(`venue:${d.venue}`);
+    return { claims, tags, edges: [], summary: artifact.title, domain: "events" };
+  });
+
+  registerLensDTUEnricher("fitness", (artifact, action, extra) => {
+    const d = artifact.data || {};
+    const claims = [];
+    const tags = ["fitness"];
+    if (d.exercise) { claims.push(`Exercise: ${d.exercise}`); tags.push(`exercise:${d.exercise}`); }
+    if (d.duration) claims.push(`Duration: ${d.duration} min`);
+    if (d.calories) claims.push(`Calories: ${d.calories}`);
+    if (d.heartRate) claims.push(`Heart rate: ${d.heartRate} bpm`);
+    return { claims, tags, edges: [], summary: artifact.title, domain: "fitness" };
+  });
+
+  registerLensDTUEnricher("food", (artifact, action, extra) => {
+    const d = artifact.data || {};
+    const claims = [];
+    const tags = ["food"];
+    if (d.recipe) tags.push(`recipe:${d.recipe}`);
+    if (d.cuisine) tags.push(`cuisine:${d.cuisine}`);
+    if (d.ingredients?.length) claims.push(`${d.ingredients.length} ingredients`);
+    if (d.servings) claims.push(`Servings: ${d.servings}`);
+    if (d.prepTime) claims.push(`Prep time: ${d.prepTime} min`);
+    return { claims, tags, edges: [], summary: artifact.title, domain: "food" };
+  });
+
+  registerLensDTUEnricher("government", (artifact, action, extra) => {
+    const d = artifact.data || {};
+    const claims = [];
+    const tags = ["government"];
+    if (d.agency) tags.push(`agency:${d.agency}`);
+    if (d.jurisdiction) tags.push(`jurisdiction:${d.jurisdiction}`);
+    if (d.policyArea) { claims.push(`Policy area: ${d.policyArea}`); tags.push(`policy:${d.policyArea}`); }
+    return { claims, tags, edges: [], summary: artifact.title, domain: "government" };
+  });
+
+  registerLensDTUEnricher("household", (artifact, action, extra) => {
+    const d = artifact.data || {};
+    const claims = [];
+    const tags = ["household"];
+    if (d.category) tags.push(`category:${d.category}`);
+    if (d.room) tags.push(`room:${d.room}`);
+    if (d.urgency) claims.push(`Urgency: ${d.urgency}`);
+    return { claims, tags, edges: [], summary: artifact.title, domain: "household" };
+  });
+
+  registerLensDTUEnricher("insurance", (artifact, action, extra) => {
+    const d = artifact.data || {};
+    const claims = [];
+    const tags = ["insurance"];
+    if (d.policyType) { claims.push(`Policy type: ${d.policyType}`); tags.push(`policy_type:${d.policyType}`); }
+    if (d.premium != null) claims.push(`Premium: $${d.premium}`);
+    if (d.coverage) claims.push(`Coverage: ${d.coverage}`);
+    return { claims, tags, edges: [], summary: artifact.title, domain: "insurance" };
+  });
+
+  registerLensDTUEnricher("legal", (artifact, action, extra) => {
+    const d = artifact.data || {};
+    const claims = [];
+    const tags = ["legal"];
+    if (d.caseType) tags.push(`case_type:${d.caseType}`);
+    if (d.jurisdiction) tags.push(`jurisdiction:${d.jurisdiction}`);
+    if (d.parties?.length) claims.push(`${d.parties.length} parties involved`);
+    if (d.status) tags.push(`status:${d.status}`);
+    return { claims, tags, edges: [], summary: artifact.title, domain: "legal" };
+  });
+
+  registerLensDTUEnricher("logistics", (artifact, action, extra) => {
+    const d = artifact.data || {};
+    const claims = [];
+    const tags = ["logistics"];
+    if (d.origin) tags.push(`origin:${d.origin}`);
+    if (d.destination) tags.push(`destination:${d.destination}`);
+    if (d.carrier) tags.push(`carrier:${d.carrier}`);
+    if (d.weight) claims.push(`Weight: ${d.weight}`);
+    if (d.status) claims.push(`Shipment status: ${d.status}`);
+    return { claims, tags, edges: [], summary: artifact.title, domain: "logistics" };
+  });
+
+  registerLensDTUEnricher("manufacturing", (artifact, action, extra) => {
+    const d = artifact.data || {};
+    const claims = [];
+    const tags = ["manufacturing"];
+    if (d.product) { claims.push(`Product: ${d.product}`); tags.push(`product:${d.product}`); }
+    if (d.batchSize) claims.push(`Batch size: ${d.batchSize}`);
+    if (d.defectRate != null) claims.push(`Defect rate: ${(d.defectRate * 100).toFixed(1)}%`);
+    if (d.line) tags.push(`line:${d.line}`);
+    return { claims, tags, edges: [], summary: artifact.title, domain: "manufacturing" };
+  });
+
+  registerLensDTUEnricher("nonprofit", (artifact, action, extra) => {
+    const d = artifact.data || {};
+    const claims = [];
+    const tags = ["nonprofit"];
+    if (d.mission) claims.push(`Mission: ${d.mission}`);
+    if (d.cause) tags.push(`cause:${d.cause}`);
+    if (d.donations != null) claims.push(`Donations: $${d.donations}`);
+    if (d.volunteers != null) claims.push(`Volunteers: ${d.volunteers}`);
+    return { claims, tags, edges: [], summary: artifact.title, domain: "nonprofit" };
+  });
+
+  registerLensDTUEnricher("realestate", (artifact, action, extra) => {
+    const d = artifact.data || {};
+    const claims = [];
+    const tags = ["realestate"];
+    if (d.propertyType) tags.push(`property_type:${d.propertyType}`);
+    if (d.location) tags.push(`location:${d.location}`);
+    if (d.price != null) claims.push(`Price: $${d.price.toLocaleString?.() || d.price}`);
+    if (d.sqft) claims.push(`Size: ${d.sqft} sqft`);
+    return { claims, tags, edges: [], summary: artifact.title, domain: "realestate" };
+  });
+
+  registerLensDTUEnricher("retail", (artifact, action, extra) => {
+    const d = artifact.data || {};
+    const claims = [];
+    const tags = ["retail"];
+    if (d.sku) tags.push(`sku:${d.sku}`);
+    if (d.category) tags.push(`category:${d.category}`);
+    if (d.price != null) claims.push(`Price: $${d.price}`);
+    if (d.inventory != null) claims.push(`Inventory: ${d.inventory} units`);
+    return { claims, tags, edges: [], summary: artifact.title, domain: "retail" };
+  });
+
+  registerLensDTUEnricher("science", (artifact, action, extra) => {
+    const d = artifact.data || {};
+    const claims = [];
+    const tags = ["science"];
+    if (d.field) { claims.push(`Field: ${d.field}`); tags.push(`field:${d.field}`); }
+    if (d.hypothesis) claims.push(`Hypothesis: ${d.hypothesis}`);
+    if (d.method) tags.push(`method:${d.method}`);
+    if (d.results) claims.push(`Results: ${typeof d.results === "string" ? d.results : JSON.stringify(d.results).slice(0, 200)}`);
+    return { claims, tags, edges: [], summary: artifact.title, domain: "science" };
+  });
+
+  registerLensDTUEnricher("security", (artifact, action, extra) => {
+    const d = artifact.data || {};
+    const claims = [];
+    const tags = ["security"];
+    if (d.threatLevel) { claims.push(`Threat level: ${d.threatLevel}`); tags.push(`threat:${d.threatLevel}`); }
+    if (d.vulnerability) tags.push(`vuln:${d.vulnerability}`);
+    if (d.protocol) tags.push(`protocol:${d.protocol}`);
+    if (d.incidents != null) claims.push(`${d.incidents} incidents recorded`);
+    return { claims, tags, edges: [], summary: artifact.title, domain: "security" };
+  });
+
+  registerLensDTUEnricher("services", (artifact, action, extra) => {
+    const d = artifact.data || {};
+    const claims = [];
+    const tags = ["services"];
+    if (d.serviceType) tags.push(`service_type:${d.serviceType}`);
+    if (d.provider) tags.push(`provider:${d.provider}`);
+    if (d.rate != null) claims.push(`Rate: $${d.rate}/hr`);
+    if (d.duration) claims.push(`Duration: ${d.duration}`);
+    return { claims, tags, edges: [], summary: artifact.title, domain: "services" };
+  });
+
+  registerLensDTUEnricher("trades", (artifact, action, extra) => {
+    const d = artifact.data || {};
+    const claims = [];
+    const tags = ["trades"];
+    if (d.trade) { claims.push(`Trade: ${d.trade}`); tags.push(`trade:${d.trade}`); }
+    if (d.materials?.length) claims.push(`${d.materials.length} materials required`);
+    if (d.laborHours) claims.push(`Labor: ${d.laborHours} hours`);
+    if (d.certification) tags.push(`cert:${d.certification}`);
+    return { claims, tags, edges: [], summary: artifact.title, domain: "trades" };
+  });
 }
 
 // ── Metrics ─────────────────────────────────────────────────────────────────

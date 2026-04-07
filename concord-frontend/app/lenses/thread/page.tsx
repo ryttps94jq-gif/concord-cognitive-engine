@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
-import { api, apiHelpers } from '@/lib/api/client';
+import { apiHelpers } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
 import { useLensBridge } from '@/lib/hooks/use-lens-bridge';
 import { UniversalActions } from '@/components/lens/UniversalActions';
@@ -57,8 +57,6 @@ interface Thread {
   messageCount: number;
   branchCount: number;
 }
-
-const INITIAL_THREADS: Thread[] = [];
 
 type ViewMode = 'tree' | 'timeline' | 'linear';
 
@@ -295,7 +293,7 @@ export default function ThreadLensPage() {
     );
   }
   return (
-    <div className="h-[calc(100vh-4rem)] flex flex-col">
+    <div data-lens-theme="thread" className="h-[calc(100vh-4rem)] flex flex-col">
       <header className="flex items-center justify-between p-4 border-b border-lattice-border">
         <div className="flex items-center gap-3">
           <span className="text-2xl">🧵</span>

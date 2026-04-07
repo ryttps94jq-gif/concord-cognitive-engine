@@ -46,6 +46,7 @@ import {
   DEDUP_PROTOCOL, INTEGRITY_INVARIANTS,
   DEFAULT_MARKETPLACE_FILTERS, DEFAULT_WEALTH_PREFERENCES,
 } from "../lib/federation-constants.js";
+import { checkConsent } from "../lib/consent.js";
 
 /**
  * Create the federation router.
@@ -409,6 +410,22 @@ export default function createFederationRouter({ db, requireAuth }) {
       season: req.query.season || null,
       limit: req.query.limit ? Number(req.query.limit) : 50,
     });
+
+    // Consent filter: only show users who opted into profile visibility for this scope
+    if (result.ok && result.entries) {
+      const scope = req.params.scope;
+      const consentAction = scope === "regional" ? "show_profile_regional"
+        : scope === "national" ? "show_profile_national"
+        : scope === "global" ? "show_profile_global" : null;
+
+      if (consentAction) {
+        result.entries = result.entries.filter(entry => {
+          const consent = checkConsent(db, entry.userId, consentAction);
+          return consent.consented;
+        });
+      }
+    }
+
     res.json(result);
   });
 

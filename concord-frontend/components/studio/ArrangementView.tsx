@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { DAWTrack, ArrangementSection, ArrangementMarker, SnapMode } from '@/lib/daw/types';
@@ -50,13 +50,45 @@ export function ArrangementView({
   onUpdateTrack,
   onDeleteTrack,
   onAddTrack,
-  onMoveClip: _onMoveClip,
-  onResizeClip: _onResizeClip,
+  onMoveClip,
+  onResizeClip,
   onSeek,
   onZoomChange,
   onSnapChange,
 }: ArrangementViewProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [dragState, setDragState] = useState<{
+    clipId: string;
+    trackId: string;
+    mode: 'move' | 'resize';
+    startX: number;
+    origBeat: number;
+    origLength: number;
+  } | null>(null);
+
+  const handleClipDragStart = useCallback((e: React.MouseEvent, clipId: string, trackId: string, startBeat: number, lengthBeats: number, mode: 'move' | 'resize') => {
+    e.stopPropagation();
+    e.preventDefault();
+    setDragState({ clipId, trackId, mode, startX: e.clientX, origBeat: startBeat, origLength: lengthBeats });
+  }, []);
+
+  const handleClipDragMove = useCallback((e: React.MouseEvent) => {
+    if (!dragState) return;
+    const deltaX = e.clientX - dragState.startX;
+    const deltaBeat = deltaX / (BEAT_WIDTH * zoomLevel);
+    if (dragState.mode === 'move') {
+      const newStart = Math.max(0, dragState.origBeat + deltaBeat);
+      onMoveClip(dragState.clipId, dragState.trackId, Math.round(newStart * 4) / 4);
+    } else {
+      const newLength = Math.max(1, dragState.origLength + deltaBeat);
+      onResizeClip(dragState.clipId, Math.round(newLength * 4) / 4);
+    }
+  }, [dragState, zoomLevel, onMoveClip, onResizeClip]);
+
+  const handleClipDragEnd = useCallback(() => {
+    setDragState(null);
+  }, []);
+
   const beatWidth = BEAT_WIDTH * zoomLevel;
   const beatsPerBar = timeSignature[0];
   const totalBeats = lengthBars * beatsPerBar;
@@ -182,7 +214,13 @@ export function ArrangementView({
         </div>
 
         {/* Timeline Content */}
-        <div className="flex-1 overflow-auto" ref={scrollRef}>
+        <div
+          className="flex-1 overflow-auto"
+          ref={scrollRef}
+          onMouseMove={handleClipDragMove}
+          onMouseUp={handleClipDragEnd}
+          onMouseLeave={handleClipDragEnd}
+        >
           {/* Ruler */}
           <div
             className="sticky top-0 z-10 bg-black/60 border-b border-white/10 cursor-pointer"
@@ -273,6 +311,16 @@ export function ArrangementView({
                       </div>
                     )}
                     <span className="relative z-10 text-white/80">{clip.name}</span>
+                    {/* Move handle (left edge) */}
+                    <div
+                      className="absolute left-0 top-0 bottom-0 w-2 cursor-grab opacity-0 group-hover:opacity-100 bg-white/10 z-20"
+                      onMouseDown={(e) => handleClipDragStart(e, clip.id, track.id, clip.startBeat, clip.lengthBeats, 'move')}
+                    />
+                    {/* Resize handle (right edge) */}
+                    <div
+                      className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize opacity-0 group-hover:opacity-100 bg-white/20 z-20"
+                      onMouseDown={(e) => handleClipDragStart(e, clip.id, track.id, clip.startBeat, clip.lengthBeats, 'resize')}
+                    />
                   </div>
                 ))}
 

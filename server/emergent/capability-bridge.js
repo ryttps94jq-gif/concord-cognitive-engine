@@ -729,7 +729,7 @@ export async function runHeartbeatBridgeTick(STATE, opts = {}) {
 
 // Helper for dynamic imports in the bridge
 async function importModule(path) {
-  try { return await import(path); } catch { return null; }
+  try { return await import(path); } catch (err) { console.debug('[capability-bridge] dynamic import failed', { path, err: err?.message }); return null; }
 }
 
 // ── 8. Bootstrap Meta-Learning Strategies ───────────────────────────────────

@@ -133,7 +133,7 @@ function parseRobotsTxt(text) {
 
 function isAllowedByRules(rules, url) {
   let path;
-  try { path = new URL(url).pathname; } catch { return false; }
+  try { path = new URL(url).pathname; } catch (err) { console.debug('[entity-web-exploration] invalid URL in isAllowedByRules', url); return false; }
 
   // Check explicit allows first
   for (const pattern of rules.allow) {
@@ -148,7 +148,7 @@ function isAllowedByRules(rules, url) {
 
 export async function checkRobotsTxt(url) {
   let domain;
-  try { domain = new URL(url).origin; } catch { return false; }
+  try { domain = new URL(url).origin; } catch (err) { console.debug('[entity-web-exploration] invalid URL in checkRobotsTxt', url); return false; }
 
   // Check cache (refresh every 24h)
   const cached = robotsCache.get(domain);
@@ -172,8 +172,9 @@ export async function checkRobotsTxt(url) {
     // No robots.txt = allowed
     robotsCache.set(domain, { rules: { disallow: [], allow: [] }, fetchedAt: Date.now() });
     return true;
-  } catch {
+  } catch (err) {
     // Can't fetch robots.txt = be cautious, skip
+    console.warn('[entity-web-exploration] failed to fetch robots.txt, skipping URL', { domain, err: err.message });
     return false;
   }
 }
@@ -202,7 +203,7 @@ function canMakeRequest(url) {
   if (windowRequestCount >= WEB_POLICY.maxTotalRequestsPerWindow) return false;
 
   let domain;
-  try { domain = new URL(url).hostname; } catch { return false; }
+  try { domain = new URL(url).hostname; } catch (err) { console.debug('[entity-web-exploration] invalid URL in canMakeRequest', url); return false; }
 
   const domainCount = domainRequestCounts.get(domain) || 0;
   if (domainCount >= WEB_POLICY.maxRequestsPerDomain) return false;
@@ -213,7 +214,7 @@ function canMakeRequest(url) {
 function recordRequest(url) {
   windowRequestCount++;
   let domain;
-  try { domain = new URL(url).hostname; } catch { return; }
+  try { domain = new URL(url).hostname; } catch (err) { console.debug('[entity-web-exploration] invalid URL in recordRequest', url); return; }
   domainRequestCounts.set(domain, (domainRequestCounts.get(domain) || 0) + 1);
 }
 

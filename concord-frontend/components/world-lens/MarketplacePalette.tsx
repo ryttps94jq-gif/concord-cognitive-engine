@@ -1,0 +1,185 @@
+'use client';
+
+import React, { useState, useMemo } from 'react';
+import { Search, Quote, ShieldCheck } from 'lucide-react';
+import type { MarketplaceEntry, ComponentCategory } from '@/lib/world-lens/types';
+
+const panel = 'bg-black/80 backdrop-blur-sm border border-white/10 rounded-lg';
+
+// Seed marketplace entries
+const SEED_MARKETPLACE: MarketplaceEntry[] = [
+  {
+    dtuId: 'comp-usb-beam-v1', name: 'USB-A Standard Beam', category: 'beam',
+    creator: '@materials_lab', creatorHandle: 'materials_lab', validationStatus: 'validated',
+    citationCount: 342, performanceSpecs: { loadCapacity: 450, spanLimit: 8 },
+    materialRefs: ['mat-usb-a'], thumbnail: '', royaltyRate: 0.02, publishedAt: '2025-08-15', tags: ['structural', 'beam', 'USB'],
+  },
+  {
+    dtuId: 'comp-concrete-found-v2', name: 'Reinforced Concrete Foundation', category: 'foundation',
+    creator: '@engineer_jane', creatorHandle: 'engineer_jane', validationStatus: 'validated',
+    citationCount: 521, performanceSpecs: { loadCapacity: 2000, seismicRating: 7 },
+    materialRefs: ['mat-concrete-c40'], thumbnail: '', royaltyRate: 0.03, publishedAt: '2025-07-20', tags: ['foundation', 'concrete', 'seismic'],
+  },
+  {
+    dtuId: 'comp-solar-panel-v1', name: 'Solar Array 5kW', category: 'solar-array',
+    creator: '@power_mike', creatorHandle: 'power_mike', validationStatus: 'validated',
+    citationCount: 189, performanceSpecs: { powerOutput: 5, efficiency: 22 },
+    materialRefs: ['mat-glass-tempered'], thumbnail: '', royaltyRate: 0.05, publishedAt: '2025-09-01', tags: ['energy', 'solar', 'renewable'],
+  },
+  {
+    dtuId: 'comp-usb-column-v1', name: 'USB-B Heavy Column', category: 'column',
+    creator: '@struct_eng', creatorHandle: 'struct_eng', validationStatus: 'validated',
+    citationCount: 278, performanceSpecs: { loadCapacity: 800, heightLimit: 12 },
+    materialRefs: ['mat-usb-b'], thumbnail: '', royaltyRate: 0.02, publishedAt: '2025-08-28', tags: ['structural', 'column', 'heavy'],
+  },
+  {
+    dtuId: 'comp-glulam-truss-v1', name: 'Glulam Roof Truss', category: 'roof-truss',
+    creator: '@timber_works', creatorHandle: 'timber_works', validationStatus: 'validated',
+    citationCount: 156, performanceSpecs: { spanLimit: 12, snowLoadRating: 40 },
+    materialRefs: ['mat-timber-glulam'], thumbnail: '', royaltyRate: 0.03, publishedAt: '2025-09-15', tags: ['roof', 'timber', 'truss'],
+  },
+  {
+    dtuId: 'comp-steel-bracket-v1', name: 'Steel Connection Bracket', category: 'bracket',
+    creator: '@fab_shop', creatorHandle: 'fab_shop', validationStatus: 'validated',
+    citationCount: 412, performanceSpecs: { loadCapacity: 200, shearRating: 150 },
+    materialRefs: ['mat-steel-a36'], thumbnail: '', royaltyRate: 0.01, publishedAt: '2025-07-10', tags: ['connection', 'bracket', 'steel'],
+  },
+  {
+    dtuId: 'comp-hvac-unit-v1', name: 'HVAC Compact Unit 10kW', category: 'hvac-unit',
+    creator: '@climate_ctrl', creatorHandle: 'climate_ctrl', validationStatus: 'validated',
+    citationCount: 98, performanceSpecs: { heatingCapacity: 10, coolingCapacity: 8 },
+    materialRefs: [], thumbnail: '', royaltyRate: 0.04, publishedAt: '2025-10-01', tags: ['hvac', 'heating', 'cooling'],
+  },
+  {
+    dtuId: 'comp-pipe-joint-v1', name: 'Universal Pipe Joint', category: 'pipe-joint',
+    creator: '@plumb_pro', creatorHandle: 'plumb_pro', validationStatus: 'validated',
+    citationCount: 287, performanceSpecs: { flowRate: 500, pressureRating: 150 },
+    materialRefs: ['mat-steel-stainless-304'], thumbnail: '', royaltyRate: 0.01, publishedAt: '2025-08-05', tags: ['plumbing', 'pipe', 'joint'],
+  },
+];
+
+const SORT_OPTIONS = [
+  { value: 'citations', label: 'Most Cited' },
+  { value: 'newest', label: 'Newest' },
+  { value: 'name', label: 'Name' },
+] as const;
+
+interface MarketplacePaletteProps {
+  onDragComponent?: (entry: MarketplaceEntry) => void;
+  onSelectComponent?: (entry: MarketplaceEntry) => void;
+  filterCategory?: ComponentCategory;
+}
+
+export default function MarketplacePalette({
+  onDragComponent,
+  onSelectComponent,
+  filterCategory,
+}: MarketplacePaletteProps) {
+  const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<string>('citations');
+  const [categoryFilter, setCategoryFilter] = useState<string>(filterCategory || 'all');
+
+  const filtered = useMemo(() => {
+    let items = [...SEED_MARKETPLACE];
+
+    if (categoryFilter !== 'all') {
+      items = items.filter(i => i.category === categoryFilter);
+    }
+    if (search) {
+      const q = search.toLowerCase();
+      items = items.filter(i =>
+        i.name.toLowerCase().includes(q) ||
+        i.tags.some(t => t.includes(q)) ||
+        i.creator.includes(q)
+      );
+    }
+
+    if (sort === 'citations') items.sort((a, b) => b.citationCount - a.citationCount);
+    else if (sort === 'newest') items.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
+    else items.sort((a, b) => a.name.localeCompare(b.name));
+
+    return items;
+  }, [search, sort, categoryFilter]);
+
+  const categories = useMemo(() => {
+    const cats = new Set(SEED_MARKETPLACE.map(i => i.category));
+    return ['all', ...Array.from(cats)];
+  }, []);
+
+  return (
+    <div className={`${panel} p-3 space-y-3`}>
+      <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+        Component Marketplace
+      </h3>
+
+      {/* Search */}
+      <div className="relative">
+        <Search className="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-gray-500" />
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search components..."
+          className="w-full bg-black/50 border border-white/10 rounded pl-7 pr-2 py-1.5 text-[10px] text-white"
+        />
+      </div>
+
+      {/* Filters */}
+      <div className="flex gap-1">
+        <select
+          value={categoryFilter}
+          onChange={e => setCategoryFilter(e.target.value)}
+          className="flex-1 bg-black/50 border border-white/10 rounded px-1.5 py-1 text-[10px] text-white"
+        >
+          {categories.map(c => (
+            <option key={c} value={c}>{c === 'all' ? 'All' : c}</option>
+          ))}
+        </select>
+        <select
+          value={sort}
+          onChange={e => setSort(e.target.value)}
+          className="flex-1 bg-black/50 border border-white/10 rounded px-1.5 py-1 text-[10px] text-white"
+        >
+          {SORT_OPTIONS.map(o => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Component list */}
+      <div className="space-y-1.5 max-h-96 overflow-y-auto">
+        {filtered.length === 0 && (
+          <p className="text-[10px] text-gray-600 text-center py-4">No components found</p>
+        )}
+        {filtered.map(entry => (
+          <button
+            key={entry.dtuId}
+            onClick={() => onSelectComponent?.(entry)}
+            draggable
+            onDragStart={() => onDragComponent?.(entry)}
+            className="w-full text-left p-2 rounded border border-white/5 hover:border-white/15 hover:bg-white/5 transition-all group"
+          >
+            <div className="flex items-center justify-between mb-0.5">
+              <span className="text-[11px] text-white font-medium group-hover:text-cyan-300 transition-colors">
+                {entry.name}
+              </span>
+              <ShieldCheck className="w-3 h-3 text-green-400 flex-shrink-0" />
+            </div>
+            <div className="flex items-center gap-2 text-[9px] text-gray-500">
+              <span className="text-cyan-500">{entry.creator}</span>
+              <span className="flex items-center gap-0.5">
+                <Quote className="w-2.5 h-2.5" /> {entry.citationCount}
+              </span>
+            </div>
+            {Object.keys(entry.performanceSpecs).length > 0 && (
+              <div className="flex gap-2 mt-0.5 text-[9px] text-gray-600">
+                {Object.entries(entry.performanceSpecs).slice(0, 2).map(([k, v]) => (
+                  <span key={k}>{k}: {v}</span>
+                ))}
+              </div>
+            )}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}

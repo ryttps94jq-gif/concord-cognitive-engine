@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Brain, Clock, Target, TrendingUp, AlertTriangle, Sun, Moon,
+  Brain, Clock, Target, AlertTriangle, Sun, Moon,
   ChevronDown, ChevronUp, RefreshCw, Loader2, Sparkles, Send,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -22,8 +22,15 @@ export function CognitiveDigitalTwin({ className }: { className?: string }) {
   const [expanded, setExpanded] = useState(false);
   const [simQuestion, setSimQuestion] = useState('');
   const [cloneQuestion, setCloneQuestion] = useState('');
-  const [simResult, setSimResult] = useState<any>(null);
-  const [cloneResult, setCloneResult] = useState<any>(null);
+  const [simResult, setSimResult] = useState<{
+    simulations?: { path: string; scenario: string; confidence: number }[];
+  } | null>(null);
+  const [cloneResult, setCloneResult] = useState<{
+    response: string;
+    source: string;
+    confidence?: number;
+    disclaimer?: string;
+  } | null>(null);
   const queryClient = useQueryClient();
 
   const { data: twinData, isLoading } = useQuery({
@@ -107,7 +114,7 @@ export function CognitiveDigitalTwin({ className }: { className?: string }) {
         <div>
           <p className="text-xs text-gray-500 mb-1 flex items-center gap-1"><Target className="w-3 h-3" /> Top Domains</p>
           <div className="space-y-1">
-            {domains.slice(0, 3).map(([domain, data]: [string, any]) => (
+            {(domains.slice(0, 3) as [string, { count: number }][]).map(([domain, data]) => (
               <div key={domain} className="flex items-center justify-between">
                 <span className="text-xs text-white truncate">{domain}</span>
                 <span className="text-[10px] text-gray-500">{data.count} DTUs</span>

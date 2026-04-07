@@ -78,6 +78,22 @@ export function ensurePipelineState(STATE) {
       },
     };
   }
+  // Ensure metrics sub-object exists even if pipeline state was deserialized without it
+  if (!STATE._autogenPipeline.metrics) {
+    STATE._autogenPipeline.metrics = {
+      totalRuns: 0,
+      byIntent: {},
+      byVariant: {},
+      candidatesProduced: 0,
+      candidatesRejected: 0,
+      shadowsCreated: 0,
+      ollamaShapings: 0,
+      ollamaFailures: 0,
+      cloudEscalations: 0,
+      noveltyRejects: 0,
+      patchProposals: 0,
+    };
+  }
   return STATE._autogenPipeline;
 }
 
@@ -1116,8 +1132,10 @@ export async function runPipeline(STATE, opts = {}) {
     candidate.meta.councilVerdict = councilResult.verdictAction;
     candidate.meta.councilConfidence = councilResult.confidence;
 
-    // Reject if council says reject — return as failed candidate
+    // Reject if council says reject — mark as blocked and return as failed candidate
     if (councilResult.verdictAction === "reject") {
+      candidate.meta.councilBlocked = true;
+      candidate.meta.councilBlockedAt = new Date().toISOString();
       ps.metrics.candidatesRejected = (ps.metrics.candidatesRejected || 0) + 1;
       return {
         ok: false,

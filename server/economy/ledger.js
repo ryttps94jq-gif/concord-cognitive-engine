@@ -229,7 +229,7 @@ function parseRow(row) {
 }
 
 function safeJsonParse(str) {
-  try { return JSON.parse(str); } catch { return {}; }
+  try { return JSON.parse(str); } catch (err) { console.debug('[ledger] JSON parse failed', err?.message); return {}; }
 }
 
 export { uid as generateTxId, nowISO };

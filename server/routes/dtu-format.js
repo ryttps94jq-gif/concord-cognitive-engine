@@ -65,7 +65,12 @@ export default function createDTUFormatRouter({ db, requireAuth }) {
     const { dtuBase64 } = req.body || {};
     if (!dtuBase64) return res.status(400).json({ ok: false, error: "missing_dtu_base64" });
 
-    const buffer = Buffer.from(dtuBase64, "base64");
+    let buffer;
+    try {
+      buffer = Buffer.from(dtuBase64, "base64");
+    } catch (_e) {
+      return res.status(400).json({ ok: false, error: "Invalid base64 input" });
+    }
     const result = decodeDTU(buffer);
     if (!result.ok) return res.status(400).json(result);
 
@@ -88,7 +93,12 @@ export default function createDTUFormatRouter({ db, requireAuth }) {
     const { dtuBase64, expectedHash, expectedSignature } = req.body || {};
     if (!dtuBase64) return res.status(400).json({ ok: false, error: "missing_dtu_base64" });
 
-    const buffer = Buffer.from(dtuBase64, "base64");
+    let buffer;
+    try {
+      buffer = Buffer.from(dtuBase64, "base64");
+    } catch (_e) {
+      return res.status(400).json({ ok: false, error: "Invalid base64 input" });
+    }
     const result = verifyDTU(buffer, { expectedHash, expectedSignature });
     res.json(result);
   });
@@ -98,7 +108,12 @@ export default function createDTUFormatRouter({ db, requireAuth }) {
     const { headerBase64 } = req.body || {};
     if (!headerBase64) return res.status(400).json({ ok: false, error: "missing_header_base64" });
 
-    const buffer = Buffer.from(headerBase64, "base64");
+    let buffer;
+    try {
+      buffer = Buffer.from(headerBase64, "base64");
+    } catch (_e) {
+      return res.status(400).json({ ok: false, error: "Invalid base64 input" });
+    }
     const result = parseHeader(buffer);
     res.json(result);
   });
@@ -125,7 +140,12 @@ export default function createDTUFormatRouter({ db, requireAuth }) {
     const { dtuBase64, importedBy, source } = req.body || {};
     if (!dtuBase64) return res.status(400).json({ ok: false, error: "missing_dtu_base64" });
 
-    const buffer = Buffer.from(dtuBase64, "base64");
+    let buffer;
+    try {
+      buffer = Buffer.from(dtuBase64, "base64");
+    } catch (_e) {
+      return res.status(400).json({ ok: false, error: "Invalid base64 input" });
+    }
     const result = reimportDTU(db, { buffer, importedBy, source });
     if (!result.ok) return res.status(400).json(result);
 

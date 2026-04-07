@@ -11,7 +11,7 @@
  * - Earnings summary for creators
  */
 
-import { useState, useCallback, useRef, useEffect, useMemo, Suspense } from 'react';
+import { useState, useCallback, useRef, useMemo, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useQuery, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -31,11 +31,14 @@ import {
   ArrowDownRight,
   Repeat,
   Loader2,
-  ChevronRight,
   Sparkles,
   BarChart3,
   Calendar,
-  Filter,
+  Send,
+  CheckCircle2,
+  XCircle,
+  Info,
+  Clock,
 } from 'lucide-react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { api, apiHelpers } from '@/lib/api/client';
@@ -43,6 +46,7 @@ import { cn } from '@/lib/utils';
 import { ds } from '@/lib/design-system';
 import { PurchaseFlow } from '@/components/wallet/PurchaseFlow';
 import { WithdrawFlow } from '@/components/wallet/WithdrawFlow';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -117,6 +121,7 @@ function WalletPageInner() {
   const [activeTab, setActiveTab] = useState<TabId>('all');
   const [showPurchase, setShowPurchase] = useState(false);
   const [showWithdraw, setShowWithdraw] = useState(false);
+  const [showTransfer, setShowTransfer] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Check for Stripe return params
@@ -133,7 +138,7 @@ function WalletPageInner() {
   } = useQuery({
     queryKey: ['wallet-balance'],
     queryFn: () =>
-      api.get('/api/billing/balance').then((r) => r.data as BalanceData),
+      api.get('/api/economy/balance').then((r) => r.data as BalanceData),
     refetchInterval: 15000,
     retry: false,
   });
@@ -161,7 +166,7 @@ function WalletPageInner() {
     queryKey: ['wallet-transactions', activeTab],
     queryFn: ({ pageParam = 0 }) =>
       api
-        .get('/api/billing/transactions', {
+        .get('/api/economy/history', {
           params: {
             type: activeTab === 'all' ? undefined : activeTab,
             limit: TX_PAGE_SIZE,
@@ -196,8 +201,7 @@ function WalletPageInner() {
   const { data: withdrawalsData } = useQuery({
     queryKey: ['wallet-withdrawals'],
     queryFn: () =>
-      api
-        .get('/api/billing/withdrawals')
+      apiHelpers.economy.withdrawals()
         .then(
           (r) =>
             r.data as { withdrawals?: Array<{ id: string; amount: number; fee: number; net: number; status: string; created_at: string }>; items?: Array<{ id: string; amount: number; fee: number; net: number; status: string; created_at: string }> }
@@ -297,7 +301,7 @@ function WalletPageInner() {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className={cn(ds.pageContainer, 'max-w-6xl mx-auto')} ref={scrollRef}>
+    <div data-lens-theme="wallet" className={cn(ds.pageContainer, 'max-w-6xl mx-auto')} ref={scrollRef}>
       {/* Page Header */}
       <div className={ds.sectionHeader}>
         <div className="flex items-center gap-3">
@@ -307,6 +311,8 @@ function WalletPageInner() {
           <h1 className={ds.heading1}>Wallet & Billing</h1>
         </div>
       </div>
+
+      <UniversalActions domain="wallet" artifactId={null} compact />
 
       {/* ── Balance Card ──────────────────────────────────────────────────── */}
       <motion.div
@@ -379,6 +385,19 @@ function WalletPageInner() {
               <ArrowDownToLine className="w-5 h-5" />
               Withdraw
             </motion.button>
+
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setShowTransfer(true)}
+              className={cn(
+                ds.btnBase,
+                'px-5 py-3 bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/50 hover:bg-neon-cyan/30 focus:ring-neon-cyan'
+              )}
+            >
+              <Send className="w-5 h-5" />
+              Transfer
+            </motion.button>
           </div>
         </div>
 
@@ -421,6 +440,9 @@ function WalletPageInner() {
           />
         </div>
       </motion.div>
+
+      {/* ── Pending Withdrawals Banner ──────────────────────────────────── */}
+      <PendingWithdrawalsBanner withdrawalsData={withdrawalsData} />
 
       {/* ── Main Content Grid ─────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -519,7 +541,7 @@ function WalletPageInner() {
         >
           <div className={cn(ds.panel, 'p-0')}>
             {/* Tab Bar */}
-            <div className="flex gap-1 border-b border-lattice-border px-4 pt-4 overflow-x-auto">
+            <div className="flex gap-1 border-b border-lattice-border px-4 pt-4 flex-wrap">
               {TRANSACTION_TABS.map((tab) => {
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.id;
@@ -540,6 +562,35 @@ function WalletPageInner() {
                 );
               })}
             </div>
+
+            {/* Withdrawals Summary */}
+            {activeTab === 'withdrawal' && withdrawalsData && (
+              <div className="px-4 pt-4">
+                <div className="bg-lattice-deep rounded-lg p-3 border border-lattice-border mb-3">
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Recent Withdrawals</p>
+                  <div className="space-y-2">
+                    {(withdrawalsData.withdrawals || withdrawalsData.items || []).slice(0, 5).map(w => (
+                      <div key={w.id} className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <ArrowDownToLine className="w-3.5 h-3.5 text-amber-400" />
+                          <span className="font-mono text-white">{w.amount.toLocaleString()} CC</span>
+                          {w.fee > 0 && <span className="text-xs text-gray-500">(fee: {w.fee})</span>}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs px-1.5 py-0.5 rounded ${w.status === 'complete' || w.status === 'completed' ? 'bg-green-500/10 text-green-400' : 'bg-amber-500/10 text-amber-400'}`}>
+                            {w.status}
+                          </span>
+                          <span className="text-xs text-gray-500">{new Date(w.created_at).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                    ))}
+                    {(withdrawalsData.withdrawals || withdrawalsData.items || []).length === 0 && (
+                      <p className="text-xs text-gray-500">No withdrawals found</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Transaction List */}
             <div className="p-4">
@@ -643,6 +694,25 @@ function WalletPageInner() {
               queryClient.invalidateQueries({
                 queryKey: ['wallet-transactions'],
               });
+              queryClient.invalidateQueries({
+                queryKey: ['wallet-withdrawals'],
+              });
+              queryClient.invalidateQueries({ queryKey: ['economy-balance'] });
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Transfer Modal */}
+      <AnimatePresence>
+        {showTransfer && (
+          <TransferFlow
+            balance={balance}
+            onClose={() => setShowTransfer(false)}
+            onSuccess={() => {
+              queryClient.invalidateQueries({ queryKey: ['wallet-balance'] });
+              queryClient.invalidateQueries({ queryKey: ['wallet-transactions'] });
+              queryClient.invalidateQueries({ queryKey: ['economy-balance'] });
             }}
           />
         )}
@@ -878,6 +948,288 @@ function MonthComparison({
         {change.toFixed(1)}% vs last month
       </span>
     </div>
+  );
+}
+
+/** Transfer CC to another user */
+function TransferFlow({
+  balance,
+  onClose,
+  onSuccess,
+}: {
+  balance: number;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [recipientId, setRecipientId] = useState('');
+  const [amount, setAmount] = useState('');
+  const [step, setStep] = useState<'input' | 'confirm' | 'loading' | 'success' | 'error'>('input');
+  const [errorMessage, setErrorMessage] = useState('');
+  const transferAbortRef = useRef<AbortController | null>(null);
+
+  // Abort in-flight transfer on unmount (e.g. navigation away)
+  useEffect(() => {
+    return () => { transferAbortRef.current?.abort(); };
+  }, []);
+
+  const TRANSFER_FEE_RATE = 0.0146; // 1.46% transfer fee
+  const parsedAmount = parseInt(amount, 10) || 0;
+  const fee = Math.ceil(parsedAmount * TRANSFER_FEE_RATE * 100) / 100;
+  const netAmount = Math.round((parsedAmount - fee) * 100) / 100;
+  const isValid = parsedAmount > 0 && parsedAmount <= balance && recipientId.trim().length > 0;
+
+  const handleTransfer = async () => {
+    if (!isValid) return;
+    transferAbortRef.current?.abort();
+    const abortController = new AbortController();
+    transferAbortRef.current = abortController;
+    setStep('loading');
+    try {
+      const res = await api.post('/api/economy/transfer', {
+        to: recipientId.trim(),
+        amount: parsedAmount,
+      }, { signal: abortController.signal });
+      const data = res.data as { ok?: boolean; error?: string };
+      if (data.ok) {
+        setStep('success');
+        onSuccess();
+      } else {
+        setErrorMessage(data.error?.replace(/_/g, ' ') || 'Transfer failed');
+        setStep('error');
+      }
+    } catch (err: unknown) {
+      setErrorMessage(
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error?.replace(/_/g, ' ') ||
+        'Transfer failed. Please try again.'
+      );
+      setStep('error');
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+        className="relative w-full max-w-lg bg-lattice-surface border border-lattice-border rounded-xl shadow-2xl p-6 max-h-[85vh] overflow-y-auto"
+      >
+        {step === 'input' && (
+          <div className="space-y-5">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-neon-cyan/20">
+                <Send className="w-5 h-5 text-neon-cyan" />
+              </div>
+              <div>
+                <h3 className={ds.heading3}>Transfer CC</h3>
+                <p className={ds.textMuted}>Send Concord Coins to another user</p>
+              </div>
+            </div>
+
+            <div>
+              <label className={ds.label}>Recipient User ID</label>
+              <input
+                type="text"
+                value={recipientId}
+                onChange={(e) => setRecipientId(e.target.value)}
+                placeholder="Enter user ID"
+                className={cn(ds.input, 'font-mono')}
+              />
+            </div>
+
+            <div>
+              <label className={ds.label}>Amount</label>
+              <div className="relative">
+                <Coins className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value.replace(/\D/g, ''))}
+                  placeholder="0"
+                  className={cn(ds.input, 'pl-10 font-mono')}
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-1">Available: {balance.toLocaleString()} CC</p>
+            </div>
+
+            {parsedAmount > 0 && isValid && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                className="bg-lattice-deep rounded-lg p-4 border border-lattice-border space-y-2"
+              >
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-400">Amount</span>
+                  <span className="font-mono text-white">{parsedAmount.toLocaleString()} CC</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-400 flex items-center gap-1">
+                    Fee (1.46%)
+                    <Info className="w-3 h-3" />
+                  </span>
+                  <span className="font-mono text-red-400">-{fee.toFixed(2)} CC</span>
+                </div>
+                <div className="border-t border-lattice-border pt-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-white">Recipient gets</span>
+                    <span className="font-mono text-lg font-bold text-neon-green">{netAmount.toFixed(2)} CC</span>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            <button
+              onClick={() => setStep('confirm')}
+              disabled={!isValid}
+              className={cn(
+                ds.btnBase,
+                'w-full px-6 py-3',
+                isValid
+                  ? 'bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/50 hover:bg-neon-cyan/30'
+                  : 'bg-lattice-elevated text-gray-500 cursor-not-allowed'
+              )}
+            >
+              <Send className="w-5 h-5" />
+              {isValid ? `Send ${parsedAmount.toLocaleString()} CC` : 'Enter transfer details'}
+            </button>
+
+            {/* Stripe integration note */}
+            {/* FLAG: Stripe integration required for real deposits/withdrawals */}
+          </div>
+        )}
+
+        {step === 'confirm' && (
+          <div className="space-y-5">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-amber-500/20">
+                <Info className="w-5 h-5 text-amber-400" />
+              </div>
+              <div>
+                <h3 className={ds.heading3}>Confirm Transfer</h3>
+                <p className={ds.textMuted}>Review before sending</p>
+              </div>
+            </div>
+            <div className="bg-lattice-deep rounded-lg p-4 border border-lattice-border space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-400">To</span>
+                <span className="font-mono text-white truncate max-w-[200px]">{recipientId}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-400">Amount</span>
+                <span className="font-mono text-white">{parsedAmount.toLocaleString()} CC</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-400">Fee (1.46%)</span>
+                <span className="font-mono text-red-400">-{fee.toFixed(2)} CC</span>
+              </div>
+              <div className="border-t border-lattice-border pt-2 flex items-center justify-between">
+                <span className="text-sm font-medium text-white">Net</span>
+                <span className="font-mono text-lg font-bold text-neon-green">{netAmount.toFixed(2)} CC</span>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setStep('input')} className={cn(ds.btnSecondary, 'flex-1')}>Back</button>
+              <button
+                onClick={handleTransfer}
+                className={cn(ds.btnBase, 'flex-1 px-6 py-2 bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/50 hover:bg-neon-cyan/30')}
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                Confirm
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step === 'loading' && (
+          <div className="text-center py-12">
+            <Loader2 className="w-10 h-10 mx-auto text-neon-cyan animate-spin" />
+            <p className="text-gray-400 mt-3">Processing transfer...</p>
+          </div>
+        )}
+
+        {step === 'success' && (
+          <div className="text-center py-8 space-y-4">
+            <CheckCircle2 className="w-16 h-16 mx-auto text-neon-green" />
+            <h3 className={ds.heading2}>Transfer Complete</h3>
+            <p className="text-gray-400">
+              <span className="text-neon-green font-mono font-bold">{netAmount.toFixed(2)} CC</span> sent to{' '}
+              <span className="text-white font-mono">{recipientId}</span>
+            </p>
+            <button onClick={onClose} className={cn(ds.btnPrimary, 'mt-4')}>Done</button>
+          </div>
+        )}
+
+        {step === 'error' && (
+          <div className="text-center py-8 space-y-4">
+            <XCircle className="w-16 h-16 mx-auto text-red-400" />
+            <h3 className={ds.heading2}>Transfer Failed</h3>
+            <p className="text-gray-400">{errorMessage}</p>
+            <button onClick={() => setStep('input')} className={cn(ds.btnSecondary, 'mt-4')}>Try Again</button>
+          </div>
+        )}
+      </motion.div>
+    </div>
+  );
+}
+
+/** Pending withdrawals banner -- shown above the main grid when active withdrawals exist */
+function PendingWithdrawalsBanner({
+  withdrawalsData,
+}: {
+  withdrawalsData?: {
+    withdrawals?: Array<{ id: string; amount: number; fee: number; net: number; status: string; created_at: string }>;
+    items?: Array<{ id: string; amount: number; fee: number; net: number; status: string; created_at: string }>;
+  };
+}) {
+  const allWithdrawals = withdrawalsData?.withdrawals || withdrawalsData?.items || [];
+  const pending = allWithdrawals.filter((w) =>
+    ['pending', 'approved', 'processing'].includes(w.status)
+  );
+
+  if (pending.length === 0) return null;
+
+  const totalPending = pending.reduce((sum, w) => sum + w.amount, 0);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4"
+    >
+      <div className="flex items-start gap-3">
+        <Clock className="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-amber-300">
+            {pending.length} pending withdrawal{pending.length !== 1 ? 's' : ''} ({totalPending.toLocaleString()} CC)
+          </p>
+          <div className="mt-2 space-y-1.5">
+            {pending.map((w) => (
+              <div key={w.id} className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-white">{w.amount.toLocaleString()} CC</span>
+                  {w.fee > 0 && <span className="text-gray-500">(fee: {w.fee})</span>}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={cn(
+                    'px-1.5 py-0.5 rounded text-xs',
+                    w.status === 'processing' ? 'bg-blue-500/10 text-blue-400' :
+                    w.status === 'approved' ? 'bg-green-500/10 text-green-400' :
+                    'bg-amber-500/10 text-amber-400'
+                  )}>
+                    {w.status}
+                  </span>
+                  <span className="text-gray-500">
+                    {new Date(w.created_at).toLocaleDateString()}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </motion.div>
   );
 }
 

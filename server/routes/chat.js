@@ -21,7 +21,11 @@ export default function registerChatRoutes(app, {
   ETHOS_INVARIANTS,
   validate,
   perEndpointRateLimit,
+  requireAuth,
 }) {
+
+  // Auth middleware — tolerate missing requireAuth for backward compat
+  const auth = typeof requireAuth === "function" ? requireAuth() : (_req, _res, next) => next();
 
   // Per-endpoint rate limit: 30 req/min per user for chat (conscious.chat category)
   const chatRateLimit = perEndpointRateLimit ? perEndpointRateLimit("conscious.chat") : ((_req, _res, next) => next());
@@ -47,7 +51,7 @@ export default function registerChatRoutes(app, {
       // This preserves existing clients while enabling event-stream when desired.
       if (wantsStream) {
         enforceEthosInvariant("chat_stream");
-        if (!STATE.__chicken3?.streamingEnabled) throw new Error("streaming disabled");
+        if (!STATE.__chicken3?.streamingEnabled) wantsStream = false; // Fall through to non-streaming response
 
         res.set({
           "Content-Type": "text/event-stream",
@@ -109,7 +113,7 @@ export default function registerChatRoutes(app, {
 
   // Chicken3: SSE streaming chat (additive; does not replace /api/chat)
   // POST /api/chat/feedback — record user thumbs up/down
-  app.post("/api/chat/feedback", asyncHandler(async (req, res) => {
+  app.post("/api/chat/feedback", auth, asyncHandler(async (req, res) => {
     try {
       const out = await runMacro("chat", "feedback", req.body, makeCtx(req));
       return res.json(out);
@@ -122,7 +126,7 @@ export default function registerChatRoutes(app, {
   app.get("/api/chat/conversations", (req, res) => {
     try {
       const limit = Math.min(Number(req.query.limit) || 50, 200);
-      const conversations = Array.from(STATE.sessions.entries())
+      const conversations = Array.from(STATE.sessions?.entries?.() || [])
         .map(([id, sess]) => {
           const msgs = sess.messages || [];
           const lastMsg = msgs[msgs.length - 1];
@@ -149,7 +153,14 @@ export default function registerChatRoutes(app, {
     const errorId = uid("err");
     try {
       enforceEthosInvariant("chat_stream");
-      if (!STATE.__chicken3?.streamingEnabled) throw new Error("streaming disabled");
+      if (!STATE.__chicken3?.streamingEnabled) {
+        // Streaming not enabled — return standard JSON response instead of throwing
+        req.body = enforceRequestInvariants(req, req.body || {});
+        req._concordMode = req.body.mode || "chat";
+        const fallbackCtx = makeCtx(req);
+        const fallbackOut = await runMacro("chat","respond", req.body, fallbackCtx);
+        return res.json(fallbackOut);
+      }
       req.body = enforceRequestInvariants(req, req.body || {});
       req._concordMode = req.body.mode || "chat";
       const ctx = makeCtx(req);
@@ -164,7 +175,7 @@ export default function registerChatRoutes(app, {
       const out = await runMacro("chat","respond", req.body, ctx);
       kernelTick({ type: "USER_MSG", meta: { path: req.path, stream: true }, signals: { benefit: out?.ok?0.2:0, error: out?.ok?0:0.2 } });
 
-      const content = String(out?.content || out?.answer || out?.text || "");
+      const content = String(out?.reply || out?.content || out?.answer || out?.text || "");
       // Deterministic chunking (local-first). If you later add true token-streaming LLM, swap this chunker.
       const step = clamp(Number(req.body?.chunkSize || 220), 40, 1200);
       for (let i = 0; i < content.length; i += step) {
@@ -194,7 +205,35 @@ export default function registerChatRoutes(app, {
     }
   });
 
-  app.post("/api/session/optin", (req, res) => {
+  // ── Session size management ───────────────────────────────────────────
+  const MAX_SESSIONS = 10_000;
+
+  /** Evict oldest sessions when the map exceeds MAX_SESSIONS. */
+  function evictOldestSessions() {
+    if (STATE.sessions.size <= MAX_SESSIONS) return;
+    // Map iteration order is insertion order; delete from the front
+    const toRemove = STATE.sessions.size - MAX_SESSIONS;
+    let removed = 0;
+    for (const key of STATE.sessions.keys()) {
+      if (removed >= toRemove) break;
+      STATE.sessions.delete(key);
+      removed++;
+    }
+    logger.info("sessions", `evicted ${removed} oldest sessions (cap: ${MAX_SESSIONS})`);
+  }
+
+  // Periodic cleanup: remove sessions older than 24 hours with no messages
+  setInterval(() => {
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+    for (const [sid, sess] of STATE.sessions) {
+      const created = sess.createdAt ? new Date(sess.createdAt).getTime() : 0;
+      if (created < cutoff && (!sess.messages || sess.messages.length === 0)) {
+        STATE.sessions.delete(sid);
+      }
+    }
+  }, 10 * 60 * 1000).unref();
+
+  app.post("/api/session/optin", auth, (req, res) => {
     try {
       enforceEthosInvariant("optin");
       const b = req.body || {};
@@ -206,6 +245,7 @@ export default function registerChatRoutes(app, {
       if (typeof b.multimodalOptIn === "boolean") s.multimodalOptIn = b.multimodalOptIn;
       if (typeof b.voiceOptIn === "boolean") s.voiceOptIn = b.voiceOptIn;
       STATE.sessions.set(sid, s);
+      evictOldestSessions();
       saveStateDebounced();
       return uiJson(res, { ok:true, sessionId: sid, flags: { cloudOptIn: !!s.cloudOptIn, toolsOptIn: !!s.toolsOptIn, multimodalOptIn: !!s.multimodalOptIn, voiceOptIn: !!s.voiceOptIn } }, req, { panel:"optin" });
     } catch (e) {
@@ -228,7 +268,7 @@ export default function registerChatRoutes(app, {
   }));
 
   // POST /api/chat/harvest — runs Phase 1 only, returns ranked DTU candidates
-  app.post("/api/chat/harvest", asyncHandler(async (req, res) => {
+  app.post("/api/chat/harvest", auth, asyncHandler(async (req, res) => {
     try {
       const out = await runMacro("chat", "harvest", req.body, makeCtx(req));
       return res.json(out);
@@ -248,8 +288,18 @@ export default function registerChatRoutes(app, {
     }
   }));
 
+  // GET /api/chat/tools — list all tools available to the chat system
+  app.get("/api/chat/tools", asyncHandler(async (req, res) => {
+    try {
+      const out = await runMacro("chat", "tools", {}, makeCtx(req));
+      return res.json(out);
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  }));
+
   // POST /api/chat/forge/message — Forge DTU from chat message
-  app.post("/api/chat/forge/message", asyncHandler(async (req, res) => {
+  app.post("/api/chat/forge/message", auth, asyncHandler(async (req, res) => {
     try {
       const out = await runMacro("chat", "forge.message", req.body, makeCtx(req));
       return res.json(out);
@@ -260,7 +310,7 @@ export default function registerChatRoutes(app, {
 
   // ── Forge Artifact Actions ────────────────────────────────────────────
   // POST /api/chat/forge/save — Save forged DTU to substrate
-  app.post("/api/chat/forge/save", asyncHandler(async (req, res) => {
+  app.post("/api/chat/forge/save", auth, asyncHandler(async (req, res) => {
     try {
       const out = await runMacro("chat", "forge.save", req.body, makeCtx(req));
       return res.json(out);
@@ -270,7 +320,7 @@ export default function registerChatRoutes(app, {
   }));
 
   // POST /api/chat/forge/delete — Delete forged DTU completely
-  app.post("/api/chat/forge/delete", asyncHandler(async (req, res) => {
+  app.post("/api/chat/forge/delete", auth, asyncHandler(async (req, res) => {
     try {
       const out = await runMacro("chat", "forge.delete", req.body, makeCtx(req));
       return res.json(out);
@@ -280,7 +330,7 @@ export default function registerChatRoutes(app, {
   }));
 
   // POST /api/chat/forge/list — Save and list on marketplace
-  app.post("/api/chat/forge/list", asyncHandler(async (req, res) => {
+  app.post("/api/chat/forge/list", auth, asyncHandler(async (req, res) => {
     try {
       const out = await runMacro("chat", "forge.list", req.body, makeCtx(req));
       return res.json(out);
@@ -290,7 +340,7 @@ export default function registerChatRoutes(app, {
   }));
 
   // POST /api/chat/forge/iterate — Iterate on existing forged artifact
-  app.post("/api/chat/forge/iterate", asyncHandler(async (req, res) => {
+  app.post("/api/chat/forge/iterate", auth, asyncHandler(async (req, res) => {
     try {
       const out = await runMacro("chat", "forge.iterate", req.body, makeCtx(req));
       return res.json(out);

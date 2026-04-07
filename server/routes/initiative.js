@@ -41,10 +41,14 @@ function _getUserId(req) {
  * @param {import('express').Express} app - Express application
  * @param {object} deps - Dependencies from server wiring
  * @param {import('better-sqlite3').Database} deps.db - SQLite database
+ * @param {Function} [deps.realtimeEmit] - WebSocket broadcast function (optional)
  */
 export default function registerInitiativeRoutes(app, deps) {
   const { db } = deps;
   const engine = createInitiativeEngine(db);
+
+  // Expose engine for external callers (e.g., proactive tick in server.js)
+  app._initiativeEngine = engine;
 
   // ── GET /api/initiative/settings ─────────────────────────────────────
   // Get user's initiative settings (creates defaults if not present)
@@ -52,8 +56,37 @@ export default function registerInitiativeRoutes(app, deps) {
   app.get("/api/initiative/settings", asyncHandler(async (req, res) => {
     const userId = _getUserId(req);
     const settings = engine.getSettings(userId);
+    const backoff = engine.getBackoff(userId);
 
-    res.json({ ok: true, settings });
+    res.json({
+      ok: true,
+      settings,
+      backoff,
+      limits: {
+        maxPerDay: settings.maxPerDay,
+        maxPerWeek: settings.maxPerWeek,
+        minGapMs: 4 * 60 * 60 * 1000,
+      },
+      availableTriggers: engine.TRIGGER_TYPES.map(t => {
+        // Convert snake_case to camelCase for frontend trigger config lookup
+        const id = t.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+        return {
+          id,
+          label: t.split('_').map(w => w[0].toUpperCase() + w.slice(1)).join(' '),
+          description: `Triggered by ${t.replace(/_/g, ' ')} events`,
+          priority: t === 'world_event' ? 'high' : t === 'check_in' ? 'low' : 'normal',
+        };
+      }),
+      availableChannels: engine.CHANNELS.map(c => ({
+        id: c,
+        label: c === 'inApp' ? 'In-App' : c === 'push' ? 'Push Notification' : c === 'sms' ? 'SMS' : 'Email',
+        description: c === 'inApp' ? 'Messages appear in the chat rail'
+          : c === 'push' ? 'Browser/mobile push notifications'
+          : c === 'sms' ? 'Text messages to your phone'
+          : 'Email notifications',
+        requiresOptIn: c !== 'inApp',
+      })),
+    });
   }));
 
   // ── PUT /api/initiative/settings ─────────────────────────────────────
@@ -125,6 +158,24 @@ export default function registerInitiativeRoutes(app, deps) {
         priority: evaluation.suggestedPriority || "normal",
         metadata: context || {},
       });
+
+      // Broadcast via WebSocket so the frontend can display it in real time
+      try {
+        const emit = globalThis.realtimeEmit;
+        if (typeof emit === "function") {
+          emit("initiative:new", {
+            id: initiative.id,
+            triggerType: initiative.triggerType,
+            message: initiative.message,
+            priority: initiative.priority,
+            score: initiative.score,
+            status: initiative.status,
+            channel: initiative.channel,
+            metadata: initiative.metadata,
+            createdAt: initiative.createdAt,
+          });
+        }
+      } catch (_e) { /* best-effort broadcast */ }
     }
 
     res.json({

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, apiHelpers } from '@/lib/api/client';
@@ -40,11 +40,12 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useLensDTUs } from '@/hooks/useLensDTUs';
 import type { DTU } from '@/lib/api/generated-types';
 import { LensContextPanel } from '@/components/lens/LensContextPanel';
-import { LensWrapper } from '@/components/lens/LensWrapper';
+
 import { ArtifactRenderer } from '@/components/artifact/ArtifactRenderer';
 import { ArtifactUploader } from '@/components/artifact/ArtifactUploader';
 import { FeedbackWidget } from '@/components/feedback/FeedbackWidget';
@@ -53,9 +54,10 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
 
 type ViewMode = 'gallery' | 'canvas' | 'marketplace' | 'my-art';
-type CanvasTool = 'brush' | 'eraser' | 'fill' | 'text' | 'shape-rect' | 'shape-circle' | 'eyedropper' | 'move' | 'pen';
+type CanvasTool = 'brush' | 'eraser' | 'fill' | 'text' | 'shape-rect' | 'shape-circle' | 'eyedropper' | 'move' | 'pen' | 'rectangle' | 'circle' | 'line';
 
 interface ArtAsset {
   id: string;
@@ -97,7 +99,7 @@ export default function ArtLensPage() {
   const queryClient = useQueryClient();
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>('gallery');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null);
@@ -113,6 +115,196 @@ export default function ArtLensPage() {
   const [artTypeFilter, setArtTypeFilter] = useState<string | null>(null);
   const [myArtView, setMyArtView] = useState<'grid' | 'list'>('grid');
 
+  // Drawing state
+  const isDrawingRef = useRef(false);
+  const lastPosRef = useRef<{ x: number; y: number } | null>(null);
+  const undoStackRef = useRef<ImageData[]>([]);
+  const redoStackRef = useRef<ImageData[]>([]);
+  const [brushOpacity, setBrushOpacity] = useState(100);
+
+  // Dynamic brush cursor — shows brush size circle
+  const [cursorPos, setCursorPos] = useState<{ x: number; y: number } | null>(null);
+  const showBrushCursor = canvasTool === 'brush' || canvasTool === 'eraser';
+
+  // Keyboard shortcuts for tools — use refs for undo/redo to avoid stale closures
+  const undoFnRef = useRef<() => void>(() => {});
+  const redoFnRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      const key = e.key.toLowerCase();
+      if (key === 'b') setCanvasTool('brush');
+      else if (key === 'e') setCanvasTool('eraser');
+      else if (key === 'g') setCanvasTool('fill');
+      else if (key === 'i') setCanvasTool('eyedropper');
+      else if (key === 't') setCanvasTool('text');
+      else if (key === 'r') setCanvasTool('rectangle');
+      else if (key === 'c') setCanvasTool('circle');
+      else if (key === 'l') setCanvasTool('line');
+      else if (key === '[') setBrushSize(s => Math.max(1, s - 2));
+      else if (key === ']') setBrushSize(s => Math.min(100, s + 2));
+      else if (e.ctrlKey && key === 'z' && !e.shiftKey) { e.preventDefault(); undoFnRef.current(); }
+      else if ((e.ctrlKey && key === 'z' && e.shiftKey) || (e.ctrlKey && key === 'y')) { e.preventDefault(); redoFnRef.current(); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  // Initialize canvas with white background
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    undoStackRef.current = [ctx.getImageData(0, 0, canvas.width, canvas.height)];
+  }, []);
+
+  const saveToUndoStack = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    undoStackRef.current.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
+    if (undoStackRef.current.length > 50) undoStackRef.current.shift();
+    redoStackRef.current = [];
+  }, []);
+
+  const getCanvasPos = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: (e.clientX - rect.left) * (canvas.width / rect.width),
+      y: (e.clientY - rect.top) * (canvas.height / rect.height),
+    };
+  }, []);
+
+  const drawLine = useCallback((ctx: CanvasRenderingContext2D, from: { x: number; y: number }, to: { x: number; y: number }) => {
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(to.x, to.y);
+    ctx.stroke();
+  }, []);
+
+  const handleCanvasMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const pos = getCanvasPos(e);
+    isDrawingRef.current = true;
+    lastPosRef.current = pos;
+    saveToUndoStack();
+
+    if (canvasTool === 'fill') {
+      ctx.fillStyle = brushColor;
+      ctx.globalAlpha = brushOpacity / 100;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.globalAlpha = 1;
+      isDrawingRef.current = false;
+      return;
+    }
+
+    if (canvasTool === 'eyedropper') {
+      const pixel = ctx.getImageData(pos.x, pos.y, 1, 1).data;
+      const hex = '#' + [pixel[0], pixel[1], pixel[2]].map(v => v.toString(16).padStart(2, '0')).join('');
+      setBrushColor(hex);
+      isDrawingRef.current = false;
+      return;
+    }
+
+    if (canvasTool === 'text') {
+      const text = prompt('Enter text:');
+      if (text) {
+        ctx.fillStyle = brushColor;
+        ctx.globalAlpha = brushOpacity / 100;
+        ctx.font = `${brushSize * 3}px sans-serif`;
+        ctx.fillText(text, pos.x, pos.y);
+        ctx.globalAlpha = 1;
+      }
+      isDrawingRef.current = false;
+      return;
+    }
+
+    // Set up drawing context
+    ctx.lineWidth = brushSize;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.globalAlpha = brushOpacity / 100;
+
+    if (canvasTool === 'eraser') {
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.strokeStyle = 'rgba(0,0,0,1)';
+    } else {
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.strokeStyle = brushColor;
+    }
+
+    // Draw a dot at click position
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, brushSize / 2, 0, Math.PI * 2);
+    ctx.fillStyle = canvasTool === 'eraser' ? 'rgba(0,0,0,1)' : brushColor;
+    ctx.fill();
+  }, [canvasTool, brushColor, brushSize, brushOpacity, getCanvasPos, saveToUndoStack]);
+
+  const handleCanvasMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDrawingRef.current || !lastPosRef.current) return;
+    if (canvasTool === 'move' || canvasTool === 'eyedropper' || canvasTool === 'fill' || canvasTool === 'text') return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const pos = getCanvasPos(e);
+
+    if (canvasTool === 'shape-rect' || canvasTool === 'shape-circle') {
+      // Shapes preview on move — restore last saved state and draw shape
+      const lastState = undoStackRef.current[undoStackRef.current.length - 1];
+      if (lastState) ctx.putImageData(lastState, 0, 0);
+      ctx.strokeStyle = brushColor;
+      ctx.lineWidth = brushSize;
+      ctx.globalAlpha = brushOpacity / 100;
+      ctx.globalCompositeOperation = 'source-over';
+      const start = lastPosRef.current;
+      if (canvasTool === 'shape-rect') {
+        ctx.strokeRect(start.x, start.y, pos.x - start.x, pos.y - start.y);
+      } else {
+        const rx = Math.abs(pos.x - start.x) / 2;
+        const ry = Math.abs(pos.y - start.y) / 2;
+        const cx = (start.x + pos.x) / 2;
+        const cy = (start.y + pos.y) / 2;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      return;
+    }
+
+    drawLine(ctx, lastPosRef.current, pos);
+    lastPosRef.current = pos;
+  }, [canvasTool, brushColor, brushSize, brushOpacity, getCanvasPos, drawLine]);
+
+  const handleCanvasMouseUp = useCallback(() => {
+    if (isDrawingRef.current) {
+      const canvas = canvasRef.current;
+      const ctx = canvas?.getContext('2d');
+      if (ctx) {
+        ctx.globalAlpha = 1;
+        ctx.globalCompositeOperation = 'source-over';
+      }
+    }
+    isDrawingRef.current = false;
+    lastPosRef.current = null;
+  }, []);
+
+  // AI generation state
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiResult, setAiResult] = useState<string | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+
   // Upload form
   const [uploadTitle, setUploadTitle] = useState('');
   const [uploadDescription, setUploadDescription] = useState('');
@@ -122,11 +314,11 @@ export default function ArtLensPage() {
   // Listing form
   const [listingTitle, setListingTitle] = useState('');
   const [listingType, setListingType] = useState('cover-art');
-  const [listingStyle, _setListingStyle] = useState('digital');
+  const [listingStyle, setListingStyle] = useState('digital');
   const [listingPrice, setListingPrice] = useState('50');
   const [listingTags, setListingTags] = useState('');
 
-  const { data: artAssets, isLoading: _assetsLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
+  const { data: artAssets, isLoading: assetsLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
     queryKey: ['art-assets', selectedStyle, searchQuery],
     queryFn: () => apiHelpers.artistry.assets.list({ type: 'artwork', search: searchQuery || undefined })
     .then(r => r.data?.assets || []).catch((err) => { console.error('Failed to fetch art assets:', err instanceof Error ? err.message : err); return []; }),
@@ -199,26 +391,88 @@ export default function ArtLensPage() {
       queryClient.invalidateQueries({ queryKey: ['art-marketplace'] });
       useUIStore.getState().addToast({ type: 'success', message: 'Purchase complete!' });
     },
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
   });
 
   const handleCanvasUndo = useCallback(() => {
-    const ctx = canvasRef.current?.getContext('2d');
-    if (ctx) { ctx.clearRect(0, 0, canvasRef.current!.width, canvasRef.current!.height); }
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    if (undoStackRef.current.length <= 1) return;
+    const current = undoStackRef.current.pop()!;
+    redoStackRef.current.push(current);
+    const prev = undoStackRef.current[undoStackRef.current.length - 1];
+    if (prev) ctx.putImageData(prev, 0, 0);
   }, []);
 
   const handleCanvasRedo = useCallback(() => {
-    useUIStore.getState().addToast({ type: 'info', message: 'Redo: no actions to redo' });
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    if (redoStackRef.current.length === 0) return;
+    const next = redoStackRef.current.pop()!;
+    undoStackRef.current.push(next);
+    ctx.putImageData(next, 0, 0);
   }, []);
 
-  const handleCanvasSave = useCallback(() => {
-    uploadMutation.mutate({
-      type: 'artwork',
-      title: canvasTitle || 'Untitled',
-      description: '',
-      tags: [],
-      metadata: { source: 'canvas' },
-    });
-  }, [canvasTitle, uploadMutation]);
+  // Wire keyboard shortcut refs to actual handlers
+  undoFnRef.current = handleCanvasUndo;
+  redoFnRef.current = handleCanvasRedo;
+
+  const handleCanvasSave = useCallback(async () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    // Upload as media with actual image data
+    try {
+      const dataUrl = canvas.toDataURL('image/png');
+      const base64Data = dataUrl.split(',')[1];
+      await api.post('/api/media/upload', {
+        title: canvasTitle || 'Untitled',
+        mediaType: 'image',
+        mimeType: 'image/png',
+        fileSize: Math.ceil(base64Data.length * 0.75),
+        originalFilename: `${canvasTitle.replace(/\s+/g, '-').toLowerCase()}.png`,
+        tags: ['art', 'canvas'],
+        data: base64Data,
+      });
+      useUIStore.getState().addToast({ type: 'success', message: 'Artwork saved!' });
+    } catch (err) {
+      console.error('Save failed:', err);
+      useUIStore.getState().addToast({ type: 'error', message: 'Failed to save artwork' });
+    }
+  }, [canvasTitle]);
+
+  const handleAiGenerate = useCallback(async () => {
+    if (!aiPrompt.trim()) return;
+    setAiGenerating(true);
+    setAiError(null);
+    setAiResult(null);
+    try {
+      const res = await api.post('/api/lens/run', {
+        domain: 'art',
+        action: 'generate',
+        input: { prompt: aiPrompt.trim(), type: 'text-to-image' },
+      });
+      const data = res.data;
+      const content = typeof data?.result === 'string'
+        ? data.result
+        : typeof data?.result?.content === 'string'
+          ? data.result.content
+          : typeof data?.result?.url === 'string'
+            ? data.result.url
+            : JSON.stringify(data?.result ?? data, null, 2);
+      setAiResult(content);
+      useUIStore.getState().addToast({ type: 'success', message: 'AI generation complete' });
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : 'Generation failed');
+    } finally {
+      setAiGenerating(false);
+    }
+  }, [aiPrompt]);
 
   const handleCanvasExport = useCallback(() => {
     const canvas = canvasRef.current;
@@ -255,10 +509,15 @@ export default function ArtLensPage() {
   }, []);
 
   const renderNav = () => (
-    <div className="flex items-center justify-between border-b border-white/10 px-6 py-3">
+    <div className="flex items-center justify-between border-b border-rose-900/15 px-6 py-3 bg-neutral-950/50">
       <div className="flex items-center gap-2">
-        <Palette className="w-6 h-6 text-neon-pink" />
-        <h1 className="text-xl font-bold">Art Studio</h1>
+        <Palette className="w-6 h-6 text-rose-400" />
+        <h1 className="text-xl font-bold text-rose-50 tracking-tight">Art Studio</h1>
+        {dtusLoading ? (
+          <span className="ml-2 w-4 h-4 border-2 border-neon-pink border-t-transparent rounded-full animate-spin inline-block" />
+        ) : (
+          <span className="ml-2 text-xs text-gray-400">({domainDTUs.length} DTUs)</span>
+        )}
       </div>
 
       {/* Real-time Enhancement Toolbar */}
@@ -286,6 +545,14 @@ export default function ArtLensPage() {
         ))}
       </div>
       <div className="flex items-center gap-2">
+        <VisionAnalyzeButton
+          domain="art"
+          prompt="Analyze this artwork image. Describe the style, medium, colors, composition, and mood. Suggest relevant tags for categorization."
+          onResult={(res) => {
+            setUploadDescription(res.analysis);
+            if (res.suggestedTags?.length) setUploadTags(res.suggestedTags.join(', '));
+          }}
+        />
         <button onClick={() => setShowUpload(true)} className="flex items-center gap-2 px-4 py-2 bg-neon-pink/20 text-neon-pink rounded-lg hover:bg-neon-pink/30 text-sm">
           <Upload className="w-4 h-4" />
           Upload
@@ -311,7 +578,7 @@ export default function ArtLensPage() {
             className="w-full pl-10 pr-4 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:outline-none focus:border-neon-pink/50"
           />
         </div>
-        <div className="flex items-center gap-2 overflow-x-auto">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setSelectedStyle(null)}
             className={cn('px-3 py-1.5 rounded-full text-xs whitespace-nowrap', !selectedStyle ? 'bg-neon-pink/20 text-neon-pink' : 'bg-white/5 text-gray-400 hover:text-white')}
@@ -332,23 +599,26 @@ export default function ArtLensPage() {
 
       {/* Featured Section */}
       <section>
-        <h2 className="text-lg font-bold mb-4">Featured Artwork</h2>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div className="flex items-center gap-2 mb-4">
+          <h2 className="text-lg font-bold">Featured Artwork</h2>
+          {assetsLoading && <span className="w-4 h-4 border-2 border-neon-pink border-t-transparent rounded-full animate-spin inline-block" />}
+        </div>
+        <div className="columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4">
           {(artAssets as ArtAsset[]).length > 0 ? (artAssets as ArtAsset[]).map((art: ArtAsset) => (
             <motion.div
               key={art.id}
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="group relative rounded-xl overflow-hidden bg-white/5 border border-white/10 hover:border-neon-pink/30 transition-colors cursor-pointer"
+              className="group relative rounded-xl overflow-hidden bg-neutral-900/50 border border-neutral-800/30 hover:border-rose-400/30 transition-all duration-300 cursor-pointer break-inside-avoid mb-4 hover:shadow-xl hover:shadow-rose-900/10"
             >
-              <div className="aspect-square bg-gradient-to-br from-purple-600/30 to-pink-600/30 flex items-center justify-center">
-                <ImageIcon className="w-16 h-16 opacity-30" />
+              <div className="aspect-[3/4] bg-gradient-to-br from-rose-900/20 to-neutral-900/40 flex items-center justify-center">
+                <ImageIcon className="w-16 h-16 opacity-20 text-rose-300" />
               </div>
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                <div className="absolute bottom-0 left-0 right-0 p-3">
-                  <p className="font-medium text-sm truncate">{art.title}</p>
-                  <div className="flex items-center gap-3 mt-1 text-xs text-gray-300">
-                    <span className="flex items-center gap-1"><Heart className="w-3 h-3" />{art.likes}</span>
+              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                <div className="absolute bottom-0 left-0 right-0 p-4">
+                  <p className="font-medium text-sm truncate text-rose-50">{art.title}</p>
+                  <div className="flex items-center gap-3 mt-1.5 text-xs text-rose-200/70">
+                    <span className="flex items-center gap-1"><Heart className="w-3 h-3 text-rose-400" />{art.likes}</span>
                     <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{art.plays}</span>
                   </div>
                 </div>
@@ -455,14 +725,61 @@ export default function ArtLensPage() {
               </button>
             </div>
           </div>
-          <div className="flex-1 flex items-center justify-center bg-[#1a1a2e] overflow-auto p-8">
-            <canvas
-              ref={canvasRef}
-              width={1024}
-              height={768}
-              className="bg-white/10 border border-white/20 rounded shadow-2xl cursor-crosshair"
-              style={{ width: `${1024 * canvasZoom / 100}px`, height: `${768 * canvasZoom / 100}px` }}
-            />
+          <div className="flex-1 flex items-center justify-center bg-[#1a1a2e] overflow-auto p-8 relative">
+            <div className="relative">
+              <canvas
+                ref={canvasRef}
+                width={1024}
+                height={768}
+                className="bg-white/10 border border-white/20 rounded shadow-2xl"
+                style={{
+                  width: `${1024 * canvasZoom / 100}px`,
+                  height: `${768 * canvasZoom / 100}px`,
+                  cursor: showBrushCursor ? 'none' : canvasTool === 'eyedropper' ? 'crosshair' : canvasTool === 'text' ? 'text' : 'crosshair',
+                }}
+                onMouseDown={handleCanvasMouseDown}
+                onMouseMove={(e) => {
+                  handleCanvasMouseMove(e);
+                  if (showBrushCursor) {
+                    const rect = canvasRef.current?.getBoundingClientRect();
+                    if (rect) setCursorPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+                  }
+                }}
+                onMouseUp={handleCanvasMouseUp}
+                onMouseLeave={() => { handleCanvasMouseUp(); setCursorPos(null); }}
+                onMouseEnter={() => setCursorPos({ x: 0, y: 0 })}
+              />
+              {/* Dynamic brush cursor */}
+              {showBrushCursor && cursorPos && (
+                <div
+                  className="pointer-events-none absolute rounded-full border"
+                  style={{
+                    width: `${brushSize * canvasZoom / 100}px`,
+                    height: `${brushSize * canvasZoom / 100}px`,
+                    left: `${cursorPos.x - (brushSize * canvasZoom / 100) / 2}px`,
+                    top: `${cursorPos.y - (brushSize * canvasZoom / 100) / 2}px`,
+                    borderColor: canvasTool === 'eraser' ? 'rgba(255,255,255,0.5)' : brushColor,
+                    opacity: 0.8,
+                  }}
+                />
+              )}
+            </div>
+            {/* Keyboard shortcut hint */}
+            <div className="absolute bottom-4 left-4 text-xs text-gray-500 space-x-3 select-none">
+              <span title="Brush">B</span>
+              <span title="Eraser">E</span>
+              <span title="Fill">G</span>
+              <span title="Eyedropper">I</span>
+              <span title="Text">T</span>
+              <span title="Rectangle">R</span>
+              <span title="Circle">C</span>
+              <span title="Line">L</span>
+              <span className="text-gray-600">|</span>
+              <span title="Decrease brush size">[</span>
+              <span title="Increase brush size">]</span>
+              <span className="text-gray-600">|</span>
+              <span title="Undo">Ctrl+Z</span>
+            </div>
           </div>
         </main>
 
@@ -476,8 +793,8 @@ export default function ArtLensPage() {
                 <input type="range" min="1" max="100" value={brushSize} onChange={e => setBrushSize(Number(e.target.value))} className="w-full accent-neon-pink" />
               </div>
               <div>
-                <label className="text-xs text-gray-400 mb-1 block">Opacity</label>
-                <input type="range" min="0" max="100" defaultValue={100} className="w-full accent-neon-pink" />
+                <label className="text-xs text-gray-400 mb-1 block">Opacity: {brushOpacity}%</label>
+                <input type="range" min="1" max="100" value={brushOpacity} onChange={e => setBrushOpacity(Number(e.target.value))} className="w-full accent-neon-pink" />
               </div>
             </div>
           </div>
@@ -520,10 +837,48 @@ export default function ArtLensPage() {
           <div>
             <h3 className="text-xs font-semibold text-gray-400 uppercase mb-3">AI Assist</h3>
             <div className="space-y-2">
-              <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'AI text-to-image generation starting...' })} className="w-full flex items-center gap-2 px-3 py-2 bg-neon-purple/10 text-neon-purple rounded-lg text-xs hover:bg-neon-purple/20">
-                <Wand2 className="w-4 h-4" />
-                Generate from Text
+              <input
+                type="text"
+                value={aiPrompt}
+                onChange={e => setAiPrompt(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleAiGenerate()}
+                placeholder="Describe artwork to generate..."
+                className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-xs focus:outline-none focus:border-neon-purple/50"
+              />
+              <button
+                onClick={handleAiGenerate}
+                disabled={aiGenerating || !aiPrompt.trim()}
+                className="w-full flex items-center gap-2 px-3 py-2 bg-neon-purple/10 text-neon-purple rounded-lg text-xs hover:bg-neon-purple/20 disabled:opacity-50"
+              >
+                {aiGenerating ? (
+                  <span className="w-4 h-4 border-2 border-neon-purple border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Wand2 className="w-4 h-4" />
+                )}
+                {aiGenerating ? 'Generating...' : 'Generate from Text'}
               </button>
+              {aiError && (
+                <p className="text-xs text-red-400 px-1">{aiError}</p>
+              )}
+              {aiResult && (
+                <div className="p-2 rounded-lg bg-neon-purple/5 border border-neon-purple/20">
+                  <p className="text-xs text-gray-300 whitespace-pre-wrap max-h-32 overflow-auto">{aiResult}</p>
+                  <button
+                    onClick={() => {
+                      const blob = new Blob([aiResult], { type: 'text/plain' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = 'ai-art-result.txt';
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                    className="flex items-center gap-1 mt-2 px-2 py-1 text-xs text-neon-purple hover:bg-neon-purple/10 rounded"
+                  >
+                    <Download className="w-3 h-3" /> Download
+                  </button>
+                </div>
+              )}
               <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Style transfer initiated' })} className="w-full flex items-center gap-2 px-3 py-2 bg-white/5 text-gray-300 rounded-lg text-xs hover:bg-white/10">
                 <Palette className="w-4 h-4" />
                 Style Transfer
@@ -549,7 +904,7 @@ export default function ArtLensPage() {
         </button>
       </div>
 
-      <div className="flex gap-3 overflow-x-auto pb-2">
+      <div className="flex gap-3 flex-wrap pb-2">
         {ART_TYPES.map(type => (
           <button key={type} onClick={() => setArtTypeFilter(artTypeFilter === type ? null : type)} className={cn('px-3 py-1.5 rounded-full text-xs whitespace-nowrap capitalize', artTypeFilter === type ? 'bg-neon-pink/20 text-neon-pink' : 'bg-white/5 text-gray-400 hover:text-white')}>
             {type.replace('-', ' ')}
@@ -642,7 +997,7 @@ export default function ArtLensPage() {
     );
   }
   return (
-    <div className="h-[calc(100vh-4rem)] flex flex-col bg-gradient-to-b from-pink-900/10 to-black">
+    <div data-lens-theme="art" className="h-[calc(100vh-4rem)] flex flex-col bg-gradient-to-b from-rose-950/10 via-neutral-950 to-black">
       {renderNav()}
       <div className="flex-1 overflow-hidden flex">
         <div className="flex-1 overflow-hidden">
@@ -742,12 +1097,19 @@ export default function ArtLensPage() {
                   </select>
                   <input type="number" value={listingPrice} onChange={e => setListingPrice(e.target.value)} className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:outline-none" placeholder="Price ($)" />
                 </div>
+                <div>
+                  <label className="text-sm text-gray-400 block mb-1">Style</label>
+                  <select value={listingStyle} onChange={e => setListingStyle(e.target.value)} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:outline-none">
+                    {ART_STYLES.map(s => <option key={s} value={s} className="bg-lattice-surface">{s}</option>)}
+                  </select>
+                </div>
                 <input type="text" value={listingTags} onChange={e => setListingTags(e.target.value)} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:outline-none" placeholder="Tags (comma separated)" />
                 <button onClick={handleCreateListing} disabled={createListingMutation.isPending} className="w-full py-2.5 bg-neon-pink text-white rounded-lg font-medium hover:bg-neon-pink/80 disabled:opacity-50">
                   {createListingMutation.isPending ? 'Creating...' : 'Create Listing'}
                 </button>
 
       {/* Real-time Data Panel */}
+      <UniversalActions domain="art" artifactId={null} compact />
       {realtimeData && (
         <RealtimeDataPanel
           domain="art"
@@ -768,7 +1130,7 @@ export default function ArtLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

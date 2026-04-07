@@ -34,7 +34,8 @@ import {
   Highlighter
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
+import { createUndoableAction, batchUndoable } from '@/store/history';
 
 interface BlockEditorProps {
   content?: string;
@@ -59,6 +60,7 @@ export function BlockEditor({
 }: BlockEditorProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [wordCount, setWordCount] = useState(0);
+  const previousContentRef = useRef(content);
 
   const editor = useEditor({
     extensions: [
@@ -128,9 +130,25 @@ export function BlockEditor({
   const handleSave = useCallback(async () => {
     if (!editor || isSaving) return;
 
+    const currentContent = editor.getHTML();
+    const prevContent = previousContentRef.current;
+
     setIsSaving(true);
     try {
-      await onSave?.(editor.getHTML());
+      const undoableSave = createUndoableAction(
+        'Save editor content',
+        async () => {
+          await onSave?.(currentContent);
+          return currentContent;
+        },
+        async () => {
+          // Undo: restore previous content and save it
+          editor.commands.setContent(prevContent);
+          await onSave?.(prevContent);
+        }
+      );
+      await undoableSave();
+      previousContentRef.current = currentContent;
     } finally {
       setIsSaving(false);
     }
@@ -174,9 +192,19 @@ export function BlockEditor({
     }
   }, [editor]);
 
-  const insertTable = useCallback(() => {
+  const insertTable = useCallback(async () => {
     if (!editor) return;
-    editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+    const prevContent = editor.getHTML();
+    await batchUndoable('Insert table', [
+      {
+        execute: () => {
+          editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+        },
+        undo: () => {
+          editor.commands.setContent(prevContent);
+        },
+      },
+    ]);
   }, [editor]);
 
   if (!editor) return null;
@@ -439,12 +467,12 @@ function ToolbarButton({
 
 // Slash command menu component
 export function SlashCommandMenu({
-  editor: _editor,
+  editor,
   items,
   onSelect
 }: {
   editor: unknown;
-  items: Array<{ icon: React.ElementType; label: string; description: string; command: () => void }>;
+  items: Array<{ icon: React.ElementType; label: string; description: string; command: (editor?: unknown) => void }>;
   onSelect: () => void;
 }) {
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -459,14 +487,14 @@ export function SlashCommandMenu({
         setSelectedIndex((prev) => (prev - 1 + items.length) % items.length);
       } else if (e.key === 'Enter') {
         e.preventDefault();
-        items[selectedIndex].command();
+        items[selectedIndex].command(editor);
         onSelect();
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [items, selectedIndex, onSelect]);
+  }, [items, selectedIndex, onSelect, editor]);
 
   return (
     <div className="w-72 bg-lattice-surface border border-lattice-border rounded-lg shadow-xl overflow-hidden">
@@ -480,7 +508,7 @@ export function SlashCommandMenu({
             <button
               key={item.label}
               onClick={() => {
-                item.command();
+                item.command(editor);
                 onSelect();
               }}
               className={cn(

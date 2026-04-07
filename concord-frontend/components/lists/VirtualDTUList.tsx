@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatRelativeTime } from '@/lib/utils';
+import { TierBadge } from '@/components/dtu/TierBadge';
 
 interface DTU {
   id: string;
@@ -125,7 +126,7 @@ export function VirtualDTUList({
     setContextMenu(null);
   }, []);
 
-  const _toggleSort = (field: SortField) => {
+  const toggleSort = (field: SortField) => {
     if (sortField === field) {
       setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
     } else {
@@ -164,16 +165,7 @@ export function VirtualDTUList({
               )}>
                 {dtu.title}
               </span>
-              {dtu.tier !== 'regular' && (
-                <span className={cn(
-                  'text-[10px] px-1.5 py-0.5 rounded uppercase font-medium',
-                  dtu.tier === 'mega' ? 'bg-neon-cyan/20 text-neon-cyan' :
-                  dtu.tier === 'hyper' ? 'bg-neon-purple/20 text-neon-purple' :
-                  'bg-gray-500/20 text-gray-400'
-                )}>
-                  {dtu.tier}
-                </span>
-              )}
+              <TierBadge tier={dtu.tier} size="sm" />
               {dtu.isFavorite && (
                 <Star className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400" />
               )}
@@ -289,25 +281,41 @@ export function VirtualDTUList({
             </div>
 
             <div className="flex items-center gap-2">
-              <select
-                value={sortField}
-                onChange={(e) => setSortField(e.target.value as SortField)}
-                className="bg-lattice-surface border border-lattice-border rounded px-2 py-1 text-xs text-white"
-              >
-                <option value="updatedAt">Updated</option>
-                <option value="createdAt">Created</option>
-                <option value="title">Title</option>
-                <option value="resonance">Resonance</option>
-              </select>
               <button
-                onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
-                className="p-1 text-gray-400 hover:text-white transition-colors"
-              >
-                {sortOrder === 'asc' ? (
-                  <SortAsc className="w-4 h-4" />
-                ) : (
-                  <SortDesc className="w-4 h-4" />
+                onClick={() => toggleSort('updatedAt')}
+                className={cn(
+                  'px-2 py-1 text-xs rounded transition-colors',
+                  sortField === 'updatedAt' ? 'text-neon-cyan' : 'text-gray-400 hover:text-white'
                 )}
+              >
+                Updated {sortField === 'updatedAt' && (sortOrder === 'asc' ? <SortAsc className="w-3 h-3 inline" /> : <SortDesc className="w-3 h-3 inline" />)}
+              </button>
+              <button
+                onClick={() => toggleSort('createdAt')}
+                className={cn(
+                  'px-2 py-1 text-xs rounded transition-colors',
+                  sortField === 'createdAt' ? 'text-neon-cyan' : 'text-gray-400 hover:text-white'
+                )}
+              >
+                Created {sortField === 'createdAt' && (sortOrder === 'asc' ? <SortAsc className="w-3 h-3 inline" /> : <SortDesc className="w-3 h-3 inline" />)}
+              </button>
+              <button
+                onClick={() => toggleSort('title')}
+                className={cn(
+                  'px-2 py-1 text-xs rounded transition-colors',
+                  sortField === 'title' ? 'text-neon-cyan' : 'text-gray-400 hover:text-white'
+                )}
+              >
+                Title {sortField === 'title' && (sortOrder === 'asc' ? <SortAsc className="w-3 h-3 inline" /> : <SortDesc className="w-3 h-3 inline" />)}
+              </button>
+              <button
+                onClick={() => toggleSort('resonance')}
+                className={cn(
+                  'px-2 py-1 text-xs rounded transition-colors',
+                  sortField === 'resonance' ? 'text-neon-cyan' : 'text-gray-400 hover:text-white'
+                )}
+              >
+                Resonance {sortField === 'resonance' && (sortOrder === 'asc' ? <SortAsc className="w-3 h-3 inline" /> : <SortDesc className="w-3 h-3 inline" />)}
               </button>
             </div>
           </div>

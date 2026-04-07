@@ -127,8 +127,14 @@ Return JSON only: {"needsUpdate": true/false, "updatedContent": "..." or null, "
 
       if (result.ok && result.content) {
         try {
-          const parsed = JSON.parse(result.content.trim());
-          if (parsed.needsUpdate && parsed.updatedContent) {
+          // Forgiving JSON extraction — small models return sloppy JSON with markdown
+          const clean = result.content.replace(/```json|```/g, "").trim();
+          let parsed;
+          try { parsed = JSON.parse(clean); } catch {
+            const jsonMatch = clean.match(/\{[\s\S]*\}/);
+            if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);
+          }
+          if (parsed && parsed.needsUpdate && parsed.updatedContent) {
             dtu.human = dtu.human || {};
             dtu.human.summary = parsed.updatedContent;
             dtu.meta = dtu.meta || {};
@@ -138,7 +144,7 @@ Return JSON only: {"needsUpdate": true/false, "updatedContent": "..." or null, "
             dtu.updatedAt = new Date().toISOString();
 
             // Re-embed the updated DTU
-            embedDTU(dtu).catch(() => {});
+            embedDTU(dtu).catch(e => console.warn('[selfHealing] embed failed:', e?.message));
 
             updated++;
           }
@@ -289,6 +295,7 @@ Generate a comprehensive knowledge unit that would help answer these types of qu
           creti: result.content,
           tags: [gap.lens === "_general" ? null : gap.lens, "skill-building", "gap-fill"].filter(Boolean),
           source: "subconscious.skill-acquisition",
+          citationMode: "original", // system-generated knowledge, no user content cited
           meta: { addressesWeakness: gap.sampleQueries[0], gapSeverity: gap.avgRetrievalScore },
         });
         generated++;

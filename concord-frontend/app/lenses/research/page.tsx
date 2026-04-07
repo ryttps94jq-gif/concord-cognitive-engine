@@ -1,11 +1,13 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
+import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
-import { Search, Filter, ArrowRight, BookOpen, Tag, Calendar, Layers, ChevronDown } from 'lucide-react';
+import { Search, Filter, ArrowRight, BookOpen, Tag, Calendar, Layers, ChevronDown, RefreshCw, Beaker, Download, X, AlertCircle, Zap, Save, FileText, Microscope, CheckCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useLensDTUs } from '@/hooks/useLensDTUs';
 import { LensContextPanel } from '@/components/lens/LensContextPanel';
@@ -15,6 +17,7 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
 
 interface DTUResult {
   id: string;
@@ -43,12 +46,99 @@ export default function ResearchLensPage() {
   const [tierFilter, setTierFilter] = useState('');
   const [sortBy, setSortBy] = useState<'relevance' | 'date' | 'tier'>('date');
   const [selectedDtu, setSelectedDtu] = useState<DTUResult | null>(null);
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
+
+  /* ---------- hypothesis / generate ---------- */
+  const [hypothesis, setHypothesis] = useState('');
+  const [generateLoading, setGenerateLoading] = useState(false);
+  const [generateResult, setGenerateResult] = useState<{ content: string; title: string } | null>(null);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+  const [savingDTU, setSavingDTU] = useState(false);
+  const [deepResearchLoading, setDeepResearchLoading] = useState(false);
+
+  const handleDeepResearch = useCallback(async () => {
+    if (!hypothesis.trim()) return;
+    setDeepResearchLoading(true);
+    setGenerateError(null);
+    setGenerateResult(null);
+    try {
+      const data = await api.post('/api/research/conduct', { topic: hypothesis.trim() }).then(r => r.data);
+      const content = typeof data?.result === 'string'
+        ? data.result
+        : typeof data?.content === 'string'
+          ? data.content
+          : JSON.stringify(data, null, 2);
+      setGenerateResult({
+        content,
+        title: data?.title || 'Deep Research Result',
+      });
+    } catch (err) {
+      setGenerateError(err instanceof Error ? err.message : 'Deep research failed');
+    } finally {
+      setDeepResearchLoading(false);
+    }
+  }, [hypothesis]);
+
+  const handleRunAnalysis = useCallback(async () => {
+    if (!hypothesis.trim()) return;
+    setGenerateLoading(true);
+    setGenerateError(null);
+    setGenerateResult(null);
+    try {
+      const res = await api.post('/api/lens/run', {
+        domain: 'research',
+        action: 'generate',
+        input: { hypothesis: hypothesis.trim(), type: 'analysis' },
+      });
+      const data = res.data;
+      const content = typeof data?.result === 'string'
+        ? data.result
+        : typeof data?.result?.content === 'string'
+          ? data.result.content
+          : JSON.stringify(data?.result ?? data, null, 2);
+      setGenerateResult({
+        content,
+        title: data?.result?.title || 'Research Analysis',
+      });
+    } catch (err) {
+      setGenerateError(err instanceof Error ? err.message : 'Analysis failed');
+    } finally {
+      setGenerateLoading(false);
+    }
+  }, [hypothesis]);
+
+  const handleDownloadResult = useCallback((content: string, filename: string) => {
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, []);
 
   const { data: dtusData, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['research-dtus'],
     queryFn: () => api.get('/api/dtus?limit=200').then(r => r.data).catch(() => ({ dtus: [] })),
   });
+
+  const handleSaveAsDTU = useCallback(async () => {
+    if (!generateResult) return;
+    setSavingDTU(true);
+    try {
+      await api.post('/api/dtus', {
+        title: generateResult.title,
+        content: generateResult.content,
+        domain: 'research',
+        tags: ['research', 'analysis', 'generated'],
+      });
+      setSavingDTU(false);
+      refetch();
+      refetchDTUs();
+    } catch {
+      setSavingDTU(false);
+    }
+  }, [generateResult, refetch, refetchDTUs]);
 
   const dtus: DTUResult[] = useMemo(() => dtusData?.dtus || [], [dtusData]);
 
@@ -113,7 +203,7 @@ export default function ResearchLensPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="research" className="p-6 space-y-6">
       <header className="flex items-center gap-3">
         <BookOpen className="w-6 h-6 text-neon-cyan" />
         <div>
@@ -127,6 +217,16 @@ export default function ResearchLensPage() {
       <div className="flex items-center gap-2 flex-wrap">
         <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} compact />
         <DTUExportButton domain="research" data={realtimeData || {}} compact />
+        <VisionAnalyzeButton
+          domain="research"
+          prompt="Analyze this research image (chart, graph, diagram, figure, data visualization, etc.). Extract key findings, describe the data shown, and suggest relevant research tags and domain classification."
+          onResult={(res) => {
+            setSelectedDtu({ id: `vision-${Date.now()}`, title: 'Vision Analysis', content: res.analysis, summary: res.analysis.slice(0, 200), domain: 'research', tags: res.suggestedTags || [], createdAt: new Date().toISOString() });
+          }}
+        />
+        <button onClick={() => refetchDTUs()} disabled={dtusLoading} className="p-1 rounded hover:bg-lattice-surface/50 disabled:opacity-50 transition-colors" title="Refresh DTUs">
+          {dtusLoading ? <span className="w-4 h-4 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin inline-block" /> : <RefreshCw className="w-4 h-4 text-gray-400" />}
+        </button>
         {realtimeAlerts.length > 0 && (
           <span className="text-xs px-2 py-0.5 rounded bg-yellow-500/10 text-yellow-400">
             {realtimeAlerts.length} alert{realtimeAlerts.length !== 1 ? 's' : ''}
@@ -134,6 +234,107 @@ export default function ResearchLensPage() {
         )}
       </div>
       </header>
+
+      {/* Quick Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { icon: FileText, label: 'Total DTUs', value: dtus.length, color: 'text-neon-cyan' },
+          { icon: Microscope, label: 'Hyper Tier', value: dtus.filter(d => d.tier === 'hyper').length, color: 'text-pink-400' },
+          { icon: BookOpen, label: 'Domains', value: domains.length, color: 'text-purple-400' },
+          { icon: Tag, label: 'Tagged', value: dtus.filter(d => (d.tags || []).length > 0).length, color: 'text-green-400' },
+        ].map((stat, i) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.08 }}
+            className="lens-card"
+          >
+            <stat.icon className={`w-5 h-5 mb-2 ${stat.color}`} />
+            <p className="text-2xl font-bold">{stat.value}</p>
+            <p className="text-sm text-gray-400">{stat.label}</p>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Hypothesis / Generate Panel */}
+      <div className="p-4 bg-lattice-surface border border-lattice-border rounded-xl space-y-3">
+        <div className="flex items-center gap-2">
+          <Beaker className="w-5 h-5 text-neon-cyan" />
+          <h2 className="text-sm font-semibold text-white">Run Analysis</h2>
+        </div>
+        <div className="flex gap-3">
+          <input
+            type="text"
+            value={hypothesis}
+            onChange={(e) => setHypothesis(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleRunAnalysis()}
+            placeholder="Enter a hypothesis or research question..."
+            className="flex-1 px-4 py-2.5 bg-lattice-deep border border-lattice-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-neon-cyan text-sm"
+          />
+          <button
+            onClick={handleRunAnalysis}
+            disabled={generateLoading || deepResearchLoading || !hypothesis.trim()}
+            className="flex items-center gap-2 px-5 py-2.5 bg-neon-cyan/20 text-neon-cyan rounded-lg text-sm font-medium hover:bg-neon-cyan/30 disabled:opacity-50 transition-colors whitespace-nowrap"
+          >
+            {generateLoading ? (
+              <span className="w-4 h-4 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Zap className="w-4 h-4" />
+            )}
+            {generateLoading ? 'Analyzing...' : 'Analyze'}
+          </button>
+          <button
+            onClick={handleDeepResearch}
+            disabled={deepResearchLoading || generateLoading || !hypothesis.trim()}
+            className="flex items-center gap-2 px-5 py-2.5 bg-purple-500/20 text-purple-400 rounded-lg text-sm font-medium hover:bg-purple-500/30 disabled:opacity-50 transition-colors whitespace-nowrap"
+          >
+            {deepResearchLoading ? (
+              <span className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Microscope className="w-4 h-4" />
+            )}
+            {deepResearchLoading ? 'Researching...' : 'Deep Research'}
+          </button>
+        </div>
+        {generateError && (
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            {generateError}
+          </div>
+        )}
+        {generateResult && (
+          <div className="space-y-3">
+            <div className="p-4 rounded-lg bg-lattice-deep border border-lattice-border">
+              <h4 className="text-sm font-semibold text-neon-cyan mb-2">{generateResult.title}</h4>
+              <div className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed max-h-64 overflow-auto">
+                {generateResult.content}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleDownloadResult(generateResult.content, `${generateResult.title.replace(/\s+/g, '-').toLowerCase()}.txt`)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-neon-cyan/10 text-neon-cyan rounded-lg text-xs hover:bg-neon-cyan/20"
+              >
+                <Download className="w-3.5 h-3.5" /> Download
+              </button>
+              <button
+                onClick={handleSaveAsDTU}
+                disabled={savingDTU}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-neon-purple/10 text-neon-purple rounded-lg text-xs hover:bg-neon-purple/20 disabled:opacity-50"
+              >
+                <Save className="w-3.5 h-3.5" /> {savingDTU ? 'Saving...' : 'Save as DTU'}
+              </button>
+              <button
+                onClick={() => setGenerateResult(null)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-gray-400 hover:text-white text-xs"
+              >
+                <X className="w-3.5 h-3.5" /> Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Search bar */}
       <div className="relative">
@@ -202,9 +403,12 @@ export default function ResearchLensPage() {
               </p>
             </div>
           ) : (
-            results.map(dtu => (
-              <button
+            results.map((dtu, idx) => (
+              <motion.button
                 key={dtu.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: idx * 0.04 }}
                 onClick={() => setSelectedDtu(dtu)}
                 className={cn(
                   'w-full text-left p-4 rounded-lg border transition-colors',
@@ -219,7 +423,7 @@ export default function ResearchLensPage() {
                       {dtu.title || dtu.summary?.slice(0, 80) || `DTU ${dtu.id.slice(0, 8)}`}
                     </h3>
                     <p className="text-xs text-gray-400 mt-1 line-clamp-2">{getSnippet(dtu)}</p>
-                    <div className="flex items-center gap-2 mt-2">
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
                       {dtu.domain && (
                         <span className="text-xs px-1.5 py-0.5 rounded bg-neon-cyan/10 text-neon-cyan">{dtu.domain}</span>
                       )}
@@ -230,6 +434,18 @@ export default function ResearchLensPage() {
                           'bg-gray-500/20 text-gray-400'
                         )}>{dtu.tier}</span>
                       )}
+                      {/* Citation count badge */}
+                      {dtu.creti && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-400 flex items-center gap-1">
+                          <Microscope className="w-3 h-3" /> {Object.keys(dtu.creti).length} scores
+                        </span>
+                      )}
+                      {/* Peer review status */}
+                      {dtu.tier === 'hyper' && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-green-500/10 text-green-400 flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3" /> Verified
+                        </span>
+                      )}
                       {(dtu.tags || []).slice(0, 3).map(tag => (
                         <span key={tag} className="text-xs text-gray-500">#{tag}</span>
                       ))}
@@ -237,7 +453,7 @@ export default function ResearchLensPage() {
                   </div>
                   <ArrowRight className="w-4 h-4 text-gray-600 flex-shrink-0 mt-1" />
                 </div>
-              </button>
+              </motion.button>
             ))
           )}
         </div>
@@ -320,14 +536,17 @@ export default function ResearchLensPage() {
 
       {/* Real-time Data Panel */}
       {realtimeData && (
-        <RealtimeDataPanel
-          domain="research"
-          data={realtimeData}
-          isLive={isLive}
-          lastUpdated={lastUpdated}
-          insights={realtimeInsights}
-          compact
-        />
+        <>
+          <UniversalActions domain="research" artifactId={null} compact />
+          <RealtimeDataPanel
+            domain="research"
+            data={realtimeData}
+            isLive={isLive}
+            lastUpdated={lastUpdated}
+            insights={realtimeInsights}
+            compact
+          />
+        </>
       )}
       </div>
 
@@ -335,7 +554,7 @@ export default function ResearchLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

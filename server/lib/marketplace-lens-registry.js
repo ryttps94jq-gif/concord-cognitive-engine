@@ -2682,7 +2682,7 @@ export function getLensById(id) { return _byId.get(id) || null; }
 export function getLensByNumber(num) { return _byNumber.get(num) || null; }
 export function getLensesByCategory(cat) { return _byCategory.get(cat) || []; }
 export function getLensesByClassification(cls) { return _byClassification.get(cls) || []; }
-export function getAllLensIds() { return Array.from(_byId.keys()); }
+function getAllLensIds() { return Array.from(_byId.keys()); }
 export function getMarketplaceLenses() { return MARKETPLACE_LENS_REGISTRY.filter(l => l.marketplaceDTUs.length > 0); }
 
 export function getLensCrossReferences(id) {

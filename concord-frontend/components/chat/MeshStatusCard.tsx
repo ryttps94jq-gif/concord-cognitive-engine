@@ -145,7 +145,11 @@ function MeshStatusView({ metrics }: { metrics: MeshMetrics }) {
   return (
     <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-4 space-y-3">
       <div className="flex items-center gap-2">
-        <Layers size={18} className="text-cyan-400" />
+        {metrics.initialized ? (
+          <Wifi size={18} className="text-cyan-400" />
+        ) : (
+          <WifiOff size={18} className="text-zinc-500" />
+        )}
         <span className="text-sm font-semibold text-zinc-200">Mesh Status</span>
         <span className={`ml-auto text-xs px-2 py-0.5 rounded-full ${
           metrics.initialized ? 'bg-emerald-900 text-emerald-300' : 'bg-red-900 text-red-300'
@@ -196,6 +200,13 @@ function MeshStatusView({ metrics }: { metrics: MeshMetrics }) {
           <span className="text-amber-500">Failovers: {metrics.stats.failovers}</span>
         )}
       </div>
+
+      {metrics.uptime > 0 && (
+        <div className="flex items-center gap-1 text-xs text-zinc-500">
+          <Clock size={12} />
+          <span>Uptime: {formatUptime(metrics.uptime)}</span>
+        </div>
+      )}
     </div>
   );
 }

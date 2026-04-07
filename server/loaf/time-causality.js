@@ -44,7 +44,7 @@ function addTimelineVersion(timelineId, state, description) {
 
   const version = {
     version: timeline.versions.length + 1,
-    state: (() => { try { return JSON.parse(JSON.stringify(state)); } catch { return { ...state }; } })(),  // deep clone with circular-ref fallback
+    state: (() => { try { return JSON.parse(JSON.stringify(state)); } catch (err) { console.debug('[time-causality] deep clone failed', err?.message); return { ...state }; } })(),  // deep clone with circular-ref fallback
     ts: new Date().toISOString(),
     description: String(description || ""),
   };

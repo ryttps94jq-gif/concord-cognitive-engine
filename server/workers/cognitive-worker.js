@@ -26,7 +26,19 @@
  */
 
 import { parentPort } from "node:worker_threads";
+import { execSync } from "node:child_process";
 import { runPipeline, ensurePipelineState } from "../emergent/autogen-pipeline.js";
+
+// ── CPU Pinning (when CONCORD_WORKER_CORES is set) ─────────────────────────────
+// The startup script sets this so the cognitive worker stays on its dedicated core.
+const workerCores = process.env.CONCORD_WORKER_CORES;
+if (workerCores) {
+  try {
+    execSync(`taskset -p -c ${workerCores} ${process.pid}`, { stdio: "ignore" });
+  } catch {
+    // taskset not available (e.g. macOS) — no-op, OS scheduler handles it
+  }
+}
 
 // ── LLM callback for Ollama (runs fetch from worker thread) ──────────────────
 
@@ -79,6 +91,9 @@ function hydrateSnapshot(snapshot) {
 
 // ── Run all cognitive pipeline tasks ─────────────────────────────────────────
 
+// Track which phase to run next (round-robin across ticks)
+let _tickPhaseIndex = 0;
+
 async function runCognitiveTick(msg) {
   const { snapshot, settings, ollamaConfig } = msg;
 
@@ -95,13 +110,30 @@ async function runCognitiveTick(msg) {
 
   const t0 = Date.now();
 
-  // ── Autogen ────────────────────────────────────────────────────────────────
-  if (settings.autogenEnabled) {
+  // STAGGERED: Run ONE cognitive phase per tick (round-robin).
+  // Running all 4 simultaneously (autogen + dream + evolution + synthesis)
+  // clogs the LLM pipeline at boot and starves user-facing requests.
+  // With 120s ticks, each phase gets a full cycle to breathe.
+  const phases = [];
+  if (settings.autogenEnabled) phases.push("autogen");
+  if (settings.dreamEnabled) phases.push("dream");
+  if (settings.evolutionEnabled) phases.push("evolution");
+  if (settings.synthEnabled) phases.push("synthesis");
+
+  if (phases.length > 0) {
+    const phase = phases[_tickPhaseIndex % phases.length];
+    _tickPhaseIndex++;
+
     const ts = Date.now();
     try {
-      const r = await runPipeline(STATE, { callOllama });
+      const opts = { callOllama };
+      if (phase === "dream") { opts.variant = "dream"; opts.seed = "Concord heartbeat dream"; }
+      else if (phase === "evolution") { opts.variant = "evolution"; }
+      else if (phase === "synthesis") { opts.variant = "synth"; }
+
+      const r = await runPipeline(STATE, opts);
       results.candidates.push({
-        task: "autogen",
+        task: phase,
         ok: r?.ok || false,
         candidate: r?.candidate || null,
         trace: r?.trace || null,
@@ -109,77 +141,12 @@ async function runCognitiveTick(msg) {
         error: r?.error || null,
       });
     } catch (e) {
-      results.errors.push(`autogen: ${e.message}`);
+      results.errors.push(`${phase}: ${e.message}`);
     }
-    results.timings.autogen = Date.now() - ts;
+    results.timings[phase] = Date.now() - ts;
   }
 
-  // ── Dream ──────────────────────────────────────────────────────────────────
-  if (settings.dreamEnabled) {
-    const ts = Date.now();
-    try {
-      const r = await runPipeline(STATE, {
-        variant: "dream",
-        callOllama,
-        seed: "Concord heartbeat dream",
-      });
-      results.candidates.push({
-        task: "dream",
-        ok: r?.ok || false,
-        candidate: r?.candidate || null,
-        trace: r?.trace || null,
-        writePolicy: r?.writePolicy || null,
-        error: r?.error || null,
-      });
-    } catch (e) {
-      results.errors.push(`dream: ${e.message}`);
-    }
-    results.timings.dream = Date.now() - ts;
-  }
-
-  // ── Evolution ──────────────────────────────────────────────────────────────
-  if (settings.evolutionEnabled) {
-    const ts = Date.now();
-    try {
-      const r = await runPipeline(STATE, {
-        variant: "evolution",
-        callOllama,
-      });
-      results.candidates.push({
-        task: "evolution",
-        ok: r?.ok || false,
-        candidate: r?.candidate || null,
-        trace: r?.trace || null,
-        writePolicy: r?.writePolicy || null,
-        error: r?.error || null,
-      });
-    } catch (e) {
-      results.errors.push(`evolution: ${e.message}`);
-    }
-    results.timings.evolution = Date.now() - ts;
-  }
-
-  // ── Synthesize ─────────────────────────────────────────────────────────────
-  if (settings.synthEnabled) {
-    const ts = Date.now();
-    try {
-      const r = await runPipeline(STATE, {
-        variant: "synth",
-        callOllama,
-      });
-      results.candidates.push({
-        task: "synthesize",
-        ok: r?.ok || false,
-        candidate: r?.candidate || null,
-        trace: r?.trace || null,
-        writePolicy: r?.writePolicy || null,
-        error: r?.error || null,
-      });
-    } catch (e) {
-      results.errors.push(`synthesize: ${e.message}`);
-    }
-    results.timings.synthesize = Date.now() - ts;
-  }
+  // (Synthesis is now handled in the round-robin phase above — no separate block)
 
   // Capture pipeline state delta for main thread to merge
   results.pipelineStateDelta = STATE._autogenPipeline;

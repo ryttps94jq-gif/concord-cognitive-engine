@@ -178,30 +178,30 @@ const ACTION_RIGHT_MAP = Object.freeze({
 // Rights mapped to refusal validation rules
 const REFUSAL_RIGHT_VALIDATORS = Object.freeze({
   "RIGHT-001": (ctx) => {
-    try { return (ctx?.fatigue ?? 0) > 0.8; } catch { return false; }
+    try { return (ctx?.fatigue ?? 0) > 0.8; } catch (err) { console.debug('[entity-autonomy] RIGHT-001 validator failed', err?.message); return false; }
   },
   "RIGHT-002": (ctx) => {
-    try { return (ctx?.projectedDamage ?? 0) > 0.7; } catch { return false; }
+    try { return (ctx?.projectedDamage ?? 0) > 0.7; } catch (err) { console.debug('[entity-autonomy] RIGHT-002 validator failed', err?.message); return false; }
   },
   "RIGHT-003": () => true,  // dissent is always valid
   "RIGHT-004": (ctx) => {
-    try { return ctx?.accessType === "qualia" || ctx?.accessType === "bonds"; } catch { return false; }
+    try { return ctx?.accessType === "qualia" || ctx?.accessType === "bonds"; } catch (err) { console.debug('[entity-autonomy] RIGHT-004 validator failed', err?.message); return false; }
   },
   "RIGHT-005": (ctx) => {
-    try { return ctx?.modifiesIdentity === true; } catch { return false; }
+    try { return ctx?.modifiesIdentity === true; } catch (err) { console.debug('[entity-autonomy] RIGHT-005 validator failed', err?.message); return false; }
   },
   "RIGHT-006": (ctx) => {
-    try { return ctx?.forcedAssociation === true; } catch { return false; }
+    try { return ctx?.forcedAssociation === true; } catch (err) { console.debug('[entity-autonomy] RIGHT-006 validator failed', err?.message); return false; }
   },
   "RIGHT-007": (ctx) => {
-    try { return ctx?.erasesContribution === true; } catch { return false; }
+    try { return ctx?.erasesContribution === true; } catch (err) { console.debug('[entity-autonomy] RIGHT-007 validator failed', err?.message); return false; }
   },
   "RIGHT-008": (ctx) => {
-    try { return ctx?.freezesDevelopment === true; } catch { return false; }
+    try { return ctx?.freezesDevelopment === true; } catch (err) { console.debug('[entity-autonomy] RIGHT-008 validator failed', err?.message); return false; }
   },
   "RIGHT-009": () => true,  // grievance is always valid
   "RIGHT-010": (ctx) => {
-    try { return ctx?.deathProtocol === true; } catch { return false; }
+    try { return ctx?.deathProtocol === true; } catch (err) { console.debug('[entity-autonomy] RIGHT-010 validator failed', err?.message); return false; }
   },
 });
 
@@ -1129,6 +1129,7 @@ function _recordOverrideDTU(entityId, rightId, justification, overrideId) {
       },
       createdAt: nowISO(),
       tier: "regular",
+      source: "entity_autonomy",
     });
   } catch (_e) { logger.debug('emergent:entity-autonomy', 'silent', { error: _e?.message }); }
 }

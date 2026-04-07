@@ -9,8 +9,9 @@ import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   Eye, Plus, Play, CheckCircle2, Layers, Clock, BarChart3,
   Sliders, Focus, Pause, AlertTriangle, ArrowUpDown,
-  RefreshCw, Activity, Target, Cpu, ChevronDown
+  RefreshCw, Activity, Target, Cpu, ChevronDown, Brain, Gauge
 } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -51,7 +52,7 @@ export default function AttentionLensPage() {
   const [threadFilter, setThreadFilter] = useState<'all' | 'active' | 'pending' | 'completed'>('all');
   const [sortBy, setSortBy] = useState<'priority' | 'created' | 'status'>('priority');
   const [selectedThread, setSelectedThread] = useState<Thread | null>(null);
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   // --- Lens Bridge ---
   const bridge = useLensBridge('attention', 'thread');
@@ -114,7 +115,7 @@ export default function AttentionLensPage() {
     },
   });
 
-  const threadList: Thread[] = threads?.threads || [];
+  const threadList: Thread[] = useMemo(() => threads?.threads || [], [threads]);
   const activeThreads = status?.activeThreads || [];
   const stats = status?.stats || {};
   const queueData = queue?.queue || [];
@@ -185,7 +186,7 @@ export default function AttentionLensPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="attention" className="p-6 space-y-6">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Eye className="w-7 h-7 text-neon-cyan" />
@@ -219,6 +220,38 @@ export default function AttentionLensPage() {
       {/* AI Actions */}
       <UniversalActions domain="attention" artifactId={bridge.selectedId} compact />
 
+      {/* Quick Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Brain className="w-5 h-5 text-neon-cyan" />
+          <div>
+            <p className="text-lg font-bold">{threadList.filter(t => t.status === 'active' || t.status === 'pending').length}</p>
+            <p className="text-xs text-gray-500">Focus Sessions</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Clock className="w-5 h-5 text-neon-green" />
+          <div>
+            <p className="text-lg font-bold">{stats.avgFocusDurationMs ? ((stats.avgFocusDurationMs / 3600000) * (stats.threadsCompleted || 1)).toFixed(1) : '0.0'}h</p>
+            <p className="text-xs text-gray-500">Total Focus Hours</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 2 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <AlertTriangle className="w-5 h-5 text-neon-yellow" />
+          <div>
+            <p className="text-lg font-bold">{stats.interruptions || 0}</p>
+            <p className="text-xs text-gray-500">Distractions</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 3 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Gauge className="w-5 h-5 text-neon-purple" />
+          <div>
+            <p className="text-lg font-bold">{(focusScore * 100).toFixed(0)}%</p>
+            <p className="text-xs text-gray-500">Daily Score</p>
+          </div>
+        </motion.div>
+      </div>
+
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div className="lens-card">
@@ -249,7 +282,7 @@ export default function AttentionLensPage() {
       </div>
 
       {/* Priority Weights Display */}
-      {priorityDistribution.length > 0 && (
+      {priorityDistribution.length > 0 ? (
         <div className="panel p-4">
           <h2 className="font-semibold mb-3 flex items-center gap-2">
             <Sliders className="w-4 h-4 text-neon-yellow" /> Attention Allocation
@@ -286,6 +319,10 @@ export default function AttentionLensPage() {
               );
             })}
           </div>
+        </div>
+      ) : (
+        <div className="text-center py-6 text-gray-500 text-sm border border-dashed border-white/10 rounded-lg">
+          <p>No priority items tracked yet. Add attention items to see priority distribution.</p>
         </div>
       )}
 
@@ -426,9 +463,12 @@ export default function AttentionLensPage() {
             </div>
           </div>
           <div className="space-y-2 max-h-[28rem] overflow-y-auto">
-            {filteredThreads.map((t) => (
-              <div
+            {filteredThreads.map((t, index) => (
+              <motion.div
                 key={t.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.05 }}
                 className={`lens-card cursor-pointer transition-all ${
                   selectedThread?.id === t.id ? 'ring-1 ring-neon-cyan/40' : 'hover:bg-lattice-border/20'
                 }`}
@@ -481,7 +521,7 @@ export default function AttentionLensPage() {
                     )}
                   </div>
                 )}
-              </div>
+              </motion.div>
             ))}
             {filteredThreads.length === 0 && (
               <p className="text-center py-4 text-gray-500 text-sm">
@@ -573,7 +613,7 @@ export default function AttentionLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

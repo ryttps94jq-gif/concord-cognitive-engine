@@ -1699,3 +1699,73 @@ export function queueScan(content, opts = {}) {
   _shieldState.scanQueue.push({ content, opts });
   return { queued: true, position: _shieldState.scanQueue.length };
 }
+
+// ── Security Intelligence Bridge ─────────────────────────────────────────
+
+/**
+ * Convert a security matcher result into a threat DTU and propagate it.
+ * Called when the security matcher detects a HIGH+ severity match.
+ *
+ * @param {Object} matchResult - Result from security-matcher.scan()
+ * @param {Object} STATE - Server state
+ * @returns {{ ok: boolean, threatDtu?: Object, firewallDtu?: Object }}
+ */
+export function bridgeMatcherToShield(matchResult, STATE) {
+  if (!matchResult || !matchResult.matched) return { ok: false };
+
+  try {
+    // Map matcher severity to shield severity (1-10 scale)
+    const severityMap = { critical: 9, high: 7, medium: 5, low: 3, info: 1 };
+    const severity = severityMap[matchResult.severity] || 5;
+
+    // Create threat DTU
+    const threatDtu = createThreatDTU({
+      subtype: matchResult.signatureType || "exploit",
+      severity,
+      hash: { sha256: matchResult.signatureId || "", md5: "", ssdeep: "" },
+      signatures: { clamav: "", yara: [], snort: "", suricata: "" },
+      vector: matchResult.reason || "security_matcher",
+      behavior: [`Detected via layer ${matchResult.layer}`],
+      source: "security_intelligence",
+      tags: ["pain_memory", "collective_immunity", "security_matcher"],
+      confidence: matchResult.overlapScore || matchResult.similarity || 0.8,
+    });
+
+    // Propagate to lattice
+    if (STATE) {
+      propagateThreatToLattice(threatDtu, STATE);
+    }
+
+    // For blocking-level threats, also create a firewall rule DTU
+    let firewallDtu = null;
+    if (matchResult.action === "blocked" && severity >= 7) {
+      firewallDtu = createFirewallRuleDTU({
+        rule: `Block ${matchResult.signatureType || "threat"}: ${matchResult.signatureId || "unknown"}`,
+        vector: matchResult.reason || "security_matcher",
+        threatSubtype: matchResult.signatureType || "exploit",
+        threatDtuId: threatDtu.id,
+        severity,
+        generatedBy: "guardian",
+      });
+
+      if (STATE?.dtus) {
+        STATE.dtus.set(firewallDtu.id, firewallDtu);
+      }
+      _shieldState.firewallRules.push(firewallDtu);
+    }
+
+    return { ok: true, threatDtu, firewallDtu };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/**
+ * Get the internal shield state reference for use by the security matcher.
+ * This allows Layer 1 (hash lookup) to check against the in-memory indexes.
+ *
+ * @returns {Object} Reference to _shieldState
+ */
+export function getShieldState() {
+  return _shieldState;
+}

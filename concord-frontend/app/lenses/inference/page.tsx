@@ -6,6 +6,7 @@ import { apiHelpers } from '@/lib/api/client';
 import { useState, useMemo, useEffect } from 'react';
 import { useLensBridge } from '@/lib/hooks/use-lens-bridge';
 import { UniversalActions } from '@/components/lens/UniversalActions';
+import { motion } from 'framer-motion';
 import {
   GitMerge, Plus, ArrowRight, Database, Search, Zap,
   Clock, Gauge, Activity, ListOrdered, ChevronDown, ChevronUp,
@@ -51,7 +52,7 @@ export default function InferenceLensPage() {
   const [inferenceHistory, setInferenceHistory] = useState<InferenceHistoryEntry[]>([]);
   const [showHistory, setShowHistory] = useState(true);
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   // --- Lens Bridge ---
   const bridge = useLensBridge('inference', 'snapshot');
@@ -130,7 +131,7 @@ export default function InferenceLensPage() {
     onError: (err) => console.error('runForwardChain failed:', err instanceof Error ? err.message : err),
   });
 
-  const statusInfo = status?.status || status || {};
+  const statusInfo = useMemo(() => status?.status || status || {}, [status]);
 
   // Bridge inference status into lens artifacts
   useEffect(() => {
@@ -172,7 +173,7 @@ export default function InferenceLensPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="inference" className="p-6 space-y-6">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <GitMerge className="w-7 h-7 text-neon-blue" />
@@ -206,34 +207,39 @@ export default function InferenceLensPage() {
         </div>
       </header>
 
-      {/* Stats Row */}
+      {/* Stats Row — model cards with inference latency */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <div className="lens-card">
-          <Database className="w-5 h-5 text-neon-blue mb-2" />
-          <p className="text-2xl font-bold">{statusInfo.factCount || 0}</p>
-          <p className="text-sm text-gray-400">Facts</p>
-        </div>
-        <div className="lens-card">
-          <GitMerge className="w-5 h-5 text-neon-purple mb-2" />
-          <p className="text-2xl font-bold">{statusInfo.ruleCount || 0}</p>
-          <p className="text-sm text-gray-400">Rules</p>
-        </div>
-        <div className="lens-card">
-          <Zap className="w-5 h-5 text-neon-green mb-2" />
-          <p className="text-2xl font-bold">{statusInfo.inferences || 0}</p>
-          <p className="text-sm text-gray-400">Inferences</p>
-        </div>
-        <div className="lens-card">
-          <Search className="w-5 h-5 text-neon-cyan mb-2" />
-          <p className="text-2xl font-bold">{statusInfo.queries || 0}</p>
-          <p className="text-sm text-gray-400">Queries</p>
-        </div>
-        <div className="lens-card">
-          <Timer className="w-5 h-5 text-neon-yellow mb-2" />
-          <p className="text-2xl font-bold">{avgLatency > 0 ? `${avgLatency.toFixed(0)}ms` : '--'}</p>
-          <p className="text-sm text-gray-400">Avg Latency</p>
-        </div>
+        {[
+          { icon: Database, color: 'text-neon-blue', value: statusInfo.factCount || 0, label: 'Facts' },
+          { icon: GitMerge, color: 'text-neon-purple', value: statusInfo.ruleCount || 0, label: 'Rules' },
+          { icon: Zap, color: 'text-neon-green', value: statusInfo.inferences || 0, label: 'Inferences' },
+          { icon: Search, color: 'text-neon-cyan', value: statusInfo.queries || 0, label: 'Queries' },
+          { icon: Timer, color: 'text-neon-yellow', value: avgLatency > 0 ? `${avgLatency.toFixed(0)}ms` : '--', label: 'Avg Latency' },
+        ].map((stat, i) => (
+          <motion.div key={stat.label} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.07 }} className="lens-card">
+            <stat.icon className={`w-5 h-5 ${stat.color} mb-2`} />
+            <p className="text-2xl font-bold">{stat.value}</p>
+            <p className="text-sm text-gray-400">{stat.label}</p>
+          </motion.div>
+        ))}
       </div>
+
+      {/* Confidence Distribution Bar */}
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="flex items-center gap-3 px-1">
+        <span className="text-[10px] text-gray-500 shrink-0">Confidence</span>
+        <div className="flex-1 h-2 rounded-full overflow-hidden flex bg-lattice-deep">
+          {inferenceHistory.length > 0 ? (
+            <>
+              <div className="bg-neon-green h-full" style={{ width: `${(inferenceHistory.filter(h => (h.confidence ?? 0) > 0.7).length / inferenceHistory.length) * 100}%` }} title="High" />
+              <div className="bg-neon-yellow h-full" style={{ width: `${(inferenceHistory.filter(h => (h.confidence ?? 0) > 0.4 && (h.confidence ?? 0) <= 0.7).length / inferenceHistory.length) * 100}%` }} title="Medium" />
+              <div className="bg-red-400 h-full" style={{ width: `${(inferenceHistory.filter(h => (h.confidence ?? 0) <= 0.4).length / inferenceHistory.length) * 100}%` }} title="Low" />
+            </>
+          ) : (
+            <div className="bg-white/5 h-full w-full" />
+          )}
+        </div>
+        <span className="text-[10px] text-gray-500">{inferenceHistory.length} runs</span>
+      </motion.div>
 
       {/* Model Selector */}
       <div className="panel p-4">
@@ -527,7 +533,7 @@ export default function InferenceLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

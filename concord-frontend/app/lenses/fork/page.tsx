@@ -2,7 +2,8 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { useState, useCallback } from 'react';
-import { GitFork, GitBranch, GitMerge, Layers, Loader2, ChevronDown, ArrowLeftRight, Eye, GitPullRequest, Network, Scale, Diff } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { GitFork, GitBranch, GitMerge, Layers, Loader2, ChevronDown, ArrowLeftRight, Eye, GitPullRequest, Network, Scale, Diff, RefreshCw } from 'lucide-react';
 import { ConnectiveTissueBar } from '@/components/lens/ConnectiveTissueBar';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -12,6 +13,7 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { showToast } from '@/components/common/Toasts';
 
 interface ForkData {
   parentId: string | null;
@@ -34,7 +36,7 @@ export default function ForkLensPage() {
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('fork');
   const [selectedFork, setSelectedFork] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'tree' | 'list'>('tree');
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   const { items: forkItems, isLoading, isError: isError, error: error, refetch: refetch, create, update } = useLensData<ForkData>('fork', 'fork', {
     seed: SEED_FORKS,
@@ -139,7 +141,7 @@ export default function ForkLensPage() {
     );
   }
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="fork" className="p-6 space-y-6">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-2xl">🌿</span>
@@ -180,29 +182,71 @@ export default function ForkLensPage() {
 
       {/* AI Actions */}
       <UniversalActions domain="fork" artifactId={forkItems[0]?.id} compact />
-      {/* Stats */}
+      {/* Stat Cards Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="lens-card">
-          <GitFork className="w-5 h-5 text-neon-purple mb-2" />
-          <p className="text-2xl font-bold">{forks.length}</p>
-          <p className="text-sm text-gray-400">Total Forks</p>
-        </div>
-        <div className="lens-card">
-          <GitBranch className="w-5 h-5 text-neon-green mb-2" />
-          <p className="text-2xl font-bold">{forks.filter((f) => f.status === 'active').length}</p>
-          <p className="text-sm text-gray-400">Active</p>
-        </div>
-        <div className="lens-card">
-          <GitMerge className="w-5 h-5 text-neon-blue mb-2" />
-          <p className="text-2xl font-bold">{forks.filter((f) => f.status === 'merged').length}</p>
-          <p className="text-sm text-gray-400">Merged</p>
-        </div>
-        <div className="lens-card">
-          <Layers className="w-5 h-5 text-neon-cyan mb-2" />
-          <p className="text-2xl font-bold">{forks.length > 0 ? Math.max(...forks.map((f) => f.depth)) + 1 : 0}</p>
-          <p className="text-sm text-gray-400">Max Depth</p>
-        </div>
+        {[
+          { icon: GitFork, color: 'text-neon-purple', value: forks.length, label: 'Total Forks' },
+          { icon: GitBranch, color: 'text-neon-green', value: forks.filter((f) => f.status === 'active').length, label: 'Active' },
+          { icon: GitMerge, color: 'text-neon-blue', value: forks.filter((f) => f.status === 'merged').length, label: 'Merged' },
+          { icon: Layers, color: 'text-neon-cyan', value: forks.length > 0 ? Math.max(...forks.map((f) => f.depth)) + 1 : 0, label: 'Max Depth' },
+        ].map((stat, i) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.08 }}
+            className="lens-card"
+          >
+            <stat.icon className={`w-5 h-5 ${stat.color} mb-2`} />
+            <p className="text-2xl font-bold">{stat.value}</p>
+            <p className="text-sm text-gray-400">{stat.label}</p>
+          </motion.div>
+        ))}
       </div>
+
+      {/* Fork Divergence & Sync Status */}
+      {forks.length > 0 ? (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.35 }}
+          className="panel p-4"
+        >
+          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+            <ArrowLeftRight className="w-4 h-4 text-neon-cyan" />
+            Divergence & Sync Status
+          </h3>
+          <div className="space-y-2">
+            {forks.filter(f => f.parentId !== null).slice(0, 5).map((fork) => {
+              const divergence = Math.min(100, fork.depth * 25 + fork.children * 10);
+              const synced = fork.status === 'merged';
+              return (
+                <div key={fork.id} className="flex items-center gap-3">
+                  <GitBranch className="w-3 h-3 text-gray-500 flex-shrink-0" />
+                  <span className="text-xs text-gray-400 w-36 truncate font-mono">{fork.workspace}</span>
+                  <div className="flex-1 h-2 bg-lattice-deep rounded-full overflow-hidden">
+                    <motion.div
+                      className={`h-full rounded-full ${divergence > 70 ? 'bg-red-400' : divergence > 40 ? 'bg-amber-400' : 'bg-neon-green'}`}
+                      initial={{ width: 0 }}
+                      animate={{ width: `${divergence}%` }}
+                      transition={{ duration: 0.6, delay: 0.4 }}
+                    />
+                  </div>
+                  <span className="text-xs font-mono w-10 text-right text-gray-300">{divergence}%</span>
+                  <span className={`text-xs px-1.5 py-0.5 rounded-full flex items-center gap-1 ${synced ? 'bg-neon-green/20 text-neon-green' : 'bg-amber-400/20 text-amber-400'}`}>
+                    <RefreshCw className="w-2.5 h-2.5" />
+                    {synced ? 'Synced' : 'Diverged'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </motion.div>
+      ) : (
+        <div className="text-center py-6 text-gray-500 text-sm border border-dashed border-white/10 rounded-lg">
+          <p>No forks created yet. Fork a DTU to see version branches here.</p>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Fork Tree */}
@@ -349,21 +393,21 @@ export default function ForkLensPage() {
               Merge Tools
             </h3>
             <div className="space-y-2">
-              <button className="w-full flex items-center gap-2 p-2.5 rounded bg-black/30 border border-white/10 hover:border-neon-green/40 transition-colors text-left">
+              <button onClick={() => showToast('info', 'Coming soon')} className="w-full flex items-center gap-2 p-2.5 rounded bg-black/30 border border-white/10 hover:border-neon-green/40 transition-colors text-left">
                 <GitMerge className="w-4 h-4 text-neon-green" />
                 <div>
                   <p className="text-sm text-white">Fast-Forward Merge</p>
                   <p className="text-xs text-gray-500">No conflicts, linear history</p>
                 </div>
               </button>
-              <button className="w-full flex items-center gap-2 p-2.5 rounded bg-black/30 border border-white/10 hover:border-neon-purple/40 transition-colors text-left">
+              <button onClick={() => showToast('info', 'Coming soon')} className="w-full flex items-center gap-2 p-2.5 rounded bg-black/30 border border-white/10 hover:border-neon-purple/40 transition-colors text-left">
                 <Scale className="w-4 h-4 text-neon-purple" />
                 <div>
                   <p className="text-sm text-white">Three-Way Merge</p>
                   <p className="text-xs text-gray-500">Resolve conflicts interactively</p>
                 </div>
               </button>
-              <button className="w-full flex items-center gap-2 p-2.5 rounded bg-black/30 border border-white/10 hover:border-neon-cyan/40 transition-colors text-left">
+              <button onClick={() => showToast('info', 'Coming soon')} className="w-full flex items-center gap-2 p-2.5 rounded bg-black/30 border border-white/10 hover:border-neon-cyan/40 transition-colors text-left">
                 <ArrowLeftRight className="w-4 h-4 text-neon-cyan" />
                 <div>
                   <p className="text-sm text-white">Cherry-Pick</p>
@@ -420,7 +464,7 @@ export default function ForkLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

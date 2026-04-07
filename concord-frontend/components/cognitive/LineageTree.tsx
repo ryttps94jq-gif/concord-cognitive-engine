@@ -47,10 +47,11 @@ export function LineageTree({
   selectedId,
   onNodeClick,
   className,
-  showTimeline: _showTimeline = false
+  showTimeline = false
 }: LineageTreeProps) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set([root.id]));
   const [zoom, setZoom] = useState(1);
+  const [timelineView, setTimelineView] = useState(showTimeline);
 
   const toggleExpanded = (id: string) => {
     setExpandedIds(prev => {
@@ -84,6 +85,15 @@ export function LineageTree({
           <span className="font-medium text-white">Lineage Tree</span>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setTimelineView(!timelineView)}
+            className={cn(
+              'px-2 py-1 text-xs transition-colors',
+              timelineView ? 'text-neon-cyan' : 'text-gray-400 hover:text-white'
+            )}
+          >
+            {timelineView ? 'Tree view' : 'Timeline'}
+          </button>
           <button
             onClick={expandAll}
             className="px-2 py-1 text-xs text-gray-400 hover:text-white transition-colors"
@@ -121,18 +131,26 @@ export function LineageTree({
         className="flex-1 overflow-auto p-4"
         style={{ transform: `scale(${zoom})`, transformOrigin: 'top left' }}
       >
-        <TreeNode
-          node={root}
-          depth={0}
-          isExpanded={expandedIds.has(root.id)}
-          onToggle={() => toggleExpanded(root.id)}
-          onClick={() => onNodeClick?.(root)}
-          isSelected={selectedId === root.id}
-          expandedIds={expandedIds}
-          onNodeToggle={toggleExpanded}
-          onNodeClick={onNodeClick}
-          selectedId={selectedId}
-        />
+        {timelineView ? (
+          <LineageTimeline
+            nodes={[root]}
+            selectedId={selectedId}
+            onNodeClick={onNodeClick}
+          />
+        ) : (
+          <TreeNode
+            node={root}
+            depth={0}
+            isExpanded={expandedIds.has(root.id)}
+            onToggle={() => toggleExpanded(root.id)}
+            onClick={() => onNodeClick?.(root)}
+            isSelected={selectedId === root.id}
+            expandedIds={expandedIds}
+            onNodeToggle={toggleExpanded}
+            onNodeClick={onNodeClick}
+            selectedId={selectedId}
+          />
+        )}
       </div>
 
       {/* Legend */}

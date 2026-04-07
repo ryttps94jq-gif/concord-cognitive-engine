@@ -5,7 +5,7 @@
  * using nomic-embed-text (137MB, CPU, millisecond inference).
  *
  * Core API:
- *   embed(text)                         → Float64Array
+ *   embed(text)                         → Float32Array (was Float64, halved for memory)
  *   cosineSimilarity(vecA, vecB)        → number
  *   findSimilar(queryVec, candidates, topK) → DTU[]
  *   findCrossDomainConnections(dtuId, limit) → DTU[]
@@ -26,12 +26,12 @@ const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || "nomic-embed-text";
 const EMBEDDING_FALLBACK_MODEL = "all-minilm";
 const EMBEDDING_DIMENSION = 768; // nomic-embed-text default
 const MAX_IN_MEMORY = 150_000;   // GPU can handle larger in-memory sets
-const BACKFILL_BATCH_SIZE = 200; // 4x faster backfill on GPU
+const BACKFILL_BATCH_SIZE = 50;   // Smaller batches to limit RSS growth
 const EMBED_TIMEOUT_MS = 5_000;  // GPU embeds are much faster
 
 // ── State ──────────────────────────────────────────────────────────────────
 
-/** @type {Map<string, Float64Array>} In-memory embedding cache (dtuId → vector) */
+/** @type {Map<string, Float32Array>} In-memory embedding cache (dtuId → vector) */
 const embeddingCache = new Map();
 
 /** @type {{ available: boolean, model: string|null, dimension: number, ollamaUrl: string|null }} */
@@ -67,6 +67,22 @@ let _log = null;
  */
 export async function initEmbeddings({ db = null, ollamaUrls = [], structuredLog = console.warn } = {}) {
   _db = db;
+
+  // Ensure dedicated embeddings table exists (separate from dtu_store)
+  if (_db) {
+    try {
+      _db.exec(`
+        CREATE TABLE IF NOT EXISTS embedding_cache (
+          dtu_id TEXT PRIMARY KEY,
+          embedding BLOB NOT NULL,
+          hash TEXT,
+          created_at TEXT NOT NULL
+        )
+      `);
+    } catch (e) {
+      structuredLog("warn", "embedding_table_create_failed", { error: String(e?.message || e) });
+    }
+  }
   _log = structuredLog;
 
   // Ensure SQLite column exists
@@ -129,7 +145,7 @@ export async function initEmbeddings({ db = null, ollamaUrls = [], structuredLog
  * Returns null if the embedding model is unavailable.
  *
  * @param {string} text
- * @returns {Promise<Float64Array|null>}
+ * @returns {Promise<Float32Array|null>}
  */
 export async function embed(text) {
   if (!embeddingState.available || !embeddingState.ollamaUrl) return null;
@@ -176,7 +192,7 @@ export async function embed(text) {
       embeddingState.stats.totalEmbedded
     );
 
-    return new Float64Array(vec);
+    return new Float32Array(vec);
   } catch (e) {
     embeddingState.stats.totalErrors++;
     if (_log) _log("warn", "embed_error", { error: String(e?.message || e) });
@@ -188,8 +204,8 @@ export async function embed(text) {
  * Cosine similarity between two embedding vectors.
  * Returns 0 if inputs are invalid.
  *
- * @param {Float64Array|number[]} vecA
- * @param {Float64Array|number[]} vecB
+ * @param {Float32Array|number[]} vecA
+ * @param {Float32Array|number[]} vecB
  * @returns {number} Similarity in [-1, 1]
  */
 export function cosineSimilarity(vecA, vecB) {
@@ -210,8 +226,8 @@ export function cosineSimilarity(vecA, vecB) {
  * Find the top-K most similar DTUs to a query embedding.
  * Applies tier weighting: HYPER 3x, MEGA 2x, regular 1x.
  *
- * @param {Float64Array} queryVec
- * @param {{ id: string, tier?: string, embedding?: Float64Array }[]} candidates
+ * @param {Float32Array} queryVec
+ * @param {{ id: string, tier?: string, embedding?: Float32Array }[]} candidates
  * @param {number} topK
  * @returns {{ id: string, score: number, tier?: string }[]}
  */
@@ -310,7 +326,7 @@ export async function findCrossDomainConnections(dtuId, allDTUs, limit = 5) {
  * Called after DTU creation (fire-and-forget).
  *
  * @param {string} dtuId
- * @param {Float64Array} vec
+ * @param {Float32Array} vec
  */
 export function storeEmbedding(dtuId, vec) {
   if (!dtuId || !vec) return;
@@ -320,13 +336,13 @@ export function storeEmbedding(dtuId, vec) {
     embeddingCache.set(dtuId, vec);
   }
 
-  // SQLite persistence
+  // SQLite persistence (dedicated embedding_cache table)
   if (_db) {
     try {
       const buf = Buffer.from(vec.buffer, vec.byteOffset, vec.byteLength);
-      _db.prepare("UPDATE dtus SET embedding = ? WHERE id = ?").run(buf, dtuId);
+      _db.prepare("INSERT OR REPLACE INTO embedding_cache (dtu_id, embedding, created_at) VALUES (?, ?, ?)").run(dtuId, buf, new Date().toISOString());
     } catch {
-      // DTU may not be in SQLite yet (JSON backend) — silent
+      // Table may not exist yet — silent
     }
   }
 }
@@ -335,7 +351,7 @@ export function storeEmbedding(dtuId, vec) {
  * Get a cached embedding for a DTU.
  *
  * @param {string} dtuId
- * @returns {Float64Array|null}
+ * @returns {Float32Array|null}
  */
 export function getEmbedding(dtuId) {
   return embeddingCache.get(dtuId) || null;
@@ -350,7 +366,7 @@ export function removeEmbedding(dtuId) {
   embeddingCache.delete(dtuId);
   if (_db) {
     try {
-      _db.prepare("UPDATE dtus SET embedding = NULL WHERE id = ?").run(dtuId);
+      _db.prepare("DELETE FROM embedding_cache WHERE dtu_id = ?").run(dtuId);
     } catch (_e) { logger.debug('embeddings', 'silent', { error: _e?.message }); }
   }
 }
@@ -420,32 +436,40 @@ export async function backfillEmbeddings(dtusMap, { onProgress = null } = {}) {
 
   let embedded = 0, errors = 0;
 
-  for (let i = 0; i < unembedded.length; i += BACKFILL_BATCH_SIZE) {
-    const batch = unembedded.slice(i, i + BACKFILL_BATCH_SIZE);
+  // Process in small groups of 10, yielding after each group so HTTP
+  // requests can be served during backfill.  Each embedDTU() is an
+  // Ollama HTTP call (~100-500ms), so 10 at a time keeps latency under
+  // 5 seconds per group while still making progress.
+  const YIELD_EVERY = 10;
 
-    for (const dtu of batch) {
-      try {
-        await embedDTU(dtu);
-        if (embeddingCache.has(dtu.id)) {
-          embedded++;
-        }
-      } catch {
-        errors++;
+  for (let i = 0; i < unembedded.length; i++) {
+    try {
+      await embedDTU(unembedded[i]);
+      if (embeddingCache.has(unembedded[i].id)) {
+        embedded++;
       }
+    } catch {
+      errors++;
     }
 
-    embeddingState.stats.backfillProgress = Math.min(i + batch.length, unembedded.length);
-    if (onProgress) {
-      onProgress({
-        progress: embeddingState.stats.backfillProgress,
-        total: unembedded.length,
-        embedded,
-        errors,
-      });
+    // Yield to event loop every YIELD_EVERY DTUs — lets HTTP respond
+    if ((i + 1) % YIELD_EVERY === 0) {
+      embeddingState.stats.backfillProgress = i + 1;
+      if (onProgress) {
+        onProgress({
+          progress: i + 1,
+          total: unembedded.length,
+          embedded,
+          errors,
+        });
+      }
+      await new Promise(r => setTimeout(r, 10));
     }
 
-    // Yield to event loop between batches
-    await new Promise(r => { setTimeout(r, 10); });
+    // GC every BACKFILL_BATCH_SIZE DTUs to keep RSS stable
+    if ((i + 1) % BACKFILL_BATCH_SIZE === 0 && global.gc) {
+      global.gc();
+    }
   }
 
   embeddingState.stats.backfillComplete = true;
@@ -540,23 +564,19 @@ function _loadEmbeddingsFromDb() {
   if (!_db) return;
 
   try {
-    // Check if dtus table and embedding column exist
-    const tableInfo = _db.prepare("PRAGMA table_info(dtus)").all();
-    const hasEmbeddingCol = tableInfo.some(col => col.name === "embedding");
-    if (!hasEmbeddingCol) return;
-
-    const rows = _db.prepare("SELECT id, embedding FROM dtus WHERE embedding IS NOT NULL").all();
+    // Load from dedicated embedding_cache table
+    const rows = _db.prepare("SELECT dtu_id, embedding FROM embedding_cache").all();
     let loaded = 0;
 
     for (const row of rows) {
       if (row.embedding && loaded < MAX_IN_MEMORY) {
         try {
-          const vec = new Float64Array(
+          const vec = new Float32Array(
             row.embedding.buffer,
             row.embedding.byteOffset,
-            row.embedding.byteLength / Float64Array.BYTES_PER_ELEMENT
+            row.embedding.byteLength / Float32Array.BYTES_PER_ELEMENT
           );
-          embeddingCache.set(row.id, vec);
+          embeddingCache.set(row.dtu_id, vec);
           loaded++;
         } catch {
           // Corrupted embedding — skip
@@ -567,10 +587,70 @@ function _loadEmbeddingsFromDb() {
     if (_log && loaded > 0) {
       _log("info", "embeddings_loaded_from_db", { count: loaded });
     }
+
+    // Migration: also check legacy dtus table if embedding_cache is empty
+    if (loaded === 0) {
+      try {
+        const tableInfo = _db.prepare("PRAGMA table_info(dtus)").all();
+        const hasEmbeddingCol = tableInfo.some(col => col.name === "embedding");
+        if (hasEmbeddingCol) {
+          const legacyRows = _db.prepare("SELECT id, embedding FROM dtus WHERE embedding IS NOT NULL").all();
+          let migrated = 0;
+          for (const row of legacyRows) {
+            if (row.embedding && migrated < MAX_IN_MEMORY) {
+              try {
+                const vec = new Float32Array(
+                  row.embedding.buffer,
+                  row.embedding.byteOffset,
+                  row.embedding.byteLength / Float32Array.BYTES_PER_ELEMENT
+                );
+                embeddingCache.set(row.id, vec);
+                // Migrate to new table
+                const buf = Buffer.from(vec.buffer, vec.byteOffset, vec.byteLength);
+                _db.prepare("INSERT OR IGNORE INTO embedding_cache (dtu_id, embedding, created_at) VALUES (?, ?, ?)").run(row.id, buf, new Date().toISOString());
+                migrated++;
+              } catch {
+                // Corrupted — skip
+              }
+            }
+          }
+          if (_log && migrated > 0) {
+            _log("info", "embeddings_migrated_from_legacy", { count: migrated });
+          }
+        }
+      } catch {
+        // Legacy table doesn't exist — fine
+      }
+    }
   } catch (e) {
-    // dtus table may not exist in SQLite (JSON backend)
     if (_log) _log("warn", "embeddings_db_load_skip", { error: String(e?.message || e) });
   }
+}
+
+/**
+ * Trim embedding cache to a target size.
+ * Evicts oldest entries (FIFO via Map insertion order).
+ * @param {number} targetSize - Max entries to keep (default: half of MAX_IN_MEMORY)
+ * @returns {{ before: number, after: number }} Cache sizes before/after trim
+ */
+export function trimEmbeddingCache(targetSize = Math.floor(MAX_IN_MEMORY / 2)) {
+  const before = embeddingCache.size;
+  if (before <= targetSize) return { before, after: before };
+  const toRemove = before - targetSize;
+  let removed = 0;
+  for (const key of embeddingCache.keys()) {
+    if (removed >= toRemove) break;
+    embeddingCache.delete(key);
+    removed++;
+  }
+  return { before, after: embeddingCache.size };
+}
+
+/**
+ * Get current embedding cache size.
+ */
+export function getEmbeddingCacheSize() {
+  return embeddingCache.size;
 }
 
 // ── Exports ────────────────────────────────────────────────────────────────
@@ -590,4 +670,6 @@ export default {
   getEmbeddingStatus,
   isEmbeddingAvailable,
   getEmbeddingModel,
+  trimEmbeddingCache,
+  getEmbeddingCacheSize,
 };

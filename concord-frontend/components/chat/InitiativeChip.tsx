@@ -16,7 +16,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { formatRelativeTime } from '@/lib/utils';
-import { ds } from '@/lib/design-system';
+import { showToast } from '@/components/common/Toasts';
 import {
   X,
   Sparkles,
@@ -26,7 +26,6 @@ import {
   Globe,
   Brain,
   Sun,
-  ChevronRight,
   AlertCircle,
   Eye,
   MessageCircle,
@@ -258,7 +257,7 @@ export function InitiativeChip({
     if (!hasBeenSeen && isVisible) {
       const timer = setTimeout(() => {
         setHasBeenSeen(true);
-        fetch(`/api/initiative/pending`, { method: 'GET' }).catch(() => {});
+        fetch(`/api/initiative/pending`, { method: 'GET' }).catch(err => { console.error('[Initiative] Failed to fetch pending:', err); showToast('error', 'Action failed'); });
       }, 2000);
       return () => clearTimeout(timer);
     }
@@ -267,7 +266,7 @@ export function InitiativeChip({
   const handleDismiss = useCallback(() => {
     setIsExiting(true);
     // Report dismissal to backend
-    fetch(`/api/initiative/dismiss/${initiative.id}`, { method: 'POST' }).catch(() => {});
+    fetch(`/api/initiative/dismiss/${initiative.id}`, { method: 'POST' }).catch(err => { console.error('[Initiative] Failed to dismiss:', err); showToast('error', 'Action failed'); });
     setTimeout(() => {
       onDismiss(initiative.id);
     }, 300);
@@ -276,7 +275,7 @@ export function InitiativeChip({
   const handleAction = useCallback((action: string) => {
     onAction(initiative.id, action, initiative.metadata as Record<string, unknown>);
     // Report response to backend
-    fetch(`/api/initiative/respond/${initiative.id}`, { method: 'PUT' }).catch(() => {});
+    fetch(`/api/initiative/${initiative.id}/respond`, { method: 'POST' }).catch(err => { console.error('[Initiative] Failed to respond:', err); showToast('error', 'Action failed'); });
     onRespond(initiative.id);
   }, [initiative.id, initiative.metadata, onAction, onRespond]);
 
@@ -470,6 +469,11 @@ function renderMetadata(
               {daysAgo}d idle
             </span>
           )}
+          {dtuTitle && (
+            <span className="text-zinc-400 truncate max-w-[150px]">
+              {dtuTitle}
+            </span>
+          )}
           {pendingCount !== undefined && pendingCount > 1 && (
             <span className="text-zinc-500">
               {pendingCount} pending item{pendingCount !== 1 ? 's' : ''}
@@ -572,7 +576,8 @@ export function InitiativeList({
   compact = false,
   className,
 }: InitiativeListProps) {
-  const visible = initiatives.slice(0, maxVisible);
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? initiatives : initiatives.slice(0, maxVisible);
   const overflow = initiatives.length - maxVisible;
 
   if (visible.length === 0) return null;
@@ -593,9 +598,9 @@ export function InitiativeList({
         <div className="text-center">
           <button
             className="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors"
-            onClick={() => {}}
+            onClick={() => setShowAll((prev) => !prev)}
           >
-            +{overflow} more initiative{overflow !== 1 ? 's' : ''}
+            {showAll ? 'Show fewer' : `+${overflow} more initiative${overflow !== 1 ? 's' : ''}`}
           </button>
         </div>
       )}

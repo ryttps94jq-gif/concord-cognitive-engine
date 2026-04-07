@@ -10,12 +10,46 @@
  * - Background sync: Replays queued mutations when connectivity is restored
  */
 
-const CACHE_NAME = 'concord-v1';
+const CACHE_NAME = 'concord-v2';
 const SHELL_ASSETS = [
   '/',
   '/login',
   '/hub',
 ];
+
+// ---------------------------------------------------------------------------
+// Quota-Aware Cache — limit Cache API storage to prevent disk pressure
+// ---------------------------------------------------------------------------
+const MAX_CACHE_ENTRIES = 200; // Max cached API responses
+const MAX_CACHE_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+async function trimCache() {
+  const cache = await caches.open(CACHE_NAME);
+  const keys = await cache.keys();
+  // Remove entries beyond limit (oldest first — Cache API maintains insertion order)
+  if (keys.length > MAX_CACHE_ENTRIES) {
+    const toDelete = keys.slice(0, keys.length - MAX_CACHE_ENTRIES);
+    await Promise.all(toDelete.map((req) => cache.delete(req)));
+  }
+}
+
+async function evictStaleEntries() {
+  const cache = await caches.open(CACHE_NAME);
+  const keys = await cache.keys();
+  const now = Date.now();
+  for (const req of keys) {
+    const res = await cache.match(req);
+    if (res) {
+      const dateHeader = res.headers.get('date');
+      if (dateHeader) {
+        const age = now - new Date(dateHeader).getTime();
+        if (age > MAX_CACHE_AGE_MS) {
+          await cache.delete(req);
+        }
+      }
+    }
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Background Sync Queue — stores failed mutations in IndexedDB for replay
@@ -88,7 +122,7 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
-// Activate: clean up old caches
+// Activate: clean up old caches + trim quota
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
@@ -97,7 +131,7 @@ self.addEventListener('activate', (event) => {
           .filter((key) => key !== CACHE_NAME)
           .map((key) => caches.delete(key))
       )
-    )
+    ).then(() => evictStaleEntries())
   );
   // Take control of all clients immediately
   self.clients.claim();
@@ -142,7 +176,10 @@ self.addEventListener('fetch', (event) => {
           // Cache successful GET responses for offline fallback
           if (response.ok) {
             const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(request, clone);
+              trimCache(); // Keep cache within quota
+            });
           }
           return response;
         })
@@ -198,5 +235,15 @@ self.addEventListener('sync', (event) => {
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'ONLINE') {
     event.waitUntil(replayMutations());
+  }
+  if (event.data && event.data.type === 'TRIM_CACHE') {
+    event.waitUntil(trimCache().then(() => evictStaleEntries()));
+  }
+  if (event.data && event.data.type === 'GET_CACHE_STATS') {
+    event.waitUntil(
+      caches.open(CACHE_NAME).then((cache) => cache.keys()).then((keys) => {
+        event.source.postMessage({ type: 'CACHE_STATS', entries: keys.length, maxEntries: MAX_CACHE_ENTRIES });
+      })
+    );
   }
 });

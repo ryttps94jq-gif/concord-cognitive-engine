@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -10,7 +10,6 @@ import {
   Hash,
   Sparkles,
   Filter,
-  ChevronDown,
   Music,
   Video,
   Image as ImageIcon,
@@ -25,11 +24,10 @@ import {
   Play,
   Flame,
   BookOpen,
-  BarChart3,
   X,
 } from 'lucide-react';
 import { cn, formatNumber, formatRelativeTime, debounce } from '@/lib/utils';
-import { api } from '@/lib/api/client';
+import { api, createSharedSession, activeSharedSessions } from '@/lib/api/client';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -353,6 +351,13 @@ export function Discovery({
 
   // ── Data fetching ────────────────────────────────────────────────────
 
+  // Active shared sessions for potential discovery
+  const sharedSessionsQuery = useQuery({
+    queryKey: ['active-shared-sessions'],
+    queryFn: () => activeSharedSessions(),
+    refetchInterval: 30000,
+  });
+
   const trendingQuery = useQuery({
     queryKey: ['trending-dtus', categoryFilter],
     queryFn: async () => {
@@ -394,9 +399,7 @@ export function Discovery({
   const usersQuery = useQuery({
     queryKey: ['discover-users', currentUserId],
     queryFn: async () => {
-      const res = await api.get('/api/social/discover', {
-        params: { userId: currentUserId, limit: 20 },
-      });
+      const res = await api.get(`/api/social/discover/${currentUserId}`);
       return (res.data.suggestions || []) as SuggestedUser[];
     },
     enabled: activeTab === 'users',
@@ -432,8 +435,8 @@ export function Discovery({
 
   // ── Search handler ───────────────────────────────────────────────────
 
-  const handleSearchChange = useCallback(
-    debounce((value: string) => {
+  const handleSearchChange = useMemo(
+    () => debounce((value: string) => {
       setSearchQuery(value);
     }, 300),
     []
@@ -596,6 +599,46 @@ export function Discovery({
         )}
       </AnimatePresence>
 
+      {/* Active Shared Sessions */}
+      {sharedSessionsQuery.data && sharedSessionsQuery.data.length > 0 && (
+        <div className="rounded-xl bg-lattice-deep border border-lattice-border p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-medium text-white flex items-center gap-2">
+              <Radio className="w-4 h-4 text-neon-cyan" />
+              Live Sessions
+              <span className="text-xs text-gray-500">({sharedSessionsQuery.data.length})</span>
+            </h4>
+            <button
+              onClick={() => createSharedSession([])}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/20 transition-colors"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              Start Session
+            </button>
+          </div>
+          <div className="space-y-2">
+            {sharedSessionsQuery.data.slice(0, 5).map((session: { id: string; topic?: string; participantCount?: number; createdAt?: string }) => (
+              <button
+                key={session.id}
+                onClick={() => onNavigateToContent?.(session.id)}
+                className="w-full flex items-center justify-between p-2 rounded-lg hover:bg-lattice-surface transition-colors text-left"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                  <span className="text-sm text-white truncate">{session.topic || 'Shared Session'}</span>
+                </div>
+                {session.participantCount != null && (
+                  <span className="text-xs text-gray-500 flex items-center gap-1">
+                    <Users className="w-3 h-3" />
+                    {session.participantCount}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Content area */}
       <div className="space-y-3">
         {/* Trending DTUs */}
@@ -681,7 +724,7 @@ export function Discovery({
               </div>
             ) : mediaFeedQuery.data && mediaFeedQuery.data.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {mediaFeedQuery.data.map((item, idx) => (
+                {mediaFeedQuery.data.map((item, _idx) => (
                   <MediaCard key={item.dtuId} item={item} onNavigate={onNavigateToContent} />
                 ))}
               </div>

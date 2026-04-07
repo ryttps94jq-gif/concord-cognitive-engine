@@ -1138,9 +1138,9 @@ export default function HypothesisLabPage() {
             <label className={ds.label}>Result</label>
             <div className="flex gap-2">
               {([
-                { value: 'pass' as const, label: 'Pass', color: 'green', icon: CheckCircle2 },
-                { value: 'fail' as const, label: 'Fail', color: 'red', icon: XCircle },
-                { value: 'inconclusive' as const, label: 'Inconclusive', color: 'yellow', icon: AlertTriangle },
+                { value: 'pass' as const, label: 'Pass', activeClass: 'bg-green-500/20 text-green-400 border-green-500/30', icon: CheckCircle2 },
+                { value: 'fail' as const, label: 'Fail', activeClass: 'bg-red-500/20 text-red-400 border-red-500/30', icon: XCircle },
+                { value: 'inconclusive' as const, label: 'Inconclusive', activeClass: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30', icon: AlertTriangle },
               ]).map(opt => (
                 <button
                   key={opt.value}
@@ -1148,7 +1148,7 @@ export default function HypothesisLabPage() {
                   className={cn(
                     'flex-1 py-2.5 rounded-lg text-sm font-medium border transition-all flex flex-col items-center gap-1',
                     testResult === opt.value
-                      ? `bg-${opt.color}-500/20 text-${opt.color}-400 border-${opt.color}-500/30`
+                      ? opt.activeClass
                       : 'bg-white/5 text-gray-400 border-lattice-border hover:bg-white/10'
                   )}
                 >

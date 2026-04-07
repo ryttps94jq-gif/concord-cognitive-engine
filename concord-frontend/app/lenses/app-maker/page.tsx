@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Boxes, Plus, CheckCircle, AlertTriangle, ArrowUp, ArrowDown, Layers, ChevronDown, Rocket, Layout, ShoppingCart, Briefcase, UserCircle } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Boxes, Plus, CheckCircle, ArrowUp, Layers, ChevronDown, Rocket, Layout, ShoppingCart, Briefcase, UserCircle, Star, TrendingUp } from 'lucide-react';
 import { apiHelpers } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -25,7 +26,7 @@ export default function AppMakerLens() {
   const setActiveLens = useUIStore((s) => s.setActiveLens);
   setActiveLens('app-maker');
 
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
   const [apps, setApps] = useState<AppEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -43,7 +44,7 @@ export default function AppMakerLens() {
     try {
       const resp = await apiHelpers.apps.list();
       setApps(resp.data?.apps || []);
-    } catch { /* silent */ }
+    } catch (e) { console.error('[AppMaker] Failed to load apps:', e); }
     setLoading(false);
   };
 
@@ -62,7 +63,7 @@ export default function AppMakerLens() {
       });
       setNewName('');
       await loadApps();
-    } catch { /* silent */ }
+    } catch (e) { console.error('[AppMaker] Failed to create app:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to create app' }); }
     setCreating(false);
   };
 
@@ -70,7 +71,7 @@ export default function AppMakerLens() {
     try {
       await apiHelpers.apps.promote(id);
       await loadApps();
-    } catch { /* silent */ }
+    } catch (e) { console.error('[AppMaker] Failed to promote app:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to promote app' }); }
   };
 
   const validateApp = async (id: string) => {
@@ -82,7 +83,7 @@ export default function AppMakerLens() {
       } else {
         alert(`Violations:\n${(data.violations || []).join('\n')}`);
       }
-    } catch { /* silent */ }
+    } catch (e) { console.error('[AppMaker] Failed to validate app:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to validate app' }); }
   };
 
   const templates = [
@@ -127,7 +128,7 @@ export default function AppMakerLens() {
   };
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6">
+    <div data-lens-theme="app-maker" className="p-6 max-w-4xl mx-auto space-y-6">
       <div className="flex items-center gap-3">
         <Boxes className="w-6 h-6 text-neon-cyan" />
         <h1 className="text-xl font-bold">App Maker</h1>
@@ -146,6 +147,31 @@ export default function AppMakerLens() {
       <p className="text-sm text-gray-400">
         Compose apps from existing primitives. Artifact + Execution + Governance + Custom UI.
       </p>
+
+      {/* Stats Row */}
+      <div className="grid grid-cols-3 gap-4">
+        <div className="panel p-3 flex items-center gap-3">
+          <Boxes className="w-5 h-5 text-neon-cyan" />
+          <div>
+            <p className="text-lg font-bold">{apps.length}</p>
+            <p className="text-xs text-gray-400">Total Apps</p>
+          </div>
+        </div>
+        <div className="panel p-3 flex items-center gap-3">
+          <Star className="w-5 h-5 text-yellow-400" />
+          <div>
+            <p className="text-lg font-bold">{apps.filter(a => a.status === 'published' || a.status === 'marketplace' || a.status === 'global').length}</p>
+            <p className="text-xs text-gray-400">Published</p>
+          </div>
+        </div>
+        <div className="panel p-3 flex items-center gap-3">
+          <TrendingUp className="w-5 h-5 text-green-400" />
+          <div>
+            <p className="text-lg font-bold">{apps.length > 0 ? (apps.filter(a => a.version !== '0.0.1').length / apps.length * 100).toFixed(0) + '%' : '0%'}</p>
+            <p className="text-xs text-gray-400">Avg Maturity</p>
+          </div>
+        </div>
+      </div>
 
       {/* Create App */}
       <div className="panel p-4 flex items-center gap-3">
@@ -176,8 +202,8 @@ export default function AppMakerLens() {
           <p className="text-sm text-gray-500">No apps yet. Create your first one above.</p>
         ) : (
           <div className="space-y-3">
-            {apps.map((app) => (
-              <div key={app.id} className="bg-lattice-deep rounded p-3 flex items-center justify-between">
+            {apps.map((app, index) => (
+              <motion.div key={app.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="bg-lattice-deep rounded p-3 flex items-center justify-between">
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-sm">{app.name}</span>
@@ -204,7 +230,7 @@ export default function AppMakerLens() {
                     <ArrowUp className="w-3 h-3" />
                   </button>
                 </div>
-              </div>
+              </motion.div>
             ))}
           </div>
         )}
@@ -343,7 +369,7 @@ export default function AppMakerLens() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

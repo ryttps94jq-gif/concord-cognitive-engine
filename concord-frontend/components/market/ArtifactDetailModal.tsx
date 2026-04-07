@@ -7,8 +7,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
-import { cn } from '@/lib/utils';
-import { X, Download, ExternalLink } from 'lucide-react';
+import { X, Download } from 'lucide-react';
 import { ArtifactRenderer } from '@/components/artifact/ArtifactRenderer';
 import { EntityAttributionCard } from './EntityAttributionCard';
 import { QualityTierBadge } from './QualityTierBadge';

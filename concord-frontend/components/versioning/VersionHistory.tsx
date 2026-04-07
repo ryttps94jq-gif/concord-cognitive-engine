@@ -35,7 +35,7 @@ interface VersionHistoryProps {
 }
 
 export function VersionHistory({
-  dtuId: _dtuId,
+  dtuId,
   versions,
   currentVersion,
   onRestore,
@@ -79,6 +79,7 @@ export function VersionHistory({
 
   const handleCompare = () => {
     if (selectedVersions.length === 2 && onCompare) {
+      console.log(`[VersionHistory] Comparing versions for DTU ${dtuId}: v${selectedVersions[0]} vs v${selectedVersions[1]}`);
       onCompare(selectedVersions[0], selectedVersions[1]);
     }
   };
@@ -242,6 +243,7 @@ export function VersionHistory({
                         <button
                           onClick={() => onRestore(v.version)}
                           className="flex items-center gap-2 px-3 py-1.5 text-sm bg-lattice-surface border border-lattice-border rounded hover:border-neon-cyan hover:text-neon-cyan transition-colors"
+                          data-dtu-id={dtuId}
                         >
                           <RotateCcw className="w-3 h-3" />
                           Restore this version

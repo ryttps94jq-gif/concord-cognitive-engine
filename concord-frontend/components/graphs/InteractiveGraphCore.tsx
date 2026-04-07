@@ -99,7 +99,7 @@ export function InteractiveGraph({
   className,
   layout = 'force',
   showControls = true,
-  showMinimap: _showMinimap = false
+  showMinimap = false
 }: InteractiveGraphProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
@@ -484,6 +484,30 @@ export function InteractiveGraph({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Minimap overlay */}
+      {showMinimap && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
+          <div className="w-40 h-28 bg-lattice-bg/80 border border-lattice-border rounded-lg overflow-hidden backdrop-blur-sm">
+            <div className="w-full h-full relative">
+              {nodes.map(node => {
+                const colors = tierColors[node.tier];
+                return (
+                  <div
+                    key={node.id}
+                    className="absolute w-1.5 h-1.5 rounded-full"
+                    style={{
+                      backgroundColor: colors.bg,
+                      left: `${((node as GraphNode & { x?: number }).x ?? Math.random() * 100) % 100}%`,
+                      top: `${((node as GraphNode & { y?: number }).y ?? Math.random() * 100) % 100}%`,
+                    }}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Stats overlay */}
       <div className="absolute bottom-4 right-4 text-xs text-gray-500 z-10">

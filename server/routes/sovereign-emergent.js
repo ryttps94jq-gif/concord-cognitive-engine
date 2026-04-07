@@ -48,13 +48,13 @@ function createSovereignDTU(STATE, action, input, output) {
     try { if (typeof globalThis.saveStateDebounced === "function") globalThis.saveStateDebounced(); } catch (_e) { logger.debug('sovereign-emergent', 'silent', { error: _e?.message }); }
     try { if (typeof globalThis.realtimeEmit === "function") globalThis.realtimeEmit("dtu:created", { dtu: { id: dtu.id, type: dtu.type, tags: dtu.tags } }); } catch (_e) { logger.debug('sovereign-emergent', 'silent', { error: _e?.message }); }
     return dtu;
-  } catch { return null; }
+  } catch (err) { logger.warn('sovereign-emergent', 'commitDTU failed', { error: err?.message }); return null; }
 }
 
 // ── Lazy-load modules (silent failure if not yet written) ──────────────────
 
 async function loadModule(path) {
-  try { return await import(path); } catch { return null; }
+  try { return await import(path); } catch (err) { logger.debug('sovereign-emergent', `module load failed: ${path}`, { error: err?.message }); return null; }
 }
 
 export default function createSovereignEmergentRouter({ STATE }) {
@@ -563,6 +563,13 @@ export default function createSovereignEmergentRouter({ STATE }) {
         // SYSTEM 9: C-NET FEDERATION
         // ══════════════════════════════════════════════════════════════════════
 
+        case "federation-init": {
+          const mod = await loadModule("../emergent/cnet-federation.js");
+          if (!mod) return res.json({ ok: false, error: "cnet-federation not available" });
+          result = mod.initFederation(data?.config || {});
+          break;
+        }
+
         case "federation-status": {
           const mod = await loadModule("../emergent/cnet-federation.js");
           if (!mod) return res.json({ ok: false, error: "cnet-federation not available" });
@@ -696,6 +703,19 @@ export default function createSovereignEmergentRouter({ STATE }) {
         // ══════════════════════════════════════════════════════════════════════
         // COUNCIL DECISIONS (for council console UI)
         // ══════════════════════════════════════════════════════════════════════
+
+        case "council-override-promote": {
+          // Sovereign override: allow promotion of a council-rejected DTU
+          if (!target) return res.json({ ok: false, error: "target (dtuId) required" });
+          const dtu = S.dtus?.get(target);
+          if (!dtu) return res.json({ ok: false, error: "DTU not found" });
+          if (!dtu.meta?.councilBlocked) return res.json({ ok: false, error: "DTU is not council-blocked" });
+          dtu.meta.councilBlocked = false;
+          dtu.meta.councilOverriddenBy = "sovereign";
+          dtu.meta.councilOverriddenAt = new Date().toISOString();
+          result = { ok: true, dtuId: target, message: "Council block removed. DTU eligible for promotion." };
+          break;
+        }
 
         case "council-decisions": {
           // Return recent DTUs that went through council evaluation

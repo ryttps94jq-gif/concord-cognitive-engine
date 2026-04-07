@@ -9,6 +9,7 @@
  *         metacognition, explanation, metalearning, multimodal, voice, tools,
  *         entity, sessions, search, stats, cognitive/status
  */
+import path from "path";
 import { asyncHandler } from "../lib/async-handler.js";
 export default function registerDomainRoutes(app, {
   STATE,
@@ -39,24 +40,77 @@ export default function registerDomainRoutes(app, {
       ensureExperienceLearning();
       ensureAttentionManager();
       ensureReflectionEngine();
+
+      // Goals
+      const goals = (() => {
+        try {
+          const active = Array.from(STATE.goals?.active || [])
+            .map(gid => STATE.goals?.registry?.get?.(gid)).filter(Boolean)
+            .slice(0, 10)
+            .map(g => ({ id: g.id, description: g.description || g.goal, priority: g.priority, status: g.status }));
+          return { activeCount: STATE.goals?.active?.size || 0, totalRegistered: STATE.goals?.registry?.size || 0, active };
+        } catch (_e) { return null; }
+      })();
+
+      // Hypothesis engine
+      const hypothesis = (() => {
+        try {
+          const hs = STATE.hypotheses;
+          if (!hs) return null;
+          return { active: hs.active?.size || hs.active?.length || 0, tested: hs.tested || 0, confirmed: hs.confirmed || 0 };
+        } catch (_e) { return null; }
+      })();
+
+      // Metacognition
+      const metacognition = (() => {
+        try {
+          const mc = STATE.metacognition;
+          if (!mc) return null;
+          return { predictions: mc.predictions?.length || 0, blindSpots: mc.blindSpots?.length || 0, calibration: mc.calibrationScore ?? null };
+        } catch (_e) { return null; }
+      })();
+
+      // World model
+      const worldModel = (() => {
+        try {
+          const wm = STATE.worldModel;
+          if (!wm) return null;
+          return { entities: wm.entities?.size || 0, relations: wm.relations?.size || 0 };
+        } catch (_e) { return null; }
+      })();
+
+      // Reasoning chains
+      const reasoning = (() => {
+        try {
+          const r = STATE.reasoning;
+          if (!r) return null;
+          return { chains: r.chains?.size || 0, steps: r.steps?.size || 0 };
+        } catch (_e) { return null; }
+      })();
+
       return res.json({
         ok: true,
         experience: {
-          episodes: STATE.experienceLearning.episodes.length,
-          patterns: STATE.experienceLearning.patterns.size,
-          strategies: STATE.experienceLearning.strategies.size,
+          episodes: STATE.experienceLearning?.episodes?.length || 0,
+          patterns: STATE.experienceLearning?.patterns?.size || 0,
+          strategies: STATE.experienceLearning?.strategies?.size || 0,
         },
         attention: {
-          focus: STATE.attention.focus,
-          activeThreads: Array.from(STATE.attention.threads.values()).filter(t => t.status === "active").length,
-          queueLength: STATE.attention.queue.length,
+          focus: STATE.attention?.focus || null,
+          activeThreads: typeof STATE.attention?.threads?.values === "function" ? Array.from(STATE.attention.threads.values()).filter(t => t.status === "active").length : 0,
+          queueLength: STATE.attention?.queue?.length || 0,
         },
         reflection: {
-          calibration: STATE.reflection.selfModel.confidenceCalibration,
-          strengths: STATE.reflection.selfModel.strengths,
-          weaknesses: STATE.reflection.selfModel.weaknesses,
-          reflections: STATE.reflection.reflections.length,
-        }
+          calibration: STATE.reflection?.selfModel?.confidenceCalibration || 0,
+          strengths: STATE.reflection?.selfModel?.strengths || [],
+          weaknesses: STATE.reflection?.selfModel?.weaknesses || [],
+          reflections: STATE.reflection?.reflections?.length || 0,
+        },
+        goals,
+        hypothesis,
+        metacognition,
+        worldModel,
+        reasoning,
       });
     } catch (e) {
       return res.status(500).json({ ok: false, error: String(e?.message || e) });
@@ -134,6 +188,19 @@ export default function registerDomainRoutes(app, {
   // ---- Macros registry + runner ----
   app.get("/api/macros/domains", (req,res)=> res.json({ ok:true, domains: listDomains() }));
   app.get("/api/macros/:domain", (req,res)=> res.json({ ok:true, domain:req.params.domain, macros: listMacros(req.params.domain) }));
+
+  // Feature 46: Macro Explorer — all macros across all domains in one call
+  app.get("/api/admin/macros", (req, res) => {
+    const domains = listDomains();
+    const all = [];
+    for (const domain of domains) {
+      const macros = listMacros(domain);
+      for (const m of macros) {
+        all.push({ domain, name: m.name, description: m.description || "", public: !!m.public, plugin: m.plugin || null });
+      }
+    }
+    res.json({ ok: true, macros: all, domainCount: domains.length, totalMacros: all.length });
+  });
   app.post("/api/macros/run", asyncHandler(async (req, res) => {
     const ctx = makeCtx(req);
     let domain = req.body?.domain;
@@ -281,7 +348,8 @@ export default function registerDomainRoutes(app, {
       ]);
       res.json(result);
     } catch (e) {
-      res.json({ ok: true, local: STATE.dtus.size, marketplace: 0, global: STATE.dtus.size, total: STATE.dtus.size, localCount: STATE.dtus.size, globalCount: STATE.dtus.size, error: e.message, timeout: true });
+      const sz = STATE.dtus?.size || 0;
+      res.json({ ok: true, local: sz, marketplace: 0, global: sz, total: sz, localCount: sz, globalCount: sz, error: e.message, timeout: true });
     }
   }));
   app.get("/api/scope/dtus/:scope", asyncHandler(async (req,res)=> res.json(await runMacro("emergent","scope.listByScope", { scope: req.params.scope, limit: Number(req.query.limit||50) }, makeCtx(req)))));
@@ -300,11 +368,11 @@ export default function registerDomainRoutes(app, {
     return res.json(out);
   }));
   app.get("/api/papers", (req, res) => {
-    const papers = Array.from(STATE.papers.values());
+    const papers = Array.from(STATE.papers?.values?.() || []);
     return res.json({ ok: true, papers });
   });
   app.get("/api/papers/:id", (req, res) => {
-    const paper = STATE.papers.get(req.params.id);
+    const paper = STATE.papers?.get(req.params.id);
     if (!paper) return res.status(404).json({ ok: false, error: "Paper not found" });
     return res.json({ ok: true, paper });
   });
@@ -316,8 +384,15 @@ export default function registerDomainRoutes(app, {
     const out = await runMacro("paper", "export", { paperId: req.params.id, format: req.query.format || "md" }, makeCtx(req));
     if (!out.ok) return res.status(500).json(out);
     const fpath = out.file?.path;
-    if (fpath && fs.existsSync(fpath)) {
-      return res.sendFile(fpath);
+    if (!fpath) return res.status(404).json({ ok: false, error: "Export file not found" });
+    // Path traversal protection: ensure resolved path is within allowed exports directory
+    const allowedBase = path.resolve(process.cwd(), "data", "exports");
+    const resolved = path.resolve(fpath);
+    if (!resolved.startsWith(allowedBase + path.sep) && resolved !== allowedBase) {
+      return res.status(403).json({ ok: false, error: "Access denied: path outside allowed directory" });
+    }
+    if (fs.existsSync(resolved)) {
+      return res.sendFile(resolved);
     }
     return res.status(404).json({ ok: false, error: "Export file not found" });
   }));
@@ -920,12 +995,12 @@ export default function registerDomainRoutes(app, {
 
   // ---- Sessions ----
   app.get("/api/sessions", (req, res) => {
-    const sessions = Array.from(STATE.sessions.entries()).map(([id, data]) => ({
+    const sessions = Array.from(STATE.sessions?.entries?.() || []).map(([id, data]) => ({
       sessionId: id,
       createdAt: data.createdAt,
       messageCount: (data.messages || []).length,
       cloudOptIn: !!data.cloudOptIn,
-      lastActivity: (data.messages || [])[data.messages.length - 1]?.ts || data.createdAt
+      lastActivity: (data.messages || [])[data.messages?.length - 1]?.ts || data.createdAt
     }));
     return res.json({ ok: true, sessions });
   });

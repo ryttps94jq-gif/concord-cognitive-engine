@@ -14,6 +14,8 @@ import DomainAssistant from '@/components/common/DomainAssistant';
 import { CrossDomainConnections } from '@/components/common/CrossDomainConnections';
 import { BrainMonitor } from '@/components/common/BrainMonitor';
 import { SkeletonCard } from '@/components/common/Skeleton';
+import { ContentPublisher } from '@/components/lens/ContentPublisher';
+import { useLensIdentity } from '@/hooks/useLensIdentity';
 import {
   isCoreLens,
   getParentCoreLens,
@@ -71,6 +73,9 @@ function useLensMeta() {
 function UniversalLensFeatures({ children }: { children: React.ReactNode }) {
   const { slug, label } = useLensMeta();
 
+  // Apply per-lens visual identity (CSS variables)
+  useLensIdentity(slug);
+
   if (!slug) return <>{children}</>;
 
   return (
@@ -81,7 +86,7 @@ function UniversalLensFeatures({ children }: { children: React.ReactNode }) {
           <SmartContextBar domain={slug} domainLabel={label} />
         </div>
         <div className="flex-shrink-0 pr-2">
-          <ExportMenu domain={slug} domainLabel={label} />
+          <ExportMenu domain={slug} />
         </div>
       </div>
 
@@ -107,6 +112,11 @@ function UniversalLensFeatures({ children }: { children: React.ReactNode }) {
       <QuickCapture domain={slug} />
       <DomainAssistant domain={slug} domainLabel={label} />
       <CrossDomainConnections domain={slug} domainLabel={label} />
+
+      {/* Universal Share — floating button (bottom-right) */}
+      <div className="fixed bottom-20 right-4 z-40">
+        <ContentPublisher domain={slug} compact />
+      </div>
 
       {/* Brain status monitor (top-left floating) */}
       <div className="fixed top-20 left-4 z-40">

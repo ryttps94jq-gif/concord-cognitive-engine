@@ -57,9 +57,9 @@ function Toast({ type, message, duration = TOAST_DURATION, onClose }: ToastProps
     },
     warning: {
       icon: AlertTriangle,
-      bg: 'bg-yellow-500/10',
-      border: 'border-yellow-500/30',
-      text: 'text-yellow-500',
+      bg: 'bg-amber-500/10',
+      border: 'border-amber-500/30',
+      text: 'text-amber-400',
     },
     info: {
       icon: Info,

@@ -1,6 +1,6 @@
 // DTU (Discrete Thought Unit) types
 
-export type DTUTier = 'regular' | 'mega' | 'hyper' | 'shadow';
+export type DTUTier = 'regular' | 'mega' | 'hyper' | 'shadow' | 'archive';
 
 export interface DTU {
   id: string;
@@ -124,6 +124,14 @@ export const DTU_TIER_CONFIG: Record<
     borderColor: 'border-gray-500/30',
     minResonance: 0,
     maxChildren: 5,
+  },
+  archive: {
+    label: 'Archive',
+    color: 'text-gray-500',
+    bgColor: 'bg-gray-600/10',
+    borderColor: 'border-gray-600/30',
+    minResonance: 0,
+    maxChildren: 0,
   },
 };
 

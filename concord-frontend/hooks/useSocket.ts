@@ -20,8 +20,10 @@ import { useSystemStore } from '@/store/system';
 import { useSovereignStore } from '@/store/sovereign';
 import { useUIStore } from '@/store/ui';
 import type { SocketEvent } from '@/lib/realtime/socket';
+import type { DTU } from '@/lib/types/dtu';
+import type { SystemAlert, AttentionAllocation, FocusOverride, Dream, Promotion } from '@/lib/types/system';
 
-const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5050';
+const _SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || process.env.NEXT_PUBLIC_API_URL || '';
 
 // ── All events to forward to the event bus ─────────────────────
 const FORWARDED_EVENTS: SocketEvent[] = [
@@ -98,6 +100,17 @@ const FORWARDED_EVENTS: SocketEvent[] = [
   'lens:dtu_generated',
   // AI domain insights from lens-learning.js
   'agent:domain_insight',
+  // Per-user tick events
+  'user:tick',
+  // Spontaneous initiative events (proactive messages from Concord)
+  'initiative:new',
+  // Chat tool execution results
+  'chat:tool_result',
+  // Feed Manager real-time DTU events
+  'feed:new-dtu',
+  // City / World lens events
+  'city:positions', 'city:stream-started', 'city:stream-ended',
+  'city:stream-dtu-created', 'city:stream-sale',
 ];
 
 interface UseSocketOptions {
@@ -225,47 +238,47 @@ export function useSocket(options: UseSocketOptions = {}): UseSocketReturn {
 // ── Store routing ──────────────────────────────────────────────
 
 function routeToStores(event: SocketEvent, data: unknown) {
+  if (!data || typeof data !== 'object') return;
   const d = data as Record<string, unknown>;
 
   switch (event) {
     // DTU → lattice store
     case 'dtu:created':
-      if (d && d.id) {
-        useLatticeStore.getState().addRecentDTU(d as never);
+      if (d.id) {
+        useLatticeStore.getState().addRecentDTU(data as unknown as DTU);
       }
       break;
     case 'dtu:updated':
-      if (d && d.id) {
-        useLatticeStore.getState().updateDTU(d.id as string, d.changes as never ?? d);
+      if (d.id) {
+        const changes = ((d.changes as Record<string, unknown> | undefined) ?? d) as unknown as Partial<DTU>;
+        useLatticeStore.getState().updateDTU(d.id as string, changes);
       }
       break;
     case 'dtu:deleted':
-      if (d && d.id) {
+      if (d.id) {
         useLatticeStore.getState().removeDTU(d.id as string);
       }
       break;
 
     // System alerts → UI store toast
     case 'system:alert':
-      if (d && d.message) {
+      if (d.message) {
         useUIStore.getState().addToast({
           type: (d.type as 'error' | 'warning' | 'info') || 'info',
           message: d.message as string,
           duration: 8000,
         });
-        useSystemStore.getState().addSystemAlert(d as never);
+        useSystemStore.getState().addSystemAlert(data as unknown as SystemAlert);
       }
       break;
 
     // Attention → system store
     case 'attention:allocation':
-      if (d) {
-        if (Array.isArray(d.allocation)) {
-          useSystemStore.getState().setAttentionAllocation(d.allocation as never);
-        }
-        if (d.focusOverride !== undefined) {
-          useSystemStore.getState().setFocusOverride(d.focusOverride as never);
-        }
+      if (Array.isArray(d.allocation)) {
+        useSystemStore.getState().setAttentionAllocation(d.allocation as unknown as AttentionAllocation[]);
+      }
+      if (d.focusOverride !== undefined) {
+        useSystemStore.getState().setFocusOverride(d.focusOverride as unknown as FocusOverride | null);
       }
       break;
 
@@ -281,16 +294,59 @@ function routeToStores(event: SocketEvent, data: unknown) {
 
     // Dream → sovereign store
     case 'dream:captured':
-      if (d && d.id) {
-        useSovereignStore.getState().addDream(d as never);
+      if (d.id) {
+        useSovereignStore.getState().addDream(data as unknown as Dream);
       }
       break;
 
     // Promotion → sovereign store
     case 'promotion:approved':
     case 'promotion:rejected':
-      if (d && d.id) {
-        useSovereignStore.getState().updatePromotion(d.id as string, d as never);
+      if (d.id) {
+        useSovereignStore.getState().updatePromotion(d.id as string, data as unknown as Partial<Promotion>);
+      }
+      break;
+
+    // Per-user tick → lattice store
+    case 'user:tick':
+      if (d) {
+        useLatticeStore.getState().setUserTickInfo({
+          tickCount: d.tickCount as number,
+          dtuCount: d.dtuCount as number,
+          lastTick: d.ts as string,
+        });
+      }
+      break;
+
+    // Resonance update → lattice store (topology stats)
+    case 'resonance:update':
+      if (d.nodes !== undefined || d.edges !== undefined || d.clusters !== undefined) {
+        useLatticeStore.getState().setTopologyStats({
+          nodes: (d.nodes as number) ?? useLatticeStore.getState().topologyStats.nodes,
+          edges: (d.edges as number) ?? useLatticeStore.getState().topologyStats.edges,
+          clusters: (d.clusters as number) ?? useLatticeStore.getState().topologyStats.clusters,
+        });
+      }
+      break;
+
+    // Domain insight → lattice store (active domains)
+    case 'agent:domain_insight':
+      if (d.domains && Array.isArray(d.domains)) {
+        useLatticeStore.getState().setActiveDomains(d.domains as string[]);
+      } else if (d.domain && typeof d.domain === 'string') {
+        const current = useLatticeStore.getState().activeDomains;
+        if (!current.includes(d.domain as string)) {
+          useLatticeStore.getState().setActiveDomains([...current, d.domain as string]);
+        }
+      }
+      break;
+
+    // Agent insights → lattice store (knowledge gaps)
+    case 'agent:insights':
+      if (d.knowledgeGaps && Array.isArray(d.knowledgeGaps)) {
+        useLatticeStore.getState().setKnowledgeGaps(
+          d.knowledgeGaps as Array<{ id: string; domain: string; description: string; severity: number; discoveredAt: string }>
+        );
       }
       break;
 

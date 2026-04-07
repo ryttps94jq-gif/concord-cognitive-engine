@@ -110,7 +110,7 @@ export function PurchaseFlow({
     setErrorMessage('');
 
     try {
-      const res = await api.post('/api/billing/checkout', {
+      const res = await api.post('/api/economy/buy/checkout', {
         tokens: effectiveAmount,
       });
 

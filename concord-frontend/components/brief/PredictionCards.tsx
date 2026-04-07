@@ -6,6 +6,7 @@
  */
 
 import { Sparkles } from 'lucide-react';
+import { dismissPrediction } from '@/lib/api/client';
 
 interface Prediction {
   dtuId: string;
@@ -21,6 +22,11 @@ interface PredictionCardsProps {
 }
 
 export function PredictionCards({ predictions, onView, onDismiss }: PredictionCardsProps) {
+  const handleDismiss = async (dtuId: string) => {
+    await dismissPrediction(dtuId);
+    onDismiss?.(dtuId);
+  };
+
   if (!predictions || predictions.length === 0) return null;
 
   return (
@@ -51,7 +57,7 @@ export function PredictionCards({ predictions, onView, onDismiss }: PredictionCa
               View
             </button>
             <button
-              onClick={() => onDismiss?.(p.dtuId)}
+              onClick={() => handleDismiss(p.dtuId)}
               className="px-3 py-1 text-xs rounded-lg
                 bg-zinc-800 text-zinc-400 border border-zinc-700
                 hover:bg-zinc-700 transition-colors"

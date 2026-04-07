@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import FoundationCard from '@/components/chat/FoundationCard';
 
@@ -14,7 +14,7 @@ const makeStatus = (overrides = {}) => ({
   totalModules: 3,
   initializedModules: 2,
   ...overrides,
-}) as any;
+}) as unknown;
 
 const makeReadings = () => [
   {

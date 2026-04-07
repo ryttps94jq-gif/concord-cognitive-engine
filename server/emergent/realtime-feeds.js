@@ -102,7 +102,7 @@ async function tickFinancialFeeds(STATE, realtimeEmit, callBrain) {
             data: { title: `${q.symbol} ${q.changePercent > 0 ? "+" : ""}${q.changePercent}%`, symbol: q.symbol, price: q.price, change: q.change, changePercent: q.changePercent, status: payload.marketStatus },
             source: "yahoo_finance",
             timestamp: payload.fetchedAt,
-          }).catch(() => {});
+          }).catch(err => logger.warn?.("[realtime-feeds] bridge event failed:", err?.message || err));
         }
       }
     }
@@ -143,7 +143,7 @@ async function tickCryptoFeeds(STATE, realtimeEmit) {
             data: { title: `${c.id} $${c.price}`, coin: c.id, price: c.price, change24h: c.change24h, marketCap: c.marketCap },
             source: "coingecko",
             timestamp: payload.fetchedAt,
-          }).catch(() => {});
+          }).catch(err => logger.warn?.("[realtime-feeds] bridge event failed:", err?.message || err));
         }
       }
     }
@@ -197,7 +197,7 @@ async function tickNewsFeeds(STATE, realtimeEmit) {
           data: { title: article.title, source: article.source, link: article.link, pubDate: article.pubDate },
           source: article.source?.toLowerCase().replace(/\s/g, "_") || "rss",
           timestamp: article.pubDate ? new Date(article.pubDate).toISOString() : payload.fetchedAt,
-        }).catch(() => {});
+        }).catch(err => logger.warn?.("[realtime-feeds] bridge event failed:", err?.message || err));
       }
     }
   }
@@ -237,7 +237,7 @@ async function tickWeatherFeeds(STATE, realtimeEmit) {
           data: { title: `Weather ${lat},${lon}: ${data.current?.temperature_2m}°`, current: data.current, location: { lat, lon } },
           source: "open_meteo",
           timestamp: payload.fetchedAt,
-        }).catch(() => {});
+        }).catch(err => logger.warn?.("[realtime-feeds] bridge event failed:", err?.message || err));
       }
     }
   } catch (e) {
@@ -285,7 +285,7 @@ async function tickResearchFeeds(STATE, realtimeEmit) {
           data: { title: paper.title, summary: paper.summary, category: paper.category, arxivId: paper.id, published: paper.published },
           source: "arxiv",
           timestamp: paper.published || payload.fetchedAt,
-        }).catch(() => {});
+        }).catch(err => logger.warn?.("[realtime-feeds] bridge event failed:", err?.message || err));
       }
     }
   }
@@ -330,7 +330,7 @@ async function tickEconomyFeeds(STATE, realtimeEmit) {
             data: { title: `${ind.indicator}: ${ind.values?.[0]?.value || "N/A"} (${ind.values?.[0]?.year || "?"})`, indicator: ind.indicator, code: ind.code, values: ind.values },
             source: "world_bank",
             timestamp: payload.fetchedAt,
-          }).catch(() => {});
+          }).catch(err => logger.warn?.("[realtime-feeds] bridge event failed:", err?.message || err));
         }
       }
     }
@@ -371,7 +371,7 @@ async function tickHealthFeeds(STATE, realtimeEmit) {
               data: { title: alert.title, link: alert.link, pubDate: alert.pubDate },
               source: "who",
               timestamp: alert.pubDate ? new Date(alert.pubDate).toISOString() : payload.fetchedAt,
-            }).catch(() => {});
+            }).catch(err => logger.warn?.("[realtime-feeds] bridge event failed:", err?.message || err));
           }
         }
       }
@@ -448,10 +448,19 @@ export async function tickRealTimeFeeds(STATE, tickCount, realtimeEmit, callBrai
 }
 
 export function getRealtimeFeedStatus() {
+  // Include feed manager status if available
+  let feedManagerStatus = null;
+  try {
+    if (globalThis._feedManager) {
+      feedManagerStatus = globalThis._feedManager.getFeedHealthDashboard();
+    }
+  } catch (_e) { /* feed manager may not be initialized */ }
+
   return {
     cacheSize: FEED_CACHE.size,
     errors: Object.fromEntries(FEED_ERRORS),
     feeds: ["finance", "crypto", "news", "weather", "research", "economy", "health", "energy"],
+    feedManager: feedManagerStatus,
   };
 }
 

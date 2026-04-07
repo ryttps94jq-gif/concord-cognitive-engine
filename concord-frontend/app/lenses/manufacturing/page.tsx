@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, useCallback } from 'react';
+import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -14,7 +15,7 @@ import {
   Gauge, Calendar, ChevronRight, ChevronDown, Activity,
   Clock, Target, Wrench, TrendingUp, BarChart3, CheckCircle2,
   XCircle, FileText, Zap, Settings, Timer,
-  Eye, PackageCheck, Truck,
+  Eye, PackageCheck, Truck, Factory, Package,
   Calculator, CircleDot, ListChecks, Shield,
 } from 'lucide-react';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -41,7 +42,7 @@ const GENERAL_STATUSES = ['active', 'inactive', 'draft', 'pending', 'review'] as
 const MACHINE_STATUSES: MachineStatus[] = ['running', 'idle', 'maintenance', 'down'];
 
 const STATUS_COLORS: Record<string, string> = {
-  planned: 'gray-400', released: 'neon-blue', in_progress: 'neon-cyan',
+  planned: 'gray-400', released: 'neon-blue', in_progress: 'orange-500',
   qc: 'amber-400', complete: 'green-400', shipped: 'neon-purple',
   reported: 'red-400', investigating: 'amber-400', corrective_action: 'neon-blue', closed: 'green-400',
   active: 'green-400', inactive: 'gray-500', draft: 'gray-400', pending: 'neon-blue', review: 'amber-400',
@@ -146,7 +147,7 @@ function BOMTreeNode({ node, depth = 0 }: { node: BOMNode; depth?: number }) {
   const rollupCost = calcBOMCost(node);
 
   return (
-    <div>
+    <div data-lens-theme="manufacturing">
       <div
         className={cn(
           'flex items-center gap-2 py-1.5 px-2 rounded hover:bg-lattice-elevated/50 cursor-pointer',
@@ -163,7 +164,7 @@ function BOMTreeNode({ node, depth = 0 }: { node: BOMNode; depth?: number }) {
         <span className={cn('text-sm flex-1', depth === 0 ? 'font-semibold text-white' : 'text-gray-300')}>{node.part}</span>
         <span className={cn(ds.textMono, 'text-xs text-gray-500 w-20')}>{node.partNumber}</span>
         <span className="text-xs text-gray-400 w-12 text-right">{node.qtyPer}x</span>
-        <span className="text-xs text-neon-cyan w-20 text-right font-mono">${rollupCost.toFixed(2)}</span>
+        <span className="text-xs text-orange-500 w-20 text-right font-mono">${rollupCost.toFixed(2)}</span>
       </div>
       {expanded && hasChildren && node.children!.map(child => (
         <BOMTreeNode key={child.id} node={child} depth={depth + 1} />
@@ -177,12 +178,12 @@ function BOMTreeNode({ node, depth = 0 }: { node: BOMNode; depth?: number }) {
 // ---------------------------------------------------------------------------
 function OEEGauge({ value, label, size = 'md' }: { value: number; label: string; size?: 'sm' | 'md' }) {
   const color = value >= 85 ? 'text-green-400' : value >= 65 ? 'text-amber-400' : 'text-red-400';
-  const _bgColor = value >= 85 ? 'bg-green-400' : value >= 65 ? 'bg-amber-400' : 'bg-red-400';
+  const bgColor = value >= 85 ? 'bg-green-400' : value >= 65 ? 'bg-amber-400' : 'bg-red-400';
   const dim = size === 'sm' ? 'w-16 h-16' : 'w-20 h-20';
 
   return (
     <div className="flex flex-col items-center gap-1">
-      <div className={cn('relative rounded-full flex items-center justify-center', dim)}>
+      <div className={cn('relative rounded-full flex items-center justify-center', dim, bgColor + '/10')}>
         <svg className="absolute inset-0" viewBox="0 0 36 36">
           <path
             d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
@@ -212,7 +213,7 @@ function OEEGauge({ value, label, size = 'md' }: { value: number; label: string;
 // Schedule Timeline mini-component
 // ---------------------------------------------------------------------------
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
-const DAY_COLORS = ['bg-neon-blue/40', 'bg-neon-cyan/40', 'bg-neon-purple/40', 'bg-green-400/40', 'bg-amber-400/40'];
+const DAY_COLORS = ['bg-neon-blue/40', 'bg-orange-500/40', 'bg-neon-purple/40', 'bg-green-400/40', 'bg-amber-400/40'];
 
 function ScheduleTimeline({ schedule }: { schedule: LensItem }) {
   const data = schedule.data as Record<string, unknown>;
@@ -281,7 +282,7 @@ export default function ManufacturingLensPage() {
   useLensNav('manufacturing');
   const { latestData: realtimeData, isLive, lastUpdated, insights } = useRealtimeLens('manufacturing');
 
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
   const [mode, setMode] = useState<ModeTab>('dashboard');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -457,8 +458,8 @@ export default function ManufacturingLensPage() {
     return (
       <div className="flex items-center justify-center h-full p-8">
         <div className="text-center space-y-3">
-          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-sm text-gray-400">Loading...</p>
+          <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-400">Loading production data...</p>
         </div>
       </div>
     );
@@ -477,17 +478,67 @@ export default function ManufacturingLensPage() {
   // ---------------------------------------------------------------------------
   const renderDashboard = () => (
     <div className="space-y-6">
+      {/* Production Line Status */}
+      <div className={ds.panel}>
+        <h3 className={ds.heading3 + ' mb-3 flex items-center gap-2'}><Factory className="w-4 h-4 text-orange-500" /> Production Line Status</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {[
+            { line: 'Line A', status: 'running' as const, product: 'Assembly Unit X1', uptime: 96 },
+            { line: 'Line B', status: 'idle' as const, product: 'Waiting for materials', uptime: 78 },
+            { line: 'Line C', status: 'maintenance' as const, product: 'Scheduled PM', uptime: 45 },
+          ].map((line, i) => {
+            const statusConfig = { running: { color: 'bg-green-500', text: 'text-green-400', label: 'Running', pulse: true }, idle: { color: 'bg-amber-500', text: 'text-amber-400', label: 'Idle', pulse: false }, maintenance: { color: 'bg-blue-500', text: 'text-blue-400', label: 'Maintenance', pulse: false } };
+            const cfg = statusConfig[line.status];
+            return (
+              <motion.div key={line.line} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.1 }} className="p-3 bg-lattice-elevated/30 rounded-lg border border-lattice-border">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-semibold text-white">{line.line}</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className={cn('w-2 h-2 rounded-full', cfg.color, cfg.pulse && 'animate-pulse')} />
+                    <span className={cn('text-xs font-medium', cfg.text)}>{cfg.label}</span>
+                  </span>
+                </div>
+                <p className="text-xs text-gray-400 mb-2">{line.product}</p>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-1.5 bg-lattice-elevated rounded-full overflow-hidden">
+                    <div className={cn('h-full rounded-full', cfg.color)} style={{ width: `${line.uptime}%` }} />
+                  </div>
+                  <span className="text-xs text-gray-500">{line.uptime}%</span>
+                </div>
+              </motion.div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Defect Rate Gauge */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: 'Defect Rate', value: metrics.qcPassRate > 0 ? (100 - metrics.qcPassRate).toFixed(2) + '%' : '0%', desc: 'Current batch', icon: Package, color: metrics.qcPassRate >= 98 ? 'text-green-400' : metrics.qcPassRate >= 95 ? 'text-amber-400' : 'text-red-400' },
+          { label: 'First Pass Yield', value: firstPassYield.toFixed(1) + '%', desc: 'Without rework', icon: Gauge, color: firstPassYield >= 95 ? 'text-green-400' : 'text-amber-400' },
+          { label: 'Scrap Cost', value: '$' + (dashWOs.reduce((s, w) => s + (((w.data as Record<string, unknown>).scrapQty as number) || 0), 0) * 12).toLocaleString(), desc: 'Month to date', icon: Trash2, color: 'text-red-400' },
+          { label: 'Throughput', value: metrics.unitsToday + ' /hr', desc: 'All lines combined', icon: TrendingUp, color: 'text-orange-500' },
+        ].map((card, i) => (
+          <motion.div key={card.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }} className={ds.panel}>
+            <card.icon className={cn('w-4 h-4 mb-1', card.color)} />
+            <p className={cn('text-2xl font-bold', card.color)}>{card.value}</p>
+            <p className="text-xs text-gray-400">{card.label}</p>
+            <p className="text-xs text-gray-600">{card.desc}</p>
+          </motion.div>
+        ))}
+      </div>
+
       {/* KPI Cards */}
       <div className={ds.grid4}>
-        <div className={ds.panel}>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 }} className={ds.panel}>
           <div className="flex items-center gap-2 mb-1">
-            <PackageCheck className="w-4 h-4 text-neon-cyan" />
+            <PackageCheck className="w-4 h-4 text-orange-500" />
             <span className={ds.textMuted}>Units Produced</span>
           </div>
           <p className="text-2xl font-bold text-white">{metrics.unitsToday.toLocaleString()}</p>
           <p className="text-xs text-green-400 mt-1">+12% vs yesterday</p>
-        </div>
-        <div className={ds.panel}>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className={ds.panel}>
           <div className="flex items-center gap-2 mb-1">
             <Gauge className="w-4 h-4 text-green-400" />
             <span className={ds.textMuted}>Avg OEE</span>
@@ -496,7 +547,7 @@ export default function ManufacturingLensPage() {
             {metrics.avgOEE.toFixed(1)}%
           </p>
           <p className="text-xs text-gray-500 mt-1">World-class: 85%+</p>
-        </div>
+        </motion.div>
         <div className={ds.panel}>
           <div className="flex items-center gap-2 mb-1">
             <ClipboardList className="w-4 h-4 text-neon-blue" />
@@ -545,7 +596,7 @@ export default function ManufacturingLensPage() {
         </div>
         <div className={ds.panel}>
           <div className="flex items-center gap-2 mb-1">
-            <Activity className="w-4 h-4 text-neon-cyan" />
+            <Activity className="w-4 h-4 text-orange-500" />
             <span className={ds.textMuted}>Machine Uptime</span>
           </div>
           <p className="text-2xl font-bold text-green-400">87.5%</p>
@@ -586,7 +637,7 @@ export default function ManufacturingLensPage() {
               <div key={i} className="flex-1 flex flex-col items-center gap-1">
                 <span className={cn('text-xs', d.rate < 95 ? 'text-red-400' : 'text-gray-400')}>{d.rate}%</span>
                 <div
-                  className={cn('w-full rounded-t transition-all', d.rate < 95 ? 'bg-red-400' : 'bg-neon-cyan/60')}
+                  className={cn('w-full rounded-t transition-all', d.rate < 95 ? 'bg-red-400' : 'bg-orange-500/60')}
                   style={{ height: `${(d.rate - 90) * 10}%` }}
                 />
                 <span className="text-[10px] text-gray-600">{d.day}</span>
@@ -641,13 +692,13 @@ export default function ManufacturingLensPage() {
                 const priority = wo.data.priority as string;
                 return (
                   <tr key={wo.title} className="border-b border-lattice-border/50 hover:bg-lattice-elevated/30">
-                    <td className="py-2 pr-4 font-mono text-neon-cyan">{wo.title}</td>
+                    <td className="py-2 pr-4 font-mono text-orange-500">{wo.title}</td>
                     <td className="py-2 pr-4 text-gray-300">{wo.data.product as string}</td>
                     <td className="py-2 pr-4"><span className={ds.badge(STATUS_COLORS[status])}>{status.replace(/_/g, ' ')}</span></td>
                     <td className="py-2 pr-4">
                       <div className="flex items-center gap-2">
                         <div className="w-24 h-1.5 bg-lattice-elevated rounded-full overflow-hidden">
-                          <div className="h-full bg-neon-cyan rounded-full" style={{ width: `${Math.min(100, pct)}%` }} />
+                          <div className="h-full bg-orange-500 rounded-full" style={{ width: `${Math.min(100, pct)}%` }} />
                         </div>
                         <span className="text-xs text-gray-400">{pct.toFixed(0)}%</span>
                       </div>
@@ -687,7 +738,7 @@ export default function ManufacturingLensPage() {
           const isDetail = detailItem === item.id;
 
           return (
-            <div key={item.id} className={cn(ds.panel, 'hover:border-neon-cyan/30 transition-colors')}>
+            <div key={item.id} className={cn(ds.panel, 'hover:border-orange-500/30 transition-colors')}>
               <div className="flex items-start justify-between mb-3 cursor-pointer" onClick={() => setDetailItem(isDetail ? null : item.id)}>
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-1">
@@ -711,7 +762,7 @@ export default function ManufacturingLensPage() {
                   <span className="font-mono">{pct.toFixed(1)}%</span>
                 </div>
                 <div className="w-full h-2.5 bg-lattice-elevated rounded-full overflow-hidden">
-                  <div className={cn('h-full rounded-full transition-all', status === 'complete' ? 'bg-green-400' : 'bg-neon-cyan')} style={{ width: `${Math.min(100, pct)}%` }} />
+                  <div className={cn('h-full rounded-full transition-all', status === 'complete' ? 'bg-green-400' : 'bg-orange-500')} style={{ width: `${Math.min(100, pct)}%` }} />
                 </div>
               </div>
 
@@ -739,7 +790,7 @@ export default function ManufacturingLensPage() {
                           <div className={cn(
                             'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
                             isComplete && 'bg-green-400/20 border-green-400/40 text-green-400',
-                            isCurrent && 'bg-neon-cyan/20 border-neon-cyan/40 text-neon-cyan animate-pulse',
+                            isCurrent && 'bg-orange-500/20 border-orange-500/40 text-orange-500 animate-pulse',
                             !isComplete && !isCurrent && 'bg-lattice-elevated border-lattice-border text-gray-500'
                           )}>
                             {isComplete ? <CheckCircle2 className="w-3 h-3" /> : isCurrent ? <Activity className="w-3 h-3" /> : <CircleDot className="w-3 h-3" />}
@@ -801,7 +852,7 @@ export default function ManufacturingLensPage() {
                 ))}
                 <div className="mt-3 pt-3 border-t border-lattice-border flex items-center justify-between px-2">
                   <span className="text-sm font-semibold text-white">Total BOM Cost</span>
-                  <span className="text-lg font-bold text-neon-cyan font-mono">${calcBOMCost(BOM_TREE[0]).toFixed(2)}</span>
+                  <span className="text-lg font-bold text-orange-500 font-mono">${calcBOMCost(BOM_TREE[0]).toFixed(2)}</span>
                 </div>
               </>
             )}
@@ -864,7 +915,7 @@ export default function ManufacturingLensPage() {
                 <p className={ds.textMuted}>Product: <span className="text-gray-300">{d.product as string}</span></p>
                 <p className={ds.textMuted}>Revision: <span className="text-white font-mono">{d.revision as string}</span> {d.prevRevision !== '-' && <span className="text-gray-600">(prev: {d.prevRevision as string})</span>}</p>
                 <p className={ds.textMuted}>Components: <span className="text-white">{String(d.components)}</span> across <span className="text-white">{String(d.levels)}</span> levels</p>
-                <p className={ds.textMuted}>Cost: <span className="text-neon-cyan font-mono">${(d.totalCost as number).toFixed(2)}</span></p>
+                <p className={ds.textMuted}>Cost: <span className="text-orange-500 font-mono">${(d.totalCost as number).toFixed(2)}</span></p>
                 <p className={ds.textMuted}>Approved: <span className="text-gray-300">{d.approvedBy as string}</span></p>
               </div>
               {Boolean(d.changeNote) && (
@@ -954,7 +1005,7 @@ export default function ManufacturingLensPage() {
             {isDetail && (
               <div className="space-y-4 mt-4 pt-4 border-t border-lattice-border">
                 {/* Measurements vs Tolerances */}
-                {measurements.length > 0 && (
+                {measurements.length > 0 ? (
                   <div>
                     <h4 className="text-sm font-semibold text-gray-300 mb-2">Measurements vs Tolerances</h4>
                     <div className="overflow-x-auto">
@@ -987,6 +1038,10 @@ export default function ManufacturingLensPage() {
                         </tbody>
                       </table>
                     </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-6 text-gray-500 text-sm border border-dashed border-white/10 rounded-lg">
+                    <p>No quality measurements yet. Add measurements to track manufacturing quality.</p>
                   </div>
                 )}
 
@@ -1062,7 +1117,7 @@ export default function ManufacturingLensPage() {
                 const isLong = setupTime > 40;
                 return (
                   <tr key={wo.title} className="border-b border-lattice-border/30">
-                    <td className="py-2 pr-4 font-mono text-neon-cyan">{wo.title}</td>
+                    <td className="py-2 pr-4 font-mono text-orange-500">{wo.title}</td>
                     <td className="py-2 pr-4 text-gray-300">{wo.data.product as string}</td>
                     <td className="py-2 pr-4 text-gray-400">{wo.data.line as string}</td>
                     <td className="py-2 pr-4">
@@ -1141,7 +1196,7 @@ export default function ManufacturingLensPage() {
         const totalDowntime = downtimeLog.reduce((s, e) => s + (e.duration as number), 0);
 
         return (
-          <div key={item.id} className={cn(ds.panel, 'hover:border-neon-cyan/30 transition-colors')}>
+          <div key={item.id} className={cn(ds.panel, 'hover:border-orange-500/30 transition-colors')}>
             <div className="flex items-start justify-between mb-3 cursor-pointer" onClick={() => setDetailItem(isDetail ? null : item.id)}>
               <div className="flex items-center gap-3">
                 <div className={cn(
@@ -1235,8 +1290,8 @@ export default function ManufacturingLensPage() {
     const oshaRecordables = safetyItems.filter(s => s.data.oshaRecordable === true).length;
     const nearMisses = safetyItems.filter(s => (s.data.incidentType as string) === 'near_miss').length;
     const openItems = safetyItems.filter(s => s.meta.status !== 'closed').length;
-    const totalHours = 50000; // YTD employee hours placeholder
-    const oshaRate = totalHours > 0 ? ((oshaRecordables * 200000) / totalHours).toFixed(2) : '0.00';
+    const totalHours = safetyItems.reduce((s, item) => s + ((item.data.employeeHours as number) || 0), 0);
+    const oshaRate = totalHours > 0 ? ((oshaRecordables * 200000) / totalHours).toFixed(2) : '--';
 
     return (
       <div className="space-y-4">
@@ -1342,7 +1397,7 @@ export default function ManufacturingLensPage() {
           const isDetail = detailItem === item.id;
 
           return (
-            <div key={item.id} className={cn(ds.panel, 'hover:border-neon-cyan/30 transition-colors')}>
+            <div key={item.id} className={cn(ds.panel, 'hover:border-orange-500/30 transition-colors')}>
               <div className="flex items-start justify-between mb-2 cursor-pointer" onClick={() => setDetailItem(isDetail ? null : item.id)}>
                 <div>
                   <div className="flex items-center gap-2 mb-1">
@@ -1443,7 +1498,7 @@ export default function ManufacturingLensPage() {
       <RealtimeDataPanel domain="manufacturing" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <DTUExportButton domain="manufacturing" data={{}} compact />
       {/* Mode Tabs */}
-      <nav className="flex items-center gap-1 border-b border-lattice-border pb-3 overflow-x-auto">
+      <nav className="flex items-center gap-1 border-b border-lattice-border pb-3 flex-wrap">
         {MODE_TABS.map(tab => {
           const Icon = tab.icon;
           return (
@@ -1595,7 +1650,7 @@ export default function ManufacturingLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

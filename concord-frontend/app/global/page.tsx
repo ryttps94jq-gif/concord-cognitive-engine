@@ -21,7 +21,6 @@ import { showToast } from '@/components/common/Toasts';
 import { cn } from '@/lib/utils';
 import { ds } from '@/lib/design-system';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiHelpers } from '@/lib/api/client';
 import {
   Globe, FileText, Package, Briefcase, Store,
   ChevronLeft, ChevronRight, ArrowUpRight, Send, Download,
@@ -91,7 +90,7 @@ export default function GlobalPage() {
   const queryClient = useQueryClient();
 
   const syncToLocalMutation = useMutation({
-    mutationFn: (dtuId: string) => apiHelpers.dtus.syncFromGlobal(dtuId),
+    mutationFn: (dtuId: string) => api.post('/api/dtus/sync-from-global', { dtuId }),
     onSuccess: (res) => {
       const data = res.data;
       if (data?.ok) {

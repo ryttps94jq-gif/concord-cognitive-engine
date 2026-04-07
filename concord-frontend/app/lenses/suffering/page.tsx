@@ -1,10 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
+import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
-import { AlertTriangle, Heart, Brain, Zap, TrendingDown, Shield, Layers, ChevronDown } from 'lucide-react';
+import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
+import { AlertTriangle, Heart, Brain, Zap, TrendingDown, Shield, Layers, ChevronDown, Activity, Compass, Plus, Trash2, Loader2 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -16,22 +19,41 @@ import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 export default function SufferingLensPage() {
   useLensNav('suffering');
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('suffering');
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
+
+  const { items: wellbeingItems, isLoading, isError: isError, error: error, refetch: refetch, create, update, remove } = useLensData<Record<string, unknown>>('suffering', 'metric', { seed: [] });
+  const runAction = useRunArtifact('suffering');
+
+  const handleAction = useCallback((artifactId: string) => {
+    runAction.mutate({ id: artifactId, action: 'analyze' });
+  }, [runAction]);
+
+  const handleCreate = useCallback(() => {
+    create({ title: 'New Metric', data: { type: 'wellbeing', value: 0 } });
+  }, [create]);
+
+  const handleUpdate = useCallback((id: string, data: Record<string, unknown>) => {
+    update(id, { data });
+  }, [update]);
+
+  const handleRemove = useCallback((id: string) => {
+    remove(id);
+  }, [remove]);
 
   // Backend: GET /api/status
-  const { data: _status, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
-    queryKey: ['_status'],
+  const { data: status } = useQuery({
+    queryKey: ['backend-status'],
     queryFn: () => api.get('/api/status').then((r) => r.data),
   });
 
-  // Simulated Chicken2 metrics (would come from STATE.__chicken2)
+  // Chicken2 metrics (derived from backend status or defaults)
   const metrics = {
-    suffering: 0.15,
-    homeostasis: 0.82,
-    contradictionLoad: 0.08,
-    functionalDecline: 0.05,
-    stressAccumulation: 0.12,
-    coherenceScore: 0.88,
+    suffering: status?.suffering ?? 0.15,
+    homeostasis: status?.homeostasis ?? 0.82,
+    contradictionLoad: status?.contradictionLoad ?? 0.08,
+    functionalDecline: status?.functionalDecline ?? 0.05,
+    stressAccumulation: status?.stressAccumulation ?? 0.12,
+    coherenceScore: status?.coherenceScore ?? 0.88,
   };
 
   const healthScore = (metrics.homeostasis - metrics.suffering) * 100;
@@ -57,6 +79,13 @@ export default function SufferingLensPage() {
   }
   return (
     <div className="p-6 space-y-6">
+      {/* Wellbeing Disclaimer */}
+      <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3 flex items-start gap-3">
+        <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
+        <p className="text-sm text-amber-200">
+          Not medical advice. This lens monitors system-level wellbeing metrics. For personal health or mental health concerns, consult a qualified healthcare provider.
+        </p>
+      </div>
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-2xl">💔</span>
@@ -91,8 +120,47 @@ export default function SufferingLensPage() {
 
       {/* AI Actions */}
       <UniversalActions domain="suffering" artifactId={undefined} compact />
+
+      {/* Wellbeing Items CRUD */}
+      <div className="panel p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold flex items-center gap-2">
+            <Activity className="w-4 h-4 text-neon-cyan" /> Tracked Wellbeing Items
+            {runAction.isPending && <Loader2 className="w-4 h-4 animate-spin text-neon-cyan" />}
+          </h3>
+          <button onClick={handleCreate} className="flex items-center gap-1.5 px-3 py-1.5 bg-neon-cyan/20 text-neon-cyan rounded-lg text-sm hover:bg-neon-cyan/30">
+            <Plus className="w-4 h-4" /> Add Item
+          </button>
+        </div>
+        {wellbeingItems.length === 0 ? (
+          <p className="text-gray-500 text-sm text-center py-4">No wellbeing items tracked yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {wellbeingItems.map(item => (
+              <div key={item.id} className="flex items-center justify-between p-2 rounded-lg bg-white/5">
+                <span className="text-sm">{item.title}</span>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => handleAction(item.id)} className="text-gray-500 hover:text-neon-cyan" title="Run AI analysis"><Zap className="w-4 h-4" /></button>
+                  <button onClick={() => handleUpdate(item.id, { ...(item.data || {}), lastReviewed: new Date().toISOString() })} className="text-gray-500 hover:text-neon-blue" title="Update"><Activity className="w-4 h-4" /></button>
+                  <button onClick={() => handleRemove(item.id)} className="text-gray-500 hover:text-red-400" title="Delete"><Trash2 className="w-4 h-4" /></button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="lens-card"><Activity className="w-5 h-5 text-neon-cyan mb-2" /><p className="text-2xl font-bold">{wellbeingItems.length}</p><p className="text-sm text-gray-400">Tracked Items</p></div>
+        <div className="lens-card"><Compass className="w-5 h-5 text-neon-green mb-2" /><p className="text-2xl font-bold">6</p><p className="text-sm text-gray-400">Coping Strategies</p></div>
+        <div className="lens-card"><TrendingDown className="w-5 h-5 text-neon-purple mb-2" /><p className="text-2xl font-bold">{healthScore.toFixed(0)}%</p><p className="text-sm text-gray-400">Progress Score</p></div>
+        <div className="lens-card"><Heart className="w-5 h-5 text-pink-400 mb-2" /><p className="text-2xl font-bold">{(metrics.coherenceScore * 100).toFixed(0)}%</p><p className="text-sm text-gray-400">Coherence</p></div>
+      </div>
+
       {/* Main Metrics */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 * 0.05 }}>
         <MetricCard
           icon={<AlertTriangle className="w-5 h-5" />}
           label="Suffering"
@@ -100,6 +168,8 @@ export default function SufferingLensPage() {
           color="pink"
           description="Pain signal from contradictions"
         />
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1 * 0.05 }}>
         <MetricCard
           icon={<Heart className="w-5 h-5" />}
           label="Homeostasis"
@@ -107,6 +177,8 @@ export default function SufferingLensPage() {
           color="green"
           description="System balance state"
         />
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 2 * 0.05 }}>
         <MetricCard
           icon={<Brain className="w-5 h-5" />}
           label="Coherence"
@@ -114,6 +186,8 @@ export default function SufferingLensPage() {
           color="cyan"
           description="Logical consistency"
         />
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 3 * 0.05 }}>
         <MetricCard
           icon={<Zap className="w-5 h-5" />}
           label="Contradiction Load"
@@ -121,6 +195,8 @@ export default function SufferingLensPage() {
           color="purple"
           description="Unresolved conflicts"
         />
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 4 * 0.05 }}>
         <MetricCard
           icon={<TrendingDown className="w-5 h-5" />}
           label="Functional Decline"
@@ -128,6 +204,8 @@ export default function SufferingLensPage() {
           color="pink"
           description="Capability degradation"
         />
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 5 * 0.05 }}>
         <MetricCard
           icon={<Shield className="w-5 h-5" />}
           label="Stress Accumulation"
@@ -135,6 +213,7 @@ export default function SufferingLensPage() {
           color="blue"
           description="Unprocessed stress"
         />
+        </motion.div>
       </div>
 
       {/* Suffering Gauge */}
@@ -219,11 +298,13 @@ export default function SufferingLensPage() {
         </p>
       </div>
 
+      <RealtimeDataPanel data={realtimeInsights} />
+
       {/* Lens Features */}
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />
@@ -271,7 +352,7 @@ function MetricCard({
   };
 
   return (
-    <div className="lens-card">
+    <div data-lens-theme="suffering" className="lens-card">
       <div className="flex items-center justify-between mb-3">
         <span className={colors[color]}>{icon}</span>
         <span className={`text-xl font-bold ${colors[color]}`}>

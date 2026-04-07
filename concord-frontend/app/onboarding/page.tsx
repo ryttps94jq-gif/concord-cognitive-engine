@@ -3,12 +3,12 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation } from '@tanstack/react-query';
-import { api, ensureCsrfToken } from '@/lib/api/client';
+import { api } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
 import { cn } from '@/lib/utils';
 import {
-  Brain, Globe, Compass, Layers, Sparkles,
-  Rocket, BookOpen, Zap, ChevronRight, Check,
+  Brain, Globe, Compass, Sparkles,
+  Rocket, ChevronRight, Check,
 } from 'lucide-react';
 
 type UniverseMode = 'empty' | 'starter' | 'domain-specific' | 'full';
@@ -81,7 +81,7 @@ export default function OnboardingPage() {
 
   const initMutation = useMutation({
     mutationFn: async (data: { mode: UniverseMode; domains?: string[] }) => {
-      await ensureCsrfToken();
+      await api.get('/api/auth/csrf-token').catch(() => {});
       const res = await api.post('/api/universe/initialize', data);
       return res.data;
     },

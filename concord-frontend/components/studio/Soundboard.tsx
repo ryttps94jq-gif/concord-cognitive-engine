@@ -26,14 +26,14 @@ type ViewMode = 'grid' | 'list';
 export function Soundboard({
   dtuEvents,
   synthPresets,
-  effectPresets: _effectPresets,
+  effectPresets,
   drumPatterns,
   currentKey,
   currentBpm,
   currentGenre,
-  onLoadPreset: _onLoadPreset,
-  onLoadEffectChain: _onLoadEffectChain,
-  onLoadPattern: _onLoadPattern,
+  onLoadPreset,
+  onLoadEffectChain,
+  onLoadPattern,
   onDragToTrack,
 }: SoundboardProps) {
   const [tab, setTab] = useState<SoundboardTab>('all');
@@ -128,6 +128,21 @@ export function Soundboard({
 
     return items;
   }, [tab, search, synthPresets, drumPatterns, instrumentDTUs, effectDTUs, patternDTUs, audioDTUs, favoriteIds]);
+
+  const handleLoadItem = (type: string, data: Record<string, unknown>) => {
+    switch (type) {
+      case 'instrument':
+        if (data.preset) onLoadPreset(data.preset as SynthPreset);
+        break;
+      case 'effect':
+        if (data.effects) onLoadEffectChain(data.effects as EffectInstance[]);
+        else if (effectPresets.length > 0) onLoadEffectChain(effectPresets);
+        break;
+      case 'pattern':
+        if (data.pattern) onLoadPattern(data.pattern as DrumPattern);
+        break;
+    }
+  };
 
   const toggleFavorite = (id: string) => {
     setFavoriteIds(prev => {
@@ -225,7 +240,10 @@ export function Soundboard({
                     <ArrowUpRight className="w-2.5 h-2.5" /> {item.reason}
                   </span>
                 </div>
-                <button className="opacity-0 group-hover:opacity-100 text-[10px] px-2 py-0.5 bg-neon-purple/10 text-neon-purple rounded">
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleLoadItem(item.type, item.data); }}
+                  className="opacity-0 group-hover:opacity-100 text-[10px] px-2 py-0.5 bg-neon-purple/10 text-neon-purple rounded"
+                >
                   Load
                 </button>
               </div>
@@ -237,6 +255,7 @@ export function Soundboard({
               <div
                 key={item.id}
                 className="p-2.5 rounded-lg bg-white/5 border border-white/10 hover:border-neon-cyan/20 cursor-pointer group transition-colors"
+                onClick={() => handleLoadItem(item.type, item.data)}
                 draggable
                 onDragStart={() => onDragToTrack(item.type, item.data)}
               >
@@ -280,7 +299,10 @@ export function Soundboard({
                 >
                   <Star className="w-3 h-3" fill={item.favorite ? 'currentColor' : 'none'} />
                 </button>
-                <button className="opacity-0 group-hover:opacity-100 p-0.5 text-neon-cyan">
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleLoadItem(item.type, item.data); }}
+                  className="opacity-0 group-hover:opacity-100 p-0.5 text-neon-cyan"
+                >
                   <Play className="w-3 h-3" />
                 </button>
               </div>

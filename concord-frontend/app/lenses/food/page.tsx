@@ -1,5 +1,6 @@
 'use client';
 
+import { motion } from 'framer-motion';
 import { useState, useMemo, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
@@ -28,6 +29,7 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -216,7 +218,7 @@ export default function FoodLensPage() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<LensItem<FoodArtifact> | null>(null);
   const [showDashboard, setShowDashboard] = useState(false);
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   // Sub-views
   const [recipeScaleId, setRecipeScaleId] = useState<string | null>(null);
@@ -233,7 +235,7 @@ export default function FoodLensPage() {
   const [wasteLog, setWasteLog] = useState<WasteEntry[]>([]);
   const [wasteItemName, setWasteItemName] = useState('');
   const [wasteQty, setWasteQty] = useState('');
-  const [wasteUnit, _setWasteUnit] = useState('lb');
+  const [wasteUnit, setWasteUnit] = useState('lb');
   const [wasteReason, setWasteReason] = useState<WasteReason>('expired');
   const [wasteCost, setWasteCost] = useState('');
   const [wasteNotes, setWasteNotes] = useState('');
@@ -385,7 +387,11 @@ export default function FoodLensPage() {
       Object.assign(base, { employee: formEmployee, role: formRole, shiftStart: formShiftStart, shiftEnd: formShiftEnd, station: formStation, hourlyRate: parseFloat(formHourlyRate) || 15 });
     }
     const payload = { title: formName, data: base as Partial<FoodArtifact>, meta: { status: formStatus, tags: [activeArtifactType, formCategory || formSection || ''] } };
-    if (editingItem) { await update(editingItem.id, payload); } else { await create(payload); }
+    if (activeArtifactType === 'MealPlan') {
+      if (editingItem) { await updateMealPlan(editingItem.id, payload); } else { await createMealPlan(payload); }
+    } else {
+      if (editingItem) { await update(editingItem.id, payload); } else { await create(payload); }
+    }
     setEditorOpen(false);
   };
 
@@ -744,7 +750,12 @@ export default function FoodLensPage() {
             </div>
             <div>
               <label className={ds.label}>Qty</label>
-              <input type="number" value={wasteQty} onChange={e => setWasteQty(e.target.value)} className={ds.input} placeholder="0" />
+              <div className="flex gap-1">
+                <input type="number" value={wasteQty} onChange={e => setWasteQty(e.target.value)} className={cn(ds.input, 'flex-1')} placeholder="0" />
+                <select value={wasteUnit} onChange={e => setWasteUnit(e.target.value)} className={cn(ds.select, 'w-20')}>
+                  {['lb', 'kg', 'oz', 'g', 'ea', 'gal', 'L', 'qt', 'pt'].map(u => <option key={u} value={u}>{u}</option>)}
+                </select>
+              </div>
             </div>
             <div>
               <label className={ds.label}>Reason</label>
@@ -1303,10 +1314,17 @@ export default function FoodLensPage() {
                       {meals.length > 0 ? meals.map(m => {
                         const md = m.data as unknown as FoodArtifact;
                         return (
-                          <div key={m.id} className="text-xs p-1.5 rounded bg-neon-cyan/10 text-neon-cyan mb-1 truncate"
+                          <div key={m.id} className="group/meal flex items-center gap-1 text-xs p-1.5 rounded bg-neon-cyan/10 text-neon-cyan mb-1"
                             onClick={e => { e.stopPropagation(); openEdit(m); }}>
-                            {m.title}
-                            {md.calories ? <span className="text-gray-500 ml-1">{md.calories}cal</span> : null}
+                            <span className="truncate flex-1">{m.title}</span>
+                            {md.calories ? <span className="text-gray-500">{md.calories}cal</span> : null}
+                            <button
+                              className="opacity-0 group-hover/meal:opacity-100 text-red-400 hover:text-red-300 transition-opacity flex-shrink-0"
+                              onClick={e => { e.stopPropagation(); removeMealPlan(m.id); }}
+                              title="Remove meal"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
                           </div>
                         );
                       }) : (
@@ -1820,11 +1838,11 @@ export default function FoodLensPage() {
           </div>
         ) : (
           <div className={ds.grid3}>
-            {filtered.map(item => {
+            {filtered.map((item, index) => {
               const d = item.data as unknown as FoodArtifact;
               const plate = d.type === 'Recipe' ? costPlate(item) : null;
               return (
-                <div key={item.id} className={ds.panelHover} onClick={() => openEdit(item)}>
+                <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className={ds.panelHover} onClick={() => openEdit(item)}>
                   <div className="flex items-start justify-between mb-2">
                     <h3 className={ds.heading3}>{item.title}</h3>
                     {renderStatusBadge(d.status)}
@@ -1947,7 +1965,7 @@ export default function FoodLensPage() {
                     <button onClick={e => { e.stopPropagation(); openEdit(item); }} className={cn(ds.btnSmall, 'text-gray-400 hover:text-white')}><Edit2 className="w-3 h-3" /> Edit</button>
                     <button onClick={e => { e.stopPropagation(); remove(item.id); }} className={cn(ds.btnSmall, 'text-red-400 hover:text-red-300')}><Trash2 className="w-3 h-3" /> Delete</button>
                   </div>
-                </div>
+                </motion.div>
               );
             })}
           </div>
@@ -2257,6 +2275,9 @@ export default function FoodLensPage() {
                 )}
               </div>
               <div className="flex items-center gap-3">
+                {editingItem && (
+                  <button onClick={() => { remove(editingItem.id); setEditorOpen(false); }} className={cn(ds.btnSecondary, 'text-red-400 hover:text-red-300')}><Trash2 className="w-4 h-4" /> Delete</button>
+                )}
                 <button onClick={() => setEditorOpen(false)} className={ds.btnSecondary}>Cancel</button>
                 <button onClick={handleSave} className={ds.btnPrimary}><CheckCircle2 className="w-4 h-4" /> {editingItem ? 'Update' : 'Create'}</button>
               </div>
@@ -2469,7 +2490,14 @@ export default function FoodLensPage() {
   }
 
   return (
-    <div className={ds.pageContainer}>
+    <div data-lens-theme="food" className={ds.pageContainer}>
+      {/* Nutrition Disclaimer */}
+      <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3 flex items-start gap-3">
+        <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
+        <p className="text-sm text-amber-200">
+          Not nutritional or dietary advice. Nutritional data shown is for informational purposes only. Consult a registered dietitian or healthcare provider for personalized guidance.
+        </p>
+      </div>
       <header className={ds.sectionHeader}>
         <div className="flex items-center gap-3">
           <ChefHat className="w-8 h-8 text-orange-400" />
@@ -2489,11 +2517,42 @@ export default function FoodLensPage() {
       </header>
 
 
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {(() => {
+          const recipes = allRecipes;
+          const totalCalories = recipes.reduce((s, r) => s + Number((r.data as unknown as FoodArtifact).calories || 0), 0);
+          return [
+            { label: 'Recipes', value: recipes.length, icon: ChefHat },
+            { label: 'Meals Logged', value: mealPlanItems.length, icon: UtensilsCrossed },
+            { label: 'Calories Today', value: totalCalories, icon: Flame },
+            { label: 'Pantry Items', value: pantryItems.length, icon: Warehouse },
+          ].map((stat) => (
+            <div key={stat.label} className={ds.panel + ' flex items-center gap-3 p-3'}>
+              <stat.icon className="w-5 h-5 text-orange-400 shrink-0" />
+              <div>
+                <p className="text-xs text-gray-400">{stat.label}</p>
+                <p className="text-lg font-bold text-white">{stat.value}</p>
+              </div>
+            </div>
+          ));
+        })()}
+      </div>
+
       {/* AI Actions */}
       <UniversalActions domain="food" artifactId={allRecipes[0]?.id} compact />
       <RealtimeDataPanel domain="food" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <DTUExportButton domain="food" data={{}} compact />
-      <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 overflow-x-auto">
+      <VisionAnalyzeButton
+        domain="food"
+        prompt="Analyze this food image. Identify the dish or ingredients visible. List likely ingredients, suggest dietary tags (vegan, gluten-free, etc.), and estimate nutritional category."
+        onResult={(res) => {
+          setFormDescription(res.analysis);
+          if (res.suggestedTags?.length) setFormNotes(res.suggestedTags.join(', '));
+        }}
+        className="inline-flex"
+      />
+      <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 flex-wrap">
         {MODE_TABS.map(tab => (
           <button
             key={tab.id}
@@ -2559,7 +2618,7 @@ export default function FoodLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

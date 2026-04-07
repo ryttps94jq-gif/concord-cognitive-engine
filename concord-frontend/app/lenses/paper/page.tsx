@@ -1,6 +1,8 @@
 'use client';
 
+import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
+import { showToast } from '@/components/common/Toasts';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useState, useMemo, useCallback } from 'react';
@@ -17,6 +19,7 @@ import { ErrorState } from '@/components/common/EmptyState';
 import { useMutation } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { ds } from '@/lib/design-system';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 import { cn } from '@/lib/utils';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -193,7 +196,7 @@ export default function PaperLensPage() {
   const [sortField, setSortField] = useState<'updatedAt' | 'title'>('updatedAt');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [citationStyle, setCitationStyle] = useState<CitationData['style']>('apa');
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   // ---- Modal state for creating items ----
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -336,27 +339,31 @@ export default function PaperLensPage() {
   }, []);
 
   const handleCreate = useCallback(async () => {
-    switch (activeTab) {
-      case 'papers':
-        await createArtifact({ title: newTitle || 'Untitled Paper', data: { wordCount: 0, excerpt: '', content: '', sections: PAPER_SECTIONS.map(h => ({ heading: h, body: '' })) }, meta: { tags: [] } });
-        break;
-      case 'hypotheses':
-        await createArtifact({ title: newTitle || 'Untitled Hypothesis', data: { statement: newStatement, status: 'proposed', confidence: 50, linkedEvidence: [], linkedExperiments: [], rationale: '' }, meta: { tags: [] } });
-        break;
-      case 'evidence':
-        await createArtifact({ title: newTitle || 'Untitled Evidence', data: { source: newSource, strength: newStrength, type: newEvidenceType, summary: '', linkedHypotheses: [] }, meta: { tags: [] } });
-        break;
-      case 'experiments':
-        await createArtifact({ title: newTitle || 'Untitled Experiment', data: { status: 'planned', methodology: newMethodology, results: '', conclusions: '', linkedHypothesis: '', linkedEvidence: [] }, meta: { tags: [] } });
-        break;
-      case 'bibliography':
-        await createArtifact({ title: newTitle || 'Untitled Citation', data: { doi: newDoi, authors: newAuthors, year: parseInt(newYear) || undefined, journal: newJournal, citedByCount: 0 }, meta: { tags: [] } });
-        break;
-      default:
-        break;
+    try {
+      switch (activeTab) {
+        case 'papers':
+          await createArtifact({ title: newTitle || 'Untitled Paper', data: { wordCount: 0, excerpt: '', content: '', sections: PAPER_SECTIONS.map(h => ({ heading: h, body: '' })) }, meta: { tags: [] } });
+          break;
+        case 'hypotheses':
+          await createArtifact({ title: newTitle || 'Untitled Hypothesis', data: { statement: newStatement, status: 'proposed', confidence: 50, linkedEvidence: [], linkedExperiments: [], rationale: '' }, meta: { tags: [] } });
+          break;
+        case 'evidence':
+          await createArtifact({ title: newTitle || 'Untitled Evidence', data: { source: newSource, strength: newStrength, type: newEvidenceType, summary: '', linkedHypotheses: [] }, meta: { tags: [] } });
+          break;
+        case 'experiments':
+          await createArtifact({ title: newTitle || 'Untitled Experiment', data: { status: 'planned', methodology: newMethodology, results: '', conclusions: '', linkedHypothesis: '', linkedEvidence: [] }, meta: { tags: [] } });
+          break;
+        case 'bibliography':
+          await createArtifact({ title: newTitle || 'Untitled Citation', data: { doi: newDoi, authors: newAuthors, year: parseInt(newYear) || undefined, journal: newJournal, citedByCount: 0 }, meta: { tags: [] } });
+          break;
+        default:
+          break;
+      }
+      setCreateModalOpen(false);
+      resetCreateForm();
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Failed to create item');
     }
-    setCreateModalOpen(false);
-    resetCreateForm();
   }, [activeTab, newTitle, newStatement, newSource, newStrength, newEvidenceType, newMethodology, newDoi, newAuthors, newYear, newJournal, createArtifact]);
 
   const resetCreateForm = () => {
@@ -512,6 +519,24 @@ export default function PaperLensPage() {
         </div>
       </header>
 
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Papers', value: stats.papers, icon: FileText },
+          { label: 'Citations', value: allCitations.length, icon: Link2 },
+          { label: 'Hypotheses', value: stats.hypotheses, icon: Lightbulb },
+          { label: 'Experiments', value: stats.experiments, icon: Beaker },
+        ].map((stat) => (
+          <div key={stat.label} className={ds.panel + ' flex items-center gap-3 p-3'}>
+            <stat.icon className="w-5 h-5 text-neon-purple shrink-0" />
+            <div>
+              <p className="text-xs text-gray-400">{stat.label}</p>
+              <p className="text-lg font-bold text-white">{stat.value}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* ---- Dashboard Stats ---- */}
       <div className={ds.grid4}>
         <StatCard icon={FileText} label="Total Papers" value={stats.papers} color="neon-purple" />
@@ -521,7 +546,7 @@ export default function PaperLensPage() {
       </div>
 
       {/* ---- Mode Tabs ---- */}
-      <div className="flex items-center gap-1 border-b border-lattice-border pb-0 overflow-x-auto">
+      <div className="flex items-center gap-1 border-b border-lattice-border pb-0 flex-wrap">
         {MODE_TABS.map(tab => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.key;
@@ -900,11 +925,14 @@ export default function PaperLensPage() {
         </>
       )}
 
+      <RealtimeDataPanel data={realtimeInsights} />
+      <UniversalActions domain="paper" artifactId={null} compact />
+
       {/* Lens Features */}
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />
@@ -952,12 +980,13 @@ function PapersGrid({ items, onEdit, onSelect, onValidate, validationResults, is
 }) {
   return (
     <div className={ds.grid3}>
-      {items.map(item => {
+      {items.map((item, index) => {
         const d = getData<PaperData>(item);
         const vr = validationResults[item.id];
         return (
-          <div
+          <motion.div
             key={item.id}
+            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }}
             className={cn(ds.panelHover, 'space-y-3')}
             onClick={() => onSelect(item)}
           >
@@ -993,7 +1022,7 @@ function PapersGrid({ items, onEdit, onSelect, onValidate, validationResults, is
                 </button>
               </div>
             </div>
-          </div>
+          </motion.div>
         );
       })}
     </div>
@@ -1539,7 +1568,7 @@ function CitationDetailFields({ item, citationStyle }: { item: LensItem; citatio
   const formatted = formatCitation({ ...d, title: item.title }, citationStyle);
   return (
     <>
-      <div>
+      <div data-lens-theme="paper">
         <span className={ds.label}>Formatted Citation ({citationStyle?.toUpperCase()})</span>
         <p className="text-sm text-gray-300 italic mt-1">{formatted}</p>
       </div>

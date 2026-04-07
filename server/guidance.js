@@ -797,7 +797,7 @@ export function registerGuidanceEndpoints(app, db) {
 
 function safeJSON(str) {
   if (!str) return null;
-  try { return JSON.parse(str); } catch { return str; }
+  try { return JSON.parse(str); } catch (err) { console.debug('[guidance] JSON parse failed, returning raw string'); return str; }
 }
 
 function stripInternal(obj) {

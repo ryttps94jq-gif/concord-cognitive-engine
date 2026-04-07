@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
+import { showToast } from '@/components/common/Toasts';
 
 interface ArtifactInfo {
   type: string;
@@ -44,7 +46,7 @@ function WaveformDisplay({ dtuId }: { dtuId: string }) {
     fetch(`/api/artifact/${dtuId}/thumbnail`)
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setPeaks(data); })
-      .catch(() => {});
+      .catch(err => { console.error('[ArtifactRenderer] Failed to load waveform:', err); showToast('error', 'Failed to load content'); });
   }, [dtuId]);
 
   if (!peaks.length) return <div className="h-12 bg-zinc-900 rounded animate-pulse" />;
@@ -84,11 +86,11 @@ export function ArtifactRenderer({ dtuId, artifact, mode = "inline" }: ArtifactR
   // Image
   if (artifact.type.startsWith("image/")) {
     if (mode === "thumbnail") {
-      return <img src={streamUrl} className="w-full h-32 object-cover rounded" alt={artifact.filename} />;
+      return <Image src={streamUrl} className="w-full h-32 object-cover rounded" alt={artifact.filename} width={400} height={128} unoptimized />;
     }
     return (
       <div className="space-y-2">
-        <img src={streamUrl} alt={artifact.filename} className="w-full rounded-lg max-h-96 object-contain bg-zinc-900" />
+        <Image src={streamUrl} alt={artifact.filename} className="w-full rounded-lg max-h-96 object-contain bg-zinc-900" width={800} height={384} unoptimized />
         <div className="flex items-center justify-between text-xs text-zinc-400">
           <span>{artifact.filename} — {formatSize(artifact.sizeBytes)}</span>
           <DownloadButton url={downloadUrl} filename={artifact.filename} />
@@ -135,7 +137,7 @@ export function ArtifactRenderer({ dtuId, artifact, mode = "inline" }: ArtifactR
     return (
       <div className="space-y-2">
         <div className="bg-zinc-900 rounded-lg border border-zinc-700 p-4 flex items-center justify-center">
-          <img src={streamUrl} alt={artifact.filename} className="max-w-full max-h-96" />
+          <Image src={streamUrl} alt={artifact.filename} className="max-w-full max-h-96" width={800} height={384} unoptimized />
         </div>
         <div className="flex items-center justify-between text-xs text-zinc-400">
           <span>{artifact.filename} — {formatSize(artifact.sizeBytes)}</span>
@@ -236,7 +238,7 @@ function CSVTablePreview({ dtuId, filename, downloadUrl }: { dtuId: string; file
         );
         setRows(parsed.slice(0, 100));
       })
-      .catch(() => {});
+      .catch(err => { console.error('[ArtifactRenderer] Failed to load CSV data:', err); showToast('error', 'Failed to load content'); });
   }, [dtuId]);
 
   if (!rows.length) return <div className="h-32 bg-zinc-900 rounded animate-pulse" />;
@@ -276,14 +278,42 @@ function CSVTablePreview({ dtuId, filename, downloadUrl }: { dtuId: string; file
 
 // MEGA SPEC: MIDI Preview
 function MidiPreview({ dtuId, filename, downloadUrl }: { dtuId: string; filename: string; downloadUrl: string }) {
+  const [midiData, setMidiData] = useState<{ notes?: { pitch: number; time: number; duration: number }[]; duration?: number } | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/artifact/${dtuId}/stream`)
+      .then(r => r.json())
+      .then(data => setMidiData(data))
+      .catch(() => setMidiData(null));
+  }, [dtuId]);
+
   return (
     <div className="space-y-2 p-3 rounded-lg bg-zinc-900 border border-zinc-700">
       <div className="flex items-center gap-2">
         <span className="text-neon-purple text-lg">{'\u266B'}</span>
         <span className="text-sm text-zinc-200">{filename}</span>
+        {midiData?.duration && (
+          <span className="text-xs text-zinc-500">{Math.round(midiData.duration)}s</span>
+        )}
       </div>
-      <div className="h-24 bg-zinc-800 rounded flex items-center justify-center text-xs text-zinc-500">
-        MIDI piano roll preview
+      <div className="h-24 bg-zinc-800 rounded overflow-hidden relative">
+        {midiData?.notes && midiData.notes.length > 0 ? (
+          <svg viewBox="0 0 200 100" className="w-full h-full" preserveAspectRatio="none">
+            {midiData.notes.slice(0, 500).map((note, i) => {
+              const maxTime = midiData.duration || 1;
+              const x = (note.time / maxTime) * 200;
+              const w = Math.max(1, (note.duration / maxTime) * 200);
+              const y = 100 - ((note.pitch - 21) / 87) * 100;
+              return (
+                <rect key={i} x={x} y={y} width={w} height={2} fill="#a855f7" opacity={0.7} />
+              );
+            })}
+          </svg>
+        ) : (
+          <div className="flex items-center justify-center h-full text-xs text-zinc-500">
+            MIDI piano roll preview
+          </div>
+        )}
       </div>
       <div className="flex gap-2">
         <DownloadButton url={downloadUrl} filename={filename} />

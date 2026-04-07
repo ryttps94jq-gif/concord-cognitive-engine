@@ -3,7 +3,7 @@
 import React from 'react';
 import {
   Globe, Map, Mountain, Clock, Cloud, Users, Zap,
-  Eye, Brain, Heart, Shield, Sparkles, Activity,
+  Eye, Brain, Sparkles, Activity,
 } from 'lucide-react';
 
 // ── Types ───────────────────────────────────────────────────────────────────

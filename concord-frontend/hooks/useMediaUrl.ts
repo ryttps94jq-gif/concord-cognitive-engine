@@ -54,7 +54,7 @@ interface UseMediaUrlReturn {
 
 // ── Constants ──────────────────────────────────────────────────────────
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5050';
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 /** Refresh signed URLs 5 minutes before they expire. */
 const REFRESH_BUFFER_MS = 5 * 60 * 1000;
@@ -240,6 +240,7 @@ export function useMediaUrl(
         setIsLoading(false);
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- scheduleRefresh is defined after this callback; stable via ref
   }, [artifactHash, signed, quality, userId, expiresIn, enabled, buildDirectUrl]);
 
   /**

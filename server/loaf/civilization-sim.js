@@ -40,8 +40,8 @@ function createSimulation(label, initialConditions, parameters) {
     id,
     label: String(label).slice(0, 500),
     state: SIM_STATES.INITIALIZED,
-    initialConditions: (() => { try { return JSON.parse(JSON.stringify(initialConditions || {})); } catch { return { ...initialConditions }; } })(),
-    currentState: (() => { try { return JSON.parse(JSON.stringify(initialConditions || {})); } catch { return { ...initialConditions }; } })(),
+    initialConditions: (() => { try { return JSON.parse(JSON.stringify(initialConditions || {})); } catch (err) { console.debug('[civilization-sim] deep clone failed', err?.message); return { ...initialConditions }; } })(),
+    currentState: (() => { try { return JSON.parse(JSON.stringify(initialConditions || {})); } catch (err) { console.debug('[civilization-sim] deep clone failed', err?.message); return { ...initialConditions }; } })(),
     parameters: {
       timeStepMs: Number(parameters?.timeStepMs || 86400000), // default 1 day
       maxSteps: Number(parameters?.maxSteps || 1000),

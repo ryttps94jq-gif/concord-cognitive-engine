@@ -7,7 +7,7 @@
  */
 
 import { create } from 'zustand';
-import type { Dream, Promotion, FocusOverride } from '@/lib/types/system';
+import type { Dream, Promotion } from '@/lib/types/system';
 
 interface SovereignState {
   // Dream capture
@@ -28,7 +28,7 @@ interface SovereignState {
   addMetaEvent: (event: { id: string; summary: string; timestamp: string; type: string }) => void;
 }
 
-export const useSovereignStore = create<SovereignState>((set, get) => ({
+export const useSovereignStore = create<SovereignState>((set, _get) => ({
   dreams: [],
   convergenceCount: 0,
   setDreams: (dreams) => set({ dreams }),

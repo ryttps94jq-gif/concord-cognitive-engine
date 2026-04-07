@@ -4,7 +4,8 @@ import { useState, useMemo } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
-import { BarChart3, TrendingUp, AlertTriangle, Star, ArrowUpDown, Layers, ChevronDown } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { BarChart3, TrendingUp, AlertTriangle, Star, ArrowUpDown, Layers, ChevronDown, Search, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -48,7 +49,7 @@ export default function CRILensPage() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [selectedDtu, setSelectedDtu] = useState<DTUWithCRETI | null>(null);
   const [thresholdFilter, setThresholdFilter] = useState(0);
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   const { data: dtusData, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['cri-dtus'],
@@ -135,7 +136,7 @@ export default function CRILensPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div data-lens-theme="cri" className="p-6 space-y-6">
       <header className="flex items-center gap-3">
         <BarChart3 className="w-6 h-6 text-neon-cyan" />
         <div>
@@ -171,27 +172,93 @@ export default function CRILensPage() {
         <>
           {/* Overview stats */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            <div className="lens-card text-center">
-              <p className="text-2xl font-bold text-white">{dtus.length}</p>
-              <p className="text-xs text-gray-400">Total DTUs</p>
-            </div>
-            <div className="lens-card text-center">
-              <p className="text-2xl font-bold text-neon-cyan">{(distribution.avg * 100).toFixed(0)}%</p>
-              <p className="text-xs text-gray-400">Avg Score</p>
-            </div>
-            <div className="lens-card text-center">
-              <p className="text-2xl font-bold text-neon-green">{(distribution.max * 100).toFixed(0)}%</p>
-              <p className="text-xs text-gray-400">Max Score</p>
-            </div>
-            <div className="lens-card text-center">
-              <p className="text-2xl font-bold text-neon-purple">{(distribution.median * 100).toFixed(0)}%</p>
-              <p className="text-xs text-gray-400">Median</p>
-            </div>
-            <div className="lens-card text-center">
-              <p className="text-2xl font-bold text-gray-400">{(distribution.min * 100).toFixed(0)}%</p>
-              <p className="text-xs text-gray-400">Min Score</p>
-            </div>
+            {[
+              { value: dtus.length.toString(), label: 'Total DTUs', color: 'text-white' },
+              { value: `${(distribution.avg * 100).toFixed(0)}%`, label: 'Avg Score', color: 'text-neon-cyan' },
+              { value: `${(distribution.max * 100).toFixed(0)}%`, label: 'Max Score', color: 'text-neon-green' },
+              { value: `${(distribution.median * 100).toFixed(0)}%`, label: 'Median', color: 'text-neon-purple' },
+              { value: `${(distribution.min * 100).toFixed(0)}%`, label: 'Min Score', color: 'text-gray-400' },
+            ].map((stat, i) => (
+              <motion.div
+                key={stat.label}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.08 }}
+                className="lens-card text-center"
+              >
+                <p className={`text-2xl font-bold ${stat.color}`}>{stat.value}</p>
+                <p className="text-xs text-gray-400">{stat.label}</p>
+              </motion.div>
+            ))}
           </div>
+
+          {/* Incident Severity Heat Map */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="panel p-4"
+          >
+            <h2 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-400" />
+              Severity Heat Map
+            </h2>
+            <div className="grid grid-cols-10 gap-1">
+              {dtus.slice(0, 50).map((d, i) => {
+                const score = getComposite(d);
+                const bg = score >= 0.8 ? 'bg-neon-green/60' : score >= 0.6 ? 'bg-neon-cyan/50' : score >= 0.4 ? 'bg-amber-400/50' : score >= 0.2 ? 'bg-orange-500/50' : 'bg-red-500/50';
+                return (
+                  <motion.div
+                    key={d.id}
+                    initial={{ opacity: 0, scale: 0.5 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: i * 0.01 }}
+                    className={`aspect-square rounded-sm cursor-pointer hover:ring-1 hover:ring-white/50 transition-all ${bg}`}
+                    title={`${d.title || d.id.slice(0, 8)}: ${(score * 100).toFixed(0)}%`}
+                    onClick={() => setSelectedDtu(d)}
+                  />
+                );
+              })}
+            </div>
+            <div className="flex items-center justify-between mt-2 text-[10px] text-gray-500">
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-red-500/50" /> Critical</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-orange-500/50" /> Low</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-amber-400/50" /> Medium</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-neon-cyan/50" /> Good</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-neon-green/60" /> Excellent</span>
+            </div>
+          </motion.div>
+
+          {/* Case Status Pipeline */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5 }}
+            className="panel p-4"
+          >
+            <h2 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+              <Search className="w-4 h-4 text-neon-cyan" />
+              Case Status Pipeline
+            </h2>
+            <div className="flex items-center gap-2">
+              {[
+                { stage: 'Open', count: dtus.filter(d => getComposite(d) < 0.3).length, color: 'bg-red-500', textColor: 'text-red-400' },
+                { stage: 'Investigating', count: dtus.filter(d => { const c = getComposite(d); return c >= 0.3 && c < 0.6; }).length, color: 'bg-amber-400', textColor: 'text-amber-400' },
+                { stage: 'Resolved', count: dtus.filter(d => getComposite(d) >= 0.6).length, color: 'bg-neon-green', textColor: 'text-neon-green' },
+              ].map((stage, i) => (
+                <div key={stage.stage} className="flex items-center gap-2 flex-1">
+                  <div className="flex-1 bg-lattice-deep rounded-lg p-3 text-center border border-white/5">
+                    <p className={`text-xl font-bold font-mono ${stage.textColor}`}>{stage.count}</p>
+                    <p className="text-xs text-gray-500">{stage.stage}</p>
+                    <div className={`h-1 rounded-full mt-2 ${stage.color}/30`}>
+                      <div className={`h-full rounded-full ${stage.color}`} style={{ width: `${dtus.length > 0 ? (stage.count / dtus.length) * 100 : 0}%` }} />
+                    </div>
+                  </div>
+                  {i < 2 && <FileText className="w-4 h-4 text-gray-600 flex-shrink-0" />}
+                </div>
+              ))}
+            </div>
+          </motion.div>
 
           {/* Distribution chart */}
           <div className="panel p-4">
@@ -393,7 +460,7 @@ export default function CRILensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

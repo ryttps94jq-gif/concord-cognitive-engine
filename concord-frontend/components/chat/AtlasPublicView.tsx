@@ -164,15 +164,38 @@ function AtmosphereView({ data }: { data: NonNullable<AtlasPublicData['atmospher
 
 function OverviewView({ data }: { data: AtlasPublicData }) {
   return (
-    <div className="rounded-lg bg-zinc-800/50 border border-zinc-700/50 p-4 space-y-2">
+    <div className="rounded-lg bg-zinc-800/50 border border-zinc-700/50 p-4 space-y-3">
       <div className="flex items-center gap-2">
         <Map size={16} className="text-emerald-400" />
         <span className="text-sm font-medium text-zinc-200">Atlas Public View</span>
       </div>
-      <p className="text-xs text-zinc-400">
-        Public atlas data showing surface terrain and atmospheric layers.
-        Subsurface and interior data require research or sovereign tier access.
-      </p>
+      <div className="grid grid-cols-2 gap-2">
+        {data.terrain?.tile && (
+          <Stat label="Terrain" value={`${data.terrain.tile.resolution_cm}cm res · ${(data.terrain.tile.confidence * 100).toFixed(0)}% confidence`} />
+        )}
+        {data.coverage && (
+          <>
+            <Stat label="Tiles" value={data.coverage.totalTiles} />
+            <Stat label="Nodes" value={data.coverage.totalNodes} />
+            <Stat label="Paths" value={data.coverage.totalPaths} />
+            {data.coverage.bestResolution_cm !== null && (
+              <Stat label="Best Resolution" value={`${data.coverage.bestResolution_cm}cm`} />
+            )}
+          </>
+        )}
+        {data.atmosphere && (
+          <>
+            {data.atmosphere.temperature !== undefined && <Stat label="Temperature" value={`${data.atmosphere.temperature}\u00B0C`} />}
+            {data.atmosphere.conditions && <Stat label="Conditions" value={data.atmosphere.conditions} />}
+          </>
+        )}
+      </div>
+      {!data.terrain && !data.coverage && !data.atmosphere && (
+        <p className="text-xs text-zinc-400">
+          Public atlas data showing surface terrain and atmospheric layers.
+          Subsurface and interior data require research or sovereign tier access.
+        </p>
+      )}
     </div>
   );
 }

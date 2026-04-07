@@ -11,7 +11,7 @@ Concord runs four Ollama instances with CPU pinning for true parallel cognition:
 | Utility (3B) | qwen2.5:3b | Lens interactions, entity actions, quick tasks | 11436 |
 | Repair (0.5B) | qwen2.5:0.5b | Error detection, auto-fix, runtime repair | 11437 |
 
-When no OPENAI_API_KEY is set, `ctx.llm.chat()` routes to the conscious brain via Ollama.
+`ctx.llm.chat()` routes to the conscious brain via Ollama. If conscious fails, subconscious brain serves as emergency fallback.
 `initThreeBrains()` probes each brain on startup and auto-pulls models if missing.
 
 ## DTU Lifecycle

@@ -3,17 +3,19 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { api } from '@/lib/api/client';
+import { motion } from 'framer-motion';
 import {
   Network, ArrowLeftRight, Shield, MessageSquare, Skull,
-  Baby, Eye, AlertTriangle, CheckCircle2, XCircle,
+  Baby, Eye, CheckCircle2, XCircle,
   RefreshCw, ChevronDown, ChevronRight, Loader2, Search,
-  Users, Zap, Activity, Layers,
+  Users, Zap, Activity, Layers, Radio, GitMerge,
 } from 'lucide-react';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { DTUDetailView } from '@/components/dtu/DTUDetailView';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -89,7 +91,7 @@ export default function BridgeLens() {
   useLensNav('bridge');
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('bridge');
 
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
   const [tab, setTab] = useState<Tab>('activity');
   const [organisms, setOrganisms] = useState<Organism[]>([]);
   const [log, setLog] = useState<BridgeLogEntry[]>([]);
@@ -98,6 +100,7 @@ export default function BridgeLens() {
   const [emergents, setEmergents] = useState<EmergentRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedDebate, setExpandedDebate] = useState<string | null>(null);
+  const [selectedDtuId, setSelectedDtuId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -121,7 +124,7 @@ export default function BridgeLens() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 p-6">
+    <div data-lens-theme="bridge" className="min-h-screen bg-zinc-950 text-zinc-100 p-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
@@ -149,6 +152,66 @@ export default function BridgeLens() {
         </button>
       </div>
 
+      {/* Stat Cards — connected system health overview */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        {[
+          { label: 'Organisms', value: organisms.length, icon: <Network className="w-5 h-5 text-purple-400" />, color: 'text-purple-400' },
+          { label: 'Bridge Events', value: log.length, icon: <Activity className="w-5 h-5 text-cyan-400" />, color: 'text-cyan-400' },
+          { label: 'Debates', value: debates.length, icon: <MessageSquare className="w-5 h-5 text-amber-400" />, color: 'text-amber-400' },
+          { label: 'Emergent Roles', value: emergents.length, icon: <Radio className="w-5 h-5 text-green-400" />, color: 'text-green-400' },
+        ].map((stat, i) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.08, duration: 0.35 }}
+            className="p-4 bg-zinc-900 rounded-lg border border-zinc-800"
+          >
+            <div className="flex items-center gap-2 mb-2">{stat.icon}</div>
+            <p className={`text-2xl font-bold font-mono ${stat.color}`}>{stat.value}</p>
+            <p className="text-xs text-zinc-500">{stat.label}</p>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Data Flow Arrows — unique visual: animated bridge connection indicator */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.3 }}
+        className="mb-6 p-3 bg-zinc-900/60 rounded-lg border border-purple-500/20 flex items-center justify-center gap-4"
+      >
+        <div className="flex items-center gap-2 text-xs text-zinc-400">
+          <GitMerge className="w-4 h-4 text-purple-400" />
+          <span>Knowledge Organisms</span>
+        </div>
+        <div className="flex items-center gap-1">
+          {[0, 1, 2].map(i => (
+            <motion.div
+              key={i}
+              className="w-2 h-2 rounded-full bg-purple-400"
+              animate={{ opacity: [0.2, 1, 0.2], x: [0, 8, 16] }}
+              transition={{ duration: 1.5, delay: i * 0.3, repeat: Infinity }}
+            />
+          ))}
+        </div>
+        <ArrowLeftRight className="w-4 h-4 text-purple-400" />
+        <div className="flex items-center gap-1">
+          {[0, 1, 2].map(i => (
+            <motion.div
+              key={i}
+              className="w-2 h-2 rounded-full bg-cyan-400"
+              animate={{ opacity: [0.2, 1, 0.2], x: [16, 8, 0] }}
+              transition={{ duration: 1.5, delay: i * 0.3, repeat: Infinity }}
+            />
+          ))}
+        </div>
+        <div className="flex items-center gap-2 text-xs text-zinc-400">
+          <span>Emergent Agents</span>
+          <Shield className="w-4 h-4 text-cyan-400" />
+        </div>
+      </motion.div>
+
       {/* Tabs */}
       <div className="flex gap-1 mb-6 bg-zinc-900 rounded-lg p-1">
         {TABS.map(t => (
@@ -168,19 +231,21 @@ export default function BridgeLens() {
         </div>
       ) : (
         <>
-          {tab === 'activity' && <ActivityTab log={log} />}
+          {tab === 'activity' && <ActivityTab log={log} onDtuClick={setSelectedDtuId} />}
           {tab === 'organisms' && <OrganismsTab organisms={organisms} onRefresh={refresh} />}
-          {tab === 'debates' && <DebatesTab debates={debates} expanded={expandedDebate} setExpanded={setExpandedDebate} />}
+          {tab === 'debates' && <DebatesTab debates={debates} expanded={expandedDebate} setExpanded={setExpandedDebate} onDtuClick={setSelectedDtuId} />}
           {tab === 'lifecycle' && <LifecycleTab births={births} />}
           {tab === 'emergents' && <EmergentsTab emergents={emergents} />}
         </>
       )}
 
+      <RealtimeDataPanel data={realtimeInsights} />
+
       {/* Lens Features */}
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />
@@ -194,6 +259,15 @@ export default function BridgeLens() {
           </div>
         )}
       </div>
+
+      {/* DTU Detail View modal */}
+      {selectedDtuId && (
+        <DTUDetailView
+          dtuId={selectedDtuId}
+          onClose={() => setSelectedDtuId(null)}
+          onNavigate={(id) => setSelectedDtuId(id)}
+        />
+      )}
     </div>
   );
 }
@@ -202,7 +276,7 @@ export default function BridgeLens() {
 /*  Sub-components                                                     */
 /* ------------------------------------------------------------------ */
 
-function ActivityTab({ log }: { log: BridgeLogEntry[] }) {
+function ActivityTab({ log, onDtuClick }: { log: BridgeLogEntry[]; onDtuClick?: (id: string) => void }) {
   if (log.length === 0) return <EmptyCard icon={<Activity />} message="No bridge activity yet" hint="Submit a DTU for validation or query an organism to see activity here." />;
 
   return (
@@ -215,7 +289,7 @@ function ActivityTab({ log }: { log: BridgeLogEntry[] }) {
               <span className="text-sm font-medium text-zinc-200">{formatAction(entry.action)}</span>
               <span className="text-xs text-zinc-600">{new Date(entry.at).toLocaleString()}</span>
             </div>
-            {entry.dtuId && <span className="text-xs text-zinc-500">DTU: {String(entry.dtuId).slice(0, 12)}...</span>}
+            {entry.dtuId && <button onClick={() => onDtuClick?.(String(entry.dtuId))} className="text-xs text-neon-cyan hover:underline cursor-pointer">DTU: {String(entry.dtuId).slice(0, 12)}...</button>}
             {entry.swarmName && <span className="text-xs text-purple-400 ml-2">{String(entry.swarmName)}</span>}
           </div>
         </div>
@@ -228,6 +302,12 @@ function OrganismsTab({ organisms, onRefresh }: { organisms: Organism[]; onRefre
   if (organisms.length === 0) return <EmptyCard icon={<Network />} message="No organisms detected" hint="DTU swarms with 10+ members can be awakened as Knowledge Organisms." />;
 
   return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <button onClick={onRefresh} className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-neon-cyan/10 text-neon-cyan hover:bg-neon-cyan/20 transition-colors">
+          <RefreshCw className="w-3.5 h-3.5" /> Refresh
+        </button>
+      </div>
     <div className="grid gap-4 md:grid-cols-2">
       {organisms.map(org => (
         <div key={org.id} className="p-4 bg-zinc-900 rounded-lg border border-zinc-800">
@@ -252,10 +332,11 @@ function OrganismsTab({ organisms, onRefresh }: { organisms: Organism[]; onRefre
         </div>
       ))}
     </div>
+    </div>
   );
 }
 
-function DebatesTab({ debates, expanded, setExpanded }: { debates: Debate[]; expanded: string | null; setExpanded: (id: string | null) => void }) {
+function DebatesTab({ debates, expanded, setExpanded, onDtuClick }: { debates: Debate[]; expanded: string | null; setExpanded: (id: string | null) => void; onDtuClick?: (id: string) => void }) {
   if (debates.length === 0) return <EmptyCard icon={<MessageSquare />} message="No debates yet" hint="Debates occur when emergent agents challenge organism DTU outputs." />;
 
   return (
@@ -269,7 +350,7 @@ function DebatesTab({ debates, expanded, setExpanded }: { debates: Debate[]; exp
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium capitalize">{debate.challengerRole}</span>
                 <span className="text-zinc-600">challenged</span>
-                <span className="text-xs text-zinc-500">{debate.dtuId.slice(0, 12)}...</span>
+                <button onClick={(e) => { e.stopPropagation(); onDtuClick?.(debate.dtuId); }} className="text-xs text-neon-cyan hover:underline cursor-pointer">{debate.dtuId.slice(0, 12)}...</button>
               </div>
               <div className="text-xs text-zinc-500 mt-0.5">{debate.challenge.slice(0, 100)}</div>
             </div>

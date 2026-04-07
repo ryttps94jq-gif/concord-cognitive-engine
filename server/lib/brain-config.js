@@ -8,7 +8,7 @@
 export const BRAIN_CONFIG = Object.freeze({
   conscious: {
     url: process.env.BRAIN_CONSCIOUS_URL || process.env.OLLAMA_HOST || "http://ollama-conscious:11434",
-    model: process.env.BRAIN_CONSCIOUS_MODEL || "qwen2.5:7b",
+    model: process.env.BRAIN_CONSCIOUS_MODEL || "concord-conscious:latest",
     role: "chat, deep reasoning, council deliberation",
     temperature: 0.7,
     timeout: 45000,    // GPU inference is faster — tighten to fail fast on real errors
@@ -19,7 +19,7 @@ export const BRAIN_CONFIG = Object.freeze({
   },
   subconscious: {
     url: process.env.BRAIN_SUBCONSCIOUS_URL || "http://ollama-subconscious:11434",
-    model: process.env.BRAIN_SUBCONSCIOUS_MODEL || "qwen2.5:1.5b",
+    model: process.env.BRAIN_SUBCONSCIOUS_MODEL || "qwen2.5:7b-instruct-q4_K_M",
     role: "autogen, dream, evolution, synthesis, birth",
     temperature: 0.85,
     timeout: 30000,    // GPU: faster inference, tighter timeout

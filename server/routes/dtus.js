@@ -3,7 +3,16 @@
  * Registered directly on app (mixed prefixes)
  */
 import { asyncHandler } from "../lib/async-handler.js";
-export default function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuForClient, dtusArray, _withAck, _saveStateDebounced, validate }) {
+import logger from '../logger.js';
+
+export default function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuForClient, dtusArray, userVisibleDTUs, _withAck, _saveStateDebounced, validate }) {
+
+  /** Parse limit/offset query params with sensible defaults and bounds. */
+  function parsePagination(query, defaultLimit = 50, maxLimit = 200) {
+    const limit = Math.max(1, Math.min(Number(query.limit) || defaultLimit, maxLimit));
+    const offset = Math.max(0, Number(query.offset) || 0);
+    return { limit, offset };
+  }
 
   // CRETI-first DTU view (no raw JSON by default)
   app.get("/api/dtu_view/:id", (req, res) => {
@@ -15,16 +24,114 @@ export default function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuFo
 
 
   // DTUs
+  /** Sanitize macro errors: log full details server-side, return generic message to client. */
+  function sanitizeMacroError(e, context) {
+    const msg = String(e?.message || e);
+    const isForbidden = msg.startsWith("forbidden");
+    logger.error("macro_error", { context, error: msg, stack: e?.stack });
+    const clientMsg = isForbidden ? "forbidden" : "An internal error occurred";
+    return { status: isForbidden ? 403 : 500, clientMsg };
+  }
+
   app.get("/api/dtus", asyncHandler(async (req, res) => {
     try {
       const ctx = makeCtx(req);
       const out = await runMacro("dtu","list",{ q:req.query.q, tier:req.query.tier || "any", limit:req.query.limit, offset:req.query.offset, scope: req.query.scope || null }, ctx);
       res.json(out);
     } catch (e) {
-      const msg = String(e?.message || e);
-      res.status(msg.startsWith("forbidden") ? 403 : 500).json({ ok: false, error: msg });
+      const { status, clientMsg } = sanitizeMacroError(e, "dtu.list");
+      res.status(status).json({ ok: false, error: clientMsg });
     }
   }));
+  // ── DTU Stats ─────────────────────────────────────────────────────────
+  app.get("/api/dtus/stats", (req, res) => {
+    try {
+      const all = userVisibleDTUs();
+      const tierCounts = {};
+      const kindCounts = {};
+      let totalRichness = 0;
+      for (const d of all) {
+        tierCounts[d.tier || "unknown"] = (tierCounts[d.tier || "unknown"] || 0) + 1;
+        kindCounts[d.kind || "unknown"] = (kindCounts[d.kind || "unknown"] || 0) + 1;
+        totalRichness += d.richness || 0;
+      }
+      const shadowCount = STATE.shadowDtus ? STATE.shadowDtus.size : 0;
+      res.json({
+        ok: true,
+        total: all.length,
+        shadowCount,
+        tierCounts,
+        kindCounts,
+        averageRichness: all.length > 0 ? totalRichness / all.length : 0,
+      });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  // ── Shadow DTU Pending ───────────────────────────────────────────────
+  app.get("/api/dtus/shadow/pending", (req, res) => {
+    try {
+      const shadows = STATE.shadowDtus ? Array.from(STATE.shadowDtus.values()) : [];
+      // Candidates: shadow DTUs with enough momentum/richness to potentially promote
+      const candidates = shadows
+        .filter(d => (d.momentum || 0) > 0 || (d.richness || 0) > 0.3)
+        .map(d => ({
+          dtuId: d.id,
+          title: d.title || d.id,
+          momentum: d.momentum || 0,
+          richness: d.richness || 0,
+          uniqueUsers: d.uniqueUsers || 0,
+          interactionCount: d.interactionCount || d.interactions || 0,
+        }))
+        .sort((a, b) => b.momentum - a.momentum)
+        .slice(0, 100);
+      // Pending shadows: all shadow DTUs
+      const pendingShadows = shadows
+        .map(d => ({
+          id: d.id,
+          title: d.title || d.id,
+          tier: d.tier || "shadow",
+          kind: d.kind || "unknown",
+          richness: d.richness || 0,
+          ttlDays: d.ttlDays || 0,
+          tags: d.tags || [],
+          createdAt: d.createdAt || null,
+        }))
+        .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""))
+        .slice(0, 200);
+      res.json({ ok: true, candidates, pendingShadows });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  // ── DTU Promotion Queue ──────────────────────────────────────────────
+  app.get("/api/dtus/promotion/queue", asyncHandler(async (req, res) => {
+    try {
+      const m = await import("../emergent/promotion-pipeline.js").catch(() => null);
+      if (m && typeof m.getQueue === "function") {
+        return res.json(m.getQueue());
+      }
+      // Fallback: derive queue from shadow DTUs with high momentum
+      const shadows = STATE.shadowDtus ? Array.from(STATE.shadowDtus.values()) : [];
+      const queue = shadows
+        .filter(d => (d.momentum || 0) > 0.5 || (d.richness || 0) > 0.6)
+        .map(d => ({
+          id: d.id,
+          artifactName: d.title || d.id,
+          fromStage: d.tier || "shadow",
+          toStage: "micro",
+          status: "pending",
+          requestedAt: d.updatedAt || d.createdAt || new Date().toISOString(),
+        }))
+        .slice(0, 50);
+      res.json({ ok: true, queue });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  }));
+
   app.get("/api/dtus/:id", asyncHandler(async (req, res) => {
     try {
       const ctx = makeCtx(req);
@@ -32,18 +139,35 @@ export default function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuFo
       if (!out.ok) return res.status(404).json(out);
       res.json(out);
     } catch (e) {
-      const msg = String(e?.message || e);
-      res.status(msg.startsWith("forbidden") ? 403 : 500).json({ ok: false, error: msg });
+      const { status, clientMsg } = sanitizeMacroError(e, "dtu.get");
+      res.status(status).json({ ok: false, error: clientMsg });
     }
   }));
   app.post("/api/dtus", validate("dtuCreate"), asyncHandler(async (req, res) => {
     try {
       const ctx = makeCtx(req);
       const out = await runMacro("dtu","create", req.body || {}, ctx);
+
+      // ── Daily DTU soft cap warning (Category 5: Operational) ──────────
+      // Non-blocking: the DTU is still created, but warn the user if they
+      // are approaching or exceeding the daily soft cap.
+      const DAILY_DTU_SOFT_CAP = 200;
+      const userId = ctx?.actor?.id || ctx?.actor?.userId || req.body?.authorId || "anon";
+      const todayKey = new Date().toISOString().slice(0, 10);
+      if (!STATE._dailyDtuRouteCount) STATE._dailyDtuRouteCount = {};
+      if (!STATE._dailyDtuRouteCount[todayKey]) STATE._dailyDtuRouteCount = { [todayKey]: {} };
+      if (!STATE._dailyDtuRouteCount[todayKey][userId]) STATE._dailyDtuRouteCount[todayKey][userId] = 0;
+      STATE._dailyDtuRouteCount[todayKey][userId]++;
+      const dayCount = STATE._dailyDtuRouteCount[todayKey][userId];
+
+      if (out.ok && dayCount > DAILY_DTU_SOFT_CAP) {
+        out.warning = `Daily DTU soft cap exceeded: ${dayCount}/${DAILY_DTU_SOFT_CAP} DTUs created today`;
+      }
+
       res.json(out);
     } catch (e) {
-      const msg = String(e?.message || e);
-      res.status(msg.startsWith("forbidden") ? 403 : 500).json({ ok: false, error: msg });
+      const { status, clientMsg } = sanitizeMacroError(e, "dtu.create");
+      res.status(status).json({ ok: false, error: clientMsg });
     }
   }));
   app.post("/api/dtus/saveSuggested", asyncHandler(async (req, res) => {
@@ -52,8 +176,8 @@ export default function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuFo
       const out = await runMacro("dtu","saveSuggested", req.body || {}, ctx);
       res.json(out);
     } catch (e) {
-      const msg = String(e?.message || e);
-      res.status(msg.startsWith("forbidden") ? 403 : 500).json({ ok: false, error: msg });
+      const { status, clientMsg } = sanitizeMacroError(e, "dtu.saveSuggested");
+      res.status(status).json({ ok: false, error: clientMsg });
     }
   }));
 
@@ -63,13 +187,17 @@ export default function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuFo
     return res.json(_withAck(out, req, ["dtus","state","logs"], ["/api/dtus","/api/state/latest","/api/logs"], null, { panel: "dtus_dedupe" }));
   }));
   app.get("/api/megas", (req,res)=> {
+    const { limit, offset } = parsePagination(req.query);
     const tier = "mega";
-    const out = dtusArray().filter(d => d.tier===tier).sort((a,b)=> (b.updatedAt||b.createdAt||"").localeCompare(a.updatedAt||a.createdAt||""));
-    res.json({ ok:true, megas: out });
+    const all = userVisibleDTUs().filter(d => d.tier===tier).sort((a,b)=> (b.updatedAt||b.createdAt||"").localeCompare(a.updatedAt||a.createdAt||""));
+    const out = all.slice(offset, offset + limit);
+    res.json({ ok:true, megas: out, total: all.length, limit, offset });
   });
   app.get("/api/hypers", (req,res)=> {
-    const out = dtusArray().filter(d => d.tier==="hyper").sort((a,b)=> (b.updatedAt||b.createdAt||"").localeCompare(a.updatedAt||a.createdAt||""));
-    res.json({ ok:true, hypers: out });
+    const { limit, offset } = parsePagination(req.query);
+    const all = userVisibleDTUs().filter(d => d.tier==="hyper").sort((a,b)=> (b.updatedAt||b.createdAt||"").localeCompare(a.updatedAt||a.createdAt||""));
+    const out = all.slice(offset, offset + limit);
+    res.json({ ok:true, hypers: out, total: all.length, limit, offset });
   });
 
   // Extended DTU endpoints
@@ -129,16 +257,18 @@ export default function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuFo
   }));
 
   app.get("/api/definitions", (req, res) => {
-    const dtus = dtusArray().filter(d =>
+    const { limit, offset } = parsePagination(req.query);
+    const all = userVisibleDTUs().filter(d =>
       (d.tags || []).includes("definition") ||
       /^def(inition)?:/i.test(d.title || "")
     );
-    return res.json({ ok: true, definitions: dtus });
+    const dtus = all.slice(offset, offset + limit);
+    return res.json({ ok: true, definitions: dtus, total: all.length, limit, offset });
   });
 
   app.get("/api/definitions/:term", (req, res) => {
     const term = String(req.params.term || "").toLowerCase();
-    const dtu = dtusArray().find(d =>
+    const dtu = userVisibleDTUs().find(d =>
       ((d.tags || []).includes("definition") || /^def(inition)?:/i.test(d.title || "")) &&
       (d.meta?.term || "").toLowerCase() === term
     );

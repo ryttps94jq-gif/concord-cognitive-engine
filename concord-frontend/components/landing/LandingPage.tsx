@@ -71,10 +71,21 @@ export function LandingPage(_props: LandingPageProps) {
           </span>
         </h1>
 
-        <p className="text-xl text-gray-400 max-w-2xl mx-auto mb-12">
+        <p className="text-xl text-gray-400 max-w-2xl mx-auto mb-8">
           A sovereign knowledge operating system that grows with you.
-          Your thoughts never leave your control. No ads. No extraction. No surveillance.
+          Your thoughts never leave your control.
         </p>
+
+        {/* Trust Signal — above the fold, before CTA */}
+        <div className="flex flex-col items-center gap-1.5 mb-10">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm font-semibold">
+            <span className="px-4 py-2 rounded-lg bg-neon-cyan/10 border border-neon-cyan/20 text-neon-cyan text-center">No ads. Ever.</span>
+            <span className="px-4 py-2 rounded-lg bg-neon-blue/10 border border-neon-blue/20 text-neon-blue text-center">No subscriptions.</span>
+            <span className="px-4 py-2 rounded-lg bg-neon-purple/10 border border-neon-purple/20 text-neon-purple text-center">No data extraction.</span>
+            <span className="px-4 py-2 rounded-lg bg-neon-green/10 border border-neon-green/20 text-neon-green text-center">Free for all services.</span>
+          </div>
+          <p className="text-xs text-gray-500 mt-2">Not a promise — it&apos;s architecture. The sovereignty lock makes it mathematically enforced.</p>
+        </div>
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
           <a
@@ -94,7 +105,7 @@ export function LandingPage(_props: LandingPageProps) {
 
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mt-20">
-          <Stat value="112" label="Domain Lenses" />
+          <Stat value="175" label="Domain Lenses" />
           <Stat value="110+" label="Neural Organs" />
           <Stat value="70%" label="Sovereignty Lock" />
           <Stat value="100%" label="Local Control" />
@@ -121,8 +132,8 @@ export function LandingPage(_props: LandingPageProps) {
             />
             <FeatureCard
               icon={<Network className="w-6 h-6" />}
-              title="112 Domain Lenses"
-              description="View your knowledge through different perspectives: healthcare, education, creative arts, science, AI, finance, and 100+ more specialized lenses."
+              title="175 Domain Lenses"
+              description="View your knowledge through different perspectives: healthcare, education, legal, trades, creative arts, science, AI, finance, and 160+ more specialized lenses."
               color="blue"
             />
             <FeatureCard

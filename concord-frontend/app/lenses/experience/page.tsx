@@ -1,6 +1,7 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useQuery } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useState, useMemo } from 'react';
@@ -215,7 +216,7 @@ export default function ExperienceLensPage() {
 
   const [activeTab, setActiveTab] = useState<TabId>('portfolio');
   const [portfolioFilter, setPortfolioFilter] = useState<PortfolioFilter>('all');
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   const { isLoading, isError: isError, error: error, refetch: refetch, items: portfolioItems } = useLensData('experience', 'portfolio', {
     seed: INITIAL_PORTFOLIO.map(p => ({ title: p.title, data: p as unknown as Record<string, unknown> })),
@@ -428,7 +429,7 @@ export default function ExperienceLensPage() {
     );
   }
   return (
-    <div className="p-6 space-y-6 max-w-6xl mx-auto">
+    <div data-lens-theme="experience" className="p-6 space-y-6 max-w-6xl mx-auto">
       {/* ========== Header ========== */}
       <motion.header
         className="flex items-center justify-between"
@@ -608,7 +609,7 @@ export default function ExperienceLensPage() {
                     whileHover={{ y: -4, transition: { duration: 0.2 } }}
                     className="lens-card group cursor-pointer overflow-hidden"
                   >
-                    {/* Cover art placeholder */}
+                    {/* Cover art gradient */}
                     <div className={`relative h-36 rounded-lg mb-3 bg-gradient-to-br ${item.coverGradient} flex items-center justify-center overflow-hidden`}>
                       <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors" />
                       {item.type === 'track' || item.type === 'collaboration' ? (
@@ -1037,6 +1038,7 @@ export default function ExperienceLensPage() {
               </div>
 
       {/* Real-time Data Panel */}
+      <UniversalActions domain="experience" artifactId={null} compact />
       {realtimeData && (
         <RealtimeDataPanel
           domain="experience"
@@ -1056,7 +1058,7 @@ export default function ExperienceLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

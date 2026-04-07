@@ -15,6 +15,15 @@ const LIMITS = {
   'global.pull': { max: 20, windowMs: 3600000 },         // 20/hour — stays same
   'semantic.search': { max: 100, windowMs: 60000 },      // 100/min — GPU: embedding search is near-instant
   'default': { max: 120, windowMs: 60000 },              // 120/min — GPU: room for background + user
+
+  // Pre-launch write endpoint limits (per IP)
+  'write.chat':         { max: 30, windowMs: 60000 },    // POST /api/chat — 30/min
+  'write.social':       { max: 10, windowMs: 60000 },    // POST /api/social/* — 10/min
+  'write.lens':         { max: 10, windowMs: 60000 },    // POST /api/lens/* — 10/min
+  'write.dtus':         { max: 20, windowMs: 60000 },    // POST /api/dtus — 20/min
+  'write.media.upload': { max: 5,  windowMs: 60000 },    // POST /api/media/upload — 5/min
+  'write.default':      { max: 20, windowMs: 60000 },    // All other POST/PUT/DELETE — 20/min
+  'read.default':       { max: 120, windowMs: 60000 },   // GET routes (open, rate limited) — 120/min
 };
 
 /**
@@ -95,4 +104,76 @@ setInterval(() => {
   }
 }, 300000).unref();
 
-export { checkRateLimit, rateLimitMiddleware, LIMITS };
+/**
+ * Classify an incoming request to the appropriate write rate-limit bucket.
+ * Returns the LIMITS key for the request, or null if no write limiting applies.
+ *
+ * @param {import('express').Request} req
+ * @returns {string|null}
+ */
+function classifyWriteEndpoint(req) {
+  const method = req.method.toUpperCase();
+  if (method !== "POST" && method !== "PUT" && method !== "DELETE" && method !== "PATCH") {
+    return null; // Only limit mutating methods
+  }
+
+  const p = req.path;
+  if (p.startsWith("/api/chat"))          return "write.chat";
+  if (p.startsWith("/api/social"))        return "write.social";
+  if (p.startsWith("/api/lens"))          return "write.lens";
+  if (p.startsWith("/api/dtus") || p.startsWith("/api/dtu")) return "write.dtus";
+  if (p.startsWith("/api/media/upload"))  return "write.media.upload";
+  return "write.default";
+}
+
+/**
+ * Express middleware: apply per-route write rate limits based on request path.
+ * Designed for pre-launch: open write endpoints get per-IP rate limiting.
+ */
+function writeRateLimitMiddleware(req, res, next) {
+  const bucket = classifyWriteEndpoint(req);
+  if (!bucket) return next(); // GETs pass through
+
+  const key = req.user?.id || req.ip;
+  const result = checkRateLimit(key, bucket);
+
+  res.setHeader("X-RateLimit-Remaining", result.remaining);
+  res.setHeader("X-RateLimit-Bucket", bucket);
+
+  if (!result.allowed) {
+    res.setHeader("Retry-After", result.retryAfter);
+    return res.status(429).json({
+      ok: false,
+      error: "Rate limit exceeded",
+      retryAfter: result.retryAfter,
+      bucket,
+    });
+  }
+
+  next();
+}
+
+/**
+ * Express middleware: rate limit open GET routes.
+ */
+function readRateLimitMiddleware(req, res, next) {
+  if (req.method !== "GET") return next();
+
+  const key = req.user?.id || req.ip;
+  const result = checkRateLimit(key, "read.default");
+
+  res.setHeader("X-RateLimit-Remaining", result.remaining);
+
+  if (!result.allowed) {
+    res.setHeader("Retry-After", result.retryAfter);
+    return res.status(429).json({
+      ok: false,
+      error: "Rate limit exceeded",
+      retryAfter: result.retryAfter,
+    });
+  }
+
+  next();
+}
+
+export { checkRateLimit, rateLimitMiddleware, LIMITS, classifyWriteEndpoint, writeRateLimitMiddleware, readRateLimitMiddleware };

@@ -1,9 +1,11 @@
 'use client';
 
+import { motion } from 'framer-motion';
 import { useState, useMemo, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
+import { apiHelpers } from '@/lib/api/client';
 import { ds } from '@/lib/design-system';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
@@ -56,11 +58,13 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
+import { showToast } from '@/components/common/Toasts';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -238,7 +242,7 @@ export default function TradesLensPage() {
   const [editingItem, setEditingItem] = useState<LensItem<TradesArtifact> | null>(null);
   const [showDashboard, setShowDashboard] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   // ----- Editor form state -----
   const [formName, setFormName] = useState('');
@@ -292,6 +296,15 @@ export default function TradesLensPage() {
   const [photoPhase, setPhotoPhase] = useState<'before' | 'during' | 'after'>('before');
   const [photoLocation, setPhotoLocation] = useState('');
   const [photoNotes, setPhotoNotes] = useState('');
+
+  // ----- Invoice Generator state -----
+  const [invLineItems, setInvLineItems] = useState<Array<{ description: string; quantity: number; unitPrice: number }>>([{ description: '', quantity: 1, unitPrice: 0 }]);
+  const [invTaxRate, setInvTaxRate] = useState(0);
+  const [invDueDate, setInvDueDate] = useState('');
+  const [invPayerName, setInvPayerName] = useState('');
+  const [invNotes, setInvNotes] = useState('');
+  const [invCreating, setInvCreating] = useState(false);
+  const [invResult, setInvResult] = useState<Record<string, unknown> | null>(null);
 
   // ----- Data hooks -----
   const activeArtifactType = MODE_TABS.find(t => t.id === activeTab)?.artifactType || 'Job';
@@ -413,9 +426,35 @@ export default function TradesLensPage() {
     if (!targetId) return;
     try {
       const result = await runAction.mutateAsync({ id: targetId, action });
-      setActionResult(result.result as Record<string, unknown>);
+      const actionData = result.result as Record<string, unknown>;
+      setActionResult(actionData);
+
+      // If generateInvoice, also create an invoice DTU via economy endpoint
+      if (action === 'generateInvoice' && actionData) {
+        try {
+          const item = items.find(i => i.id === targetId);
+          const itemData = (item?.data || {}) as Record<string, unknown>;
+          const lineItems = ((itemData.lineItems || actionData.lineItems || []) as Array<{ description?: string; name?: string; qty?: number; quantity?: number; unitCost?: number; unitPrice?: number }>).map(li => ({
+            description: li.description || li.name || 'Item',
+            quantity: li.qty || li.quantity || 1,
+            unitPrice: li.unitCost || li.unitPrice || 0,
+          }));
+          await apiHelpers.economy.createInvoice({
+            lineItems,
+            taxRate: (actionData.taxRate as number) || (itemData.taxRate as number) || 0,
+            dueDate: (actionData.dueDate as string) || undefined,
+            payerName: (itemData.clientName as string) || (actionData.payerName as string) || undefined,
+            payeeName: (actionData.payeeName as string) || undefined,
+            notes: `Generated from trades job: ${item?.title || targetId}`,
+          });
+        } catch (invoiceErr) {
+          console.error('Invoice DTU creation failed:', invoiceErr);
+          showToast('error', 'Invoice creation failed');
+        }
+      }
     } catch (err) {
       console.error('Action failed:', err);
+      showToast('error', 'Action failed');
     }
   };
 
@@ -650,7 +689,7 @@ export default function TradesLensPage() {
     return <span className={ds.badge(cfg.color)}>{cfg.label}</span>;
   };
 
-  const _renderPhaseStatusBadge = (status: PhaseStatus) => {
+  const renderPhaseStatusBadge = (status: PhaseStatus) => {
     const cfg = PHASE_STATUS_CONFIG[status];
     return <span className={ds.badge(cfg.color)}>{cfg.label}</span>;
   };
@@ -741,6 +780,7 @@ export default function TradesLensPage() {
                     <div className="w-48 shrink-0 flex items-center gap-2">
                       {phase.isMilestone && <Milestone className="w-3 h-3 text-yellow-400" />}
                       <span className="text-sm text-white truncate">{phase.name}</span>
+                      {renderPhaseStatusBadge(phase.status)}
                     </div>
                     <div className="w-24 shrink-0">
                       <select
@@ -906,7 +946,7 @@ export default function TradesLensPage() {
         </div>
 
         {/* Totals section */}
-        {estLineItems.length > 0 && (
+        {estLineItems.length > 0 ? (
           <div className="flex justify-end">
             <div className="w-80 space-y-2">
               <div className="flex items-center justify-between">
@@ -958,6 +998,10 @@ export default function TradesLensPage() {
                 </span>
               </div>
             </div>
+          </div>
+        ) : (
+          <div className="text-center py-6 text-gray-500 text-sm border border-dashed border-white/10 rounded-lg">
+            <p>No estimate line items yet. Add items to build your estimate.</p>
           </div>
         )}
       </div>
@@ -1608,12 +1652,13 @@ export default function TradesLensPage() {
         </div>
       ) : (
         <div className={ds.grid3}>
-          {filtered.map(item => {
+          {filtered.map((item, index) => {
             const d = item.data as unknown as TradesArtifact;
             const isSelected = selectedJobId === item.id;
             return (
-              <div
+              <motion.div
                 key={item.id}
+                initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }}
                 className={cn(ds.panelHover, isSelected && 'border-neon-cyan ring-1 ring-neon-cyan/30')}
                 onClick={() => openEdit(item)}
               >
@@ -1669,7 +1714,7 @@ export default function TradesLensPage() {
                     </span>
                   )}
                 </div>
-              </div>
+              </motion.div>
             );
           })}
         </div>
@@ -1997,6 +2042,113 @@ export default function TradesLensPage() {
   );
 
   // ---------------------------------------------------------------------------
+  // Invoice Generator sub-view
+  // ---------------------------------------------------------------------------
+
+  const renderInvoiceGenerator = () => {
+    const subtotal = invLineItems.reduce((sum, li) => sum + li.quantity * li.unitPrice, 0);
+    const taxAmount = subtotal * (invTaxRate / 100);
+    const total = subtotal + taxAmount;
+
+    const handleCreateInvoice = async () => {
+      setInvCreating(true);
+      try {
+        const resp = await apiHelpers.economy.createInvoice({
+          lineItems: invLineItems.filter(li => li.description.trim()),
+          taxRate: invTaxRate,
+          dueDate: invDueDate || undefined,
+          payerName: invPayerName || selectedJob?.title || undefined,
+          notes: invNotes || `Generated from trades lens${selectedJob ? ` — Job: ${selectedJob.title}` : ''}`,
+        });
+        setInvResult(resp.data as Record<string, unknown>);
+        // Reset form
+        setInvLineItems([{ description: '', quantity: 1, unitPrice: 0 }]);
+        setInvTaxRate(0);
+        setInvDueDate('');
+        setInvPayerName('');
+        setInvNotes('');
+      } catch (err) {
+        console.error('Invoice creation failed:', err);
+        showToast('error', 'Invoice creation failed');
+      } finally {
+        setInvCreating(false);
+      }
+    };
+
+    return (
+      <div className={ds.panel}>
+        <h3 className={cn(ds.heading3, 'mb-4')}>Invoice Generator</h3>
+
+        {/* Client / Payer */}
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div>
+            <label className={ds.label}>Bill To</label>
+            <input value={invPayerName} onChange={e => setInvPayerName(e.target.value)} placeholder="Client name" className={ds.input} />
+          </div>
+          <div>
+            <label className={ds.label}>Due Date</label>
+            <input type="date" value={invDueDate} onChange={e => setInvDueDate(e.target.value)} className={ds.input} />
+          </div>
+        </div>
+
+        {/* Line Items */}
+        <div className="space-y-2 mb-4">
+          <label className={ds.label}>Line Items</label>
+          {invLineItems.map((li, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input value={li.description} onChange={e => { const next = [...invLineItems]; next[i] = { ...li, description: e.target.value }; setInvLineItems(next); }} placeholder="Description" className={cn(ds.input, 'flex-1')} />
+              <input type="number" value={li.quantity} onChange={e => { const next = [...invLineItems]; next[i] = { ...li, quantity: Number(e.target.value) || 0 }; setInvLineItems(next); }} className={cn(ds.input, 'w-20')} min={0} />
+              <input type="number" value={li.unitPrice} onChange={e => { const next = [...invLineItems]; next[i] = { ...li, unitPrice: Number(e.target.value) || 0 }; setInvLineItems(next); }} className={cn(ds.input, 'w-24')} min={0} step={0.01} />
+              {invLineItems.length > 1 && (
+                <button onClick={() => setInvLineItems(prev => prev.filter((_, j) => j !== i))} className={ds.btnGhost}><X className="w-3 h-3" /></button>
+              )}
+            </div>
+          ))}
+          <button onClick={() => setInvLineItems(prev => [...prev, { description: '', quantity: 1, unitPrice: 0 }])} className={cn(ds.btnSmall, 'text-neon-cyan')}>
+            <Plus className="w-3 h-3" /> Add Line
+          </button>
+        </div>
+
+        {/* Tax & Notes */}
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div>
+            <label className={ds.label}>Tax Rate (%)</label>
+            <input type="number" value={invTaxRate} onChange={e => setInvTaxRate(Number(e.target.value) || 0)} className={ds.input} min={0} step={0.5} />
+          </div>
+          <div>
+            <label className={ds.label}>Notes</label>
+            <input value={invNotes} onChange={e => setInvNotes(e.target.value)} placeholder="Optional notes" className={ds.input} />
+          </div>
+        </div>
+
+        {/* Summary */}
+        <div className="bg-lattice-deep rounded-lg p-3 mb-4 space-y-1 text-sm">
+          <div className="flex justify-between"><span className="text-gray-400">Subtotal</span><span className="text-white font-mono">${subtotal.toFixed(2)}</span></div>
+          {invTaxRate > 0 && <div className="flex justify-between"><span className="text-gray-400">Tax ({invTaxRate}%)</span><span className="text-white font-mono">${taxAmount.toFixed(2)}</span></div>}
+          <div className="flex justify-between border-t border-lattice-border pt-1"><span className="text-gray-300 font-medium">Total</span><span className="text-white font-mono font-bold">${total.toFixed(2)}</span></div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-3">
+          <button onClick={handleCreateInvoice} disabled={invCreating || invLineItems.every(li => !li.description.trim())} className={cn(ds.btnPrimary, 'flex items-center gap-2')}>
+            <CreditCard className="w-4 h-4" /> {invCreating ? 'Creating...' : 'Create Invoice DTU'}
+          </button>
+          {invResult && (
+            <span className="text-xs text-green-400">Invoice DTU created: {(invResult as Record<string, unknown>)?.dtuId as string || 'success'}</span>
+          )}
+        </div>
+
+        {invResult && (
+          <div className="mt-3 bg-lattice-surface border border-lattice-border rounded-lg p-3">
+            <p className="text-xs text-gray-400 mb-1">Invoice DTU created and downloadable via DTU export</p>
+            <pre className={cn(ds.textMono, 'text-xs overflow-auto max-h-32')}>{JSON.stringify(invResult, null, 2)}</pre>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ---------------------------------------------------------------------------
   // Sub-view selector rendering
   // ---------------------------------------------------------------------------
 
@@ -2009,6 +2161,7 @@ export default function TradesLensPage() {
     { id: 'profitLoss', label: 'P&L', icon: PieChart, forTabs: ['jobs'] },
     { id: 'materialsTracker', label: 'Materials', icon: Package, forTabs: ['jobs', 'materials'] },
     { id: 'photos', label: 'Photos', icon: Camera, forTabs: ['jobs'] },
+    { id: 'invoiceGenerator', label: 'Invoice', icon: Receipt, forTabs: ['jobs', 'clients'] },
   ];
 
   const visibleSubViews = SUB_VIEW_TABS.filter(sv => !sv.forTabs || sv.forTabs.includes(activeTab));
@@ -2022,6 +2175,7 @@ export default function TradesLensPage() {
       case 'profitLoss': return renderProfitLoss();
       case 'materialsTracker': return renderMaterialsTracker();
       case 'photos': return renderPhotoDocumentation();
+      case 'invoiceGenerator': return renderInvoiceGenerator();
       default: return renderLibrary();
     }
   };
@@ -2050,14 +2204,14 @@ export default function TradesLensPage() {
   }
 
   return (
-    <div className={ds.pageContainer}>
+    <div className={cn(ds.pageContainer, 'lens-trades')} data-lens-theme="trades">
       {/* Header */}
       <header className={ds.sectionHeader}>
         <div className="flex items-center gap-3">
-          <HardHat className="w-8 h-8 text-yellow-400" />
+          <HardHat className="w-8 h-8 text-teal-400" />
           <div>
             <div className="flex items-center gap-2">
-              <h1 className={ds.heading1}>Trades & Construction</h1>
+              <h1 className={cn(ds.heading1, 'text-slate-100')}>Trades & Construction</h1>
               <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} />
             </div>
             <p className={ds.textMuted}>Manage jobs, estimates, materials, permits, equipment, and clients</p>
@@ -2065,6 +2219,14 @@ export default function TradesLensPage() {
         </div>
         <div className="flex items-center gap-2">
           <DTUExportButton domain="trades" data={{}} compact />
+          <VisionAnalyzeButton
+            domain="trades"
+            prompt="Analyze this construction/trades job site image. Identify materials, equipment, safety concerns, progress status, and any issues. Suggest inspection notes and relevant tags."
+            onResult={(res) => {
+              setFormNotes(prev => prev ? `${prev}\n\n[Site Inspection - Vision]\n${res.analysis}` : `[Site Inspection - Vision]\n${res.analysis}`);
+              if (res.suggestedTags?.length) setFormDescription(prev => prev ? `${prev}\nTags: ${res.suggestedTags!.join(', ')}` : `Tags: ${res.suggestedTags!.join(', ')}`);
+            }}
+          />
           {selectedJob && (
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-neon-cyan/10 border border-neon-cyan/30">
               <CircleDot className="w-3 h-3 text-neon-cyan" />
@@ -2083,10 +2245,34 @@ export default function TradesLensPage() {
 
       <RealtimeDataPanel domain="trades" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
 
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {(() => {
+          const allData = items.map(i => i.data as unknown as TradesArtifact);
+          const completed = allData.filter(d => d.status === 'completed' || d.status === 'paid').length;
+          const certs = new Set(allData.map(d => d.trade).filter(Boolean)).size;
+          const completionRate = allData.length > 0 ? Math.round((completed / allData.length) * 100) : 0;
+          return [
+            { label: 'Jobs', value: items.length, icon: Hammer },
+            { label: 'Certifications', value: certs, icon: ShieldCheck },
+            { label: 'Completion Rate', value: `${completionRate}%`, icon: ClipboardCheck },
+            { label: 'Active', value: allData.filter(d => d.status === 'in_progress').length, icon: HardHat },
+          ].map((stat) => (
+            <div key={stat.label} className={ds.panel + ' flex items-center gap-3 p-3'}>
+              <stat.icon className="w-5 h-5 text-teal-400 shrink-0" />
+              <div>
+                <p className="text-xs text-gray-400">{stat.label}</p>
+                <p className="text-lg font-bold text-white">{stat.value}</p>
+              </div>
+            </div>
+          ));
+        })()}
+      </div>
+
       {/* AI Actions */}
       <UniversalActions domain="trades" artifactId={items[0]?.id} compact />
       {/* Mode tabs (original 6) */}
-      <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 overflow-x-auto">
+      <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 flex-wrap">
         {MODE_TABS.map(tab => (
           <button
             key={tab.id}
@@ -2094,8 +2280,8 @@ export default function TradesLensPage() {
             className={cn(
               'flex items-center gap-2 px-4 py-2 rounded-lg transition-colors whitespace-nowrap',
               activeTab === tab.id && !showDashboard
-                ? 'bg-neon-blue/20 text-neon-blue'
-                : 'text-gray-400 hover:text-white hover:bg-lattice-elevated'
+                ? 'bg-teal-500/15 text-teal-400 border border-teal-500/30'
+                : 'text-slate-400 hover:text-white hover:bg-slate-700/30'
             )}
           >
             <tab.icon className="w-4 h-4" />
@@ -2106,7 +2292,7 @@ export default function TradesLensPage() {
 
       {/* Sub-view tabs (when not on dashboard) */}
       {!showDashboard && visibleSubViews.length > 1 && (
-        <div className="flex items-center gap-1 overflow-x-auto pb-1">
+        <div className="flex items-center gap-1 flex-wrap pb-1">
           {visibleSubViews.map(sv => (
             <button
               key={sv.id}
@@ -2114,8 +2300,8 @@ export default function TradesLensPage() {
               className={cn(
                 'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors whitespace-nowrap',
                 subView === sv.id
-                  ? 'bg-lattice-elevated text-white'
-                  : 'text-gray-500 hover:text-gray-300 hover:bg-lattice-elevated/50'
+                  ? 'bg-slate-700/40 text-teal-300 border border-slate-600/50'
+                  : 'text-slate-500 hover:text-slate-300 hover:bg-slate-700/30'
               )}
             >
               <sv.icon className="w-3.5 h-3.5" />
@@ -2165,7 +2351,7 @@ export default function TradesLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

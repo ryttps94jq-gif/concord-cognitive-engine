@@ -24,7 +24,7 @@ import {
   getFullRegistrySummary,
 } from "../lib/marketplace-lens-registry.js";
 
-export default function marketplaceLensRegistryRoutes(db) {
+export default function marketplaceLensRegistryRoutes(db, requireAuth) {
   const router = Router();
 
   /**
@@ -178,7 +178,7 @@ export default function marketplaceLensRegistryRoutes(db) {
    * POST /api/marketplace-lens-registry/seed
    * Seed all 112 lenses into the database (admin only, idempotent)
    */
-  router.post("/seed", (req, res) => {
+  router.post("/seed", requireAuth(), (req, res) => {
     const result = seedMarketplaceLensRegistry(db);
     res.json(result);
   });

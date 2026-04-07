@@ -1,0 +1,349 @@
+// ── Domain Logic — validation rules, computed fields, transitions & scoring ──
+// Each domain entry defines: types, validStatuses, transitions, requiredFields,
+// computedFields, and scoring weights used by the Lens artifact system.
+
+const DOMAIN_RULES = new Map();
+
+// === Paper (Research) ===
+DOMAIN_RULES.set("paper", {
+  types: ["research", "review", "survey", "meta-analysis", "preprint", "commentary"],
+  validStatuses: ["draft", "in-review", "validated", "published", "retracted", "archived"],
+  transitions: {
+    draft: ["in-review", "archived"],
+    "in-review": ["draft", "validated", "archived"],
+    validated: ["published", "in-review", "archived"],
+    published: ["retracted", "archived"],
+    retracted: ["archived"],
+    archived: [],
+  },
+  requiredFields: { research: ["title"], review: ["title"], survey: ["title"] },
+  computedFields: (type, data) => {
+    const claims = data.claims || [];
+    data.claimCount = claims.length;
+    data.validatedClaimCount = claims.filter(c => c.validated).length;
+    data.evidenceCoverage = claims.length > 0
+      ? Math.round(claims.filter(c => (c.evidence || c.sources || []).length > 0).length / claims.length * 100) / 100
+      : 0;
+    return data;
+  },
+  scoring: (type, data) => {
+    const claims = data.claims || [];
+    if (claims.length === 0) return 0.1;
+    const validated = claims.filter(c => c.validated).length / claims.length;
+    const evidenced = claims.filter(c => (c.evidence || c.sources || []).length > 0).length / claims.length;
+    return Math.round((validated * 0.6 + evidenced * 0.3 + Math.min(claims.length / 10, 1) * 0.1) * 100) / 100;
+  },
+});
+
+// === Reasoning ===
+DOMAIN_RULES.set("reasoning", {
+  types: ["deductive", "inductive", "abductive", "analogical", "chain"],
+  validStatuses: ["draft", "in-progress", "concluded", "validated", "archived"],
+  transitions: {
+    draft: ["in-progress", "archived"],
+    "in-progress": ["draft", "concluded", "archived"],
+    concluded: ["validated", "in-progress", "archived"],
+    validated: ["archived"],
+    archived: [],
+  },
+  requiredFields: { deductive: ["premise"], inductive: [] },
+  computedFields: (type, data) => {
+    const steps = data.steps || [];
+    data.stepCount = steps.length;
+    data.hasConclusion = !!data.conclusion;
+    return data;
+  },
+  scoring: (type, data) => {
+    const steps = data.steps || [];
+    if (steps.length === 0) return 0.1;
+    const valid = steps.every(s => s.content && s.content.length > 0);
+    const hasConclusion = !!data.conclusion;
+    return Math.round((valid ? 0.5 : 0.2) + (hasConclusion ? 0.3 : 0) + Math.min(steps.length / 10, 1) * 0.2) * 100 / 100;
+  },
+});
+
+// === Council (Governance) ===
+DOMAIN_RULES.set("council", {
+  types: ["proposal", "resolution", "amendment", "budget", "policy"],
+  validStatuses: ["draft", "open", "debating", "voting", "passed", "rejected", "archived"],
+  transitions: {
+    draft: ["open", "archived"],
+    open: ["debating", "voting", "archived"],
+    debating: ["voting", "open", "archived"],
+    voting: ["passed", "rejected", "debating", "archived"],
+    passed: ["archived"],
+    rejected: ["draft", "archived"],
+    archived: [],
+  },
+  requiredFields: { proposal: ["title"] },
+  computedFields: (type, data) => {
+    const votes = data.votes || [];
+    data.voteCount = votes.length;
+    data.uniqueVoters = [...new Set(votes.map(v => v.voterId))].length;
+    if (votes.length > 0) {
+      const tally = {};
+      votes.forEach(v => { tally[v.choice || "abstain"] = (tally[v.choice || "abstain"] || 0) + 1; });
+      data.voteTally = tally;
+    }
+    return data;
+  },
+  scoring: (type, data) => {
+    const votes = data.votes || [];
+    const debate = data.debate || {};
+    const hasDebate = !!(debate.turns && debate.turns.length > 0);
+    const hasVotes = votes.length > 0;
+    const hasBudget = !!data.budget;
+    return Math.round(((hasDebate ? 0.3 : 0) + (hasVotes ? 0.4 : 0) + (hasBudget ? 0.2 : 0) + 0.1) * 100) / 100;
+  },
+});
+
+// === Agents ===
+DOMAIN_RULES.set("agents", {
+  types: ["agent", "swarm", "pipeline", "orchestrator", "worker"],
+  validStatuses: ["draft", "configured", "active", "paused", "stopped", "error", "archived"],
+  transitions: {
+    draft: ["configured", "archived"],
+    configured: ["active", "draft", "archived"],
+    active: ["paused", "stopped", "error"],
+    paused: ["active", "stopped", "archived"],
+    stopped: ["configured", "archived"],
+    error: ["stopped", "configured", "archived"],
+    archived: [],
+  },
+  requiredFields: { agent: ["title"] },
+  computedFields: (type, data) => {
+    data.isRunning = data.status === "active";
+    return data;
+  },
+  scoring: (type, data) => {
+    const hasConfig = !!data.config || !!data.parameters;
+    const isActive = data.status === "active";
+    return Math.round(((hasConfig ? 0.4 : 0.1) + (isActive ? 0.4 : 0.1) + 0.1) * 100) / 100;
+  },
+});
+
+// === Sim (Simulation) ===
+DOMAIN_RULES.set("sim", {
+  types: ["scenario", "monte-carlo", "agent-based", "system-dynamics", "discrete-event"],
+  validStatuses: ["draft", "configured", "running", "completed", "archived"],
+  transitions: {
+    draft: ["configured", "archived"],
+    configured: ["running", "draft", "archived"],
+    running: ["completed", "configured"],
+    completed: ["configured", "archived"],
+    archived: [],
+  },
+  requiredFields: { scenario: ["title"] },
+  computedFields: (type, data) => {
+    data.runCount = data.runCount || 0;
+    data.hasResults = !!data.lastRun;
+    return data;
+  },
+  scoring: (type, data) => {
+    const assumptions = data.assumptions || [];
+    const hasRun = !!data.lastRun;
+    const runs = data.runs || [];
+    return Math.round((
+      Math.min(assumptions.length / 5, 1) * 0.3 +
+      (hasRun ? 0.4 : 0) +
+      Math.min(runs.length / 5, 1) * 0.2 +
+      0.1
+    ) * 100) / 100;
+  },
+});
+
+// === Studio (Creative / Audio) ===
+DOMAIN_RULES.set("studio", {
+  types: ["project", "track", "session", "stem", "mix", "master"],
+  validStatuses: ["draft", "recording", "mixing", "mastering", "released", "archived"],
+  transitions: {
+    draft: ["recording", "mixing", "archived"],
+    recording: ["mixing", "draft", "archived"],
+    mixing: ["mastering", "recording", "archived"],
+    mastering: ["released", "mixing", "archived"],
+    released: ["archived"],
+    archived: [],
+  },
+  requiredFields: { project: ["title"] },
+  computedFields: (type, data) => {
+    const tracks = data.tracks || [];
+    data.trackCount = tracks.length;
+    data.activeTracks = tracks.filter(t => !t.muted).length;
+    data.isMixed = data.mixStatus === "mixed";
+    data.isMastered = data.masterStatus === "mastered";
+    return data;
+  },
+  scoring: (type, data) => {
+    const tracks = data.tracks || [];
+    const isMixed = data.mixStatus === "mixed";
+    const isMastered = data.masterStatus === "mastered";
+    return Math.round((
+      Math.min(tracks.length / 8, 1) * 0.3 +
+      (isMixed ? 0.3 : 0) +
+      (isMastered ? 0.3 : 0) +
+      0.1
+    ) * 100) / 100;
+  },
+});
+
+// === Law (Legal) ===
+DOMAIN_RULES.set("law", {
+  types: ["case", "contract", "opinion", "brief", "regulation", "compliance-report"],
+  validStatuses: ["draft", "review", "filed", "active", "closed", "archived"],
+  transitions: {
+    draft: ["review", "archived"],
+    review: ["filed", "draft", "archived"],
+    filed: ["active", "archived"],
+    active: ["closed", "archived"],
+    closed: ["archived"],
+    archived: [],
+  },
+  requiredFields: { case: ["title"] },
+  computedFields: (type, data) => {
+    data.citationCount = (data.citations || []).length;
+    data.draftCount = (data.drafts || []).length;
+    return data;
+  },
+  scoring: (type, data) => {
+    const citations = (data.citations || []).length;
+    const drafts = (data.drafts || []).length;
+    const hasBody = !!(data.body && data.body.length > 50);
+    return Math.round((
+      (hasBody ? 0.3 : 0.1) +
+      Math.min(citations / 5, 1) * 0.3 +
+      Math.min(drafts / 3, 1) * 0.2 +
+      0.1
+    ) * 100) / 100;
+  },
+});
+
+// === Graph (Knowledge Graph) ===
+DOMAIN_RULES.set("graph", {
+  types: ["knowledge-graph", "concept-map", "ontology", "network", "taxonomy"],
+  validStatuses: ["draft", "building", "stable", "published", "archived"],
+  transitions: {
+    draft: ["building", "archived"],
+    building: ["stable", "draft", "archived"],
+    stable: ["published", "building", "archived"],
+    published: ["building", "archived"],
+    archived: [],
+  },
+  requiredFields: { "knowledge-graph": [] },
+  computedFields: (type, data) => {
+    const nodes = data.nodes || [];
+    const edges = data.edges || [];
+    data.nodeCount = nodes.length;
+    data.edgeCount = edges.length;
+    data.density = nodes.length > 1
+      ? Math.round(edges.length / (nodes.length * (nodes.length - 1) / 2) * 10000) / 10000
+      : 0;
+    return data;
+  },
+  scoring: (type, data) => {
+    const nodes = (data.nodes || []).length;
+    const edges = (data.edges || []).length;
+    const hasStructure = nodes > 0 && edges > 0;
+    return Math.round((
+      Math.min(nodes / 20, 1) * 0.3 +
+      Math.min(edges / 30, 1) * 0.3 +
+      (hasStructure ? 0.3 : 0) +
+      0.1
+    ) * 100) / 100;
+  },
+});
+
+// === Whiteboard (Collaboration) ===
+DOMAIN_RULES.set("whiteboard", {
+  types: ["board", "canvas", "diagram", "sketch", "wireframe"],
+  validStatuses: ["draft", "active", "shared", "locked", "archived"],
+  transitions: {
+    draft: ["active", "archived"],
+    active: ["shared", "locked", "archived"],
+    shared: ["active", "locked", "archived"],
+    locked: ["active", "archived"],
+    archived: [],
+  },
+  requiredFields: { board: [] },
+  computedFields: (type, data) => {
+    const elements = data.elements || [];
+    data.elementCount = elements.length;
+    return data;
+  },
+  scoring: (type, data) => {
+    const elements = (data.elements || []).length;
+    return Math.round((Math.min(elements / 10, 1) * 0.7 + 0.1 + (elements > 0 ? 0.2 : 0)) * 100) / 100;
+  },
+});
+
+// ── Exported helpers ─────────────────────────────────────────────────────────
+
+function validateArtifact(domain, type, data, meta) {
+  const rule = DOMAIN_RULES.get(domain);
+  const errors = [];
+  const warnings = [];
+
+  if (!rule) {
+    // Unknown domains pass validation with a warning
+    warnings.push(`Unknown domain "${domain}" — no validation rules applied`);
+    return { ok: true, errors, warnings };
+  }
+
+  // Type check
+  if (rule.types.length > 0 && !rule.types.includes(type)) {
+    errors.push(`Invalid type "${type}" for domain "${domain}". Valid types: ${rule.types.join(", ")}`);
+  }
+
+  // Status check
+  if (meta?.status && rule.validStatuses.length > 0 && !rule.validStatuses.includes(meta.status)) {
+    errors.push(`Invalid status "${meta.status}" for domain "${domain}". Valid statuses: ${rule.validStatuses.join(", ")}`);
+  }
+
+  // Required fields
+  const required = rule.requiredFields?.[type] || [];
+  for (const field of required) {
+    if (data[field] === undefined || data[field] === null || data[field] === "") {
+      warnings.push(`Recommended field "${field}" is missing for ${domain}/${type}`);
+    }
+  }
+
+  return { ok: errors.length === 0, errors, warnings };
+}
+
+function computeFields(domain, type, data) {
+  const rule = DOMAIN_RULES.get(domain);
+  if (rule?.computedFields) {
+    return rule.computedFields(type, data);
+  }
+  return data;
+}
+
+function getValidTransitions(domain, currentStatus) {
+  const rule = DOMAIN_RULES.get(domain);
+  if (!rule?.transitions) return [];
+  return rule.transitions[currentStatus] || [];
+}
+
+function scoreArtifact(domain, type, data) {
+  const rule = DOMAIN_RULES.get(domain);
+  if (rule?.scoring) {
+    return rule.scoring(type, data);
+  }
+  return 0.1; // minimal score for unknown domains
+}
+
+function getDomainSchema(domain) {
+  const rule = DOMAIN_RULES.get(domain);
+  if (!rule) {
+    return { domain, known: false, types: [], validStatuses: [], transitions: {} };
+  }
+  return {
+    domain,
+    known: true,
+    types: rule.types,
+    validStatuses: rule.validStatuses,
+    transitions: rule.transitions,
+    requiredFields: rule.requiredFields || {},
+  };
+}
+
+export { DOMAIN_RULES, validateArtifact, computeFields, getValidTransitions, scoreArtifact, getDomainSchema };

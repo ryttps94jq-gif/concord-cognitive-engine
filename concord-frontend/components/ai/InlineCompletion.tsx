@@ -26,7 +26,7 @@ export function InlineCompletion({
   position,
   onAccept,
   onReject,
-  onRefresh: _onRefresh,
+  onRefresh,
   getSuggestion,
   className
 }: InlineCompletionProps) {
@@ -109,6 +109,7 @@ export function InlineCompletion({
             <div className="flex items-center gap-1">
               <button
                 onClick={() => {
+                  onRefresh();
                   fetchSuggestion();
                 }}
                 className="p-1.5 text-gray-400 hover:text-white transition-colors"

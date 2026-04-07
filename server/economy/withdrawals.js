@@ -19,9 +19,25 @@ function nowISO() {
  * Request a withdrawal. Creates a pending withdrawal record.
  * Does NOT debit balance yet — that happens at processing.
  */
+// Withdrawal hold period: earnings must settle before withdrawal
+const WITHDRAWAL_HOLD_HOURS = 48;
+
 export function requestWithdrawal(db, { userId, amount }) {
   const amountCheck = validateAmount(amount);
   if (!amountCheck.ok) return amountCheck;
+
+  // 48-hour hold: only credits older than 48 hours are withdrawal-eligible
+  // This prevents the exploit: sell → withdraw instantly → buyer requests refund → funds already gone
+  const settledBalance = db.prepare(`
+    SELECT COALESCE(SUM(CASE WHEN to_user_id = ? THEN CAST(ROUND(net * 100) AS INTEGER) ELSE 0 END), 0)
+         - COALESCE(SUM(CASE WHEN from_user_id = ? THEN CAST(ROUND(amount * 100) AS INTEGER) ELSE 0 END), 0)
+      AS settled_cents
+    FROM economy_ledger
+    WHERE (to_user_id = ? OR from_user_id = ?)
+      AND status = 'complete'
+      AND created_at <= datetime('now', '-${WITHDRAWAL_HOLD_HOURS} hours')
+  `).get(userId, userId, userId, userId)?.settled_cents || 0;
+  const settledDollars = settledBalance / 100;
 
   // Check user has sufficient balance (including pending withdrawals)
   const pendingSum = db.prepare(`
@@ -29,6 +45,17 @@ export function requestWithdrawal(db, { userId, amount }) {
     FROM economy_withdrawals
     WHERE user_id = ? AND status IN ('pending', 'approved', 'processing')
   `).get(userId)?.total || 0;
+
+  if (settledDollars - pendingSum < amount) {
+    return {
+      ok: false,
+      error: "insufficient_settled_balance",
+      detail: "Earnings must be at least 48 hours old before withdrawal.",
+      settledBalance: settledDollars,
+      pendingWithdrawals: pendingSum,
+      requestedAmount: amount,
+    };
+  }
 
   const balCheck = validateBalance(db, userId, amount + pendingSum);
   if (!balCheck.ok) {

@@ -51,11 +51,32 @@ spec:
                   cpu: "1"
                   memory: 1Gi
 
-              envFrom:
-                - configMapRef:
-                    name: concord-config
-                - secretRef:
-                    name: concord-secrets
+              env:
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: concord-secrets
+                      key: AWS_ACCESS_KEY_ID
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: concord-secrets
+                      key: AWS_SECRET_ACCESS_KEY
+                - name: BACKUP_ENCRYPTION_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: concord-secrets
+                      key: BACKUP_ENCRYPTION_KEY
+                - name: AWS_BUCKET
+                  valueFrom:
+                    configMapKeyRef:
+                      name: concord-config
+                      key: AWS_BUCKET
+                - name: AWS_REGION
+                  valueFrom:
+                    configMapKeyRef:
+                      name: concord-config
+                      key: AWS_REGION
 
               volumeMounts:
                 - name: concord-data

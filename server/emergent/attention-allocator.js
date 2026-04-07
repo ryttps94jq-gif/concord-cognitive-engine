@@ -23,7 +23,7 @@ function getSTATE() { return globalThis._concordSTATE || null; }
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
-const ATTENTION_INTERVAL_MS = 300000; // 5 minutes
+const ATTENTION_INTERVAL_MS = 900_000; // 15 minutes — attention allocation is gradual
 const DEFAULT_TOTAL_BUDGET = parseInt(process.env.ATTENTION_BUDGET || "60", 10);
 
 // ── Module State ────────────────────────────────────────────────────────────
@@ -336,7 +336,7 @@ export function init({ STATE, helpers } = {}) {
   if (STATE) globalThis._concordSTATE = STATE;
 
   _timer = setInterval(() => {
-    runAttentionCycle().catch(() => {});
+    runAttentionCycle().catch(e => console.warn('[attention-allocator] async op failed:', e?.message));
   }, ATTENTION_INTERVAL_MS);
   if (_timer.unref) _timer.unref();
 

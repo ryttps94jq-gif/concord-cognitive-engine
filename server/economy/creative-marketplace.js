@@ -19,6 +19,7 @@ import { recordTransactionBatch, generateTxId } from "./ledger.js";
 import { PLATFORM_ACCOUNT_ID } from "./fees.js";
 import { distributeFee } from "./fee-split.js";
 import { economyAudit } from "./audit.js";
+import { validateBalance } from "./validators.js";
 import {
   ARTIFACT_TYPES, CREATIVE_MARKETPLACE, CREATIVE_FEDERATION,
   CREATIVE_QUESTS, CREATIVE_LEADERBOARD, CREATOR_RIGHTS, LICENSE_TYPES,
@@ -69,6 +70,7 @@ export function publishArtifact(db, {
   if (!fileSize || fileSize <= 0) return { ok: false, error: "invalid_file_size" };
   if (!fileHash) return { ok: false, error: "missing_file_hash" };
   if (!price || price <= 0) return { ok: false, error: "invalid_price" };
+  if (price > 50000) return { ok: false, error: "price_exceeds_maximum", maxPrice: 50000 };
 
   // Validate file size against type limit
   const typeConfig = ARTIFACT_TYPES[type];
@@ -101,7 +103,7 @@ export function publishArtifact(db, {
   const locationNational = creator?.declared_national || null;
 
   const licenseType = license.type || "standard";
-  if (!["standard", "exclusive", "custom"].includes(licenseType)) {
+  if (!["standard", "exclusive", "custom", "personal-use"].includes(licenseType)) {
     return { ok: false, error: "invalid_license_type" };
   }
 
@@ -309,7 +311,16 @@ export function purchaseArtifact(db, { buyerId, artifactId, requestId, ip }) {
     if (exclusiveHolder) return { ok: false, error: "exclusive_license_already_held" };
   }
 
+  // Wash trade prevention
+  const washCheck = checkWashTrade(db, buyerId, artifact.creator_id, artifactId);
+  if (!washCheck.ok) return washCheck;
+
   const price = artifact.price;
+
+  // Validate buyer has sufficient balance before proceeding
+  const balanceCheck = validateBalance(db, buyerId, price);
+  if (!balanceCheck.ok) return balanceCheck;
+
   const purchaseId = uid("cap");
 
   // Calculate fees
@@ -322,15 +333,77 @@ export function purchaseArtifact(db, { buyerId, artifactId, requestId, ip }) {
   let cascadePayments = [];
   let totalCascade = 0;
 
+  // Seller protection: royalties never exceed 30% of sale price
+  // Seller always keeps at least 64.54% (100% - 5.46% fees - 30% max royalties)
+  const MAX_ROYALTY_RATE = 0.30;
+  const maxRoyaltyPool = Math.round(price * MAX_ROYALTY_RATE * 100) / 100;
+
   if (artifact.is_derivative) {
     cascadePayments = calculateCascadePayments(db, artifactId, remainingAfterFees);
+    // Anti-gaming: filter out self-citing (creator earning royalties on their own chain)
+    cascadePayments = cascadePayments.filter(p => p.recipientId !== artifact.creator_id && p.recipientId !== buyerId);
+
+    // Apply 30% cap — trim payments from deepest generation first
+    cascadePayments.sort((a, b) => a.generation - b.generation); // pay closest ancestors first
+    let capped = 0;
+    cascadePayments = cascadePayments.filter(p => {
+      if (capped + p.amount > maxRoyaltyPool) {
+        const remaining = Math.round((maxRoyaltyPool - capped) * 100) / 100;
+        if (remaining >= 0.01) {
+          p.amount = remaining;
+          capped += remaining;
+          return true;
+        }
+        return false; // drop this payment
+      }
+      capped += p.amount;
+      return true;
+    });
+
     totalCascade = Math.round(cascadePayments.reduce((sum, p) => sum + p.amount, 0) * 100) / 100;
+  }
+
+  // Concord 30/70 split for emergent-created content
+  const concordSplit = calculateConcordSplit(db, artifact, remainingAfterFees);
+  let concordDeduction = 0;
+  if (concordSplit) {
+    // Concord split also counts against the 30% cap
+    let concordAllowance = Math.round((maxRoyaltyPool - totalCascade) * 100) / 100;
+    if (concordAllowance > 0) {
+      concordDeduction = Math.min(concordSplit.totalConcordRoyalty, concordAllowance);
+      // Proportionally adjust passthrough payments if capped
+      const ratio = concordDeduction / (concordSplit.totalConcordRoyalty || 1);
+      for (const pp of concordSplit.passthroughPayments) {
+        cascadePayments.push({
+          recipientId: pp.recipientId,
+          recipientArtifactId: pp.contentId,
+          amount: Math.round(pp.amount * ratio * 100) / 100,
+          generation: 0,
+          rate: 0.21,
+          reason: "concord_passthrough",
+        });
+      }
+      totalCascade = Math.round((totalCascade + concordDeduction) * 100) / 100;
+    }
   }
 
   const creatorEarnings = Math.round((remainingAfterFees - totalCascade) * 100) / 100;
 
   // Execute atomically
   const doPurchase = db.transaction(() => {
+    // Re-check balance inside transaction to prevent race conditions
+    const txBalanceCheck = validateBalance(db, buyerId, price);
+    if (!txBalanceCheck.ok) throw new Error(`insufficient_balance:${txBalanceCheck.balance}:${price}`);
+
+    // Re-check exclusive availability inside transaction (race condition guard)
+    // Two users clicking "Buy" at the same millisecond: second one gets "already sold"
+    if (artifact.license_type === "exclusive") {
+      const exclusiveHeld = db.prepare(
+        "SELECT id FROM creative_usage_licenses WHERE artifact_id = ? AND license_type = 'exclusive' AND status = 'active'"
+      ).get(artifactId);
+      if (exclusiveHeld) throw new Error("exclusive_already_sold");
+    }
+
     const batchId = generateTxId();
     const now = nowISO();
     const entries = [];
@@ -391,6 +464,28 @@ export function purchaseArtifact(db, { buyerId, artifactId, requestId, ip }) {
       });
     }
 
+    // 3b. Concord keeps (9% of sale for emergent-created content)
+    if (concordSplit && concordSplit.concordKeeps > 0) {
+      entries.push({
+        id: generateTxId(),
+        type: "CONCORD_ROYALTY",
+        from: PLATFORM_ACCOUNT_ID,
+        to: "__CONCORD__",
+        amount: concordSplit.concordKeeps,
+        fee: 0,
+        net: concordSplit.concordKeeps,
+        status: "complete",
+        refId: `concord_royalty:${purchaseId}`,
+        metadata: {
+          batchId, role: "concord_keeps",
+          artifactId, purchaseId,
+          totalConcordRoyalty: concordSplit.totalConcordRoyalty,
+          passthroughToCreators: concordSplit.passthroughPayments.reduce((s, p) => s + p.amount, 0),
+        },
+        requestId, ip,
+      });
+    }
+
     const results = recordTransactionBatch(db, entries);
 
     // 4. Record cascade in immutable ledger
@@ -420,12 +515,20 @@ export function purchaseArtifact(db, { buyerId, artifactId, requestId, ip }) {
       ) VALUES (?, ?, ?, ?, 'active', ?, ?, ?)
     `).run(uid("cul"), artifactId, buyerId, artifact.license_type, price, purchaseId, now);
 
-    // 6. Update artifact stats
-    db.prepare(`
-      UPDATE creative_artifacts
-      SET purchase_count = purchase_count + 1, updated_at = ?
-      WHERE id = ?
-    `).run(now, artifactId);
+    // 6. Update artifact stats + auto-delist exclusive items
+    if (artifact.license_type === "exclusive") {
+      db.prepare(`
+        UPDATE creative_artifacts
+        SET purchase_count = purchase_count + 1, marketplace_status = 'delisted', updated_at = ?
+        WHERE id = ?
+      `).run(now, artifactId);
+    } else {
+      db.prepare(`
+        UPDATE creative_artifacts
+        SET purchase_count = purchase_count + 1, updated_at = ?
+        WHERE id = ?
+      `).run(now, artifactId);
+    }
 
     // 7. Distribute fees through 80/10/10 split
     distributeFee(db, {
@@ -473,9 +576,136 @@ export function purchaseArtifact(db, { buyerId, artifactId, requestId, ip }) {
       batchId,
     };
   } catch (err) {
+    // Surface specific race-condition errors to callers
+    if (err.message?.startsWith("insufficient_balance:")) {
+      return { ok: false, error: "insufficient_balance" };
+    }
+    if (err.message === "exclusive_already_sold") {
+      return { ok: false, error: "exclusive_license_already_held" };
+    }
     console.error("[economy] purchase_failed:", err.message);
     return { ok: false, error: "purchase_failed" };
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// WASH TRADE PREVENTION
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Block wash trading patterns between buyer-seller pairs.
+ *
+ * 1. Ping-pong: Same artifact sold back and forth within 30 days → reject
+ * 2. Excessive pair trading: >3 transactions between same pair in 7 days → reject
+ */
+function checkWashTrade(db, buyerId, sellerId, artifactId) {
+  // Ping-pong: has buyer previously sold this exact artifact TO the seller?
+  const pingPong = db.prepare(`
+    SELECT COUNT(*) AS c FROM economy_ledger
+    WHERE type = 'MARKETPLACE_PURCHASE'
+      AND from_user_id = ?
+      AND to_user_id = ?
+      AND metadata_json LIKE ?
+      AND created_at > datetime('now', '-30 days')
+  `).get(sellerId, buyerId, `%"artifactId":"${artifactId}"%`)?.c || 0;
+
+  if (pingPong > 0) {
+    return {
+      ok: false,
+      error: "wash_trade_detected",
+      detail: "This artifact was recently traded between these accounts.",
+    };
+  }
+
+  // Excessive pair trading: >3 transactions between same pair in 7 days
+  const pairCount = db.prepare(`
+    SELECT COUNT(*) AS c FROM economy_ledger
+    WHERE type = 'MARKETPLACE_PURCHASE'
+      AND (
+        (from_user_id = ? AND to_user_id = ?)
+        OR (from_user_id = ? AND to_user_id = ?)
+      )
+      AND created_at > datetime('now', '-7 days')
+  `).get(buyerId, sellerId, sellerId, buyerId)?.c || 0;
+
+  if (pairCount > 3) {
+    return {
+      ok: false,
+      error: "excessive_pair_trading",
+      detail: "Too many transactions between this buyer-seller pair in the last 7 days.",
+    };
+  }
+
+  return { ok: true };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CONCORD 30/70 ROYALTY SPLIT (Emergent-Created Content)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * When a Concord emergent creates a DTU that gets sold:
+ * - Concord receives 30% royalty on the sale (from seller's share)
+ * - 70% of that (21% of sale) flows to human creators whose work was cited
+ * - Concord keeps 30% of that (9% of sale)
+ *
+ * This is the mechanism that pays creators for feeding the emergents.
+ *
+ * @param {object} db
+ * @param {object} artifact - the artifact being sold
+ * @param {number} remainingAfterFees - price minus platform/marketplace fees
+ * @returns {{ concordKeeps: number, passthroughPayments: Array, totalConcordRoyalty: number }}
+ */
+function calculateConcordSplit(db, artifact, remainingAfterFees) {
+  const CONCORD_ROYALTY_RATE = 0.30;
+  const CONCORD_PASSTHROUGH_RATE = 0.70;
+
+  // Check if creator is an emergent/system entity
+  const creatorId = artifact.creator_id || "";
+  const isEmergent = creatorId.startsWith("ent_") || creatorId.startsWith("__") || creatorId === "__CONCORD__";
+
+  if (!isEmergent) return null; // Not emergent-created, skip
+
+  const concordRoyalty = Math.round(remainingAfterFees * CONCORD_ROYALTY_RATE * 100) / 100;
+  const passthroughTotal = Math.round(concordRoyalty * CONCORD_PASSTHROUGH_RATE * 100) / 100;
+  const concordKeeps = Math.round((concordRoyalty - passthroughTotal) * 100) / 100;
+
+  // Find cited human creators from lineage
+  const citations = db.prepare(`
+    SELECT parent_id, parent_creator FROM royalty_lineage
+    WHERE child_id = ? AND parent_creator NOT LIKE 'ent_%' AND parent_creator != '__CONCORD__' AND parent_creator != 'system'
+  `).all(artifact.dtu_id || artifact.id);
+
+  if (citations.length === 0) {
+    // Emergent with no human citations — Concord keeps full 30%
+    return {
+      concordKeeps: concordRoyalty,
+      passthroughPayments: [],
+      totalConcordRoyalty: concordRoyalty,
+    };
+  }
+
+  // Distribute passthrough proportionally among cited human creators
+  const perCreator = Math.round((passthroughTotal / citations.length) * 100) / 100;
+  const passthroughPayments = citations.map(c => ({
+    recipientId: c.parent_creator,
+    contentId: c.parent_id,
+    amount: perCreator,
+    reason: "concord_passthrough",
+  }));
+
+  // Adjust rounding: give any remaining cents to first creator
+  const distributed = passthroughPayments.reduce((s, p) => s + p.amount, 0);
+  const rounding = Math.round((passthroughTotal - distributed) * 100) / 100;
+  if (rounding > 0 && passthroughPayments.length > 0) {
+    passthroughPayments[0].amount = Math.round((passthroughPayments[0].amount + rounding) * 100) / 100;
+  }
+
+  return {
+    concordKeeps,
+    passthroughPayments,
+    totalConcordRoyalty: concordRoyalty,
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1241,7 +1471,7 @@ function formatArtifact(row) {
 }
 
 function safeJsonParse(str) {
-  try { return JSON.parse(str); } catch { return []; }
+  try { return JSON.parse(str); } catch (err) { console.debug('[creative-marketplace] JSON parse failed', err?.message); return []; }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

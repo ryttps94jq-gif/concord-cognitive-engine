@@ -2,10 +2,12 @@
 
 import { useState, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
-import { Upload, FileJson, Database, Check, AlertTriangle, Loader2, FileText, Archive, RefreshCw, Layers, ChevronDown } from 'lucide-react';
+import { Upload, FileJson, Database, Check, AlertTriangle, Loader2, FileText, Archive, RefreshCw, Layers, ChevronDown, Clock, CheckCircle2, Download } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { UniversalActions } from '@/components/lens/UniversalActions';
-import { apiHelpers } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
+import { useUIStore } from '@/store/ui';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -47,7 +49,7 @@ export default function ImportLens() {
     items: importJobItems,
     isLoading: jobsLoading, isError: isError, error: error, refetch: refetch,
     create: createJob,
-    update: _updateJob,
+    update: updateJob,
   } = useLensData<ImportJob>('import', 'import-job', { seed: [] });
 
   const importJobs: ImportJob[] = importJobItems.map(item => ({
@@ -65,7 +67,7 @@ export default function ImportLens() {
     completed_at: item.data.completed_at,
   } as ImportJob));
 
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
   const [dragActive, setDragActive] = useState(false);
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -259,6 +261,65 @@ export default function ImportLens() {
     }
   };
 
+  const handleExportSubstrate = async () => {
+    setImporting(true);
+    try {
+      const response = await api.get('/api/substrate/export', { responseType: 'arraybuffer' });
+      const blob = new Blob([response.data], { type: 'application/gzip' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `substrate-export-${new Date().toISOString().slice(0, 10)}.gz`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) { console.error('[Import] Failed to export substrate:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to export substrate' }); }
+    finally { setImporting(false); }
+  };
+
+  const handleImportSubstrate = async (file: File) => {
+    setImporting(true);
+    try {
+      const buffer = await file.arrayBuffer();
+      await api.post('/api/substrate/import', buffer, { headers: { 'Content-Type': 'application/gzip' } }).then(r => r.data);
+      await createJob({
+        title: file.name,
+        data: {
+          filename: file.name,
+          type: 'full_backup',
+          status: 'completed',
+          progress: 100,
+          records_total: 1,
+          records_imported: 1,
+          records_skipped: 0,
+          records_failed: 0,
+          errors: [],
+          started_at: new Date().toISOString(),
+          completed_at: new Date().toISOString(),
+        } as unknown as Partial<ImportJob>,
+        meta: { tags: ['import', 'substrate'], status: 'completed' },
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Substrate import failed';
+      await createJob({
+        title: file.name,
+        data: {
+          filename: file.name,
+          type: 'full_backup',
+          status: 'failed',
+          progress: 0,
+          records_total: 0,
+          records_imported: 0,
+          records_skipped: 0,
+          records_failed: 1,
+          errors: [message],
+          started_at: new Date().toISOString(),
+          completed_at: new Date().toISOString(),
+        } as unknown as Partial<ImportJob>,
+        meta: { tags: ['import', 'substrate', 'failed'], status: 'failed' },
+      });
+    } finally { setImporting(false); }
+  };
+
   const getStatusColor = (status: ImportJob['status']) => {
     switch (status) {
       case 'completed': return 'text-neon-green';
@@ -297,7 +358,7 @@ export default function ImportLens() {
     );
   }
   return (
-    <div className="lens-container">
+    <div data-lens-theme="import" className="lens-container">
       <div className="lens-header">
         <div className="flex items-center gap-3">
           <Upload className="w-8 h-8 text-neon-blue" />
@@ -321,6 +382,38 @@ export default function ImportLens() {
 
       {/* AI Actions */}
       <UniversalActions domain="import" artifactId={importJobItems[0]?.id} compact />
+
+      {/* Quick Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Upload className="w-5 h-5 text-neon-blue" />
+          <div>
+            <p className="text-lg font-bold">{importJobs.length}</p>
+            <p className="text-xs text-gray-500">Total Imports</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Clock className="w-5 h-5 text-neon-yellow" />
+          <div>
+            <p className="text-lg font-bold">{importJobs.filter(j => j.status === 'pending' || j.status === 'importing' || j.status === 'validating').length}</p>
+            <p className="text-xs text-gray-500">Pending</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 2 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <AlertTriangle className="w-5 h-5 text-red-400" />
+          <div>
+            <p className="text-lg font-bold">{importJobs.filter(j => j.status === 'failed').length}</p>
+            <p className="text-xs text-gray-500">Failed</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 3 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <CheckCircle2 className="w-5 h-5 text-neon-green" />
+          <div>
+            <p className="text-lg font-bold">{importJobs.filter(j => j.status === 'completed').length}</p>
+            <p className="text-xs text-gray-500">Completed</p>
+          </div>
+        </motion.div>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Universal Import — Drop any file */}
@@ -480,6 +573,39 @@ export default function ImportLens() {
                 </div>
               </div>
             </button>
+
+            <button
+              onClick={handleExportSubstrate}
+              disabled={importing}
+              className="w-full p-4 bg-void-800 rounded-lg hover:bg-void-700 transition-colors text-left disabled:opacity-50"
+            >
+              <div className="flex items-center gap-3">
+                <Download className="w-8 h-8 text-neon-cyan" />
+                <div>
+                  <p className="text-white font-medium">Export Substrate</p>
+                  <p className="text-void-400 text-sm">Download full substrate as compressed archive</p>
+                </div>
+              </div>
+            </button>
+
+            <label className="w-full p-4 bg-void-800 rounded-lg hover:bg-void-700 transition-colors text-left disabled:opacity-50 cursor-pointer block">
+              <div className="flex items-center gap-3">
+                <Upload className="w-8 h-8 text-neon-yellow" />
+                <div>
+                  <p className="text-white font-medium">Import Substrate</p>
+                  <p className="text-void-400 text-sm">Restore from a substrate archive (.gz)</p>
+                </div>
+              </div>
+              <input
+                type="file"
+                className="hidden"
+                accept=".gz,.gzip"
+                disabled={importing}
+                onChange={(e) => {
+                  if (e.target.files?.[0]) handleImportSubstrate(e.target.files[0]);
+                }}
+              />
+            </label>
           </div>
 
           {/* Supported Formats */}
@@ -533,8 +659,8 @@ export default function ImportLens() {
           </div>
         ) : (
           <div className="space-y-3">
-            {importJobs.map(job => (
-              <div key={job.id} className="p-4 bg-void-800 rounded-lg">
+            {importJobs.map((job, index) => (
+              <motion.div key={job.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="p-4 bg-void-800 rounded-lg">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-3">
                     {getTypeIcon(job.type)}
@@ -590,11 +716,21 @@ export default function ImportLens() {
                   </div>
                 )}
 
-                <p className="text-void-500 text-xs mt-2">
-                  Started: {new Date(job.started_at).toLocaleString()}
-                  {job.completed_at && ` | Completed: ${new Date(job.completed_at).toLocaleString()}`}
-                </p>
-              </div>
+                <div className="flex items-center justify-between mt-2">
+                  <p className="text-void-500 text-xs">
+                    Started: {new Date(job.started_at).toLocaleString()}
+                    {job.completed_at && ` | Completed: ${new Date(job.completed_at).toLocaleString()}`}
+                  </p>
+                  {(job.status === 'importing' || job.status === 'pending') && (
+                    <button
+                      onClick={() => updateJob(job.id, { data: { ...job, status: 'completed', progress: 100, completed_at: new Date().toISOString() } as unknown as Record<string, unknown> })}
+                      className="text-xs px-2 py-1 bg-neon-green/10 text-neon-green rounded hover:bg-neon-green/20 transition-colors"
+                    >
+                      Mark Complete
+                    </button>
+                  )}
+                </div>
+              </motion.div>
             ))}
           </div>
         )}
@@ -616,7 +752,7 @@ export default function ImportLens() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

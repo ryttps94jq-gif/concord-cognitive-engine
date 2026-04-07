@@ -1,8 +1,12 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
+import { apiHelpers } from '@/lib/api/client';
+import { useUIStore } from '@/store/ui';
 import { ds } from '@/lib/design-system';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
@@ -58,7 +62,9 @@ import {
   Video,
   FileType,
   ExternalLink,
-  Copy,
+  Flame,
+  Timer,
+  Zap,
   type LucideIcon,
 } from 'lucide-react';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -68,12 +74,13 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-type ModeTab = 'Students' | 'Courses' | 'Assignments' | 'Grades' | 'Plans' | 'Certifications' | 'Resources' | 'Quizzes';
+type ModeTab = 'Students' | 'Courses' | 'Assignments' | 'Grades' | 'Plans' | 'Certifications' | 'Resources' | 'Quizzes' | 'Study';
 type ArtifactType = 'Student' | 'Course' | 'Assignment' | 'Grade' | 'LessonPlan' | 'Certification' | 'Resource' | 'Quiz';
 type Status = 'enrolled' | 'active' | 'completed' | 'withdrawn' | 'graduated';
 type AttendanceStatus = 'present' | 'absent' | 'tardy' | 'excused';
@@ -179,6 +186,7 @@ const MODE_TABS: { id: ModeTab; icon: LucideIcon; defaultType: ArtifactType }[] 
   { id: 'Resources', icon: Library, defaultType: 'Resource' },
   { id: 'Quizzes', icon: HelpCircle, defaultType: 'Quiz' },
   { id: 'Certifications', icon: Award, defaultType: 'Certification' },
+  { id: 'Study', icon: BookMarked, defaultType: 'Student' },
 ];
 
 const ALL_STATUSES: Status[] = ['enrolled', 'active', 'completed', 'withdrawn', 'graduated'];
@@ -284,6 +292,158 @@ function calculateWeightedAverage(
 }
 
 /* ------------------------------------------------------------------ */
+/*  Mastery Badge                                                      */
+/* ------------------------------------------------------------------ */
+
+const MASTERY_LEVELS = [
+  { key: 'beginner',     label: 'Beginner',     color: 'text-gray-400    bg-gray-400/10    border-gray-400/30',    min: 0   },
+  { key: 'intermediate', label: 'Intermediate', color: 'text-cyan-400    bg-cyan-400/10    border-cyan-400/30',    min: 40  },
+  { key: 'advanced',     label: 'Advanced',     color: 'text-neon-green  bg-neon-green/10  border-neon-green/30',  min: 70  },
+  { key: 'expert',       label: 'Expert',       color: 'text-amber-400   bg-amber-400/10   border-amber-400/30',   min: 90  },
+] as const;
+
+function getMasteryLevel(score: number) {
+  for (let i = MASTERY_LEVELS.length - 1; i >= 0; i--) {
+    if (score >= MASTERY_LEVELS[i].min) return MASTERY_LEVELS[i];
+  }
+  return MASTERY_LEVELS[0];
+}
+
+function MasteryBadge({ score }: { score: number }) {
+  const lvl = getMasteryLevel(score);
+  return (
+    <span className={cn('px-2 py-0.5 rounded text-xs font-semibold border', lvl.color)}>
+      {lvl.label}
+    </span>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Learning Streak Indicator                                          */
+/* ------------------------------------------------------------------ */
+
+function LearningStreak({ streak = 5, best = 21 }: { streak?: number; best?: number }) {
+  return (
+    <div className="flex items-center gap-2 px-3 py-2 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+      <Flame className="w-4 h-4 text-amber-400 shrink-0" />
+      <div>
+        <span className="text-sm font-bold text-amber-400">{streak}-day streak</span>
+        <span className="text-xs text-gray-500 ml-2">Best: {best}</span>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Course Progress Bar                                                */
+/* ------------------------------------------------------------------ */
+
+function CourseProgressBar({ label, pct, color = 'neon-cyan' }: { label: string; pct: number; color?: string }) {
+  return (
+    <div className="space-y-1">
+      <div className="flex justify-between text-xs">
+        <span className="text-gray-300">{label}</span>
+        <span className={`text-${color} font-semibold`}>{Math.round(pct)}%</span>
+      </div>
+      <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+        <motion.div
+          className={`h-full bg-${color} rounded-full`}
+          initial={{ width: 0 }}
+          animate={{ width: `${pct}%` }}
+          transition={{ duration: 0.6, ease: 'easeOut' }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Study Session Timer                                                */
+/* ------------------------------------------------------------------ */
+
+function StudySessionTimer() {
+  const [running, setRunning] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const [sessions, setSessions] = useState(0);
+  const [goal, setGoal] = useState(25 * 60); // 25 min pomodoro
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (running) {
+      intervalRef.current = setInterval(() => {
+        setElapsed(e => {
+          if (e + 1 >= goal) {
+            setRunning(false);
+            setSessions(s => s + 1);
+            return 0;
+          }
+          return e + 1;
+        });
+      }, 1000);
+    } else {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    }
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [running, goal]);
+
+  const pct = goal > 0 ? (elapsed / goal) * 100 : 0;
+  const mm = Math.floor(elapsed / 60).toString().padStart(2, '0');
+  const ss = (elapsed % 60).toString().padStart(2, '0');
+  const totalMin = Math.floor(goal / 60);
+  const circumference = 2 * Math.PI * 28;
+  const dash = (pct / 100) * circumference;
+
+  return (
+    <div className="panel p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold text-sm flex items-center gap-2">
+          <Timer className="w-4 h-4 text-neon-cyan" /> Study Timer
+        </h3>
+        <span className="text-xs text-gray-500">{sessions} session{sessions !== 1 ? 's' : ''} today</span>
+      </div>
+      <div className="flex items-center gap-4">
+        <div className="relative w-16 h-16 shrink-0">
+          <svg className="w-full h-full -rotate-90" viewBox="0 0 64 64">
+            <circle cx="32" cy="32" r="28" fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="5" />
+            <circle cx="32" cy="32" r="28" fill="none"
+              stroke={running ? '#06b6d4' : '#6b7280'} strokeWidth="5" strokeLinecap="round"
+              strokeDasharray={`${dash} ${circumference}`}
+              style={{ transition: 'stroke-dasharray 0.5s linear' }} />
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-xs font-mono font-bold text-white">{mm}:{ss}</span>
+          </div>
+        </div>
+        <div className="flex-1 space-y-2">
+          <div className="flex items-center gap-2">
+            <select value={totalMin} onChange={e => { setGoal(parseInt(e.target.value)*60); setElapsed(0); setRunning(false); }}
+              className="text-xs bg-white/5 border border-white/10 rounded px-2 py-1">
+              <option value={5}>5 min</option>
+              <option value={15}>15 min</option>
+              <option value={25}>25 min (Pomodoro)</option>
+              <option value={45}>45 min</option>
+              <option value={60}>60 min</option>
+            </select>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setRunning(r => !r)}
+              className={cn('px-3 py-1 rounded text-xs font-medium transition-colors',
+                running ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
+                        : 'bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/30')}>
+              {running ? 'Pause' : 'Start'}
+            </button>
+            <button onClick={() => { setElapsed(0); setRunning(false); }}
+              className="px-3 py-1 rounded text-xs bg-white/5 border border-white/10 hover:bg-white/10">
+              Reset
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 
@@ -297,7 +457,8 @@ export default function EducationLensPage() {
   const [filterStatus, setFilterStatus] = useState<Status | 'all'>('all');
   const [showEditor, setShowEditor] = useState(false);
   const [editingItem, setEditingItem] = useState<LensItem<EducationArtifact> | null>(null);
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
+  const [showStudyPanel, setShowStudyPanel] = useState(false);
 
   /* ---------- detail views ---------- */
   const [selectedStudent, setSelectedStudent] = useState<LensItem<EducationArtifact> | null>(null);
@@ -578,6 +739,16 @@ export default function EducationLensPage() {
       console.error('Action failed:', err);
     }
   };
+
+  const handleDownloadResult = useCallback((content: string, filename: string) => {
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, []);
 
   /* ---------- gradebook helpers ---------- */
   const handleCellEdit = (studentId: string, assignmentId: string, value: string) => {
@@ -1051,14 +1222,16 @@ export default function EducationLensPage() {
   /* ================================================================== */
 
   return (
-    <div className={ds.pageContainer}>
+    <div data-lens-theme="education" className="p-6 space-y-6 bg-gradient-to-b from-amber-950/10 to-transparent">
       {/* Header */}
       <header className={ds.sectionHeader}>
         <div className="flex items-center gap-3">
-          <GraduationCap className="w-7 h-7 text-neon-blue" />
+          <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-400/20 flex items-center justify-center">
+            <GraduationCap className="w-6 h-6 text-amber-400" />
+          </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className={ds.heading1}>Education</h1>
+              <h1 className="text-2xl font-bold text-amber-50">Education</h1>
               <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} />
             </div>
             <p className={ds.textMuted}>Student management, courses, assignments, and academic tracking</p>
@@ -1066,6 +1239,18 @@ export default function EducationLensPage() {
         </div>
         <div className="flex items-center gap-2">
           <DTUExportButton domain="education" data={{}} compact />
+          <VisionAnalyzeButton
+            domain="education"
+            prompt="Analyze this education-related image (whiteboard, diagram, textbook page, student work, etc.). Extract key concepts, suggest lesson content, and provide relevant educational tags."
+            onResult={(res) => {
+              setFormDescription(res.analysis);
+              if (res.suggestedTags?.length) setFormNotes(prev => prev ? `${prev}\nVision tags: ${res.suggestedTags!.join(', ')}` : `Vision tags: ${res.suggestedTags!.join(', ')}`);
+            }}
+          />
+          <button onClick={() => setShowStudyPanel(p => !p)}
+            className={cn(ds.btnSecondary, showStudyPanel && 'bg-amber-500/20 border-amber-500/40 text-amber-400')}>
+            <Timer className="w-4 h-4" /> Study Mode
+          </button>
           <button onClick={openNewEditor} className={ds.btnPrimary}>
             <Plus className="w-4 h-4" /> New Record
           </button>
@@ -1075,12 +1260,12 @@ export default function EducationLensPage() {
       <RealtimeDataPanel domain="education" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
 
       {/* Mode Tabs */}
-      <nav className="flex items-center gap-1 border-b border-lattice-border pb-3 overflow-x-auto">
+      <nav className="flex items-center gap-1 border-b border-amber-800/20 pb-3 flex-wrap">
         {MODE_TABS.map(tab => (
           <button
             key={tab.id}
             onClick={() => { setActiveTab(tab.id); setFilterStatus('all'); setShowGradeBook(false); setShowAttendance(false); setShowCurriculum(false); setShowAssignmentBuilder(false); }}
-            className={cn(ds.btnGhost, 'whitespace-nowrap', activeTab === tab.id && 'bg-neon-blue/20 text-neon-blue')}
+            className={cn(ds.btnGhost, 'whitespace-nowrap rounded-lg', activeTab === tab.id && 'bg-amber-500/15 text-amber-400 border-amber-400/20')}
           >
             <tab.icon className="w-4 h-4" />
             {tab.id}
@@ -1090,35 +1275,86 @@ export default function EducationLensPage() {
 
       {/* Enhanced Dashboard */}
       <div className={ds.grid4}>
-        <div className={ds.panel}>
-          <Users className="w-5 h-5 text-neon-blue mb-2" />
-          <p className="text-2xl font-bold">{stats.students}</p>
-          <p className={ds.textMuted}>Students</p>
+        <div className="bg-gradient-to-br from-amber-500/10 to-orange-600/5 rounded-xl border border-amber-400/15 p-4">
+          <Users className="w-5 h-5 text-amber-400 mb-2" />
+          <p className="text-2xl font-bold text-white">{stats.students}</p>
+          <p className="text-sm text-amber-300/50">Students</p>
         </div>
-        <div className={ds.panel}>
-          <BookOpen className="w-5 h-5 text-neon-green mb-2" />
-          <p className="text-2xl font-bold">{stats.activeCourses}</p>
-          <p className={ds.textMuted}>Active Courses</p>
+        <div className="bg-gradient-to-br from-orange-500/10 to-amber-600/5 rounded-xl border border-amber-400/15 p-4">
+          <BookOpen className="w-5 h-5 text-orange-400 mb-2" />
+          <p className="text-2xl font-bold text-white">{stats.activeCourses}</p>
+          <p className="text-sm text-amber-300/50">Active Courses</p>
         </div>
-        <div className={ds.panel}>
-          <ClipboardList className="w-5 h-5 text-amber-400 mb-2" />
-          <p className="text-2xl font-bold">{stats.pendingAssignments}</p>
-          <p className={ds.textMuted}>Pending Assignments</p>
+        <div className="bg-gradient-to-br from-yellow-500/10 to-amber-600/5 rounded-xl border border-amber-400/15 p-4">
+          <ClipboardList className="w-5 h-5 text-yellow-400 mb-2" />
+          <p className="text-2xl font-bold text-white">{stats.pendingAssignments}</p>
+          <p className="text-sm text-amber-300/50">Pending Assignments</p>
         </div>
-        <div className={ds.panel}>
-          <TrendingUp className="w-5 h-5 text-neon-cyan mb-2" />
-          <p className="text-2xl font-bold">{stats.avgScore > 0 ? `${stats.avgScore}%` : '--'}</p>
-          <p className={ds.textMuted}>Avg Score</p>
+        <div className="bg-gradient-to-br from-amber-500/10 to-yellow-600/5 rounded-xl border border-amber-400/15 p-4">
+          <TrendingUp className="w-5 h-5 text-amber-300 mb-2" />
+          <p className="text-2xl font-bold text-white">{stats.avgScore > 0 ? `${stats.avgScore}%` : '--'}</p>
+          <p className="text-sm text-amber-300/50">Avg Score</p>
         </div>
       </div>
+
+      {/* ========== Study Panel ========== */}
+      <AnimatePresence>
+        {showStudyPanel && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+              {/* Streak */}
+              <div className="panel p-4 space-y-3">
+                <h3 className="font-semibold text-sm flex items-center gap-2">
+                  <Flame className="w-4 h-4 text-amber-400" /> Learning Streak
+                </h3>
+                <LearningStreak streak={5} best={21} />
+                <div className="space-y-2">
+                  <CourseProgressBar label="Mathematics" pct={72} color="neon-cyan" />
+                  <CourseProgressBar label="Literature" pct={55} color="amber-400" />
+                  <CourseProgressBar label="Science" pct={88} color="neon-green" />
+                </div>
+              </div>
+              {/* Mastery Levels */}
+              <div className="panel p-4 space-y-3">
+                <h3 className="font-semibold text-sm flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-neon-cyan" /> Mastery Levels
+                </h3>
+                <div className="space-y-3">
+                  {[
+                    { subject: 'Mathematics', score: 78 },
+                    { subject: 'Literature',  score: 55 },
+                    { subject: 'Science',     score: 91 },
+                    { subject: 'History',     score: 63 },
+                  ].map(item => (
+                    <div key={item.subject} className="flex items-center justify-between">
+                      <span className="text-sm text-gray-300">{item.subject}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500">{item.score}%</span>
+                        <MasteryBadge score={item.score} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {/* Study Timer */}
+              <StudySessionTimer />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Dashboard Insights Row */}
       <div className={ds.grid3}>
         {/* At-Risk Students */}
-        <div className={cn(ds.panel, 'border-red-500/20')}>
+        <div className="bg-gradient-to-br from-red-500/5 to-orange-600/5 rounded-xl border border-red-500/15 p-4">
           <div className="flex items-center gap-2 mb-3">
             <AlertTriangle className="w-4 h-4 text-red-400" />
-            <h3 className={cn(ds.heading3, 'text-sm')}>At-Risk Students</h3>
+            <h3 className="text-sm font-semibold text-red-300">At-Risk Students</h3>
           </div>
           {stats.atRiskStudents.length === 0 ? (
             <p className={cn(ds.textMuted, 'text-xs')}>No at-risk students detected</p>
@@ -1206,9 +1442,27 @@ export default function EducationLensPage() {
         <div className={ds.panel}>
           <div className="flex items-center justify-between mb-2">
             <h3 className={ds.heading3}>Action Result</h3>
-            <button onClick={() => setActionResult(null)} className={ds.btnGhost}><X className="w-4 h-4" /></button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleDownloadResult(
+                  typeof actionResult === 'object' ? JSON.stringify(actionResult, null, 2) : String(actionResult),
+                  'education-result.txt'
+                )}
+                className={cn(ds.btnGhost, 'text-xs')}
+              >
+                <Activity className="w-3.5 h-3.5 mr-1" /> Download
+              </button>
+              <button onClick={() => setActionResult(null)} className={ds.btnGhost}><X className="w-4 h-4" /></button>
+            </div>
           </div>
-          <pre className={cn(ds.textMono, 'text-xs overflow-auto max-h-48')}>{JSON.stringify(actionResult, null, 2)}</pre>
+          {typeof actionResult === 'object' && 'content' in actionResult && actionResult.content ? (
+            <div className="prose prose-invert prose-sm max-w-none">
+              {actionResult.title ? <h4 className="text-sm font-semibold text-neon-cyan mb-2">{String(actionResult.title)}</h4> : null}
+              <div className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed">{String(actionResult.content)}</div>
+            </div>
+          ) : (
+            <pre className={cn(ds.textMono, 'text-xs overflow-auto max-h-48')}>{JSON.stringify(actionResult, null, 2)}</pre>
+          )}
         </div>
       )}
 
@@ -2675,11 +2929,16 @@ export default function EducationLensPage() {
         </>
       )}
 
+      {/* Feature 43: Spaced Repetition Study Mode */}
+      {activeTab === 'Study' && (
+        <StudyModePanel />
+      )}
+
       {/* Lens Features */}
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />
@@ -2694,5 +2953,157 @@ export default function EducationLensPage() {
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * Feature 43: Spaced Repetition Study Mode Panel
+ * Wired to existing SRS endpoints (/api/srs/due, /api/srs/:dtuId/review)
+ * Uses the SM-2 algorithm implemented on the server.
+ */
+function StudyModePanel() {
+  const queryClient = useQueryClient();
+  const [showAnswer, setShowAnswer] = useState(false);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [reviewed, setReviewed] = useState<Set<string>>(new Set());
+
+  const { data: srsData, isLoading } = useQuery({
+    queryKey: ['srs-due'],
+    queryFn: () => apiHelpers.srs.due().then(r => r.data),
+  });
+
+  const reviewMutation = useMutation({
+    mutationFn: ({ dtuId, quality }: { dtuId: string; quality: number }) =>
+      apiHelpers.srs.review(dtuId, { quality }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['srs-due'] }),
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
+  });
+
+  const cards = srsData?.due || srsData?.cards || [];
+  const currentCard = cards[currentIndex];
+  const remaining = cards.filter((c: { dtu?: { id?: string }; dtuId?: string }) => !reviewed.has(c.dtu?.id || c.dtuId || '')).length;
+  const total = cards.length;
+  const retentionRate = total > 0 ? Math.round(((total - remaining) / Math.max(total, 1)) * 100) : 0;
+
+  const handleReview = (quality: number) => {
+    if (!currentCard) return;
+    const dtuId = currentCard.dtu?.id || currentCard.dtuId;
+    reviewMutation.mutate({ dtuId, quality });
+    setReviewed(prev => new Set([...prev, dtuId]));
+    setShowAnswer(false);
+    // Advance to next
+    const next = cards.findIndex((c: { dtu?: { id?: string }; dtuId?: string }, i: number) =>
+      i > currentIndex && !reviewed.has(c.dtu?.id || c.dtuId || '')
+    );
+    if (next !== -1) setCurrentIndex(next);
+  };
+
+  if (isLoading) {
+    return (
+      <section className="p-6">
+        <div className="flex items-center gap-2 text-gray-400">
+          <Clock className="w-5 h-5 animate-spin" />
+          Loading study cards...
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <BookMarked className="w-6 h-6 text-neon-cyan" />
+          <div>
+            <h2 className="text-lg font-bold text-white">Spaced Repetition Study</h2>
+            <p className="text-xs text-gray-400">SM-2 algorithm -- review DTUs at optimal intervals</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Stats row */}
+      <div className="grid grid-cols-3 gap-4">
+        <div className="p-4 rounded-lg bg-lattice-surface border border-lattice-border text-center">
+          <p className="text-2xl font-bold text-neon-cyan">{total}</p>
+          <p className="text-xs text-gray-400">Cards Due</p>
+        </div>
+        <div className="p-4 rounded-lg bg-lattice-surface border border-lattice-border text-center">
+          <p className="text-2xl font-bold text-green-400">{retentionRate}%</p>
+          <p className="text-xs text-gray-400">Session Progress</p>
+        </div>
+        <div className="p-4 rounded-lg bg-lattice-surface border border-lattice-border text-center">
+          <p className="text-2xl font-bold text-purple-400">{remaining}</p>
+          <p className="text-xs text-gray-400">Remaining</p>
+        </div>
+      </div>
+
+      {/* Card */}
+      {total === 0 ? (
+        <div className="text-center py-12">
+          <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-3" />
+          <h3 className="text-lg font-bold text-white">All caught up!</h3>
+          <p className="text-gray-400">No cards due for review. Add DTUs to SRS from other lenses.</p>
+        </div>
+      ) : remaining === 0 ? (
+        <div className="text-center py-12">
+          <Award className="w-12 h-12 text-neon-cyan mx-auto mb-3" />
+          <h3 className="text-lg font-bold text-white">Session Complete!</h3>
+          <p className="text-gray-400">You reviewed {total} cards.</p>
+        </div>
+      ) : currentCard ? (
+        <div className="space-y-4">
+          {/* Progress bar */}
+          <div className="h-1.5 bg-lattice-surface rounded-full overflow-hidden">
+            <div className="h-full bg-neon-cyan transition-all duration-300 rounded-full"
+              style={{ width: `${((total - remaining) / total) * 100}%` }} />
+          </div>
+
+          {/* Question card */}
+          <div className="p-8 bg-lattice-surface border border-lattice-border rounded-xl text-center">
+            <h3 className="text-xl font-bold text-white mb-2">
+              {currentCard.dtu?.title || currentCard.title || 'Untitled'}
+            </h3>
+            {(currentCard.dtu?.tags || []).slice(0, 4).map((tag: string) => (
+              <span key={tag} className="inline-block px-2 py-0.5 text-xs bg-lattice-bg rounded text-gray-400 mr-1">#{tag}</span>
+            ))}
+            <p className="text-xs text-gray-500 mt-3">
+              Interval: {currentCard.card?.interval || currentCard.interval || 1}d
+              {' '} | Ease: {(currentCard.card?.easeFactor || currentCard.easiness || 2.5).toFixed(2)}
+              {' '} | Reps: {currentCard.card?.repetitions || currentCard.repetitions || 0}
+            </p>
+          </div>
+
+          {!showAnswer ? (
+            <button onClick={() => setShowAnswer(true)}
+              className="w-full py-3 bg-neon-cyan/10 border border-neon-cyan/30 rounded-xl text-neon-cyan font-medium hover:bg-neon-cyan/20 transition-colors">
+              Show Answer (Space)
+            </button>
+          ) : (
+            <div className="space-y-3">
+              {currentCard.dtu?.content && (
+                <div className="p-4 bg-lattice-bg border border-lattice-border rounded-xl text-gray-300 text-sm whitespace-pre-wrap">
+                  {currentCard.dtu.content}
+                </div>
+              )}
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { q: 1, label: 'Again', color: 'text-red-400' },
+                  { q: 3, label: 'Good', color: 'text-green-400' },
+                  { q: 5, label: 'Easy', color: 'text-neon-cyan' },
+                ].map(opt => (
+                  <button key={opt.q} onClick={() => handleReview(opt.q)}
+                    className="p-3 bg-lattice-surface border border-lattice-border rounded-lg hover:border-gray-500 transition-colors">
+                    <span className={`text-sm font-medium ${opt.color}`}>{opt.label}</span>
+                    <span className="block text-xs text-gray-500 mt-1">({opt.q})</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      ) : null}
+    </section>
   );
 }

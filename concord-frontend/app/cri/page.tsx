@@ -96,6 +96,20 @@ async function decree<T = unknown>(payload: {
 // Sub-components
 // ---------------------------------------------------------------------------
 
+const STAT_CARD_STYLES: Record<string, { bg: string; text: string }> = {
+  'neon-blue': { bg: 'bg-neon-blue/20', text: 'text-neon-blue' },
+  'neon-purple': { bg: 'bg-neon-purple/20', text: 'text-neon-purple' },
+  'neon-cyan': { bg: 'bg-neon-cyan/20', text: 'text-neon-cyan' },
+  'neon-green': { bg: 'bg-neon-green/20', text: 'text-neon-green' },
+};
+
+const PROGRESS_BAR_COLORS: Record<string, string> = {
+  'neon-cyan': 'bg-neon-cyan',
+  'neon-purple': 'bg-neon-purple',
+  'neon-blue': 'bg-neon-blue',
+  'neon-green': 'bg-neon-green',
+};
+
 function StatCard({
   icon: Icon,
   label,
@@ -107,11 +121,12 @@ function StatCard({
   value: string | number;
   color: string;
 }) {
+  const styles = STAT_CARD_STYLES[color] || { bg: 'bg-gray-400/20', text: 'text-gray-400' };
   return (
     <div className={ds.panel}>
       <div className="flex items-center gap-3">
-        <div className={cn('p-2 rounded-lg', `bg-${color}/20`)}>
-          <Icon className={cn('w-5 h-5', `text-${color}`)} />
+        <div className={cn('p-2 rounded-lg', styles.bg)}>
+          <Icon className={cn('w-5 h-5', styles.text)} />
         </div>
         <div>
           <p className={ds.textMuted}>{label}</p>
@@ -126,7 +141,7 @@ function ProgressBar({ value, color = 'neon-cyan' }: { value: number; color?: st
   return (
     <div className="w-full h-2 rounded-full bg-lattice-elevated overflow-hidden">
       <div
-        className={cn('h-full rounded-full transition-all', `bg-${color}`)}
+        className={cn('h-full rounded-full transition-all', PROGRESS_BAR_COLORS[color] || 'bg-neon-cyan')}
         style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
       />
     </div>
@@ -161,22 +176,22 @@ function DTUBarChart({ cris }: { cris: CRISummary[] }) {
   );
 }
 
+const STATUS_BADGE_CLASSES: Record<string, string> = {
+  active: 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-neon-green/20 text-neon-green',
+  completed: 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-neon-blue/20 text-neon-blue',
+  paused: 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-400/20 text-yellow-400',
+  proposed: 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-400/20 text-gray-400',
+  scheduled: 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-neon-purple/20 text-neon-purple',
+  cancelled: 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-400/20 text-red-400',
+  testing: 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-neon-cyan/20 text-neon-cyan',
+  confirmed: 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-neon-green/20 text-neon-green',
+  refuted: 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-400/20 text-red-400',
+  forming: 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-400/20 text-yellow-400',
+};
+
 function StatusBadge({ status }: { status: string }) {
-  const colorMap: Record<string, string> = {
-    active: 'neon-green',
-    completed: 'neon-blue',
-    paused: 'yellow-400',
-    proposed: 'gray-400',
-    scheduled: 'neon-purple',
-    cancelled: 'red-400',
-    testing: 'neon-cyan',
-    confirmed: 'neon-green',
-    refuted: 'red-400',
-    forming: 'yellow-400',
-  };
-  const color = colorMap[status] ?? 'gray-400';
   return (
-    <span className={ds.badge(color)}>
+    <span className={STATUS_BADGE_CLASSES[status] ?? 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-400/20 text-gray-400'}>
       {status}
     </span>
   );
@@ -880,7 +895,7 @@ export default function CRIDashboardPage() {
               </div>
             </div>
 
-            {/* Recent Activity Placeholder */}
+            {/* Recent Activity */}
             <div className={cn(ds.panel, 'space-y-3')}>
               <h3 className={ds.heading3}>
                 <Clock className="w-4 h-4 inline mr-2 text-gray-400" />

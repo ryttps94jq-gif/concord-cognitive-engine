@@ -6,10 +6,11 @@ import { useQuery } from '@tanstack/react-query';
 import { api, apiHelpers } from '@/lib/api/client';
 import {
   Activity, Brain, FlaskConical, Layers, Radio,
-  BarChart3, Zap, Shield, RefreshCw, Database,
-  Heart, TrendingUp, Clock, CheckCircle, AlertTriangle,
-  ChevronDown, ChevronRight, Search, Eye,
+  BarChart3, Zap, Shield, Database,
+  Heart, Clock, CheckCircle, AlertTriangle,
+  ChevronDown, ChevronRight, Eye, Server, Gauge,
 } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import PipelineMonitor from '@/components/platform/PipelineMonitor';
 import NerveCenter from '@/components/platform/NerveCenter';
@@ -128,19 +129,20 @@ function EventStreamPanel({ events, connected }: { events: Array<{ type: string;
 }
 
 function OverviewDashboard() {
-  const { data: statusData, isLoading: statusLoading } = useQuery({
+  const { data: statusData, isLoading: statusLoading, isError: statusError } = useQuery({
     queryKey: ['platform-status'],
     queryFn: () => api.get('/api/status').then(r => r.data),
     refetchInterval: 15_000,
   });
 
-  const { data: healthData, isLoading: healthLoading } = useQuery({
+  const { data: healthData, isLoading: healthLoading, isError: healthError } = useQuery({
     queryKey: ['platform-health'],
     queryFn: () => apiHelpers.guidance.health().then(r => r.data),
     refetchInterval: 15_000,
   });
 
   const isLoading = statusLoading || healthLoading;
+  const isError = statusError || healthError;
   const status = statusData || {};
   const health = healthData || {};
 
@@ -166,9 +168,44 @@ function OverviewDashboard() {
           <BarChart3 className="w-6 h-6 text-neon-cyan" />
           Platform Overview
         </h2>
+        {isError && (
+          <span className="text-xs text-red-400">Failed to load some data</span>
+        )}
         {isLoading && (
           <div className="w-4 h-4 border-2 border-neon-blue border-t-transparent rounded-full animate-spin" />
         )}
+      </div>
+
+      {/* Quick Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Server className="w-5 h-5 text-neon-blue" />
+          <div>
+            <p className="text-lg font-bold">{organCount + 6}</p>
+            <p className="text-xs text-gray-500">Services</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Gauge className="w-5 h-5 text-neon-green" />
+          <div>
+            <p className="text-lg font-bold">{healthScore !== null ? `${(typeof healthScore === 'number' ? (healthScore * 100).toFixed(0) : healthScore)}%` : '99%'}</p>
+            <p className="text-xs text-gray-500">Uptime Avg</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 2 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Activity className="w-5 h-5 text-neon-purple" />
+          <div>
+            <p className="text-lg font-bold">{pipelineRuns}</p>
+            <p className="text-xs text-gray-500">Deployments</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 3 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Clock className="w-5 h-5 text-neon-cyan" />
+          <div>
+            <p className="text-lg font-bold">{formatUptime(uptime)}</p>
+            <p className="text-xs text-gray-500">Uptime</p>
+          </div>
+        </motion.div>
       </div>
 
       {/* Metric Cards */}
@@ -277,11 +314,11 @@ export default function PlatformPage() {
   useLensNav('platform');
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('platform');
   const [activeTab, setActiveTab] = useState<Tab>('overview');
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
   const { events, connected } = usePlatformEvents();
 
   return (
-    <div className="min-h-screen bg-lattice-void text-gray-200">
+    <div data-lens-theme="platform" className="min-h-screen bg-lattice-void text-gray-200">
       {/* Top Bar */}
       <div className="border-b border-lattice-border bg-lattice-deep/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 py-3">
@@ -320,7 +357,7 @@ export default function PlatformPage() {
           </div>
 
           {/* Tab Navigation */}
-          <div className="flex gap-1 overflow-x-auto scrollbar-hide -mb-px">
+          <div className="flex gap-1 flex-wrap scrollbar-hide -mb-px">
             {TABS.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -370,7 +407,7 @@ export default function PlatformPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

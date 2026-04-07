@@ -437,6 +437,14 @@ export const LICENSE_TYPES = Object.freeze({
     derivativesAllowed: null,
     attributionRequired: null,
   },
+  "personal-use": {
+    commercialUse: false,
+    derivativesAllowed: false,
+    attributionRequired: true,
+    redistribute: false,
+    modify: false,
+    exclusive: false,
+  },
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

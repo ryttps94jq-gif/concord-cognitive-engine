@@ -1,6 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import { SkeletonGraph } from '@/components/common/Skeleton';
 
 /**
  * InteractiveGraph — lazy-loaded wrapper.
@@ -17,9 +18,7 @@ const InteractiveGraph = dynamic(
     })),
   {
     ssr: false,
-    loading: () => (
-      <div className="animate-pulse bg-white/5 rounded-lg h-64" />
-    ),
+    loading: () => <SkeletonGraph />,
   }
 );
 

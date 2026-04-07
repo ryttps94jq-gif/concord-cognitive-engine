@@ -1,15 +1,17 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
+import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, apiHelpers } from '@/lib/api/client';
+import { apiHelpers } from '@/lib/api/client';
 import { MarketEmpireListing } from '@/components/market/MarketEmpireListing';
 import {
   Store, TrendingUp, Package, Coins, Search, Filter, X,
-  ShoppingCart, Tag, ArrowUpRight, ArrowDownRight, BarChart3,
-  Clock, Star, RefreshCw, Layers, ChevronDown,
+  ShoppingCart, Tag, ArrowUpRight, ArrowDownRight,
+  RefreshCw, Layers, ChevronDown, DollarSign, BarChart3,
 } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -48,7 +50,7 @@ export default function MarketLensPage() {
   const [sortBy, setSortBy] = useState<SortField>('newest');
   const [purchasingId, setPurchasingId] = useState<string | null>(null);
   const [showPurchaseConfirm, setShowPurchaseConfirm] = useState<MarketListingItem | null>(null);
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   // Backend: GET /api/marketplace/listings
   const { data: listings, isLoading, isError, error, refetch } = useQuery({
@@ -196,6 +198,7 @@ export default function MarketLensPage() {
       </header>
 
       <RealtimeDataPanel domain="market" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
+      <UniversalActions domain="market" artifactId={null} compact />
 
       {/* Wallet Banner */}
       {wallet && (
@@ -283,6 +286,38 @@ export default function MarketLensPage() {
           </div>
         </div>
       )}
+
+      {/* Quick Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <Store className="w-5 h-5 text-neon-green" />
+          <div>
+            <p className="text-lg font-bold">{totalListings}</p>
+            <p className="text-xs text-gray-500">Listings</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <DollarSign className="w-5 h-5 text-neon-cyan" />
+          <div>
+            <p className="text-lg font-bold">{totalVolume} CC</p>
+            <p className="text-xs text-gray-500">Volume</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 2 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <BarChart3 className="w-5 h-5 text-neon-purple" />
+          <div>
+            <p className="text-lg font-bold">{totalTransactions}</p>
+            <p className="text-xs text-gray-500">Transactions</p>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 3 * 0.05 }} className="panel p-3 flex items-center gap-3">
+          <TrendingUp className="w-5 h-5 text-neon-blue" />
+          <div>
+            <p className="text-lg font-bold">{filteredListings.length > 0 ? `${((filteredListings.reduce((a, l) => a + (l.price || 0), 0) / filteredListings.length) || 0).toFixed(0)} CC` : '--'}</p>
+            <p className="text-xs text-gray-500">Avg Price</p>
+          </div>
+        </motion.div>
+      </div>
 
       {/* Market Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -381,12 +416,18 @@ export default function MarketLensPage() {
               )}
             </div>
           ) : (
-            filteredListings.map((listing: MarketListingItem) => (
-              <MarketEmpireListing
-                key={listing.id}
-                listing={listing}
-                onPurchase={() => handlePurchase(listing)}
-              />
+            filteredListings.map((listing: MarketListingItem, index: number) => (
+              <motion.div key={listing.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="relative">
+                {purchasingId === listing.id && (
+                  <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40 rounded-xl backdrop-blur-sm">
+                    <div className="w-6 h-6 border-2 border-neon-purple border-t-transparent rounded-full animate-spin" />
+                  </div>
+                )}
+                <MarketEmpireListing
+                  listing={listing}
+                  onPurchase={() => handlePurchase(listing)}
+                />
+              </motion.div>
             ))
           )}
         </div>
@@ -396,7 +437,7 @@ export default function MarketLensPage() {
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />
@@ -490,7 +531,7 @@ function StatCard({
   trend?: '+' | '-';
 }) {
   return (
-    <div className="lens-card">
+    <div data-lens-theme="market" className="lens-card">
       <div className="flex items-center justify-between">
         <span className="text-neon-green">{icon}</span>
         <div className="flex items-center gap-1">

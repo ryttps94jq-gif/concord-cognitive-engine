@@ -4,10 +4,12 @@ import { useState, useMemo, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
+import { useUIStore } from '@/store/ui';
+import { motion } from 'framer-motion';
 import {
   Coins, Check, Zap, Crown,
   ArrowRight, Sparkles, ShieldCheck, TrendingUp,
-  Download, Filter, BarChart3, ArrowUpDown,
+  Download, BarChart3, Receipt, DollarSign,
   CreditCard, History, Wallet, ChevronDown, Layers,
 } from 'lucide-react';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
@@ -50,7 +52,7 @@ export default function BillingPage() {
   const [selectedPackage, setSelectedPackage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'transactions' | 'subscriptions'>('overview');
   const [txFilter, setTxFilter] = useState<'all' | 'purchase' | 'usage' | 'credit'>('all');
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   // ---- API Queries ----
 
@@ -159,7 +161,7 @@ export default function BillingPage() {
   });
 
   const tokenPackages: TokenPackage[] = config?.tokenPackages || [];
-  const transactions: Transaction[] = historyData?.transactions || [];
+  const transactions: Transaction[] = useMemo(() => historyData?.transactions || [], [historyData]);
 
   // Usage data for the last 7 days (derived from transactions)
   const usageByDay = useMemo(() => {
@@ -229,7 +231,7 @@ export default function BillingPage() {
   }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-8">
+    <div data-lens-theme="billing" className="p-6 max-w-6xl mx-auto space-y-8">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -249,54 +251,77 @@ export default function BillingPage() {
       </div>
       </div>
 
-      {/* Current Balance - Large Display */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-lattice-surface border border-lattice-border rounded-xl p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-lg bg-neon-cyan/20 flex items-center justify-center">
-              <Coins className="w-5 h-5 text-neon-cyan" />
+      {/* Stat Cards Row */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {[
+          { icon: Coins, color: 'bg-neon-cyan/20', iconColor: 'text-neon-cyan', label: 'Token Balance', value: walletLoading ? '...' : `${(wallet?.balance || 0).toLocaleString()} CT` },
+          { icon: Crown, color: 'bg-neon-purple/20', iconColor: 'text-neon-purple', label: 'Current Tier', value: walletLoading ? '...' : (wallet?.tier || 'free'), capitalize: true },
+          { icon: Zap, color: 'bg-neon-green/20', iconColor: 'text-neon-green', label: 'Daily Ingest', value: walletLoading ? '...' : (wallet?.ingestStatus?.limit === -1 ? 'Unlimited' : `${wallet?.ingestStatus?.remaining || 0}/${wallet?.ingestStatus?.limit || 10}`) },
+          { icon: Receipt, color: 'bg-amber-500/20', iconColor: 'text-amber-400', label: 'Transactions', value: `${transactions.length}` },
+        ].map((stat, i) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.08 }}
+            className="bg-lattice-surface border border-lattice-border rounded-xl p-6"
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className={`w-10 h-10 rounded-lg ${stat.color} flex items-center justify-center`}>
+                <stat.icon className={`w-5 h-5 ${stat.iconColor}`} />
+              </div>
+              <div>
+                <p className="text-sm text-gray-400">{stat.label}</p>
+                <p className={`text-2xl font-bold text-white ${stat.capitalize ? 'capitalize' : ''}`}>{stat.value}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm text-gray-400">Token Balance</p>
-              <p className="text-2xl font-bold text-white">
-                {walletLoading ? '...' : (wallet?.balance || 0).toLocaleString()} CT
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-lattice-surface border border-lattice-border rounded-xl p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-lg bg-neon-purple/20 flex items-center justify-center">
-              <Crown className="w-5 h-5 text-neon-purple" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-400">Current Tier</p>
-              <p className="text-2xl font-bold text-white capitalize">
-                {walletLoading ? '...' : (wallet?.tier || 'free')}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-lattice-surface border border-lattice-border rounded-xl p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-lg bg-neon-green/20 flex items-center justify-center">
-              <Zap className="w-5 h-5 text-neon-green" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-400">Daily Ingest</p>
-              <p className="text-2xl font-bold text-white">
-                {walletLoading ? '...' : (
-                  wallet?.ingestStatus?.limit === -1
-                    ? 'Unlimited'
-                    : `${wallet?.ingestStatus?.remaining || 0}/${wallet?.ingestStatus?.limit || 10}`
-                )}
-              </p>
-            </div>
-          </div>
-        </div>
+          </motion.div>
+        ))}
       </div>
+
+      {/* Invoice Status Badges Overview */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className="bg-lattice-surface border border-lattice-border rounded-xl p-4">
+        <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2"><CreditCard className="w-4 h-4 text-neon-cyan" /> Transaction Breakdown</h3>
+        <div className="flex flex-wrap gap-3">
+          {(() => {
+            const typeMap = new Map<string, number>();
+            transactions.forEach(t => typeMap.set(t.type || 'other', (typeMap.get(t.type || 'other') || 0) + 1));
+            const badgeColors: Record<string, string> = { purchase: 'bg-green-500/20 text-green-400', credit: 'bg-cyan-500/20 text-cyan-400', usage: 'bg-pink-500/20 text-pink-400', spend: 'bg-pink-500/20 text-pink-400', debit: 'bg-red-500/20 text-red-400' };
+            return Array.from(typeMap.entries()).map(([type, count]) => (
+              <span key={type} className={`px-3 py-1.5 rounded-lg text-sm font-medium capitalize ${badgeColors[type] || 'bg-gray-500/20 text-gray-400'}`}>
+                {type}: {count}
+              </span>
+            ));
+          })()}
+        </div>
+      </motion.div>
+
+      {/* Revenue Chart Placeholder */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="bg-lattice-surface border border-lattice-border rounded-xl p-4">
+        <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2"><DollarSign className="w-4 h-4 text-green-400" /> 7-Day Token Flow</h3>
+        <div className="flex items-end justify-between gap-1 h-24">
+          {usageByDay.map((day, i) => {
+            const income = transactions.filter(t => {
+              const tDate = t.created_at ? t.created_at.slice(0, 10) : '';
+              const d = new Date(); d.setDate(d.getDate() - (6 - i));
+              return tDate === d.toISOString().slice(0, 10) && (t.type === 'purchase' || t.type === 'credit');
+            }).reduce((s, t) => s + Math.abs(t.amount || 0), 0);
+            return (
+              <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
+                <div className="w-full flex flex-col items-center gap-0.5" style={{ height: '80px' }}>
+                  {income > 0 && <div className="w-full bg-green-500/60 rounded-t" style={{ height: `${Math.min(income / Math.max(maxUsage, 1) * 100, 100)}%`, minHeight: '4px' }} />}
+                  {day.value > 0 && <div className="w-full bg-pink-500/60 rounded-t" style={{ height: `${Math.min(day.value / Math.max(maxUsage, 1) * 100, 100)}%`, minHeight: '4px' }} />}
+                </div>
+                <span className="text-[10px] text-gray-500">{day.label}</span>
+              </div>
+            );
+          })}
+        </div>
+        <div className="flex gap-4 mt-2 text-xs text-gray-400">
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500/60" />Income</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-pink-500/60" />Spending</span>
+        </div>
+      </motion.div>
 
       {/* Tab Navigation */}
       <div className="flex gap-1 border-b border-lattice-border">
@@ -401,14 +426,28 @@ export default function BillingPage() {
                 </button>
               ))}
             </div>
-            <button
-              onClick={handleExportCSV}
-              disabled={transactions.length === 0}
-              className="btn-neon flex items-center gap-2 text-sm disabled:opacity-50"
-            >
-              <Download className="w-4 h-4" />
-              Export CSV
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={async () => {
+                  try {
+                    const resp = await apiHelpers.economy.createTaxSummary({ year: new Date().getFullYear() });
+                    alert(`Tax Summary DTU created: ${(resp.data as Record<string, unknown>)?.dtuId || 'success'}`);
+                  } catch (e) { console.error('[Billing] Failed to create tax summary:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to create tax summary' }); }
+                }}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 transition-colors"
+              >
+                <BarChart3 className="w-4 h-4" />
+                Tax Summary DTU
+              </button>
+              <button
+                onClick={handleExportCSV}
+                disabled={transactions.length === 0}
+                className="btn-neon flex items-center gap-2 text-sm disabled:opacity-50"
+              >
+                <Download className="w-4 h-4" />
+                Export CSV
+              </button>
+            </div>
           </div>
 
           {/* Transaction List */}
@@ -632,11 +671,13 @@ export default function BillingPage() {
         </div>
       )}
 
+      <RealtimeDataPanel data={realtimeInsights} />
+
       {/* Lens Features */}
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />

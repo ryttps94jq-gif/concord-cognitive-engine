@@ -1,12 +1,14 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useState } from 'react';
-import { FileCode, Plus, Check, X } from 'lucide-react';
+import { FileCode, Plus, Check, X, Database, Code, FileJson, Tag } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { ErrorState } from '@/components/common/EmptyState';
+import { showToast } from '@/components/common/Toasts';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -16,7 +18,6 @@ import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 export default function SchemaLensPage() {
   useLensNav('schema');
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('schema');
-  const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [validateData, setValidateData] = useState({ schemaName: '', data: '' });
   const [validationResult, setValidationResult] = useState<{ valid: boolean; errors?: { field: string; error: string }[] } | null>(null);
@@ -32,6 +33,7 @@ export default function SchemaLensPage() {
     },
     onError: (err) => {
       console.error('Schema creation failed:', err instanceof Error ? err.message : err);
+      showToast('error', 'Schema creation failed');
     },
   });
 
@@ -101,6 +103,55 @@ export default function SchemaLensPage() {
         </button>
       </header>
 
+
+      {/* Quick Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="lens-card">
+          <Database className="w-5 h-5 text-neon-cyan mb-2" />
+          <p className="text-2xl font-bold text-neon-cyan">{schemas.length}</p>
+          <p className="text-sm text-gray-400">Total Schemas</p>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="lens-card">
+          <Code className="w-5 h-5 text-neon-green mb-2" />
+          <p className="text-2xl font-bold text-neon-green">
+            {schemas.reduce((sum, s) => sum + ((s.fields as unknown[])?.length || 0), 0)}
+          </p>
+          <p className="text-sm text-gray-400">Total Fields</p>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="lens-card">
+          <FileJson className="w-5 h-5 text-neon-purple mb-2" />
+          <p className="text-2xl font-bold text-neon-purple">
+            {new Set(schemas.map(s => s.kind as string).filter(Boolean)).size}
+          </p>
+          <p className="text-sm text-gray-400">Unique Kinds</p>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="lens-card">
+          <Check className="w-5 h-5 text-neon-green mb-2" />
+          <p className="text-2xl font-bold text-neon-green">{validationResult?.valid ? 'Pass' : '--'}</p>
+          <p className="text-sm text-gray-400">Last Validation</p>
+        </motion.div>
+      </div>
+
+      {/* Schema Version Badges */}
+      {schemas.length > 0 && (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
+          className="panel p-4">
+          <h2 className="text-sm font-semibold mb-3 flex items-center gap-2">
+            <Tag className="w-4 h-4 text-neon-purple" /> Schema Versions
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            {schemas.map((s) => (
+              <span key={(s.id || s.name) as string}
+                className="text-xs px-3 py-1.5 rounded-full bg-lattice-deep border border-white/10 flex items-center gap-2">
+                <FileCode className="w-3 h-3 text-neon-cyan" />
+                <span className="font-medium">{s.name as string}</span>
+                <span className="text-gray-500">v{(s.version as number) || 1}</span>
+                <span className={`w-2 h-2 rounded-full ${(s.version as number) >= 1 ? 'bg-green-400' : 'bg-amber-400'}`} />
+              </span>
+            ))}
+          </div>
+        </motion.div>
+      )}
 
       {/* AI Actions */}
       <UniversalActions domain="schema" artifactId={schemaItems[0]?.id} compact />
@@ -172,6 +223,8 @@ export default function SchemaLensPage() {
         </div>
       </div>
 
+      <RealtimeDataPanel data={realtimeInsights} />
+
       {showCreate && (
         <CreateSchemaModal
           onClose={() => setShowCreate(false)}
@@ -231,7 +284,7 @@ function CreateSchemaModal({ onClose, onCreate, creating }: { onClose: () => voi
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div data-lens-theme="schema" className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-lattice-bg border border-lattice-border rounded-lg p-6 w-full max-w-lg space-y-4 max-h-[80vh] overflow-y-auto">
         <h2 className="text-lg font-bold">Create Schema</h2>
         <input

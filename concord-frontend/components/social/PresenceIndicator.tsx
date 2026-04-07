@@ -211,20 +211,31 @@ interface CollaborativeCursorsProps {
   containerRef: React.RefObject<HTMLElement>;
 }
 
-export function CollaborativeCursors({ cursors, containerRef: _containerRef }: CollaborativeCursorsProps) {
+export function CollaborativeCursors({ cursors, containerRef }: CollaborativeCursorsProps) {
+  const getRelativePosition = (position: { x: number; y: number }) => {
+    if (!containerRef.current) return position;
+    const rect = containerRef.current.getBoundingClientRect();
+    return {
+      x: position.x - rect.left,
+      y: position.y - rect.top,
+    };
+  };
+
   return (
     <>
-      {cursors.map(cursor => (
+      {cursors.map(cursor => {
+        const relPos = getRelativePosition(cursor.position);
+        return (
         <motion.div
           key={cursor.userId}
           initial={{ opacity: 0 }}
           animate={{
             opacity: 1,
-            x: cursor.position.x,
-            y: cursor.position.y
+            x: relPos.x,
+            y: relPos.y
           }}
           transition={{ type: 'spring', damping: 30, stiffness: 500 }}
-          className="fixed pointer-events-none z-50"
+          className="absolute pointer-events-none z-50"
           style={{ left: 0, top: 0 }}
         >
           {/* Cursor */}
@@ -249,7 +260,8 @@ export function CollaborativeCursors({ cursors, containerRef: _containerRef }: C
             {cursor.userName}
           </div>
         </motion.div>
-      ))}
+        );
+      })}
     </>
   );
 }

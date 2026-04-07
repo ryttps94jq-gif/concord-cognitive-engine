@@ -43,8 +43,8 @@ export function UploadFlow({ onUpload, onCancel, progress }: UploadFlowProps) {
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [isExplicit, setIsExplicit] = useState(false);
-  const [lyrics, _setLyrics] = useState('');
-  const [credits, _setCredits] = useState<TrackCredit[]>([]);
+  const [lyrics, setLyrics] = useState('');
+  const [credits, setCredits] = useState<TrackCredit[]>([]);
   const [crossPost, setCrossPost] = useState(true);
   const [previewStart, setPreviewStart] = useState(0);
   const [previewDuration, setPreviewDuration] = useState(30);
@@ -252,6 +252,56 @@ export function UploadFlow({ onUpload, onCancel, progress }: UploadFlowProps) {
                 <Plus className="w-3 h-3" />
               </button>
             </div>
+          </div>
+
+          {/* Lyrics */}
+          <div>
+            <label className="text-xs text-gray-400 mb-1 block">Lyrics (optional)</label>
+            <textarea
+              value={lyrics}
+              onChange={e => setLyrics(e.target.value)}
+              rows={4}
+              className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-xs focus:outline-none focus:border-neon-cyan/50 resize-none font-mono"
+              placeholder="Paste or type lyrics..."
+            />
+          </div>
+
+          {/* Credits */}
+          <div>
+            <label className="text-xs text-gray-400 mb-1 block">Credits</label>
+            {credits.map((credit, i) => (
+              <div key={i} className="flex gap-2 mb-1">
+                <input
+                  value={credit.name}
+                  onChange={e => {
+                    const next = [...credits];
+                    next[i] = { ...next[i], name: e.target.value };
+                    setCredits(next);
+                  }}
+                  className="flex-1 px-2 py-1 bg-white/5 border border-white/10 rounded text-xs focus:outline-none"
+                  placeholder="Name"
+                />
+                <input
+                  value={credit.role}
+                  onChange={e => {
+                    const next = [...credits];
+                    next[i] = { ...next[i], role: e.target.value };
+                    setCredits(next);
+                  }}
+                  className="flex-1 px-2 py-1 bg-white/5 border border-white/10 rounded text-xs focus:outline-none"
+                  placeholder="Role (producer, vocalist...)"
+                />
+                <button onClick={() => setCredits(credits.filter((_, j) => j !== i))} className="text-gray-500 hover:text-red-400">
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+            <button
+              onClick={() => setCredits([...credits, { name: '', role: '', userId: null }])}
+              className="flex items-center gap-1 text-xs text-gray-400 hover:text-white mt-1"
+            >
+              <Plus className="w-3 h-3" /> Add Credit
+            </button>
           </div>
 
           <label className="flex items-center gap-2 text-sm cursor-pointer">

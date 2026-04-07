@@ -84,7 +84,7 @@ export function DailyNotes({
   };
 
   const days = getDaysInMonth(viewMonth);
-  const _noteDates = new Set(notes.map(n => n.date));
+  const noteDates = new Set(notes.map(n => n.date));
 
   const prevMonth = () => {
     setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() - 1));
@@ -151,7 +151,7 @@ export function DailyNotes({
                 )}
               >
                 {day?.day}
-                {day?.hasNote && day?.date !== selectedDate && (
+                {noteDates.has(day?.date ?? '') && day?.date !== selectedDate && (
                   <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-neon-cyan" />
                 )}
               </button>

@@ -313,7 +313,7 @@ export function RepairDashboard({ className, apiBase = '' }: RepairDashboardProp
         // Refresh data after repair
         await fetchAll();
       }
-    } catch (err) {
+    } catch {
       setDiagnoseResult({
         ok: false,
         diagnosis: {

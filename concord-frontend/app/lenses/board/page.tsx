@@ -35,6 +35,7 @@ import {
   Activity,
   Upload,
   Layers,
+  Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { generateId } from '@/lib/utils';
@@ -187,7 +188,7 @@ export default function BoardLensPage() {
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('board');
 
   // Persist tasks via real backend lens artifacts (auto-seeds on first use)
-  const { items: lensItems, isLoading: tasksLoading, isError, error, refetch, isSeeding, create: createLens, update: updateLens, remove: _removeLens } = useLensData<Record<string, unknown>>('board', 'task', {
+  const { items: lensItems, isLoading: tasksLoading, isError, error, refetch, isSeeding, create: createLens, update: updateLens, remove: removeLens } = useLensData<Record<string, unknown>>('board', 'task', {
     seed: SEED_TASKS,
   });
 
@@ -209,7 +210,7 @@ export default function BoardLensPage() {
   const [filterGenre, setFilterGenre] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(true);
 
   // --- Keyboard navigation state ---
   const [focusedCol, setFocusedCol] = useState(0);
@@ -790,17 +791,20 @@ export default function BoardLensPage() {
               onClose={() => setSelectedTask(null)}
               onUpdate={updateTask}
               onToggleSubtask={toggleSubtask}
+              onDelete={(id) => { removeLens(id); setSelectedTask(null); }}
             />
           </motion.aside>
         )}
       </AnimatePresence>
       </div>
 
+      <RealtimeDataPanel data={realtimeInsights} />
+
       {/* Lens Features */}
       <div className="border-t border-white/10">
         <button
           onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
         >
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4" />
@@ -827,11 +831,13 @@ function TaskDetailPanel({
   onClose,
   onUpdate,
   onToggleSubtask,
+  onDelete,
 }: {
   task: Task;
   onClose: () => void;
   onUpdate: (id: string, patch: Partial<Task>) => void;
   onToggleSubtask: (taskId: string, subtaskId: string) => void;
+  onDelete: (id: string) => void;
 }) {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(task.title);
@@ -842,7 +848,7 @@ function TaskDetailPanel({
   const col = columns.find((c) => c.id === task.status);
 
   return (
-    <div className="p-5 space-y-5 min-h-full">
+    <div data-lens-theme="board" className="p-5 space-y-5 min-h-full">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div className="flex-1 min-w-0">
@@ -870,9 +876,14 @@ function TaskDetailPanel({
             </div>
           )}
         </div>
-        <button onClick={onClose} className="p-1 rounded-md hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
-          <X className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button onClick={() => onDelete(task.id)} className="p-1 rounded-md hover:bg-red-500/20 text-gray-400 hover:text-red-400 transition-colors" title="Delete task">
+            <Trash2 className="w-4 h-4" />
+          </button>
+          <button onClick={onClose} className="p-1 rounded-md hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Description */}

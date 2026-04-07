@@ -15,7 +15,6 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
-import { ds } from '@/lib/design-system';
 import { Flame, Zap, Trophy, TrendingUp, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface XPProfile {

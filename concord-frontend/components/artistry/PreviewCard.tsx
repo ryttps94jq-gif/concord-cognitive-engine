@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import NextImage from 'next/image';
 import {
   Play, Pause, ExternalLink, Music, Image, Video, FileText,
   Code2, Gamepad2, Box, Eye, Clock, User,
@@ -59,9 +60,9 @@ export function PreviewCard({ post, onViewInLens }: PreviewCardProps) {
         <div>
           <h3 className="text-sm font-medium line-clamp-2">{post.title}</h3>
           <div className="flex items-center gap-2 mt-1">
-            <div className="w-5 h-5 rounded-full bg-white/10 overflow-hidden flex-shrink-0">
+            <div className="relative w-5 h-5 rounded-full bg-white/10 overflow-hidden flex-shrink-0">
               {post.creatorAvatarUrl ? (
-                <img src={post.creatorAvatarUrl} alt="" className="w-full h-full object-cover" />
+                <NextImage src={post.creatorAvatarUrl} alt={post.creatorName || 'Creator avatar'} fill className="object-cover" unoptimized />
               ) : (
                 <User className="w-3 h-3 m-1 text-gray-500" />
               )}
@@ -133,19 +134,23 @@ function AudioPreviewRender({ preview }: { preview: AudioPreview }) {
 
   useEffect(() => {
     return () => {
-      audioRef.current?.pause();
+      const audio = audioRef.current;
+      if (audio) {
+        audio.pause();
+        audio.src = '';
+        audio.load();
+      }
     };
   }, []);
 
   const togglePlay = () => {
     if (!audioRef.current) {
-      audioRef.current = new Audio(preview.previewUrl);
-      audioRef.current.addEventListener('timeupdate', () => {
-        if (audioRef.current) {
-          setProgress(audioRef.current.currentTime / audioRef.current.duration);
-        }
-      });
-      audioRef.current.addEventListener('ended', () => setPlaying(false));
+      const audio = new Audio(preview.previewUrl);
+      audio.ontimeupdate = () => {
+        setProgress(audio.currentTime / (audio.duration || 1));
+      };
+      audio.onended = () => setPlaying(false);
+      audioRef.current = audio;
     }
 
     if (playing) {
@@ -161,7 +166,7 @@ function AudioPreviewRender({ preview }: { preview: AudioPreview }) {
     <div className="relative aspect-square bg-gradient-to-br from-neon-cyan/10 to-neon-purple/10 overflow-hidden">
       {/* Cover art */}
       {preview.coverArtUrl ? (
-        <img src={preview.coverArtUrl} alt="" className="w-full h-full object-cover" />
+        <NextImage src={preview.coverArtUrl} alt="Cover art" fill className="object-cover" unoptimized />
       ) : (
         <div className="w-full h-full flex items-center justify-center">
           <Music className="w-16 h-16 text-gray-600" />
@@ -222,10 +227,12 @@ function ImagePreviewRender({ preview }: { preview: ImagePreview }) {
       className={cn('relative overflow-hidden cursor-pointer', zoomed ? 'max-h-[600px]' : 'aspect-square')}
       onClick={() => setZoomed(!zoomed)}
     >
-      <img
+      <NextImage
         src={preview.imageUrl}
-        alt=""
-        className={cn('w-full transition-all', zoomed ? 'object-contain' : 'object-cover h-full')}
+        alt="Image preview"
+        fill
+        className={cn('transition-all', zoomed ? 'object-contain' : 'object-cover')}
+        unoptimized
       />
       {preview.medium && (
         <span className="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-black/50 text-[9px] text-gray-300 backdrop-blur-sm capitalize">
@@ -253,7 +260,7 @@ function VideoPreviewRender({ preview }: { preview: VideoPreview }) {
         />
       ) : (
         <>
-          <img src={preview.thumbnailUrl} alt="" className="w-full h-full object-cover" />
+          <NextImage src={preview.thumbnailUrl} alt="Video thumbnail" fill className="object-cover" unoptimized />
           <button
             onClick={() => setPlaying(true)}
             className="absolute inset-0 flex items-center justify-center bg-black/20 hover:bg-black/30 transition"
