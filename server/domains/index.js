@@ -142,6 +142,11 @@ import lawenforcement from './lawenforcement.js';
 import linguistics from './linguistics.js';
 import marketing from './marketing.js';
 import masonry from './masonry.js';
+import mentalhealth from './mentalhealth.js';
+import mentorship from './mentorship.js';
+import mining from './mining.js';
+import ocean from './ocean.js';
+import pharmacy from './pharmacy.js';
 
 export default [
   healthcare,
@@ -277,4 +282,9 @@ export default [
   linguistics,
   marketing,
   masonry,
+  mentalhealth,
+  mentorship,
+  mining,
+  ocean,
+  pharmacy,
 ];
