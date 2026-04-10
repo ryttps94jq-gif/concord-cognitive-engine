@@ -246,6 +246,20 @@ export default function WhiteboardLensPage() {
     }
   }, [selectedWb]);
 
+  /* auto-save: debounce save elements to backend when they change */
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!selectedWbId || elements.length === 0) return;
+    // Skip the initial load (when elements were just set from server data)
+    if (selectedWb?.whiteboard?.elements && JSON.stringify(selectedWb.whiteboard.elements) === JSON.stringify(elements)) return;
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      saveMutation.mutate({ elements });
+    }, 2000);
+    return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [elements, selectedWbId]);
+
   /* resize */
   useEffect(() => {
     const update = () => {

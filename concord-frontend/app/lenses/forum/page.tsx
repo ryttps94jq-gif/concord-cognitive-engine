@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { apiHelpers } from '@/lib/api/client';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -235,22 +235,23 @@ export default function ForumLensPage() {
   });
 
   // Sync backend data into local state when available
+  // IMPORTANT: Use the lens artifact ID (i.id) as the Post id so that
+  // subsequent update/delete calls send the correct ID to the backend.
   useEffect(() => {
     if (postItems.length > 0) {
-      setPosts(postItems.map(i => i.data as unknown as Post));
+      setPosts(postItems.map(i => ({ ...(i.data as unknown as Post), id: i.id })));
     }
   }, [postItems]);
 
   useEffect(() => {
     if (communityItems.length > 0) {
-      setCommunities(communityItems.map(i => i.data as unknown as Community));
+      setCommunities(communityItems.map(i => ({ ...(i.data as unknown as Community), id: i.id })));
     }
   }, [communityItems]);
 
-  // API queries for real-data integration
+  // API queries for supplementary real-data integration
   useQuery({ queryKey: ['forum-posts-api', selectedCommunity, sortMode], queryFn: () => apiHelpers.dtus.paginated({ tags: selectedCommunity !== 'all' ? selectedCommunity : undefined, pageSize: 50 }).then(r => r.data) });
   useQuery({ queryKey: ['communities-api'], queryFn: () => apiHelpers.dtus.list().then(r => { const tags = new Set<string>(); (r.data?.dtus || []).forEach((d: Record<string, unknown>) => ((d.tags as string[]) || []).forEach(t => tags.add(t))); return { tags: Array.from(tags) }; }) });
-  const voteMutation = useMutation({ mutationFn: ({ postId, vote }: { postId: string; vote: number }) => apiHelpers.dtus.update(postId, { vote }), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['forum-posts-api'] }), onError: (err: Error) => { console.error('Vote failed:', err.message); } });
 
   // ----- Filtered & sorted posts -----
   const displayPosts = useMemo(() => {
@@ -277,14 +278,28 @@ export default function ForumLensPage() {
 
   // ----- Actions -----
   const handleVote = useCallback((postId: string, direction: number) => {
-    setPosts(prev => prev.map(p => {
-      if (p.id !== postId) return p;
-      const newVote = p.userVote === direction ? 0 : direction;
-      const scoreDelta = newVote - p.userVote;
-      return { ...p, userVote: newVote, score: p.score + scoreDelta };
-    }));
-    voteMutation.mutate({ postId, vote: direction });
-  }, [voteMutation]);
+    setPosts(prev => {
+      const updated = prev.map(p => {
+        if (p.id !== postId) return p;
+        const newVote = p.userVote === direction ? 0 : direction;
+        const scoreDelta = newVote - p.userVote;
+        return { ...p, userVote: newVote, score: p.score + scoreDelta };
+      });
+      // Persist voted post to backend via lens API
+      const post = updated.find(p => p.id === postId);
+      if (post) {
+        updateForumPost(postId, { data: post as unknown as Record<string, unknown> }).catch(() => {
+          // Rollback on failure
+          setPosts(prev2 => prev2.map(p => {
+            if (p.id !== postId) return p;
+            const revertedVote = p.userVote === direction ? 0 : direction;
+            return { ...p, userVote: revertedVote === direction ? 0 : p.userVote, score: p.score };
+          }));
+        });
+      }
+      return updated;
+    });
+  }, [updateForumPost]);
 
   const handleCommentVote = useCallback((commentId: string, direction: number) => {
     function updateComment(comments: Comment[]): Comment[] {
@@ -296,8 +311,16 @@ export default function ForumLensPage() {
         return { ...c, replies: updateComment(c.replies) };
       });
     }
-    setPosts(prev => prev.map(p => ({ ...p, comments: updateComment(p.comments) })));
-  }, []);
+    setPosts(prev => {
+      const updated = prev.map(p => ({ ...p, comments: updateComment(p.comments) }));
+      // Persist the post containing the comment to backend
+      const postWithComment = updated.find(p => JSON.stringify(p.comments).includes(commentId));
+      if (postWithComment) {
+        updateForumPost(postWithComment.id, { data: postWithComment as unknown as Record<string, unknown> });
+      }
+      return updated;
+    });
+  }, [updateForumPost]);
 
   const handleCreatePost = useCallback(() => {
     if (!newPostTitle.trim() || !newPostCommunity) return;
