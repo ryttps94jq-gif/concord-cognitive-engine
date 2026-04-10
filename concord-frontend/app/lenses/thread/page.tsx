@@ -2,8 +2,9 @@
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
+import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useUIStore } from '@/store/ui';
 import { useLensBridge } from '@/lib/hooks/use-lens-bridge';
 import { UniversalActions } from '@/components/lens/UniversalActions';
@@ -66,6 +67,8 @@ export default function ThreadLensPage() {
 
   // --- Lens Bridge ---
   const bridge = useLensBridge('thread', 'conversation');
+  const { create: createThread, remove: deleteThread } = useLensData<Record<string, unknown>>('thread', 'conversation');
+  const queryClient = useQueryClient();
 
   const [selectedNode, setSelectedNode] = useState<ThreadNode | null>(null);
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set(['msg-1', 'msg-2']));
@@ -252,7 +255,10 @@ export default function ThreadLensPage() {
 
           {/* Actions */}
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: `Forking from: ${node.content.slice(0, 30)}...` })} className="p-1 rounded hover:bg-lattice-border/50 text-gray-400 hover:text-white">
+            <button onClick={() => {
+              createThread({ title: `Fork: ${node.content.slice(0, 30)}...`, data: { messages: [{ content: node.content, author: node.author }], forkedFrom: node.id }, meta: {} });
+              useUIStore.getState().addToast({ type: 'success', message: 'Thread forked' });
+            }} className="p-1 rounded hover:bg-lattice-border/50 text-gray-400 hover:text-white">
               <GitFork className="w-4 h-4" />
             </button>
             <button onClick={() => setSelectedNode(node)} className="p-1 rounded hover:bg-lattice-border/50 text-gray-400 hover:text-white">
@@ -335,7 +341,10 @@ export default function ThreadLensPage() {
             ))}
           </div>
 
-          <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Creating new thread...' })} className="btn-neon flex items-center gap-2">
+          <button onClick={() => {
+            createThread({ title: `Thread ${threads.length + 1}`, data: { messages: [], branchCount: 1 }, meta: { messageCount: '0' } });
+            queryClient.invalidateQueries({ queryKey: ['thread-conversations'] });
+          }} className="btn-neon flex items-center gap-2">
             <Plus className="w-4 h-4" />
             New Thread
           </button>

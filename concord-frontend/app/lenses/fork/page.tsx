@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import { GitFork, GitBranch, GitMerge, Layers, Loader2, ChevronDown, ArrowLeftRight, Eye, GitPullRequest, Network, Scale, Diff, RefreshCw } from 'lucide-react';
 import { ConnectiveTissueBar } from '@/components/lens/ConnectiveTissueBar';
 import { useLensData } from '@/lib/hooks/use-lens-data';
+import { api } from '@/lib/api/client';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -393,21 +394,21 @@ export default function ForkLensPage() {
               Merge Tools
             </h3>
             <div className="space-y-2">
-              <button onClick={() => showToast('info', 'Coming soon')} className="w-full flex items-center gap-2 p-2.5 rounded bg-black/30 border border-white/10 hover:border-neon-green/40 transition-colors text-left">
+              <button onClick={() => { api.post('/api/lens/run', { domain: 'fork', action: 'merge', strategy: 'fast-forward' }).then(() => showToast('success', 'Fast-forward merge initiated')).catch(() => showToast('error', 'Merge failed — no eligible forks')); }} className="w-full flex items-center gap-2 p-2.5 rounded bg-black/30 border border-white/10 hover:border-neon-green/40 transition-colors text-left">
                 <GitMerge className="w-4 h-4 text-neon-green" />
                 <div>
                   <p className="text-sm text-white">Fast-Forward Merge</p>
                   <p className="text-xs text-gray-500">No conflicts, linear history</p>
                 </div>
               </button>
-              <button onClick={() => showToast('info', 'Coming soon')} className="w-full flex items-center gap-2 p-2.5 rounded bg-black/30 border border-white/10 hover:border-neon-purple/40 transition-colors text-left">
+              <button onClick={() => { api.post('/api/lens/run', { domain: 'fork', action: 'merge', strategy: 'three-way' }).then(() => showToast('success', 'Three-way merge initiated')).catch(() => showToast('error', 'Merge failed — no eligible forks')); }} className="w-full flex items-center gap-2 p-2.5 rounded bg-black/30 border border-white/10 hover:border-neon-purple/40 transition-colors text-left">
                 <Scale className="w-4 h-4 text-neon-purple" />
                 <div>
                   <p className="text-sm text-white">Three-Way Merge</p>
                   <p className="text-xs text-gray-500">Resolve conflicts interactively</p>
                 </div>
               </button>
-              <button onClick={() => showToast('info', 'Coming soon')} className="w-full flex items-center gap-2 p-2.5 rounded bg-black/30 border border-white/10 hover:border-neon-cyan/40 transition-colors text-left">
+              <button onClick={() => { api.post('/api/lens/run', { domain: 'fork', action: 'cherry-pick' }).then(() => showToast('success', 'Cherry-pick mode activated')).catch(() => showToast('error', 'Cherry-pick failed — no DTUs selected')); }} className="w-full flex items-center gap-2 p-2.5 rounded bg-black/30 border border-white/10 hover:border-neon-cyan/40 transition-colors text-left">
                 <ArrowLeftRight className="w-4 h-4 text-neon-cyan" />
                 <div>
                   <p className="text-sm text-white">Cherry-Pick</p>

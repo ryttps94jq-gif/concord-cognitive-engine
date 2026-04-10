@@ -275,6 +275,577 @@ DOMAIN_RULES.set("whiteboard", {
   },
 });
 
+// === Chat (Conversational AI) ===
+DOMAIN_RULES.set("chat", {
+  types: ["conversation", "thread", "summary", "forged", "analysis"],
+  validStatuses: ["active", "archived", "pinned", "exported"],
+  transitions: {
+    active: ["archived", "pinned", "exported"],
+    pinned: ["active", "archived", "exported"],
+    archived: ["active"],
+    exported: ["archived"],
+  },
+  requiredFields: { conversation: ["title"] },
+  computedFields: (type, data) => {
+    const messages = data.messages || [];
+    data.messageCount = messages.length;
+    data.userMessageCount = messages.filter(m => m.role === "user").length;
+    data.assistantMessageCount = messages.filter(m => m.role === "assistant").length;
+    data.avgResponseLength = data.assistantMessageCount > 0
+      ? Math.round(messages.filter(m => m.role === "assistant").reduce((s, m) => s + (m.content || "").length, 0) / data.assistantMessageCount)
+      : 0;
+    data.hasFeedback = messages.some(m => m.feedbackGiven);
+    data.pinnedCount = messages.filter(m => m.pinned).length;
+    return data;
+  },
+  scoring: (type, data) => {
+    const msgs = (data.messages || []).length;
+    if (msgs === 0) return 0.1;
+    const depth = Math.min(msgs / 20, 1) * 0.4;
+    const feedback = data.hasFeedback ? 0.2 : 0;
+    const pinned = data.pinnedCount > 0 ? 0.1 : 0;
+    return Math.round((depth + feedback + pinned + 0.2) * 100) / 100;
+  },
+});
+
+// === Feed (Social) ===
+DOMAIN_RULES.set("feed", {
+  types: ["post", "article", "link", "media", "poll"],
+  validStatuses: ["draft", "published", "archived", "flagged"],
+  transitions: {
+    draft: ["published", "archived"],
+    published: ["archived", "flagged"],
+    flagged: ["published", "archived"],
+    archived: [],
+  },
+  requiredFields: { post: ["content"] },
+  computedFields: (type, data) => {
+    data.likeCount = data.likes?.length || 0;
+    data.commentCount = data.comments?.length || 0;
+    data.repostCount = data.reposts?.length || 0;
+    data.engagementScore = data.likeCount + data.commentCount * 2 + data.repostCount * 3;
+    return data;
+  },
+  scoring: (type, data) => {
+    const engagement = data.engagementScore || 0;
+    return Math.round(Math.min(engagement / 50, 1) * 100) / 100;
+  },
+});
+
+// === Forum ===
+DOMAIN_RULES.set("forum", {
+  types: ["thread", "reply", "announcement", "poll"],
+  validStatuses: ["open", "closed", "pinned", "locked", "archived"],
+  transitions: {
+    open: ["closed", "pinned", "locked", "archived"],
+    pinned: ["open", "closed", "locked"],
+    closed: ["open", "archived"],
+    locked: ["open", "archived"],
+    archived: [],
+  },
+  requiredFields: { thread: ["title", "content"] },
+  computedFields: (type, data) => {
+    data.replyCount = data.replies?.length || 0;
+    data.voteScore = (data.upvotes || 0) - (data.downvotes || 0);
+    return data;
+  },
+  scoring: (type, data) => {
+    const replies = data.replyCount || 0;
+    const votes = Math.max(data.voteScore || 0, 0);
+    return Math.round((Math.min(replies / 20, 1) * 0.5 + Math.min(votes / 10, 1) * 0.3 + 0.1) * 100) / 100;
+  },
+});
+
+// === Marketplace ===
+DOMAIN_RULES.set("marketplace", {
+  types: ["template", "component", "dataset", "artwork", "plugin", "preset"],
+  validStatuses: ["draft", "listed", "sold", "suspended", "archived"],
+  transitions: {
+    draft: ["listed", "archived"],
+    listed: ["sold", "suspended", "archived"],
+    sold: ["listed", "archived"],
+    suspended: ["listed", "archived"],
+    archived: [],
+  },
+  requiredFields: { template: ["title", "price"], component: ["title", "price"] },
+  computedFields: (type, data) => {
+    data.salesCount = data.purchases?.length || 0;
+    data.totalRevenue = (data.purchases || []).reduce((s, p) => s + (p.price || 0), 0);
+    data.avgRating = data.ratings?.length > 0
+      ? Math.round(data.ratings.reduce((s, r) => s + r.score, 0) / data.ratings.length * 10) / 10
+      : 0;
+    return data;
+  },
+  scoring: (type, data) => {
+    const sales = data.salesCount || 0;
+    const rating = data.avgRating || 0;
+    return Math.round((Math.min(sales / 10, 1) * 0.4 + (rating / 5) * 0.4 + 0.1) * 100) / 100;
+  },
+});
+
+// === Wallet ===
+DOMAIN_RULES.set("wallet", {
+  types: ["transaction", "transfer", "purchase", "withdrawal", "earning", "tip"],
+  validStatuses: ["pending", "processing", "completed", "failed", "reversed"],
+  transitions: {
+    pending: ["processing", "completed", "failed"],
+    processing: ["completed", "failed"],
+    completed: ["reversed"],
+    failed: [],
+    reversed: [],
+  },
+  requiredFields: { transaction: ["amount"], transfer: ["amount", "to"] },
+  computedFields: (type, data) => {
+    data.fee = data.fee || 0;
+    data.net = (data.amount || 0) - (data.fee || 0);
+    data.isCredit = data.amount > 0;
+    return data;
+  },
+  scoring: (type, data) => {
+    const amount = Math.abs(data.amount || 0);
+    return Math.round(Math.min(amount / 1000, 1) * 100) / 100;
+  },
+});
+
+// === Music ===
+DOMAIN_RULES.set("music", {
+  types: ["track", "album", "playlist", "sample", "beat", "remix"],
+  validStatuses: ["draft", "recording", "mixing", "mastering", "released", "archived"],
+  transitions: {
+    draft: ["recording", "archived"],
+    recording: ["mixing", "archived"],
+    mixing: ["mastering", "recording"],
+    mastering: ["released", "mixing"],
+    released: ["archived"],
+    archived: [],
+  },
+  requiredFields: { track: ["title"], album: ["title"] },
+  computedFields: (type, data) => {
+    data.trackCount = data.tracks?.length || 0;
+    data.totalDuration = (data.tracks || []).reduce((s, t) => s + (t.duration || 0), 0);
+    data.playCount = data.plays || 0;
+    return data;
+  },
+  scoring: (type, data) => {
+    const plays = data.playCount || 0;
+    const tracks = data.trackCount || 0;
+    return Math.round((Math.min(plays / 1000, 1) * 0.5 + Math.min(tracks / 10, 1) * 0.3 + 0.1) * 100) / 100;
+  },
+});
+
+// === Artistry / Art ===
+DOMAIN_RULES.set("artistry", {
+  types: ["painting", "illustration", "sculpture", "photography", "digital", "mixed-media"],
+  validStatuses: ["concept", "in-progress", "review", "published", "exhibited", "archived"],
+  transitions: {
+    concept: ["in-progress", "archived"],
+    "in-progress": ["review", "concept"],
+    review: ["published", "in-progress"],
+    published: ["exhibited", "archived"],
+    exhibited: ["archived"],
+    archived: [],
+  },
+  requiredFields: { painting: ["title"], illustration: ["title"] },
+  computedFields: (type, data) => {
+    data.viewCount = data.views || 0;
+    data.likeCount = data.likes || 0;
+    data.commentCount = data.comments?.length || 0;
+    return data;
+  },
+  scoring: (type, data) => {
+    const views = data.viewCount || 0;
+    const likes = data.likeCount || 0;
+    return Math.round((Math.min(views / 500, 1) * 0.3 + Math.min(likes / 50, 1) * 0.5 + 0.1) * 100) / 100;
+  },
+});
+
+// === Code ===
+DOMAIN_RULES.set("code", {
+  types: ["snippet", "project", "pipeline", "notebook", "algorithm", "library"],
+  validStatuses: ["draft", "development", "testing", "review", "deployed", "archived"],
+  transitions: {
+    draft: ["development", "archived"],
+    development: ["testing", "review", "archived"],
+    testing: ["review", "development"],
+    review: ["deployed", "development"],
+    deployed: ["archived", "development"],
+    archived: [],
+  },
+  requiredFields: { snippet: ["title", "language"], project: ["title"] },
+  computedFields: (type, data) => {
+    data.lineCount = data.lines || 0;
+    data.language = data.language || "javascript";
+    data.hasTests = !!(data.tests && data.tests.length > 0);
+    return data;
+  },
+  scoring: (type, data) => {
+    const lines = data.lineCount || 0;
+    const hasTests = data.hasTests ? 1 : 0;
+    return Math.round((Math.min(lines / 500, 1) * 0.4 + hasTests * 0.3 + 0.1) * 100) / 100;
+  },
+});
+
+// === Creative Writing ===
+DOMAIN_RULES.set("creative-writing", {
+  types: ["story", "poem", "essay", "screenplay", "novel-chapter", "flash-fiction"],
+  validStatuses: ["idea", "drafting", "revision", "editing", "published", "archived"],
+  transitions: {
+    idea: ["drafting", "archived"],
+    drafting: ["revision", "idea"],
+    revision: ["editing", "drafting"],
+    editing: ["published", "revision"],
+    published: ["archived"],
+    archived: [],
+  },
+  requiredFields: { story: ["title"], poem: ["title"] },
+  computedFields: (type, data) => {
+    data.wordCount = typeof data.content === "string" ? data.content.split(/\s+/).filter(Boolean).length : 0;
+    data.readTime = Math.ceil((data.wordCount || 0) / 200);
+    data.revisionCount = data.revisions?.length || 0;
+    return data;
+  },
+  scoring: (type, data) => {
+    const words = data.wordCount || 0;
+    const revisions = data.revisionCount || 0;
+    return Math.round((Math.min(words / 2000, 1) * 0.4 + Math.min(revisions / 5, 1) * 0.3 + 0.1) * 100) / 100;
+  },
+});
+
+// === Research ===
+DOMAIN_RULES.set("research", {
+  types: ["paper", "dataset", "experiment", "literature-review", "thesis", "grant-proposal"],
+  validStatuses: ["draft", "in-review", "peer-reviewed", "published", "retracted", "archived"],
+  transitions: {
+    draft: ["in-review", "archived"],
+    "in-review": ["draft", "peer-reviewed", "archived"],
+    "peer-reviewed": ["published", "in-review", "archived"],
+    published: ["retracted", "archived"],
+    retracted: ["archived"],
+    archived: [],
+  },
+  requiredFields: { paper: ["title", "abstract"], dataset: ["title", "format"] },
+  computedFields: (type, data) => {
+    const citations = data.citations || [];
+    data.citationCount = citations.length;
+    data.hasPeerReview = data.reviewers?.length > 0;
+    data.hasAbstract = !!data.abstract;
+    return data;
+  },
+  scoring: (type, data) => {
+    const citations = data.citationCount || 0;
+    const hasPeerReview = data.hasPeerReview ? 1 : 0;
+    const hasAbstract = data.hasAbstract ? 1 : 0;
+    return Math.round((Math.min(citations / 20, 1) * 0.4 + hasPeerReview * 0.3 + hasAbstract * 0.2 + 0.1) * 100) / 100;
+  },
+});
+
+// === Education ===
+DOMAIN_RULES.set("education", {
+  types: ["course", "lesson", "quiz", "assignment", "curriculum", "certificate"],
+  validStatuses: ["draft", "active", "in-progress", "completed", "graded", "archived"],
+  transitions: {
+    draft: ["active", "archived"],
+    active: ["in-progress", "draft", "archived"],
+    "in-progress": ["completed", "active"],
+    completed: ["graded", "archived"],
+    graded: ["archived"],
+    archived: [],
+  },
+  requiredFields: { course: ["title"], lesson: ["title"], quiz: ["title", "questions"] },
+  computedFields: (type, data) => {
+    const lessons = data.lessons || [];
+    data.lessonCount = lessons.length;
+    data.completedLessons = lessons.filter(l => l.completed).length;
+    data.progressPercent = lessons.length > 0 ? Math.round((data.completedLessons / lessons.length) * 100) : 0;
+    data.totalDuration = lessons.reduce((sum, l) => sum + (l.durationMinutes || 0), 0);
+    return data;
+  },
+  scoring: (type, data) => {
+    const progress = (data.progressPercent || 0) / 100;
+    const hasQuiz = data.quizzes?.length > 0 ? 1 : 0;
+    return Math.round((progress * 0.5 + hasQuiz * 0.2 + Math.min((data.lessonCount || 0) / 10, 1) * 0.2 + 0.1) * 100) / 100;
+  },
+});
+
+// === Physics ===
+DOMAIN_RULES.set("physics", {
+  types: ["simulation", "equation", "experiment", "model", "derivation", "problem-set"],
+  validStatuses: ["draft", "hypothesis", "testing", "validated", "published", "archived"],
+  transitions: {
+    draft: ["hypothesis", "archived"],
+    hypothesis: ["testing", "draft", "archived"],
+    testing: ["validated", "hypothesis", "archived"],
+    validated: ["published", "testing", "archived"],
+    published: ["archived"],
+    archived: [],
+  },
+  requiredFields: { simulation: ["title", "parameters"], equation: ["title", "expression"] },
+  computedFields: (type, data) => {
+    data.hasSimulation = !!data.simulationData;
+    data.parameterCount = Object.keys(data.parameters || {}).length;
+    data.unitConsistency = data.units ? "verified" : "unchecked";
+    return data;
+  },
+  scoring: (type, data) => {
+    const hasSimulation = data.hasSimulation ? 1 : 0;
+    const params = Math.min((data.parameterCount || 0) / 5, 1);
+    const verified = data.unitConsistency === "verified" ? 1 : 0;
+    return Math.round((hasSimulation * 0.3 + params * 0.3 + verified * 0.3 + 0.1) * 100) / 100;
+  },
+});
+
+// === Math ===
+DOMAIN_RULES.set("math", {
+  types: ["proof", "theorem", "problem", "formula", "visualization", "notebook"],
+  validStatuses: ["draft", "conjecture", "in-proof", "proven", "published", "archived"],
+  transitions: {
+    draft: ["conjecture", "in-proof", "archived"],
+    conjecture: ["in-proof", "draft", "archived"],
+    "in-proof": ["proven", "conjecture", "archived"],
+    proven: ["published", "archived"],
+    published: ["archived"],
+    archived: [],
+  },
+  requiredFields: { proof: ["title", "statement"], theorem: ["title", "statement"] },
+  computedFields: (type, data) => {
+    data.stepCount = (data.steps || []).length;
+    data.hasVisualization = !!data.visualization;
+    data.complexity = data.stepCount > 10 ? "high" : data.stepCount > 5 ? "medium" : "low";
+    return data;
+  },
+  scoring: (type, data) => {
+    const steps = Math.min((data.stepCount || 0) / 10, 1);
+    const hasViz = data.hasVisualization ? 1 : 0;
+    const isProven = data.status === "proven" || data.status === "published" ? 1 : 0;
+    return Math.round((steps * 0.3 + hasViz * 0.2 + isProven * 0.4 + 0.1) * 100) / 100;
+  },
+});
+
+// === Science ===
+DOMAIN_RULES.set("science", {
+  types: ["experiment", "observation", "hypothesis", "lab-report", "field-study", "meta-analysis"],
+  validStatuses: ["draft", "hypothesis", "experimenting", "analyzing", "concluded", "published", "archived"],
+  transitions: {
+    draft: ["hypothesis", "archived"],
+    hypothesis: ["experimenting", "draft", "archived"],
+    experimenting: ["analyzing", "hypothesis", "archived"],
+    analyzing: ["concluded", "experimenting", "archived"],
+    concluded: ["published", "analyzing", "archived"],
+    published: ["archived"],
+    archived: [],
+  },
+  requiredFields: { experiment: ["title", "hypothesis"], "lab-report": ["title", "methodology"] },
+  computedFields: (type, data) => {
+    const dataPoints = data.dataPoints || [];
+    data.dataPointCount = dataPoints.length;
+    data.hasControls = !!data.controlGroup;
+    data.reproducible = data.methodology && data.results ? true : false;
+    return data;
+  },
+  scoring: (type, data) => {
+    const dataPoints = Math.min((data.dataPointCount || 0) / 50, 1);
+    const hasControls = data.hasControls ? 1 : 0;
+    const reproducible = data.reproducible ? 1 : 0;
+    return Math.round((dataPoints * 0.3 + hasControls * 0.3 + reproducible * 0.3 + 0.1) * 100) / 100;
+  },
+});
+
+// === Healthcare ===
+DOMAIN_RULES.set("healthcare", {
+  types: ["patient-record", "diagnosis", "treatment-plan", "lab-result", "prescription", "clinical-note"],
+  validStatuses: ["draft", "active", "in-treatment", "monitoring", "resolved", "archived"],
+  transitions: {
+    draft: ["active", "archived"],
+    active: ["in-treatment", "monitoring", "archived"],
+    "in-treatment": ["monitoring", "active", "resolved"],
+    monitoring: ["resolved", "active", "in-treatment"],
+    resolved: ["archived", "active"],
+    archived: [],
+  },
+  requiredFields: { "patient-record": ["patientId"], diagnosis: ["condition"], prescription: ["medication", "dosage"] },
+  computedFields: (type, data) => {
+    data.hasLabResults = (data.labResults || []).length > 0;
+    data.medicationCount = (data.medications || []).length;
+    data.isCompliant = data.compliance === "compliant";
+    return data;
+  },
+  scoring: (type, data) => {
+    const hasLab = data.hasLabResults ? 1 : 0;
+    const compliant = data.isCompliant ? 1 : 0;
+    const meds = Math.min((data.medicationCount || 0) / 5, 1);
+    return Math.round((hasLab * 0.3 + compliant * 0.3 + meds * 0.2 + 0.2) * 100) / 100;
+  },
+});
+
+// === Trades ===
+DOMAIN_RULES.set("trades", {
+  types: ["project", "estimate", "work-order", "inspection", "invoice", "certification"],
+  validStatuses: ["draft", "quoted", "approved", "in-progress", "inspection", "completed", "archived"],
+  transitions: {
+    draft: ["quoted", "archived"],
+    quoted: ["approved", "draft", "archived"],
+    approved: ["in-progress", "quoted"],
+    "in-progress": ["inspection", "approved"],
+    inspection: ["completed", "in-progress"],
+    completed: ["archived"],
+    archived: [],
+  },
+  requiredFields: { project: ["title", "tradeType"], estimate: ["total"], "work-order": ["title"] },
+  computedFields: (type, data) => {
+    const items = data.lineItems || [];
+    data.lineItemCount = items.length;
+    data.totalCost = items.reduce((sum, i) => sum + (i.cost || 0), 0);
+    data.laborHours = items.reduce((sum, i) => sum + (i.hours || 0), 0);
+    data.passedInspection = data.inspectionResult === "pass";
+    return data;
+  },
+  scoring: (type, data) => {
+    const items = Math.min((data.lineItemCount || 0) / 10, 1);
+    const passed = data.passedInspection ? 1 : 0;
+    const hasEstimate = data.totalCost > 0 ? 1 : 0;
+    return Math.round((items * 0.3 + passed * 0.3 + hasEstimate * 0.3 + 0.1) * 100) / 100;
+  },
+});
+
+// === Finance ===
+DOMAIN_RULES.set("finance", {
+  types: ["portfolio", "analysis", "report", "forecast", "transaction-log", "budget"],
+  validStatuses: ["draft", "active", "under-review", "approved", "closed", "archived"],
+  transitions: {
+    draft: ["active", "under-review", "archived"],
+    active: ["under-review", "closed"],
+    "under-review": ["approved", "active", "draft"],
+    approved: ["closed", "archived"],
+    closed: ["archived"],
+    archived: [],
+  },
+  requiredFields: { portfolio: ["title"], analysis: ["title", "dataSource"], budget: ["title", "period"] },
+  computedFields: (type, data) => {
+    const holdings = data.holdings || [];
+    data.holdingCount = holdings.length;
+    data.totalValue = holdings.reduce((sum, h) => sum + (h.value || 0), 0);
+    data.hasRiskAssessment = !!data.riskScore;
+    data.returnRate = data.totalReturn && data.initialInvestment ? ((data.totalReturn / data.initialInvestment - 1) * 100).toFixed(2) : null;
+    return data;
+  },
+  scoring: (type, data) => {
+    const holdings = Math.min((data.holdingCount || 0) / 20, 1);
+    const hasRisk = data.hasRiskAssessment ? 1 : 0;
+    const hasReturn = data.returnRate !== null ? 1 : 0;
+    return Math.round((holdings * 0.3 + hasRisk * 0.3 + hasReturn * 0.3 + 0.1) * 100) / 100;
+  },
+});
+
+// === Engineering ===
+DOMAIN_RULES.set("engineering", {
+  types: ["design", "specification", "blueprint", "simulation", "test-report", "bom"],
+  validStatuses: ["draft", "in-design", "review", "approved", "fabrication", "testing", "released", "archived"],
+  transitions: {
+    draft: ["in-design", "archived"],
+    "in-design": ["review", "draft"],
+    review: ["approved", "in-design"],
+    approved: ["fabrication", "testing", "released"],
+    fabrication: ["testing", "approved"],
+    testing: ["released", "fabrication"],
+    released: ["archived"],
+    archived: [],
+  },
+  requiredFields: { design: ["title", "revision"], specification: ["title"], blueprint: ["title"] },
+  computedFields: (type, data) => {
+    data.revisionNumber = data.revision || "A";
+    data.componentCount = (data.components || []).length;
+    data.hasSimulation = !!data.simulationData;
+    data.testsPassed = (data.tests || []).filter(t => t.passed).length;
+    data.totalTests = (data.tests || []).length;
+    return data;
+  },
+  scoring: (type, data) => {
+    const components = Math.min((data.componentCount || 0) / 20, 1);
+    const hasSim = data.hasSimulation ? 1 : 0;
+    const testRatio = data.totalTests > 0 ? data.testsPassed / data.totalTests : 0;
+    return Math.round((components * 0.2 + hasSim * 0.3 + testRatio * 0.4 + 0.1) * 100) / 100;
+  },
+});
+
+// === World ===
+DOMAIN_RULES.set("world", {
+  types: ["region", "event", "entity-link", "timeline", "map-layer", "narrative"],
+  validStatuses: ["draft", "active", "historical", "projected", "archived"],
+  transitions: {
+    draft: ["active", "archived"],
+    active: ["historical", "archived"],
+    historical: ["archived"],
+    projected: ["active", "archived"],
+    archived: [],
+  },
+  requiredFields: { region: ["title"], event: ["title", "date"] },
+  computedFields: (type, data) => {
+    data.entityCount = (data.entities || []).length;
+    data.eventCount = (data.events || []).length;
+    data.hasTimeline = (data.timeline || []).length > 0;
+    return data;
+  },
+  scoring: (type, data) => {
+    const entities = Math.min((data.entityCount || 0) / 20, 1);
+    const events = Math.min((data.eventCount || 0) / 10, 1);
+    const timeline = data.hasTimeline ? 1 : 0;
+    return Math.round((entities * 0.3 + events * 0.3 + timeline * 0.3 + 0.1) * 100) / 100;
+  },
+});
+
+// === Entity ===
+DOMAIN_RULES.set("entity", {
+  types: ["person", "organization", "concept", "location", "artifact", "system"],
+  validStatuses: ["draft", "active", "verified", "deprecated", "archived"],
+  transitions: {
+    draft: ["active", "archived"],
+    active: ["verified", "deprecated", "archived"],
+    verified: ["deprecated", "archived"],
+    deprecated: ["archived"],
+    archived: [],
+  },
+  requiredFields: { person: ["name"], organization: ["name"], concept: ["title"] },
+  computedFields: (type, data) => {
+    data.relationCount = (data.relations || []).length;
+    data.attributeCount = Object.keys(data.attributes || {}).length;
+    data.hasDescription = !!data.description;
+    return data;
+  },
+  scoring: (type, data) => {
+    const relations = Math.min((data.relationCount || 0) / 10, 1);
+    const attrs = Math.min((data.attributeCount || 0) / 5, 1);
+    const hasDesc = data.hasDescription ? 1 : 0;
+    return Math.round((relations * 0.3 + attrs * 0.3 + hasDesc * 0.3 + 0.1) * 100) / 100;
+  },
+});
+
+// === Admin ===
+DOMAIN_RULES.set("admin", {
+  types: ["config", "user-management", "audit-log", "permission", "system-report", "integration"],
+  validStatuses: ["draft", "active", "review", "approved", "suspended", "archived"],
+  transitions: {
+    draft: ["active", "review", "archived"],
+    active: ["review", "suspended", "archived"],
+    review: ["approved", "active"],
+    approved: ["active", "archived"],
+    suspended: ["active", "archived"],
+    archived: [],
+  },
+  requiredFields: { config: ["key", "value"], permission: ["role", "resource"] },
+  computedFields: (type, data) => {
+    data.userCount = (data.users || []).length;
+    data.activeIntegrations = (data.integrations || []).filter(i => i.active).length;
+    data.auditEntries = (data.auditLog || []).length;
+    return data;
+  },
+  scoring: (type, data) => {
+    const users = Math.min((data.userCount || 0) / 100, 1);
+    const integrations = Math.min((data.activeIntegrations || 0) / 5, 1);
+    const audit = Math.min((data.auditEntries || 0) / 50, 1);
+    return Math.round((users * 0.3 + integrations * 0.3 + audit * 0.3 + 0.1) * 100) / 100;
+  },
+});
+
 // ── Exported helpers ─────────────────────────────────────────────────────────
 
 function validateArtifact(domain, type, data, meta) {

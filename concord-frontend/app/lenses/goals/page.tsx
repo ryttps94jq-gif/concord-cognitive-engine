@@ -19,7 +19,7 @@ import {
   Lock,
   Unlock,
   Zap,
-  Music,
+  Flag,
   Users,
   Calendar,
   ChevronDown,
@@ -223,7 +223,7 @@ function WeeklyActivityBar({ goals }: { goals: Goal[] }) {
 function resolveIcon(iconName: string) {
   const iconMap: Record<string, typeof Zap> = {
     zap: Zap,
-    music: Music,
+    music: Flag,
     sparkles: Sparkles,
     users: Users,
     star: Star,

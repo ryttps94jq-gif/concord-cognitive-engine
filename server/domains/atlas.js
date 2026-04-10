@@ -1,0 +1,482 @@
+// server/domains/atlas.js
+// Domain actions for atlas: geocoding, distance matrices, region stats, route optimization.
+
+export default function registerAtlasActions(registerLensAction) {
+  /**
+   * geocode
+   * Resolve place names to coordinates with distance calculations.
+   * artifact.data.places: [{ name, lat?, lon? }]
+   * If coordinates are missing, attempts lookup from a built-in reference set.
+   * Optionally computes distance from artifact.data.origin: { lat, lon }.
+   */
+  registerLensAction("atlas", "geocode", (ctx, artifact, _params) => {
+    const places = artifact.data?.places || [];
+    if (places.length === 0) {
+      return { ok: true, result: { message: "No places provided. Supply artifact.data.places as [{ name, lat?, lon? }]. Optionally set artifact.data.origin for distance calculations.", resolved: [], count: 0 } };
+    }
+
+    // Built-in reference coordinates for common cities
+    const reference = {
+      "new york": { lat: 40.7128, lon: -74.006 },
+      "london": { lat: 51.5074, lon: -0.1278 },
+      "paris": { lat: 48.8566, lon: 2.3522 },
+      "tokyo": { lat: 35.6762, lon: 139.6503 },
+      "sydney": { lat: -33.8688, lon: 151.2093 },
+      "los angeles": { lat: 34.0522, lon: -118.2437 },
+      "chicago": { lat: 41.8781, lon: -87.6298 },
+      "berlin": { lat: 52.52, lon: 13.405 },
+      "moscow": { lat: 55.7558, lon: 37.6173 },
+      "beijing": { lat: 39.9042, lon: 116.4074 },
+      "mumbai": { lat: 19.076, lon: 72.8777 },
+      "cairo": { lat: 30.0444, lon: 31.2357 },
+      "rio de janeiro": { lat: -22.9068, lon: -43.1729 },
+      "toronto": { lat: 43.6532, lon: -79.3832 },
+      "dubai": { lat: 25.2048, lon: 55.2708 },
+      "singapore": { lat: 1.3521, lon: 103.8198 },
+      "san francisco": { lat: 37.7749, lon: -122.4194 },
+      "seattle": { lat: 47.6062, lon: -122.3321 },
+      "miami": { lat: 25.7617, lon: -80.1918 },
+      "rome": { lat: 41.9028, lon: 12.4964 },
+    };
+
+    // Haversine distance in km
+    function haversine(lat1, lon1, lat2, lon2) {
+      const R = 6371;
+      const dLat = ((lat2 - lat1) * Math.PI) / 180;
+      const dLon = ((lon2 - lon1) * Math.PI) / 180;
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return Math.round(R * c * 100) / 100;
+    }
+
+    // Bearing calculation
+    function bearing(lat1, lon1, lat2, lon2) {
+      const dLon = ((lon2 - lon1) * Math.PI) / 180;
+      const y = Math.sin(dLon) * Math.cos((lat2 * Math.PI) / 180);
+      const x =
+        Math.cos((lat1 * Math.PI) / 180) * Math.sin((lat2 * Math.PI) / 180) -
+        Math.sin((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.cos(dLon);
+      const brng = ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+      return Math.round(brng * 100) / 100;
+    }
+
+    function bearingToCardinal(deg) {
+      const dirs = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+      return dirs[Math.round(deg / 22.5) % 16];
+    }
+
+    const origin = artifact.data?.origin || null;
+    let resolvedCount = 0;
+    let unresolvedCount = 0;
+
+    const resolved = places.map((place) => {
+      const name = (place.name || "").trim();
+      const nameLower = name.toLowerCase();
+      let lat = parseFloat(place.lat);
+      let lon = parseFloat(place.lon);
+      let source = "provided";
+
+      if (isNaN(lat) || isNaN(lon)) {
+        const ref = reference[nameLower];
+        if (ref) {
+          lat = ref.lat;
+          lon = ref.lon;
+          source = "reference";
+          resolvedCount++;
+        } else {
+          unresolvedCount++;
+          return { name, resolved: false, message: `Could not resolve "${name}". Provide lat/lon or use a known city name.` };
+        }
+      } else {
+        resolvedCount++;
+      }
+
+      // Determine hemisphere and timezone estimate
+      const hemisphere = lat >= 0 ? "Northern" : "Southern";
+      const timezoneEstimate = Math.round(lon / 15);
+
+      const entry = {
+        name,
+        lat,
+        lon,
+        resolved: true,
+        source,
+        hemisphere,
+        estimatedUTCOffset: timezoneEstimate,
+      };
+
+      if (origin && !isNaN(parseFloat(origin.lat)) && !isNaN(parseFloat(origin.lon))) {
+        entry.distanceFromOriginKm = haversine(origin.lat, origin.lon, lat, lon);
+        entry.bearingFromOrigin = bearing(origin.lat, origin.lon, lat, lon);
+        entry.directionFromOrigin = bearingToCardinal(entry.bearingFromOrigin);
+      }
+
+      return entry;
+    });
+
+    // Sort by distance from origin if available
+    const sorted = origin
+      ? [...resolved].filter((r) => r.resolved).sort((a, b) => (a.distanceFromOriginKm || 0) - (b.distanceFromOriginKm || 0))
+      : null;
+
+    const result = {
+      count: places.length,
+      resolvedCount,
+      unresolvedCount,
+      resolved,
+      nearestToOrigin: sorted && sorted.length > 0 ? sorted[0].name : null,
+      farthestFromOrigin: sorted && sorted.length > 0 ? sorted[sorted.length - 1].name : null,
+    };
+
+    artifact.data.geocodeResult = result;
+    return { ok: true, result };
+  });
+
+  /**
+   * distanceMatrix
+   * Compute distances between multiple coordinate points using the Haversine formula.
+   * artifact.data.points: [{ name?, lat, lon }]
+   * Returns a full NxN distance matrix in km.
+   */
+  registerLensAction("atlas", "distanceMatrix", (ctx, artifact, _params) => {
+    const points = artifact.data?.points || [];
+    if (points.length < 2) {
+      return { ok: true, result: { message: "Need at least 2 points. Supply artifact.data.points as [{ name?, lat, lon }].", matrix: [], stats: null } };
+    }
+
+    function haversine(lat1, lon1, lat2, lon2) {
+      const R = 6371;
+      const dLat = ((lat2 - lat1) * Math.PI) / 180;
+      const dLon = ((lon2 - lon1) * Math.PI) / 180;
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return Math.round(R * c * 100) / 100;
+    }
+
+    const n = points.length;
+    const labels = points.map((p, i) => p.name || `Point_${i}`);
+    const matrix = Array.from({ length: n }, () => new Array(n).fill(0));
+
+    let totalDist = 0;
+    let pairCount = 0;
+    let maxDist = 0;
+    let minDist = Infinity;
+    let maxPair = null;
+    let minPair = null;
+
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        const lat1 = parseFloat(points[i].lat) || 0;
+        const lon1 = parseFloat(points[i].lon) || 0;
+        const lat2 = parseFloat(points[j].lat) || 0;
+        const lon2 = parseFloat(points[j].lon) || 0;
+        const dist = haversine(lat1, lon1, lat2, lon2);
+        matrix[i][j] = dist;
+        matrix[j][i] = dist;
+        totalDist += dist;
+        pairCount++;
+
+        if (dist > maxDist) {
+          maxDist = dist;
+          maxPair = [labels[i], labels[j]];
+        }
+        if (dist < minDist) {
+          minDist = dist;
+          minPair = [labels[i], labels[j]];
+        }
+      }
+    }
+
+    const avgDist = pairCount > 0 ? Math.round((totalDist / pairCount) * 100) / 100 : 0;
+
+    // Compute centroid
+    const avgLat = points.reduce((s, p) => s + (parseFloat(p.lat) || 0), 0) / n;
+    const avgLon = points.reduce((s, p) => s + (parseFloat(p.lon) || 0), 0) / n;
+
+    // Spread: average distance from centroid
+    const centroidDistances = points.map((p) => {
+      return haversine(avgLat, avgLon, parseFloat(p.lat) || 0, parseFloat(p.lon) || 0);
+    });
+    const avgSpread = Math.round((centroidDistances.reduce((s, d) => s + d, 0) / n) * 100) / 100;
+
+    const result = {
+      pointCount: n,
+      labels,
+      matrix,
+      stats: {
+        averageDistanceKm: avgDist,
+        maxDistanceKm: maxDist,
+        maxDistancePair: maxPair,
+        minDistanceKm: minDist === Infinity ? 0 : minDist,
+        minDistancePair: minPair,
+        totalPairs: pairCount,
+        centroid: { lat: Math.round(avgLat * 10000) / 10000, lon: Math.round(avgLon * 10000) / 10000 },
+        averageSpreadKm: avgSpread,
+        clusterTightness: avgSpread < 100 ? "tight" : avgSpread < 500 ? "moderate" : avgSpread < 2000 ? "spread" : "dispersed",
+      },
+    };
+
+    artifact.data.distanceMatrix = result;
+    return { ok: true, result };
+  });
+
+  /**
+   * regionStats
+   * Aggregate demographic/economic stats for regions.
+   * artifact.data.regions: [{ name, population?, area?, gdp?, density?, growth?, subregions?: [...] }]
+   * Calculates totals, averages, rankings, and normalized comparisons.
+   */
+  registerLensAction("atlas", "regionStats", (ctx, artifact, _params) => {
+    const regions = artifact.data?.regions || [];
+    if (regions.length === 0) {
+      return { ok: true, result: { message: "No region data provided. Supply artifact.data.regions as [{ name, population, area, gdp, density, growth }].", summary: null, rankings: null } };
+    }
+
+    const parsed = regions.map((r) => ({
+      name: r.name || "Unknown",
+      population: parseFloat(r.population) || 0,
+      area: parseFloat(r.area) || 0,
+      gdp: parseFloat(r.gdp) || 0,
+      density: parseFloat(r.density) || (parseFloat(r.population) && parseFloat(r.area) ? parseFloat(r.population) / parseFloat(r.area) : 0),
+      growth: parseFloat(r.growth) || 0,
+      subregionCount: Array.isArray(r.subregions) ? r.subregions.length : 0,
+    }));
+
+    // Totals
+    const totalPop = parsed.reduce((s, r) => s + r.population, 0);
+    const totalArea = parsed.reduce((s, r) => s + r.area, 0);
+    const totalGdp = parsed.reduce((s, r) => s + r.gdp, 0);
+
+    // Weighted averages
+    const weightedDensity = totalArea > 0 ? Math.round((totalPop / totalArea) * 100) / 100 : 0;
+    const weightedGrowth = totalPop > 0
+      ? Math.round((parsed.reduce((s, r) => s + r.growth * r.population, 0) / totalPop) * 10000) / 10000
+      : 0;
+
+    // Per-capita GDP
+    const perCapita = parsed.map((r) => ({
+      name: r.name,
+      gdpPerCapita: r.population > 0 ? Math.round((r.gdp / r.population) * 100) / 100 : 0,
+    }));
+
+    // Rankings by each metric
+    const rankBy = (field) => {
+      return [...parsed]
+        .sort((a, b) => b[field] - a[field])
+        .map((r, i) => ({ rank: i + 1, name: r.name, value: r[field] }));
+    };
+
+    // Standard deviation of population for distribution analysis
+    const meanPop = totalPop / parsed.length;
+    const popVariance = parsed.reduce((s, r) => s + Math.pow(r.population - meanPop, 2), 0) / parsed.length;
+    const popStdDev = Math.round(Math.sqrt(popVariance) * 100) / 100;
+
+    // Gini-like concentration index for population distribution
+    const sortedPops = parsed.map((r) => r.population).sort((a, b) => a - b);
+    let giniNum = 0;
+    const n = sortedPops.length;
+    for (let i = 0; i < n; i++) {
+      giniNum += (2 * (i + 1) - n - 1) * sortedPops[i];
+    }
+    const giniCoefficient = totalPop > 0 && n > 1
+      ? Math.round((giniNum / (n * totalPop)) * 10000) / 10000
+      : 0;
+
+    // Categorize regions by development proxy (GDP per capita)
+    const categorized = perCapita.map((r) => ({
+      name: r.name,
+      gdpPerCapita: r.gdpPerCapita,
+      tier: r.gdpPerCapita > 40000 ? "high-income" : r.gdpPerCapita > 12000 ? "upper-middle" : r.gdpPerCapita > 4000 ? "lower-middle" : "low-income",
+    }));
+
+    const result = {
+      regionCount: parsed.length,
+      totals: {
+        population: totalPop,
+        area: Math.round(totalArea * 100) / 100,
+        gdp: Math.round(totalGdp * 100) / 100,
+      },
+      averages: {
+        population: Math.round(meanPop * 100) / 100,
+        density: weightedDensity,
+        gdpPerCapita: totalPop > 0 ? Math.round((totalGdp / totalPop) * 100) / 100 : 0,
+        growthRate: weightedGrowth,
+      },
+      distribution: {
+        populationStdDev: popStdDev,
+        populationGini: giniCoefficient,
+        concentration: giniCoefficient > 0.5 ? "highly-concentrated" : giniCoefficient > 0.3 ? "moderately-concentrated" : "evenly-distributed",
+      },
+      rankings: {
+        byPopulation: rankBy("population"),
+        byGdp: rankBy("gdp"),
+        byDensity: rankBy("density"),
+        byGrowth: rankBy("growth"),
+      },
+      perCapita: perCapita.sort((a, b) => b.gdpPerCapita - a.gdpPerCapita),
+      incomeTiers: categorized,
+    };
+
+    artifact.data.regionStats = result;
+    return { ok: true, result };
+  });
+
+  /**
+   * routeOptimize
+   * Find optimal order for visiting multiple waypoints by nearest-neighbor TSP.
+   * artifact.data.waypoints: [{ name?, lat, lon }]
+   * artifact.data.startIndex: number (optional, default 0)
+   * Returns optimized route order with total distance.
+   */
+  registerLensAction("atlas", "routeOptimize", (ctx, artifact, _params) => {
+    const waypoints = artifact.data?.waypoints || [];
+    if (waypoints.length < 2) {
+      return { ok: true, result: { message: "Need at least 2 waypoints. Supply artifact.data.waypoints as [{ name?, lat, lon }].", route: [], totalDistanceKm: 0 } };
+    }
+
+    function haversine(lat1, lon1, lat2, lon2) {
+      const R = 6371;
+      const dLat = ((lat2 - lat1) * Math.PI) / 180;
+      const dLon = ((lon2 - lon1) * Math.PI) / 180;
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return Math.round(R * c * 100) / 100;
+    }
+
+    const n = waypoints.length;
+    const labels = waypoints.map((w, i) => w.name || `Waypoint_${i}`);
+    const coords = waypoints.map((w) => ({
+      lat: parseFloat(w.lat) || 0,
+      lon: parseFloat(w.lon) || 0,
+    }));
+
+    // Pre-compute distance matrix
+    const dist = Array.from({ length: n }, () => new Array(n).fill(0));
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        const d = haversine(coords[i].lat, coords[i].lon, coords[j].lat, coords[j].lon);
+        dist[i][j] = d;
+        dist[j][i] = d;
+      }
+    }
+
+    // Compute naive (input order) total distance for comparison
+    let naiveTotal = 0;
+    for (let i = 0; i < n - 1; i++) {
+      naiveTotal += dist[i][i + 1];
+    }
+    naiveTotal = Math.round(naiveTotal * 100) / 100;
+
+    // Nearest-neighbor heuristic from multiple starting points, pick best
+    let bestRoute = null;
+    let bestTotal = Infinity;
+
+    for (let startIdx = 0; startIdx < n; startIdx++) {
+      const visited = new Set();
+      const route = [startIdx];
+      visited.add(startIdx);
+      let total = 0;
+
+      let current = startIdx;
+      while (visited.size < n) {
+        let nearest = -1;
+        let nearestDist = Infinity;
+        for (let j = 0; j < n; j++) {
+          if (!visited.has(j) && dist[current][j] < nearestDist) {
+            nearestDist = dist[current][j];
+            nearest = j;
+          }
+        }
+        if (nearest === -1) break;
+        route.push(nearest);
+        visited.add(nearest);
+        total += nearestDist;
+        current = nearest;
+      }
+
+      total = Math.round(total * 100) / 100;
+      if (total < bestTotal) {
+        bestTotal = total;
+        bestRoute = route;
+      }
+    }
+
+    // 2-opt improvement on the best route
+    let improved = true;
+    while (improved) {
+      improved = false;
+      for (let i = 1; i < bestRoute.length - 1; i++) {
+        for (let j = i + 1; j < bestRoute.length; j++) {
+          const segBefore =
+            dist[bestRoute[i - 1]][bestRoute[i]] +
+            (j + 1 < bestRoute.length ? dist[bestRoute[j]][bestRoute[j + 1]] : 0);
+          const segAfter =
+            dist[bestRoute[i - 1]][bestRoute[j]] +
+            (j + 1 < bestRoute.length ? dist[bestRoute[i]][bestRoute[j + 1]] : 0);
+          if (segAfter < segBefore - 0.01) {
+            // Reverse the segment between i and j
+            const reversed = bestRoute.slice(i, j + 1).reverse();
+            for (let k = 0; k < reversed.length; k++) {
+              bestRoute[i + k] = reversed[k];
+            }
+            improved = true;
+          }
+        }
+      }
+    }
+
+    // Recalculate total after 2-opt
+    bestTotal = 0;
+    for (let i = 0; i < bestRoute.length - 1; i++) {
+      bestTotal += dist[bestRoute[i]][bestRoute[i + 1]];
+    }
+    bestTotal = Math.round(bestTotal * 100) / 100;
+
+    // Build route details with leg info
+    const routeDetails = bestRoute.map((idx, step) => {
+      const entry = {
+        step: step + 1,
+        name: labels[idx],
+        lat: coords[idx].lat,
+        lon: coords[idx].lon,
+      };
+      if (step > 0) {
+        const prevIdx = bestRoute[step - 1];
+        entry.legDistanceKm = dist[prevIdx][idx];
+        entry.cumulativeDistanceKm = Math.round(
+          bestRoute.slice(0, step + 1).reduce((s, ci, si) => {
+            if (si === 0) return 0;
+            return s + dist[bestRoute[si - 1]][ci];
+          }, 0) * 100
+        ) / 100;
+      } else {
+        entry.legDistanceKm = 0;
+        entry.cumulativeDistanceKm = 0;
+      }
+      return entry;
+    });
+
+    const savings = naiveTotal > 0 ? Math.round(((naiveTotal - bestTotal) / naiveTotal) * 10000) / 100 : 0;
+
+    const result = {
+      waypointCount: n,
+      optimizedRoute: routeDetails,
+      totalDistanceKm: bestTotal,
+      naiveOrderDistanceKm: naiveTotal,
+      savingsPercent: savings,
+      algorithm: "nearest-neighbor + 2-opt improvement",
+    };
+
+    artifact.data.routeOptimization = result;
+    return { ok: true, result };
+  });
+}

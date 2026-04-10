@@ -92,6 +92,96 @@ import tick from './tick.js';
 import lock from './lock.js';
 import fork from './fork.js';
 import invariant from './invariant.js';
+import pets from './pets.js';
+import parenting from './parenting.js';
+import questmarket from './questmarket.js';
+import diy from './diy.js';
+import materials from './materials.js';
+import agents from './agents.js';
+import analytics from './analytics.js';
+import animation from './animation.js';
+import astronomy from './astronomy.js';
+import automotive from './automotive.js';
+import bridge from './bridge.js';
+import calendar from './calendar.js';
+import carpentry from './carpentry.js';
+import collab from './collab.js';
+import construction from './construction.js';
+import consulting from './consulting.js';
+import cooking from './cooking.js';
+import council from './council.js';
+import creativewriting from './creativewriting.js';
+import custom from './custom.js';
+import daily from './daily.js';
+import database from './database.js';
+import debate from './debate.js';
+import defense from './defense.js';
+import desert from './desert.js';
+import disputes from './disputes.js';
+import electrical from './electrical.js';
+import emergencyservices from './emergencyservices.js';
+import energy from './energy.js';
+import engineering from './engineering.js';
+import experience from './experience.js';
+import exportdomain from './exportdomain.js';
+import fashion from './fashion.js';
+import feed from './feed.js';
+import filmstudios from './filmstudios.js';
+import finance from './finance.js';
+import forestry from './forestry.js';
+import forum from './forum.js';
+import game from './game.js';
+import gamedesign from './gamedesign.js';
+import geology from './geology.js';
+import history from './history.js';
+import homeimprovement from './homeimprovement.js';
+import hr from './hr.js';
+import hvac from './hvac.js';
+import landscaping from './landscaping.js';
+import lawenforcement from './lawenforcement.js';
+import linguistics from './linguistics.js';
+import marketing from './marketing.js';
+import masonry from './masonry.js';
+import mentalhealth from './mentalhealth.js';
+import mentorship from './mentorship.js';
+import mining from './mining.js';
+import ocean from './ocean.js';
+import pharmacy from './pharmacy.js';
+import philosophy from './philosophy.js';
+import photography from './photography.js';
+import plumbing from './plumbing.js';
+import podcast from './podcast.js';
+import poetry from './poetry.js';
+import privacy from './privacy.js';
+import projects from './projects.js';
+import robotics from './robotics.js';
+import space from './space.js';
+import sports from './sports.js';
+import supplychain from './supplychain.js';
+import telecommunications from './telecommunications.js';
+import travel from './travel.js';
+import urbanplanning from './urbanplanning.js';
+import veterinary from './veterinary.js';
+import artistry from './artistry.js';
+import atlas from './atlas.js';
+import graph from './graph.js';
+import importdomain from './importdomain.js';
+import ingest from './ingest.js';
+import law from './law.js';
+import marketplace from './marketplace.js';
+import ml from './ml.js';
+import musicDomain from './music.js';
+import paper from './paper.js';
+import reasoning from './reasoning.js';
+import sim from './sim.js';
+import srs from './srs.js';
+import studioDomain from './studio.js';
+import thread from './thread.js';
+import voice from './voice.js';
+import wallet from './wallet.js';
+import welding from './welding.js';
+import whiteboard from './whiteboard.js';
+import world from './world.js';
 
 export default [
   healthcare,
@@ -177,4 +267,94 @@ export default [
   lock,
   fork,
   invariant,
+  pets,
+  parenting,
+  questmarket,
+  diy,
+  materials,
+  agents,
+  analytics,
+  animation,
+  astronomy,
+  automotive,
+  bridge,
+  calendar,
+  carpentry,
+  collab,
+  construction,
+  consulting,
+  cooking,
+  council,
+  creativewriting,
+  custom,
+  daily,
+  database,
+  debate,
+  defense,
+  desert,
+  disputes,
+  electrical,
+  emergencyservices,
+  energy,
+  engineering,
+  experience,
+  exportdomain,
+  fashion,
+  feed,
+  filmstudios,
+  finance,
+  forestry,
+  forum,
+  game,
+  gamedesign,
+  geology,
+  history,
+  homeimprovement,
+  hr,
+  hvac,
+  landscaping,
+  lawenforcement,
+  linguistics,
+  marketing,
+  masonry,
+  mentalhealth,
+  mentorship,
+  mining,
+  ocean,
+  pharmacy,
+  philosophy,
+  photography,
+  plumbing,
+  podcast,
+  poetry,
+  privacy,
+  projects,
+  robotics,
+  space,
+  sports,
+  supplychain,
+  telecommunications,
+  travel,
+  urbanplanning,
+  veterinary,
+  artistry,
+  atlas,
+  graph,
+  importdomain,
+  ingest,
+  law,
+  marketplace,
+  ml,
+  musicDomain,
+  paper,
+  reasoning,
+  sim,
+  srs,
+  studioDomain,
+  thread,
+  voice,
+  wallet,
+  welding,
+  whiteboard,
+  world,
 ];

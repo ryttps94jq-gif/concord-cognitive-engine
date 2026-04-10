@@ -13,7 +13,7 @@ import {
   ShoppingBag,
   Users,
   Target,
-  Headphones,
+  Ticket,
   Monitor,
   Plus,
   Search,
@@ -133,7 +133,7 @@ const MODE_TABS: { id: ModeTab; icon: typeof Store; types: ArtifactType[] }[] = 
   { id: 'Orders', icon: ShoppingBag, types: ['Order'] },
   { id: 'Customers', icon: Users, types: ['Customer'] },
   { id: 'Pipeline', icon: Target, types: ['Lead'] },
-  { id: 'Support', icon: Headphones, types: ['Ticket'] },
+  { id: 'Support', icon: Ticket, types: ['Ticket'] },
   { id: 'Displays', icon: Monitor, types: ['Display'] },
 ];
 
@@ -1458,7 +1458,7 @@ export default function RetailLensPage() {
         <div className={ds.grid4}>
           <MetricCard icon={PackageCheck} label="Inventory Health" value={`${inventoryHealthScore}%`} color={inventoryHealthScore >= 80 ? 'green-400' : 'yellow-400'} />
           <MetricCard icon={RotateCcw} label="Return Rate" value="4.2%" trend="-0.8%" trendUp={true} color="green-400" />
-          <MetricCard icon={Headphones} label="Open Tickets" value={String(openTicketCount)} subtext="SLA compliance 94%" color="red-400" />
+          <MetricCard icon={Ticket} label="Open Tickets" value={String(openTicketCount)} subtext="SLA compliance 94%" color="red-400" />
           <MetricCard icon={Activity} label="Customer Acq. Cost" value="$34.50" trend="-12%" trendUp={true} color="neon-cyan" />
         </div>
 
@@ -1640,7 +1640,7 @@ export default function RetailLensPage() {
       return (
         <>
           {renderSubTabs([
-            { id: 'tickets', label: 'All Tickets', icon: Headphones },
+            { id: 'tickets', label: 'All Tickets', icon: Ticket },
             { id: 'sla', label: 'SLA Dashboard', icon: ShieldCheck },
             { id: 'templates', label: 'Templates', icon: FileText },
           ], supportSubTab, (id) => setSupportSubTab(id as SupportSubTab))}

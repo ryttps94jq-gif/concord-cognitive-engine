@@ -8,9 +8,9 @@ import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   Lightbulb,
   Pen,
-  Mic,
+  ListTodo,
   SlidersHorizontal,
-  Headphones,
+  CheckCircle,
   Rocket,
   Plus,
   GripVertical,
@@ -19,7 +19,7 @@ import {
   Calendar,
   Paperclip,
   MessageSquare,
-  Music,
+  Kanban,
   Search,
   Filter,
   LayoutGrid,
@@ -36,6 +36,7 @@ import {
   Upload,
   Layers,
   Trash2,
+  Tag,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { generateId } from '@/lib/utils';
@@ -50,9 +51,9 @@ import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 // Types
 // ---------------------------------------------------------------------------
 
-type ColumnId = 'idea_bank' | 'writing' | 'recording' | 'mixing' | 'mastering' | 'released';
+type ColumnId = 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'testing' | 'done';
 type Priority = 'low' | 'medium' | 'high' | 'urgent';
-type TaskType = 'beat' | 'song' | 'remix' | 'cover_art' | 'video' | 'mix';
+type TaskType = 'task' | 'feature' | 'bug' | 'design' | 'research' | 'docs';
 type ViewMode = 'board' | 'timeline' | 'table';
 
 interface Subtask {
@@ -82,11 +83,11 @@ interface Task {
   priority: Priority;
   type: TaskType;
   assignee: string;
-  genre: string;
+  label: string;
   progress: number;
   dueDate: string;
-  bpm?: number;
-  musicalKey?: string;
+  estimate?: string;
+  tags?: string[];
   attachments: number;
   commentCount: number;
   subtasks: Subtask[];
@@ -100,12 +101,12 @@ interface Task {
 // ---------------------------------------------------------------------------
 
 const columns: { id: ColumnId; name: string; icon: typeof Lightbulb; color: string; bg: string; border: string }[] = [
-  { id: 'idea_bank', name: 'Idea Bank', icon: Lightbulb, color: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/30' },
-  { id: 'writing', name: 'Writing', icon: Pen, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/30' },
-  { id: 'recording', name: 'Recording', icon: Mic, color: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/30' },
-  { id: 'mixing', name: 'Mixing', icon: SlidersHorizontal, color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/30' },
-  { id: 'mastering', name: 'Mastering', icon: Headphones, color: 'text-pink-400', bg: 'bg-pink-500/10', border: 'border-pink-500/30' },
-  { id: 'released', name: 'Released', icon: Rocket, color: 'text-green-400', bg: 'bg-green-500/10', border: 'border-green-500/30' },
+  { id: 'backlog', name: 'Backlog', icon: Lightbulb, color: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/30' },
+  { id: 'todo', name: 'To Do', icon: ListTodo, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/30' },
+  { id: 'in_progress', name: 'In Progress', icon: Activity, color: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/30' },
+  { id: 'in_review', name: 'In Review', icon: SlidersHorizontal, color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/30' },
+  { id: 'testing', name: 'Testing', icon: CheckCircle, color: 'text-pink-400', bg: 'bg-pink-500/10', border: 'border-pink-500/30' },
+  { id: 'done', name: 'Done', icon: Rocket, color: 'text-green-400', bg: 'bg-green-500/10', border: 'border-green-500/30' },
 ];
 
 const priorityConfig: Record<Priority, { label: string; color: string; dot: string }> = {
@@ -116,15 +117,15 @@ const priorityConfig: Record<Priority, { label: string; color: string; dot: stri
 };
 
 const typeConfig: Record<TaskType, { label: string; color: string }> = {
-  beat: { label: 'Beat', color: 'bg-violet-500/20 text-violet-300' },
-  song: { label: 'Song', color: 'bg-rose-500/20 text-rose-300' },
-  remix: { label: 'Remix', color: 'bg-amber-500/20 text-amber-300' },
-  cover_art: { label: 'Cover Art', color: 'bg-teal-500/20 text-teal-300' },
-  video: { label: 'Video', color: 'bg-indigo-500/20 text-indigo-300' },
-  mix: { label: 'Mix', color: 'bg-fuchsia-500/20 text-fuchsia-300' },
+  task: { label: 'Task', color: 'bg-violet-500/20 text-violet-300' },
+  feature: { label: 'Feature', color: 'bg-rose-500/20 text-rose-300' },
+  bug: { label: 'Bug', color: 'bg-red-500/20 text-red-300' },
+  design: { label: 'Design', color: 'bg-teal-500/20 text-teal-300' },
+  research: { label: 'Research', color: 'bg-indigo-500/20 text-indigo-300' },
+  docs: { label: 'Docs', color: 'bg-fuchsia-500/20 text-fuchsia-300' },
 };
 
-const genres = ['Hip-Hop', 'R&B', 'Pop', 'Electronic', 'Lo-Fi', 'Rock', 'Jazz', 'Latin', 'Afrobeats'];
+const labels = ['Frontend', 'Backend', 'Design', 'DevOps', 'Research', 'Marketing', 'Operations', 'Support', 'Strategy'];
 const assignees = ['Alex', 'Jordan', 'Maya', 'Rio', 'Sam'];
 const projects: string[] = [];
 
@@ -141,15 +142,15 @@ function lensItemToTask(item: LensItem<Record<string, unknown>>): Task {
     id: item.id,
     title: item.title || (d.title as string) || 'Untitled',
     description: (d.description as string) || '',
-    status: (d.status as ColumnId) || 'idea_bank',
+    status: (d.status as ColumnId) || 'backlog',
     priority: (d.priority as Priority) || 'medium',
-    type: (d.type as TaskType) || 'song',
+    type: (d.type as TaskType) || 'task',
     assignee: (d.assignee as string) || '',
-    genre: (d.genre as string) || '',
+    label: (d.label as string) || '',
     progress: (d.progress as number) || 0,
     dueDate: (d.dueDate as string) || new Date().toISOString().split('T')[0],
-    bpm: d.bpm as number | undefined,
-    musicalKey: d.musicalKey as string | undefined,
+    estimate: d.estimate as string | undefined,
+    tags: d.tags as string[] | undefined,
     attachments: (d.attachments as number) || 0,
     commentCount: (d.commentCount as number) || 0,
     subtasks: (d.subtasks as Subtask[]) || [],
@@ -207,7 +208,7 @@ export default function BoardLensPage() {
   const [filterAssignee, setFilterAssignee] = useState<string>('all');
   const [filterPriority, setFilterPriority] = useState<string>('all');
   const [filterType, setFilterType] = useState<string>('all');
-  const [filterGenre, setFilterGenre] = useState<string>('all');
+  const [filterLabel, setFilterLabel] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [showFeatures, setShowFeatures] = useState(true);
@@ -224,11 +225,11 @@ export default function BoardLensPage() {
       if (filterAssignee !== 'all' && t.assignee !== filterAssignee) return false;
       if (filterPriority !== 'all' && t.priority !== filterPriority) return false;
       if (filterType !== 'all' && t.type !== filterType) return false;
-      if (filterGenre !== 'all' && t.genre !== filterGenre) return false;
+      if (filterLabel !== 'all' && t.label !== filterLabel) return false;
       if (searchQuery && !t.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
       return true;
     });
-  }, [tasks, filterAssignee, filterPriority, filterType, filterGenre, searchQuery]);
+  }, [tasks, filterAssignee, filterPriority, filterType, filterLabel, searchQuery]);
 
   const getTasksByStatus = useCallback(
     (status: ColumnId) => filteredTasks.filter((t) => t.status === status),
@@ -241,9 +242,9 @@ export default function BoardLensPage() {
     const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     return {
       total: tasks.length,
-      inProgress: tasks.filter((t) => !['idea_bank', 'released'].includes(t.status)).length,
-      overdue: tasks.filter((t) => isOverdue(t.dueDate) && t.status !== 'released').length,
-      completedThisWeek: tasks.filter((t) => t.status === 'released' && new Date(t.dueDate) >= weekAgo).length,
+      inProgress: tasks.filter((t) => !['backlog', 'done'].includes(t.status)).length,
+      overdue: tasks.filter((t) => isOverdue(t.dueDate) && t.status !== 'done').length,
+      completedThisWeek: tasks.filter((t) => t.status === 'done' && new Date(t.dueDate) >= weekAgo).length,
     };
   }, [tasks]);
 
@@ -268,7 +269,7 @@ export default function BoardLensPage() {
     const taskId = e.dataTransfer.getData('taskId');
     const task = tasks.find((t) => t.id === taskId);
     if (task) {
-      const newProgress = targetCol === 'released' ? 100 : task.progress;
+      const newProgress = targetCol === 'done' ? 100 : task.progress;
       updateLens(taskId, { data: { ...task, status: targetCol, progress: newProgress, id: undefined, title: undefined } as unknown as Record<string, unknown> });
     }
     setDragOverColumn(null);
@@ -284,9 +285,9 @@ export default function BoardLensPage() {
         description: '',
         status: colId,
         priority: 'medium',
-        type: 'song',
+        type: 'task',
         assignee: assignees[0],
-        genre: genres[0],
+        label: labels[0],
         progress: 0,
         dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         attachments: 0,
@@ -423,8 +424,8 @@ export default function BoardLensPage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
-                <Music className="w-6 h-6 text-purple-400" />
-                <h1 className="text-xl font-bold text-white">Production Board</h1>
+                <Kanban className="w-6 h-6 text-purple-400" />
+                <h1 className="text-xl font-bold text-white">Project Board</h1>
               </div>
 
       {/* Real-time Enhancement Toolbar */}
@@ -567,14 +568,14 @@ export default function BoardLensPage() {
                     <option value="all">All Types</option>
                     {Object.entries(typeConfig).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                   </select>
-                  {/* Genre filter */}
+                  {/* Label filter */}
                   <select
-                    value={filterGenre}
-                    onChange={(e) => setFilterGenre(e.target.value)}
+                    value={filterLabel}
+                    onChange={(e) => setFilterLabel(e.target.value)}
                     className="px-3 py-1.5 text-sm rounded-lg bg-white/5 border border-white/10 text-gray-300 focus:outline-none focus:border-purple-500/50"
                   >
-                    <option value="all">All Genres</option>
-                    {genres.map((g) => <option key={g} value={g}>{g}</option>)}
+                    <option value="all">All Labels</option>
+                    {labels.map((l) => <option key={l} value={l}>{l}</option>)}
                   </select>
                 </div>
               </motion.div>
@@ -591,7 +592,7 @@ export default function BoardLensPage() {
             ref={boardRef}
             className="flex gap-4 h-full min-w-max"
             role="grid"
-            aria-label="Production board"
+            aria-label="Project board"
             tabIndex={0}
             onKeyDown={handleBoardKeyDown}
           >
@@ -685,21 +686,21 @@ export default function BoardLensPage() {
                                 {typeConfig[task.type].label}
                               </span>
                               <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/5 text-gray-400">
-                                {task.genre}
+                                {task.label}
                               </span>
                             </div>
 
-                            {/* BPM / Key for music tasks */}
-                            {(task.bpm || task.musicalKey) && (
+                            {/* Estimate / Tag for tasks */}
+                            {(task.estimate || task.tags?.[0]) && (
                               <div className="flex gap-2 mt-1.5">
-                                {task.bpm && (
+                                {task.estimate && (
                                   <span className="text-[10px] text-gray-500 flex items-center gap-0.5">
-                                    <Activity className="w-3 h-3" />{task.bpm} BPM
+                                    <Clock className="w-3 h-3" />{task.estimate} Est.
                                   </span>
                                 )}
-                                {task.musicalKey && (
+                                {task.tags?.[0] && (
                                   <span className="text-[10px] text-gray-500 flex items-center gap-0.5">
-                                    <Music className="w-3 h-3" />Key: {task.musicalKey}
+                                    <Tag className="w-3 h-3" />Tag: {task.tags[0]}
                                   </span>
                                 )}
                               </div>
@@ -727,7 +728,7 @@ export default function BoardLensPage() {
                                 <span
                                   className={cn(
                                     'text-[10px] flex items-center gap-0.5',
-                                    isOverdue(task.dueDate) && task.status !== 'released'
+                                    isOverdue(task.dueDate) && task.status !== 'done'
                                       ? 'text-red-400 font-medium'
                                       : 'text-gray-500'
                                   )}
@@ -927,15 +928,15 @@ function TaskDetailPanel({
           </select>
         </div>
 
-        {/* Genre */}
+        {/* Label */}
         <div className="space-y-1">
-          <label className="text-[10px] uppercase tracking-wider text-gray-600">Genre</label>
+          <label className="text-[10px] uppercase tracking-wider text-gray-600">Label</label>
           <select
-            value={task.genre}
-            onChange={(e) => onUpdate(task.id, { genre: e.target.value })}
+            value={task.label}
+            onChange={(e) => onUpdate(task.id, { label: e.target.value })}
             className="w-full px-2 py-1.5 text-sm bg-white/5 border border-white/10 rounded-md text-gray-300 focus:outline-none focus:border-purple-500/50"
           >
-            {genres.map((g) => <option key={g} value={g}>{g}</option>)}
+            {labels.map((l) => <option key={l} value={l}>{l}</option>)}
           </select>
         </div>
 
@@ -948,19 +949,19 @@ function TaskDetailPanel({
             onChange={(e) => onUpdate(task.id, { dueDate: e.target.value })}
             className={cn(
               'w-full px-2 py-1.5 text-sm bg-white/5 border border-white/10 rounded-md focus:outline-none focus:border-purple-500/50',
-              isOverdue(task.dueDate) && task.status !== 'released' ? 'text-red-400' : 'text-gray-300'
+              isOverdue(task.dueDate) && task.status !== 'done' ? 'text-red-400' : 'text-gray-300'
             )}
           />
         </div>
 
-        {/* BPM */}
+        {/* Estimate */}
         <div className="space-y-1">
-          <label className="text-[10px] uppercase tracking-wider text-gray-600">BPM</label>
+          <label className="text-[10px] uppercase tracking-wider text-gray-600">Estimate</label>
           <input
-            type="number"
-            value={task.bpm ?? ''}
-            onChange={(e) => onUpdate(task.id, { bpm: e.target.value ? parseInt(e.target.value) : undefined })}
-            placeholder="--"
+            type="text"
+            value={task.estimate ?? ''}
+            onChange={(e) => onUpdate(task.id, { estimate: e.target.value || undefined })}
+            placeholder="e.g. 2h, 1d"
             className="w-full px-2 py-1.5 text-sm bg-white/5 border border-white/10 rounded-md text-gray-300 focus:outline-none focus:border-purple-500/50"
           />
         </div>

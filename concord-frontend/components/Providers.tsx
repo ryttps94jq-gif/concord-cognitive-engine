@@ -57,6 +57,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
     // Connect WebSocket with existing session cookie
     connectSocket();
 
+    // Fetch CSRF token on app init (ensures POSTs work even if login was in a prior session)
+    api.get('/api/auth/csrf-token').catch(() => {});
+
     // Fetch user scopes for PermissionGate
     api.get('/api/auth/me')
       .then((res) => {

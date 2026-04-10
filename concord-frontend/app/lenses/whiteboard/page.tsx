@@ -29,7 +29,6 @@ import {
   Save,
   Grid3X3,
   Move,
-  Music,
   Image as ImageIcon,
   StickyNote,
   Bookmark,
@@ -119,12 +118,12 @@ const DEFAULT_ARRANGEMENT: ArrangementSection[] = [
   { id: 'arr_9', type: 'outro', label: 'Outro', bars: 4, color: '#fb923c' },
 ];
 const DEFAULT_MOOD_ZONES: MoodZone[] = [
-  { id: 'mz_1', label: 'Sonic Palette', items: [] },
+  { id: 'mz_1', label: 'Ideas & Concepts', items: [] },
   { id: 'mz_2', label: 'Visual References', items: [] },
   { id: 'mz_3', label: 'Mood Words', items: [] },
   { id: 'mz_4', label: 'Color Palette', items: [] },
-  { id: 'mz_5', label: 'Instruments & Textures', items: [] },
-  { id: 'mz_6', label: 'Inspiration Tracks', items: [] },
+  { id: 'mz_5', label: 'Tools & Resources', items: [] },
+  { id: 'mz_6', label: 'Inspiration Board', items: [] },
 ];
 
 /* ---------- tiny helpers ---------- */
@@ -186,8 +185,8 @@ export default function WhiteboardLensPage() {
 
   /* arrangement state */
   const [arrangement, setArrangement] = useState<ArrangementSection[]>(DEFAULT_ARRANGEMENT);
-  const [bpm, setBpm] = useState(120);
-  const [musicalKey, setMusicalKey] = useState('C minor');
+  const [pace, setPace] = useState(120);
+  const [theme, setTheme] = useState('Minimal');
   const [dragIdx, setDragIdx] = useState<number | null>(null);
 
   /* moodboard state */
@@ -245,6 +244,20 @@ export default function WhiteboardLensPage() {
       setElements([]);
     }
   }, [selectedWb]);
+
+  /* auto-save: debounce save elements to backend when they change */
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!selectedWbId || elements.length === 0) return;
+    // Skip the initial load (when elements were just set from server data)
+    if (selectedWb?.whiteboard?.elements && JSON.stringify(selectedWb.whiteboard.elements) === JSON.stringify(elements)) return;
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      saveMutation.mutate({ elements });
+    }, 2000);
+    return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [elements, selectedWbId]);
 
   /* resize */
   useEffect(() => {
@@ -716,7 +729,7 @@ export default function WhiteboardLensPage() {
     { id: 'arrow', icon: ArrowRight, label: 'Arrow', key: 'A' },
     { id: 'text', icon: Type, label: 'Text', key: 'T' },
     { id: 'dtu', icon: Link2, label: 'Link DTU', key: 'D' },
-    { id: 'audio', icon: Music, label: 'Audio Pin', key: '' },
+    { id: 'audio', icon: PenTool, label: 'Audio Pin', key: '' },
     { id: 'image', icon: ImageIcon, label: 'Image Pin', key: '' },
     { id: 'notecard', icon: StickyNote, label: 'Note Card', key: '' },
     { id: 'section', icon: Bookmark, label: 'Section Marker', key: '' },
@@ -910,11 +923,11 @@ export default function WhiteboardLensPage() {
                 <Clock className="w-5 h-5 text-neon-cyan" />
                 <span className="text-sm font-semibold">Arrangement Sketch</span>
                 <div className="w-px h-6 bg-lattice-border" />
-                <label className="text-xs text-gray-400">BPM</label>
-                <input type="number" value={bpm} onChange={e => setBpm(clamp(+e.target.value, 20, 300))}
+                <label className="text-xs text-gray-400">Pace</label>
+                <input type="number" value={pace} onChange={e => setPace(clamp(+e.target.value, 20, 300))}
                   className="w-16 px-2 py-1 bg-lattice-bg border border-lattice-border rounded text-sm text-center" />
-                <label className="text-xs text-gray-400">Key</label>
-                <input type="text" value={musicalKey} onChange={e => setMusicalKey(e.target.value)}
+                <label className="text-xs text-gray-400">Theme</label>
+                <input type="text" value={theme} onChange={e => setTheme(e.target.value)}
                   className="w-24 px-2 py-1 bg-lattice-bg border border-lattice-border rounded text-sm text-center" />
                 <div className="w-px h-6 bg-lattice-border" />
                 <span className="text-xs text-gray-400">Total: <strong className="text-white">{totalBars} bars</strong></span>
@@ -1005,7 +1018,7 @@ export default function WhiteboardLensPage() {
                       <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }}
                         className="bg-lattice-surface border border-lattice-border rounded-lg p-5 w-80">
                         <div className="flex items-center justify-between mb-4">
-                          <h3 className="font-semibold flex items-center gap-2"><Music className="w-4 h-4 text-neon-cyan" />Pin Audio Clip</h3>
+                          <h3 className="font-semibold flex items-center gap-2"><PenTool className="w-4 h-4 text-neon-cyan" />Pin Audio Clip</h3>
                           <button onClick={() => { setShowAudioDialog(false); setTextPosition(null); }}><X className="w-5 h-5" /></button>
                         </div>
                         <input type="text" placeholder="Clip name (e.g. Verse Vocal Take 3)" value={audioClipName}
@@ -1137,13 +1150,13 @@ export default function WhiteboardLensPage() {
             {/* ===== Arrangement Sketch view ===== */}
             {boardMode === 'arrangement' && (
               <div className="flex-1 overflow-auto p-6">
-                {/* BPM/Key badge */}
+                {/* Speed/Theme badge */}
                 <div className="absolute top-20 right-6 flex items-center gap-3 bg-lattice-surface border border-lattice-border rounded-lg px-4 py-2 z-10">
-                  <span className="text-xs text-gray-400">BPM</span>
-                  <span className="text-lg font-bold text-neon-cyan">{bpm}</span>
+                  <span className="text-xs text-gray-400">Speed</span>
+                  <span className="text-lg font-bold text-neon-cyan">{pace}</span>
                   <div className="w-px h-6 bg-lattice-border" />
-                  <span className="text-xs text-gray-400">Key</span>
-                  <span className="text-lg font-bold text-neon-pink">{musicalKey}</span>
+                  <span className="text-xs text-gray-400">Theme</span>
+                  <span className="text-lg font-bold text-neon-pink">{theme}</span>
                 </div>
 
                 {/* Timeline */}
@@ -1233,7 +1246,7 @@ export default function WhiteboardLensPage() {
                               <div className="w-10 h-10 rounded-lg border border-white/10" style={{ backgroundColor: item.value }} />
                             ) : item.kind === 'audio' ? (
                               <div className="flex items-center gap-2 bg-neon-cyan/10 border border-neon-cyan/30 rounded-lg px-3 py-1.5">
-                                <Music className="w-3 h-3 text-neon-cyan" />
+                                <PenTool className="w-3 h-3 text-neon-cyan" />
                                 <span className="text-xs text-neon-cyan">{item.value}</span>
                               </div>
                             ) : item.kind === 'image' ? (
@@ -1308,7 +1321,7 @@ export default function WhiteboardLensPage() {
                           </div>
                         ) : (
                           <input type="text" value={moodInput} onChange={e => setMoodInput(e.target.value)} autoFocus
-                            placeholder={moodKind === 'audio' ? 'Track name...' : moodKind === 'image' ? 'Image description...' : 'Mood description...'}
+                            placeholder={moodKind === 'audio' ? 'Audio note...' : moodKind === 'image' ? 'Image description...' : 'Mood description...'}
                             onKeyDown={e => e.key === 'Enter' && addMoodItem()}
                             className="w-full px-3 py-2 bg-lattice-bg border border-lattice-border rounded text-sm mb-4" />
                         )}

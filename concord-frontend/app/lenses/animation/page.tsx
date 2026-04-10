@@ -249,9 +249,9 @@ export default function AnimationPage() {
                 <div className="flex items-center justify-between">
                   <h2 className="text-lg font-semibold">{selectedProject.title}</h2>
                   <div className="flex gap-2">
-                    <button onClick={() => showToast('info', 'Coming soon')} className="p-2 bg-white/5 rounded hover:bg-white/10"><Play className="w-4 h-4" /></button>
-                    <button onClick={() => showToast('info', 'Coming soon')} className="p-2 bg-white/5 rounded hover:bg-white/10"><Pause className="w-4 h-4" /></button>
-                    <button onClick={() => showToast('info', 'Coming soon')} className="p-2 bg-white/5 rounded hover:bg-white/10"><RotateCcw className="w-4 h-4" /></button>
+                    <button onClick={() => { api.post('/api/lens/run', { domain: 'animation', action: 'play', projectId: selectedProject.id }).then(() => showToast('success', 'Playback started')).catch(() => showToast('error', 'Failed to start playback')); }} className="p-2 bg-white/5 rounded hover:bg-white/10"><Play className="w-4 h-4" /></button>
+                    <button onClick={() => { api.post('/api/lens/run', { domain: 'animation', action: 'pause', projectId: selectedProject.id }).then(() => showToast('success', 'Playback paused')).catch(() => showToast('error', 'Failed to pause playback')); }} className="p-2 bg-white/5 rounded hover:bg-white/10"><Pause className="w-4 h-4" /></button>
+                    <button onClick={() => { api.post('/api/lens/run', { domain: 'animation', action: 'reset', projectId: selectedProject.id }).then(() => showToast('success', 'Timeline reset to frame 0')).catch(() => showToast('error', 'Failed to reset timeline')); }} className="p-2 bg-white/5 rounded hover:bg-white/10"><RotateCcw className="w-4 h-4" /></button>
                   </div>
                 </div>
                 <div className="bg-white/5 border border-white/10 rounded-lg p-4">

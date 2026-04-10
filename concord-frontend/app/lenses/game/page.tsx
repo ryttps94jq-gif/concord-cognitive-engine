@@ -10,7 +10,7 @@ import {
   Trophy, Star, Zap, Target, Users, Swords, Crown,
   Flame, TrendingUp, ShoppingBag, Lock, Unlock,
   ChevronRight, ChevronDown, Plus, X, Check, Clock,
-  BarChart3, Sparkles, Gem, Music, Headphones,
+  BarChart3, Sparkles, Gem, Gamepad2, Joystick,
   GitBranch, BookOpen, Cpu,
   Activity, ArrowUp,
 } from 'lucide-react';
@@ -144,29 +144,29 @@ const INITIAL_QUESTS: Quest[] = [];
 
 const INITIAL_LEADERBOARD: LeaderboardPlayer[] = [];
 
-const SKILL_TREES: Record<SkillBranch, { label: string; color: string; icon: typeof Music; nodes: SkillNode[] }> = {
+const SKILL_TREES: Record<SkillBranch, { label: string; color: string; icon: typeof Gamepad2; nodes: SkillNode[] }> = {
   production: {
-    label: 'Production',
+    label: 'Building',
     color: 'text-neon-purple',
-    icon: Music,
+    icon: Gamepad2,
     nodes: [
-      { id: 'p1', name: 'Beat Making', description: 'Fundamentals of rhythm and groove', level: 0, maxLevel: 5, xpCost: 0, unlocked: true },
-      { id: 'p2', name: 'Arrangement', description: 'Song structure and flow', level: 0, maxLevel: 5, xpCost: 200, unlocked: false, requires: 'p1' },
-      { id: 'p3', name: 'Sampling', description: 'Creative sample manipulation', level: 0, maxLevel: 5, xpCost: 300, unlocked: false, requires: 'p1' },
-      { id: 'p4', name: 'Vocal Production', description: 'Recording and processing vocals', level: 0, maxLevel: 5, xpCost: 400, unlocked: false, requires: 'p2' },
-      { id: 'p5', name: 'Orchestration', description: 'Layering and instrumentation', level: 0, maxLevel: 5, xpCost: 500, unlocked: false, requires: 'p2' },
+      { id: 'p1', name: 'Prototyping', description: 'Rapidly turning ideas into working drafts', level: 0, maxLevel: 5, xpCost: 0, unlocked: true },
+      { id: 'p2', name: 'Architecture', description: 'Structuring complex systems and workflows', level: 0, maxLevel: 5, xpCost: 200, unlocked: false, requires: 'p1' },
+      { id: 'p3', name: 'Integration', description: 'Connecting tools, APIs, and data sources', level: 0, maxLevel: 5, xpCost: 300, unlocked: false, requires: 'p1' },
+      { id: 'p4', name: 'Automation', description: 'Building repeatable pipelines and triggers', level: 0, maxLevel: 5, xpCost: 400, unlocked: false, requires: 'p2' },
+      { id: 'p5', name: 'Optimization', description: 'Performance tuning and resource management', level: 0, maxLevel: 5, xpCost: 500, unlocked: false, requires: 'p2' },
     ],
   },
   theory: {
-    label: 'Theory',
+    label: 'Knowledge',
     color: 'text-neon-cyan',
     icon: BookOpen,
     nodes: [
-      { id: 't1', name: 'Scales & Modes', description: 'Musical scales and modal theory', level: 0, maxLevel: 5, xpCost: 0, unlocked: true },
-      { id: 't2', name: 'Harmony', description: 'Chord progressions and voice leading', level: 0, maxLevel: 5, xpCost: 250, unlocked: false, requires: 't1' },
-      { id: 't3', name: 'Ear Training', description: 'Interval and chord recognition', level: 0, maxLevel: 5, xpCost: 350, unlocked: false, requires: 't1' },
-      { id: 't4', name: 'Counterpoint', description: 'Melodic independence and interplay', level: 0, maxLevel: 5, xpCost: 450, unlocked: false, requires: 't2' },
-      { id: 't5', name: 'Orchestral Theory', description: 'Advanced harmonic and timbral concepts', level: 0, maxLevel: 5, xpCost: 600, unlocked: false, requires: 't4' },
+      { id: 't1', name: 'Fundamentals', description: 'Core concepts and first principles', level: 0, maxLevel: 5, xpCost: 0, unlocked: true },
+      { id: 't2', name: 'Analysis', description: 'Breaking down problems systematically', level: 0, maxLevel: 5, xpCost: 250, unlocked: false, requires: 't1' },
+      { id: 't3', name: 'Pattern Recognition', description: 'Identifying recurring structures and signals', level: 0, maxLevel: 5, xpCost: 350, unlocked: false, requires: 't1' },
+      { id: 't4', name: 'Systems Thinking', description: 'Understanding complex interdependencies', level: 0, maxLevel: 5, xpCost: 450, unlocked: false, requires: 't2' },
+      { id: 't5', name: 'Research Mastery', description: 'Advanced investigation and synthesis', level: 0, maxLevel: 5, xpCost: 600, unlocked: false, requires: 't4' },
     ],
   },
   engineering: {
@@ -174,23 +174,23 @@ const SKILL_TREES: Record<SkillBranch, { label: string; color: string; icon: typ
     color: 'text-neon-green',
     icon: Cpu,
     nodes: [
-      { id: 'e1', name: 'EQ & Filtering', description: 'Spectral shaping and tone sculpting', level: 0, maxLevel: 5, xpCost: 0, unlocked: true },
-      { id: 'e2', name: 'Compression', description: 'Dynamic range control', level: 0, maxLevel: 5, xpCost: 200, unlocked: false, requires: 'e1' },
-      { id: 'e3', name: 'Spatial FX', description: 'Reverb, delay, and stereo imaging', level: 0, maxLevel: 5, xpCost: 300, unlocked: false, requires: 'e1' },
-      { id: 'e4', name: 'Mastering', description: 'Final polish and loudness optimization', level: 0, maxLevel: 5, xpCost: 500, unlocked: false, requires: 'e2' },
-      { id: 'e5', name: 'Synthesis', description: 'Subtractive, FM, wavetable, granular', level: 0, maxLevel: 5, xpCost: 400, unlocked: false, requires: 'e3' },
+      { id: 'e1', name: 'Data Wrangling', description: 'Cleaning, transforming, and shaping data', level: 0, maxLevel: 5, xpCost: 0, unlocked: true },
+      { id: 'e2', name: 'Debugging', description: 'Diagnosing and resolving complex issues', level: 0, maxLevel: 5, xpCost: 200, unlocked: false, requires: 'e1' },
+      { id: 'e3', name: 'Visualization', description: 'Presenting data and insights clearly', level: 0, maxLevel: 5, xpCost: 300, unlocked: false, requires: 'e1' },
+      { id: 'e4', name: 'Deployment', description: 'Shipping reliable systems to production', level: 0, maxLevel: 5, xpCost: 500, unlocked: false, requires: 'e2' },
+      { id: 'e5', name: 'AI & ML', description: 'Machine learning models and inference', level: 0, maxLevel: 5, xpCost: 400, unlocked: false, requires: 'e3' },
     ],
   },
   performance: {
-    label: 'Performance',
+    label: 'Leadership',
     color: 'text-neon-pink',
-    icon: Headphones,
+    icon: Joystick,
     nodes: [
-      { id: 'r1', name: 'Live Sets', description: 'Building and performing live sets', level: 0, maxLevel: 5, xpCost: 0, unlocked: true },
-      { id: 'r2', name: 'DJ Mixing', description: 'Beatmatching, transitions, and reading a crowd', level: 0, maxLevel: 5, xpCost: 250, unlocked: false, requires: 'r1' },
-      { id: 'r3', name: 'Improvisation', description: 'Real-time creative decision-making', level: 0, maxLevel: 5, xpCost: 350, unlocked: false, requires: 'r1' },
-      { id: 'r4', name: 'Controllerism', description: 'Advanced MIDI controller techniques', level: 0, maxLevel: 5, xpCost: 450, unlocked: false, requires: 'r2' },
-      { id: 'r5', name: 'Stage Presence', description: 'Audience engagement and showmanship', level: 0, maxLevel: 5, xpCost: 500, unlocked: false, requires: 'r3' },
+      { id: 'r1', name: 'Communication', description: 'Clear and effective information exchange', level: 0, maxLevel: 5, xpCost: 0, unlocked: true },
+      { id: 'r2', name: 'Collaboration', description: 'Working effectively across teams and roles', level: 0, maxLevel: 5, xpCost: 250, unlocked: false, requires: 'r1' },
+      { id: 'r3', name: 'Decision Making', description: 'Quick, informed judgment under uncertainty', level: 0, maxLevel: 5, xpCost: 350, unlocked: false, requires: 'r1' },
+      { id: 'r4', name: 'Strategy', description: 'Long-term planning and resource allocation', level: 0, maxLevel: 5, xpCost: 450, unlocked: false, requires: 'r2' },
+      { id: 'r5', name: 'Mentorship', description: 'Teaching, guiding, and growing others', level: 0, maxLevel: 5, xpCost: 500, unlocked: false, requires: 'r3' },
     ],
   },
 };
@@ -436,7 +436,7 @@ export default function GameLensPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-white">Game Lens</h1>
-            <p className="text-sm text-gray-400">Gamification platform &mdash; level up your music production skills</p>
+            <p className="text-sm text-gray-400">Gamification platform &mdash; level up your skills and track progress</p>
           </div>
 
       {/* Real-time Enhancement Toolbar */}

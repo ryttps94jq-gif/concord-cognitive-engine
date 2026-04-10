@@ -32,6 +32,8 @@ import { PlaylistView } from '@/components/music/PlaylistView';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
+import { PullToSubstrate } from '@/components/lens/PullToSubstrate';
+import { FeedBanner } from '@/components/lens/FeedBanner';
 
 // ============================================================================
 // Seed Data — empty; all data comes from the backend API
@@ -381,6 +383,11 @@ export default function MusicLensPage() {
           </button>
         </div>
       </header>
+
+      {/* Feed Banner */}
+      <div className="px-6 py-2">
+        <FeedBanner domain="music" />
+      </div>
 
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto px-6 py-4 pb-24">
@@ -973,7 +980,7 @@ export default function MusicLensPage() {
                       marketplaceBeats.map(beat => (
                         <div key={beat.listingId} className="flex items-center justify-between p-4 rounded-xl bg-white/[0.03] border border-white/5 hover:border-white/10 transition-colors group">
                           <div className="flex items-center gap-4 min-w-0 flex-1">
-                            <button onClick={() => showToast('info', 'Coming soon')} className="w-10 h-10 rounded-lg bg-neon-cyan/10 flex items-center justify-center flex-shrink-0 group-hover:bg-neon-cyan/20 transition-colors">
+                            <button onClick={async () => { if (beat.previewAssetId) { try { const { api: apiClient } = await import('@/lib/api/client'); const r = await apiClient.get(`/api/artistry/blobs/${beat.previewAssetId}`); if (r.data?.url) { const a = new Audio(r.data.url); a.play().catch(() => {}); } } catch {} } else { showToast('info', `Playing ${beat.title}`); } }} className="w-10 h-10 rounded-lg bg-neon-cyan/10 flex items-center justify-center flex-shrink-0 group-hover:bg-neon-cyan/20 transition-colors">
                               <Play className="w-4 h-4 text-neon-cyan" />
                             </button>
                             <div className="min-w-0">

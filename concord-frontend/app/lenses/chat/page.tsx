@@ -11,8 +11,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Send,
   Paperclip,
-  Mic,
   Smile,
+  Pencil,
   MoreVertical,
   Search,
   Settings,
@@ -340,6 +340,11 @@ export default function ChatLensPage() {
   const [chatSidebarOpen, setChatSidebarOpen] = useState(false);
   const [conversationSearch, setConversationSearch] = useState('');
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState('');
+  const [renamingConversation, setRenamingConversation] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
   const [showFeatures, setShowFeatures] = useState(true);
   const [storedConversations, setStoredConversations] = useState<Conversation[]>(() => loadConversations());
 
@@ -1079,6 +1084,49 @@ export default function ChatLensPage() {
     saveSessionId(null);
   }, []);
 
+  // ── Message edit / delete ──
+  const startEditMessage = useCallback((message: Message) => {
+    setEditingMessageId(message.id);
+    setEditContent(message.content);
+  }, []);
+
+  const saveEditMessage = useCallback(() => {
+    if (!editingMessageId || !editContent.trim()) return;
+    setLocalMessages(prev => prev.map(m =>
+      m.id === editingMessageId ? { ...m, content: editContent.trim() } : m
+    ));
+    setEditingMessageId(null);
+    setEditContent('');
+  }, [editingMessageId, editContent]);
+
+  const cancelEditMessage = useCallback(() => {
+    setEditingMessageId(null);
+    setEditContent('');
+  }, []);
+
+  const deleteMessage = useCallback((messageId: string) => {
+    setLocalMessages(prev => prev.filter(m => m.id !== messageId));
+  }, []);
+
+  // ── Conversation rename ──
+  const startRenameConversation = useCallback((conv: Conversation) => {
+    setRenamingConversation(conv.id);
+    setRenameValue(conv.title);
+  }, []);
+
+  const saveRenameConversation = useCallback(() => {
+    if (!renamingConversation || !renameValue.trim()) return;
+    setStoredConversations(prev => {
+      const next = prev.map(c =>
+        c.id === renamingConversation ? { ...c, title: renameValue.trim() } : c
+      );
+      saveConversations(next);
+      return next;
+    });
+    setRenamingConversation(null);
+    setRenameValue('');
+  }, [renamingConversation, renameValue]);
+
   const exp = cogStatus?.experience;
   const attn = cogStatus?.attention;
   const refl = cogStatus?.reflection;
@@ -1147,8 +1195,28 @@ export default function ChatLensPage() {
                 ? 'bg-red-500/10 border border-red-500/30 text-red-300 rounded-bl-md'
                 : 'bg-lattice-surface border border-lattice-border text-gray-200 rounded-bl-md hover:border-lattice-border/80 transition-colors'
           )}>
-            <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
-            {timeStr && (
+            {editingMessageId === message.id ? (
+              <div className="space-y-2">
+                <textarea
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  className="w-full bg-black/20 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-neon-cyan resize-none"
+                  rows={3}
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEditMessage(); }
+                    if (e.key === 'Escape') cancelEditMessage();
+                  }}
+                />
+                <div className="flex gap-2">
+                  <button onClick={saveEditMessage} className="px-3 py-1 text-xs bg-neon-cyan/20 text-neon-cyan rounded-lg hover:bg-neon-cyan/30 transition-colors">Save</button>
+                  <button onClick={cancelEditMessage} className="px-3 py-1 text-xs text-gray-400 hover:text-white transition-colors">Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
+            )}
+            {timeStr && editingMessageId !== message.id && (
               <p className="text-[10px] text-gray-500 mt-1 select-none">{timeStr}</p>
             )}
 
@@ -1256,6 +1324,29 @@ export default function ChatLensPage() {
               <Quote className="w-3 h-3" />
             </button>
 
+            {/* User-specific actions: edit & delete */}
+            {message.role === 'user' && (
+              <>
+                <span>·</span>
+                <button
+                  onClick={() => startEditMessage(message)}
+                  className="hover:text-white transition-colors"
+                  title="Edit message"
+                  aria-label="Edit message"
+                >
+                  <Pencil className="w-3 h-3" />
+                </button>
+                <button
+                  onClick={() => deleteMessage(message.id)}
+                  className="hover:text-red-400 transition-colors"
+                  title="Delete message"
+                  aria-label="Delete message"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </>
+            )}
+
             {/* Assistant-specific actions */}
             {message.role === 'assistant' && (
               <>
@@ -1297,7 +1388,7 @@ export default function ChatLensPage() {
         </div>
       </motion.div>
     );
-  }, [feedbackState, feedbackMutation, forgeMutation, regenerateMutation, handleRegenerate, copyToClipboard, formatTime, pinnedMessages, copiedMessageId, togglePin, quoteMessage]);
+  }, [feedbackState, feedbackMutation, forgeMutation, regenerateMutation, handleRegenerate, copyToClipboard, formatTime, pinnedMessages, copiedMessageId, togglePin, quoteMessage, editingMessageId, editContent, startEditMessage, saveEditMessage, cancelEditMessage, deleteMessage]);
 
   // ──────────────────────────────────────────────
   // Loading / Error states
@@ -1443,7 +1534,22 @@ export default function ChatLensPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
-                    <h3 className="font-medium text-white truncate text-sm">{conv.title}</h3>
+                    {renamingConversation === conv.id ? (
+                      <input
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') { e.preventDefault(); saveRenameConversation(); }
+                          if (e.key === 'Escape') { setRenamingConversation(null); setRenameValue(''); }
+                        }}
+                        onBlur={saveRenameConversation}
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex-1 bg-lattice-bg border border-neon-cyan/50 rounded px-2 py-0.5 text-sm text-white focus:outline-none"
+                        autoFocus
+                      />
+                    ) : (
+                      <h3 className="font-medium text-white truncate text-sm">{conv.title}</h3>
+                    )}
                     <span className="text-[10px] text-gray-500 whitespace-nowrap flex-shrink-0">
                       {formatRelativeTime(conv.updatedAt)}
                     </span>
@@ -1454,19 +1560,26 @@ export default function ChatLensPage() {
                   </div>
                 </div>
               </div>
-              {/* Delete button - visible on hover */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  deleteConversationMutation.mutate(conv.id);
-                }}
-                disabled={deleteConversationMutation.isPending}
-                className="absolute top-3 right-3 p-1.5 rounded-md opacity-0 group-hover:opacity-100 hover:bg-red-500/20 text-gray-500 hover:text-red-400 transition-all"
-                title="Delete conversation"
-                aria-label={`Delete conversation: ${conv.title}`}
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
+              {/* Hover actions: rename + delete */}
+              <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                <button
+                  onClick={(e) => { e.stopPropagation(); startRenameConversation(conv); }}
+                  className="p-1.5 rounded-md hover:bg-lattice-bg text-gray-500 hover:text-white transition-colors"
+                  title="Rename conversation"
+                  aria-label={`Rename conversation: ${conv.title}`}
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); deleteConversationMutation.mutate(conv.id); }}
+                  disabled={deleteConversationMutation.isPending}
+                  className="p-1.5 rounded-md hover:bg-red-500/20 text-gray-500 hover:text-red-400 transition-colors"
+                  title="Delete conversation"
+                  aria-label={`Delete conversation: ${conv.title}`}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -1681,7 +1794,7 @@ export default function ChatLensPage() {
                       disabled={deleteConversationMutation.isPending}
                       className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors border-t border-lattice-border disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <RefreshCw className={`w-4 h-4 ${deleteConversationMutation.isPending ? 'animate-spin' : ''}`} />
+                      <Trash2 className="w-4 h-4" />
                       {deleteConversationMutation.isPending ? 'Deleting...' : 'Delete Conversation'}
                     </button>
                   )}
@@ -1936,12 +2049,35 @@ export default function ChatLensPage() {
                     style={{ minHeight: '24px' }}
                     disabled={sendMutation.isPending}
                   />
-                  <button onClick={() => setInput(prev => prev + ' :)')} className="p-2 text-gray-400 hover:text-white transition-colors">
-                    <Smile className="w-5 h-5" />
-                  </button>
-                  <button onClick={() => setInput(prev => prev + ' [Voice Note]')} className="p-2 text-gray-400 hover:text-white transition-colors">
-                    <Mic className="w-5 h-5" />
-                  </button>
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowEmojiPicker(prev => !prev)}
+                      className="p-2 text-gray-400 hover:text-white transition-colors"
+                      title="Add emoji"
+                    >
+                      <Smile className="w-5 h-5" />
+                    </button>
+                    <AnimatePresence>
+                      {showEmojiPicker && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: 8 }}
+                          className="absolute bottom-full right-0 mb-2 p-2 bg-lattice-surface border border-lattice-border rounded-xl shadow-xl z-50 grid grid-cols-8 gap-1 w-72"
+                        >
+                          {['👍','👎','❤️','😂','🔥','💡','✅','❌','🎯','🚀','💪','🤔','👀','⭐','💬','🙏','📌','🎉','👏','💯','⚡','🧠','📝','🔗'].map(emoji => (
+                            <button
+                              key={emoji}
+                              onClick={() => { setInput(prev => prev + emoji); setShowEmojiPicker(false); }}
+                              className="w-8 h-8 flex items-center justify-center text-lg hover:bg-lattice-bg rounded-lg transition-colors"
+                            >
+                              {emoji}
+                            </button>
+                          ))}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 </div>
                 <button
                   onClick={handleSend}

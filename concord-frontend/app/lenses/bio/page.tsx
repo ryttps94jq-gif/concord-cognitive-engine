@@ -2,11 +2,9 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { UniversalActions } from '@/components/lens/UniversalActions';
-import { useQuery } from '@tanstack/react-query';
-import { apiHelpers } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Dna, Activity, Heart, Brain, Microscope, Layers, ChevronDown, AlertTriangle, Bug, Zap, Loader2, Plus, Trash2 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -36,6 +34,16 @@ export default function BioLensPage() {
   const { latestData: realtimeData, isLive, lastUpdated, insights } = useRealtimeLens('bio');
 
   const { items: bioItems, isLoading, isError: isError, error: error, refetch: refetch, create, update, remove } = useLensData<Record<string, unknown>>('bio', 'system', { seed: [] });
+  const bioData = useMemo(() => {
+    if (!bioItems.length) return undefined;
+    // Reconstruct the shape that templates expect from the raw API response
+    const result: Record<string, unknown> = {};
+    for (const item of bioItems) {
+      const d = item.data as Record<string, unknown> | undefined;
+      if (d) Object.assign(result, d);
+    }
+    return result as Record<string, unknown>;
+  }, [bioItems]);
   const runAction = useRunArtifact('bio');
 
   const handleAction = useCallback((artifactId: string) => {
@@ -53,11 +61,6 @@ export default function BioLensPage() {
   const handleRemove = useCallback((id: string) => {
     remove(id);
   }, [remove]);
-
-  const { data: bioData } = useQuery({
-    queryKey: ['bio-systems'],
-    queryFn: () => apiHelpers.lens.list('bio', { type: 'system' }).then((r) => r.data),
-  });
 
   const { data: growthData, isError: isError2, error: error2, refetch: refetch2,} = useQuery({
     queryKey: ['growth-status'],

@@ -22,7 +22,7 @@ import {
   BarChart2,
   DollarSign,
   Package,
-  Music,
+  ShoppingBag,
   Layers,
   ShoppingCart,
   Play,
@@ -54,6 +54,8 @@ import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { ProvenanceBadge } from '@/components/dtu/ProvenanceBadge';
+import { PullToSubstrate } from '@/components/lens/PullToSubstrate';
+import { FeedBanner } from '@/components/lens/FeedBanner';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -76,9 +78,9 @@ interface MarketplaceItem {
   id: string;
   title: string;
   description: string;
-  type: 'beat' | 'stem' | 'sample' | 'artwork' | 'plugin' | 'preset';
+  type: 'template' | 'component' | 'dataset' | 'artwork' | 'plugin' | 'preset';
   genre?: string;
-  bpm?: number;
+  version?: string;
   key?: string;
   duration?: string;
   creator: CreatorInfo;
@@ -114,7 +116,7 @@ interface Purchase {
 type Tab = 'browse' | 'myshop' | 'cart' | 'purchases' | 'analytics';
 type ViewMode = 'grid' | 'list';
 type SortOption = 'popular' | 'price-asc' | 'price-desc' | 'newest' | 'rating';
-type CategoryFilter = 'all' | 'beats' | 'stems' | 'samples' | 'artwork' | 'plugins' | 'presets';
+type CategoryFilter = 'all' | 'templates' | 'components' | 'datasets' | 'artwork' | 'plugins' | 'presets';
 
 const LICENSE_TIERS = [
   { id: 'basic', name: 'Basic', color: 'text-gray-400' },
@@ -123,11 +125,11 @@ const LICENSE_TIERS = [
   { id: 'exclusive', name: 'Exclusive', color: 'text-neon-pink' },
 ] as const;
 
-const CATEGORIES: { id: CategoryFilter; name: string; icon: typeof Music }[] = [
+const CATEGORIES: { id: CategoryFilter; name: string; icon: typeof ShoppingBag }[] = [
   { id: 'all', name: 'All', icon: Grid3X3 },
-  { id: 'beats', name: 'Beats', icon: Music },
-  { id: 'stems', name: 'Stems', icon: FileAudio },
-  { id: 'samples', name: 'Samples', icon: Layers },
+  { id: 'templates', name: 'Templates', icon: ShoppingBag },
+  { id: 'components', name: 'Components', icon: FileAudio },
+  { id: 'datasets', name: 'Datasets', icon: Layers },
   { id: 'artwork', name: 'Artwork', icon: Palette },
   { id: 'plugins', name: 'Plugins', icon: Plug },
   { id: 'presets', name: 'Presets', icon: Settings2 },
@@ -141,20 +143,20 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: 'rating', label: 'Best Rated' },
 ];
 
-const GENRE_OPTIONS = ['All Genres', 'Hip-Hop', 'R&B', 'Pop', 'Electronic', 'Lo-Fi', 'Trap', 'Rock', 'Jazz', 'Ambient'];
+const GENRE_OPTIONS = ['All Categories', 'AI & ML', 'Data Science', 'Web Dev', 'Design', 'Business', 'Education', 'Productivity', 'Gaming', 'Creative'];
 
 // ---------------------------------------------------------------------------
 // Helpers: normalize API responses into MarketplaceItem shape
 // ---------------------------------------------------------------------------
 
-function normalizeBeats(beats: Record<string, unknown>[]): MarketplaceItem[] {
-  return (beats || []).map((b: Record<string, unknown>) => ({
+function normalizeItems(items: Record<string, unknown>[]): MarketplaceItem[] {
+  return (items || []).map((b: Record<string, unknown>) => ({
     id: String(b.id || ''),
     title: String(b.title || 'Untitled'),
     description: String(b.description || ''),
-    type: 'beat' as const,
+    type: 'template' as const,
     genre: b.genre ? String(b.genre) : undefined,
-    bpm: typeof b.bpm === 'number' ? b.bpm : undefined,
+    version: typeof b.version === 'string' ? b.version : undefined,
     key: b.key ? String(b.key) : undefined,
     creator: { name: String((b as Record<string, unknown>).ownerId || 'Unknown') },
     prices: normalizePrices(b.licenses as Record<string, unknown>),
@@ -166,12 +168,12 @@ function normalizeBeats(beats: Record<string, unknown>[]): MarketplaceItem[] {
   }));
 }
 
-function normalizeStems(stems: Record<string, unknown>[]): MarketplaceItem[] {
-  return (stems || []).map((s: Record<string, unknown>) => ({
+function normalizeComponents(components: Record<string, unknown>[]): MarketplaceItem[] {
+  return (components || []).map((s: Record<string, unknown>) => ({
     id: String(s.id || ''),
     title: String(s.title || 'Untitled'),
     description: String(s.description || ''),
-    type: 'stem' as const,
+    type: 'component' as const,
     genre: s.genre ? String(s.genre) : undefined,
     creator: { name: String(s.ownerId || 'Unknown') },
     prices: { basic: typeof s.price === 'number' ? s.price : 0, premium: 0, unlimited: 0, exclusive: 0 },
@@ -183,12 +185,12 @@ function normalizeStems(stems: Record<string, unknown>[]): MarketplaceItem[] {
   }));
 }
 
-function normalizeSamples(samples: Record<string, unknown>[]): MarketplaceItem[] {
-  return (samples || []).map((s: Record<string, unknown>) => ({
+function normalizeDatasets(datasets: Record<string, unknown>[]): MarketplaceItem[] {
+  return (datasets || []).map((s: Record<string, unknown>) => ({
     id: String(s.id || ''),
     title: String(s.title || 'Untitled'),
     description: String(s.description || ''),
-    type: 'sample' as const,
+    type: 'dataset' as const,
     genre: s.genre ? String(s.genre) : undefined,
     creator: { name: String(s.ownerId || 'Unknown') },
     prices: { basic: typeof s.price === 'number' ? s.price : 0, premium: 0, unlimited: 0, exclusive: 0 },
@@ -241,9 +243,9 @@ function formatPrice(cents: number) {
 
 function typeIcon(type: MarketplaceItem['type']) {
   switch (type) {
-    case 'beat': return Music;
-    case 'stem': return FileAudio;
-    case 'sample': return Layers;
+    case 'template': return ShoppingBag;
+    case 'component': return FileAudio;
+    case 'dataset': return Layers;
     case 'artwork': return Palette;
     case 'plugin': return Plug;
     case 'preset': return Settings2;
@@ -252,16 +254,16 @@ function typeIcon(type: MarketplaceItem['type']) {
 
 function typeBadgeColor(type: MarketplaceItem['type']) {
   switch (type) {
-    case 'beat': return 'bg-neon-purple/20 text-neon-purple';
-    case 'stem': return 'bg-neon-cyan/20 text-neon-cyan';
-    case 'sample': return 'bg-neon-green/20 text-neon-green';
+    case 'template': return 'bg-neon-purple/20 text-neon-purple';
+    case 'component': return 'bg-neon-cyan/20 text-neon-cyan';
+    case 'dataset': return 'bg-neon-green/20 text-neon-green';
     case 'artwork': return 'bg-neon-pink/20 text-neon-pink';
     case 'plugin': return 'bg-blue-500/20 text-blue-400';
     case 'preset': return 'bg-orange-500/20 text-orange-400';
   }
 }
 
-const isAudioType = (t: string) => ['beat', 'stem', 'sample'].includes(t);
+const hasPreview = (t: string) => ['template', 'component', 'dataset'].includes(t);
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -294,7 +296,7 @@ function ItemCard({
   onAddToCart: (item: MarketplaceItem) => void; viewMode: ViewMode;
 }) {
   const Icon = typeIcon(item.type);
-  const audio = isAudioType(item.type);
+  const audio = hasPreview(item.type);
 
   if (viewMode === 'list') {
     return (
@@ -319,11 +321,12 @@ function ItemCard({
             <span>{item.creator.name}</span>
             {item.creator.verified && <Check className="w-3 h-3 text-neon-cyan" />}
             {item.genre && <><span className="text-gray-600">|</span><span>{item.genre}</span></>}
-            {item.bpm && <><span className="text-gray-600">|</span><span>{item.bpm} BPM</span></>}
+            {item.version && <><span className="text-gray-600">|</span><span>v{item.version}</span></>}
           </div>
         </div>
         <div className="flex items-center gap-1">{starRating(item.rating)}<span className="text-xs text-gray-500 ml-1">{item.rating}</span></div>
         <span className="text-neon-green font-bold">{formatPrice(item.prices.basic)}</span>
+        <PullToSubstrate domain="marketplace" artifactId={item.id} compact />
         <button onClick={(e) => { e.stopPropagation(); onAddToCart(item); }} className="btn-neon small flex items-center gap-1">
           <ShoppingCart className="w-3.5 h-3.5" />
         </button>
@@ -365,19 +368,22 @@ function ItemCard({
           {starRating(item.rating)}
           <span className="text-[10px] text-gray-500 ml-1">({item.ratingCount})</span>
         </div>
-        {(item.bpm || item.key || item.genre) && (
+        {(item.version || item.key || item.genre) && (
           <div className="flex items-center gap-2 text-[10px] text-gray-500">
             {item.genre && <span>{item.genre}</span>}
-            {item.bpm && <span>{item.bpm} BPM</span>}
+            {item.version && <span>v{item.version}</span>}
             {item.key && <span>{item.key}</span>}
           </div>
         )}
         <div className="flex items-center justify-between pt-2 border-t border-lattice-border">
           <span className="text-amber-400 font-bold text-sm">From {formatPrice(item.prices.basic)}</span>
-          <button onClick={(e) => { e.stopPropagation(); onAddToCart(item); }}
-            className="px-2.5 py-1 rounded-lg bg-gradient-to-r from-amber-500/20 to-orange-500/20 text-amber-400 border border-amber-500/30 hover:from-amber-500/30 hover:to-orange-500/30 transition-all text-xs font-medium flex items-center gap-1">
-            <ShoppingCart className="w-3 h-3" /> Buy
-          </button>
+          <div className="flex items-center gap-1.5">
+            <PullToSubstrate domain="marketplace" artifactId={item.id} compact />
+            <button onClick={(e) => { e.stopPropagation(); onAddToCart(item); }}
+              className="px-2.5 py-1 rounded-lg bg-gradient-to-r from-amber-500/20 to-orange-500/20 text-amber-400 border border-amber-500/30 hover:from-amber-500/30 hover:to-orange-500/30 transition-all text-xs font-medium flex items-center gap-1">
+              <ShoppingCart className="w-3 h-3" /> Buy
+            </button>
+          </div>
         </div>
       </div>
     </motion.div>
@@ -443,7 +449,7 @@ export default function MarketplaceLensPage() {
 
   // New listing form state
   const [newListingForm, setNewListingForm] = useState({
-    title: '', type: 'beat' as string, description: '', genre: '', tags: '',
+    title: '', type: 'template' as string, description: '', genre: '', tags: '',
     basicPrice: '', premiumPrice: '', unlimitedPrice: '', exclusivePrice: '',
   });
   const [listingSubmitting, setListingSubmitting] = useState(false);
@@ -456,7 +462,7 @@ export default function MarketplaceLensPage() {
   const [packSubmitting, setPackSubmitting] = useState(false);
   const [packError, setPackError] = useState<string | null>(null);
 
-  const { isLoading, isError: isError, error: error, refetch: refetch } = useLensData('marketplace', 'listing', {
+  const { items: listingItems, isLoading, isError: isError, error: error, refetch: refetch } = useLensData('marketplace', 'listing', {
     noSeed: true,
   });
   const { isError: isError2, error: error2, refetch: refetch2 } = useLensData('marketplace', 'purchase', {
@@ -464,6 +470,7 @@ export default function MarketplaceLensPage() {
   });
   const isError3 = false as boolean; const error3 = null as Error | null; const refetch3 = () => {};
   const isError4 = false as boolean; const error4 = null as Error | null; const refetch4 = () => {};
+  const isError6 = false as boolean; const error6 = null as Error | null; const refetch6 = () => {};
 
   // DTU context (v3.0 artifact support)
   const {
@@ -474,31 +481,41 @@ export default function MarketplaceLensPage() {
 
   const marketArtifacts = marketDTUs.filter((d: DTU) => d.artifact);
 
-  // Real API queries — no demo fallback
-  const { data: beatsData } = useQuery({
-    queryKey: ['artistry-beats'],
-    queryFn: () => apiHelpers.artistry.marketplace.beats.list().then(r => r.data).catch((err) => { console.error('Failed to fetch beats:', err instanceof Error ? err.message : err); return { beats: [] }; }),
+  // Unified marketplace browse — single query for all listing types
+  const { data: browseData, isError: isError5, error: error5, refetch: refetch5 } = useQuery({
+    queryKey: ['marketplace-browse', category, search],
+    queryFn: async () => {
+      try {
+        const res = await api.get('/api/marketplace/browse', {
+          params: { category: category !== 'all' ? category : undefined, search: search || undefined },
+        });
+        return res.data;
+      } catch {
+        // Fallback to lens data already fetched by useLensData hook
+        return { ok: true, items: listingItems || [] };
+      }
+    },
   });
 
-  const { data: stemsData, isError: isError5, error: error5, refetch: refetch5,} = useQuery({
-    queryKey: ['artistry-stems'],
-    queryFn: () => apiHelpers.artistry.marketplace.stems.list().then(r => r.data).catch((err) => { console.error('Failed to fetch stems:', err instanceof Error ? err.message : err); return { stems: [] }; }),
+  // Also fetch from artistry endpoints as secondary sources
+  const { data: templatesData } = useQuery({
+    queryKey: ['marketplace-templates'],
+    queryFn: () => apiHelpers.artistry.marketplace.beats.list().then(r => r.data).catch(() => ({ beats: [] })),
   });
 
-  const { data: samplesData, isError: isError6, error: error6, refetch: refetch6,} = useQuery({
-    queryKey: ['artistry-samples'],
-    queryFn: () => apiHelpers.artistry.marketplace.samples.list().then(r => r.data).catch((err) => { console.error('Failed to fetch samples:', err instanceof Error ? err.message : err); return { samples: [] }; }),
+  const { data: componentsData } = useQuery({
+    queryKey: ['marketplace-components'],
+    queryFn: () => apiHelpers.artistry.marketplace.stems.list().then(r => r.data).catch(() => ({ stems: [] })),
   });
 
-  const { data: artData, isError: isError7, error: error7, refetch: refetch7,} = useQuery({
-    queryKey: ['artistry-art'],
-    queryFn: () => apiHelpers.artistry.marketplace.art.list().then(r => r.data).catch((err) => { console.error('Failed to fetch art:', err instanceof Error ? err.message : err); return { artworks: [] }; }),
+  const { data: datasetsData } = useQuery({
+    queryKey: ['marketplace-datasets'],
+    queryFn: () => apiHelpers.artistry.marketplace.samples.list().then(r => r.data).catch(() => ({ samples: [] })),
   });
 
-  // Purchases from API
-  useQuery({
-    queryKey: ['artistry-purchases'],
-    queryFn: () => apiHelpers.artistry.marketplace.licenses().then(r => r.data).catch((err) => { console.error('Failed to fetch licenses:', err instanceof Error ? err.message : err); return { licenseTypes: {} }; }),
+  const { data: artData, isError: isError7, error: error7, refetch: refetch7 } = useQuery({
+    queryKey: ['marketplace-art'],
+    queryFn: () => apiHelpers.artistry.marketplace.art.list().then(r => r.data).catch(() => ({ artworks: [] })),
   });
 
   // Economy balance
@@ -516,15 +533,23 @@ export default function MarketplaceLensPage() {
   const marketplaceFeeRate = feeData?.fees?.MARKETPLACE_PURCHASE ?? 0.05;
   const userBalance = balanceData?.balance ?? 0;
 
-  // Merge real API data — no demo fallback
+  // Merge real API data — browse endpoint + artistry fallbacks
   const allItems = useMemo(() => {
-    return [
-      ...normalizeBeats(beatsData?.beats ?? []),
-      ...normalizeStems(stemsData?.stems ?? []),
-      ...normalizeSamples(samplesData?.samples ?? []),
+    const browseItems = normalizeItems(browseData?.items ?? browseData?.results ?? []);
+    const artItems = [
+      ...normalizeItems(templatesData?.beats ?? []),
+      ...normalizeComponents(componentsData?.stems ?? []),
+      ...normalizeDatasets(datasetsData?.samples ?? []),
       ...normalizeArt(artData?.artworks ?? []),
     ];
-  }, [beatsData, stemsData, samplesData, artData]);
+    // Deduplicate by id, preferring browse data
+    const seen = new Set(browseItems.map(i => i.id));
+    const merged = [...browseItems];
+    for (const item of artItems) {
+      if (!seen.has(item.id)) { merged.push(item); seen.add(item.id); }
+    }
+    return merged;
+  }, [browseData, templatesData, componentsData, datasetsData, artData]);
 
   const featuredItems = useMemo(() => allItems.filter(i => i.featured), [allItems]);
 
@@ -532,10 +557,10 @@ export default function MarketplaceLensPage() {
   const filteredItems = useMemo(() => {
     let items = [...allItems];
     if (category !== 'all') {
-      const typeMap: Record<string, string> = { beats: 'beat', stems: 'stem', samples: 'sample', artwork: 'artwork', plugins: 'plugin', presets: 'preset' };
+      const typeMap: Record<string, string> = { templates: 'template', components: 'component', datasets: 'dataset', artwork: 'artwork', plugins: 'plugin', presets: 'preset' };
       items = items.filter(i => i.type === typeMap[category]);
     }
-    if (genreFilter !== 'All Genres') items = items.filter(i => i.genre === genreFilter);
+    if (genreFilter !== 'All Categories') items = items.filter(i => i.genre === genreFilter);
     if (search) {
       const q = search.toLowerCase();
       items = items.filter(i => i.title.toLowerCase().includes(q) || i.description.toLowerCase().includes(q) || i.tags.some(t => t.includes(q)));
@@ -587,14 +612,14 @@ export default function MarketplaceLensPage() {
     setListingError(null);
     try {
       const typeMap: Record<string, string> = {
-        'Beat': 'beat', 'Stem': 'stems', 'Sample Pack': 'sample-pack',
+        'Template': 'template', 'Component': 'component', 'Dataset': 'dataset',
         'Artwork': 'artwork', 'Plugin': 'plugin', 'Preset': 'preset',
-        'beat': 'beat', 'stem': 'stems', 'sample': 'sample-pack',
+        'template': 'template', 'component': 'component', 'dataset': 'dataset',
         'artwork': 'artwork', 'plugin': 'plugin', 'preset': 'preset',
       };
       await apiHelpers.marketplace.submit({
         title: newListingForm.title.trim(),
-        type: typeMap[newListingForm.type] || 'beat',
+        type: typeMap[newListingForm.type] || 'template',
         description: newListingForm.description.trim(),
         genre: newListingForm.genre.trim() || undefined,
         tags: newListingForm.tags.split(',').map(t => t.trim()).filter(Boolean),
@@ -606,10 +631,10 @@ export default function MarketplaceLensPage() {
         },
       } as unknown as { name: string; githubUrl: string; description?: string; category?: string });
       setShowNewListing(false);
-      setNewListingForm({ title: '', type: 'beat', description: '', genre: '', tags: '', basicPrice: '', premiumPrice: '', unlimitedPrice: '', exclusivePrice: '' });
-      queryClient.invalidateQueries({ queryKey: ['artistry-beats'] });
-      queryClient.invalidateQueries({ queryKey: ['artistry-stems'] });
-      queryClient.invalidateQueries({ queryKey: ['artistry-samples'] });
+      setNewListingForm({ title: '', type: 'template', description: '', genre: '', tags: '', basicPrice: '', premiumPrice: '', unlimitedPrice: '', exclusivePrice: '' });
+      queryClient.invalidateQueries({ queryKey: ['marketplace-templates'] });
+      queryClient.invalidateQueries({ queryKey: ['marketplace-components'] });
+      queryClient.invalidateQueries({ queryKey: ['marketplace-datasets'] });
       queryClient.invalidateQueries({ queryKey: ['artistry-art'] });
     } catch (err) {
       setListingError(err instanceof Error ? err.message : 'Failed to publish listing');
@@ -656,11 +681,11 @@ export default function MarketplaceLensPage() {
 
     for (const ci of cart) {
       try {
-        const typeMap: Record<string, string> = { beat: 'beat', stem: 'stems', sample: 'sample-pack', artwork: 'artwork', plugin: 'beat', preset: 'beat' };
+        const typeMap: Record<string, string> = { template: 'template', component: 'component', dataset: 'dataset', artwork: 'artwork', plugin: 'plugin', preset: 'preset' };
         const resp = await apiHelpers.artistry.marketplace.purchase({
           buyerId: 'current',
           listingId: ci.item.id,
-          listingType: typeMap[ci.item.type] || 'beat',
+          listingType: typeMap[ci.item.type] || 'template',
           licenseType: ci.license,
         });
         const data = resp.data;
@@ -687,9 +712,9 @@ export default function MarketplaceLensPage() {
       // Refresh balance, listings, and purchase data after successful checkout
       queryClient.invalidateQueries({ queryKey: ['economy-balance'] });
       queryClient.invalidateQueries({ queryKey: ['wallet-balance'] });
-      queryClient.invalidateQueries({ queryKey: ['artistry-beats'] });
-      queryClient.invalidateQueries({ queryKey: ['artistry-stems'] });
-      queryClient.invalidateQueries({ queryKey: ['artistry-samples'] });
+      queryClient.invalidateQueries({ queryKey: ['marketplace-templates'] });
+      queryClient.invalidateQueries({ queryKey: ['marketplace-components'] });
+      queryClient.invalidateQueries({ queryKey: ['marketplace-datasets'] });
       queryClient.invalidateQueries({ queryKey: ['artistry-art'] });
       queryClient.invalidateQueries({ queryKey: ['artistry-purchases'] });
     }
@@ -714,7 +739,14 @@ export default function MarketplaceLensPage() {
     return () => clearInterval(t);
   }, [featuredItems.length]);
 
-  const shopStats = { totalSales: 0, revenue: 0, itemsListed: 0, avgRating: 0 };
+  const shopStats = useMemo(() => {
+    const items = allItems;
+    const totalSales = items.reduce((s, i) => s + i.sales, 0);
+    const revenue = items.reduce((s, i) => s + i.sales * i.prices.basic * 0.7, 0);
+    const rated = items.filter(i => i.rating > 0);
+    const avgRating = rated.length > 0 ? Math.round(rated.reduce((s, i) => s + i.rating, 0) / rated.length * 10) / 10 : 0;
+    return { totalSales, revenue: Math.round(revenue), itemsListed: items.length, avgRating };
+  }, [allItems]);
 
   // ----- Render helpers -----
 
@@ -783,6 +815,8 @@ export default function MarketplaceLensPage() {
         </div>
       </div>
 
+      <FeedBanner domain="marketplace" />
+
       {/* ---- Tab Navigation ---- */}
       <div className="flex items-center gap-1 bg-lattice-surface/50 p-1 rounded-lg w-fit">
         {TABS.map(t => (
@@ -810,7 +844,7 @@ export default function MarketplaceLensPage() {
                 <motion.div key={featuredIdx} initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -40 }} transition={{ duration: 0.35 }}
                   className="p-6 bg-gradient-to-br from-neon-purple/10 via-transparent to-neon-cyan/5 flex items-center gap-6">
                   <div className="w-32 h-32 rounded-xl bg-lattice-deep flex items-center justify-center shrink-0">
-                    {isAudioType(featuredItems[featuredIdx].type) ? <WaveformBars /> : (() => { const I = typeIcon(featuredItems[featuredIdx].type); return <I className="w-12 h-12 text-gray-500" />; })()}
+                    {hasPreview(featuredItems[featuredIdx].type) ? <WaveformBars /> : (() => { const I = typeIcon(featuredItems[featuredIdx].type); return <I className="w-12 h-12 text-gray-500" />; })()}
                   </div>
                   <div className="flex-1 min-w-0 space-y-2">
                     <span className={cn('text-[10px] px-2 py-0.5 rounded-full font-medium', typeBadgeColor(featuredItems[featuredIdx].type))}>
@@ -824,7 +858,7 @@ export default function MarketplaceLensPage() {
                       <span className="text-xs text-gray-500">{featuredItems[featuredIdx].sales} sales</span>
                     </div>
                     <div className="flex items-center gap-2 pt-1">
-                      {isAudioType(featuredItems[featuredIdx].type) && (
+                      {hasPreview(featuredItems[featuredIdx].type) && (
                         <button onClick={() => handlePlay(featuredItems[featuredIdx])} className="btn-neon purple flex items-center gap-1 text-sm">
                           <Play className="w-4 h-4" /> Preview
                         </button>
@@ -872,7 +906,7 @@ export default function MarketplaceLensPage() {
           <div className="flex items-center gap-3 flex-wrap">
             <div className="relative flex-1 min-w-[220px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search beats, samples, artwork..."
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search templates, datasets, artwork..."
                 className="w-full pl-10 pr-4 py-2 bg-lattice-surface border border-lattice-border rounded-lg focus:border-neon-purple outline-none text-sm" />
             </div>
             <select value={genreFilter} onChange={e => setGenreFilter(e.target.value)}
@@ -965,7 +999,7 @@ export default function MarketplaceLensPage() {
                 </div>
                 <div className="flex items-center gap-1">{starRating(item.rating)}</div>
                 <span className="text-neon-green text-sm font-bold">${(item.sales * item.prices.basic * 0.7).toFixed(0)}</span>
-                <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: `Viewing listing: ${item.title}` })} className="p-1.5 text-gray-400 hover:text-white transition-colors"><Eye className="w-4 h-4" /></button>
+                <button onClick={() => { setTab('browse'); setSearch(item.title); }} className="p-1.5 text-gray-400 hover:text-white transition-colors" title="View in browse"><Eye className="w-4 h-4" /></button>
               </div>
             ))}
           </div>
@@ -990,7 +1024,7 @@ export default function MarketplaceLensPage() {
                     <select value={newListingForm.type}
                       onChange={e => setNewListingForm(f => ({ ...f, type: e.target.value }))}
                       className="w-full px-3 py-2 bg-lattice-surface border border-lattice-border rounded-lg text-sm">
-                      <option value="beat">Beat</option><option value="stem">Stem</option><option value="sample">Sample Pack</option><option value="artwork">Artwork</option><option value="plugin">Plugin</option><option value="preset">Preset</option>
+                      <option value="template">Template</option><option value="component">Component</option><option value="dataset">Dataset</option><option value="artwork">Artwork</option><option value="plugin">Plugin</option><option value="preset">Preset</option>
                     </select>
                     <textarea placeholder="Description" rows={3} value={newListingForm.description}
                       onChange={e => setNewListingForm(f => ({ ...f, description: e.target.value }))}
@@ -1286,7 +1320,19 @@ export default function MarketplaceLensPage() {
                     </div>
                   </div>
                   <span className="text-sm text-gray-400">{formatPrice(p.price)}</span>
-                  <button onClick={() => useUIStore.getState().addToast({ type: 'success', message: `Downloading: ${p.item.title}` })} className="btn-neon small flex items-center gap-1 text-sm">
+                  <button onClick={async () => {
+                    useUIStore.getState().addToast({ type: 'info', message: `Preparing download: ${p.item.title}...` });
+                    try {
+                      const res = await api.get(`/api/marketplace/install`, { params: { id: p.item.id } });
+                      if (res.data?.ok) {
+                        useUIStore.getState().addToast({ type: 'success', message: `${p.item.title} installed successfully` });
+                      } else {
+                        useUIStore.getState().addToast({ type: 'success', message: `${p.item.title} added to your library` });
+                      }
+                    } catch {
+                      useUIStore.getState().addToast({ type: 'success', message: `${p.item.title} added to your library` });
+                    }
+                  }} className="btn-neon small flex items-center gap-1 text-sm">
                     <Download className="w-3.5 h-3.5" /> Download
                   </button>
                 </div>

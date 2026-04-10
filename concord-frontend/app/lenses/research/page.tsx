@@ -18,6 +18,8 @@ import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
+import { PullToSubstrate } from '@/components/lens/PullToSubstrate';
+import { FeedBanner } from '@/components/lens/FeedBanner';
 
 interface DTUResult {
   id: string;
@@ -235,6 +237,8 @@ export default function ResearchLensPage() {
       </div>
       </header>
 
+      <FeedBanner domain="research" />
+
       {/* Quick Stats Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
@@ -451,7 +455,10 @@ export default function ResearchLensPage() {
                       ))}
                     </div>
                   </div>
-                  <ArrowRight className="w-4 h-4 text-gray-600 flex-shrink-0 mt-1" />
+                  <div className="flex items-center gap-1 flex-shrink-0 mt-1">
+                    <PullToSubstrate domain="research" artifactId={dtu.id} compact />
+                    <ArrowRight className="w-4 h-4 text-gray-600" />
+                  </div>
                 </div>
               </motion.button>
             ))

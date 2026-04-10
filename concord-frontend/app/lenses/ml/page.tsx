@@ -2,7 +2,7 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { UniversalActions } from '@/components/lens/UniversalActions';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { apiHelpers } from '@/lib/api/client';
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -155,11 +155,7 @@ export default function MLLensPage() {
   const [playgroundModel, setPlaygroundModel] = useState<string>('');
 
   // Queries
-  const { data: metricsData } = useQuery({
-    queryKey: ['ml-metrics'],
-    queryFn: () => apiHelpers.lens.list('ml', { type: 'metrics' }).then(r => r.data),
-    refetchInterval: 5000
-  });
+  const { items: metricsItems } = useLensData('ml', 'metrics', { noSeed: true });
 
   // Mutations
   const runInference = useMutation({
@@ -246,7 +242,7 @@ export default function MLLensPage() {
   // Data - sourced from persistent backend
   const datasets: Dataset[] = datasetItems.map(i => ({ ...(i.data as unknown as Dataset), id: i.id }));
   const deployments: Deployment[] = deploymentItems.map(i => ({ ...(i.data as unknown as Deployment), id: i.id }));
-  const metrics = metricsData || { gpuUsage: 0, memoryUsage: 0, totalInferences: 0, avgLatency: 0 };
+  const metrics = metricsItems?.[0]?.data || { gpuUsage: 0, memoryUsage: 0, totalInferences: 0, avgLatency: 0 };
 
   // Filtered data
   const filteredModels = useMemo(() => {

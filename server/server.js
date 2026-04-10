@@ -223,7 +223,7 @@ import { createAtlasDtu, getAtlasDtu, searchAtlasDtus, promoteAtlasDtu, addAtlas
 import { runAntiGamingScan, getAntiGamingMetrics } from "./emergent/atlas-antigaming.js";
 import { runAutogenV2, getAutogenRun, acceptAutogenOutput, mergeAutogenOutput, propagateConfidence, getAutogenV2Metrics } from "./emergent/atlas-autogen-v2.js";
 import { councilResolve, getCouncilQueue, councilRequestSources, councilMerge, getCouncilActions, getCouncilMetrics } from "./emergent/atlas-council.js";
-import { upsertProfile, getProfile, listProfiles, followUser, unfollowUser, getFollowers, getFollowing, publishDtu, unpublishDtu, recordCitation, getCitedBy, getFeed, computeTrending, discoverUsers, getSocialMetrics } from "./emergent/social-layer.js";
+import { upsertProfile, getProfile, listProfiles, followUser, unfollowUser, getFollowers, getFollowing, publishDtu, unpublishDtu, recordCitation, getCitedBy, getFeed, computeTrending, discoverUsers, getSocialMetrics, createPost as socialCreatePost, getPost as socialGetPost, deletePost as socialDeletePost, getUserPosts as socialGetUserPosts, addReaction as socialAddReaction, getReactions as socialGetReactions, addComment as socialAddComment, deleteComment as socialDeleteComment, getComments as socialGetComments, sharePost as socialSharePost, getShares as socialGetShares, bookmarkPost as socialBookmarkPost, getUserBookmarks as socialGetUserBookmarks, getForYouFeed, getFollowingFeed, getExploreFeed, sendMessage as socialSendMessage, getConversations as socialGetConversations, getMessages as socialGetMessages, markMessagesRead as socialMarkMessagesRead, getActiveStories, viewStory as socialViewStory, votePoll as socialVotePoll, getPollResults as socialGetPollResults, getNotifications as socialGetNotifications, markNotificationRead as socialMarkNotificationRead, markAllNotificationsRead as socialMarkAllNotificationsRead, getUnreadCount as socialGetUnreadCount, deleteNotification as socialDeleteNotification } from "./emergent/social-layer.js";
 import { createWorkspace as collabCreateWorkspace, getWorkspace as collabGetWorkspace, listWorkspaces as collabListWorkspaces, addWorkspaceMember as collabAddWorkspaceMember, removeWorkspaceMember as collabRemoveWorkspaceMember, addDtuToWorkspace as collabAddDtuToWorkspace, addComment as collabAddComment, getComments as collabGetComments, editComment as collabEditComment, resolveComment as collabResolveComment, proposeRevision, getRevisionProposals, voteOnRevision, applyRevision, startEditSession, recordEdit, endEditSession, getCollabMetrics } from "./emergent/collaboration.js";
 import { createOrgWorkspace, getOrgWorkspace, assignRole, revokeRole, getUserRole, getOrgMembers, checkPermission, getUserPermissions, assignOrgLens, getOrgLenses, exportAuditLog, getRbacMetrics } from "./emergent/rbac.js";
 import { takeSnapshot as takeAnalyticsSnapshot, getPersonalAnalytics, getDtuGrowthTrends, getCitationAnalytics, getMarketplaceAnalytics as getMarketAnalytics, getKnowledgeDensity, getAtlasDomainAnalytics, getDashboardSummary } from "./emergent/analytics-dashboard.js";
@@ -6448,6 +6448,62 @@ try {
   structuredLog("info", "state_fields_initialized", { maps: 30, arrays: 14, objects: 7 });
 }
 
+// Auto-migrate DTU ownership (runs once, idempotent)
+{
+  let migrated = 0;
+  for (const [id, dtu] of STATE.dtus) {
+    if (dtu.ownerId) continue; // already migrated
+    if (dtu.creatorType === "user" || dtu.creatorType === "user_uploaded_text" || dtu.source === "local") {
+      dtu.ownerId = "founder";
+      dtu.visibility = dtu.visibility || "private";
+    } else {
+      dtu.ownerId = "system";
+      dtu.visibility = "internal";
+    }
+    if (!dtu.creatorType) {
+      dtu.creatorType = dtu.ownerId === "system" ? "system" : "user";
+    }
+    migrated++;
+  }
+  if (migrated > 0) {
+    structuredLog("info", "dtu_ownership_migration", { migrated, total: STATE.dtus.size });
+    saveStateDebounced();
+  }
+}
+
+// Seed default feed sources (idempotent — only adds if STATE.feeds is empty)
+{
+  if (!STATE.feeds) STATE.feeds = new Map();
+  if (STATE.feeds.size === 0) {
+    const seedFeeds = [
+      // News / General
+      { id: "feed_seed_reuters", url: "https://feeds.reuters.com/reuters/topNews", domain: "news", name: "Reuters Top News", pollIntervalMs: 1800000 },
+      { id: "feed_seed_ap", url: "https://rsshub.app/apnews/topics/apf-topnews", domain: "news", name: "AP News", pollIntervalMs: 1800000 },
+      { id: "feed_seed_bbc", url: "https://feeds.bbci.co.uk/news/rss.xml", domain: "news", name: "BBC News", pollIntervalMs: 1800000 },
+      // Technology
+      { id: "feed_seed_hn", url: "https://hnrss.org/frontpage", domain: "code", name: "Hacker News", pollIntervalMs: 3600000 },
+      { id: "feed_seed_arxiv_ai", url: "https://rss.arxiv.org/rss/cs.AI", domain: "research", name: "arXiv AI", pollIntervalMs: 7200000 },
+      { id: "feed_seed_techcrunch", url: "https://techcrunch.com/feed/", domain: "news", name: "TechCrunch", pollIntervalMs: 3600000 },
+      // Science / Research
+      { id: "feed_seed_nature", url: "https://www.nature.com/nature.rss", domain: "research", name: "Nature", pollIntervalMs: 14400000 },
+      { id: "feed_seed_arxiv_ml", url: "https://rss.arxiv.org/rss/cs.LG", domain: "ml", name: "arXiv Machine Learning", pollIntervalMs: 7200000 },
+      // Creative / Culture
+      { id: "feed_seed_creativity", url: "https://www.creativebloq.com/feed", domain: "creative", name: "Creative Bloq", pollIntervalMs: 7200000 },
+      // Health
+      { id: "feed_seed_health", url: "https://tools.cdc.gov/api/v2/resources/media/rss", domain: "healthcare", name: "CDC Health", pollIntervalMs: 14400000 },
+      // Finance / Economics
+      { id: "feed_seed_economics", url: "https://feeds.finance.yahoo.com/rss/2.0/headline?s=^GSPC&region=US&lang=en-US", domain: "eco", name: "Yahoo Finance", pollIntervalMs: 3600000 },
+      // Philosophy / Ethics
+      { id: "feed_seed_philosophy", url: "https://dailynous.com/feed/", domain: "philosophy", name: "Daily Nous (Philosophy)", pollIntervalMs: 14400000 },
+    ];
+    for (const sf of seedFeeds) {
+      STATE.feeds.set(sf.id, { ...sf, active: true, lastFetchedAt: null, itemCount: 0, createdBy: "system", createdAt: nowISO() });
+    }
+    structuredLog("info", "seed_feeds_registered", { count: seedFeeds.length });
+    saveStateDebounced();
+  }
+}
+
 const SEED_INFO = { ok:false, loaded:false, count:0, path:"./dtus.js", error:null, source:"none" };
 
 async function tryLoadSeedDTUs() {
@@ -9836,6 +9892,10 @@ function computeAdaptiveThreshold() {
 const _SYSTEM_DTU_SOURCES = new Set([
   "repair_cortex", "concord_brain_index", "system_guardian",
   "guardian_monitor", "lattice_audit", "self_repair",
+  "system", "concord-mesh", "system.analogize", "auto",
+  "autogen", "system_tick", "heartbeat", "system_repair",
+  "concord_system", "background", "internal", "migration",
+  "embedding_backfill", "consolidation", "evolution",
 ]);
 
 /** All DTUs (including system/internal). Use for admin endpoints only. */
@@ -10536,6 +10596,9 @@ async function embeddingSearch(query, { limit = 10, minScore = 0.3 } = {}) {
   const results = topResults.map(({ dtuId, score }) => {
     const dtu = STATE.dtus.get(dtuId) || STATE.shadowDtus?.get(dtuId);
     if (!dtu) return null;
+    // Filter out system/internal DTUs from user-facing search results
+    if (_SYSTEM_DTU_SOURCES.has(dtu.source) || _SYSTEM_DTU_SOURCES.has(dtu.creatorType) ||
+        dtu.scope === "system" || dtu.visibility === "internal") return null;
     // Shadow results get 0.6× score penalty (subconscious, not canonical)
     const effectiveScore = isShadowDTU(dtu) ? score * 0.6 : score;
     return { ...dtu, _semanticScore: effectiveScore, _isShadow: isShadowDTU(dtu) };
@@ -12780,7 +12843,7 @@ async function buildBrainContext(query, lens = null, maxDTUs = 10, sessionId = n
     }
   }
 
-  const all = dtusArray();
+  const all = userVisibleDTUs();
   let existingContext = "";
 
   if (all.length) {
@@ -15873,7 +15936,15 @@ register("dtu", "create", async (ctx, input) => {
     lineage,
     source,
     meta,
-    ownerId: ctx?.actor?.id || ctx?.actor?.odId || null,
+    ownerId: ctx?.actor?.userId || ctx?.actor?.id || input.authorId || null,
+    visibility: input.visibility || "private",
+    consent: {
+      publishToMarketplace: false,
+      shareToFeed: false,
+      allowCitations: false,
+      allowAiTraining: false,
+    },
+    creatorType: input.creatorType || (ctx?.actor?.userId && ctx.actor.userId !== "anon" ? "user" : "system"),
     core: {
       definitions: Array.isArray(coreIn.definitions) ? coreIn.definitions : [],
       invariants: Array.isArray(coreIn.invariants) ? coreIn.invariants : [],
@@ -16077,8 +16148,14 @@ register("dtu", "list", (ctx, input) => {
   } else if (scopeFilter === "local") {
     items = items.filter(d => d.scope !== "global" && (!userId || !d.ownerId || d.ownerId === userId));
   } else if (userId) {
-    // Default view: show user's own local DTUs + all global DTUs
-    items = items.filter(d => d.scope === "global" || !d.ownerId || d.ownerId === userId);
+    // Default view: show user's own local DTUs + all global DTUs + published/public DTUs
+    items = items.filter(d => {
+      if (d.scope === "global") return true;
+      if (!d.ownerId || d.ownerId === userId) return true;
+      const vis = d.meta?.visibility || d.visibility;
+      if (vis === "published" || vis === "public") return true;
+      return false;
+    });
   }
 
   items = items.sort((a,b)=> (b.createdAt||"").localeCompare(a.createdAt||""));
@@ -23143,6 +23220,9 @@ function startHeartbeat() {
     // process crawl queue once (Local scope only — ingest is local activity)
     await runMacro("ingest","processQueueOnce", {}, ctx).catch((err) => { console.error('[system] Heartbeat ingest queue error:', err); });
 
+    // Poll registered lens feeds for new items (each feed checks its own interval internally)
+    try { await pollFeeds(); } catch (e) { structuredLog("debug", "feed_poll_heartbeat_error", { error: e?.message }); }
+
     // ── Cognitive pipeline tasks: dispatch to worker thread ──
     // The 4 pipeline tasks (autogen, dream, evolution, synthesize) run off-thread.
     // This is the core of the worker migration: HTTP never blocks during pipeline computation.
@@ -23773,6 +23853,56 @@ if (db) {
 // ===== PASSWORD RESET / EMAIL VERIFICATION (uses AuthDB, not SQLite db) =====
 import createPasswordResetRouter from "./routes/password-reset.js";
 app.use("/api/auth", createPasswordResetRouter({ AuthDB, hashPassword, authRateLimiter }));
+
+// ===== PREVIOUSLY UNIMPORTED ROUTE MODULES ========================================
+// These route files existed but were never imported — endpoints were 404.
+// Now wired up. Each uses the same deps pattern as existing routes.
+
+import createCDNRouter from "./routes/cdn.js";
+try { app.use("/api/cdn", createCDNRouter({ cdnManager: null, urlSigner: null, STATE })); } catch (e) { structuredLog("warn", "cdn_routes_skip", { error: e.message }); }
+
+import createEmergentFeaturesRouter from "./routes/emergent-features.js";
+try { app.use("/api/emergent-features", createEmergentFeaturesRouter({ STATE, requireAuth })); } catch (e) { structuredLog("warn", "emergent_features_routes_skip", { error: e.message }); }
+
+import createFrontierRoutesPart1 from "./routes/frontier-part1.js";
+import createFrontierRoutesPart2 from "./routes/frontier-part2.js";
+import createFrontierRoutesPart3 from "./routes/frontier-part3.js";
+import createFrontierRoutesPart4 from "./routes/frontier-part4.js";
+try {
+  app.use("/api", createFrontierRoutesPart1({ requireAuth }));
+  app.use("/api", createFrontierRoutesPart2({ requireAuth }));
+  app.use("/api", createFrontierRoutesPart3({ requireAuth }));
+  app.use("/api", createFrontierRoutesPart4({ requireAuth }));
+} catch (e) { structuredLog("warn", "frontier_routes_skip", { error: e.message }); }
+
+import registerHelpersExtendedRoutes from "./routes/helpers-extended.js";
+try { registerHelpersExtendedRoutes(app, { db, requireAuth, STATE, structuredLog }); } catch (e) { structuredLog("warn", "helpers_extended_routes_skip", { error: e.message }); }
+
+import createMediaRouter from "./routes/media.js";
+try { app.use("/api/media", createMediaRouter({ STATE })); } catch (e) { structuredLog("warn", "media_routes_skip", { error: e.message }); }
+
+import { createModerationRouter } from "./routes/moderation.js";
+try { app.use("/api/moderation", createModerationRouter({ db, requireAuth, requireRole, structuredLog })); } catch (e) { structuredLog("warn", "moderation_routes_skip", { error: e.message }); }
+
+import createSocialGroupRoutes from "./routes/social-groups.js";
+try { app.use("/api/social", createSocialGroupRoutes({ db, requireAuth })); } catch (e) { structuredLog("warn", "social_groups_routes_skip", { error: e.message }); }
+
+import createFeedRoutes from "./routes/feeds.js";
+try { app.use("/api/feeds", createFeedRoutes({ requireAuth })); } catch (e) { structuredLog("warn", "feed_routes_skip", { error: e.message }); }
+
+import registerCanonicalRoutes from "./routes/canonical.js";
+try { registerCanonicalRoutes(app, { db, requireAuth, STATE, structuredLog }); } catch (e) { structuredLog("warn", "canonical_routes_skip", { error: e.message }); }
+
+import createAttributionRoutes from "./routes/attribution.js";
+try { app.use("/api/attribution", createAttributionRoutes({ requireAuth })); } catch (e) { structuredLog("warn", "attribution_routes_skip", { error: e.message }); }
+
+import createCityRoutes from "./routes/city.js";
+try { app.use("/api/city", createCityRoutes({ requireAuth })); } catch (e) { structuredLog("warn", "city_routes_skip", { error: e.message }); }
+
+structuredLog("info", "previously_missing_routes_registered", {
+  count: 15,
+  routes: ["cdn","emergent-features","frontier-part1","frontier-part2","frontier-part3","frontier-part4","helpers-extended","media","moderation","social-groups","feeds","canonical","attribution","city"],
+});
 
 // ===== SPECIES API =====
 app.get("/api/species/registry", (_req, res) => res.json({ ok: true, registry: getSpeciesRegistry() }));
@@ -27183,6 +27313,23 @@ register("lens", "list", (ctx, input={}) => {
   }
   if (tags && tags.length) artifacts = artifacts.filter(a => tags.some(t => (a.meta?.tags||[]).includes(t)));
   if (status) artifacts = artifacts.filter(a => a.meta?.status === status);
+
+  // User sovereignty: filter by ownership for non-social domains
+  const SOCIAL_DOMAINS = new Set(["forum", "feed", "marketplace", "collab", "thread", "vote", "alliance", "global", "news", "questmarket"]);
+  if (!SOCIAL_DOMAINS.has(domain)) {
+    const currentUserId = ctx.actor?.userId || "anon";
+    artifacts = artifacts.filter(a => {
+      // System/anonymous artifacts are always visible (backward compat)
+      if (!a.ownerId || a.ownerId === "anon") return true;
+      // User's own artifacts are always visible
+      if (a.ownerId === currentUserId) return true;
+      // Published or public artifacts are visible to everyone
+      const vis = a.meta?.visibility;
+      if (vis === "published" || vis === "public") return true;
+      return false;
+    });
+  }
+
   artifacts.sort((a,b) => (b.updatedAt||b.createdAt||"").localeCompare(a.updatedAt||a.createdAt||""));
   const total = artifacts.length;
   artifacts = artifacts.slice(offset, offset + limit);
@@ -27229,7 +27376,7 @@ register("lens", "create", (ctx, input={}) => {
     ownerId: ctx.actor?.userId || "anon",
     title: title || `New ${type}`,
     data: enrichedData,
-    meta: { tags: meta.tags || [], status: meta.status || "draft", visibility: meta.visibility || "private", scope: meta.scope || "local", ...meta },
+    meta: { tags: meta.tags || [], status: meta.status || "draft", visibility: meta.visibility || "private", scope: meta.scope || "local", ...meta, consent: meta.consent || { publishToMarketplace: false, shareToFeed: false, allowCitations: false, allowAiTraining: false } },
     createdAt: nowISO(),
     updatedAt: nowISO(),
     version: 1,
@@ -27289,7 +27436,25 @@ register("lens", "run", async (ctx, input={}) => {
   if (!artifact) return { ok: false, error: "not found" };
   // Domain-specific action handlers can be registered via lens.registerAction
   const handler = LENS_ACTIONS.get(`${artifact.domain}.${action}`);
-  if (!handler) return { ok: false, error: `no handler for ${artifact.domain}.${action}` };
+  if (!handler) {
+    // AI fallback (last resort): unregistered actions route to utility brain.
+    // This should fire rarely now that aliases + common actions cover most cases.
+    structuredLog("debug", "lens_action_ai_fallback", { domain: artifact.domain, action, note: "Register a real handler to avoid utility brain load" });
+    try {
+      const aiResult = await utilityCall(action, artifact.domain, {
+        artifactTitle: artifact?.title,
+        artifactType: artifact?.type,
+        artifactData: artifact?.data,
+        artifactMeta: artifact?.meta,
+        ...params,
+      });
+      _lensEmitDTU(ctx, artifact.domain, action, artifact.type, artifact, { actionResult: aiResult, source: "ai-catchall" });
+      return { ok: true, result: { ok: aiResult.ok, output: aiResult.content || aiResult.error, source: "utility-brain", model: aiResult.model, action, domain: artifact.domain } };
+    } catch (e) {
+      logger.debug("server", "ai-catchall-error", { domain: artifact.domain, action, error: String(e?.message || e) });
+      return { ok: false, error: `${artifact.domain}.${action} encountered an error`, domain: artifact.domain, action };
+    }
+  }
   const result = await handler(ctx, artifact, params);
   _lensEmitDTU(ctx, artifact.domain, action, artifact.type, artifact, { actionResult: result });
   // Run cross-lens pipelines (fire-and-forget)
@@ -28294,6 +28459,31 @@ app.get("/api/lens/stats", (req, res) => {
   res.json({ ok: true, domains, totalArtifacts: STATE.lensArtifacts.size, domainCount: STATE.lensDomainIndex.size });
 });
 
+// Domain-level action runner (no artifact ID required) — used by frontend runDomain()
+// Must be defined before wildcard :domain routes so Express doesn't match "run" as :domain
+app.post("/api/lens/run", async (req, res) => {
+  try {
+    const { domain, action, ...rest } = req.body || {};
+    if (!domain || !action) return res.status(400).json({ ok: false, error: "domain and action required" });
+    const ctx = makeCtx(req);
+    // Check if there's a registered handler for this domain action
+    const handler = LENS_ACTIONS.get(`${domain}.${action}`);
+    if (handler) {
+      // Run the handler with a virtual artifact (no specific artifact for domain-level actions)
+      const virtualArtifact = { id: null, domain, type: "domain_action", data: rest, meta: {} };
+      const result = await handler(ctx, virtualArtifact, rest);
+      return res.json({ ok: true, result });
+    }
+    // AI-powered catch-all: route unregistered domain actions to utility brain
+    const aiResult = await utilityCall(action, domain, rest);
+    return res.json({ ok: true, result: { ok: aiResult.ok, output: aiResult.content || aiResult.error, source: "utility-brain", model: aiResult.model, action, domain } });
+  } catch (e) {
+    const msg = String(e?.message || e);
+    const status = msg.startsWith("forbidden") ? 403 : 500;
+    res.status(status).json({ ok: false, error: msg });
+  }
+});
+
 // REST routes for generic lens artifacts
 // All routes wrapped in try/catch to prevent hanging requests on errors
 app.get("/api/lens/:domain", async (req, res) => {
@@ -28345,6 +28535,24 @@ app.delete("/api/lens/:domain/:id", async (req, res) => {
     const msg = String(e?.message || e);
     const status = msg.startsWith("forbidden") ? 403 : 500;
     res.status(status).json({ ok: false, error: msg });
+  }
+});
+app.post("/api/lens/:domain/:id/publish", async (req, res) => {
+  try {
+    const ctx = makeCtx(req);
+    const artifact = STATE.lensArtifacts.get(req.params.id);
+    if (!artifact) return res.status(404).json({ ok: false, error: "not found" });
+    if (artifact.ownerId && artifact.ownerId !== "anon" && artifact.ownerId !== ctx.actor?.userId) {
+      return res.status(403).json({ ok: false, error: "not your artifact" });
+    }
+    artifact.meta = artifact.meta || {};
+    artifact.meta.visibility = "published";
+    artifact.meta.publishedAt = new Date().toISOString();
+    artifact.updatedAt = new Date().toISOString();
+    saveStateDebounced();
+    res.json({ ok: true, artifact });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
 });
 app.post("/api/lens/:domain/:id/run", async (req, res) => {
@@ -30320,22 +30528,24 @@ domainModules.forEach(mod => mod(registerLensAction));
 // have custom handlers for these actions keep them — we only fill gaps.
 const UNIVERSAL_ACTIONS = ["analyze", "generate", "suggest"];
 const ALL_LENS_DOMAINS = [
-  "accounting","admin","affect","agents","agriculture","all","alliance",
-  "anon","app-maker","ar","art","attention","audit","aviation","billing",
-  "bio","board","calendar","chat","chem","code","collab","command-center",
-  "commonsense","council","creative","cri","crypto","custom","daily",
-  "database","debug","docs","eco","education","entity","environment",
-  "ethics","events","experience","export","feed","finance","fitness",
-  "food","fork","forum","fractal","game","global","goals","government",
-  "graph","grounding","healthcare","household","hypothesis","import",
+  "accounting","admin","affect","agents","agriculture","all","alliance","analytics","animation",
+  "anon","app-maker","ar","art","artistry","astronomy","atlas","attention","audit","automotive","aviation","billing",
+  "bio","board","bridge","calendar","carpentry","chat","chem","code","collab","command-center","construction",
+  "commonsense","consulting","cooking","council","creative","creative-writing","cri","crypto","custom","daily",
+  "database","debate","debug","defense","desert","diy","docs","dtus","eco","education","entity","environment",
+  "disputes","electrical","emergency-services","energy","engineering",
+  "ethics","events","experience","export","fashion","feed","film-studios","finance","fitness",
+  "food","forestry","fork","forum","fractal","game","game-design","geology","global","goals","government",
+  "graph","grounding","healthcare","history","home-improvement","household","hr","hvac","hypothesis","import",
   "inference","ingest","insurance","integrations","invariant","lab",
-  "law","legacy","legal","lock","logistics","manufacturing","market",
-  "marketplace","math","meta","metacognition","metalearning","ml",
-  "music","neuro","news","nonprofit","offline","organ","paper","physics",
-  "platform","quantum","questmarket","queue","realestate","reasoning",
+  "landscaping","law","law-enforcement","legacy","legal","linguistics","lock","logistics","manufacturing","market",
+  "marketing","marketplace","masonry","materials","math","mental-health","mentorship","meta","metacognition","metalearning","mining","ml",
+  "music","neuro","news","nonprofit","ocean","offline","organ","paper","parenting","pets","pharmacy","philosophy","photography","physics",
+  "platform","plumbing","podcast","poetry","privacy","projects","quantum","questmarket","queue","realestate","reasoning","robotics",
   "reflection","repos","research","resonance","retail","schema","science",
-  "security","services","sim","srs","studio","suffering","temporal",
-  "thread","tick","timeline","trades","transfer","voice","vote","whiteboard"
+  "security","services","sim","space","sports","srs","studio","suffering","supplychain",
+  "telecommunications","temporal","thread","tick","timeline","trades","transfer",
+  "travel","urban-planning","veterinary","voice","vote","wallet","welding","whiteboard","world"
 ];
 
 function registerUniversalLensActions() {
@@ -30371,6 +30581,246 @@ function registerUniversalLensActions() {
   });
 }
 registerUniversalLensActions();
+
+// ── Frontend Action Aliases ──────────────────────────────────────────────────
+// The frontend calls actions with different names than the backend registers.
+// Wire aliases so EVERY frontend button hits a REAL handler, no AI catch-all.
+{
+  const aliases = [
+    // Reasoning lens: frontend calls validate_logic, check_fallacies, assess_strength
+    ["reasoning", "validate_logic", "validate"],
+    ["reasoning", "check_fallacies", "validate"],
+    ["reasoning", "assess_strength", "validate"],
+
+    // Council lens: frontend calls synthesize, generate-minutes
+    ["council", "synthesize", "debate"],
+    ["council", "generate-minutes", "audit"],
+
+    // Sim lens: frontend calls sensitivity-analysis
+    ["sim", "sensitivity-analysis", "simulate"],
+
+    // ML lens: frontend calls stop, scale, stop-deployment
+    ["ml", "stop", "evaluate"],
+    ["ml", "scale", "deploy"],
+    ["ml", "stop-deployment", "evaluate"],
+
+    // Schema lens: frontend calls validate
+    ["schema", "validate", "schemaValidate"],
+
+    // Entity lens: frontend calls terminal
+    ["entity", "terminal", "entityResolution"],
+
+    // Code lens: frontend calls forge-generate
+    ["code", "forge-generate", "complexityAnalysis"],
+
+    // Integrations lens: frontend calls run
+    ["integrations", "run", "apiHealthCheck"],
+
+    // Invariant lens: frontend calls check
+    ["invariant", "check", "invariantCheck"],
+
+    // Vote lens: frontend calls upvote/downvote as reactions
+    ["vote", "upvote", "tallyVotes"],
+    ["vote", "downvote", "tallyVotes"],
+
+    // Events lens: frontend calls budget_analysis, vendor_check, ros_generate, registration_report, event_summary
+    ["events", "budget_analysis", "budgetReconcile"],
+    ["events", "vendor_check", "techRiderMatch"],
+    ["events", "ros_generate", "advanceSheet"],
+    ["events", "registration_report", "settlementCalc"],
+    ["events", "event_summary", "budgetReconcile"],
+
+    // Creative lens: frontend calls generate_shot_list, asset_report, budget_analysis, distribution_checklist, project_summary
+    ["creative", "generate_shot_list", "shotListGenerate"],
+    ["creative", "asset_report", "assetOrganize"],
+    ["creative", "budget_analysis", "budgetTrack"],
+    ["creative", "distribution_checklist", "distributionChecklist"],
+    ["creative", "project_summary", "assetOrganize"],
+
+    // Pharmacy lens: frontend calls checkInteractions
+    ["pharmacy", "checkInteractions", "analyze"],
+
+    // Mental health lens: frontend calls generate-insights
+    ["mental-health", "generate-insights", "generate"],
+
+    // Projects lens: frontend calls analyze-risks
+    ["projects", "analyze-risks", "analyze"],
+  ];
+
+  let aliasCount = 0;
+  for (const [domain, alias, target] of aliases) {
+    const targetHandler = LENS_ACTIONS.get(`${domain}.${target}`);
+    if (targetHandler && !LENS_ACTIONS.has(`${domain}.${alias}`)) {
+      LENS_ACTIONS.set(`${domain}.${alias}`, targetHandler);
+      aliasCount++;
+    }
+  }
+  structuredLog("info", "frontend_action_aliases_registered", { aliasCount, total: aliases.length });
+}
+
+// ── Common Action Handlers (every domain gets these) ──────────────────────────
+// Beyond analyze/generate/suggest, register computational handlers for actions
+// that many lenses need: save, publish, archive, compute, transform, summarize
+{
+  const COMMON_ACTIONS = {
+    save: (ctx, artifact, params) => {
+      if (params && typeof params === "object") {
+        artifact.data = { ...artifact.data, ...params };
+        artifact.updatedAt = nowISO();
+        artifact.version = (artifact.version || 1) + 1;
+        saveStateDebounced();
+      }
+      return { ok: true, saved: true, version: artifact.version };
+    },
+    publish: (ctx, artifact) => {
+      artifact.meta = { ...artifact.meta, status: "published", visibility: "public" };
+      artifact.updatedAt = nowISO();
+      saveStateDebounced();
+      return { ok: true, published: true, visibility: "public" };
+    },
+    archive: (ctx, artifact) => {
+      artifact.meta = { ...artifact.meta, status: "archived" };
+      artifact.updatedAt = nowISO();
+      saveStateDebounced();
+      return { ok: true, archived: true };
+    },
+    duplicate: (ctx, artifact) => {
+      const copy = { ...structuredClone(artifact), id: uid("lart"), title: `Copy of ${artifact.title}`, createdAt: nowISO(), updatedAt: nowISO(), version: 1 };
+      STATE.lensArtifacts.set(copy.id, copy);
+      _lensDomainIndexAdd(copy.domain, copy.id);
+      saveStateDebounced();
+      return { ok: true, artifact: copy };
+    },
+    pin: (ctx, artifact) => {
+      artifact.meta = { ...artifact.meta, pinned: !artifact.meta?.pinned };
+      artifact.updatedAt = nowISO();
+      saveStateDebounced();
+      return { ok: true, pinned: artifact.meta.pinned };
+    },
+    star: (ctx, artifact) => {
+      artifact.meta = { ...artifact.meta, starred: !artifact.meta?.starred };
+      artifact.updatedAt = nowISO();
+      saveStateDebounced();
+      return { ok: true, starred: artifact.meta.starred };
+    },
+    lock: (ctx, artifact) => {
+      artifact.meta = { ...artifact.meta, locked: !artifact.meta?.locked };
+      artifact.updatedAt = nowISO();
+      saveStateDebounced();
+      return { ok: true, locked: artifact.meta.locked };
+    },
+    like: (ctx, artifact) => {
+      if (!artifact.data) artifact.data = {};
+      artifact.data.likes = (artifact.data.likes || 0) + 1;
+      artifact.updatedAt = nowISO();
+      saveStateDebounced();
+      return { ok: true, likes: artifact.data.likes };
+    },
+    dislike: (ctx, artifact) => {
+      if (!artifact.data) artifact.data = {};
+      artifact.data.dislikes = (artifact.data.dislikes || 0) + 1;
+      artifact.updatedAt = nowISO();
+      saveStateDebounced();
+      return { ok: true, dislikes: artifact.data.dislikes };
+    },
+    comment: (ctx, artifact, params) => {
+      if (!artifact.data) artifact.data = {};
+      if (!artifact.data.comments) artifact.data.comments = [];
+      const comment = { id: uid("cmt"), text: params?.text || "", author: ctx?.actor?.userId || "anon", createdAt: nowISO() };
+      artifact.data.comments.push(comment);
+      artifact.updatedAt = nowISO();
+      saveStateDebounced();
+      return { ok: true, comment, totalComments: artifact.data.comments.length };
+    },
+    share: (ctx, artifact) => {
+      artifact.data = { ...artifact.data, shares: (artifact.data?.shares || 0) + 1 };
+      artifact.updatedAt = nowISO();
+      saveStateDebounced();
+      return { ok: true, shares: artifact.data.shares, shareUrl: `/lenses/${artifact.domain}/${artifact.id}` };
+    },
+    repost: (ctx, artifact) => {
+      artifact.data = { ...artifact.data, reposts: (artifact.data?.reposts || 0) + 1 };
+      artifact.updatedAt = nowISO();
+      saveStateDebounced();
+      return { ok: true, reposts: artifact.data.reposts };
+    },
+    bookmark: (ctx, artifact) => {
+      artifact.meta = { ...artifact.meta, bookmarked: !artifact.meta?.bookmarked };
+      artifact.updatedAt = nowISO();
+      saveStateDebounced();
+      return { ok: true, bookmarked: artifact.meta.bookmarked };
+    },
+    vote: (ctx, artifact, params) => {
+      if (!artifact.data) artifact.data = {};
+      const direction = params?.direction || params?.vote || 1;
+      artifact.data.score = (artifact.data.score || 0) + Number(direction);
+      artifact.data.voteCount = (artifact.data.voteCount || 0) + 1;
+      artifact.updatedAt = nowISO();
+      saveStateDebounced();
+      return { ok: true, score: artifact.data.score, voteCount: artifact.data.voteCount };
+    },
+    rate: (ctx, artifact, params) => {
+      if (!artifact.data) artifact.data = {};
+      const rating = Number(params?.rating || params?.stars || 5);
+      if (!artifact.data.ratings) artifact.data.ratings = [];
+      artifact.data.ratings.push(rating);
+      artifact.data.averageRating = artifact.data.ratings.reduce((a, b) => a + b, 0) / artifact.data.ratings.length;
+      artifact.updatedAt = nowISO();
+      saveStateDebounced();
+      return { ok: true, averageRating: artifact.data.averageRating, totalRatings: artifact.data.ratings.length };
+    },
+    tag: (ctx, artifact, params) => {
+      const newTags = Array.isArray(params?.tags) ? params.tags : [params?.tag].filter(Boolean);
+      artifact.meta = { ...artifact.meta, tags: [...new Set([...(artifact.meta?.tags || []), ...newTags])] };
+      artifact.updatedAt = nowISO();
+      saveStateDebounced();
+      return { ok: true, tags: artifact.meta.tags };
+    },
+    assign: (ctx, artifact, params) => {
+      artifact.data = { ...artifact.data, assignee: params?.assignee || ctx?.actor?.userId || "unassigned" };
+      artifact.updatedAt = nowISO();
+      saveStateDebounced();
+      return { ok: true, assignee: artifact.data.assignee };
+    },
+    status: (ctx, artifact, params) => {
+      const newStatus = params?.status || params?.state;
+      if (newStatus) {
+        artifact.meta = { ...artifact.meta, status: newStatus };
+        artifact.updatedAt = nowISO();
+        saveStateDebounced();
+      }
+      return { ok: true, status: artifact.meta?.status };
+    },
+    priority: (ctx, artifact, params) => {
+      artifact.data = { ...artifact.data, priority: params?.priority || "medium" };
+      artifact.updatedAt = nowISO();
+      saveStateDebounced();
+      return { ok: true, priority: artifact.data.priority };
+    },
+    move: (ctx, artifact, params) => {
+      const newColumn = params?.column || params?.status || params?.to;
+      if (newColumn) {
+        artifact.meta = { ...artifact.meta, status: newColumn };
+        artifact.data = { ...artifact.data, column: newColumn };
+        artifact.updatedAt = nowISO();
+        saveStateDebounced();
+      }
+      return { ok: true, moved: newColumn };
+    },
+  };
+
+  let commonCount = 0;
+  for (const domain of ALL_LENS_DOMAINS) {
+    for (const [actionName, handler] of Object.entries(COMMON_ACTIONS)) {
+      const key = `${domain}.${actionName}`;
+      if (!LENS_ACTIONS.has(key)) {
+        LENS_ACTIONS.set(key, handler);
+        commonCount++;
+      }
+    }
+  }
+  structuredLog("info", "common_actions_registered", { actionsPerDomain: Object.keys(COMMON_ACTIONS).length, domains: ALL_LENS_DOMAINS.length, totalRegistered: commonCount });
+}
 
 // ── Domain-Specific Action Manifest ─────────────────────────────────────────
 // ~450 domain-specific actions across 113 lenses, each routed to the
@@ -35347,6 +35797,126 @@ app.post("/api/dtus/:id/share", (req, res) => {
   }
 });
 
+// POST /api/dtus/:id/sync-lens — sync a DTU into a specific lens as an artifact
+app.post("/api/dtus/:id/sync-lens", (req, res) => {
+  try {
+    const dtu = STATE.dtus?.get?.(req.params.id);
+    if (!dtu) return res.status(404).json({ ok: false, error: "DTU not found" });
+    const lens = req.body?.lens || req.body?.domain;
+    if (!lens) return res.status(400).json({ ok: false, error: "lens/domain required" });
+    const userId = req.user?.id || "anon";
+
+    // Create a lens artifact from this DTU
+    const artifactId = uid("lart");
+    const artifact = {
+      id: artifactId, domain: lens, type: dtu.type || "dtu_sync",
+      ownerId: userId,
+      title: dtu.title || "Synced DTU",
+      data: {
+        summary: typeof dtu.creti === "string" ? dtu.creti.slice(0, 500) : "",
+        description: dtu.content || dtu.creti || "",
+        source: dtu.source || "dtu",
+        dtuId: dtu.id,
+        tags: dtu.tags || [],
+      },
+      meta: { tags: dtu.tags || [], status: "draft", visibility: "private", scope: req.body?.scope || "local" },
+      createdAt: nowISO(), updatedAt: nowISO(), version: 1,
+      qualityScore: 0.5,
+    };
+    STATE.lensArtifacts.set(artifactId, artifact);
+    _lensDomainIndexAdd(lens, artifactId);
+    saveStateDebounced();
+    res.json({ ok: true, artifact, dtuId: dtu.id });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+// POST /api/dtus/:id/fork — fork/clone a DTU into the user's substrate
+app.post("/api/dtus/:id/fork", (req, res) => {
+  try {
+    const sourceDtu = STATE.dtus?.get?.(req.params.id);
+    if (!sourceDtu) return res.status(404).json({ ok: false, error: "DTU not found" });
+    const userId = req.user?.id || req.body?.userId || "anon";
+    const forkedDtu = {
+      ...structuredClone(sourceDtu),
+      id: uid("dtu"),
+      ownerId: userId,
+      scope: "local",
+      visibility: "private",
+      creatorType: "user",
+      source: `fork:${sourceDtu.id}`,
+      lineage: [...(sourceDtu.lineage || []), sourceDtu.id],
+      meta: {
+        ...(sourceDtu.meta || {}),
+        forkedFrom: sourceDtu.id,
+        forkedAt: nowISO(),
+        originalSource: sourceDtu.source,
+      },
+      createdAt: nowISO(),
+      updatedAt: nowISO(),
+    };
+    upsertDTU(forkedDtu, { broadcast: true });
+    saveStateDebounced();
+    res.json({ ok: true, dtu: forkedDtu, forkedFrom: sourceDtu.id });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+// POST /api/lens/:domain/:id/pull — pull a lens artifact into user's DTU substrate
+app.post("/api/lens/:domain/:id/pull", (req, res) => {
+  try {
+    const artifact = STATE.lensArtifacts.get(req.params.id);
+    if (!artifact) return res.status(404).json({ ok: false, error: "Artifact not found" });
+    const userId = req.user?.id || "anon";
+
+    // If the artifact links to an existing DTU, fork that DTU
+    if (artifact.data?.dtuId && STATE.dtus.get(artifact.data.dtuId)) {
+      const sourceDtu = STATE.dtus.get(artifact.data.dtuId);
+      const forkedDtu = {
+        ...structuredClone(sourceDtu),
+        id: uid("dtu"),
+        ownerId: userId,
+        scope: "local",
+        visibility: "private",
+        creatorType: "user",
+        source: `pull:${artifact.id}`,
+        lineage: [...(sourceDtu.lineage || []), sourceDtu.id],
+        meta: { ...(sourceDtu.meta || {}), pulledFrom: artifact.id, pulledAt: nowISO(), originalDomain: artifact.domain },
+        createdAt: nowISO(), updatedAt: nowISO(),
+      };
+      upsertDTU(forkedDtu, { broadcast: true });
+      saveStateDebounced();
+      return res.json({ ok: true, dtu: forkedDtu, source: "dtu_fork", artifactId: artifact.id });
+    }
+
+    // Otherwise, create a new DTU from the artifact data
+    const newDtu = {
+      id: uid("dtu"),
+      title: artifact.title || "Pulled Artifact",
+      creti: artifact.data?.description || artifact.data?.summary || JSON.stringify(artifact.data),
+      content: artifact.data?.description || artifact.data?.summary || "",
+      tags: [...(artifact.meta?.tags || []), artifact.domain, "pulled"],
+      tier: "regular",
+      type: "pulled_artifact",
+      source: `pull:${artifact.domain}:${artifact.id}`,
+      ownerId: userId,
+      scope: "local",
+      visibility: "private",
+      creatorType: "user",
+      meta: { pulledFrom: artifact.id, pulledAt: nowISO(), originalDomain: artifact.domain, articleUrl: artifact.data?.url || artifact.data?.link },
+      lineage: [],
+      createdAt: nowISO(), updatedAt: nowISO(),
+    };
+    upsertDTU(newDtu, { broadcast: true });
+    saveStateDebounced();
+    res.json({ ok: true, dtu: newDtu, source: "artifact_convert", artifactId: artifact.id });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
 // POST /api/dtus/:id/vote — up/down vote a DTU (forum)
 app.post("/api/dtus/:id/vote", validate("dtuVote"), (req, res) => {
   try {
@@ -36154,6 +36724,134 @@ function createDTUFromRSSItem(item, feedName) {
   return { ok: true, dtu };
 }
 
+// ---- Real-Time Feed Ingestion (Lens Feed DTU Pipeline) ----
+
+/** Lightweight RSS parser — no external dependencies, regex-based XML extraction */
+function parseRSSItems(xml) {
+  const items = [];
+  const itemRegex = /<item>([\s\S]*?)<\/item>/gi;
+  let match;
+  while ((match = itemRegex.exec(xml)) !== null) {
+    const block = match[1];
+    const title = (block.match(/<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/i) || [])[1] || "";
+    const link = (block.match(/<link>(.*?)<\/link>/i) || [])[1] || "";
+    const desc = (block.match(/<description>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/description>/i) || [])[1] || "";
+    const pubDate = (block.match(/<pubDate>(.*?)<\/pubDate>/i) || [])[1] || "";
+    if (title) items.push({ title: title.trim(), link: link.trim(), description: desc.trim().slice(0, 2000), pubDate: pubDate.trim() });
+  }
+  return items;
+}
+
+/** Feed polling: iterates registered lens feeds, fetches due items, creates DTUs */
+async function pollFeeds() {
+  if (!STATE.feeds || STATE.feeds.size === 0) return;
+  const now = Date.now();
+
+  for (const [feedId, feed] of STATE.feeds) {
+    if (!feed.active) continue;
+
+    // Check if it's time to poll this feed
+    const lastFetched = feed.lastFetchedAt ? new Date(feed.lastFetchedAt).getTime() : 0;
+    const interval = feed.pollIntervalMs || 3600000;
+    if (now - lastFetched < interval) continue;
+
+    try {
+      const response = await fetch(feed.url, {
+        signal: AbortSignal.timeout(15000), // 15s timeout per feed
+        headers: { "User-Agent": "Concord-Cognitive-Engine/1.0 (Feed Ingestion)" },
+      });
+      if (!response.ok) {
+        structuredLog("warn", "feed_fetch_http_error", { feedId, url: feed.url, status: response.status });
+        continue;
+      }
+
+      const xml = await response.text();
+      const items = parseRSSItems(xml);
+
+      // Track seen items to avoid duplicates
+      if (!feed._itemsSeen) feed._itemsSeen = new Set();
+
+      let ingested = 0;
+      for (const item of items) {
+        const itemKey = item.link || item.title;
+        if (!itemKey || feed._itemsSeen.has(itemKey)) continue;
+
+        // Extract domain from feed URL for tagging
+        let feedDomain = feed.domain || "news";
+        try { feedDomain = new URL(feed.url).hostname.replace(/^www\./, ""); } catch (_e) { /* use default */ }
+
+        const dtu = {
+          id: uid("dtu"),
+          title: item.title || "Feed Item",
+          creti: item.description || "",
+          content: `**Source:** ${feed.name}\n**Link:** ${item.link}\n\n---\n\n${item.description}`,
+          tags: ["feed", feedDomain, "web-dtu"],
+          tier: "regular",
+          type: "feed_item",
+          scope: "global",
+          source: "feed:" + feed.url,
+          ownerId: "system",
+          visibility: "public",
+          creatorType: "feed_ingestion",
+          meta: {
+            feedUrl: feed.url,
+            articleUrl: item.link,
+            publishedAt: item.pubDate,
+            feedName: feed.name,
+          },
+          createdAt: nowISO(),
+          updatedAt: nowISO(),
+        };
+
+        upsertDTU(dtu);
+
+        // Also create a lens artifact in the feed's target domain so it shows up in lens pages
+        const lensDomain = feed.domain || "news";
+        const artifactId = uid("lart");
+        const artifact = {
+          id: artifactId, domain: lensDomain, type: "feed_article",
+          ownerId: "system",
+          title: item.title || "Feed Item",
+          data: {
+            summary: (item.description || "").slice(0, 500),
+            description: item.description || "",
+            source: feed.name || feedDomain,
+            url: item.link || "",
+            link: item.link || "",
+            feedUrl: feed.url,
+            publishedAt: item.pubDate || "",
+            dtuId: dtu.id, // link back to the DTU for pull-to-substrate
+          },
+          meta: { tags: ["feed", feedDomain, "web-dtu"], status: "published", visibility: "public", scope: "global", consent: { publishToMarketplace: false, shareToFeed: true, allowCitations: true, allowAiTraining: false } },
+          createdAt: nowISO(), updatedAt: nowISO(), version: 1,
+          qualityScore: 0.5,
+        };
+        STATE.lensArtifacts.set(artifactId, artifact);
+        _lensDomainIndexAdd(lensDomain, artifactId);
+
+        feed._itemsSeen.add(itemKey);
+        ingested++;
+
+        // Cap seen-set to prevent unbounded memory growth
+        if (feed._itemsSeen.size > 10000) {
+          const iter = feed._itemsSeen.values();
+          for (let i = 0; i < 2000; i++) { feed._itemsSeen.delete(iter.next().value); }
+        }
+      }
+
+      feed.lastFetchedAt = nowISO();
+      feed.itemCount = (feed.itemCount || 0) + ingested;
+
+      if (ingested > 0) {
+        structuredLog("info", "feed_poll_ingested", { feedId, url: feed.url, ingested, totalItems: items.length });
+        saveStateDebounced();
+      }
+    } catch (e) {
+      structuredLog("debug", "feed_poll_error", { feedId, url: feed.url, error: String(e?.message || e) });
+    }
+  }
+}
+
 // ---- Reminders ----
 const REMINDERS = new Map(); // reminderId -> { id, dtuId, reminderAt, message, completed }
 const REMINDERS_MAX = 1000;
@@ -36708,6 +37406,32 @@ app.post("/api/feeds/:id/import", asyncHandler(async (req, res) => {
 
   res.json({ ok: true, imported, count: imported.length });
 }));
+
+// ---- Real-Time Lens Feed Registration Endpoints ----
+
+/** Register a new feed source for real-time lens ingestion */
+app.post("/api/feeds/register", requireAuth(), (req, res) => {
+  const { url, domain, name, pollIntervalMs } = req.body;
+  if (!url) return res.status(400).json({ ok: false, error: "url required" });
+  const id = uid("feed");
+  const feed = {
+    id, url, domain: domain || "news", name: name || url,
+    pollIntervalMs: pollIntervalMs || 3600000, // default 1 hour
+    lastFetchedAt: null, itemCount: 0, active: true,
+    createdBy: req.user?.id || "anon",
+    createdAt: nowISO(),
+  };
+  if (!STATE.feeds) STATE.feeds = new Map();
+  STATE.feeds.set(id, feed);
+  saveStateDebounced();
+  res.json({ ok: true, feed });
+});
+
+/** List all registered lens feed sources */
+app.get("/api/feeds/sources", (req, res) => {
+  const feeds = STATE.feeds ? Array.from(STATE.feeds.values()) : [];
+  res.json({ ok: true, feeds });
+});
 
 app.post("/api/reminders", (req, res) => {
   try {
@@ -38716,6 +39440,165 @@ app.get("/api/social/metrics", (req, res) => {
   try { res.json(getSocialMetrics(STATE)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
+// ---- Social Posts CRUD ----
+app.post("/api/social/post", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    const result = socialCreatePost(STATE, { userId, ...req.body });
+    res.json(result);
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/post/:postId", (req, res) => {
+  try { res.json(socialGetPost(STATE, req.params.postId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.delete("/api/social/post/:postId", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    res.json(socialDeletePost(STATE, { userId, postId: req.params.postId }));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/posts/user/:userId", (req, res) => {
+  try { res.json(socialGetUserPosts(STATE, req.params.userId, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- Social Reactions ----
+app.post("/api/social/react", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    res.json(socialAddReaction(STATE, { userId, postId: req.body?.postId, type: req.body?.type || "like" }));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/reactions/:postId", (req, res) => {
+  try {
+    const currentUserId = req.query.userId || req.user?.id || req.actor?.userId || null;
+    res.json(socialGetReactions(STATE, req.params.postId, currentUserId));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- Social Comments ----
+app.post("/api/social/comment", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    res.json(socialAddComment(STATE, { userId, postId: req.body?.postId, content: req.body?.content, parentCommentId: req.body?.parentCommentId }));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.delete("/api/social/comment/:postId/:commentId", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    res.json(socialDeleteComment(STATE, { userId, postId: req.params.postId, commentId: req.params.commentId }));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/comments/:postId", (req, res) => {
+  try { res.json(socialGetComments(STATE, req.params.postId, { limit: Number(req.query.limit || 50) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- Social Shares ----
+app.post("/api/social/share", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    res.json(socialSharePost(STATE, { userId, postId: req.body?.postId, commentary: req.body?.commentary }));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/shares/:postId", (req, res) => {
+  try { res.json(socialGetShares(STATE, req.params.postId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- Social Bookmarks ----
+app.post("/api/social/bookmark", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    res.json(socialBookmarkPost(STATE, { userId, postId: req.body?.postId }));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/bookmarks", (req, res) => {
+  try {
+    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+    res.json(socialGetUserBookmarks(STATE, userId, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0) }));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- Social Feeds (For-You, Following, Explore) ----
+app.get("/api/social/feed/foryou", (req, res) => {
+  try {
+    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+    res.json(getForYouFeed(STATE, userId, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0) }));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/feed/following", (req, res) => {
+  try {
+    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+    res.json(getFollowingFeed(STATE, userId, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0) }));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/feed/explore", (req, res) => {
+  try {
+    res.json(getExploreFeed(STATE, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0), topic: req.query.topic }));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- Social DMs ----
+app.post("/api/social/dm", (req, res) => {
+  try {
+    const fromUserId = req.body?.fromUserId || req.user?.id || req.actor?.userId || "anon";
+    res.json(socialSendMessage(STATE, { fromUserId, toUserId: req.body?.toUserId, content: req.body?.content, mediaUrl: req.body?.mediaUrl }));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/dm/conversations", (req, res) => {
+  try {
+    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+    res.json(socialGetConversations(STATE, userId));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/dm/:conversationId", (req, res) => {
+  try { res.json(socialGetMessages(STATE, req.params.conversationId, { limit: Number(req.query.limit || 50), offset: Number(req.query.offset || 0) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/social/dm/read", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    res.json(socialMarkMessagesRead(STATE, { userId, conversationId: req.body?.conversationId }));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- Social Stories ----
+app.get("/api/social/stories", (req, res) => {
+  try {
+    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+    res.json(getActiveStories(STATE, userId));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/social/stories/view", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    res.json(socialViewStory(STATE, { userId, storyId: req.body?.storyId }));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- Social Polls ----
+app.post("/api/social/poll/vote", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    res.json(socialVotePoll(STATE, { userId, postId: req.body?.postId, optionIndex: req.body?.optionIndex }));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/poll/:postId", (req, res) => {
+  try { res.json(socialGetPollResults(STATE, req.params.postId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 // ---- Social Notifications ----
 app.get("/api/social/notifications", (req, res) => {
   try {
@@ -39922,11 +40805,23 @@ app.post("/api/brain/entity/explore", asyncHandler(async (req, res) => {
 }));
 
 // Brain health probe — quick check all three brains (used by frontend GracefulFallback + ConnectionStatus)
+// Tracks consecutive failures per brain to avoid marking offline on a single timeout
+const _brainHealthFailures = {};
+const BRAIN_HEALTH_FAILURE_THRESHOLD = 3; // Only mark offline after 3 consecutive failures
 app.get("/api/brain/health", asyncHandler(async (_req, res) => {
   const health = {};
-  for (const [name, brain] of Object.entries(BRAIN)) {
+  const probes = Object.entries(BRAIN).map(async ([name, brain]) => {
     try {
-      const probe = await fetch(`${brain.url}/api/tags`, { signal: AbortSignal.timeout(3000) });
+      const probe = await fetch(`${brain.url}/api/tags`, { signal: AbortSignal.timeout(8000) });
+      if (probe.ok) {
+        _brainHealthFailures[name] = 0; // Reset failure counter on success
+        // Re-enable brain if it was previously disabled (Ollama recovered)
+        if (!brain.enabled) {
+          brain.enabled = true;
+          _refreshLlmReady();
+          structuredLog("info", "brain_health_recovered", { brain: name });
+        }
+      }
       health[name] = {
         online: probe.ok,
         healthy: probe.ok,
@@ -39936,9 +40831,25 @@ app.get("/api/brain/health", asyncHandler(async (_req, res) => {
         status: probe.status,
       };
     } catch (e) {
-      health[name] = { online: false, healthy: false, model: brain.model, error: String(e?.message || e) };
+      _brainHealthFailures[name] = (_brainHealthFailures[name] || 0) + 1;
+      const consecutiveFailures = _brainHealthFailures[name];
+      // Only mark as offline after multiple consecutive failures
+      const isStillOnline = brain.enabled && consecutiveFailures < BRAIN_HEALTH_FAILURE_THRESHOLD;
+      if (!isStillOnline && brain.enabled && consecutiveFailures >= BRAIN_HEALTH_FAILURE_THRESHOLD) {
+        brain.enabled = false;
+        _refreshLlmReady();
+        structuredLog("warn", "brain_health_offline", { brain: name, consecutiveFailures });
+      }
+      health[name] = {
+        online: isStillOnline,
+        healthy: false,
+        model: brain.model,
+        error: isStillOnline ? `transient (${consecutiveFailures}/${BRAIN_HEALTH_FAILURE_THRESHOLD} failures)` : String(e?.message || e),
+        consecutiveFailures,
+      };
     }
-  }
+  });
+  await Promise.all(probes);
   const allHealthy = Object.values(health).every(r => r.online);
   res.json({ ok: true, allHealthy, ...health, brains: health });
 }));

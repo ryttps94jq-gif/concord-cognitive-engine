@@ -55,6 +55,8 @@ import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
+import { PullToSubstrate } from '@/components/lens/PullToSubstrate';
+import { FeedBanner } from '@/components/lens/FeedBanner';
 
 type ViewMode = 'gallery' | 'canvas' | 'marketplace' | 'my-art';
 type CanvasTool = 'brush' | 'eraser' | 'fill' | 'text' | 'shape-rect' | 'shape-circle' | 'eyedropper' | 'move' | 'pen' | 'rectangle' | 'circle' | 'line';
@@ -567,6 +569,7 @@ export default function ArtLensPage() {
 
   const renderGallery = () => (
     <div className="p-6 space-y-6">
+      <FeedBanner domain="art" />
       <div className="flex items-center gap-4">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -620,6 +623,7 @@ export default function ArtLensPage() {
                   <div className="flex items-center gap-3 mt-1.5 text-xs text-rose-200/70">
                     <span className="flex items-center gap-1"><Heart className="w-3 h-3 text-rose-400" />{art.likes}</span>
                     <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{art.plays}</span>
+                    <PullToSubstrate domain="art" artifactId={art.id} compact />
                   </div>
                 </div>
               </div>
@@ -977,6 +981,7 @@ export default function ArtLensPage() {
             <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
               <span className="text-sm font-medium">{art.title}</span>
               <div className="flex gap-2">
+                <PullToSubstrate domain="art" artifactId={art.id} compact />
                 <button onClick={() => handleShareArt(art.id)} className="p-1.5 bg-white/10 rounded hover:bg-white/20"><Share2 className="w-4 h-4" /></button>
                 <button onClick={() => handleDownloadArt(art.id)} className="p-1.5 bg-white/10 rounded hover:bg-white/20"><Download className="w-4 h-4" /></button>
                 <button onClick={() => handleListArt(art.id)} className="p-1.5 bg-white/10 rounded hover:bg-white/20"><DollarSign className="w-4 h-4" /></button>

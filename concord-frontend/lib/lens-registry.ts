@@ -474,10 +474,10 @@ export function getLensesByCategory(): Record<LensCategory, LensEntry[]> {
 
 // ── Sovereign visibility & sidebar category grouping ──────────
 
-/** Lens IDs that require sovereign access */
-export const SOVEREIGN_LENSES = ['admin', 'command-center', 'audit', 'lock'] as const;
+/** Lens IDs historically restricted — now open to all authenticated users */
+export const SOVEREIGN_LENSES = [] as const;
 
-/** Set for fast lookup */
+/** Set for fast lookup (empty — no lenses restricted) */
 const SOVEREIGN_LENS_SET = new Set<string>(SOVEREIGN_LENSES);
 
 /**
@@ -496,20 +496,16 @@ export const SIDEBAR_CATEGORIES: Record<string, string[]> = {
   Social: ['feed', 'forum', 'marketplace', 'collab', 'vote', 'global', 'alliance', 'debate', 'mentorship', 'disputes', 'privacy', 'world'],
   'AI & Cognition': ['ml', 'agents', 'affect', 'attention', 'experience', 'transfer', 'bio', 'chem', 'physics', 'math', 'quantum', 'neuro'],
   Tools: ['export', 'import', 'fork', 'analytics', 'custom', 'ingest', 'wallet', 'bridge', 'all', 'app-maker', 'integrations'],
-  System: ['chat', 'entity', 'council', 'organ', 'tick', 'timeline', 'queue', 'resonance', 'docs', 'paper', 'platform', 'offline', 'lab', 'legacy', 'crypto', 'invariant', 'suffering', 'cri', 'market', 'questmarket', 'ethics'],
-  Sovereign: ['admin', 'command-center', 'audit', 'lock'],
+  System: ['chat', 'entity', 'council', 'organ', 'tick', 'timeline', 'queue', 'resonance', 'docs', 'paper', 'platform', 'offline', 'lab', 'legacy', 'crypto', 'invariant', 'suffering', 'cri', 'market', 'questmarket', 'ethics', 'audit', 'lock'],
+  Sovereign: ['admin', 'command-center'],
 };
 
 /**
  * Returns sidebar categories visible to the given user role.
- * Sovereign category is hidden for non-sovereign users.
+ * All categories visible to all authenticated users.
  */
-export function getVisibleSidebarCategories(userRole: string): Record<string, string[]> {
-  const categories = { ...SIDEBAR_CATEGORIES };
-  if (userRole !== 'sovereign') {
-    delete categories['Sovereign'];
-  }
-  return categories;
+export function getVisibleSidebarCategories(_userRole: string): Record<string, string[]> {
+  return { ...SIDEBAR_CATEGORIES };
 }
 
 /**
@@ -525,12 +521,9 @@ export function getSidebarCategory(lensId: string): string {
 
 /**
  * Checks if a lens is visible to the given user role.
- * Sovereign-only lenses are hidden from non-sovereign users.
+ * Every lens is visible to all authenticated users. No exceptions.
  */
-export function isLensVisible(lensId: string, userRole: string): boolean {
-  if (SOVEREIGN_LENS_SET.has(lensId)) {
-    return userRole === 'sovereign';
-  }
+export function isLensVisible(_lensId: string, _userRole: string): boolean {
   return true;
 }
 

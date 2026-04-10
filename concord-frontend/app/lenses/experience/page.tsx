@@ -9,11 +9,11 @@ import { useUIStore } from '@/store/ui';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import {
-  Brain, Share2, Edit3, Plus, Play, Music, Disc3,
+  Brain, Share2, Edit3, Plus, Play, Sparkles, Compass,
   Palette, Trophy, Star, TrendingUp, Users, Heart,
   Clock, Target, Zap, Award, ShoppingBag, Calendar,
   MapPin, ExternalLink, Filter, GripVertical,
-  Lightbulb, BarChart3, Flame, ChevronRight, Layers, ChevronDown
+  Lightbulb, BarChart3, Flame, ChevronRight, Layers, ChevronDown, Eye
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -25,8 +25,8 @@ import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 // --- Types ---
 
 type TabId = 'portfolio' | 'skills' | 'history' | 'insights';
-type PortfolioFilter = 'all' | 'tracks' | 'releases' | 'art' | 'collaborations';
-type PortfolioItemType = 'track' | 'release' | 'art' | 'collaboration';
+type PortfolioFilter = 'all' | 'projects' | 'releases' | 'art' | 'collaborations';
+type PortfolioItemType = 'project' | 'release' | 'art' | 'collaboration';
 
 interface PortfolioItem {
   id: string;
@@ -35,7 +35,7 @@ interface PortfolioItem {
   subtitle: string;
   coverGradient: string;
   playCount?: number;
-  trackCount?: number;
+  itemCount?: number;
   medium?: string;
   genre: string;
   date: string;
@@ -56,7 +56,7 @@ interface SkillData {
 
 interface HistoryItem {
   id: string;
-  type: 'track_created' | 'session_joined' | 'goal_completed' | 'skill_leveled' | 'item_sold';
+  type: 'project_created' | 'session_joined' | 'goal_completed' | 'skill_leveled' | 'item_sold';
   title: string;
   description: string;
   timestamp: string;
@@ -78,7 +78,7 @@ const PROFILE = {
   bio: '',
   location: '',
   genres: [] as string[],
-  stats: { tracks: 0, collaborations: 0, sales: 0, followers: 0 },
+  stats: { projects: 0, collaborations: 0, sales: 0, followers: 0 },
   socials: [] as { label: string; url: string }[],
 };
 
@@ -143,7 +143,7 @@ const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 function historyIcon(type: HistoryItem['type']) {
   switch (type) {
-    case 'track_created': return <Music className="w-4 h-4 text-neon-purple" />;
+    case 'project_created': return <Sparkles className="w-4 h-4 text-neon-purple" />;
     case 'session_joined': return <Users className="w-4 h-4 text-neon-cyan" />;
     case 'goal_completed': return <Target className="w-4 h-4 text-neon-green" />;
     case 'skill_leveled': return <TrendingUp className="w-4 h-4 text-neon-yellow" />;
@@ -182,7 +182,7 @@ function categoryBg(cat: SkillData['category']): string {
 
 function typeBadge(type: PortfolioItemType): { label: string; color: string } {
   switch (type) {
-    case 'track': return { label: 'Track', color: 'bg-blue-500/20 text-blue-400' };
+    case 'project': return { label: 'Project', color: 'bg-blue-500/20 text-blue-400' };
     case 'release': return { label: 'Release', color: 'bg-purple-500/20 text-purple-400' };
     case 'art': return { label: 'Art', color: 'bg-pink-500/20 text-pink-400' };
     case 'collaboration': return { label: 'Collab', color: 'bg-green-500/20 text-green-400' };
@@ -397,7 +397,7 @@ export default function ExperienceLensPage() {
 
   const FILTERS: { id: PortfolioFilter; label: string }[] = [
     { id: 'all', label: 'All' },
-    { id: 'tracks', label: 'Tracks' },
+    { id: 'projects', label: 'Projects' },
     { id: 'releases', label: 'Releases' },
     { id: 'art', label: 'Art' },
     { id: 'collaborations', label: 'Collaborations' },
@@ -443,7 +443,7 @@ export default function ExperienceLensPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold">Creative Portfolio</h1>
-            <p className="text-sm text-gray-400">Showcase your work, track your growth</p>
+            <p className="text-sm text-gray-400">Showcase your work, measure your growth</p>
           </div>
 
       {/* Real-time Enhancement Toolbar */}
@@ -498,7 +498,7 @@ export default function ExperienceLensPage() {
             {/* Stats row */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
-                { label: 'Tracks Produced', value: PROFILE.stats.tracks, icon: Music },
+                { label: 'Projects Created', value: PROFILE.stats.projects, icon: Sparkles },
                 { label: 'Collaborations', value: PROFILE.stats.collaborations, icon: Users },
                 { label: 'Sales', value: PROFILE.stats.sales, icon: ShoppingBag },
                 { label: 'Followers', value: PROFILE.stats.followers.toLocaleString(), icon: Heart },
@@ -612,10 +612,10 @@ export default function ExperienceLensPage() {
                     {/* Cover art gradient */}
                     <div className={`relative h-36 rounded-lg mb-3 bg-gradient-to-br ${item.coverGradient} flex items-center justify-center overflow-hidden`}>
                       <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors" />
-                      {item.type === 'track' || item.type === 'collaboration' ? (
+                      {item.type === 'project' || item.type === 'collaboration' ? (
                         <Play className="w-10 h-10 text-white/80 drop-shadow-lg group-hover:scale-110 transition-transform" />
                       ) : item.type === 'release' ? (
-                        <Disc3 className="w-10 h-10 text-white/80 drop-shadow-lg group-hover:rotate-90 transition-transform duration-500" />
+                        <Compass className="w-10 h-10 text-white/80 drop-shadow-lg group-hover:rotate-90 transition-transform duration-500" />
                       ) : (
                         <Palette className="w-10 h-10 text-white/80 drop-shadow-lg" />
                       )}
@@ -645,8 +645,8 @@ export default function ExperienceLensPage() {
                             {item.playCount.toLocaleString()}
                           </span>
                         )}
-                        {item.trackCount !== undefined && (
-                          <span>{item.trackCount} tracks</span>
+                        {item.itemCount !== undefined && (
+                          <span>{item.itemCount} items</span>
                         )}
                         {item.medium !== undefined && (
                           <span>{item.medium}</span>
@@ -907,7 +907,7 @@ export default function ExperienceLensPage() {
                 <p className="text-xs text-gray-400">Most Productive Day</p>
               </div>
               <div className="lens-card text-center py-4">
-                <Music className="w-6 h-6 mx-auto mb-2 text-neon-purple" />
+                <Eye className="w-6 h-6 mx-auto mb-2 text-neon-purple" />
                 <p className="text-lg font-bold">
                   {computedInsights.favoriteGenre || <span className="text-gray-500 text-sm font-normal">Add items to see</span>}
                 </p>

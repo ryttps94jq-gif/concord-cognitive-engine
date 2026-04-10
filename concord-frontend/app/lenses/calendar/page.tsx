@@ -8,8 +8,8 @@ import {
   Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, MapPin,
   Plus, X, Edit2, Trash2, Bell, Repeat, Users,
   Search, Settings, Check, Video,
-  ExternalLink, Rocket, Mic, Megaphone, BookOpen, Music, Headphones,
-  Play, Disc3, Timer
+  ExternalLink, Rocket, CalendarDays, Megaphone, BookOpen, CheckSquare,
+  Play, Timer
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
@@ -66,8 +66,8 @@ type ViewMode = 'month' | 'week' | 'day' | 'agenda';
 // ---------------------------------------------------------------------------
 
 const EVENT_TYPE_META: Record<EventType, { label: string; color: string }> = {
-  release:   { label: 'Release Dates',  color: '#22c55e' },
-  session:   { label: 'Studio Sessions', color: '#06b6d4' },
+  release:   { label: 'Launches',        color: '#22c55e' },
+  session:   { label: 'Work Sessions',   color: '#06b6d4' },
   deadline:  { label: 'Deadlines',       color: '#ef4444' },
   collab:    { label: 'Collaboration',   color: '#8b5cf6' },
   marketing: { label: 'Marketing',       color: '#f97316' },
@@ -87,7 +87,7 @@ const COLORS = [
 
 const INITIAL_CATEGORIES: CalendarCategory[] = [];
 
-const PLATFORMS = ['Spotify', 'Apple Music', 'SoundCloud', 'YouTube Music', 'Tidal', 'Bandcamp', 'Amazon Music'];
+const PLATFORMS = ['Web', 'Mobile', 'Desktop', 'API', 'Social', 'Email', 'Print'];
 
 const INITIAL_PROJECTS: string[] = [];
 
@@ -98,13 +98,13 @@ const REMINDER_OPTIONS = [
   { label: '1 hour before',  time: 1, unit: 'hours' as const },
 ];
 
-const SESSION_TYPES = ['Vocal Recording', 'Beat Making', 'Mixing', 'Mastering', 'Sound Design', 'Songwriting'];
+const SESSION_TYPES = ['Deep Work', 'Brainstorm', 'Review', 'Planning', 'Research', 'Workshop'];
 const SESSION_DURATIONS = [1, 1.5, 2, 3, 4];
 
 const CategoryIcon = ({ type, className }: { type: EventType; className?: string }) => {
   switch (type) {
     case 'release':   return <Rocket className={className} />;
-    case 'session':   return <Mic className={className} />;
+    case 'session':   return <CalendarDays className={className} />;
     case 'deadline':  return <Clock className={className} />;
     case 'collab':    return <Users className={className} />;
     case 'marketing': return <Megaphone className={className} />;
@@ -413,14 +413,14 @@ export default function CalendarLensPage() {
 
     const event: CalendarEvent = {
       id: Date.now().toString(),
-      title: `${bookSession.sessionType} - Studio`,
+      title: `${bookSession.sessionType} Session`,
       startDate: start,
       endDate: end,
       allDay: false,
       color: '#06b6d4',
-      category: 'Studio Sessions',
+      category: 'Work Sessions',
       eventType: 'session',
-      location: 'Studio A',
+      location: '',
       reminders: [{ time: 1, unit: 'hours' }],
     };
 
@@ -812,7 +812,7 @@ export default function CalendarLensPage() {
                           background: `linear-gradient(135deg, ${event.artworkColor || event.color}40, ${event.color}20)`,
                         }}
                       >
-                        <Disc3 className="w-8 h-8" style={{ color: event.artworkColor || event.color }} />
+                        <CalendarDays className="w-8 h-8" style={{ color: event.artworkColor || event.color }} />
                       </div>
                       <p className="font-semibold text-sm truncate">{event.title}</p>
                       <p className="text-xs text-gray-400 mt-1">
@@ -937,7 +937,7 @@ export default function CalendarLensPage() {
 
           {upcomingEvents.length === 0 && (
             <div className="flex flex-col items-center justify-center h-64 text-gray-400">
-              <Music className="w-16 h-16 mb-4 opacity-30" />
+              <CalendarDays className="w-16 h-16 mb-4 opacity-30" />
               <p>No upcoming events</p>
               <button
                 onClick={() => { setEditingEventId(null); setShowCreateModal(true); }}
@@ -1220,15 +1220,15 @@ export default function CalendarLensPage() {
           {viewMode === 'day' && renderDayView()}
           {viewMode === 'agenda' && renderAgendaView()}
 
-          {/* Book Studio Time floating button */}
+          {/* Book Session floating button */}
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={() => setShowBookingModal(true)}
             className="absolute bottom-6 right-6 flex items-center gap-2 px-5 py-3 rounded-full bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-semibold shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 transition-shadow z-20"
           >
-            <Headphones className="w-5 h-5" />
-            Book Studio Time
+            <Clock className="w-5 h-5" />
+            Book Session
           </motion.button>
         </main>
       </div>
@@ -1319,7 +1319,7 @@ export default function CalendarLensPage() {
 
                 {selectedEvent.linkedProject && (
                   <div className="flex items-center gap-3 text-gray-400">
-                    <Music className="w-5 h-5" />
+                    <CheckSquare className="w-5 h-5" />
                     <span>Project: <span className="text-neon-cyan">{selectedEvent.linkedProject}</span></span>
                   </div>
                 )}
@@ -1373,7 +1373,7 @@ export default function CalendarLensPage() {
 
                 {selectedEvent.eventType === 'release' && (
                   <div className="pt-4 border-t border-lattice-border">
-                    <button onClick={() => { window.location.href = '/lenses/music'; }} className="flex items-center gap-2 text-neon-cyan hover:underline">
+                    <button onClick={() => { window.location.href = '/lenses/board'; }} className="flex items-center gap-2 text-neon-cyan hover:underline">
                       <ExternalLink className="w-4 h-4" />
                       Open release dashboard
                     </button>
@@ -1618,7 +1618,7 @@ export default function CalendarLensPage() {
                       type="text"
                       value={newEvent.location || ''}
                       onChange={(e) => setNewEvent({ ...newEvent, location: e.target.value })}
-                      placeholder="Studio name or address"
+                      placeholder="Location or address"
                       className="w-full bg-lattice-deep rounded-lg pl-10 pr-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-neon-cyan"
                     />
                   </div>
@@ -1630,7 +1630,7 @@ export default function CalendarLensPage() {
                   <textarea
                     value={newEvent.description || ''}
                     onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })}
-                    placeholder="Add notes, BPM, key, stems info..."
+                    placeholder="Add notes, details, links..."
                     rows={3}
                     className="w-full bg-lattice-deep rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-neon-cyan resize-none"
                   />
@@ -1659,7 +1659,7 @@ export default function CalendarLensPage() {
       </AnimatePresence>
 
       {/* ----------------------------------------------------------------- */}
-      {/* Quick Book Studio Time modal                                      */}
+      {/* Quick Book Session modal                                           */}
       {/* ----------------------------------------------------------------- */}
       <AnimatePresence>
         {showBookingModal && (
@@ -1680,9 +1680,9 @@ export default function CalendarLensPage() {
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
-                    <Headphones className="w-5 h-5 text-cyan-400" />
+                    <Bell className="w-5 h-5 text-cyan-400" />
                   </div>
-                  <h2 className="text-xl font-bold">Book Studio Time</h2>
+                  <h2 className="text-xl font-bold">Book a Session</h2>
                 </div>
                 <button
                   onClick={() => setShowBookingModal(false)}

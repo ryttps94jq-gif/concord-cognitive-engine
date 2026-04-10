@@ -32,6 +32,8 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { PullToSubstrate } from '@/components/lens/PullToSubstrate';
+import { FeedBanner } from '@/components/lens/FeedBanner';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -664,6 +666,7 @@ export default function CreativeLensPage() {
                 <span className={cn('text-xs font-medium', profitMargin > 0.3 ? 'text-green-400' : profitMargin > 0.1 ? 'text-amber-400' : 'text-red-400')}>
                   {fmtPct(profitMargin)} margin
                 </span>
+                <PullToSubstrate domain="creative" artifactId={item.id} compact />
                 <button onClick={e => { e.stopPropagation(); openEdit(item); }} className={ds.btnGhost}><Edit2 className="w-3.5 h-3.5" /></button>
                 <button onClick={e => { e.stopPropagation(); remove(item.id); }} className={cn(ds.btnGhost, 'hover:text-red-400')}><Trash2 className="w-3.5 h-3.5" /></button>
               </div>
@@ -1422,6 +1425,8 @@ export default function CreativeLensPage() {
         </div>
       </header>
 
+
+      <FeedBanner domain="creative" />
 
       {/* Quick Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

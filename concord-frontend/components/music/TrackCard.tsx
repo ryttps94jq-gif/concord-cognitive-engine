@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import { useMusicStore } from '@/lib/music/store';
 import { getPlayer } from '@/lib/music/player';
 import type { MusicTrack, ArtifactTier } from '@/lib/music/types';
+import { PullToSubstrate } from '@/components/lens/PullToSubstrate';
 
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -153,6 +154,7 @@ export function TrackCard({
               )}
             </div>
             <div className="flex items-center gap-1">
+              <PullToSubstrate domain="music" artifactId={track.id} compact />
               <button
                 onClick={() => setLiked(!liked)}
                 className={cn('p-1 transition-colors', liked ? 'text-neon-pink' : 'text-gray-600 hover:text-white')}
@@ -280,6 +282,7 @@ export function TrackCard({
 
         {/* Actions */}
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+          <PullToSubstrate domain="music" artifactId={track.id} compact />
           <button
             onClick={() => setLiked(!liked)}
             className={cn('p-1', liked ? 'text-neon-pink' : 'text-gray-500 hover:text-white')}

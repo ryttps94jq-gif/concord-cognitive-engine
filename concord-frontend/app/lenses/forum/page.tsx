@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { apiHelpers } from '@/lib/api/client';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -43,6 +43,8 @@ import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
+import { PullToSubstrate } from '@/components/lens/PullToSubstrate';
+import { FeedBanner } from '@/components/lens/FeedBanner';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -113,12 +115,12 @@ type ViewMode = 'feed' | 'detail' | 'profile';
 // ---------------------------------------------------------------------------
 
 const AWARDS = [
-  { id: 'fire', emoji: '\uD83D\uDD25', name: 'Fire Track', cost: 100 },
-  { id: 'gold', emoji: '\uD83C\uDFC6', name: 'Gold Record', cost: 500 },
+  { id: 'fire', emoji: '\uD83D\uDD25', name: 'Hot Take', cost: 100 },
+  { id: 'gold', emoji: '\uD83C\uDFC6', name: 'Top Post', cost: 500 },
   { id: 'platinum', emoji: '\uD83D\uDC8E', name: 'Platinum', cost: 1000 },
-  { id: 'headphones', emoji: '\uD83C\uDFA7', name: 'Headphones', cost: 50 },
-  { id: 'mic', emoji: '\uD83C\uDFA4', name: 'Mic Drop', cost: 250 },
-  { id: 'vinyl', emoji: '\uD83D\uDCBF', name: 'Vinyl Press', cost: 750 },
+  { id: 'lightbulb', emoji: '\uD83D\uDCA1', name: 'Insightful', cost: 50 },
+  { id: 'star', emoji: '\u2B50', name: 'Star Reply', cost: 250 },
+  { id: 'rocket', emoji: '\uD83D\uDE80', name: 'Breakthrough', cost: 750 },
 ];
 
 const FLAIRS = [
@@ -235,22 +237,23 @@ export default function ForumLensPage() {
   });
 
   // Sync backend data into local state when available
+  // IMPORTANT: Use the lens artifact ID (i.id) as the Post id so that
+  // subsequent update/delete calls send the correct ID to the backend.
   useEffect(() => {
     if (postItems.length > 0) {
-      setPosts(postItems.map(i => i.data as unknown as Post));
+      setPosts(postItems.map(i => ({ ...(i.data as unknown as Post), id: i.id })));
     }
   }, [postItems]);
 
   useEffect(() => {
     if (communityItems.length > 0) {
-      setCommunities(communityItems.map(i => i.data as unknown as Community));
+      setCommunities(communityItems.map(i => ({ ...(i.data as unknown as Community), id: i.id })));
     }
   }, [communityItems]);
 
-  // API queries for real-data integration
+  // API queries for supplementary real-data integration
   useQuery({ queryKey: ['forum-posts-api', selectedCommunity, sortMode], queryFn: () => apiHelpers.dtus.paginated({ tags: selectedCommunity !== 'all' ? selectedCommunity : undefined, pageSize: 50 }).then(r => r.data) });
   useQuery({ queryKey: ['communities-api'], queryFn: () => apiHelpers.dtus.list().then(r => { const tags = new Set<string>(); (r.data?.dtus || []).forEach((d: Record<string, unknown>) => ((d.tags as string[]) || []).forEach(t => tags.add(t))); return { tags: Array.from(tags) }; }) });
-  const voteMutation = useMutation({ mutationFn: ({ postId, vote }: { postId: string; vote: number }) => apiHelpers.dtus.update(postId, { vote }), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['forum-posts-api'] }), onError: (err: Error) => { console.error('Vote failed:', err.message); } });
 
   // ----- Filtered & sorted posts -----
   const displayPosts = useMemo(() => {
@@ -277,14 +280,28 @@ export default function ForumLensPage() {
 
   // ----- Actions -----
   const handleVote = useCallback((postId: string, direction: number) => {
-    setPosts(prev => prev.map(p => {
-      if (p.id !== postId) return p;
-      const newVote = p.userVote === direction ? 0 : direction;
-      const scoreDelta = newVote - p.userVote;
-      return { ...p, userVote: newVote, score: p.score + scoreDelta };
-    }));
-    voteMutation.mutate({ postId, vote: direction });
-  }, [voteMutation]);
+    setPosts(prev => {
+      const updated = prev.map(p => {
+        if (p.id !== postId) return p;
+        const newVote = p.userVote === direction ? 0 : direction;
+        const scoreDelta = newVote - p.userVote;
+        return { ...p, userVote: newVote, score: p.score + scoreDelta };
+      });
+      // Persist voted post to backend via lens API
+      const post = updated.find(p => p.id === postId);
+      if (post) {
+        updateForumPost(postId, { data: post as unknown as Record<string, unknown> }).catch(() => {
+          // Rollback on failure
+          setPosts(prev2 => prev2.map(p => {
+            if (p.id !== postId) return p;
+            const revertedVote = p.userVote === direction ? 0 : direction;
+            return { ...p, userVote: revertedVote === direction ? 0 : p.userVote, score: p.score };
+          }));
+        });
+      }
+      return updated;
+    });
+  }, [updateForumPost]);
 
   const handleCommentVote = useCallback((commentId: string, direction: number) => {
     function updateComment(comments: Comment[]): Comment[] {
@@ -296,8 +313,16 @@ export default function ForumLensPage() {
         return { ...c, replies: updateComment(c.replies) };
       });
     }
-    setPosts(prev => prev.map(p => ({ ...p, comments: updateComment(p.comments) })));
-  }, []);
+    setPosts(prev => {
+      const updated = prev.map(p => ({ ...p, comments: updateComment(p.comments) }));
+      // Persist the post containing the comment to backend
+      const postWithComment = updated.find(p => JSON.stringify(p.comments).includes(commentId));
+      if (postWithComment) {
+        updateForumPost(postWithComment.id, { data: postWithComment as unknown as Record<string, unknown> });
+      }
+      return updated;
+    });
+  }, [updateForumPost]);
 
   const handleCreatePost = useCallback(() => {
     if (!newPostTitle.trim() || !newPostCommunity) return;
@@ -319,7 +344,7 @@ export default function ForumLensPage() {
   const handleCreateCommunity = useCallback(() => {
     if (!newCommName.trim()) return;
     const slug = newCommName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    const newComm: Community = { id: slug, name: newCommName, description: newCommDesc, memberCount: 1, icon: '\uD83C\uDFB5', banner: 'from-neon-cyan to-neon-purple', joined: true, rules: ['Be respectful', 'Stay on topic'], createdAt: new Date().toISOString(), moderators: [DEFAULT_AUTHOR.username] };
+    const newComm: Community = { id: slug, name: newCommName, description: newCommDesc, memberCount: 1, icon: '\uD83D\uDCAC', banner: 'from-neon-cyan to-neon-purple', joined: true, rules: ['Be respectful', 'Stay on topic'], createdAt: new Date().toISOString(), moderators: [DEFAULT_AUTHOR.username] };
     setCommunities(prev => [...prev, newComm]);
     createForumCommunity({ title: newComm.name, data: newComm as unknown as Record<string, unknown>, meta: { status: 'active' } });
     setShowCreateCommunity(false);
@@ -457,7 +482,7 @@ export default function ForumLensPage() {
                 <button onClick={() => { setReplyTo(comment.id); setReplyContent(''); }} className="text-xs text-gray-500 hover:text-white flex items-center gap-1"><MessageSquare className="w-3 h-3" />Reply</button>
               )}
               <button onClick={() => setShowAwardModal({ type: 'comment', id: comment.id })} className="text-xs text-gray-500 hover:text-yellow-400 flex items-center gap-1"><Award className="w-3 h-3" />Award</button>
-              <button onClick={() => { /* report action */ }} className="text-xs text-gray-500 hover:text-white flex items-center gap-1"><Flag className="w-3 h-3" />Report</button>
+              <ReportButton contentId={comment.id} contentType="comment" compact />
             </div>
             <AnimatePresence>
               {replyTo === comment.id && (
@@ -513,6 +538,7 @@ export default function ForumLensPage() {
               <button onClick={() => setShowShareModal(post.id)} className="flex items-center gap-1.5 text-xs hover:bg-lattice-bg px-2 py-1 rounded transition-colors"><Share2 className="w-4 h-4" />Share</button>
               <ReportButton contentId={post.id} contentType="post" compact />
               <button onClick={() => handleToggleSave(post.id)} className={cn('flex items-center gap-1.5 text-xs hover:bg-lattice-bg px-2 py-1 rounded transition-colors', post.saved && 'text-neon-cyan')}>{post.saved ? <BookmarkCheck className="w-4 h-4" /> : <Bookmark className="w-4 h-4" />}{post.saved ? 'Saved' : 'Save'}</button>
+              <PullToSubstrate domain="forum" artifactId={post.id} compact />
               <div className="flex items-center gap-1.5 text-xs px-2 py-1 text-gray-500"><Eye className="w-3.5 h-3.5" />{post.views.toLocaleString()}</div>
               {/* Mod tools */}
               <div className="relative ml-auto">
@@ -580,6 +606,7 @@ export default function ForumLensPage() {
                 <button onClick={() => setShowShareModal(selectedPost.id)} className="flex items-center gap-1 text-xs hover:text-white transition-colors"><Share2 className="w-4 h-4" />Share</button>
                 <ReportButton contentId={selectedPost.id} contentType="post" compact />
                 <button onClick={() => handleToggleSave(selectedPost.id)} className={cn('flex items-center gap-1 text-xs transition-colors', selectedPost.saved ? 'text-neon-cyan' : 'hover:text-white')}>{selectedPost.saved ? <BookmarkCheck className="w-4 h-4" /> : <Bookmark className="w-4 h-4" />}{selectedPost.saved ? 'Saved' : 'Save'}</button>
+                <PullToSubstrate domain="forum" artifactId={selectedPost.id} compact />
                 <span className="text-xs flex items-center gap-1 text-gray-500"><Eye className="w-3.5 h-3.5" />{selectedPost.views.toLocaleString()} views</span>
               </div>
             </div>
@@ -766,7 +793,8 @@ export default function ForumLensPage() {
       </header>
 
       <div className="max-w-6xl mx-auto px-4 py-6">
-        <div className="flex gap-6">
+        <FeedBanner domain="forum" />
+        <div className="flex gap-6 mt-4">
           {/* Main content */}
           <AnimatePresence mode="wait">
             {viewMode === 'feed' && (

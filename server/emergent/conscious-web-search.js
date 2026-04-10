@@ -268,7 +268,10 @@ CITATION RULES:
 
   prompt += `
 RESPONSE RULES:
-- Answer the user's question directly and thoroughly
+- ALWAYS answer the user's actual question first. This is your primary job.
+- Use substrate context and web sources to enrich your answer, not replace it.
+- If no relevant context exists, answer from your own knowledge.
+- Never ignore the question to discuss system internals or unrelated context.
 - Be conversational, not robotic
 - If you used web sources, include citations naturally
 - If you couldn't find a good answer even with web search, say so honestly

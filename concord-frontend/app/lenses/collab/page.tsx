@@ -15,11 +15,9 @@ import {
   Clock,
   Send,
   X,
-  Music,
+  Hand as Handshake,
   Paintbrush,
   PenTool,
-  Mic2,
-  Disc3,
   Globe,
   Lock,
   Mail,
@@ -32,9 +30,7 @@ import {
   Check,
   XCircle,
   Crown,
-  Radio,
   Hash,
-  FileAudio,
   Paperclip,
   Timer,
   Archive,
@@ -53,10 +49,10 @@ import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 // Types
 // ---------------------------------------------------------------------------
 
-type ProjectType = 'beat' | 'song' | 'remix' | 'art' | 'writing';
+type ProjectType = 'design' | 'development' | 'research' | 'art' | 'writing';
 type SessionStatus = 'open' | 'in-progress' | 'full' | 'private';
 type Privacy = 'public' | 'private' | 'invite-only';
-type ParticipantRole = 'host' | 'producer' | 'vocalist' | 'mixer' | 'artist' | 'writer';
+type ParticipantRole = 'host' | 'developer' | 'designer' | 'reviewer' | 'creator' | 'writer';
 type MainTab = 'active' | 'mine' | 'invitations' | 'history';
 type FilterPill = 'all' | ProjectType;
 
@@ -129,9 +125,9 @@ const AVATARS = [
 ];
 
 const NAMES = [
-  'ProdByVex', 'LunaBeatsmith', 'AceOnTheTrack', 'SketchQueen',
-  'RhymeCraft', 'WaveSurgeon', 'NovaMelody', 'BassAlchemy',
-  'InkFlow', 'PixelDrift', 'VocalFire', 'SynthLord',
+  'AlexDesigner', 'JordanDev', 'TaylorResearch', 'MorganCreative',
+  'CaseyWriter', 'RileyAnalyst', 'SamArchitect', 'DanaEngineer',
+  'InkFlow', 'PixelDrift', 'DrewPlanner', 'QuinnStrategy',
 ];
 
 function _makePart(idx: number, role: ParticipantRole, online = true): Participant {
@@ -156,18 +152,18 @@ const INITIAL_HISTORY: HistoryEntry[] = [];
 // Helpers
 // ---------------------------------------------------------------------------
 
-const TYPE_ICONS: Record<ProjectType, typeof Music> = {
-  beat: Disc3,
-  song: Mic2,
-  remix: Radio,
-  art: Paintbrush,
+const TYPE_ICONS: Record<ProjectType, typeof Handshake> = {
+  design: Paintbrush,
+  development: Monitor,
+  research: Search,
+  art: PenTool,
   writing: PenTool,
 };
 
 const TYPE_COLORS: Record<ProjectType, string> = {
-  beat: 'text-neon-blue',
-  song: 'text-neon-purple',
-  remix: 'text-neon-cyan',
+  design: 'text-neon-blue',
+  development: 'text-neon-purple',
+  research: 'text-neon-cyan',
   art: 'text-amber-400',
   writing: 'text-emerald-400',
 };
@@ -181,10 +177,10 @@ const STATUS_STYLES: Record<SessionStatus, string> = {
 
 const ROLE_BADGE: Record<ParticipantRole, { label: string; color: string }> = {
   host: { label: 'Host', color: 'bg-amber-500/20 text-amber-400' },
-  producer: { label: 'Producer', color: 'bg-neon-blue/20 text-neon-blue' },
-  vocalist: { label: 'Vocalist', color: 'bg-neon-purple/20 text-neon-purple' },
-  mixer: { label: 'Mixer', color: 'bg-neon-cyan/20 text-neon-cyan' },
-  artist: { label: 'Artist', color: 'bg-amber-400/20 text-amber-400' },
+  developer: { label: 'Developer', color: 'bg-neon-blue/20 text-neon-blue' },
+  designer: { label: 'Designer', color: 'bg-neon-purple/20 text-neon-purple' },
+  reviewer: { label: 'Reviewer', color: 'bg-neon-cyan/20 text-neon-cyan' },
+  creator: { label: 'Creator', color: 'bg-amber-400/20 text-amber-400' },
   writer: { label: 'Writer', color: 'bg-emerald-400/20 text-emerald-400' },
 };
 
@@ -268,9 +264,9 @@ export default function CollabLensPage() {
 
   const PILLS: { key: FilterPill; label: string }[] = [
     { key: 'all', label: 'All' },
-    { key: 'beat', label: 'Beats' },
-    { key: 'song', label: 'Songs' },
-    { key: 'remix', label: 'Remixes' },
+    { key: 'design', label: 'Design' },
+    { key: 'development', label: 'Development' },
+    { key: 'research', label: 'Research' },
     { key: 'art', label: 'Art' },
     { key: 'writing', label: 'Writing' },
   ];
@@ -441,7 +437,7 @@ export default function CollabLensPage() {
           >
             {mySessions.length === 0 ? (
               <div className="panel p-12 text-center text-gray-400">
-                <Music className="w-12 h-12 mx-auto mb-3 opacity-40" />
+                <Users className="w-12 h-12 mx-auto mb-3 opacity-40" />
                 <p className="font-medium">No active sessions</p>
                 <p className="text-sm mt-1">Create or join a session to see it here.</p>
               </div>
@@ -776,7 +772,7 @@ function ActiveSessionView({ session, onLeave }: { session: CollabSession; onLea
             <div className="panel p-4">
               <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Project Timeline</h3>
               <div className="space-y-2">
-                {['Intro', 'Verse 1', 'Hook', 'Verse 2', 'Bridge', 'Outro'].map((section, i) => (
+                {['Planning', 'Research', 'Design', 'Development', 'Review', 'Delivery'].map((section, i) => (
                   <div key={section} className="flex items-center gap-2">
                     <span className="text-[10px] text-gray-500 w-12 text-right">{(i * 8) + 1}-{(i + 1) * 8}</span>
                     <div
@@ -799,11 +795,11 @@ function ActiveSessionView({ session, onLeave }: { session: CollabSession; onLea
             <div className="panel p-4">
               <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Shared Notes</h3>
               <div className="bg-lattice-surface rounded-lg p-3 text-sm text-gray-300 space-y-2 min-h-[80px]">
-                <p>- BPM: 145 | Key: F minor</p>
-                <p>- Main melody uses pentatonic scale with chromatic runs</p>
-                <p>- 808 pattern: half-time bounce with triplet rolls at bar 4</p>
-                <p>- Vocal chops layered on hook section, need reverb tail</p>
-                <p>- Reference tracks: Metro Boomin, Southside style</p>
+                <p>- Target: Q2 delivery</p>
+                <p>- Primary focus on user onboarding flow improvements</p>
+                <p>- Action items: finalize wireframes, collect stakeholder feedback</p>
+                <p>- Accessibility review pending for all new components</p>
+                <p>- Reference: competitor analysis doc</p>
               </div>
             </div>
 
@@ -812,14 +808,14 @@ function ActiveSessionView({ session, onLeave }: { session: CollabSession; onLea
               <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Shared Files</h3>
               <div className="space-y-1.5">
                 {[
-                  { name: 'main_melody_v2.mid', size: '12 KB', by: 'LunaBeatsmith' },
-                  { name: '808_bounce.wav', size: '2.4 MB', by: 'ProdByVex' },
-                  { name: 'vocal_chops_pack.zip', size: '18 MB', by: 'LunaBeatsmith' },
-                  { name: 'rough_mix_v1.wav', size: '8.1 MB', by: 'ProdByVex' },
+                  { name: 'design_mockup_v2.fig', size: '12 KB', by: 'JordanDev' },
+                  { name: 'requirements_spec.pdf', size: '2.4 MB', by: 'AlexDesigner' },
+                  { name: 'assets_bundle.zip', size: '18 MB', by: 'JordanDev' },
+                  { name: 'project_brief_v1.docx', size: '8.1 MB', by: 'AlexDesigner' },
                 ].map(f => (
                   <div key={f.name} className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-lattice-surface transition-colors">
                     <div className="flex items-center gap-2">
-                      <FileAudio className="w-3.5 h-3.5 text-neon-cyan" />
+                      <Paperclip className="w-3.5 h-3.5 text-neon-cyan" />
                       <span className="text-xs font-medium">{f.name}</span>
                     </div>
                     <div className="flex items-center gap-3 text-[11px] text-gray-500">
@@ -1006,7 +1002,7 @@ function HistoryCard({ entry }: { entry: HistoryEntry }) {
           {entry.participantCount}
         </div>
         <div className="flex items-center gap-1" title="Files shared">
-          <FileAudio className="w-3 h-3" />
+          <Paperclip className="w-3 h-3" />
           {entry.filesShared}
         </div>
         <div className="flex items-center gap-1" title="Ended">
@@ -1026,7 +1022,7 @@ function CreateSessionModal({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState({
     name: '',
-    type: 'beat' as ProjectType,
+    type: 'design' as ProjectType,
     genre: '',
     maxParticipants: 6,
     privacy: 'public' as Privacy,
@@ -1089,7 +1085,7 @@ function CreateSessionModal({ onClose }: { onClose: () => void }) {
           <label className="text-xs font-medium text-gray-400 block mb-1">Session Name</label>
           <input
             type="text"
-            placeholder="e.g. Late Night Beat Session"
+            placeholder="e.g. Q2 Design Sprint"
             value={form.name}
             onChange={e => setForm({ ...form, name: e.target.value })}
             className="w-full px-3 py-2 text-sm bg-lattice-surface border border-lattice-border rounded-lg focus:outline-none focus:border-neon-blue/50"
@@ -1105,18 +1101,18 @@ function CreateSessionModal({ onClose }: { onClose: () => void }) {
               onChange={e => setForm({ ...form, type: e.target.value as ProjectType })}
               className="w-full px-3 py-2 text-sm bg-lattice-surface border border-lattice-border rounded-lg focus:outline-none focus:border-neon-blue/50"
             >
-              <option value="beat">Beat</option>
-              <option value="song">Song</option>
-              <option value="remix">Remix</option>
+              <option value="design">Design</option>
+              <option value="development">Development</option>
+              <option value="research">Research</option>
               <option value="art">Art</option>
               <option value="writing">Writing</option>
             </select>
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-400 block mb-1">Genre</label>
+            <label className="text-xs font-medium text-gray-400 block mb-1">Category</label>
             <input
               type="text"
-              placeholder="e.g. Trap, Lo-Fi"
+              placeholder="e.g. UI/UX, Backend"
               value={form.genre}
               onChange={e => setForm({ ...form, genre: e.target.value })}
               className="w-full px-3 py-2 text-sm bg-lattice-surface border border-lattice-border rounded-lg focus:outline-none focus:border-neon-blue/50"

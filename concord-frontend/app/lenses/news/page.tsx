@@ -2,13 +2,16 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { UniversalActions } from '@/components/lens/UniversalActions';
-import { useQuery } from '@tanstack/react-query';
-import { apiHelpers } from '@/lib/api/client';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { api } from '@/lib/api/client';
+import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useState, useMemo, useCallback } from 'react';
+import { useUIStore } from '@/store/ui';
 import {
   Newspaper, Clock, Tag, TrendingUp, Bookmark, Share2,
   Search, RefreshCw, ChevronDown, ChevronUp, ExternalLink,
   Filter, X, Eye, BarChart3, ArrowUpRight, Bell, Globe, Rss,
+  Download, Quote, GitFork,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -56,21 +59,32 @@ export default function NewsLensPage() {
   const [showFilters, setShowFilters] = useState(false);
   const { bookmarkedIds, toggleBookmark } = useBookmarks('news');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
+  const addToast = useUIStore((s) => s.addToast);
+  const queryClient = useQueryClient();
 
-  const { data: news, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ['news', selectedCategory],
-    queryFn: () =>
-      apiHelpers.lens.list('news', {
-        tags: selectedCategory !== 'all' ? selectedCategory : undefined,
-      }).then((r) => r.data),
-    refetchInterval: 60_000,
+  // Pull article to user's DTU substrate
+  const pullMutation = useMutation({
+    mutationFn: (articleId: string) => api.post(`/api/lens/news/${articleId}/pull`),
+    onSuccess: (res) => {
+      addToast({ type: 'success', message: `Pulled to your substrate${res.data?.dtu?.title ? `: ${res.data.dtu.title}` : ''}` });
+      queryClient.invalidateQueries({ queryKey: ['dtus'] });
+    },
+    onError: () => addToast({ type: 'error', message: 'Failed to pull article' }),
   });
 
-  const { data: trending, isError: isError2, error: error2, refetch: refetch2 } = useQuery({
-    queryKey: ['news-trending'],
-    queryFn: () => apiHelpers.lens.list('news', { type: 'trending' }).then((r) => r.data),
-    refetchInterval: 120_000,
+  // Cite an article (link it to one of user's DTUs)
+  const citeMutation = useMutation({
+    mutationFn: ({ articleId, userDtuId }: { articleId: string; userDtuId?: string }) =>
+      api.post('/api/social/cite', { citedDtuId: articleId, citingDtuId: userDtuId || 'latest' }),
+    onSuccess: () => addToast({ type: 'success', message: 'Citation recorded' }),
   });
+
+  const { items: newsItems, isLoading, isError, error, refetch } = useLensData('news', 'article', {
+    tags: selectedCategory !== 'all' ? [selectedCategory] : undefined,
+    noSeed: true,
+  });
+
+  const { items: trendingItems, isError: isError2, error: error2, refetch: refetch2 } = useLensData('news', 'trending', { noSeed: true });
 
   const categories = [
     { id: 'all', name: 'All', icon: Newspaper },
@@ -82,8 +96,7 @@ export default function NewsLensPage() {
   ];
 
   const articles: NewsArticle[] = useMemo(() => {
-    const raw = news?.artifacts || news?.articles || news?.items || [];
-    return raw.map((item: Record<string, unknown>) => {
+    return (newsItems || []).map((item: Record<string, unknown>) => {
       const data = (item.data || {}) as Record<string, unknown>;
       return {
         id: String(item.id || ''),
@@ -101,7 +114,7 @@ export default function NewsLensPage() {
         importance: (data.importance as 'low' | 'medium' | 'high' | 'critical') || undefined,
       };
     });
-  }, [news]);
+  }, [newsItems]);
 
   // Extract unique sources for filtering
   const sources = useMemo(() => {
@@ -323,7 +336,7 @@ export default function NewsLensPage() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 3 * 0.05 }} className="panel p-3 flex items-center gap-3">
           <Globe className="w-5 h-5 text-neon-purple" />
           <div>
-            <p className="text-lg font-bold">{news?.stats?.today || 0}</p>
+            <p className="text-lg font-bold">{0}</p>
             <p className="text-xs text-gray-500">Today</p>
           </div>
         </motion.div>
@@ -455,6 +468,20 @@ export default function NewsLensPage() {
                         </div>
                         <div className="flex items-center gap-2">
                           <button
+                            onClick={(e) => { e.stopPropagation(); pullMutation.mutate(article.id); }}
+                            className="text-gray-400 hover:text-neon-green transition-colors"
+                            title="Pull to substrate"
+                          >
+                            <Download className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); citeMutation.mutate({ articleId: article.id }); }}
+                            className="text-gray-400 hover:text-neon-cyan transition-colors"
+                            title="Cite this article"
+                          >
+                            <Quote className="w-4 h-4" />
+                          </button>
+                          <button
                             onClick={(e) => { e.stopPropagation(); toggleBookmark(article.id); }}
                             className={`transition-colors ${isBookmarked ? 'text-neon-yellow' : 'text-gray-400 hover:text-neon-yellow'}`}
                           >
@@ -466,6 +493,7 @@ export default function NewsLensPage() {
                               navigator.clipboard?.writeText(
                                 `${window.location.origin}/lenses/news?article=${article.id}`
                               );
+                              addToast({ type: 'info', message: 'Link copied' });
                             }}
                             className="text-gray-400 hover:text-neon-purple transition-colors"
                           >
@@ -501,6 +529,23 @@ export default function NewsLensPage() {
                               Read full article
                             </a>
                           )}
+                          <div className="flex gap-2 pt-2">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); pullMutation.mutate(article.id); }}
+                              disabled={pullMutation.isPending}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-neon-green/10 text-neon-green border border-neon-green/20 hover:bg-neon-green/20 transition-colors disabled:opacity-50"
+                            >
+                              <Download className="w-3 h-3" />
+                              {pullMutation.isPending ? 'Pulling...' : 'Pull to Substrate'}
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); citeMutation.mutate({ articleId: article.id }); }}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/20 hover:bg-neon-cyan/20 transition-colors"
+                            >
+                              <Quote className="w-3 h-3" />
+                              Cite
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -542,8 +587,8 @@ export default function NewsLensPage() {
               Trending Topics
             </h3>
             <div className="space-y-2">
-              {trending?.topics?.length > 0 ? (
-                trending.topics.map((topic: Record<string, unknown>, index: number) => (
+              {trendingItems?.length > 0 ? (
+                trendingItems.map((topic: Record<string, unknown>, index: number) => (
                   <div
                     key={topic.id as string}
                     className="flex items-center gap-3 p-2 rounded-lg hover:bg-lattice-elevated cursor-pointer transition-colors"
@@ -576,11 +621,11 @@ export default function NewsLensPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">Articles Today</span>
-                <span className="font-mono">{news?.stats?.today || 0}</span>
+                <span className="font-mono">{0}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">Active Sources</span>
-                <span className="font-mono">{news?.stats?.sources || sources.length - 1}</span>
+                <span className="font-mono">{sources.length - 1}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">Trending</span>

@@ -126,7 +126,7 @@ export function DTUDetailView({ dtuId, onClose, onNavigate }: DTUDetailViewProps
   });
 
   // Prefer server data when available, fall back to offline cache
-  const dtuData = (serverDtu || offlineDtu as DTU | null) ?? null;
+  const dtuData: DTU | null = (serverDtu || (offlineDtu as DTU | null)) ?? null;
   const isLoading = serverLoading && offlineLoading;
 
   // Fetch lineage (enhanced: includes forks, citations, citedBy, royaltyCascade)
@@ -358,10 +358,100 @@ export function DTUDetailView({ dtuId, onClose, onNavigate }: DTUDetailViewProps
                   )}
 
                   {/* Summary */}
-                  {dtu.summary && (
+                  {!!dtu.summary && (
                     <div>
                       <h3 className="text-sm font-medium text-gray-400 mb-1">Summary</h3>
                       <p className="text-gray-200">{dtu.summary}</p>
+                    </div>
+                  )}
+
+                  {/* Human-readable summary from human layer */}
+                  {!!(dtu as unknown as Record<string, unknown>).human && typeof (dtu as unknown as Record<string, unknown>).human === 'object' && (
+                    <div>
+                      {!!((dtu as unknown as Record<string, Record<string, unknown>>).human?.summary) && (
+                        <div className="mb-3">
+                          <h3 className="text-sm font-medium text-gray-400 mb-1">Human Summary</h3>
+                          <p className="text-gray-200">{String((dtu as unknown as Record<string, Record<string, unknown>>).human.summary)}</p>
+                        </div>
+                      )}
+                      {Array.isArray((dtu as unknown as Record<string, Record<string, unknown[]>>).human?.bullets) && ((dtu as unknown as Record<string, Record<string, string[]>>).human.bullets).length > 0 && (
+                        <div>
+                          <h3 className="text-sm font-medium text-gray-400 mb-1">Key Points</h3>
+                          <ul className="list-disc list-inside space-y-1 text-gray-200 text-sm">
+                            {((dtu as unknown as Record<string, Record<string, string[]>>).human.bullets).map((b: string, i: number) => (
+                              <li key={i}>{b}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* CRETI content (the main knowledge text) */}
+                  {!!((dtu as unknown as Record<string, unknown>).creti || (dtu as unknown as Record<string, unknown>).cretiHuman) && (
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-400 mb-2">CRETI Content</h3>
+                      <div className="bg-lattice-deep p-4 rounded-lg">
+                        {typeof (dtu as unknown as Record<string, unknown>).cretiHuman === 'string' && (
+                          <p className="text-gray-200 whitespace-pre-wrap text-sm mb-2">
+                            {String((dtu as unknown as Record<string, unknown>).cretiHuman)}
+                          </p>
+                        )}
+                        {typeof (dtu as unknown as Record<string, unknown>).creti === 'object' && !Array.isArray((dtu as unknown as Record<string, unknown>).creti) && (dtu as unknown as Record<string, unknown>).creti !== null && (
+                          <div className="space-y-2">
+                            {Object.entries((dtu as unknown as Record<string, Record<string, number>>).creti).map(([key, val]) => (
+                              <div key={key} className="flex items-center gap-3">
+                                <span className="text-xs text-gray-400 uppercase w-24 flex-shrink-0">{key}</span>
+                                <div className="flex-1 h-2 bg-lattice-border rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full rounded-full bg-neon-cyan"
+                                    style={{ width: `${Math.min(typeof val === 'number' ? val * 100 : 0, 100)}%` }}
+                                  />
+                                </div>
+                                <span className="text-xs text-gray-300 w-10 text-right font-mono">
+                                  {typeof val === 'number' ? val.toFixed(2) : String(val)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Core structured data (definitions, claims, examples) */}
+                  {!!(dtu as unknown as Record<string, unknown>).core && typeof (dtu as unknown as Record<string, unknown>).core === 'object' && (
+                    <div className="space-y-3">
+                      {Array.isArray((dtu as unknown as Record<string, Record<string, unknown[]>>).core?.definitions) && ((dtu as unknown as Record<string, Record<string, string[]>>).core.definitions).length > 0 && (
+                        <div>
+                          <h3 className="text-sm font-medium text-gray-400 mb-1">Definitions</h3>
+                          <ul className="space-y-1">
+                            {((dtu as unknown as Record<string, Record<string, string[]>>).core.definitions).map((def: string, i: number) => (
+                              <li key={i} className="text-sm text-gray-200 pl-3 border-l-2 border-neon-blue/40">{typeof def === 'string' ? def : JSON.stringify(def)}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {Array.isArray((dtu as unknown as Record<string, Record<string, unknown[]>>).core?.claims) && ((dtu as unknown as Record<string, Record<string, string[]>>).core.claims).length > 0 && (
+                        <div>
+                          <h3 className="text-sm font-medium text-gray-400 mb-1">Claims</h3>
+                          <ul className="space-y-1">
+                            {((dtu as unknown as Record<string, Record<string, string[]>>).core.claims).map((claim: string, i: number) => (
+                              <li key={i} className="text-sm text-gray-200 pl-3 border-l-2 border-neon-purple/40">{typeof claim === 'string' ? claim : JSON.stringify(claim)}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {Array.isArray((dtu as unknown as Record<string, Record<string, unknown[]>>).core?.examples) && ((dtu as unknown as Record<string, Record<string, string[]>>).core.examples).length > 0 && (
+                        <div>
+                          <h3 className="text-sm font-medium text-gray-400 mb-1">Examples</h3>
+                          <ul className="space-y-1">
+                            {((dtu as unknown as Record<string, Record<string, string[]>>).core.examples).map((ex: string, i: number) => (
+                              <li key={i} className="text-sm text-gray-200 pl-3 border-l-2 border-neon-cyan/40">{typeof ex === 'string' ? ex : JSON.stringify(ex)}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                     </div>
                   )}
 
