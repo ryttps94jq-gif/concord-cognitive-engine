@@ -157,6 +157,11 @@ import projects from './projects.js';
 import robotics from './robotics.js';
 import space from './space.js';
 import sports from './sports.js';
+import supplychain from './supplychain.js';
+import telecommunications from './telecommunications.js';
+import travel from './travel.js';
+import urbanplanning from './urbanplanning.js';
+import veterinary from './veterinary.js';
 
 export default [
   healthcare,
@@ -307,4 +312,9 @@ export default [
   robotics,
   space,
   sports,
+  supplychain,
+  telecommunications,
+  travel,
+  urbanplanning,
+  veterinary,
 ];
