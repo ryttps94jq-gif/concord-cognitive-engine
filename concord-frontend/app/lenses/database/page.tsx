@@ -251,21 +251,12 @@ export default function DatabaseLensPage() {
     queryFn: () => api.get('/api/backpressure/status').then(r => r.data),
   });
 
-  const { data: liveTables, isError: isError6, error: error6, refetch: refetch6,} = useQuery({
-    queryKey: ['db-tables'],
-    queryFn: () => apiHelpers.lens.list('database', { type: 'table' }).then(r => r.data),
-    retry: false,
-  });
-
-  const { data: liveIndexes, isError: isError7, error: error7, refetch: refetch7,} = useQuery({
-    queryKey: ['db-indexes'],
-    queryFn: () => apiHelpers.lens.list('database', { type: 'index' }).then(r => r.data),
-    retry: false,
-  });
+  const { items: tableItems, isError: isError6, error: error6, refetch: refetch6 } = useLensData('database', 'table', { noSeed: true });
+  const { items: indexItems, isError: isError7, error: error7, refetch: refetch7 } = useLensData('database', 'index', { noSeed: true });
 
   // Use live data only — no fake fallbacks
-  const tables: TableInfo[] = useMemo(() => liveTables?.tables ?? [], [liveTables]);
-  const indexes: IndexInfo[] = useMemo(() => liveIndexes?.indexes ?? [], [liveIndexes]);
+  const tables: TableInfo[] = useMemo(() => tableItems?.map(i => i.data as unknown as TableInfo) ?? [], [tableItems]);
+  const indexes: IndexInfo[] = useMemo(() => indexItems?.map(i => i.data as unknown as IndexInfo) ?? [], [indexItems]);
 
   // Accumulate perf snapshots for time-series charts
   useEffect(() => {

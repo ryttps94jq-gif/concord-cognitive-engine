@@ -3,6 +3,7 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, apiHelpers } from '@/lib/api/client';
+import { useLensData } from '@/lib/hooks/use-lens-data';
 import type { CreateWebhookRequest } from '@/lib/api/generated-types';
 import { useUIStore } from '@/store/ui';
 import { useState } from 'react';
@@ -28,15 +29,8 @@ export default function IntegrationsLensPage() {
     queryFn: () => apiHelpers.webhooks.list().then(r => r.data),
   });
 
-  const { data: automations, isError: isError2, error: error2, refetch: refetch2,} = useQuery({
-    queryKey: ['automations'],
-    queryFn: () => apiHelpers.lens.list('integrations', { type: 'automation' }).then(r => r.data),
-  });
-
-  const { data: integrations, isError: isError3, error: error3, refetch: refetch3,} = useQuery({
-    queryKey: ['integrations'],
-    queryFn: () => apiHelpers.lens.list('integrations', { type: 'integration' }).then(r => r.data),
-  });
+  const { items: automationItems, isError: isError2, error: error2, refetch: refetch2 } = useLensData('integrations', 'automation', { noSeed: true });
+  const { items: integrationItems, isError: isError3, error: error3, refetch: refetch3 } = useLensData('integrations', 'integration', { noSeed: true });
 
   const createWebhookMutation = useMutation({
     mutationFn: (data: CreateWebhookRequest) => apiHelpers.webhooks.register(data),
@@ -125,11 +119,11 @@ export default function IntegrationsLensPage() {
       <div className="grid grid-cols-4 gap-4">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 }} className="panel p-3 flex items-center gap-3">
           <Link className="w-5 h-5 text-neon-green" />
-          <div><p className="text-lg font-bold">{integrations?.integrations?.length || 0}</p><p className="text-xs text-gray-400">Connected</p></div>
+          <div><p className="text-lg font-bold">{integrationItems?.length || 0}</p><p className="text-xs text-gray-400">Connected</p></div>
         </motion.div>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="panel p-3 flex items-center gap-3">
           <Zap className="w-5 h-5 text-neon-cyan" />
-          <div><p className="text-lg font-bold">{automations?.automations?.length || 0}</p><p className="text-xs text-gray-400">Active Syncs</p></div>
+          <div><p className="text-lg font-bold">{automationItems?.length || 0}</p><p className="text-xs text-gray-400">Active Syncs</p></div>
         </motion.div>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="panel p-3 flex items-center gap-3">
           <Webhook className="w-5 h-5 text-neon-purple" />
@@ -145,8 +139,8 @@ export default function IntegrationsLensPage() {
       <div className="flex gap-2 border-b border-lattice-border">
         {[
           { id: 'webhooks', label: 'Webhooks', icon: <Webhook className="w-4 h-4" />, count: webhooks?.count },
-          { id: 'automations', label: 'Automations', icon: <Zap className="w-4 h-4" />, count: automations?.count },
-          { id: 'services', label: 'Services', icon: <Plug className="w-4 h-4" />, count: integrations?.integrations?.length },
+          { id: 'automations', label: 'Automations', icon: <Zap className="w-4 h-4" />, count: automationItems?.length },
+          { id: 'services', label: 'Services', icon: <Plug className="w-4 h-4" />, count: integrationItems?.length },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -209,10 +203,10 @@ export default function IntegrationsLensPage() {
 
       {activeTab === 'automations' && (
         <div className="space-y-3">
-          {automations?.automations?.length === 0 ? (
+          {automationItems?.length === 0 ? (
             <EmptyState icon={<Zap />} message="No automations configured" />
           ) : (
-            automations?.automations?.map((auto: Record<string, unknown>) => (
+            automationItems?.map((auto: Record<string, unknown>) => (
               <div key={auto.id as string} className="panel p-4 flex items-center justify-between">
                 <div>
                   <h3 className="font-semibold">{String(auto.name)}</h3>
@@ -238,7 +232,7 @@ export default function IntegrationsLensPage() {
 
       {activeTab === 'services' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {integrations?.integrations?.map((svc: Record<string, unknown>) => (
+          {integrationItems?.map((svc: Record<string, unknown>) => (
             <div key={svc.id as string} className="panel p-4">
               <div className="flex items-center gap-3 mb-2">
                 {(svc.id as string) === 'vscode' && <Code className="w-6 h-6 text-blue-400" />}

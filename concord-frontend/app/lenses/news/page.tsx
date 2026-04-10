@@ -2,8 +2,9 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { UniversalActions } from '@/components/lens/UniversalActions';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, apiHelpers } from '@/lib/api/client';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { api } from '@/lib/api/client';
+import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useState, useMemo, useCallback } from 'react';
 import { useUIStore } from '@/store/ui';
 import {
@@ -78,20 +79,12 @@ export default function NewsLensPage() {
     onSuccess: () => addToast({ type: 'success', message: 'Citation recorded' }),
   });
 
-  const { data: news, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ['news', selectedCategory],
-    queryFn: () =>
-      apiHelpers.lens.list('news', {
-        tags: selectedCategory !== 'all' ? selectedCategory : undefined,
-      }).then((r) => r.data),
-    refetchInterval: 60_000,
+  const { items: newsItems, isLoading, isError, error, refetch } = useLensData('news', 'article', {
+    tags: selectedCategory !== 'all' ? [selectedCategory] : undefined,
+    noSeed: true,
   });
 
-  const { data: trending, isError: isError2, error: error2, refetch: refetch2 } = useQuery({
-    queryKey: ['news-trending'],
-    queryFn: () => apiHelpers.lens.list('news', { type: 'trending' }).then((r) => r.data),
-    refetchInterval: 120_000,
-  });
+  const { items: trendingItems, isError: isError2, error: error2, refetch: refetch2 } = useLensData('news', 'trending', { noSeed: true });
 
   const categories = [
     { id: 'all', name: 'All', icon: Newspaper },
@@ -103,8 +96,7 @@ export default function NewsLensPage() {
   ];
 
   const articles: NewsArticle[] = useMemo(() => {
-    const raw = news?.artifacts || news?.articles || news?.items || [];
-    return raw.map((item: Record<string, unknown>) => {
+    return (newsItems || []).map((item: Record<string, unknown>) => {
       const data = (item.data || {}) as Record<string, unknown>;
       return {
         id: String(item.id || ''),
@@ -122,7 +114,7 @@ export default function NewsLensPage() {
         importance: (data.importance as 'low' | 'medium' | 'high' | 'critical') || undefined,
       };
     });
-  }, [news]);
+  }, [newsItems]);
 
   // Extract unique sources for filtering
   const sources = useMemo(() => {
@@ -344,7 +336,7 @@ export default function NewsLensPage() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 3 * 0.05 }} className="panel p-3 flex items-center gap-3">
           <Globe className="w-5 h-5 text-neon-purple" />
           <div>
-            <p className="text-lg font-bold">{news?.stats?.today || 0}</p>
+            <p className="text-lg font-bold">{0}</p>
             <p className="text-xs text-gray-500">Today</p>
           </div>
         </motion.div>
@@ -595,8 +587,8 @@ export default function NewsLensPage() {
               Trending Topics
             </h3>
             <div className="space-y-2">
-              {trending?.topics?.length > 0 ? (
-                trending.topics.map((topic: Record<string, unknown>, index: number) => (
+              {trendingItems?.length > 0 ? (
+                trendingItems.map((topic: Record<string, unknown>, index: number) => (
                   <div
                     key={topic.id as string}
                     className="flex items-center gap-3 p-2 rounded-lg hover:bg-lattice-elevated cursor-pointer transition-colors"
@@ -629,11 +621,11 @@ export default function NewsLensPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">Articles Today</span>
-                <span className="font-mono">{news?.stats?.today || 0}</span>
+                <span className="font-mono">{0}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">Active Sources</span>
-                <span className="font-mono">{news?.stats?.sources || sources.length - 1}</span>
+                <span className="font-mono">{sources.length - 1}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">Trending</span>

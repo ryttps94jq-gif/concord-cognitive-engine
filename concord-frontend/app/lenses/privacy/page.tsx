@@ -1,5 +1,6 @@
 'use client';
 
+import { useLensNav } from '@/hooks/useLensNav';
 import { useState, useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -381,6 +382,7 @@ function StatsCard({
 // ── Main Page ───────────────────────────────────────────────────────────────
 
 export default function PrivacySharingPage() {
+  useLensNav('privacy');
   const queryClient = useQueryClient();
 
   // Local state mirrors API state for optimistic editing

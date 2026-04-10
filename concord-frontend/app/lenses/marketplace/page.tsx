@@ -462,7 +462,7 @@ export default function MarketplaceLensPage() {
   const [packSubmitting, setPackSubmitting] = useState(false);
   const [packError, setPackError] = useState<string | null>(null);
 
-  const { isLoading, isError: isError, error: error, refetch: refetch } = useLensData('marketplace', 'listing', {
+  const { items: listingItems, isLoading, isError: isError, error: error, refetch: refetch } = useLensData('marketplace', 'listing', {
     noSeed: true,
   });
   const { isError: isError2, error: error2, refetch: refetch2 } = useLensData('marketplace', 'purchase', {
@@ -491,13 +491,8 @@ export default function MarketplaceLensPage() {
         });
         return res.data;
       } catch {
-        // Fallback to lens data
-        try {
-          const lensRes = await api.get('/api/lens/marketplace');
-          return { ok: true, items: lensRes.data?.items || [] };
-        } catch {
-          return { ok: true, items: [] };
-        }
+        // Fallback to lens data already fetched by useLensData hook
+        return { ok: true, items: listingItems || [] };
       }
     },
   });

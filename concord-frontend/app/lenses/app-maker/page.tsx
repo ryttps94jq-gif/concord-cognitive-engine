@@ -1,5 +1,6 @@
 'use client';
 
+import { useLensNav } from '@/hooks/useLensNav';
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Boxes, Plus, CheckCircle, ArrowUp, Layers, ChevronDown, Rocket, Layout, ShoppingCart, Briefcase, UserCircle, Star, TrendingUp } from 'lucide-react';
@@ -22,9 +23,8 @@ interface AppEntry {
 }
 
 export default function AppMakerLens() {
+  useLensNav('app-maker');
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('app-maker');
-  const setActiveLens = useUIStore((s) => s.setActiveLens);
-  setActiveLens('app-maker');
 
   const [showFeatures, setShowFeatures] = useState(true);
   const [apps, setApps] = useState<AppEntry[]>([]);

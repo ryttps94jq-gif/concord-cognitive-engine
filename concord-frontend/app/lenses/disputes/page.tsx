@@ -7,6 +7,7 @@
  * Status flow visualization, auto-escalation awareness, refund controls.
  */
 
+import { useLensNav } from '@/hooks/useLensNav';
 import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -634,6 +635,7 @@ function DisputeCard({
 type ViewTab = 'my' | 'queue';
 
 export default function DisputesPage() {
+  useLensNav('disputes');
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ViewTab>('my');

@@ -1,5 +1,6 @@
 'use client';
 
+import { useLensNav } from '@/hooks/useLensNav';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
@@ -52,6 +53,7 @@ interface DTUSummary {
 // ── Analytics Page ───────────────────────────────────────────────────────────
 
 export default function AnalyticsPage() {
+  useLensNav('analytics');
   const [activeSection, setActiveSection] = useState<'overview' | 'revenue' | 'dtus'>('overview');
 
   // Fetch user profile for userId
