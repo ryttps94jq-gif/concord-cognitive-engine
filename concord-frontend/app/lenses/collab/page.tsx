@@ -52,7 +52,7 @@ import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 type ProjectType = 'design' | 'development' | 'research' | 'art' | 'writing';
 type SessionStatus = 'open' | 'in-progress' | 'full' | 'private';
 type Privacy = 'public' | 'private' | 'invite-only';
-type ParticipantRole = 'host' | 'developer' | 'designer' | 'reviewer' | 'artist' | 'writer';
+type ParticipantRole = 'host' | 'developer' | 'designer' | 'reviewer' | 'creator' | 'writer';
 type MainTab = 'active' | 'mine' | 'invitations' | 'history';
 type FilterPill = 'all' | ProjectType;
 
@@ -180,7 +180,7 @@ const ROLE_BADGE: Record<ParticipantRole, { label: string; color: string }> = {
   developer: { label: 'Developer', color: 'bg-neon-blue/20 text-neon-blue' },
   designer: { label: 'Designer', color: 'bg-neon-purple/20 text-neon-purple' },
   reviewer: { label: 'Reviewer', color: 'bg-neon-cyan/20 text-neon-cyan' },
-  artist: { label: 'Artist', color: 'bg-amber-400/20 text-amber-400' },
+  creator: { label: 'Creator', color: 'bg-amber-400/20 text-amber-400' },
   writer: { label: 'Writer', color: 'bg-emerald-400/20 text-emerald-400' },
 };
 
