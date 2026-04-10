@@ -767,6 +767,85 @@ DOMAIN_RULES.set("engineering", {
   },
 });
 
+// === World ===
+DOMAIN_RULES.set("world", {
+  types: ["region", "event", "entity-link", "timeline", "map-layer", "narrative"],
+  validStatuses: ["draft", "active", "historical", "projected", "archived"],
+  transitions: {
+    draft: ["active", "archived"],
+    active: ["historical", "archived"],
+    historical: ["archived"],
+    projected: ["active", "archived"],
+    archived: [],
+  },
+  requiredFields: { region: ["title"], event: ["title", "date"] },
+  computedFields: (type, data) => {
+    data.entityCount = (data.entities || []).length;
+    data.eventCount = (data.events || []).length;
+    data.hasTimeline = (data.timeline || []).length > 0;
+    return data;
+  },
+  scoring: (type, data) => {
+    const entities = Math.min((data.entityCount || 0) / 20, 1);
+    const events = Math.min((data.eventCount || 0) / 10, 1);
+    const timeline = data.hasTimeline ? 1 : 0;
+    return Math.round((entities * 0.3 + events * 0.3 + timeline * 0.3 + 0.1) * 100) / 100;
+  },
+});
+
+// === Entity ===
+DOMAIN_RULES.set("entity", {
+  types: ["person", "organization", "concept", "location", "artifact", "system"],
+  validStatuses: ["draft", "active", "verified", "deprecated", "archived"],
+  transitions: {
+    draft: ["active", "archived"],
+    active: ["verified", "deprecated", "archived"],
+    verified: ["deprecated", "archived"],
+    deprecated: ["archived"],
+    archived: [],
+  },
+  requiredFields: { person: ["name"], organization: ["name"], concept: ["title"] },
+  computedFields: (type, data) => {
+    data.relationCount = (data.relations || []).length;
+    data.attributeCount = Object.keys(data.attributes || {}).length;
+    data.hasDescription = !!data.description;
+    return data;
+  },
+  scoring: (type, data) => {
+    const relations = Math.min((data.relationCount || 0) / 10, 1);
+    const attrs = Math.min((data.attributeCount || 0) / 5, 1);
+    const hasDesc = data.hasDescription ? 1 : 0;
+    return Math.round((relations * 0.3 + attrs * 0.3 + hasDesc * 0.3 + 0.1) * 100) / 100;
+  },
+});
+
+// === Admin ===
+DOMAIN_RULES.set("admin", {
+  types: ["config", "user-management", "audit-log", "permission", "system-report", "integration"],
+  validStatuses: ["draft", "active", "review", "approved", "suspended", "archived"],
+  transitions: {
+    draft: ["active", "review", "archived"],
+    active: ["review", "suspended", "archived"],
+    review: ["approved", "active"],
+    approved: ["active", "archived"],
+    suspended: ["active", "archived"],
+    archived: [],
+  },
+  requiredFields: { config: ["key", "value"], permission: ["role", "resource"] },
+  computedFields: (type, data) => {
+    data.userCount = (data.users || []).length;
+    data.activeIntegrations = (data.integrations || []).filter(i => i.active).length;
+    data.auditEntries = (data.auditLog || []).length;
+    return data;
+  },
+  scoring: (type, data) => {
+    const users = Math.min((data.userCount || 0) / 100, 1);
+    const integrations = Math.min((data.activeIntegrations || 0) / 5, 1);
+    const audit = Math.min((data.auditEntries || 0) / 50, 1);
+    return Math.round((users * 0.3 + integrations * 0.3 + audit * 0.3 + 0.1) * 100) / 100;
+  },
+});
+
 // ── Exported helpers ─────────────────────────────────────────────────────────
 
 function validateArtifact(domain, type, data, meta) {
