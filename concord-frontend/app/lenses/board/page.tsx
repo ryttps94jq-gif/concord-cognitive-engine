@@ -51,7 +51,7 @@ import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 // Types
 // ---------------------------------------------------------------------------
 
-type ColumnId = 'idea_bank' | 'writing' | 'recording' | 'mixing' | 'mastering' | 'released';
+type ColumnId = 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'testing' | 'done';
 type Priority = 'low' | 'medium' | 'high' | 'urgent';
 type TaskType = 'task' | 'feature' | 'bug' | 'design' | 'research' | 'docs';
 type ViewMode = 'board' | 'timeline' | 'table';
@@ -101,12 +101,12 @@ interface Task {
 // ---------------------------------------------------------------------------
 
 const columns: { id: ColumnId; name: string; icon: typeof Lightbulb; color: string; bg: string; border: string }[] = [
-  { id: 'idea_bank', name: 'Backlog', icon: Lightbulb, color: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/30' },
-  { id: 'writing', name: 'To Do', icon: ListTodo, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/30' },
-  { id: 'recording', name: 'In Progress', icon: Activity, color: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/30' },
-  { id: 'mixing', name: 'In Review', icon: SlidersHorizontal, color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/30' },
-  { id: 'mastering', name: 'Testing', icon: CheckCircle, color: 'text-pink-400', bg: 'bg-pink-500/10', border: 'border-pink-500/30' },
-  { id: 'released', name: 'Done', icon: Rocket, color: 'text-green-400', bg: 'bg-green-500/10', border: 'border-green-500/30' },
+  { id: 'backlog', name: 'Backlog', icon: Lightbulb, color: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/30' },
+  { id: 'todo', name: 'To Do', icon: ListTodo, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/30' },
+  { id: 'in_progress', name: 'In Progress', icon: Activity, color: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/30' },
+  { id: 'in_review', name: 'In Review', icon: SlidersHorizontal, color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/30' },
+  { id: 'testing', name: 'Testing', icon: CheckCircle, color: 'text-pink-400', bg: 'bg-pink-500/10', border: 'border-pink-500/30' },
+  { id: 'done', name: 'Done', icon: Rocket, color: 'text-green-400', bg: 'bg-green-500/10', border: 'border-green-500/30' },
 ];
 
 const priorityConfig: Record<Priority, { label: string; color: string; dot: string }> = {
@@ -142,7 +142,7 @@ function lensItemToTask(item: LensItem<Record<string, unknown>>): Task {
     id: item.id,
     title: item.title || (d.title as string) || 'Untitled',
     description: (d.description as string) || '',
-    status: (d.status as ColumnId) || 'idea_bank',
+    status: (d.status as ColumnId) || 'backlog',
     priority: (d.priority as Priority) || 'medium',
     type: (d.type as TaskType) || 'task',
     assignee: (d.assignee as string) || '',
@@ -242,9 +242,9 @@ export default function BoardLensPage() {
     const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     return {
       total: tasks.length,
-      inProgress: tasks.filter((t) => !['idea_bank', 'released'].includes(t.status)).length,
-      overdue: tasks.filter((t) => isOverdue(t.dueDate) && t.status !== 'released').length,
-      completedThisWeek: tasks.filter((t) => t.status === 'released' && new Date(t.dueDate) >= weekAgo).length,
+      inProgress: tasks.filter((t) => !['backlog', 'done'].includes(t.status)).length,
+      overdue: tasks.filter((t) => isOverdue(t.dueDate) && t.status !== 'done').length,
+      completedThisWeek: tasks.filter((t) => t.status === 'done' && new Date(t.dueDate) >= weekAgo).length,
     };
   }, [tasks]);
 
@@ -269,7 +269,7 @@ export default function BoardLensPage() {
     const taskId = e.dataTransfer.getData('taskId');
     const task = tasks.find((t) => t.id === taskId);
     if (task) {
-      const newProgress = targetCol === 'released' ? 100 : task.progress;
+      const newProgress = targetCol === 'done' ? 100 : task.progress;
       updateLens(taskId, { data: { ...task, status: targetCol, progress: newProgress, id: undefined, title: undefined } as unknown as Record<string, unknown> });
     }
     setDragOverColumn(null);
@@ -728,7 +728,7 @@ export default function BoardLensPage() {
                                 <span
                                   className={cn(
                                     'text-[10px] flex items-center gap-0.5',
-                                    isOverdue(task.dueDate) && task.status !== 'released'
+                                    isOverdue(task.dueDate) && task.status !== 'done'
                                       ? 'text-red-400 font-medium'
                                       : 'text-gray-500'
                                   )}
@@ -949,7 +949,7 @@ function TaskDetailPanel({
             onChange={(e) => onUpdate(task.id, { dueDate: e.target.value })}
             className={cn(
               'w-full px-2 py-1.5 text-sm bg-white/5 border border-white/10 rounded-md focus:outline-none focus:border-purple-500/50',
-              isOverdue(task.dueDate) && task.status !== 'released' ? 'text-red-400' : 'text-gray-300'
+              isOverdue(task.dueDate) && task.status !== 'done' ? 'text-red-400' : 'text-gray-300'
             )}
           />
         </div>

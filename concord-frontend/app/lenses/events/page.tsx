@@ -12,7 +12,7 @@ import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   CalendarDays, MapPin, Plus, Search, Filter, X, Edit2, Trash2,
   Ticket, Star, DollarSign, Users, Clock, CheckCircle2, AlertTriangle,
-  Building2, Utensils, Speaker, Palette, Camera, Shield, Music,
+  Building2, Utensils, Speaker, Palette, Camera, Shield,
   BarChart3, FileText, Play, MessageCircle,
   ListChecks, PieChart, ArrowUpRight,
   ArrowDownRight, Crown, Gift, ClipboardList, Sparkles,
@@ -41,7 +41,7 @@ type _PaymentStatus = 'pending' | 'partial' | 'paid' | 'overdue';
 const EVENT_TYPES: { id: EventType; label: string; icon: typeof CalendarDays }[] = [
   { id: 'conference', label: 'Conference', icon: Briefcase },
   { id: 'wedding', label: 'Wedding', icon: Heart },
-  { id: 'concert', label: 'Concert', icon: Music },
+  { id: 'concert', label: 'Concert', icon: Ticket },
   { id: 'festival', label: 'Festival', icon: PartyPopper },
   { id: 'corporate', label: 'Corporate', icon: Building2 },
   { id: 'social', label: 'Social', icon: Users },
@@ -68,7 +68,7 @@ const VENDOR_CATEGORIES: { id: VendorCategory; label: string; icon: typeof Calen
   { id: 'catering', label: 'Catering', icon: Utensils },
   { id: 'av', label: 'AV / Tech', icon: Speaker },
   { id: 'decor', label: 'Decor', icon: Palette },
-  { id: 'entertainment', label: 'Entertainment', icon: Music },
+  { id: 'entertainment', label: 'Entertainment', icon: PartyPopper },
   { id: 'photo', label: 'Photo / Video', icon: Camera },
   { id: 'security', label: 'Security', icon: Shield },
 ];

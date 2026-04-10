@@ -36736,6 +36736,7 @@ async function pollFeeds() {
           tags: ["feed", feedDomain, "web-dtu"],
           tier: "regular",
           type: "feed_item",
+          scope: "global",
           source: "feed:" + feed.url,
           ownerId: "system",
           visibility: "public",

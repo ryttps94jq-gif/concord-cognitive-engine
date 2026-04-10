@@ -115,12 +115,12 @@ type ViewMode = 'feed' | 'detail' | 'profile';
 // ---------------------------------------------------------------------------
 
 const AWARDS = [
-  { id: 'fire', emoji: '\uD83D\uDD25', name: 'Fire Track', cost: 100 },
-  { id: 'gold', emoji: '\uD83C\uDFC6', name: 'Gold Record', cost: 500 },
+  { id: 'fire', emoji: '\uD83D\uDD25', name: 'Hot Take', cost: 100 },
+  { id: 'gold', emoji: '\uD83C\uDFC6', name: 'Top Post', cost: 500 },
   { id: 'platinum', emoji: '\uD83D\uDC8E', name: 'Platinum', cost: 1000 },
-  { id: 'headphones', emoji: '\uD83C\uDFA7', name: 'Headphones', cost: 50 },
-  { id: 'mic', emoji: '\uD83C\uDFA4', name: 'Mic Drop', cost: 250 },
-  { id: 'vinyl', emoji: '\uD83D\uDCBF', name: 'Vinyl Press', cost: 750 },
+  { id: 'lightbulb', emoji: '\uD83D\uDCA1', name: 'Insightful', cost: 50 },
+  { id: 'star', emoji: '\u2B50', name: 'Star Reply', cost: 250 },
+  { id: 'rocket', emoji: '\uD83D\uDE80', name: 'Breakthrough', cost: 750 },
 ];
 
 const FLAIRS = [

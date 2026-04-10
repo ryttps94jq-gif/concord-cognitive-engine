@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
 import { motion } from 'framer-motion';
-import { Upload, Settings2, CheckCircle2, AlertTriangle, Loader2, Clock, Database, Layers, ChevronDown, FileUp, FileJson, FileText, Image as ImageIcon, Music, Shield, Gauge, ArrowDownToLine, Zap, Activity } from 'lucide-react';
+import { Upload, Settings2, CheckCircle2, AlertTriangle, Loader2, Clock, Database, Layers, ChevronDown, FileUp, FileJson, FileText, Image as ImageIcon, Shield, Gauge, ArrowDownToLine, Zap, Activity } from 'lucide-react';
 import { ConnectiveTissueBar } from '@/components/lens/ConnectiveTissueBar';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -399,7 +399,7 @@ export default function IngestLensPage() {
             <span className="flex items-center gap-1"><FileText className="w-3 h-3" /> .txt .md</span>
             <span className="flex items-center gap-1"><FileJson className="w-3 h-3" /> .json .csv</span>
             <span className="flex items-center gap-1"><ImageIcon className="w-3 h-3" /> .png .jpg</span>
-            <span className="flex items-center gap-1"><Music className="w-3 h-3" /> .mp3 .wav</span>
+            <span className="flex items-center gap-1"><FileUp className="w-3 h-3" /> .mp3 .wav</span>
           </div>
           <button onClick={() => showToast('info', 'Coming soon')} className="mt-2 px-6 py-2 bg-neon-cyan/20 border border-neon-cyan/40 rounded-lg text-sm text-neon-cyan hover:bg-neon-cyan/30 transition-colors">
             Select Files for Batch Ingest

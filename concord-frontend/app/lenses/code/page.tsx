@@ -16,7 +16,7 @@ import {
   Play, FileCode, Terminal, FolderTree, Plus, X,
   ChevronRight, ChevronDown, File, Folder, FolderOpen,
   Sparkles, RefreshCw, Copy,
-  Download, Zap, Music, Waves, SlidersHorizontal,
+  Download, Zap, Waves, SlidersHorizontal,
   Loader2, BookOpen,
   Save, Maximize2, Minimize2, Layers
 } from 'lucide-react';
@@ -50,12 +50,12 @@ interface Tab {
 type ScriptType = 'midi' | 'effect' | 'automation' | 'macro' | 'sampler' | 'generator';
 
 const SCRIPT_TYPES: { id: ScriptType; name: string; icon: React.ElementType; color: string; description: string }[] = [
-  { id: 'midi', name: 'MIDI Script', icon: Music, color: 'text-neon-blue', description: 'Generate MIDI patterns programmatically' },
+  { id: 'midi', name: 'MIDI Script', icon: FileCode, color: 'text-neon-blue', description: 'Generate MIDI patterns programmatically' },
   { id: 'effect', name: 'Effect Chain', icon: Waves, color: 'text-neon-purple', description: 'Build custom signal processing chains' },
   { id: 'automation', name: 'Automation', icon: SlidersHorizontal, color: 'text-neon-yellow', description: 'Create parameter automation curves' },
   { id: 'macro', name: 'Macro', icon: Zap, color: 'text-green-400', description: 'Build reusable production macros' },
   { id: 'sampler', name: 'Sampler', icon: RefreshCw, color: 'text-neon-cyan', description: 'Script sample playback patterns' },
-  { id: 'generator', name: 'Generator', icon: Sparkles, color: 'text-red-400', description: 'Algorithmic music generation scripts' },
+  { id: 'generator', name: 'Generator', icon: Sparkles, color: 'text-red-400', description: 'Algorithmic generation scripts' },
 ];
 
 const TEMPLATE_FILES: FileNode[] = [
@@ -464,31 +464,31 @@ macro.run(async ({ vocal, harmonies, spread }) => {
 });`,
       },
       {
-        id: 'beat_maker.js', name: 'beat_maker.js', type: 'file', language: 'javascript', scriptType: 'macro',
-        content: `// Beat Maker Macro
-// Auto-generates beats from genre templates
+        id: 'data_pipeline.js', name: 'data_pipeline.js', type: 'file', language: 'javascript', scriptType: 'macro',
+        content: `// Data Pipeline Macro
+// Auto-generates data pipelines from source templates
 
-macro.name('Beat Maker');
-macro.input('genre', 'select', {
-  options: ['trap', 'house', 'dnb', 'lofi', 'techno'],
+macro.name('Data Pipeline');
+macro.input('source', 'select', {
+  options: ['csv', 'json', 'api', 'database', 'stream'],
 });
-macro.input('bpm', 'number', { min: 60, max: 200, default: 140 });
-macro.input('swing', 'number', { min: 0, max: 100, default: 20 });
-macro.input('bars', 'number', { min: 1, max: 16, default: 4 });
+macro.input('batchSize', 'number', { min: 10, max: 10000, default: 500 });
+macro.input('format', 'select', { options: ['json', 'csv', 'parquet', 'avro'] });
+macro.input('limit', 'number', { min: 1, max: 10000, default: 1000 });
 
-macro.run(async ({ genre, bpm, swing, bars }) => {
-  const kit = sampler.loadKit(genre);
-  const patterns = {
-    trap: { kick: [1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0], hat: [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1] },
-    house: { kick: [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0], hat: [0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0] },
-    dnb:   { kick: [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0], snare: [0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0] },
-    lofi:  { kick: [1,0,0,1,0,0,1,0,0,0,1,0,0,0,0,1], hat: [1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0] },
-    techno:{ kick: [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0], hat: [0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0] },
+macro.run(async ({ source, batchSize, format, limit }) => {
+  const connector = pipeline.connect(source);
+  const transforms = {
+    csv:      { parse: [1,0,0,1], validate: [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1] },
+    json:     { parse: [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0], validate: [0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0] },
+    api:      { parse: [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0], validate: [0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0] },
+    database: { parse: [1,0,0,1,0,0,1,0,0,0,1,0,0,0,0,1], validate: [1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0] },
+    stream:   { parse: [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0], validate: [0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0] },
   };
 
-  const beat = patterns[genre];
-  const sequence = sampler.sequence(kit, beat, { bpm, swing: swing / 100, bars });
-  output.arrange(sequence, { bpm });
+  const steps = transforms[source];
+  const sequence = pipeline.process(connector, steps, { batchSize, format, limit });
+  output.arrange(sequence, { batchSize });
 });`,
       },
     ],
@@ -882,7 +882,7 @@ export default function CodeLensPage() {
           <Terminal className="w-6 h-6 text-green-400" />
           <div>
             <h1 className="text-lg font-bold text-green-300 font-mono tracking-tight">Script Studio</h1>
-            <p className="text-xs text-green-600 font-mono">MIDI scripting, automation & macros</p>
+            <p className="text-xs text-green-600 font-mono">Scripting, automation & macros</p>
           </div>
 
       {/* Real-time Enhancement Toolbar */}
@@ -1185,7 +1185,7 @@ export default function CodeLensPage() {
                     onChange={(e) => updateTabContent(e.target.value)}
                     className="flex-1 bg-lattice-deep p-4 font-mono text-sm text-white resize-none focus:outline-none leading-6"
                     spellCheck={false}
-                    placeholder="// Write your music production script here"
+                    placeholder="// Write your script here"
                   />
                 </div>
               </div>
@@ -1280,7 +1280,7 @@ export default function CodeLensPage() {
                               {scriptOutput.visualization && (
                               <div>
                                 <h4 className="text-xs font-semibold text-gray-400 uppercase mb-2">
-                                  {activeScriptType === 'midi' && 'Piano Roll'}
+                                  {activeScriptType === 'midi' && 'Data View'}
                                   {activeScriptType === 'effect' && 'Signal Flow'}
                                   {activeScriptType === 'automation' && 'Automation Curves'}
                                   {activeScriptType === 'macro' && 'Macro Preview'}
@@ -1317,7 +1317,7 @@ export default function CodeLensPage() {
                             </div>
                           ) : (
                             <div className="flex flex-col items-center justify-center h-full text-gray-500">
-                              <Music className="w-12 h-12 mb-4 opacity-30" />
+                              <Terminal className="w-12 h-12 mb-4 opacity-30" />
                               <p className="text-sm">Click &quot;Run Script&quot; to execute</p>
                               <p className="text-xs mt-1 text-gray-600">Output will appear here</p>
                             </div>

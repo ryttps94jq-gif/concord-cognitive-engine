@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Palette, Search, Upload,
   Eye, ShoppingBag, DollarSign, Sparkles,
-  Music, X,
+  Paintbrush, X,
   BarChart3, Globe, Layers,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -105,7 +105,7 @@ export default function ArtistryLensPage() {
     { id: 'feed', label: 'Feed', icon: Globe },
     { id: 'assets', label: 'Assets', icon: Layers },
     { id: 'marketplace', label: 'Marketplace', icon: ShoppingBag },
-    { id: 'studio', label: 'Studio', icon: Music },
+    { id: 'studio', label: 'Studio', icon: Paintbrush },
     { id: 'stats', label: 'Stats', icon: BarChart3 },
   ];
 
@@ -137,7 +137,7 @@ export default function ArtistryLensPage() {
           {[
             { label: 'Assets', value: (assets as unknown[]).length, icon: Layers, color: 'text-neon-pink' },
             { label: 'Artistry DTUs', value: contextDTUs.length, icon: Sparkles, color: 'text-purple-400' },
-            { label: 'Genres', value: (genres as unknown[]).length, icon: Music, color: 'text-cyan-400' },
+            { label: 'Genres', value: (genres as unknown[]).length, icon: Paintbrush, color: 'text-cyan-400' },
             { label: 'Marketplace', value: (marketplaceBeats as unknown[]).length, icon: ShoppingBag, color: 'text-yellow-400' },
           ].map((stat, i) => (
             <motion.div key={stat.label} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.07 }} className="bg-white/5 border border-white/10 rounded-lg p-3 hover:border-neon-pink/30 transition-colors group">
@@ -223,19 +223,18 @@ export default function ArtistryLensPage() {
         {/* Marketplace */}
         {tab === 'marketplace' && (
           <div className="space-y-4">
-            <h2 className="text-lg font-semibold flex items-center gap-2"><ShoppingBag className="w-5 h-5" /> Beat Marketplace</h2>
+            <h2 className="text-lg font-semibold flex items-center gap-2"><ShoppingBag className="w-5 h-5" /> Asset Marketplace</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {(marketplaceBeats as Record<string, unknown>[]).map((beat: Record<string, unknown>) => (
                 <div key={beat.id as string} className="bg-white/5 border border-white/10 rounded-lg p-4">
                   <h3 className="font-medium text-sm">{beat.title as string}</h3>
                   <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
                     <DollarSign className="w-3 h-3" /> {beat.price as number || 0}
-                    <Music className="w-3 h-3 ml-2" /> {beat.bpm as number || 120} BPM
                   </div>
                 </div>
               ))}
               {(marketplaceBeats as Record<string, unknown>[]).length === 0 && (
-                <div className="col-span-full text-center py-12 text-gray-500 text-sm">No beats listed yet.</div>
+                <div className="col-span-full text-center py-12 text-gray-500 text-sm">No assets listed yet.</div>
               )}
             </div>
           </div>
@@ -244,16 +243,16 @@ export default function ArtistryLensPage() {
         {/* Studio */}
         {tab === 'studio' && (
           <div className="space-y-4">
-            <h2 className="text-lg font-semibold flex items-center gap-2"><Music className="w-5 h-5" /> Studio Projects</h2>
+            <h2 className="text-lg font-semibold flex items-center gap-2"><Paintbrush className="w-5 h-5" /> Creative Projects</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {(studioProjects as Record<string, unknown>[]).map((proj: Record<string, unknown>) => (
                 <div key={proj.id as string} className="bg-white/5 border border-white/10 rounded-lg p-4">
                   <h3 className="font-medium text-sm">{proj.title as string}</h3>
-                  <div className="text-xs text-gray-500 mt-1">{proj.bpm as number || 120} BPM - {proj.key as string || 'C'}</div>
+                  <div className="text-xs text-gray-500 mt-1">{proj.key as string || 'Untitled'}</div>
                 </div>
               ))}
               {(studioProjects as Record<string, unknown>[]).length === 0 && (
-                <div className="col-span-full text-center py-12 text-gray-500 text-sm">No studio projects. Create one in the Studio lens.</div>
+                <div className="col-span-full text-center py-12 text-gray-500 text-sm">No projects yet. Start creating in the Studio lens.</div>
               )}
             </div>
           </div>
@@ -271,7 +270,7 @@ export default function ArtistryLensPage() {
               <div className="text-2xl font-bold">{contextDTUs.length}</div>
             </div>
             <div className="bg-white/5 border border-white/10 rounded-lg p-4">
-              <div className="text-xs text-gray-500 mb-1">Genres</div>
+              <div className="text-xs text-gray-500 mb-1">Categories</div>
               <div className="text-2xl font-bold">{(genres as unknown[]).length}</div>
             </div>
           </div>
@@ -291,8 +290,8 @@ export default function ArtistryLensPage() {
                   <select value={uploadType} onChange={e => setUploadType(e.target.value)} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm">
                     {(assetTypes as string[]).length > 0 ? (assetTypes as string[]).map((t: string) => <option key={t} value={t}>{t}</option>) : (
                       <>
-                        <option value="track">Track</option>
-                        <option value="beat">Beat</option>
+                        <option value="illustration">Illustration</option>
+                        <option value="design">Design</option>
                         <option value="artwork">Artwork</option>
                         <option value="video">Video</option>
                       </>

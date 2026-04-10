@@ -10,7 +10,7 @@ import {
   ZoomIn, ZoomOut, RotateCcw, Search, Eye, EyeOff,
   Circle, X, Play, Pause, Settings, Download,
   Share2, GitBranch, ChevronRight, Copy, ExternalLink,
-  Plus, Link2, Music, User, Disc, AudioWaveform,
+  Plus, Link2, User, AudioWaveform,
   TreePine, Users, Filter,
   Layers, ChevronDown
 } from 'lucide-react';
@@ -1526,10 +1526,10 @@ export default function GraphLensPage() {
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-4 h-4 rounded-full" style={{ backgroundColor: (NODE_COLORS[selectedNode.tier] || NODE_COLORS.regular).fill }} />
                   <span className="text-xs text-gray-400 uppercase font-medium">{(NODE_COLORS[selectedNode.tier] || NODE_COLORS.regular).name}</span>
-                  {selectedNode.tier === 'track' && <Music className="w-3.5 h-3.5 text-cyan-400" />}
+                  {selectedNode.tier === 'track' && <GitBranch className="w-3.5 h-3.5 text-cyan-400" />}
                   {selectedNode.tier === 'artist' && <User className="w-3.5 h-3.5 text-violet-400" />}
                   {selectedNode.tier === 'sample' && <AudioWaveform className="w-3.5 h-3.5 text-green-400" />}
-                  {selectedNode.tier === 'release' && <Disc className="w-3.5 h-3.5 text-pink-400" />}
+                  {selectedNode.tier === 'release' && <Share2 className="w-3.5 h-3.5 text-pink-400" />}
                 </div>
                 <div className="flex items-center gap-2">
                   <h3 className="font-semibold text-white text-lg">{selectedNode.label}</h3>

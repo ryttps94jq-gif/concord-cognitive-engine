@@ -24,17 +24,17 @@ import {
   Sparkles,
   Play,
   Pause,
-  Music,
+  Rss,
   Link2,
   PlusCircle,
-  Disc3,
+  Newspaper,
   Palette,
   Users,
   TrendingUp,
   Eye,
-  Headphones,
-  Mic2,
-  ListMusic,
+  FileText,
+  Globe,
+  Link,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
@@ -73,7 +73,7 @@ interface PostAuthor {
 interface AudioAttachment {
   title: string;
   duration: string;
-  bpm?: number;
+  bitrate?: number;
   waveform: number[];
 }
 
@@ -165,7 +165,7 @@ const NEW_RELEASES: MiniRelease[] = [];
 
 // ── Subcomponents ──────────────────────────────────────────────────────────────
 
-function WaveformPlayer({ waveform, duration, bpm, title }: AudioAttachment & { className?: string }) {
+function WaveformPlayer({ waveform, duration, bitrate, title }: AudioAttachment & { className?: string }) {
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
 
@@ -199,9 +199,9 @@ function WaveformPlayer({ waveform, duration, bpm, title }: AudioAttachment & { 
         </button>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1.5">
-            <Headphones className="w-3.5 h-3.5 text-neon-cyan" />
+            <FileText className="w-3.5 h-3.5 text-neon-cyan" />
             <span className="text-sm font-medium text-white truncate">{title}</span>
-            {bpm && <span className="text-xs text-gray-500">{bpm} BPM</span>}
+            {bitrate && <span className="text-xs text-gray-500">{bitrate} kbps</span>}
           </div>
           <div className="flex items-end gap-[2px] h-8">
             {waveform.map((h, i) => {
@@ -234,7 +234,7 @@ function ReleaseCard({ release }: { release: ReleaseAttachment }) {
     >
       <div className="flex">
         <div className={cn('w-28 h-28 flex-shrink-0 bg-gradient-to-br flex items-center justify-center', release.coverGradient)}>
-          <Disc3 className="w-10 h-10 text-white/60" />
+          <Newspaper className="w-10 h-10 text-white/60" />
         </div>
         <div className="flex-1 p-3 min-w-0">
           <div className="flex items-center gap-2 mb-1">
@@ -446,7 +446,7 @@ export default function FeedLensPage() {
           return topics.map((t: Record<string, unknown>, i: number) => ({
             id: `t-${i}`,
             tag: `#${(t.tag as string) || (t.topic as string) || ''}`,
-            category: (t.category as string) || ['Music', 'Production', 'Community', 'Tech', 'Visual'][i % 5],
+            category: (t.category as string) || ['News', 'Tech', 'Community', 'Creative', 'Science'][i % 5],
             posts: (t.count as number) || (t.posts as number) || 0,
           }));
         }
@@ -455,7 +455,7 @@ export default function FeedLensPage() {
         const allTags = new Set<string>();
         (dtuR.data?.dtus || []).forEach((d: Record<string, unknown>) => ((d.tags as string[]) || []).forEach(t => allTags.add(t)));
         return Array.from(allTags).slice(0, 5).map((tag, i) => ({
-          id: `t-${i}`, tag: `#${tag}`, category: ['Music', 'Production', 'Community', 'Tech', 'Visual'][i % 5], posts: 0,
+          id: `t-${i}`, tag: `#${tag}`, category: ['News', 'Tech', 'Community', 'Creative', 'Science'][i % 5], posts: 0,
         }));
       } catch {
         return [];
@@ -576,7 +576,7 @@ export default function FeedLensPage() {
     { icon: Mail, label: 'Messages', active: false, action: () => useUIStore.getState().addToast({ type: 'info', message: 'Requires direct messaging to be enabled' }) },
     { icon: Bookmark, label: 'Bookmarks', active: activeTab === 'bookmarks' as string, action: () => setActiveTab('following' as FeedTab) },
     { icon: User, label: 'Profile', active: false, action: () => { apiHelpers.social.getProfile('me').then(() => useUIStore.getState().addToast({ type: 'success', message: 'Profile loaded' })).catch(() => useUIStore.getState().addToast({ type: 'info', message: 'No profile yet. Create DTUs to build your profile.' })); } },
-    { icon: Music, label: 'Studio', active: activeTab === 'releases', action: () => setActiveTab('releases') },
+    { icon: Rss, label: 'Media', active: activeTab === 'releases', action: () => setActiveTab('releases') },
   ];
 
 
@@ -592,7 +592,7 @@ export default function FeedLensPage() {
       {/* ── Left Sidebar ──────────────────────────────────────────────────── */}
       <aside className="w-20 xl:w-64 border-r border-lattice-border/50 p-2 xl:p-4 flex flex-col items-center xl:items-start sticky top-0 h-screen overflow-y-auto bg-gradient-to-b from-lattice-surface to-lattice-bg">
         <div className="flex items-center gap-2 mb-8 p-3">
-          <Disc3 className="w-8 h-8 text-blue-400" />
+          <Newspaper className="w-8 h-8 text-blue-400" />
           <span className="hidden xl:inline text-lg font-bold text-white tracking-tight">Concord</span>
         </div>
 
@@ -700,17 +700,17 @@ export default function FeedLensPage() {
                 ref={composeRef}
                 value={newPost}
                 onChange={(e) => setNewPost(e.target.value)}
-                placeholder="Share a track, thought, or start a collab..."
+                placeholder="Share a thought, link, or start a discussion..."
                 className="w-full bg-transparent text-base text-white placeholder-gray-600 resize-none focus:outline-none min-h-[60px]"
                 rows={2}
               />
               <div className="flex items-center justify-between pt-3 border-t border-lattice-border">
                 <div className="flex items-center gap-0.5 text-neon-cyan">
-                  <button onClick={() => handleComposeHint('Track')} className="p-2 rounded-full hover:bg-neon-cyan/10 transition-colors" title="Attach track reference">
-                    <ListMusic className="w-5 h-5" />
+                  <button onClick={() => handleComposeHint('Link')} className="p-2 rounded-full hover:bg-neon-cyan/10 transition-colors" title="Attach link">
+                    <Link className="w-5 h-5" />
                   </button>
                   <button onClick={() => handleComposeHint('Audio')} className="p-2 rounded-full hover:bg-neon-cyan/10 transition-colors" title="Attach audio">
-                    <Mic2 className="w-5 h-5" />
+                    <Globe className="w-5 h-5" />
                   </button>
                   <button onClick={() => handleComposeHint('Image')} className="p-2 rounded-full hover:bg-neon-cyan/10 transition-colors" title="Attach image">
                     <ImageIcon className="w-5 h-5" />
@@ -1035,7 +1035,7 @@ export default function FeedLensPage() {
           {/* End-of-feed indicator */}
           {!isLoading && filteredPosts.length > 0 && (
             <div className="p-8 text-center text-gray-600 text-sm">
-              <Disc3 className="w-6 h-6 mx-auto mb-2 animate-spin-slow opacity-40" />
+              <Newspaper className="w-6 h-6 mx-auto mb-2 animate-spin-slow opacity-40" />
               You are all caught up
             </div>
           )}
@@ -1051,16 +1051,16 @@ export default function FeedLensPage() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search artists, tracks, DTUs..."
+            placeholder="Search posts, topics, DTUs..."
             className="w-full pl-10 pr-4 py-2.5 bg-lattice-surface border border-lattice-border rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-neon-cyan transition-colors"
           />
         </div>
 
-        {/* Trending in Studio */}
+        {/* Trending Now */}
         <div className="bg-lattice-surface rounded-xl border border-lattice-border overflow-hidden">
           <div className="flex items-center gap-2 p-4 pb-2">
             <TrendingUp className="w-4 h-4 text-neon-cyan" />
-            <h2 className="text-base font-bold text-white">Trending in Studio</h2>
+            <h2 className="text-base font-bold text-white">Trending Now</h2>
           </div>
           {(trending || TRENDING_TOPICS).map(topic => (
             <button
@@ -1092,7 +1092,7 @@ export default function FeedLensPage() {
         {/* New Releases Mini */}
         <div className="bg-lattice-surface rounded-xl border border-lattice-border overflow-hidden">
           <div className="flex items-center gap-2 p-4 pb-2">
-            <Disc3 className="w-4 h-4 text-neon-pink" />
+            <Newspaper className="w-4 h-4 text-neon-pink" />
             <h2 className="text-base font-bold text-white">New Releases</h2>
           </div>
           {NEW_RELEASES.map(rel => (
@@ -1105,7 +1105,7 @@ export default function FeedLensPage() {
                 'w-10 h-10 rounded-lg bg-gradient-to-br flex items-center justify-center flex-shrink-0',
                 rel.gradient,
               )}>
-                <Disc3 className="w-5 h-5 text-white/50" />
+                <Newspaper className="w-5 h-5 text-white/50" />
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-medium text-white truncate">{rel.title}</p>

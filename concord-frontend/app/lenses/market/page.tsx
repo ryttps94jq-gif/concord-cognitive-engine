@@ -33,7 +33,7 @@ interface MarketListingItem {
 }
 
 type SortField = 'newest' | 'price-asc' | 'price-desc' | 'popular';
-type ListingType = 'all' | 'beat' | 'stem' | 'sample' | 'artwork';
+type ListingType = 'all' | 'template' | 'component' | 'dataset' | 'artwork';
 
 export default function MarketLensPage() {
   useLensNav('market');
@@ -245,9 +245,9 @@ export default function MarketLensPage() {
               value={newType}
               onChange={(e) => setNewType(e.target.value)}
             >
-              <option value="beat">Beat</option>
-              <option value="stem">Stem</option>
-              <option value="sample">Sample</option>
+              <option value="template">Template</option>
+              <option value="component">Component</option>
+              <option value="dataset">Dataset</option>
               <option value="artwork">Artwork</option>
             </select>
             <input
@@ -354,9 +354,9 @@ export default function MarketLensPage() {
               onChange={(e) => setFilterType(e.target.value as ListingType)}
             >
               <option value="all">All Types</option>
-              <option value="beat">Beats</option>
-              <option value="stem">Stems</option>
-              <option value="sample">Samples</option>
+              <option value="template">Templates</option>
+              <option value="component">Components</option>
+              <option value="dataset">Datasets</option>
               <option value="artwork">Artwork</option>
             </select>
             <select

@@ -9,8 +9,8 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Bell, Plus, Sparkles, CheckCircle2, Clock, Play, Pause, Square, RotateCcw,
-  Mic, Music, BookOpen, Target, TrendingUp, Flame, ChevronLeft,
-  ChevronRight, FileText, Headphones,
+  Coffee, CheckSquare, BookOpen, Target, TrendingUp, Flame, ChevronLeft,
+  ChevronRight, FileText, ListChecks,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { showToast } from '@/components/common/Toasts';
@@ -30,10 +30,10 @@ interface PracticeSession { id: string; skill: string; duration: number; complet
 const QUOTES = [
   { text: 'The only way to do great work is to love what you do.', author: 'Steve Jobs' },
   { text: 'Creativity is intelligence having fun.', author: 'Albert Einstein' },
-  { text: 'Music is the shorthand of emotion.', author: 'Leo Tolstoy' },
+  { text: 'The best way to predict the future is to create it.', author: 'Peter Drucker' },
   { text: 'Every artist was first an amateur.', author: 'Ralph Waldo Emerson' },
-  { text: 'Without music, life would be a mistake.', author: 'Friedrich Nietzsche' },
-  { text: 'The earth has music for those who listen.', author: 'William Shakespeare' },
+  { text: 'What gets measured gets managed.', author: 'Peter Drucker' },
+  { text: 'Start where you are. Use what you have. Do what you can.', author: 'Arthur Ashe' },
   { text: 'Art is not what you see, but what you make others see.', author: 'Edgar Degas' },
 ];
 
@@ -469,7 +469,7 @@ export default function DailyLensPage() {
             </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1.5 uppercase tracking-wider flex items-center gap-1.5">
-                <Music className="w-3 h-3" /> What I worked on today
+                <CheckSquare className="w-3 h-3" /> What I worked on today
               </label>
               <textarea value={workedOn} onChange={(e) => setWorkedOn(e.target.value)}
                 placeholder="Production log..." rows={2} className="input-lattice w-full text-sm resize-none" />
@@ -548,14 +548,14 @@ export default function DailyLensPage() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.25 }} className="lens-card">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-                <Headphones className="w-4 h-4 text-neon-purple" /> Audio Clips
+                <ListChecks className="w-4 h-4 text-neon-purple" /> Audio Clips
               </h2>
               <button
                 onClick={handleRecordToggle}
                 className={`btn-neon text-xs flex items-center gap-1 ${isRecording ? 'bg-red-500/20 text-red-400 border-red-500/50' : 'purple'}`}
                 title={isRecording ? 'Stop recording' : 'Record a quick audio note'}
               >
-                {isRecording ? <Square className="w-3 h-3" /> : <Mic className="w-3 h-3" />}
+                {isRecording ? <Square className="w-3 h-3" /> : <Coffee className="w-3 h-3" />}
                 {isRecording ? 'Stop Recording' : 'Record Quick Note'}
               </button>
             </div>
