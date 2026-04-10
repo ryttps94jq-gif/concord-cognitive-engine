@@ -35,6 +35,12 @@ import {
   FileText,
   Globe,
   Link,
+  Trash2,
+  Send,
+  ChevronDown,
+  ChevronUp,
+  Pin,
+  Flag,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
@@ -520,6 +526,52 @@ export default function FeedLensPage() {
     },
   });
 
+  // Comment & post options state
+  const [expandedComments, setExpandedComments] = useState<string | null>(null);
+  const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
+  const [postComments, setPostComments] = useState<Record<string, { id: string; userId: string; content: string; createdAt: string; replies?: unknown[] }[]>>({});
+  const [postMenuOpen, setPostMenuOpen] = useState<string | null>(null);
+
+  const commentMutation = useMutation({
+    mutationFn: ({ postId, content }: { postId: string; content: string }) =>
+      api.post('/api/social/comment', { postId, content }),
+    onSuccess: (_data, { postId }) => {
+      setCommentInputs(prev => ({ ...prev, [postId]: '' }));
+      queryClient.invalidateQueries({ queryKey: ['feed-posts'] });
+      // Refetch comments for this post
+      api.get(`/api/social/comments/${postId}`).then(res => {
+        setPostComments(prev => ({ ...prev, [postId]: res.data?.comments || [] }));
+      }).catch(() => {});
+    },
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Failed to add comment' });
+    },
+  });
+
+  const deletePostMutation = useMutation({
+    mutationFn: (postId: string) => api.delete(`/api/social/post/${postId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['feed-posts'] });
+      useUIStore.getState().addToast({ type: 'success', message: 'Post deleted' });
+      setPostMenuOpen(null);
+    },
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Failed to delete post' });
+    },
+  });
+
+  const toggleComments = useCallback((postId: string) => {
+    if (expandedComments === postId) {
+      setExpandedComments(null);
+      return;
+    }
+    setExpandedComments(postId);
+    // Fetch comments from backend
+    api.get(`/api/social/comments/${postId}`).then(res => {
+      setPostComments(prev => ({ ...prev, [postId]: res.data?.comments || [] }));
+    }).catch(() => {});
+  }, [expandedComments]);
+
   const handleComposeHint = useCallback((hint: string) => {
     setNewPost(prev => prev ? `${prev}\n[${hint}]` : `[${hint}]`);
     composeRef.current?.focus();
@@ -868,12 +920,49 @@ export default function FeedLensPage() {
                         {post.dtuSource && (
                           <ProvenanceBadge source={post.dtuSource} model={post.dtuMeta?.model as string} authority={post.dtuMeta?.authority as string} />
                         )}
-                        <button
-                          onClick={() => useUIStore.getState().addToast({ type: 'info', message: `Post ${post.id} options` })}
-                          className="ml-auto p-1 text-gray-600 hover:text-neon-cyan hover:bg-neon-cyan/10 rounded-full transition-colors flex-shrink-0"
-                        >
-                          <MoreHorizontal className="w-4 h-4" />
-                        </button>
+                        <div className="ml-auto relative flex-shrink-0">
+                          <button
+                            onClick={() => setPostMenuOpen(postMenuOpen === post.id ? null : post.id)}
+                            className="p-1 text-gray-600 hover:text-neon-cyan hover:bg-neon-cyan/10 rounded-full transition-colors"
+                          >
+                            <MoreHorizontal className="w-4 h-4" />
+                          </button>
+                          <AnimatePresence>
+                            {postMenuOpen === post.id && (
+                              <motion.div
+                                initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                                className="absolute right-0 top-8 z-20 w-44 bg-lattice-surface border border-lattice-border rounded-xl shadow-lg overflow-hidden"
+                              >
+                                <button
+                                  onClick={() => { deletePostMutation.mutate(post.id); }}
+                                  className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
+                                >
+                                  <Trash2 className="w-4 h-4" /> Delete Post
+                                </button>
+                                <button
+                                  onClick={() => { bookmarkMutation.mutate(post.id); setPostMenuOpen(null); }}
+                                  className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-gray-300 hover:bg-lattice-deep transition-colors"
+                                >
+                                  <Bookmark className="w-4 h-4" /> {post.bookmarked ? 'Remove Bookmark' : 'Bookmark'}
+                                </button>
+                                <button
+                                  onClick={() => { shareMutation.mutate(post.id); setPostMenuOpen(null); }}
+                                  className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-gray-300 hover:bg-lattice-deep transition-colors"
+                                >
+                                  <Share className="w-4 h-4" /> Copy Link
+                                </button>
+                                <button
+                                  onClick={() => { useUIStore.getState().addToast({ type: 'info', message: 'Post reported' }); setPostMenuOpen(null); }}
+                                  className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-gray-300 hover:bg-lattice-deep transition-colors"
+                                >
+                                  <Flag className="w-4 h-4" /> Report
+                                </button>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
                       </div>
 
                       {/* Content */}
@@ -950,27 +1039,11 @@ export default function FeedLensPage() {
                       {/* Engagement Bar */}
                       <div className="flex items-center justify-between mt-3 max-w-md text-gray-500">
                         <button
-                          onClick={() => {
-                            if (post.dtuId) {
-                              apiHelpers.collab.getComments(post.dtuId, true)
-                                .then((res) => {
-                                  const comments = res.data?.comments || [];
-                                  useUIStore.getState().addToast({
-                                    type: 'info',
-                                    message: comments.length > 0
-                                      ? `${comments.length} comment${comments.length === 1 ? '' : 's'} on this post`
-                                      : 'No comments yet',
-                                  });
-                                })
-                                .catch(() => useUIStore.getState().addToast({ type: 'info', message: 'No comments yet' }));
-                            } else {
-                              useUIStore.getState().addToast({ type: 'info', message: 'No comments yet' });
-                            }
-                          }}
-                          className="flex items-center gap-1.5 group"
+                          onClick={() => toggleComments(post.id)}
+                          className={cn('flex items-center gap-1.5 group', expandedComments === post.id && 'text-blue-400')}
                         >
                           <div className="p-1.5 rounded-full group-hover:bg-blue-500/15 group-hover:text-blue-400 group-hover:scale-110 transition-all duration-200">
-                            <MessageCircle className="w-4 h-4" />
+                            <MessageCircle className={cn('w-4 h-4', expandedComments === post.id && 'fill-current')} />
                           </div>
                           <span className="text-xs group-hover:text-blue-400 transition-colors">{formatNumber(post.comments)}</span>
                         </button>
@@ -1025,6 +1098,70 @@ export default function FeedLensPage() {
                           <ReportButton contentId={post.id} contentType="post" compact />
                         </div>
                       </div>
+
+                      {/* Expandable Comments Section */}
+                      <AnimatePresence>
+                        {expandedComments === post.id && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="mt-3 overflow-hidden"
+                          >
+                            <div className="border-t border-lattice-border pt-3 space-y-3">
+                              {/* Comment input */}
+                              <div className="flex gap-2">
+                                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-neon-cyan to-neon-purple flex-shrink-0" />
+                                <div className="flex-1 flex gap-2">
+                                  <input
+                                    type="text"
+                                    value={commentInputs[post.id] || ''}
+                                    onChange={(e) => setCommentInputs(prev => ({ ...prev, [post.id]: e.target.value }))}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter' && (commentInputs[post.id] || '').trim()) {
+                                        commentMutation.mutate({ postId: post.id, content: commentInputs[post.id] });
+                                      }
+                                    }}
+                                    placeholder="Write a comment..."
+                                    className="flex-1 bg-lattice-surface border border-lattice-border rounded-full px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-neon-cyan transition-colors"
+                                  />
+                                  <button
+                                    onClick={() => {
+                                      if ((commentInputs[post.id] || '').trim()) {
+                                        commentMutation.mutate({ postId: post.id, content: commentInputs[post.id] });
+                                      }
+                                    }}
+                                    disabled={!(commentInputs[post.id] || '').trim() || commentMutation.isPending}
+                                    className="p-1.5 rounded-full bg-neon-cyan/20 text-neon-cyan hover:bg-neon-cyan/30 disabled:opacity-40 transition-colors"
+                                  >
+                                    <Send className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Comment list */}
+                              {(postComments[post.id] || []).length === 0 ? (
+                                <p className="text-xs text-gray-500 text-center py-2">No comments yet. Be the first!</p>
+                              ) : (
+                                <div className="space-y-2 max-h-60 overflow-y-auto">
+                                  {(postComments[post.id] || []).map((comment) => (
+                                    <div key={comment.id} className="flex gap-2">
+                                      <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex-shrink-0" />
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="text-xs font-semibold text-white">{comment.userId}</span>
+                                          <span className="text-[10px] text-gray-600">{formatTime(comment.createdAt)}</span>
+                                        </div>
+                                        <p className="text-sm text-gray-300 leading-snug">{comment.content}</p>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
                   </div>
                 </motion.article>

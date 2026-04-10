@@ -223,7 +223,7 @@ import { createAtlasDtu, getAtlasDtu, searchAtlasDtus, promoteAtlasDtu, addAtlas
 import { runAntiGamingScan, getAntiGamingMetrics } from "./emergent/atlas-antigaming.js";
 import { runAutogenV2, getAutogenRun, acceptAutogenOutput, mergeAutogenOutput, propagateConfidence, getAutogenV2Metrics } from "./emergent/atlas-autogen-v2.js";
 import { councilResolve, getCouncilQueue, councilRequestSources, councilMerge, getCouncilActions, getCouncilMetrics } from "./emergent/atlas-council.js";
-import { upsertProfile, getProfile, listProfiles, followUser, unfollowUser, getFollowers, getFollowing, publishDtu, unpublishDtu, recordCitation, getCitedBy, getFeed, computeTrending, discoverUsers, getSocialMetrics } from "./emergent/social-layer.js";
+import { upsertProfile, getProfile, listProfiles, followUser, unfollowUser, getFollowers, getFollowing, publishDtu, unpublishDtu, recordCitation, getCitedBy, getFeed, computeTrending, discoverUsers, getSocialMetrics, createPost as socialCreatePost, getPost as socialGetPost, deletePost as socialDeletePost, getUserPosts as socialGetUserPosts, addReaction as socialAddReaction, getReactions as socialGetReactions, addComment as socialAddComment, deleteComment as socialDeleteComment, getComments as socialGetComments, sharePost as socialSharePost, getShares as socialGetShares, bookmarkPost as socialBookmarkPost, getUserBookmarks as socialGetUserBookmarks, getForYouFeed, getFollowingFeed, getExploreFeed, sendMessage as socialSendMessage, getConversations as socialGetConversations, getMessages as socialGetMessages, markMessagesRead as socialMarkMessagesRead, getActiveStories, viewStory as socialViewStory, votePoll as socialVotePoll, getPollResults as socialGetPollResults, getNotifications as socialGetNotifications, markNotificationRead as socialMarkNotificationRead, markAllNotificationsRead as socialMarkAllNotificationsRead, getUnreadCount as socialGetUnreadCount, deleteNotification as socialDeleteNotification } from "./emergent/social-layer.js";
 import { createWorkspace as collabCreateWorkspace, getWorkspace as collabGetWorkspace, listWorkspaces as collabListWorkspaces, addWorkspaceMember as collabAddWorkspaceMember, removeWorkspaceMember as collabRemoveWorkspaceMember, addDtuToWorkspace as collabAddDtuToWorkspace, addComment as collabAddComment, getComments as collabGetComments, editComment as collabEditComment, resolveComment as collabResolveComment, proposeRevision, getRevisionProposals, voteOnRevision, applyRevision, startEditSession, recordEdit, endEditSession, getCollabMetrics } from "./emergent/collaboration.js";
 import { createOrgWorkspace, getOrgWorkspace, assignRole, revokeRole, getUserRole, getOrgMembers, checkPermission, getUserPermissions, assignOrgLens, getOrgLenses, exportAuditLog, getRbacMetrics } from "./emergent/rbac.js";
 import { takeSnapshot as takeAnalyticsSnapshot, getPersonalAnalytics, getDtuGrowthTrends, getCitationAnalytics, getMarketplaceAnalytics as getMarketAnalytics, getKnowledgeDensity, getAtlasDomainAnalytics, getDashboardSummary } from "./emergent/analytics-dashboard.js";
@@ -39386,6 +39386,165 @@ app.get("/api/social/cited-by/:dtuId", (req, res) => {
 
 app.get("/api/social/metrics", (req, res) => {
   try { res.json(getSocialMetrics(STATE)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- Social Posts CRUD ----
+app.post("/api/social/post", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    const result = socialCreatePost(STATE, { userId, ...req.body });
+    res.json(result);
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/post/:postId", (req, res) => {
+  try { res.json(socialGetPost(STATE, req.params.postId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.delete("/api/social/post/:postId", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    res.json(socialDeletePost(STATE, { userId, postId: req.params.postId }));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/posts/user/:userId", (req, res) => {
+  try { res.json(socialGetUserPosts(STATE, req.params.userId, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- Social Reactions ----
+app.post("/api/social/react", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    res.json(socialAddReaction(STATE, { userId, postId: req.body?.postId, type: req.body?.type || "like" }));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/reactions/:postId", (req, res) => {
+  try {
+    const currentUserId = req.query.userId || req.user?.id || req.actor?.userId || null;
+    res.json(socialGetReactions(STATE, req.params.postId, currentUserId));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- Social Comments ----
+app.post("/api/social/comment", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    res.json(socialAddComment(STATE, { userId, postId: req.body?.postId, content: req.body?.content, parentCommentId: req.body?.parentCommentId }));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.delete("/api/social/comment/:postId/:commentId", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    res.json(socialDeleteComment(STATE, { userId, postId: req.params.postId, commentId: req.params.commentId }));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/comments/:postId", (req, res) => {
+  try { res.json(socialGetComments(STATE, req.params.postId, { limit: Number(req.query.limit || 50) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- Social Shares ----
+app.post("/api/social/share", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    res.json(socialSharePost(STATE, { userId, postId: req.body?.postId, commentary: req.body?.commentary }));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/shares/:postId", (req, res) => {
+  try { res.json(socialGetShares(STATE, req.params.postId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- Social Bookmarks ----
+app.post("/api/social/bookmark", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    res.json(socialBookmarkPost(STATE, { userId, postId: req.body?.postId }));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/bookmarks", (req, res) => {
+  try {
+    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+    res.json(socialGetUserBookmarks(STATE, userId, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0) }));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- Social Feeds (For-You, Following, Explore) ----
+app.get("/api/social/feed/foryou", (req, res) => {
+  try {
+    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+    res.json(getForYouFeed(STATE, userId, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0) }));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/feed/following", (req, res) => {
+  try {
+    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+    res.json(getFollowingFeed(STATE, userId, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0) }));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/feed/explore", (req, res) => {
+  try {
+    res.json(getExploreFeed(STATE, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0), topic: req.query.topic }));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- Social DMs ----
+app.post("/api/social/dm", (req, res) => {
+  try {
+    const fromUserId = req.body?.fromUserId || req.user?.id || req.actor?.userId || "anon";
+    res.json(socialSendMessage(STATE, { fromUserId, toUserId: req.body?.toUserId, content: req.body?.content, mediaUrl: req.body?.mediaUrl }));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/dm/conversations", (req, res) => {
+  try {
+    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+    res.json(socialGetConversations(STATE, userId));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/dm/:conversationId", (req, res) => {
+  try { res.json(socialGetMessages(STATE, req.params.conversationId, { limit: Number(req.query.limit || 50), offset: Number(req.query.offset || 0) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/social/dm/read", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    res.json(socialMarkMessagesRead(STATE, { userId, conversationId: req.body?.conversationId }));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- Social Stories ----
+app.get("/api/social/stories", (req, res) => {
+  try {
+    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+    res.json(getActiveStories(STATE, userId));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/social/stories/view", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    res.json(socialViewStory(STATE, { userId, storyId: req.body?.storyId }));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- Social Polls ----
+app.post("/api/social/poll/vote", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    res.json(socialVotePoll(STATE, { userId, postId: req.body?.postId, optionIndex: req.body?.optionIndex }));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/social/poll/:postId", (req, res) => {
+  try { res.json(socialGetPollResults(STATE, req.params.postId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 // ---- Social Notifications ----
