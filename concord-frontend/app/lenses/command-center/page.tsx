@@ -1749,21 +1749,23 @@ export default function CommandCenterPage() {
   const [showFeatures, setShowFeatures] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>('vitals');
 
-  // Auth gate — check if user is owner, redirect silently if not
+  // Auth gate — admin+ access (sovereign, admin, owner, founder)
   const { data: me, isLoading: authLoading } = useQuery({
     queryKey: ['cc-auth'],
     queryFn: () => apiHelpers.auth.me().then(r => r.data),
     retry: false,
   });
 
+  const ALLOWED_ROLES = ['sovereign', 'admin', 'owner', 'founder'];
+
   useEffect(() => {
-    if (!authLoading && me && !['owner', 'founder'].includes(me.role)) {
+    if (!authLoading && me && !ALLOWED_ROLES.includes(me.role)) {
       router.push('/lenses');
     }
   }, [me, authLoading, router]);
 
   if (authLoading) return null;
-  if (!me || !['owner', 'founder'].includes(me.role)) return null;
+  if (!me || !ALLOWED_ROLES.includes(me.role)) return null;
 
   const renderPanel = () => {
     switch (activeTab) {
