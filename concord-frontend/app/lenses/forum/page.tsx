@@ -538,6 +538,7 @@ export default function ForumLensPage() {
               <button onClick={() => setShowShareModal(post.id)} className="flex items-center gap-1.5 text-xs hover:bg-lattice-bg px-2 py-1 rounded transition-colors"><Share2 className="w-4 h-4" />Share</button>
               <ReportButton contentId={post.id} contentType="post" compact />
               <button onClick={() => handleToggleSave(post.id)} className={cn('flex items-center gap-1.5 text-xs hover:bg-lattice-bg px-2 py-1 rounded transition-colors', post.saved && 'text-neon-cyan')}>{post.saved ? <BookmarkCheck className="w-4 h-4" /> : <Bookmark className="w-4 h-4" />}{post.saved ? 'Saved' : 'Save'}</button>
+              <PullToSubstrate domain="forum" artifactId={post.id} compact />
               <div className="flex items-center gap-1.5 text-xs px-2 py-1 text-gray-500"><Eye className="w-3.5 h-3.5" />{post.views.toLocaleString()}</div>
               {/* Mod tools */}
               <div className="relative ml-auto">
@@ -605,6 +606,7 @@ export default function ForumLensPage() {
                 <button onClick={() => setShowShareModal(selectedPost.id)} className="flex items-center gap-1 text-xs hover:text-white transition-colors"><Share2 className="w-4 h-4" />Share</button>
                 <ReportButton contentId={selectedPost.id} contentType="post" compact />
                 <button onClick={() => handleToggleSave(selectedPost.id)} className={cn('flex items-center gap-1 text-xs transition-colors', selectedPost.saved ? 'text-neon-cyan' : 'hover:text-white')}>{selectedPost.saved ? <BookmarkCheck className="w-4 h-4" /> : <Bookmark className="w-4 h-4" />}{selectedPost.saved ? 'Saved' : 'Save'}</button>
+                <PullToSubstrate domain="forum" artifactId={selectedPost.id} compact />
                 <span className="text-xs flex items-center gap-1 text-gray-500"><Eye className="w-3.5 h-3.5" />{selectedPost.views.toLocaleString()} views</span>
               </div>
             </div>
@@ -791,7 +793,8 @@ export default function ForumLensPage() {
       </header>
 
       <div className="max-w-6xl mx-auto px-4 py-6">
-        <div className="flex gap-6">
+        <FeedBanner domain="forum" />
+        <div className="flex gap-6 mt-4">
           {/* Main content */}
           <AnimatePresence mode="wait">
             {viewMode === 'feed' && (

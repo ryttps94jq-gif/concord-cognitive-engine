@@ -326,6 +326,7 @@ function ItemCard({
         </div>
         <div className="flex items-center gap-1">{starRating(item.rating)}<span className="text-xs text-gray-500 ml-1">{item.rating}</span></div>
         <span className="text-neon-green font-bold">{formatPrice(item.prices.basic)}</span>
+        <PullToSubstrate domain="marketplace" artifactId={item.id} compact />
         <button onClick={(e) => { e.stopPropagation(); onAddToCart(item); }} className="btn-neon small flex items-center gap-1">
           <ShoppingCart className="w-3.5 h-3.5" />
         </button>
@@ -376,10 +377,13 @@ function ItemCard({
         )}
         <div className="flex items-center justify-between pt-2 border-t border-lattice-border">
           <span className="text-amber-400 font-bold text-sm">From {formatPrice(item.prices.basic)}</span>
-          <button onClick={(e) => { e.stopPropagation(); onAddToCart(item); }}
-            className="px-2.5 py-1 rounded-lg bg-gradient-to-r from-amber-500/20 to-orange-500/20 text-amber-400 border border-amber-500/30 hover:from-amber-500/30 hover:to-orange-500/30 transition-all text-xs font-medium flex items-center gap-1">
-            <ShoppingCart className="w-3 h-3" /> Buy
-          </button>
+          <div className="flex items-center gap-1.5">
+            <PullToSubstrate domain="marketplace" artifactId={item.id} compact />
+            <button onClick={(e) => { e.stopPropagation(); onAddToCart(item); }}
+              className="px-2.5 py-1 rounded-lg bg-gradient-to-r from-amber-500/20 to-orange-500/20 text-amber-400 border border-amber-500/30 hover:from-amber-500/30 hover:to-orange-500/30 transition-all text-xs font-medium flex items-center gap-1">
+              <ShoppingCart className="w-3 h-3" /> Buy
+            </button>
+          </div>
         </div>
       </div>
     </motion.div>
@@ -784,6 +788,8 @@ export default function MarketplaceLensPage() {
           </button>
         </div>
       </div>
+
+      <FeedBanner domain="marketplace" />
 
       {/* ---- Tab Navigation ---- */}
       <div className="flex items-center gap-1 bg-lattice-surface/50 p-1 rounded-lg w-fit">

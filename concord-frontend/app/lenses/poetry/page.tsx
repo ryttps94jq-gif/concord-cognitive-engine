@@ -377,6 +377,7 @@ export default function PoetryPage() {
         </div>
 
         {showFeatures && <LensFeaturePanel lensId="poetry" />}
+        <FeedBanner domain="poetry" />
         <RealtimeDataPanel data={realtimeData} insights={realtimeInsights} />
       <UniversalActions domain="poetry" artifactId={null} compact />
 
@@ -424,6 +425,7 @@ export default function PoetryPage() {
                         </div>
                       </div>
                       <div className="flex gap-1">
+                        <PullToSubstrate domain="poetry" artifactId={poem.id} compact />
                         <button onClick={e => { e.stopPropagation(); openPoem(poem); }} className="p-1 hover:bg-white/10 rounded"><Edit2 className="w-3.5 h-3.5" /></button>
                         <button onClick={e => { e.stopPropagation(); removePoem(poem.id).then(() => refetch()).catch((err) => { console.error('[Poetry] Failed to delete poem:', err); useUIStore.getState().addToast({ type: 'error', message: 'Failed to delete poem' }); }); }} className="p-1 hover:bg-white/10 rounded text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div>
