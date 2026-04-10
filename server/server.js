@@ -30530,7 +30530,7 @@ const UNIVERSAL_ACTIONS = ["analyze", "generate", "suggest"];
 const ALL_LENS_DOMAINS = [
   "accounting","admin","affect","agents","agriculture","all","alliance","analytics","animation",
   "anon","app-maker","ar","art","astronomy","attention","audit","automotive","aviation","billing",
-  "bio","board","calendar","chat","chem","code","collab","command-center",
+  "bio","board","bridge","calendar","carpentry","chat","chem","code","collab","command-center","construction",
   "commonsense","council","creative","cri","crypto","custom","daily",
   "database","debug","diy","docs","eco","education","entity","environment",
   "ethics","events","experience","export","feed","finance","fitness",

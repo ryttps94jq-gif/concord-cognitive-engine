@@ -102,6 +102,11 @@ import analytics from './analytics.js';
 import animation from './animation.js';
 import astronomy from './astronomy.js';
 import automotive from './automotive.js';
+import bridge from './bridge.js';
+import calendar from './calendar.js';
+import carpentry from './carpentry.js';
+import collab from './collab.js';
+import construction from './construction.js';
 
 export default [
   healthcare,
@@ -197,4 +202,9 @@ export default [
   animation,
   astronomy,
   automotive,
+  bridge,
+  calendar,
+  carpentry,
+  collab,
+  construction,
 ];
