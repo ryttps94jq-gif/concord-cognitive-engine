@@ -30543,8 +30543,9 @@ const ALL_LENS_DOMAINS = [
   "music","neuro","news","nonprofit","ocean","offline","organ","paper","parenting","pets","pharmacy","philosophy","photography","physics",
   "platform","plumbing","podcast","poetry","privacy","projects","quantum","questmarket","queue","realestate","reasoning","robotics",
   "reflection","repos","research","resonance","retail","schema","science",
-  "security","services","sim","srs","studio","suffering","temporal",
-  "thread","tick","timeline","trades","transfer","voice","vote","whiteboard"
+  "security","services","sim","space","sports","srs","studio","suffering","supplychain",
+  "telecommunications","temporal","thread","tick","timeline","trades","transfer",
+  "travel","urban-planning","veterinary","voice","vote","wallet","welding","whiteboard","world"
 ];
 
 function registerUniversalLensActions() {

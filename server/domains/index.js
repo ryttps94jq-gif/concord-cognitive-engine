@@ -152,6 +152,11 @@ import photography from './photography.js';
 import plumbing from './plumbing.js';
 import podcast from './podcast.js';
 import poetry from './poetry.js';
+import privacy from './privacy.js';
+import projects from './projects.js';
+import robotics from './robotics.js';
+import space from './space.js';
+import sports from './sports.js';
 
 export default [
   healthcare,
@@ -297,4 +302,9 @@ export default [
   plumbing,
   podcast,
   poetry,
+  privacy,
+  projects,
+  robotics,
+  space,
+  sports,
 ];
