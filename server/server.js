@@ -30538,7 +30538,7 @@ const ALL_LENS_DOMAINS = [
   "graph","grounding","healthcare","household","hypothesis","import",
   "inference","ingest","insurance","integrations","invariant","lab",
   "law","legacy","legal","lock","logistics","manufacturing","market",
-  "marketplace","math","meta","metacognition","metalearning","ml",
+  "marketplace","materials","math","meta","metacognition","metalearning","ml",
   "music","neuro","news","nonprofit","offline","organ","paper","parenting","pets","pharmacy","physics",
   "platform","plumbing","quantum","questmarket","queue","realestate","reasoning",
   "reflection","repos","research","resonance","retail","schema","science",

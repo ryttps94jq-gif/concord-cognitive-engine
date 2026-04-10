@@ -345,6 +345,16 @@ export const LENS_IDENTITIES: Record<string, LensIdentity> = {
     emptyState: "Scanning the cosmos...",
     vibe: "nasa-dark",
   },
+  materials: {
+    accent: "#78909C",
+    secondaryAccent: "#607D8B",
+    icon: "\u{1F9F2}",
+    gradient: "linear-gradient(135deg, #78909C11, #607D8B11)",
+    contentLayout: "reference",
+    cardStyle: "species",
+    emptyState: "No material data sheets loaded. Add your first alloy.",
+    vibe: "matweb-reference",
+  },
   diy: {
     accent: "#E65100",
     secondaryAccent: "#BF360C",

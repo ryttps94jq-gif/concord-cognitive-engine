@@ -96,6 +96,7 @@ import pets from './pets.js';
 import parenting from './parenting.js';
 import questmarket from './questmarket.js';
 import diy from './diy.js';
+import materials from './materials.js';
 
 export default [
   healthcare,
@@ -185,4 +186,5 @@ export default [
   parenting,
   questmarket,
   diy,
+  materials,
 ];
