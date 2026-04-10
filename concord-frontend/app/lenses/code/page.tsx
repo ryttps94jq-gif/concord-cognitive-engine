@@ -47,536 +47,399 @@ interface Tab {
   scriptType: ScriptType;
 }
 
-type ScriptType = 'midi' | 'effect' | 'automation' | 'macro' | 'sampler' | 'generator';
+type ScriptType = 'snippet' | 'project' | 'pipeline' | 'notebook' | 'algorithm' | 'library';
 
 const SCRIPT_TYPES: { id: ScriptType; name: string; icon: React.ElementType; color: string; description: string }[] = [
-  { id: 'midi', name: 'MIDI Script', icon: FileCode, color: 'text-neon-blue', description: 'Generate MIDI patterns programmatically' },
-  { id: 'effect', name: 'Effect Chain', icon: Waves, color: 'text-neon-purple', description: 'Build custom signal processing chains' },
-  { id: 'automation', name: 'Automation', icon: SlidersHorizontal, color: 'text-neon-yellow', description: 'Create parameter automation curves' },
-  { id: 'macro', name: 'Macro', icon: Zap, color: 'text-green-400', description: 'Build reusable production macros' },
-  { id: 'sampler', name: 'Sampler', icon: RefreshCw, color: 'text-neon-cyan', description: 'Script sample playback patterns' },
-  { id: 'generator', name: 'Generator', icon: Sparkles, color: 'text-red-400', description: 'Algorithmic generation scripts' },
+  { id: 'snippet', name: 'Snippet', icon: FileCode, color: 'text-neon-blue', description: 'Quick code snippets and utilities' },
+  { id: 'project', name: 'Project', icon: Layers, color: 'text-neon-purple', description: 'Multi-file project scaffolding' },
+  { id: 'pipeline', name: 'Pipeline', icon: Waves, color: 'text-neon-yellow', description: 'Data processing and ETL pipelines' },
+  { id: 'notebook', name: 'Notebook', icon: SlidersHorizontal, color: 'text-green-400', description: 'Interactive computation notebooks' },
+  { id: 'algorithm', name: 'Algorithm', icon: Zap, color: 'text-neon-cyan', description: 'Algorithm implementations and DSA' },
+  { id: 'library', name: 'Library', icon: Sparkles, color: 'text-red-400', description: 'Reusable modules and packages' },
 ];
 
 const TEMPLATE_FILES: FileNode[] = [
   {
-    id: 'midi',
-    name: 'MIDI',
+    id: 'algorithms',
+    name: 'Algorithms',
     type: 'folder',
     isExpanded: true,
     children: [
       {
-        id: 'chord_generator.js', name: 'chord_generator.js', type: 'file', language: 'javascript', scriptType: 'midi',
-        content: `// MIDI Chord Generator Script
-// Generates chord progressions from scale degrees
+        id: 'binary_search.js', name: 'binary_search.js', type: 'file', language: 'javascript', scriptType: 'algorithm',
+        content: `// Binary Search Implementation
+// O(log n) search on sorted arrays
 
-const SCALES = {
-  major: [0, 2, 4, 5, 7, 9, 11],
-  minor: [0, 2, 3, 5, 7, 8, 10],
-  dorian: [0, 2, 3, 5, 7, 9, 10],
-};
+function binarySearch(arr, target) {
+  let left = 0;
+  let right = arr.length - 1;
 
-const NOTE_MAP = { C: 60, D: 62, E: 64, F: 65, G: 67, A: 69, B: 71 };
-
-function generateChords(root, scaleName, progression) {
-  const scale = SCALES[scaleName];
-  const rootNote = NOTE_MAP[root] || 60;
-  const chords = [];
-
-  for (const degree of progression) {
-    const idx = degree - 1;
-    const notes = [
-      rootNote + scale[idx % 7],
-      rootNote + scale[(idx + 2) % 7],
-      rootNote + scale[(idx + 4) % 7],
-    ];
-    chords.push({
-      notes,
-      velocity: 100,
-      duration: '1/4',
-      time: chords.length * 480,
-    });
+  while (left <= right) {
+    const mid = Math.floor((left + right) / 2);
+    if (arr[mid] === target) return mid;
+    if (arr[mid] < target) left = mid + 1;
+    else right = mid - 1;
   }
-  return chords;
+  return -1;
 }
 
-// Generate a ii-V-I in C major
-const chords = generateChords('C', 'major', [2, 5, 1]);
-output.midi(chords);`,
+// Test
+const sorted = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19];
+console.log(binarySearch(sorted, 7));  // 3
+console.log(binarySearch(sorted, 12)); // -1`,
       },
       {
-        id: 'arpeggiator.js', name: 'arpeggiator.js', type: 'file', language: 'javascript', scriptType: 'midi',
-        content: `// Arpeggiator Script
-// Creates arpeggiated patterns from input chords
+        id: 'graph_bfs.js', name: 'graph_bfs.js', type: 'file', language: 'javascript', scriptType: 'algorithm',
+        content: `// Breadth-First Search (BFS)
+// Graph traversal using a queue
 
-const PATTERNS = {
-  up: (notes) => [...notes].sort((a, b) => a - b),
-  down: (notes) => [...notes].sort((a, b) => b - a),
-  upDown: (notes) => {
-    const up = [...notes].sort((a, b) => a - b);
-    return [...up, ...up.slice(1, -1).reverse()];
-  },
-  random: (notes) => notes.sort(() => Math.random() - 0.5),
+function bfs(graph, start) {
+  const visited = new Set();
+  const queue = [start];
+  const order = [];
+
+  while (queue.length > 0) {
+    const node = queue.shift();
+    if (visited.has(node)) continue;
+
+    visited.add(node);
+    order.push(node);
+
+    for (const neighbor of (graph[node] || [])) {
+      if (!visited.has(neighbor)) {
+        queue.push(neighbor);
+      }
+    }
+  }
+  return order;
+}
+
+const graph = {
+  A: ['B', 'C'],
+  B: ['A', 'D', 'E'],
+  C: ['A', 'F'],
+  D: ['B'],
+  E: ['B', 'F'],
+  F: ['C', 'E'],
 };
 
-function arpeggiate(chord, pattern, rate, octaves) {
-  const sorted = PATTERNS[pattern](chord);
+console.log(bfs(graph, 'A')); // ['A', 'B', 'C', 'D', 'E', 'F']`,
+      },
+      {
+        id: 'merge_sort.js', name: 'merge_sort.js', type: 'file', language: 'javascript', scriptType: 'algorithm',
+        content: `// Merge Sort Implementation
+// O(n log n) stable sorting algorithm
+
+function mergeSort(arr) {
+  if (arr.length <= 1) return arr;
+
+  const mid = Math.floor(arr.length / 2);
+  const left = mergeSort(arr.slice(0, mid));
+  const right = mergeSort(arr.slice(mid));
+
+  return merge(left, right);
+}
+
+function merge(left, right) {
   const result = [];
-  for (let oct = 0; oct < octaves; oct++) {
-    for (const note of sorted) {
-      result.push(midi.note(note + oct * 12, 90, rate));
-    }
+  let i = 0, j = 0;
+
+  while (i < left.length && j < right.length) {
+    if (left[i] <= right[j]) result.push(left[i++]);
+    else result.push(right[j++]);
   }
-  return result;
+
+  return [...result, ...left.slice(i), ...right.slice(j)];
 }
 
-const chord = [60, 64, 67, 72]; // Cmaj7
-const arp = arpeggiate(chord, 'upDown', '1/16', 2);
-output.midi(arp);`,
-      },
-      {
-        id: 'drum_pattern.js', name: 'drum_pattern.js', type: 'file', language: 'javascript', scriptType: 'midi',
-        content: `// Drum Pattern Generator
-// Uses Euclidean rhythms for natural grooves
-
-function euclidean(steps, pulses) {
-  const pattern = Array(steps).fill(0);
-  const spacing = steps / pulses;
-  for (let i = 0; i < pulses; i++) {
-    pattern[Math.round(i * spacing)] = 1;
-  }
-  return pattern;
-}
-
-const DRUM_MAP = { kick: 36, snare: 38, hat: 42, openHat: 46, clap: 39 };
-
-const kick =   euclidean(16, 4);
-const snare =  euclidean(16, 2).map((v, i) => i % 8 === 4 ? 1 : 0);
-const hat =    euclidean(16, 6);
-
-const pattern = [];
-for (let step = 0; step < 16; step++) {
-  if (kick[step])  pattern.push(midi.note(DRUM_MAP.kick, 110, '1/16', step));
-  if (snare[step]) pattern.push(midi.note(DRUM_MAP.snare, 100, '1/16', step));
-  if (hat[step])   pattern.push(midi.note(DRUM_MAP.hat, 80, '1/16', step));
-}
-output.midi(pattern);`,
-      },
-      {
-        id: 'bass_line.js', name: 'bass_line.js', type: 'file', language: 'javascript', scriptType: 'midi',
-        content: `// Bass Line Generator
-// Creates walking bass lines from chord changes
-
-const CHORD_TONES = {
-  maj: [0, 4, 7],
-  min: [0, 3, 7],
-  dom7: [0, 4, 7, 10],
-  min7: [0, 3, 7, 10],
-};
-
-function walkingBass(changes, tempo) {
-  const line = [];
-  let time = 0;
-  for (const { root, type, bars } of changes) {
-    const tones = CHORD_TONES[type];
-    for (let bar = 0; bar < bars; bar++) {
-      for (let beat = 0; beat < 4; beat++) {
-        const pitch = root + tones[beat % tones.length] - 24;
-        const vel = beat === 0 ? 110 : 85;
-        line.push(midi.note(pitch, vel, '1/4', time));
-        time += 480;
-      }
-    }
-  }
-  return line;
-}
-
-const changes = [
-  { root: 60, type: 'min7', bars: 2 },
-  { root: 65, type: 'dom7', bars: 2 },
-  { root: 60, type: 'maj', bars: 2 },
-];
-const bass = walkingBass(changes, 120);
-output.midi(bass);`,
+const unsorted = [38, 27, 43, 3, 9, 82, 10];
+console.log(mergeSort(unsorted)); // [3, 9, 10, 27, 38, 43, 82]`,
       },
     ],
   },
   {
-    id: 'effects',
-    name: 'Effects',
+    id: 'snippets',
+    name: 'Snippets',
     type: 'folder',
     children: [
       {
-        id: 'custom_reverb.js', name: 'custom_reverb.js', type: 'file', language: 'javascript', scriptType: 'effect',
-        content: `// Custom Reverb Chain
-// Layers multiple reverb stages for depth
+        id: 'fetch_api.js', name: 'fetch_api.js', type: 'file', language: 'javascript', scriptType: 'snippet',
+        content: `// REST API Client
+// Reusable fetch wrapper with error handling
 
-const earlyReflections = effect.create('delay', {
-  time: '22ms', feedback: 0.0, mix: 0.3,
-  taps: [
-    { time: '7ms', gain: 0.8 },
-    { time: '13ms', gain: 0.6 },
-    { time: '22ms', gain: 0.4 },
-  ],
-});
+async function apiClient(baseUrl) {
+  const headers = { 'Content-Type': 'application/json' };
 
-const diffusion = effect.create('allpass', {
-  stages: 4,
-  times: ['4.7ms', '6.1ms', '8.3ms', '11.2ms'],
-  feedback: 0.5,
-});
-
-const tail = effect.create('reverb', {
-  decay: 2.8, damping: 0.6, size: 0.85,
-  predelay: '30ms', modRate: 0.8, modDepth: 0.15,
-});
-
-const eq = effect.create('eq', {
-  highpass: '120Hz', lowShelf: { freq: '300Hz', gain: -2 },
-  highShelf: { freq: '6kHz', gain: -4 },
-});
-
-effect.chain([earlyReflections, diffusion, tail, eq]);
-output.effectChain('Custom Plate Reverb');`,
-      },
-      {
-        id: 'sidechain.js', name: 'sidechain.js', type: 'file', language: 'javascript', scriptType: 'effect',
-        content: `// Sidechain Compressor Script
-// Musical ducking with shape control
-
-const envelope = effect.create('envelope', {
-  attack: '0.5ms',
-  hold: '10ms',
-  release: '150ms',
-  curve: 'exponential',
-});
-
-const compressor = effect.create('compressor', {
-  threshold: -30,
-  ratio: 8,
-  attack: '0.1ms',
-  release: '80ms',
-  sidechain: { source: 'kick_bus', filter: '100Hz' },
-});
-
-const shaper = effect.create('shaper', {
-  shape: automation.curve('amount', [
-    { time: 0, value: 1.0 },
-    { time: 0.05, value: 0.1 },
-    { time: 0.3, value: 1.0 },
-  ]),
-});
-
-effect.chain([compressor, shaper, envelope]);
-output.effectChain('Sidechain Pump');`,
-      },
-      {
-        id: 'tape_saturator.js', name: 'tape_saturator.js', type: 'file', language: 'javascript', scriptType: 'effect',
-        content: `// Tape Saturation Emulation
-// Models analog tape warmth and compression
-
-const inputGain = effect.create('gain', { amount: 6 });
-
-const saturation = effect.create('waveshaper', {
-  curve: 'tanh',
-  drive: 0.65,
-  bias: 0.02,
-  oversample: 4,
-});
-
-const tapeEQ = effect.create('eq', {
-  lowShelf: { freq: '80Hz', gain: 2, q: 0.7 },
-  bell: { freq: '3kHz', gain: 1.5, q: 1.2 },
-  highShelf: { freq: '12kHz', gain: -3 },
-});
-
-const flutter = effect.create('modDelay', {
-  time: '0.3ms',
-  rate: '5.5Hz',
-  depth: 0.002,
-  mix: 0.4,
-});
-
-const hissNoise = effect.create('noise', {
-  type: 'pink', level: -48, filter: '8kHz',
-});
-
-effect.chain([inputGain, saturation, tapeEQ, flutter, hissNoise]);
-output.effectChain('Vintage Tape');`,
-      },
-    ],
-  },
-  {
-    id: 'automation',
-    name: 'Automation',
-    type: 'folder',
-    children: [
-      {
-        id: 'filter_sweep.js', name: 'filter_sweep.js', type: 'file', language: 'javascript', scriptType: 'automation',
-        content: `// Filter Sweep Automation
-// Smooth frequency sweeps with resonance modulation
-
-const filterFreq = automation.curve('filter.frequency', [
-  { time: '0:0:0', value: 200, curve: 'exponential' },
-  { time: '0:2:0', value: 2000, curve: 'exponential' },
-  { time: '0:3:0', value: 8000, curve: 'exponential' },
-  { time: '0:3:2', value: 12000, curve: 'linear' },
-  { time: '0:4:0', value: 200, curve: 'exponential' },
-]);
-
-const resonance = automation.curve('filter.resonance', [
-  { time: '0:0:0', value: 0.2 },
-  { time: '0:2:0', value: 0.7 },
-  { time: '0:3:0', value: 0.9 },
-  { time: '0:4:0', value: 0.2 },
-]);
-
-automation.sync('4bars');
-automation.link(filterFreq, resonance);
-output.automation([filterFreq, resonance]);`,
-      },
-      {
-        id: 'volume_fade.js', name: 'volume_fade.js', type: 'file', language: 'javascript', scriptType: 'automation',
-        content: `// Volume Fade Automation
-// Cinematic builds with parallel processing
-
-const mainVolume = automation.curve('master.volume', [
-  { time: '0:0:0', value: -60 },
-  { time: '0:4:0', value: -20, curve: 'exponential' },
-  { time: '0:7:0', value: -6, curve: 'logarithmic' },
-  { time: '0:8:0', value: 0, curve: 'linear' },
-]);
-
-const reverbSend = automation.curve('reverb.send', [
-  { time: '0:0:0', value: 0.8 },
-  { time: '0:4:0', value: 0.5 },
-  { time: '0:8:0', value: 0.2 },
-]);
-
-const widthControl = automation.curve('stereo.width', [
-  { time: '0:0:0', value: 0.3 },
-  { time: '0:8:0', value: 1.0, curve: 'exponential' },
-]);
-
-automation.sync('8bars');
-output.automation([mainVolume, reverbSend, widthControl]);`,
-      },
-      {
-        id: 'pan_lfo.js', name: 'pan_lfo.js', type: 'file', language: 'javascript', scriptType: 'automation',
-        content: `// Pan LFO Automation
-// Creates evolving stereo movement
-
-function lfo(shape, rate, depth, offset) {
-  const points = [];
-  const steps = 64;
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    let value;
-    switch (shape) {
-      case 'sine': value = Math.sin(t * Math.PI * 2 * rate); break;
-      case 'triangle': value = Math.abs((t * rate * 2) % 2 - 1) * 2 - 1; break;
-      case 'random': value = Math.random() * 2 - 1; break;
-      default: value = 0;
-    }
-    points.push({
-      time: t * 4,
-      value: offset + value * depth,
-    });
-  }
-  return points;
-}
-
-const panCurve = automation.curve('pan', lfo('sine', 2, 0.8, 0));
-const auxPan = automation.curve('aux.pan', lfo('triangle', 0.5, 0.4, 0));
-
-automation.sync('4bars');
-output.automation([panCurve, auxPan]);`,
-      },
-    ],
-  },
-  {
-    id: 'macros',
-    name: 'Macros',
-    type: 'folder',
-    children: [
-      {
-        id: 'quick_chop.js', name: 'quick_chop.js', type: 'file', language: 'javascript', scriptType: 'macro',
-        content: `// Quick Chop Macro
-// Slice and rearrange audio on the grid
-
-macro.name('Quick Chop');
-macro.input('sample', 'audio', { label: 'Sample to chop' });
-macro.input('slices', 'number', { min: 4, max: 64, default: 16 });
-macro.input('pattern', 'select', {
-  options: ['forward', 'reverse', 'shuffle', 'halftime'],
-});
-
-macro.run(async ({ sample, slices, pattern }) => {
-  const regions = sampler.slice(sample, slices);
-  const sequence = [];
-
-  switch (pattern) {
-    case 'forward':
-      sequence.push(...regions);
-      break;
-    case 'reverse':
-      sequence.push(...regions.reverse());
-      break;
-    case 'shuffle':
-      sequence.push(...regions.sort(() => Math.random() - 0.5));
-      break;
-    case 'halftime':
-      for (const r of regions) {
-        sequence.push(sampler.stretch(r, 2.0));
-      }
-      break;
-  }
-
-  output.arrange(sequence, { quantize: '1/16' });
-});`,
-      },
-      {
-        id: 'vocal_stack.js', name: 'vocal_stack.js', type: 'file', language: 'javascript', scriptType: 'macro',
-        content: `// Vocal Stack Macro
-// Creates layered vocal harmonies with processing
-
-macro.name('Vocal Stack');
-macro.input('vocal', 'audio', { label: 'Lead vocal' });
-macro.input('harmonies', 'number', { min: 1, max: 6, default: 3 });
-macro.input('spread', 'number', { min: 0, max: 100, default: 60 });
-
-macro.run(async ({ vocal, harmonies, spread }) => {
-  const tracks = [];
-  const intervals = [-12, -5, 4, 7, 12, 16];
-
-  for (let i = 0; i < harmonies; i++) {
-    const shifted = effect.pitchShift(vocal, intervals[i]);
-    const panned = effect.pan(shifted, (i / harmonies - 0.5) * spread / 50);
-    const eqd = effect.chain([
-      effect.create('eq', { highpass: '200Hz', lowShelf: { freq: '400Hz', gain: -3 } }),
-      effect.create('compressor', { threshold: -18, ratio: 4 }),
-      effect.create('delay', { time: '1/8d', feedback: 0.2, mix: 0.15 }),
-    ]);
-    tracks.push({ audio: eqd.process(panned), pan: panned.pan });
-  }
-
-  output.multitrack(tracks);
-});`,
-      },
-      {
-        id: 'data_pipeline.js', name: 'data_pipeline.js', type: 'file', language: 'javascript', scriptType: 'macro',
-        content: `// Data Pipeline Macro
-// Auto-generates data pipelines from source templates
-
-macro.name('Data Pipeline');
-macro.input('source', 'select', {
-  options: ['csv', 'json', 'api', 'database', 'stream'],
-});
-macro.input('batchSize', 'number', { min: 10, max: 10000, default: 500 });
-macro.input('format', 'select', { options: ['json', 'csv', 'parquet', 'avro'] });
-macro.input('limit', 'number', { min: 1, max: 10000, default: 1000 });
-
-macro.run(async ({ source, batchSize, format, limit }) => {
-  const connector = pipeline.connect(source);
-  const transforms = {
-    csv:      { parse: [1,0,0,1], validate: [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1] },
-    json:     { parse: [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0], validate: [0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0] },
-    api:      { parse: [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0], validate: [0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0] },
-    database: { parse: [1,0,0,1,0,0,1,0,0,0,1,0,0,0,0,1], validate: [1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0] },
-    stream:   { parse: [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0], validate: [0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0] },
+  return {
+    get: async (path) => {
+      const res = await fetch(baseUrl + path, { headers });
+      if (!res.ok) throw new Error(res.statusText);
+      return res.json();
+    },
+    post: async (path, body) => {
+      const res = await fetch(baseUrl + path, {
+        method: 'POST', headers,
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(res.statusText);
+      return res.json();
+    },
+    put: async (path, body) => {
+      const res = await fetch(baseUrl + path, {
+        method: 'PUT', headers,
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(res.statusText);
+      return res.json();
+    },
+    delete: async (path) => {
+      const res = await fetch(baseUrl + path, { method: 'DELETE', headers });
+      if (!res.ok) throw new Error(res.statusText);
+      return res.json();
+    },
   };
+}
 
-  const steps = transforms[source];
-  const sequence = pipeline.process(connector, steps, { batchSize, format, limit });
-  output.arrange(sequence, { batchSize });
-});`,
+// Usage
+const api = await apiClient('https://api.example.com');
+const users = await api.get('/users');
+console.log(users);`,
+      },
+      {
+        id: 'debounce.js', name: 'debounce.js', type: 'file', language: 'javascript', scriptType: 'snippet',
+        content: `// Debounce & Throttle Utilities
+// Common performance optimization patterns
+
+function debounce(fn, delay) {
+  let timer;
+  return function (...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn.apply(this, args), delay);
+  };
+}
+
+function throttle(fn, limit) {
+  let inThrottle = false;
+  return function (...args) {
+    if (!inThrottle) {
+      fn.apply(this, args);
+      inThrottle = true;
+      setTimeout(() => (inThrottle = false), limit);
+    }
+  };
+}
+
+// Usage
+const handleSearch = debounce((query) => {
+  console.log('Searching:', query);
+}, 300);
+
+const handleScroll = throttle(() => {
+  console.log('Scroll position:', window.scrollY);
+}, 100);`,
+      },
+      {
+        id: 'event_emitter.js', name: 'event_emitter.js', type: 'file', language: 'javascript', scriptType: 'library',
+        content: `// Event Emitter Pattern
+// Pub/sub implementation for decoupled communication
+
+class EventEmitter {
+  constructor() {
+    this.events = new Map();
+  }
+
+  on(event, listener) {
+    if (!this.events.has(event)) this.events.set(event, []);
+    this.events.get(event).push(listener);
+    return () => this.off(event, listener);
+  }
+
+  off(event, listener) {
+    const listeners = this.events.get(event);
+    if (listeners) {
+      this.events.set(event, listeners.filter(l => l !== listener));
+    }
+  }
+
+  emit(event, ...args) {
+    const listeners = this.events.get(event) || [];
+    listeners.forEach(listener => listener(...args));
+  }
+
+  once(event, listener) {
+    const unsub = this.on(event, (...args) => {
+      unsub();
+      listener(...args);
+    });
+    return unsub;
+  }
+}
+
+// Usage
+const bus = new EventEmitter();
+bus.on('user:login', (user) => console.log('Logged in:', user.name));
+bus.emit('user:login', { name: 'Alice', role: 'admin' });`,
+      },
+    ],
+  },
+  {
+    id: 'pipelines',
+    name: 'Pipelines',
+    type: 'folder',
+    children: [
+      {
+        id: 'data_transform.js', name: 'data_transform.js', type: 'file', language: 'javascript', scriptType: 'pipeline',
+        content: `// Data Transform Pipeline
+// Composable data processing stages
+
+function pipeline(...fns) {
+  return (input) => fns.reduce((acc, fn) => fn(acc), input);
+}
+
+const normalize = (data) => data.map(d => ({
+  ...d,
+  name: d.name?.trim().toLowerCase(),
+  email: d.email?.trim().toLowerCase(),
+}));
+
+const validate = (data) => data.filter(d =>
+  d.name && d.email && d.email.includes('@')
+);
+
+const deduplicate = (data) => {
+  const seen = new Set();
+  return data.filter(d => {
+    if (seen.has(d.email)) return false;
+    seen.add(d.email);
+    return true;
+  });
+};
+
+const enrich = (data) => data.map(d => ({
+  ...d,
+  domain: d.email.split('@')[1],
+  createdAt: new Date().toISOString(),
+}));
+
+// Compose the pipeline
+const process = pipeline(normalize, validate, deduplicate, enrich);
+
+const rawData = [
+  { name: ' Alice ', email: 'ALICE@example.com' },
+  { name: 'Bob', email: 'bob@test.io' },
+  { name: ' alice', email: 'alice@example.com' },
+  { name: '', email: 'invalid' },
+];
+
+console.log(process(rawData));`,
+      },
+      {
+        id: 'csv_processor.js', name: 'csv_processor.js', type: 'file', language: 'javascript', scriptType: 'pipeline',
+        content: `// CSV Stream Processor
+// Parse, transform, and output CSV data
+
+function parseCSV(text, delimiter = ',') {
+  const lines = text.trim().split('\\n');
+  const headers = lines[0].split(delimiter).map(h => h.trim());
+  return lines.slice(1).map(line => {
+    const values = line.split(delimiter);
+    return headers.reduce((obj, header, i) => {
+      obj[header] = values[i]?.trim() || '';
+      return obj;
+    }, {});
+  });
+}
+
+function toCSV(data, delimiter = ',') {
+  if (data.length === 0) return '';
+  const headers = Object.keys(data[0]);
+  const rows = data.map(row =>
+    headers.map(h => row[h] ?? '').join(delimiter)
+  );
+  return [headers.join(delimiter), ...rows].join('\\n');
+}
+
+// Example
+const csv = \`name,age,city
+Alice,30,NYC
+Bob,25,LA
+Charlie,35,Chicago\`;
+
+const parsed = parseCSV(csv);
+const filtered = parsed.filter(r => parseInt(r.age) >= 30);
+console.log(toCSV(filtered));`,
       },
     ],
   },
 ];
 
-const DEFAULT_CODE = `// MIDI Chord Generator Script
-// This script generates chord progressions
+const DEFAULT_CODE = `// Welcome to the Code Workspace
+// Write, run, and save code snippets
 
-const SCALES = {
-  major: [0, 2, 4, 5, 7, 9, 11],
-  minor: [0, 2, 3, 5, 7, 8, 10],
-  dorian: [0, 2, 3, 5, 7, 9, 10],
-};
-
-const NOTE_MAP = { C: 60, D: 62, E: 64, F: 65, G: 67, A: 69, B: 71 };
-
-function generateChords(root, scale, progression) {
-  const scaleNotes = SCALES[scale];
-  const rootMidi = NOTE_MAP[root] || 60;
-  const chords = [];
-
-  for (const degree of progression) {
-    const idx = degree - 1;
-    const triad = [
-      rootMidi + scaleNotes[idx % 7],
-      rootMidi + scaleNotes[(idx + 2) % 7],
-      rootMidi + scaleNotes[(idx + 4) % 7],
-    ];
-    chords.push({
-      notes: triad,
-      velocity: 100,
-      duration: '1/4',
-      time: chords.length * 480,
-    });
+function fibonacci(n) {
+  if (n <= 1) return n;
+  let a = 0, b = 1;
+  for (let i = 2; i <= n; i++) {
+    [a, b] = [b, a + b];
   }
-  return chords;
+  return b;
 }
 
-// Generate a ii-V-I in C major
-const chords = generateChords('C', 'major', [2, 5, 1]);
-output.midi(chords);
+// Generate first 10 Fibonacci numbers
+const results = Array.from({ length: 10 }, (_, i) => fibonacci(i));
+console.log('Fibonacci:', results);
+
+// Quick benchmark
+const start = performance.now();
+fibonacci(1000);
+const elapsed = (performance.now() - start).toFixed(2);
+console.log(\`Computed fib(1000) in \${elapsed}ms\`);
 `;
 
 const API_REFERENCE: { category: string; functions: { signature: string; description: string }[] }[] = [
   {
-    category: 'MIDI',
+    category: 'Console',
     functions: [
-      { signature: 'midi.note(pitch, velocity, duration)', description: 'Create a single MIDI note event' },
-      { signature: 'midi.chord(root, type, inversion)', description: 'Generate a chord from root note and type' },
-      { signature: 'midi.cc(controller, value, time)', description: 'Send a MIDI CC message' },
-      { signature: 'midi.bend(value, time)', description: 'Send pitch bend data' },
+      { signature: 'console.log(...args)', description: 'Print values to the output console' },
+      { signature: 'console.table(data)', description: 'Display tabular data in a formatted table' },
+      { signature: 'console.time(label) / timeEnd(label)', description: 'Measure execution time of a code block' },
+      { signature: 'console.assert(condition, msg)', description: 'Assert a condition, log error if false' },
     ],
   },
   {
-    category: 'Effects',
+    category: 'Data',
     functions: [
-      { signature: 'effect.create(type, params)', description: 'Instantiate an effect processor' },
-      { signature: 'effect.chain(effects[])', description: 'Connect effects in series' },
-      { signature: 'effect.parallel(effects[])', description: 'Process effects in parallel' },
-      { signature: 'effect.pitchShift(audio, semitones)', description: 'Shift pitch by semitones' },
+      { signature: 'JSON.parse(str) / JSON.stringify(obj)', description: 'Serialize and deserialize JSON data' },
+      { signature: 'structuredClone(obj)', description: 'Deep clone any structured data' },
+      { signature: 'Array.from(iterable, mapFn)', description: 'Create arrays from iterables with optional mapping' },
+      { signature: 'Object.entries(obj) / fromEntries(arr)', description: 'Convert between objects and key-value arrays' },
     ],
   },
   {
-    category: 'Automation',
+    category: 'Async',
     functions: [
-      { signature: 'automation.curve(param, points[])', description: 'Define an automation curve with breakpoints' },
-      { signature: 'automation.lfo(shape, rate, depth)', description: 'Create an LFO modulation source' },
-      { signature: 'automation.sync(duration)', description: 'Set automation loop length' },
-      { signature: 'automation.link(curves...)', description: 'Link multiple automation curves' },
+      { signature: 'fetch(url, options)', description: 'Make HTTP requests to APIs' },
+      { signature: 'Promise.all(promises)', description: 'Await multiple promises in parallel' },
+      { signature: 'Promise.allSettled(promises)', description: 'Wait for all promises regardless of outcome' },
+      { signature: 'AbortController / signal', description: 'Cancel in-flight fetch requests' },
     ],
   },
   {
-    category: 'Sampler',
+    category: 'Utilities',
     functions: [
-      { signature: 'sampler.load(sample)', description: 'Load a sample into the sampler engine' },
-      { signature: 'sampler.play(pattern)', description: 'Trigger samples from a pattern array' },
-      { signature: 'sampler.slice(sample, count)', description: 'Slice a sample into regions' },
-      { signature: 'sampler.stretch(region, factor)', description: 'Time-stretch a sample region' },
+      { signature: 'performance.now()', description: 'High-resolution timestamp for benchmarking' },
+      { signature: 'crypto.randomUUID()', description: 'Generate a random UUID v4 string' },
+      { signature: 'new URL(url).searchParams', description: 'Parse and manipulate URL query strings' },
+      { signature: 'Intl.NumberFormat / DateTimeFormat', description: 'Locale-aware number and date formatting' },
     ],
   },
   {
-    category: 'Output',
+    category: 'DTU Bridge',
     functions: [
-      { signature: 'output.midi(events)', description: 'Send generated MIDI events to output' },
-      { signature: 'output.effectChain(name)', description: 'Render the current effect chain' },
-      { signature: 'output.automation(curves[])', description: 'Render automation curves' },
-      { signature: 'output.arrange(sequence, opts)', description: 'Arrange results on timeline' },
+      { signature: 'output.save(data, meta)', description: 'Persist script output as a DTU artifact' },
+      { signature: 'output.publish(dtuId)', description: 'Publish a DTU to the marketplace' },
+      { signature: 'output.share(dtuId, userId)', description: 'Share a DTU with another user' },
+      { signature: 'output.export(format)', description: 'Export results as JSON, CSV, or Markdown' },
     ],
   },
 ];
@@ -585,7 +448,7 @@ function generateScriptOutput(scriptType: ScriptType, code: string): { log: stri
   const lines = code.split('\n').length;
   const typeName = SCRIPT_TYPES.find((s) => s.id === scriptType)?.name || scriptType;
   return {
-    log: `[Script Engine] Compiling ${typeName} script (${lines} lines)...\n[OK] Script submitted for processing`,
+    log: `[Code Engine] Running ${typeName} (${lines} lines)...\n[OK] Execution complete`,
     visualization: '',
   };
 }
@@ -605,12 +468,12 @@ export default function CodeLensPage() {
 
   const [files, setFiles] = useState<FileNode[]>([]);
   const [tabs, setTabs] = useState<Tab[]>([
-    { id: 'main', name: 'untitled.js', language: 'javascript', content: DEFAULT_CODE, isDirty: false, scriptType: 'midi' },
+    { id: 'main', name: 'untitled.js', language: 'javascript', content: DEFAULT_CODE, isDirty: false, scriptType: 'snippet' },
   ]);
   const [activeTabId, setActiveTabId] = useState('main');
   const [scriptOutput, setScriptOutput] = useState<{ log: string; visualization: string } | null>(null);
   const [consoleLog, setConsoleLog] = useState<string[]>([]);
-  const [activeScriptType, setActiveScriptType] = useState<ScriptType>('midi');
+  const [activeScriptType, setActiveScriptType] = useState<ScriptType>('snippet');
   const [showFileTree, setShowFileTree] = useState(true);
   const [showOutput, setShowOutput] = useState(true);
   const [showApiRef, setShowApiRef] = useState(false);
@@ -651,7 +514,7 @@ export default function CodeLensPage() {
         language: 'javascript',
         content,
         isDirty: true,
-        scriptType: 'macro',
+        scriptType: 'project',
       };
       setTabs(prev => [...prev, newTab]);
       setActiveTabId(id);
@@ -794,7 +657,7 @@ export default function CodeLensPage() {
       language: file.language || 'javascript',
       content: file.content || '',
       isDirty: false,
-      scriptType: file.scriptType || 'midi',
+      scriptType: file.scriptType || 'snippet',
     };
     setTabs([...tabs, newTab]);
     setActiveTabId(file.id);
@@ -881,8 +744,8 @@ export default function CodeLensPage() {
         <div className="flex items-center gap-3">
           <Terminal className="w-6 h-6 text-green-400" />
           <div>
-            <h1 className="text-lg font-bold text-green-300 font-mono tracking-tight">Script Studio</h1>
-            <p className="text-xs text-green-600 font-mono">Scripting, automation & macros</p>
+            <h1 className="text-lg font-bold text-green-300 font-mono tracking-tight">Code Workspace</h1>
+            <p className="text-xs text-green-600 font-mono">Write, run & share code</p>
           </div>
 
       {/* Real-time Enhancement Toolbar */}
@@ -937,7 +800,7 @@ export default function CodeLensPage() {
             ) : (
               <Play className="w-4 h-4 fill-current" />
             )}
-            Run Script
+            Run
           </button>
 
           <button
@@ -1280,12 +1143,12 @@ export default function CodeLensPage() {
                               {scriptOutput.visualization && (
                               <div>
                                 <h4 className="text-xs font-semibold text-gray-400 uppercase mb-2">
-                                  {activeScriptType === 'midi' && 'Data View'}
-                                  {activeScriptType === 'effect' && 'Signal Flow'}
-                                  {activeScriptType === 'automation' && 'Automation Curves'}
-                                  {activeScriptType === 'macro' && 'Macro Preview'}
-                                  {activeScriptType === 'sampler' && 'Sampler View'}
-                                  {activeScriptType === 'generator' && 'Generated Output'}
+                                  {activeScriptType === 'snippet' && 'Output'}
+                                  {activeScriptType === 'project' && 'Project View'}
+                                  {activeScriptType === 'pipeline' && 'Pipeline Flow'}
+                                  {activeScriptType === 'notebook' && 'Notebook Output'}
+                                  {activeScriptType === 'algorithm' && 'Visualization'}
+                                  {activeScriptType === 'library' && 'Module Export'}
                                 </h4>
                                 <pre className="font-mono text-xs text-neon-cyan whitespace-pre bg-lattice-deep rounded-lg p-3 border border-lattice-border overflow-x-auto">{scriptOutput.visualization}</pre>
                               </div>
@@ -1318,7 +1181,7 @@ export default function CodeLensPage() {
                           ) : (
                             <div className="flex flex-col items-center justify-center h-full text-gray-500">
                               <Terminal className="w-12 h-12 mb-4 opacity-30" />
-                              <p className="text-sm">Click &quot;Run Script&quot; to execute</p>
+                              <p className="text-sm">Click &quot;Run&quot; to execute</p>
                               <p className="text-xs mt-1 text-gray-600">Output will appear here</p>
                             </div>
                           )
@@ -1356,7 +1219,7 @@ export default function CodeLensPage() {
             <div className="flex items-center gap-4">
               <span className="flex items-center gap-1">
                 <Zap className="w-3 h-3 text-neon-yellow" />
-                Script Engine Ready
+                Code Engine Ready
               </span>
               <span className={SCRIPT_TYPES.find((s) => s.id === activeScriptType)?.color}>
                 {SCRIPT_TYPES.find((s) => s.id === activeScriptType)?.name}

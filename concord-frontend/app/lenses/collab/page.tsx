@@ -15,7 +15,7 @@ import {
   Clock,
   Send,
   X,
-  Handshake,
+  Hand as Handshake,
   Paintbrush,
   PenTool,
   Globe,
