@@ -30529,10 +30529,10 @@ domainModules.forEach(mod => mod(registerLensAction));
 const UNIVERSAL_ACTIONS = ["analyze", "generate", "suggest"];
 const ALL_LENS_DOMAINS = [
   "accounting","admin","affect","agents","agriculture","all","alliance","analytics","animation",
-  "anon","app-maker","ar","art","astronomy","attention","audit","automotive","aviation","billing",
+  "anon","app-maker","ar","art","artistry","astronomy","atlas","attention","audit","automotive","aviation","billing",
   "bio","board","bridge","calendar","carpentry","chat","chem","code","collab","command-center","construction",
   "commonsense","consulting","cooking","council","creative","creative-writing","cri","crypto","custom","daily",
-  "database","debate","debug","defense","desert","diy","docs","eco","education","entity","environment",
+  "database","debate","debug","defense","desert","diy","docs","dtus","eco","education","entity","environment",
   "disputes","electrical","emergency-services","energy","engineering",
   "ethics","events","experience","export","fashion","feed","film-studios","finance","fitness",
   "food","forestry","fork","forum","fractal","game","game-design","geology","global","goals","government",

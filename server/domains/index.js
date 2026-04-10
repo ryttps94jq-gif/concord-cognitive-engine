@@ -162,6 +162,26 @@ import telecommunications from './telecommunications.js';
 import travel from './travel.js';
 import urbanplanning from './urbanplanning.js';
 import veterinary from './veterinary.js';
+import artistry from './artistry.js';
+import atlas from './atlas.js';
+import graph from './graph.js';
+import importdomain from './importdomain.js';
+import ingest from './ingest.js';
+import law from './law.js';
+import marketplace from './marketplace.js';
+import ml from './ml.js';
+import musicDomain from './music.js';
+import paper from './paper.js';
+import reasoning from './reasoning.js';
+import sim from './sim.js';
+import srs from './srs.js';
+import studioDomain from './studio.js';
+import thread from './thread.js';
+import voice from './voice.js';
+import wallet from './wallet.js';
+import welding from './welding.js';
+import whiteboard from './whiteboard.js';
+import world from './world.js';
 
 export default [
   healthcare,
@@ -317,4 +337,24 @@ export default [
   travel,
   urbanplanning,
   veterinary,
+  artistry,
+  atlas,
+  graph,
+  importdomain,
+  ingest,
+  law,
+  marketplace,
+  ml,
+  musicDomain,
+  paper,
+  reasoning,
+  sim,
+  srs,
+  studioDomain,
+  thread,
+  voice,
+  wallet,
+  welding,
+  whiteboard,
+  world,
 ];
