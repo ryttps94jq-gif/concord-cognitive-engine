@@ -9836,6 +9836,10 @@ function computeAdaptiveThreshold() {
 const _SYSTEM_DTU_SOURCES = new Set([
   "repair_cortex", "concord_brain_index", "system_guardian",
   "guardian_monitor", "lattice_audit", "self_repair",
+  "system", "concord-mesh", "system.analogize", "auto",
+  "autogen", "system_tick", "heartbeat", "system_repair",
+  "concord_system", "background", "internal", "migration",
+  "embedding_backfill", "consolidation", "evolution",
 ]);
 
 /** All DTUs (including system/internal). Use for admin endpoints only. */
@@ -10536,6 +10540,9 @@ async function embeddingSearch(query, { limit = 10, minScore = 0.3 } = {}) {
   const results = topResults.map(({ dtuId, score }) => {
     const dtu = STATE.dtus.get(dtuId) || STATE.shadowDtus?.get(dtuId);
     if (!dtu) return null;
+    // Filter out system/internal DTUs from user-facing search results
+    if (_SYSTEM_DTU_SOURCES.has(dtu.source) || _SYSTEM_DTU_SOURCES.has(dtu.creatorType) ||
+        dtu.scope === "system" || dtu.visibility === "internal") return null;
     // Shadow results get 0.6× score penalty (subconscious, not canonical)
     const effectiveScore = isShadowDTU(dtu) ? score * 0.6 : score;
     return { ...dtu, _semanticScore: effectiveScore, _isShadow: isShadowDTU(dtu) };
@@ -12780,7 +12787,7 @@ async function buildBrainContext(query, lens = null, maxDTUs = 10, sessionId = n
     }
   }
 
-  const all = dtusArray();
+  const all = userVisibleDTUs();
   let existingContext = "";
 
   if (all.length) {
@@ -15873,7 +15880,9 @@ register("dtu", "create", async (ctx, input) => {
     lineage,
     source,
     meta,
-    ownerId: ctx?.actor?.id || ctx?.actor?.odId || null,
+    ownerId: ctx?.actor?.userId || ctx?.actor?.id || input.authorId || null,
+    visibility: input.visibility || "private",
+    creatorType: input.creatorType || (ctx?.actor?.userId && ctx.actor.userId !== "anon" ? "user" : "system"),
     core: {
       definitions: Array.isArray(coreIn.definitions) ? coreIn.definitions : [],
       invariants: Array.isArray(coreIn.invariants) ? coreIn.invariants : [],
