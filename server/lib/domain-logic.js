@@ -650,6 +650,123 @@ DOMAIN_RULES.set("science", {
   },
 });
 
+// === Healthcare ===
+DOMAIN_RULES.set("healthcare", {
+  types: ["patient-record", "diagnosis", "treatment-plan", "lab-result", "prescription", "clinical-note"],
+  validStatuses: ["draft", "active", "in-treatment", "monitoring", "resolved", "archived"],
+  transitions: {
+    draft: ["active", "archived"],
+    active: ["in-treatment", "monitoring", "archived"],
+    "in-treatment": ["monitoring", "active", "resolved"],
+    monitoring: ["resolved", "active", "in-treatment"],
+    resolved: ["archived", "active"],
+    archived: [],
+  },
+  requiredFields: { "patient-record": ["patientId"], diagnosis: ["condition"], prescription: ["medication", "dosage"] },
+  computedFields: (type, data) => {
+    data.hasLabResults = (data.labResults || []).length > 0;
+    data.medicationCount = (data.medications || []).length;
+    data.isCompliant = data.compliance === "compliant";
+    return data;
+  },
+  scoring: (type, data) => {
+    const hasLab = data.hasLabResults ? 1 : 0;
+    const compliant = data.isCompliant ? 1 : 0;
+    const meds = Math.min((data.medicationCount || 0) / 5, 1);
+    return Math.round((hasLab * 0.3 + compliant * 0.3 + meds * 0.2 + 0.2) * 100) / 100;
+  },
+});
+
+// === Trades ===
+DOMAIN_RULES.set("trades", {
+  types: ["project", "estimate", "work-order", "inspection", "invoice", "certification"],
+  validStatuses: ["draft", "quoted", "approved", "in-progress", "inspection", "completed", "archived"],
+  transitions: {
+    draft: ["quoted", "archived"],
+    quoted: ["approved", "draft", "archived"],
+    approved: ["in-progress", "quoted"],
+    "in-progress": ["inspection", "approved"],
+    inspection: ["completed", "in-progress"],
+    completed: ["archived"],
+    archived: [],
+  },
+  requiredFields: { project: ["title", "tradeType"], estimate: ["total"], "work-order": ["title"] },
+  computedFields: (type, data) => {
+    const items = data.lineItems || [];
+    data.lineItemCount = items.length;
+    data.totalCost = items.reduce((sum, i) => sum + (i.cost || 0), 0);
+    data.laborHours = items.reduce((sum, i) => sum + (i.hours || 0), 0);
+    data.passedInspection = data.inspectionResult === "pass";
+    return data;
+  },
+  scoring: (type, data) => {
+    const items = Math.min((data.lineItemCount || 0) / 10, 1);
+    const passed = data.passedInspection ? 1 : 0;
+    const hasEstimate = data.totalCost > 0 ? 1 : 0;
+    return Math.round((items * 0.3 + passed * 0.3 + hasEstimate * 0.3 + 0.1) * 100) / 100;
+  },
+});
+
+// === Finance ===
+DOMAIN_RULES.set("finance", {
+  types: ["portfolio", "analysis", "report", "forecast", "transaction-log", "budget"],
+  validStatuses: ["draft", "active", "under-review", "approved", "closed", "archived"],
+  transitions: {
+    draft: ["active", "under-review", "archived"],
+    active: ["under-review", "closed"],
+    "under-review": ["approved", "active", "draft"],
+    approved: ["closed", "archived"],
+    closed: ["archived"],
+    archived: [],
+  },
+  requiredFields: { portfolio: ["title"], analysis: ["title", "dataSource"], budget: ["title", "period"] },
+  computedFields: (type, data) => {
+    const holdings = data.holdings || [];
+    data.holdingCount = holdings.length;
+    data.totalValue = holdings.reduce((sum, h) => sum + (h.value || 0), 0);
+    data.hasRiskAssessment = !!data.riskScore;
+    data.returnRate = data.totalReturn && data.initialInvestment ? ((data.totalReturn / data.initialInvestment - 1) * 100).toFixed(2) : null;
+    return data;
+  },
+  scoring: (type, data) => {
+    const holdings = Math.min((data.holdingCount || 0) / 20, 1);
+    const hasRisk = data.hasRiskAssessment ? 1 : 0;
+    const hasReturn = data.returnRate !== null ? 1 : 0;
+    return Math.round((holdings * 0.3 + hasRisk * 0.3 + hasReturn * 0.3 + 0.1) * 100) / 100;
+  },
+});
+
+// === Engineering ===
+DOMAIN_RULES.set("engineering", {
+  types: ["design", "specification", "blueprint", "simulation", "test-report", "bom"],
+  validStatuses: ["draft", "in-design", "review", "approved", "fabrication", "testing", "released", "archived"],
+  transitions: {
+    draft: ["in-design", "archived"],
+    "in-design": ["review", "draft"],
+    review: ["approved", "in-design"],
+    approved: ["fabrication", "testing", "released"],
+    fabrication: ["testing", "approved"],
+    testing: ["released", "fabrication"],
+    released: ["archived"],
+    archived: [],
+  },
+  requiredFields: { design: ["title", "revision"], specification: ["title"], blueprint: ["title"] },
+  computedFields: (type, data) => {
+    data.revisionNumber = data.revision || "A";
+    data.componentCount = (data.components || []).length;
+    data.hasSimulation = !!data.simulationData;
+    data.testsPassed = (data.tests || []).filter(t => t.passed).length;
+    data.totalTests = (data.tests || []).length;
+    return data;
+  },
+  scoring: (type, data) => {
+    const components = Math.min((data.componentCount || 0) / 20, 1);
+    const hasSim = data.hasSimulation ? 1 : 0;
+    const testRatio = data.totalTests > 0 ? data.testsPassed / data.totalTests : 0;
+    return Math.round((components * 0.2 + hasSim * 0.3 + testRatio * 0.4 + 0.1) * 100) / 100;
+  },
+});
+
 // ── Exported helpers ─────────────────────────────────────────────────────────
 
 function validateArtifact(domain, type, data, meta) {
