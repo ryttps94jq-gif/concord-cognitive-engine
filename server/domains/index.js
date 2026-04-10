@@ -107,6 +107,11 @@ import calendar from './calendar.js';
 import carpentry from './carpentry.js';
 import collab from './collab.js';
 import construction from './construction.js';
+import consulting from './consulting.js';
+import cooking from './cooking.js';
+import council from './council.js';
+import creativewriting from './creativewriting.js';
+import custom from './custom.js';
 
 export default [
   healthcare,
@@ -207,4 +212,9 @@ export default [
   carpentry,
   collab,
   construction,
+  consulting,
+  cooking,
+  council,
+  creativewriting,
+  custom,
 ];
