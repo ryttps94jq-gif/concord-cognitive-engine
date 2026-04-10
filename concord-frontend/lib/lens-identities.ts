@@ -1,13 +1,15 @@
 /**
- * Lens Identity System — 112 lenses, 112 identities, one design system.
+ * Lens Identity System — 175+ lenses, 175+ identities, one design system.
  *
- * Each lens gets its own visual personality: accent colors, gradients,
+ * Every lens gets its own visual personality: accent colors, gradients,
  * content layout style, card style, and vibe. The underlying design system
  * is shared — same buttons, same spacing, same font scale. Just different
  * colors and layouts on top.
  *
  * CSS variables are scoped per-lens via useLensIdentity hook:
  *   --lens-accent, --lens-secondary, --lens-gradient
+ *
+ * ZERO fallbacks. Every lens has a unique identity.
  */
 
 export interface LensIdentity {
