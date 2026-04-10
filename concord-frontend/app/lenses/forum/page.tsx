@@ -344,7 +344,7 @@ export default function ForumLensPage() {
   const handleCreateCommunity = useCallback(() => {
     if (!newCommName.trim()) return;
     const slug = newCommName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    const newComm: Community = { id: slug, name: newCommName, description: newCommDesc, memberCount: 1, icon: '\uD83C\uDFB5', banner: 'from-neon-cyan to-neon-purple', joined: true, rules: ['Be respectful', 'Stay on topic'], createdAt: new Date().toISOString(), moderators: [DEFAULT_AUTHOR.username] };
+    const newComm: Community = { id: slug, name: newCommName, description: newCommDesc, memberCount: 1, icon: '\uD83D\uDCAC', banner: 'from-neon-cyan to-neon-purple', joined: true, rules: ['Be respectful', 'Stay on topic'], createdAt: new Date().toISOString(), moderators: [DEFAULT_AUTHOR.username] };
     setCommunities(prev => [...prev, newComm]);
     createForumCommunity({ title: newComm.name, data: newComm as unknown as Record<string, unknown>, meta: { status: 'active' } });
     setShowCreateCommunity(false);
@@ -482,7 +482,7 @@ export default function ForumLensPage() {
                 <button onClick={() => { setReplyTo(comment.id); setReplyContent(''); }} className="text-xs text-gray-500 hover:text-white flex items-center gap-1"><MessageSquare className="w-3 h-3" />Reply</button>
               )}
               <button onClick={() => setShowAwardModal({ type: 'comment', id: comment.id })} className="text-xs text-gray-500 hover:text-yellow-400 flex items-center gap-1"><Award className="w-3 h-3" />Award</button>
-              <button onClick={() => { /* report action */ }} className="text-xs text-gray-500 hover:text-white flex items-center gap-1"><Flag className="w-3 h-3" />Report</button>
+              <ReportButton contentId={comment.id} contentType="comment" compact />
             </div>
             <AnimatePresence>
               {replyTo === comment.id && (

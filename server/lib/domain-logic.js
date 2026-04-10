@@ -383,6 +383,30 @@ DOMAIN_RULES.set("marketplace", {
   },
 });
 
+// === Wallet ===
+DOMAIN_RULES.set("wallet", {
+  types: ["transaction", "transfer", "purchase", "withdrawal", "earning", "tip"],
+  validStatuses: ["pending", "processing", "completed", "failed", "reversed"],
+  transitions: {
+    pending: ["processing", "completed", "failed"],
+    processing: ["completed", "failed"],
+    completed: ["reversed"],
+    failed: [],
+    reversed: [],
+  },
+  requiredFields: { transaction: ["amount"], transfer: ["amount", "to"] },
+  computedFields: (type, data) => {
+    data.fee = data.fee || 0;
+    data.net = (data.amount || 0) - (data.fee || 0);
+    data.isCredit = data.amount > 0;
+    return data;
+  },
+  scoring: (type, data) => {
+    const amount = Math.abs(data.amount || 0);
+    return Math.round(Math.min(amount / 1000, 1) * 100) / 100;
+  },
+});
+
 // ── Exported helpers ─────────────────────────────────────────────────────────
 
 function validateArtifact(domain, type, data, meta) {
