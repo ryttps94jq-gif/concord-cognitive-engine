@@ -112,6 +112,11 @@ import cooking from './cooking.js';
 import council from './council.js';
 import creativewriting from './creativewriting.js';
 import custom from './custom.js';
+import daily from './daily.js';
+import database from './database.js';
+import debate from './debate.js';
+import defense from './defense.js';
+import desert from './desert.js';
 
 export default [
   healthcare,
@@ -217,4 +222,9 @@ export default [
   council,
   creativewriting,
   custom,
+  daily,
+  database,
+  debate,
+  defense,
+  desert,
 ];
