@@ -97,6 +97,11 @@ import parenting from './parenting.js';
 import questmarket from './questmarket.js';
 import diy from './diy.js';
 import materials from './materials.js';
+import agents from './agents.js';
+import analytics from './analytics.js';
+import animation from './animation.js';
+import astronomy from './astronomy.js';
+import automotive from './automotive.js';
 
 export default [
   healthcare,
@@ -187,4 +192,9 @@ export default [
   questmarket,
   diy,
   materials,
+  agents,
+  analytics,
+  animation,
+  astronomy,
+  automotive,
 ];

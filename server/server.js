@@ -30528,8 +30528,8 @@ domainModules.forEach(mod => mod(registerLensAction));
 // have custom handlers for these actions keep them — we only fill gaps.
 const UNIVERSAL_ACTIONS = ["analyze", "generate", "suggest"];
 const ALL_LENS_DOMAINS = [
-  "accounting","admin","affect","agents","agriculture","all","alliance",
-  "anon","app-maker","ar","art","attention","audit","aviation","billing",
+  "accounting","admin","affect","agents","agriculture","all","alliance","analytics","animation",
+  "anon","app-maker","ar","art","astronomy","attention","audit","automotive","aviation","billing",
   "bio","board","calendar","chat","chem","code","collab","command-center",
   "commonsense","council","creative","cri","crypto","custom","daily",
   "database","debug","diy","docs","eco","education","entity","environment",
