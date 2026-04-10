@@ -92,6 +92,7 @@ import tick from './tick.js';
 import lock from './lock.js';
 import fork from './fork.js';
 import invariant from './invariant.js';
+import pets from './pets.js';
 
 export default [
   healthcare,
@@ -177,4 +178,5 @@ export default [
   lock,
   fork,
   invariant,
+  pets,
 ];

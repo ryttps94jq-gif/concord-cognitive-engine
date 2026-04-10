@@ -345,6 +345,16 @@ export const LENS_IDENTITIES: Record<string, LensIdentity> = {
     emptyState: "Scanning the cosmos...",
     vibe: "nasa-dark",
   },
+  pets: {
+    accent: "#FFAB40",
+    secondaryAccent: "#FF9100",
+    icon: "\u{1F43E}",
+    gradient: "linear-gradient(135deg, #FFAB4011, #FF910011)",
+    contentLayout: "feed",
+    cardStyle: "listing",
+    emptyState: "No pet profiles registered. Add your first furry friend.",
+    vibe: "chewy-friendly",
+  },
 };
 
 // Fallback for lenses without a defined identity
