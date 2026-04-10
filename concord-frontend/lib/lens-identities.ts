@@ -345,6 +345,16 @@ export const LENS_IDENTITIES: Record<string, LensIdentity> = {
     emptyState: "Scanning the cosmos...",
     vibe: "nasa-dark",
   },
+  diy: {
+    accent: "#E65100",
+    secondaryAccent: "#BF360C",
+    icon: "\u{1F6E0}",
+    gradient: "linear-gradient(135deg, #E6510011, #BF360C11)",
+    contentLayout: "tutorial",
+    cardStyle: "project",
+    emptyState: "No DIY projects started. Grab your tools and build something.",
+    vibe: "instructables-maker",
+  },
   questmarket: {
     accent: "#FFD740",
     secondaryAccent: "#FFC400",

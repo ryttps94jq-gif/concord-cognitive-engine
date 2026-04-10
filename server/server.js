@@ -30532,7 +30532,7 @@ const ALL_LENS_DOMAINS = [
   "anon","app-maker","ar","art","attention","audit","aviation","billing",
   "bio","board","calendar","chat","chem","code","collab","command-center",
   "commonsense","council","creative","cri","crypto","custom","daily",
-  "database","debug","docs","eco","education","entity","environment",
+  "database","debug","diy","docs","eco","education","entity","environment",
   "ethics","events","experience","export","feed","finance","fitness",
   "food","fork","forum","fractal","game","global","goals","government",
   "graph","grounding","healthcare","household","hypothesis","import",
