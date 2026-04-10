@@ -23854,6 +23854,56 @@ if (db) {
 import createPasswordResetRouter from "./routes/password-reset.js";
 app.use("/api/auth", createPasswordResetRouter({ AuthDB, hashPassword, authRateLimiter }));
 
+// ===== PREVIOUSLY UNIMPORTED ROUTE MODULES ========================================
+// These route files existed but were never imported — endpoints were 404.
+// Now wired up. Each uses the same deps pattern as existing routes.
+
+import createCDNRouter from "./routes/cdn.js";
+try { app.use("/api/cdn", createCDNRouter({ cdnManager: null, urlSigner: null, STATE })); } catch (e) { structuredLog("warn", "cdn_routes_skip", { error: e.message }); }
+
+import createEmergentFeaturesRouter from "./routes/emergent-features.js";
+try { app.use("/api/emergent-features", createEmergentFeaturesRouter({ STATE, requireAuth })); } catch (e) { structuredLog("warn", "emergent_features_routes_skip", { error: e.message }); }
+
+import createFrontierRoutesPart1 from "./routes/frontier-part1.js";
+import createFrontierRoutesPart2 from "./routes/frontier-part2.js";
+import createFrontierRoutesPart3 from "./routes/frontier-part3.js";
+import createFrontierRoutesPart4 from "./routes/frontier-part4.js";
+try {
+  app.use("/api", createFrontierRoutesPart1({ requireAuth }));
+  app.use("/api", createFrontierRoutesPart2({ requireAuth }));
+  app.use("/api", createFrontierRoutesPart3({ requireAuth }));
+  app.use("/api", createFrontierRoutesPart4({ requireAuth }));
+} catch (e) { structuredLog("warn", "frontier_routes_skip", { error: e.message }); }
+
+import registerHelpersExtendedRoutes from "./routes/helpers-extended.js";
+try { registerHelpersExtendedRoutes(app, { db, requireAuth, STATE, structuredLog }); } catch (e) { structuredLog("warn", "helpers_extended_routes_skip", { error: e.message }); }
+
+import createMediaRouter from "./routes/media.js";
+try { app.use("/api/media", createMediaRouter({ STATE })); } catch (e) { structuredLog("warn", "media_routes_skip", { error: e.message }); }
+
+import { createModerationRouter } from "./routes/moderation.js";
+try { app.use("/api/moderation", createModerationRouter({ db, requireAuth, requireRole, structuredLog })); } catch (e) { structuredLog("warn", "moderation_routes_skip", { error: e.message }); }
+
+import createSocialGroupRoutes from "./routes/social-groups.js";
+try { app.use("/api/social", createSocialGroupRoutes({ db, requireAuth })); } catch (e) { structuredLog("warn", "social_groups_routes_skip", { error: e.message }); }
+
+import createFeedRoutes from "./routes/feeds.js";
+try { app.use("/api/feeds", createFeedRoutes({ requireAuth })); } catch (e) { structuredLog("warn", "feed_routes_skip", { error: e.message }); }
+
+import registerCanonicalRoutes from "./routes/canonical.js";
+try { registerCanonicalRoutes(app, { db, requireAuth, STATE, structuredLog }); } catch (e) { structuredLog("warn", "canonical_routes_skip", { error: e.message }); }
+
+import createAttributionRoutes from "./routes/attribution.js";
+try { app.use("/api/attribution", createAttributionRoutes({ requireAuth })); } catch (e) { structuredLog("warn", "attribution_routes_skip", { error: e.message }); }
+
+import createCityRoutes from "./routes/city.js";
+try { app.use("/api/city", createCityRoutes({ requireAuth })); } catch (e) { structuredLog("warn", "city_routes_skip", { error: e.message }); }
+
+structuredLog("info", "previously_missing_routes_registered", {
+  count: 15,
+  routes: ["cdn","emergent-features","frontier-part1","frontier-part2","frontier-part3","frontier-part4","helpers-extended","media","moderation","social-groups","feeds","canonical","attribution","city"],
+});
+
 // ===== SPECIES API =====
 app.get("/api/species/registry", (_req, res) => res.json({ ok: true, registry: getSpeciesRegistry() }));
 app.get("/api/species/census", (_req, res) => res.json({ ok: true, ...getSpeciesCensus(STATE) }));
