@@ -94,6 +94,7 @@ import fork from './fork.js';
 import invariant from './invariant.js';
 import pets from './pets.js';
 import parenting from './parenting.js';
+import questmarket from './questmarket.js';
 
 export default [
   healthcare,
@@ -181,4 +182,5 @@ export default [
   invariant,
   pets,
   parenting,
+  questmarket,
 ];

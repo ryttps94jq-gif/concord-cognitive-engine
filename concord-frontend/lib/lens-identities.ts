@@ -345,6 +345,16 @@ export const LENS_IDENTITIES: Record<string, LensIdentity> = {
     emptyState: "Scanning the cosmos...",
     vibe: "nasa-dark",
   },
+  questmarket: {
+    accent: "#FFD740",
+    secondaryAccent: "#FFC400",
+    icon: "\u{1F3C6}",
+    gradient: "linear-gradient(135deg, #FFD74011, #FFC40011)",
+    contentLayout: "feed",
+    cardStyle: "game",
+    emptyState: "No quests posted. Create a bounty to get started.",
+    vibe: "gamified-marketplace",
+  },
   parenting: {
     accent: "#FF8A65",
     secondaryAccent: "#FF7043",
