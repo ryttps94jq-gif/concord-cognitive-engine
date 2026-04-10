@@ -407,6 +407,110 @@ DOMAIN_RULES.set("wallet", {
   },
 });
 
+// === Music ===
+DOMAIN_RULES.set("music", {
+  types: ["track", "album", "playlist", "sample", "beat", "remix"],
+  validStatuses: ["draft", "recording", "mixing", "mastering", "released", "archived"],
+  transitions: {
+    draft: ["recording", "archived"],
+    recording: ["mixing", "archived"],
+    mixing: ["mastering", "recording"],
+    mastering: ["released", "mixing"],
+    released: ["archived"],
+    archived: [],
+  },
+  requiredFields: { track: ["title"], album: ["title"] },
+  computedFields: (type, data) => {
+    data.trackCount = data.tracks?.length || 0;
+    data.totalDuration = (data.tracks || []).reduce((s, t) => s + (t.duration || 0), 0);
+    data.playCount = data.plays || 0;
+    return data;
+  },
+  scoring: (type, data) => {
+    const plays = data.playCount || 0;
+    const tracks = data.trackCount || 0;
+    return Math.round((Math.min(plays / 1000, 1) * 0.5 + Math.min(tracks / 10, 1) * 0.3 + 0.1) * 100) / 100;
+  },
+});
+
+// === Artistry / Art ===
+DOMAIN_RULES.set("artistry", {
+  types: ["painting", "illustration", "sculpture", "photography", "digital", "mixed-media"],
+  validStatuses: ["concept", "in-progress", "review", "published", "exhibited", "archived"],
+  transitions: {
+    concept: ["in-progress", "archived"],
+    "in-progress": ["review", "concept"],
+    review: ["published", "in-progress"],
+    published: ["exhibited", "archived"],
+    exhibited: ["archived"],
+    archived: [],
+  },
+  requiredFields: { painting: ["title"], illustration: ["title"] },
+  computedFields: (type, data) => {
+    data.viewCount = data.views || 0;
+    data.likeCount = data.likes || 0;
+    data.commentCount = data.comments?.length || 0;
+    return data;
+  },
+  scoring: (type, data) => {
+    const views = data.viewCount || 0;
+    const likes = data.likeCount || 0;
+    return Math.round((Math.min(views / 500, 1) * 0.3 + Math.min(likes / 50, 1) * 0.5 + 0.1) * 100) / 100;
+  },
+});
+
+// === Code ===
+DOMAIN_RULES.set("code", {
+  types: ["snippet", "project", "pipeline", "notebook", "algorithm", "library"],
+  validStatuses: ["draft", "development", "testing", "review", "deployed", "archived"],
+  transitions: {
+    draft: ["development", "archived"],
+    development: ["testing", "review", "archived"],
+    testing: ["review", "development"],
+    review: ["deployed", "development"],
+    deployed: ["archived", "development"],
+    archived: [],
+  },
+  requiredFields: { snippet: ["title", "language"], project: ["title"] },
+  computedFields: (type, data) => {
+    data.lineCount = data.lines || 0;
+    data.language = data.language || "javascript";
+    data.hasTests = !!(data.tests && data.tests.length > 0);
+    return data;
+  },
+  scoring: (type, data) => {
+    const lines = data.lineCount || 0;
+    const hasTests = data.hasTests ? 1 : 0;
+    return Math.round((Math.min(lines / 500, 1) * 0.4 + hasTests * 0.3 + 0.1) * 100) / 100;
+  },
+});
+
+// === Creative Writing ===
+DOMAIN_RULES.set("creative-writing", {
+  types: ["story", "poem", "essay", "screenplay", "novel-chapter", "flash-fiction"],
+  validStatuses: ["idea", "drafting", "revision", "editing", "published", "archived"],
+  transitions: {
+    idea: ["drafting", "archived"],
+    drafting: ["revision", "idea"],
+    revision: ["editing", "drafting"],
+    editing: ["published", "revision"],
+    published: ["archived"],
+    archived: [],
+  },
+  requiredFields: { story: ["title"], poem: ["title"] },
+  computedFields: (type, data) => {
+    data.wordCount = typeof data.content === "string" ? data.content.split(/\s+/).filter(Boolean).length : 0;
+    data.readTime = Math.ceil((data.wordCount || 0) / 200);
+    data.revisionCount = data.revisions?.length || 0;
+    return data;
+  },
+  scoring: (type, data) => {
+    const words = data.wordCount || 0;
+    const revisions = data.revisionCount || 0;
+    return Math.round((Math.min(words / 2000, 1) * 0.4 + Math.min(revisions / 5, 1) * 0.3 + 0.1) * 100) / 100;
+  },
+});
+
 // ── Exported helpers ─────────────────────────────────────────────────────────
 
 function validateArtifact(domain, type, data, meta) {
