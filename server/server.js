@@ -30536,7 +30536,7 @@ const ALL_LENS_DOMAINS = [
   "disputes","electrical","emergency-services","energy","engineering",
   "ethics","events","experience","export","fashion","feed","film-studios","finance","fitness",
   "food","forestry","fork","forum","fractal","game","game-design","geology","global","goals","government",
-  "graph","grounding","healthcare","household","hypothesis","import",
+  "graph","grounding","healthcare","history","home-improvement","household","hr","hvac","hypothesis","import",
   "inference","ingest","insurance","integrations","invariant","lab",
   "law","legacy","legal","lock","logistics","manufacturing","market",
   "marketplace","materials","math","meta","metacognition","metalearning","ml",

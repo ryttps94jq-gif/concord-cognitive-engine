@@ -132,6 +132,11 @@ import forestry from './forestry.js';
 import forum from './forum.js';
 import game from './game.js';
 import gamedesign from './gamedesign.js';
+import geology from './geology.js';
+import history from './history.js';
+import homeimprovement from './homeimprovement.js';
+import hr from './hr.js';
+import hvac from './hvac.js';
 
 export default [
   healthcare,
@@ -257,4 +262,9 @@ export default [
   forum,
   game,
   gamedesign,
+  geology,
+  history,
+  homeimprovement,
+  hr,
+  hvac,
 ];
