@@ -245,8 +245,8 @@ export default function FilmStudiosPage() {
                     )}
                   </div>
                   <div className="flex gap-2 mt-3">
-                    <button onClick={() => showToast('info', 'Coming soon')} className="flex-1 text-xs py-1.5 bg-neon-purple/20 rounded hover:bg-neon-purple/30 flex items-center justify-center gap-1"><Play className="w-3 h-3" /> Preview</button>
-                    <button onClick={() => showToast('info', 'Coming soon')} className="text-xs py-1.5 px-2 bg-white/5 rounded hover:bg-white/10"><Share2 className="w-3 h-3" /></button>
+                    <button onClick={() => { apiHelpers.filmStudio.preview(film.id).then(() => showToast('success', `Loading preview for "${film.title}"`)).catch(() => showToast('error', 'Preview unavailable')); }} className="flex-1 text-xs py-1.5 bg-neon-purple/20 rounded hover:bg-neon-purple/30 flex items-center justify-center gap-1"><Play className="w-3 h-3" /> Preview</button>
+                    <button onClick={() => { navigator.clipboard?.writeText(window.location.href).then(() => showToast('success', 'Link copied to clipboard')).catch(() => showToast('error', 'Failed to copy link')); }} className="text-xs py-1.5 px-2 bg-white/5 rounded hover:bg-white/10"><Share2 className="w-3 h-3" /></button>
                   </div>
                 </motion.div>
               ))}
@@ -306,14 +306,14 @@ export default function FilmStudiosPage() {
 
                       {/* Crew & Components buttons with count badges */}
                       <div className="flex gap-2">
-                        <button onClick={() => showToast('info', 'Coming soon')} className="flex-1 text-xs py-1.5 bg-white/5 rounded hover:bg-white/10 flex items-center justify-center gap-1.5 group">
+                        <button onClick={() => { apiHelpers.filmStudio.components(film.id).then(r => { const count = r.data?.length ?? r.data?.components?.length ?? 0; showToast('success', `Loaded ${count} component(s)`); }).catch(() => showToast('error', 'Failed to load components')); }} className="flex-1 text-xs py-1.5 bg-white/5 rounded hover:bg-white/10 flex items-center justify-center gap-1.5 group">
                           <Layers className="w-3 h-3 text-gray-400 group-hover:text-white transition-colors" />
                           <span>Components</span>
                           {componentCount > 0 && (
                             <span className="ml-auto px-1.5 py-0.5 rounded-full bg-neon-purple/20 text-neon-purple text-[9px] font-bold">{componentCount}</span>
                           )}
                         </button>
-                        <button onClick={() => showToast('info', 'Coming soon')} className="flex-1 text-xs py-1.5 bg-white/5 rounded hover:bg-white/10 flex items-center justify-center gap-1.5 group">
+                        <button onClick={() => { apiHelpers.filmStudio.crew(film.id).then(r => { const count = r.data?.length ?? r.data?.crew?.length ?? 0; showToast('success', `Loaded ${count} crew member(s)`); }).catch(() => showToast('error', 'Failed to load crew')); }} className="flex-1 text-xs py-1.5 bg-white/5 rounded hover:bg-white/10 flex items-center justify-center gap-1.5 group">
                           {film.crew && film.crew.length > 0 ? roleIcon(film.crew[0]?.role) : <Users className="w-3 h-3 text-gray-400 group-hover:text-white transition-colors" />}
                           <span>Crew</span>
                           {crewCount > 0 && (

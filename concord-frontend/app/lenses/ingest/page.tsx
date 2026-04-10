@@ -401,7 +401,7 @@ export default function IngestLensPage() {
             <span className="flex items-center gap-1"><ImageIcon className="w-3 h-3" /> .png .jpg</span>
             <span className="flex items-center gap-1"><FileUp className="w-3 h-3" /> .mp3 .wav</span>
           </div>
-          <button onClick={() => showToast('info', 'Coming soon')} className="mt-2 px-6 py-2 bg-neon-cyan/20 border border-neon-cyan/40 rounded-lg text-sm text-neon-cyan hover:bg-neon-cyan/30 transition-colors">
+          <button onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.multiple = true; input.accept = '.txt,.md,.json,.csv,.png,.jpg,.mp3,.wav'; input.onchange = () => { const files = input.files; if (files && files.length > 0) { showToast('info', `Processing ${files.length} file(s)...`); api.post('/api/lens/run', { domain: 'ingest', action: 'batch-ingest', fileCount: files.length, filenames: Array.from(files).map(f => f.name) }).then(() => showToast('success', `Batch ingest started for ${files.length} file(s)`)).catch(() => showToast('error', 'Batch ingest failed')); } }; input.click(); }} className="mt-2 px-6 py-2 bg-neon-cyan/20 border border-neon-cyan/40 rounded-lg text-sm text-neon-cyan hover:bg-neon-cyan/30 transition-colors">
             Select Files for Batch Ingest
           </button>
         </div>
