@@ -79,7 +79,7 @@ export const LENS_IDENTITIES: Record<string, LensIdentity> = {
     gradient: "linear-gradient(135deg, #9B978F11, #E8A44C11)",
     contentLayout: "document",
     cardStyle: "document",
-    emptyState: "No documents yet. Templates coming soon.",
+    emptyState: "No documents yet. Create one to get started.",
     vibe: "law-firm-modern",
   },
   trades: {

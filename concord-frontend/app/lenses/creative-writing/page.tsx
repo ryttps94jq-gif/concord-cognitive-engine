@@ -521,9 +521,9 @@ export default function CreativeWritingPage() {
               <h3 className="text-sm font-medium mb-3 text-gray-400">Recent Activity</h3>
               <div className="space-y-2">
                 {[
-                  { text: 'Workshop opens for beta writers next month', icon: Star },
-                  { text: 'Peer review matching coming soon', icon: Users },
-                  { text: 'Collaborative editing in development', icon: Edit2 },
+                  { text: 'Share your work for community feedback and grow together', icon: Star },
+                  { text: 'Peer reviews help improve craft through diverse perspectives', icon: Users },
+                  { text: 'Collaborate with other writers on shared manuscripts', icon: Edit2 },
                 ].map((item, i) => (
                   <motion.div
                     key={i}

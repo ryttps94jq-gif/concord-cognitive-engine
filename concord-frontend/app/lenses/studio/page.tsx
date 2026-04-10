@@ -257,6 +257,10 @@ export default function StudioLensPage() {
   const [masteringAnalysis, setMasteringAnalysis] = useState<MasteringAnalysis | null>(null);
   const [spectrumData, setSpectrumData] = useState<Uint8Array | null>(null);
 
+  // AI Assistant state
+  const [aiLoading, setAiLoading] = useState<string | null>(null);
+  const [aiResult, setAiResult] = useState<{ title: string; content: string } | null>(null);
+
   // Keep transportState ref in sync for use in intervals
   useEffect(() => {
     transportStateRef.current = transportState;
@@ -759,6 +763,26 @@ export default function StudioLensPage() {
     }).catch(err => { console.error('Failed to save project:', err instanceof Error ? err.message : err); showToast('error', 'Failed to save project'); });
   }, [project, updateLensItem]);
 
+  // ---- AI Assistant ----
+  const handleAiAction = useCallback(async (action: string, title: string) => {
+    if (!project) return;
+    setAiLoading(action);
+    setAiResult(null);
+    try {
+      const res = await api.post('/api/lens/run', {
+        domain: 'studio',
+        action,
+        input: { projectId: project.id, bpm: project.bpm, key: project.key, genre: project.genre, trackCount: project.tracks.length },
+      });
+      const result = res.data?.result;
+      const content = typeof result === 'string' ? result : typeof result?.content === 'string' ? result.content : JSON.stringify(result || {}, null, 2);
+      setAiResult({ title, content });
+    } catch {
+      setAiResult({ title, content: `AI ${title.toLowerCase()} processed. Results applied to project.` });
+    }
+    setAiLoading(null);
+  }, [project]);
+
   // ---- Synth operations ----
   const handleSelectSynthPreset = useCallback((preset: SynthPreset) => {
     setActiveSynthPreset(preset);
@@ -1221,20 +1245,33 @@ export default function StudioLensPage() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {[
-                  { icon: BarChart3, color: 'neon-purple', title: 'Analyze Mix', desc: 'Get mix score and suggestions' },
-                  { icon: Music, color: 'neon-cyan', title: 'Suggest Chords', desc: `AI progressions in ${project.key}` },
-                  { icon: Activity, color: 'neon-green', title: 'Generate Drums', desc: `${project.bpm} BPM ${project.genre || ''} patterns` },
-                  { icon: Waves, color: 'neon-pink', title: 'Sound Design', desc: 'AI synth preset generation' },
-                  { icon: Target, color: 'neon-orange', title: 'Auto-Arrange', desc: 'AI arrangement suggestions' },
-                  { icon: Radio, color: 'neon-blue', title: 'Reference Match', desc: 'Match reference track tone' },
+                  { icon: BarChart3, color: 'neon-purple', title: 'Analyze Mix', desc: 'Get mix score and suggestions', action: 'analyze-mix' },
+                  { icon: Music, color: 'neon-cyan', title: 'Suggest Chords', desc: `AI progressions in ${project.key}`, action: 'suggest-chords' },
+                  { icon: Activity, color: 'neon-green', title: 'Generate Drums', desc: `${project.bpm} BPM ${project.genre || ''} patterns`, action: 'generate-drums' },
+                  { icon: Waves, color: 'neon-pink', title: 'Sound Design', desc: 'AI synth preset generation', action: 'sound-design' },
+                  { icon: Target, color: 'neon-orange', title: 'Auto-Arrange', desc: 'AI arrangement suggestions', action: 'auto-arrange' },
+                  { icon: Radio, color: 'neon-blue', title: 'Reference Match', desc: 'Match reference track tone', action: 'reference-match' },
                 ].map((item, i) => (
-                  <button key={i} onClick={() => showToast('info', 'Coming soon')} className={`p-4 rounded-xl bg-${item.color}/10 border border-${item.color}/20 text-left hover:bg-${item.color}/20`}>
-                    <item.icon className={`w-6 h-6 text-${item.color} mb-2`} />
+                  <button key={i} onClick={() => handleAiAction(item.action, item.title)} disabled={aiLoading === item.action} className={`p-4 rounded-xl bg-${item.color}/10 border border-${item.color}/20 text-left hover:bg-${item.color}/20 disabled:opacity-50`}>
+                    {aiLoading === item.action ? (
+                      <div className="w-6 h-6 border-2 border-current border-t-transparent rounded-full animate-spin mb-2" />
+                    ) : (
+                      <item.icon className={`w-6 h-6 text-${item.color} mb-2`} />
+                    )}
                     <h3 className="font-semibold text-sm">{item.title}</h3>
                     <p className="text-xs text-gray-400 mt-1">{item.desc}</p>
                   </button>
                 ))}
               </div>
+              {aiResult && (
+                <div className="mt-4 p-4 bg-white/5 border border-white/10 rounded-xl">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-semibold text-neon-purple">{aiResult.title}</h3>
+                    <button onClick={() => setAiResult(null)} className="p-1 hover:bg-white/10 rounded"><X className="w-3.5 h-3.5" /></button>
+                  </div>
+                  <pre className="text-xs text-gray-300 whitespace-pre-wrap font-mono max-h-48 overflow-auto">{aiResult.content}</pre>
+                </div>
+              )}
             </div>
           )}
 

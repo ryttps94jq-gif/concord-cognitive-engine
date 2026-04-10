@@ -511,6 +511,145 @@ DOMAIN_RULES.set("creative-writing", {
   },
 });
 
+// === Research ===
+DOMAIN_RULES.set("research", {
+  types: ["paper", "dataset", "experiment", "literature-review", "thesis", "grant-proposal"],
+  validStatuses: ["draft", "in-review", "peer-reviewed", "published", "retracted", "archived"],
+  transitions: {
+    draft: ["in-review", "archived"],
+    "in-review": ["draft", "peer-reviewed", "archived"],
+    "peer-reviewed": ["published", "in-review", "archived"],
+    published: ["retracted", "archived"],
+    retracted: ["archived"],
+    archived: [],
+  },
+  requiredFields: { paper: ["title", "abstract"], dataset: ["title", "format"] },
+  computedFields: (type, data) => {
+    const citations = data.citations || [];
+    data.citationCount = citations.length;
+    data.hasPeerReview = data.reviewers?.length > 0;
+    data.hasAbstract = !!data.abstract;
+    return data;
+  },
+  scoring: (type, data) => {
+    const citations = data.citationCount || 0;
+    const hasPeerReview = data.hasPeerReview ? 1 : 0;
+    const hasAbstract = data.hasAbstract ? 1 : 0;
+    return Math.round((Math.min(citations / 20, 1) * 0.4 + hasPeerReview * 0.3 + hasAbstract * 0.2 + 0.1) * 100) / 100;
+  },
+});
+
+// === Education ===
+DOMAIN_RULES.set("education", {
+  types: ["course", "lesson", "quiz", "assignment", "curriculum", "certificate"],
+  validStatuses: ["draft", "active", "in-progress", "completed", "graded", "archived"],
+  transitions: {
+    draft: ["active", "archived"],
+    active: ["in-progress", "draft", "archived"],
+    "in-progress": ["completed", "active"],
+    completed: ["graded", "archived"],
+    graded: ["archived"],
+    archived: [],
+  },
+  requiredFields: { course: ["title"], lesson: ["title"], quiz: ["title", "questions"] },
+  computedFields: (type, data) => {
+    const lessons = data.lessons || [];
+    data.lessonCount = lessons.length;
+    data.completedLessons = lessons.filter(l => l.completed).length;
+    data.progressPercent = lessons.length > 0 ? Math.round((data.completedLessons / lessons.length) * 100) : 0;
+    data.totalDuration = lessons.reduce((sum, l) => sum + (l.durationMinutes || 0), 0);
+    return data;
+  },
+  scoring: (type, data) => {
+    const progress = (data.progressPercent || 0) / 100;
+    const hasQuiz = data.quizzes?.length > 0 ? 1 : 0;
+    return Math.round((progress * 0.5 + hasQuiz * 0.2 + Math.min((data.lessonCount || 0) / 10, 1) * 0.2 + 0.1) * 100) / 100;
+  },
+});
+
+// === Physics ===
+DOMAIN_RULES.set("physics", {
+  types: ["simulation", "equation", "experiment", "model", "derivation", "problem-set"],
+  validStatuses: ["draft", "hypothesis", "testing", "validated", "published", "archived"],
+  transitions: {
+    draft: ["hypothesis", "archived"],
+    hypothesis: ["testing", "draft", "archived"],
+    testing: ["validated", "hypothesis", "archived"],
+    validated: ["published", "testing", "archived"],
+    published: ["archived"],
+    archived: [],
+  },
+  requiredFields: { simulation: ["title", "parameters"], equation: ["title", "expression"] },
+  computedFields: (type, data) => {
+    data.hasSimulation = !!data.simulationData;
+    data.parameterCount = Object.keys(data.parameters || {}).length;
+    data.unitConsistency = data.units ? "verified" : "unchecked";
+    return data;
+  },
+  scoring: (type, data) => {
+    const hasSimulation = data.hasSimulation ? 1 : 0;
+    const params = Math.min((data.parameterCount || 0) / 5, 1);
+    const verified = data.unitConsistency === "verified" ? 1 : 0;
+    return Math.round((hasSimulation * 0.3 + params * 0.3 + verified * 0.3 + 0.1) * 100) / 100;
+  },
+});
+
+// === Math ===
+DOMAIN_RULES.set("math", {
+  types: ["proof", "theorem", "problem", "formula", "visualization", "notebook"],
+  validStatuses: ["draft", "conjecture", "in-proof", "proven", "published", "archived"],
+  transitions: {
+    draft: ["conjecture", "in-proof", "archived"],
+    conjecture: ["in-proof", "draft", "archived"],
+    "in-proof": ["proven", "conjecture", "archived"],
+    proven: ["published", "archived"],
+    published: ["archived"],
+    archived: [],
+  },
+  requiredFields: { proof: ["title", "statement"], theorem: ["title", "statement"] },
+  computedFields: (type, data) => {
+    data.stepCount = (data.steps || []).length;
+    data.hasVisualization = !!data.visualization;
+    data.complexity = data.stepCount > 10 ? "high" : data.stepCount > 5 ? "medium" : "low";
+    return data;
+  },
+  scoring: (type, data) => {
+    const steps = Math.min((data.stepCount || 0) / 10, 1);
+    const hasViz = data.hasVisualization ? 1 : 0;
+    const isProven = data.status === "proven" || data.status === "published" ? 1 : 0;
+    return Math.round((steps * 0.3 + hasViz * 0.2 + isProven * 0.4 + 0.1) * 100) / 100;
+  },
+});
+
+// === Science ===
+DOMAIN_RULES.set("science", {
+  types: ["experiment", "observation", "hypothesis", "lab-report", "field-study", "meta-analysis"],
+  validStatuses: ["draft", "hypothesis", "experimenting", "analyzing", "concluded", "published", "archived"],
+  transitions: {
+    draft: ["hypothesis", "archived"],
+    hypothesis: ["experimenting", "draft", "archived"],
+    experimenting: ["analyzing", "hypothesis", "archived"],
+    analyzing: ["concluded", "experimenting", "archived"],
+    concluded: ["published", "analyzing", "archived"],
+    published: ["archived"],
+    archived: [],
+  },
+  requiredFields: { experiment: ["title", "hypothesis"], "lab-report": ["title", "methodology"] },
+  computedFields: (type, data) => {
+    const dataPoints = data.dataPoints || [];
+    data.dataPointCount = dataPoints.length;
+    data.hasControls = !!data.controlGroup;
+    data.reproducible = data.methodology && data.results ? true : false;
+    return data;
+  },
+  scoring: (type, data) => {
+    const dataPoints = Math.min((data.dataPointCount || 0) / 50, 1);
+    const hasControls = data.hasControls ? 1 : 0;
+    const reproducible = data.reproducible ? 1 : 0;
+    return Math.round((dataPoints * 0.3 + hasControls * 0.3 + reproducible * 0.3 + 0.1) * 100) / 100;
+  },
+});
+
 // ── Exported helpers ─────────────────────────────────────────────────────────
 
 function validateArtifact(domain, type, data, meta) {
