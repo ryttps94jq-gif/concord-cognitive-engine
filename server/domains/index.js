@@ -93,6 +93,7 @@ import lock from './lock.js';
 import fork from './fork.js';
 import invariant from './invariant.js';
 import pets from './pets.js';
+import parenting from './parenting.js';
 
 export default [
   healthcare,
@@ -179,4 +180,5 @@ export default [
   fork,
   invariant,
   pets,
+  parenting,
 ];

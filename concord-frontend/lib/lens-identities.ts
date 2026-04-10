@@ -345,6 +345,16 @@ export const LENS_IDENTITIES: Record<string, LensIdentity> = {
     emptyState: "Scanning the cosmos...",
     vibe: "nasa-dark",
   },
+  parenting: {
+    accent: "#FF8A65",
+    secondaryAccent: "#FF7043",
+    icon: "\u{1F476}",
+    gradient: "linear-gradient(135deg, #FF8A6511, #FF704311)",
+    contentLayout: "feed",
+    cardStyle: "article",
+    emptyState: "No milestones logged. Record your child's first steps.",
+    vibe: "babycenter-warm",
+  },
   pets: {
     accent: "#FFAB40",
     secondaryAccent: "#FF9100",
