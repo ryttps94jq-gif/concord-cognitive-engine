@@ -22,6 +22,7 @@ import {
 import { cn, formatNumber } from '@/lib/utils';
 import { api, apiHelpers } from '@/lib/api/client';
 import { CreatorAnalytics } from '@/components/social/CreatorAnalytics';
+import { useLensNav } from '@/hooks/useLensNav';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -52,6 +53,7 @@ interface DTUSummary {
 // ── Analytics Page ───────────────────────────────────────────────────────────
 
 export default function AnalyticsPage() {
+  useLensNav('analytics');
   const [activeSection, setActiveSection] = useState<'overview' | 'revenue' | 'dtus'>('overview');
 
   // Fetch user profile for userId
@@ -156,7 +158,7 @@ export default function AnalyticsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-lattice-void text-white">
+    <div data-lens-theme="analytics" className="min-h-screen bg-lattice-void text-white">
       {/* Header */}
       <header className="bg-lattice-surface border-b border-lattice-border">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4">

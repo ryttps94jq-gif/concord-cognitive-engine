@@ -43,7 +43,7 @@ export default function MarketLensPage() {
   const [newTitle, setNewTitle] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [newPrice, setNewPrice] = useState('');
-  const [newType, setNewType] = useState('beat');
+  const [newType, setNewType] = useState('template');
   const [newTags, setNewTags] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<ListingType>('all');
@@ -73,7 +73,7 @@ export default function MarketLensPage() {
       setNewTitle('');
       setNewDescription('');
       setNewPrice('');
-      setNewType('beat');
+      setNewType('template');
       setNewTags('');
     },
     onError: (err) => console.error('createMutation failed:', err instanceof Error ? err.message : err),

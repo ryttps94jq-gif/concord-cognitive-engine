@@ -63,10 +63,9 @@ const AGENT_TYPES = [
 
 const AVAILABLE_TOOLS = [
   'web_search', 'dtu_create', 'dtu_read', 'dtu_update', 'summarize', 'classify',
-  'music_analyze', 'score_harmony', 'suggest', 'audio_analyze', 'eq_suggest',
-  'dynamics_check', 'lufs_measure', 'audio_fingerprint', 'tag_assign', 'graph_connect',
-  'db_query', 'graph_check', 'metric_read', 'alert_send', 'text_generate',
-  'rhyme_find', 'syllable_count', 'code_execute', 'file_read', 'file_write',
+  'suggest', 'tag_assign', 'graph_connect', 'db_query', 'graph_check',
+  'metric_read', 'alert_send', 'text_generate', 'code_execute', 'file_read',
+  'file_write', 'data_extract', 'image_analyze', 'translate',
 ];
 
 export default function AgentsLensPage() {

@@ -35,6 +35,7 @@ import {
 import { api } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
 import { ds } from '@/lib/design-system';
+import { useLensNav } from '@/hooks/useLensNav';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -634,6 +635,7 @@ function DisputeCard({
 type ViewTab = 'my' | 'queue';
 
 export default function DisputesPage() {
+  useLensNav('disputes');
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ViewTab>('my');

@@ -679,6 +679,8 @@ function SessionCard({ session, onJoin }: { session: CollabSession; onJoin: () =
 
 function ActiveSessionView({ session, onLeave }: { session: CollabSession; onLeave: () => void }) {
   const [chatInput, setChatInput] = useState('');
+  const [showSettings, setShowSettings] = useState(false);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
   const { items: chatItems, create: createChatMessage } = useLensData('collab', 'chat', {
     seed: INITIAL_CHAT.map(m => ({ title: m.senderName, data: m as unknown as Record<string, unknown> })),
   });
@@ -830,19 +832,85 @@ function ActiveSessionView({ session, onLeave }: { session: CollabSession; onLea
 
           {/* Bottom action bar */}
           <div className="flex items-center gap-2 px-5 py-3 border-t border-lattice-border bg-lattice-surface/50">
-            <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Screen sharing initiated' })} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-lattice-surface border border-lattice-border text-gray-300 hover:border-neon-blue/40 transition-colors">
-              <Monitor className="w-3.5 h-3.5" /> Share Screen
+            <button onClick={() => {
+              setIsScreenSharing(!isScreenSharing);
+              api.post('/api/lens/run', { domain: 'collab', action: 'share-screen', sessionId: session.id })
+                .then(() => {
+                  useUIStore.getState().addToast({ type: 'success', message: isScreenSharing ? 'Screen sharing stopped' : 'Screen sharing started' });
+                  const sysMsg: ChatMessage = {
+                    id: `m-${Date.now()}`,
+                    senderId: 'system',
+                    senderName: 'System',
+                    senderAvatar: AVATARS[0],
+                    text: isScreenSharing ? 'You stopped sharing your screen.' : 'You started sharing your screen.',
+                    timestamp: Date.now(),
+                    isSystem: true,
+                  };
+                  createChatMessage({ title: sysMsg.senderName, data: sysMsg as unknown as Record<string, unknown> });
+                })
+                .catch(() => {
+                  setIsScreenSharing(s => !s);
+                  useUIStore.getState().addToast({ type: 'error', message: 'Failed to toggle screen sharing' });
+                });
+            }} className={cn("flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border transition-colors", isScreenSharing ? "bg-red-500/10 border-red-500/30 text-red-400" : "bg-lattice-surface border-lattice-border text-gray-300 hover:border-neon-blue/40")}>
+              <Monitor className="w-3.5 h-3.5" /> {isScreenSharing ? 'Stop Sharing' : 'Share Screen'}
             </button>
             <button onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.click(); }} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-lattice-surface border border-lattice-border text-gray-300 hover:border-neon-blue/40 transition-colors">
               <Upload className="w-3.5 h-3.5" /> Upload File
             </button>
-            <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Invite link copied to clipboard' })} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-lattice-surface border border-lattice-border text-gray-300 hover:border-neon-blue/40 transition-colors">
+            <button onClick={() => {
+              navigator.clipboard.writeText(window.location.href + '?invite=true')
+                .then(() => useUIStore.getState().addToast({ type: 'success', message: 'Invite link copied to clipboard' }))
+                .catch(() => useUIStore.getState().addToast({ type: 'error', message: 'Failed to copy invite link' }));
+            }} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-lattice-surface border border-lattice-border text-gray-300 hover:border-neon-blue/40 transition-colors">
               <UserPlus className="w-3.5 h-3.5" /> Invite
             </button>
-            <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Session settings' })} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-lattice-surface border border-lattice-border text-gray-300 hover:border-neon-blue/40 transition-colors">
+            <button onClick={() => setShowSettings(!showSettings)} className={cn("flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border transition-colors", showSettings ? "bg-neon-blue/10 border-neon-blue/30 text-neon-blue" : "bg-lattice-surface border-lattice-border text-gray-300 hover:border-neon-blue/40")}>
               <Settings className="w-3.5 h-3.5" /> Settings
             </button>
           </div>
+
+          {/* Settings panel */}
+          <AnimatePresence>
+          {showSettings && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="border-t border-lattice-border bg-lattice-surface/80 overflow-hidden"
+            >
+              <div className="px-5 py-3 space-y-3">
+                <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Session Settings</h4>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-[10px] text-gray-500 block mb-1">Privacy</label>
+                    <select className="w-full text-xs bg-lattice-deep border border-lattice-border rounded-md px-2 py-1.5 focus:outline-none focus:border-neon-blue/50">
+                      <option value="public">Public</option>
+                      <option value="private">Private</option>
+                      <option value="invite-only">Invite Only</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-gray-500 block mb-1">Max Capacity</label>
+                    <input type="number" defaultValue={session.maxCapacity} min={1} max={50} className="w-full text-xs bg-lattice-deep border border-lattice-border rounded-md px-2 py-1.5 focus:outline-none focus:border-neon-blue/50" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-gray-500 block mb-1">Notifications</label>
+                    <select className="w-full text-xs bg-lattice-deep border border-lattice-border rounded-md px-2 py-1.5 focus:outline-none focus:border-neon-blue/50">
+                      <option value="all">All</option>
+                      <option value="mentions">Mentions only</option>
+                      <option value="none">None</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <button onClick={() => setShowSettings(false)} className="text-xs px-3 py-1 rounded-md border border-lattice-border text-gray-400 hover:bg-lattice-elevated transition-colors">Close</button>
+                  <button onClick={() => { useUIStore.getState().addToast({ type: 'success', message: 'Settings saved' }); setShowSettings(false); }} className="text-xs px-3 py-1 rounded-md bg-neon-blue/20 text-neon-blue border border-neon-blue/30 hover:bg-neon-blue/30 transition-colors">Save</button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
         </div>
 
         {/* Right panel: live chat */}

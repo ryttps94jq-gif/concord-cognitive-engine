@@ -933,11 +933,11 @@ export default function GameLensPage() {
             <h3 className="font-semibold text-white mb-3">Recent Activity</h3>
             <div className="space-y-3">
               {[
-                { time: '2h ago', text: 'Completed "Daily Mix Session" quest', xp: '+120 XP', color: 'text-neon-green' },
+                { time: '2h ago', text: 'Completed "Daily Challenge Quest" quest', xp: '+120 XP', color: 'text-neon-green' },
                 { time: '5h ago', text: 'Unlocked "Plugin Collector" achievement', xp: '+350 XP', color: 'text-neon-yellow' },
                 { time: '1d ago', text: 'Purchased "Fire Emote" from shop', xp: '-300 XP', color: 'text-neon-pink' },
-                { time: '1d ago', text: 'Leveled up Compression skill to Lv 4', xp: '+200 XP', color: 'text-neon-cyan' },
-                { time: '2d ago', text: 'Completed "Genre Explorer" weekly quest', xp: '+500 XP', color: 'text-neon-green' },
+                { time: '1d ago', text: 'Leveled up Engineering skill to Lv 4', xp: '+200 XP', color: 'text-neon-cyan' },
+                { time: '2d ago', text: 'Completed "Domain Explorer" weekly quest', xp: '+500 XP', color: 'text-neon-green' },
                 { time: '3d ago', text: 'Reached Level 14', xp: 'Level up!', color: 'text-neon-purple' },
               ].map((entry, i) => (
                 <div key={i} className="flex items-center justify-between text-sm border-b border-lattice-border/30 pb-2 last:border-0">
@@ -982,7 +982,7 @@ export default function GameLensPage() {
                 <input
                   value={newChallenge.name}
                   onChange={(e) => setNewChallenge((p) => ({ ...p, name: e.target.value }))}
-                  placeholder="e.g. 808 Bass Marathon"
+                  placeholder="e.g. 7-Day Streak Challenge"
                   className="input-lattice w-full"
                 />
               </div>

@@ -144,7 +144,7 @@ export default function SRSLensPage() {
   // Create card form
   const [newFront, setNewFront] = useState('');
   const [newBack, setNewBack] = useState('');
-  const [newDeck, setNewDeck] = useState('music-theory');
+  const [newDeck, setNewDeck] = useState('general');
   const [newTags, setNewTags] = useState('');
 
   // Create deck form
@@ -939,7 +939,7 @@ export default function SRSLensPage() {
                     type="text"
                     value={newTags}
                     onChange={(e) => setNewTags(e.target.value)}
-                    placeholder="harmony, chords"
+                    placeholder="math, history"
                     className="input-lattice w-full"
                   />
                 </div>

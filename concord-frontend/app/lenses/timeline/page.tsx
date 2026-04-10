@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
@@ -90,6 +91,7 @@ const REACTIONS = [
 
 export default function TimelineLensPage() {
   useLensNav('timeline');
+  const router = useRouter();
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('timeline');
   const queryClient = useQueryClient();
 
@@ -98,6 +100,12 @@ export default function TimelineLensPage() {
   const [limit, setLimit] = useState(30);
   const [showPostModal, setShowPostModal] = useState(false);
   const [postContent, setPostContent] = useState('');
+  const [mediaFilter, setMediaFilter] = useState<string | null>(null);
+  const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
+  const [postOptionsMenu, setPostOptionsMenu] = useState<string | null>(null);
+  const [viewingStory, setViewingStory] = useState<Story | null>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null);
+  const commentImageRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
 
   const { data: postsData, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
@@ -127,6 +135,18 @@ export default function TimelineLensPage() {
         dtuId: dtu.id
       })) || [];
 
+  const filteredPosts = mediaFilter
+    ? posts.filter((post: Post) => {
+        if (mediaFilter === 'video') return post.content?.toLowerCase().includes('video') || post.content?.toLowerCase().includes('[video]');
+        if (mediaFilter === 'memories') {
+          const postDate = new Date(post.createdAt);
+          const now = new Date();
+          return postDate.getFullYear() < now.getFullYear();
+        }
+        if (mediaFilter === 'saved') return post.userReaction === 'love';
+        return true;
+      })
+    : posts;
 
   const { data: friends, isError: isError2, error: error2, refetch: refetch2,} = useQuery({
     queryKey: ['friends'],
@@ -200,6 +220,17 @@ export default function TimelineLensPage() {
     },
     onError: () => {
       useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (postId: string) => apiHelpers.dtus.delete(postId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['timeline-posts'] });
+      useUIStore.getState().addToast({ type: 'success', message: 'Post deleted' });
+    },
+    onError: () => {
+      useUIStore.getState().addToast({ type: 'error', message: 'Failed to delete post' });
     },
   });
 
@@ -284,13 +315,13 @@ export default function TimelineLensPage() {
             <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="p-2 bg-[#3a3b3c] rounded-full hover:bg-[#4a4b4c] transition-colors">
               <Home className="w-5 h-5 text-white" />
             </button>
-            <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Watch section' })} className="p-2 bg-[#3a3b3c] rounded-full hover:bg-[#4a4b4c] transition-colors">
-              <Tv className="w-5 h-5 text-gray-400" />
+            <button onClick={() => setMediaFilter(mediaFilter === 'video' ? null : 'video')} className={cn("p-2 bg-[#3a3b3c] rounded-full hover:bg-[#4a4b4c] transition-colors", mediaFilter === 'video' && "ring-2 ring-blue-500")}>
+              <Tv className={cn("w-5 h-5", mediaFilter === 'video' ? "text-blue-500" : "text-gray-400")} />
             </button>
-            <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Marketplace' })} className="p-2 bg-[#3a3b3c] rounded-full hover:bg-[#4a4b4c] transition-colors">
+            <button onClick={() => router.push('/lenses/marketplace')} className="p-2 bg-[#3a3b3c] rounded-full hover:bg-[#4a4b4c] transition-colors">
               <Store className="w-5 h-5 text-gray-400" />
             </button>
-            <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Groups' })} className="p-2 bg-[#3a3b3c] rounded-full hover:bg-[#4a4b4c] transition-colors">
+            <button onClick={() => router.push('/lenses/forum')} className="p-2 bg-[#3a3b3c] rounded-full hover:bg-[#4a4b4c] transition-colors">
               <Users2 className="w-5 h-5 text-gray-400" />
             </button>
           </div>
@@ -304,21 +335,24 @@ export default function TimelineLensPage() {
         {/* Left Sidebar */}
         <aside className="w-64 hidden lg:block space-y-1">
           {[
-            { icon: Users, label: 'Friends' },
-            { icon: Users2, label: 'Groups' },
-            { icon: Tv, label: 'Watch' },
-            { icon: Clock, label: 'Memories' },
-            { icon: Bookmark, label: 'Saved' },
-            { icon: CalendarDays, label: 'Events' },
-            { icon: Flag, label: 'Pages' },
+            { icon: Users, label: 'Friends', action: () => router.push('/lenses/collab') },
+            { icon: Users2, label: 'Groups', action: () => router.push('/lenses/forum') },
+            { icon: Tv, label: 'Watch', action: () => setMediaFilter(mediaFilter === 'video' ? null : 'video') },
+            { icon: Clock, label: 'Memories', action: () => setMediaFilter(mediaFilter === 'memories' ? null : 'memories') },
+            { icon: Bookmark, label: 'Saved', action: () => setMediaFilter(mediaFilter === 'saved' ? null : 'saved') },
+            { icon: CalendarDays, label: 'Events', action: () => router.push('/lenses/calendar') },
+            { icon: Flag, label: 'Pages', action: () => router.push('/lenses/forum') },
           ].map(item => (
             <button
               key={item.label}
-              onClick={() => useUIStore.getState().addToast({ type: 'info', message: `${item.label} section` })}
-              className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-[#3a3b3c] transition-colors"
+              onClick={item.action}
+              className={cn(
+                "w-full flex items-center gap-3 p-2 rounded-lg hover:bg-[#3a3b3c] transition-colors",
+                mediaFilter === item.label.toLowerCase() && "bg-[#3a3b3c]"
+              )}
             >
               <div className="w-9 h-9 rounded-full bg-[#3a3b3c] flex items-center justify-center">
-                <item.icon className="w-5 h-5 text-blue-500" />
+                <item.icon className={cn("w-5 h-5", mediaFilter === item.label.toLowerCase() ? "text-blue-400" : "text-blue-500")} />
               </div>
               <span className="text-white text-sm font-medium">{item.label}</span>
             </button>
@@ -333,7 +367,7 @@ export default function TimelineLensPage() {
               {stories?.map((story, i) => (
                 <button
                   key={story.id}
-                  onClick={() => i === 0 ? setShowPostModal(true) : useUIStore.getState().addToast({ type: 'info', message: `Viewing ${story.author.name}'s story` })}
+                  onClick={() => i === 0 ? setShowPostModal(true) : setViewingStory(story)}
                   className={cn(
                     'flex-shrink-0 w-28 h-48 rounded-xl overflow-hidden relative',
                     i === 0 ? 'bg-[#3a3b3c]' : 'bg-gradient-to-br from-blue-500 to-purple-500'
@@ -363,6 +397,14 @@ export default function TimelineLensPage() {
               ))}
             </div>
           </div>
+
+          {/* Active Filter Banner */}
+          {mediaFilter && (
+            <div className="bg-[#242526] rounded-lg p-3 flex items-center justify-between">
+              <span className="text-sm text-blue-400">Filtering: <span className="font-medium capitalize">{mediaFilter}</span></span>
+              <button onClick={() => setMediaFilter(null)} className="text-xs text-gray-400 hover:text-white px-2 py-1 rounded bg-[#3a3b3c]">Clear filter</button>
+            </div>
+          )}
 
           {/* Create Post */}
           <div className="bg-[#242526] rounded-lg p-4">
@@ -416,7 +458,7 @@ export default function TimelineLensPage() {
           ) : (
             <>
               <div className="bg-[#242526] rounded-lg p-3 flex items-center justify-between text-xs text-gray-400">
-                <span>Showing {posts.length} of {postsData?.total || posts.length} timeline DTUs</span>
+                <span>Showing {filteredPosts.length} of {postsData?.total || posts.length} timeline DTUs{mediaFilter ? ` (filtered: ${mediaFilter})` : ''}</span>
                 <button
                   className="px-3 py-1.5 rounded bg-[#3a3b3c] text-white disabled:opacity-50"
                   disabled={posts.length >= Number(postsData?.total || 0)}
@@ -425,7 +467,7 @@ export default function TimelineLensPage() {
                   Load more
                 </button>
               </div>
-            {posts?.map((post: Post) => (
+            {filteredPosts?.map((post: Post) => (
               <article key={post.id} className="bg-[#242526] rounded-lg">
                 {/* Post Header */}
                 <div className="p-4 pb-0">
@@ -449,9 +491,33 @@ export default function TimelineLensPage() {
                         </div>
                       </div>
                     </div>
-                    <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Post options' })} className="p-2 rounded-full hover:bg-[#3a3b3c] transition-colors">
-                      <MoreHorizontal className="w-5 h-5 text-gray-400" />
-                    </button>
+                    <div className="relative">
+                      <button onClick={() => setPostOptionsMenu(postOptionsMenu === post.id ? null : post.id)} className="p-2 rounded-full hover:bg-[#3a3b3c] transition-colors">
+                        <MoreHorizontal className="w-5 h-5 text-gray-400" />
+                      </button>
+                      {postOptionsMenu === post.id && (
+                        <div className="absolute right-0 top-full mt-1 w-48 bg-[#242526] border border-gray-700 rounded-lg shadow-xl z-10 py-1">
+                          <button
+                            onClick={() => { setPostContent(post.content); setShowPostModal(true); setPostOptionsMenu(null); }}
+                            className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-[#3a3b3c] transition-colors"
+                          >
+                            Edit post
+                          </button>
+                          <button
+                            onClick={() => { deleteMutation.mutate(post.id); setPostOptionsMenu(null); }}
+                            className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-[#3a3b3c] transition-colors"
+                          >
+                            Delete post
+                          </button>
+                          <button
+                            onClick={() => { shareMutation.mutate(post.id); setPostOptionsMenu(null); }}
+                            className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-[#3a3b3c] transition-colors"
+                          >
+                            Share post
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -517,7 +583,7 @@ export default function TimelineLensPage() {
                     </AnimatePresence>
                   </div>
 
-                  <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Comment section' })} className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg hover:bg-[#3a3b3c] transition-colors">
+                  <button onClick={() => setExpandedComments(prev => { const next = new Set(prev); if (next.has(post.id)) next.delete(post.id); else next.add(post.id); return next; })} className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg hover:bg-[#3a3b3c] transition-colors">
                     <MessageCircle className="w-5 h-5 text-gray-400" />
                     <span className="text-gray-400 font-medium">Comment</span>
                   </button>
@@ -529,24 +595,64 @@ export default function TimelineLensPage() {
                 </div>
 
                 {/* Comment Input */}
+                {expandedComments.has(post.id) && (
                 <div className="px-4 py-3 flex gap-2">
                   <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex-shrink-0" />
-                  <div className="flex-1 flex items-center bg-[#3a3b3c] rounded-full px-4">
-                    <input
-                      type="text"
-                      placeholder="Write a comment..."
-                      className="flex-1 py-2 bg-transparent text-white placeholder-gray-500 focus:outline-none text-sm"
-                    />
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Emoji picker' })} className="p-1 text-gray-400 hover:text-gray-300">
-                        <Smile className="w-5 h-5" />
-                      </button>
-                      <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Attach image to comment' })} className="p-1 text-gray-400 hover:text-gray-300">
-                        <ImageIcon className="w-5 h-5" />
-                      </button>
+                  <div className="flex-1 relative">
+                    <div className="flex items-center bg-[#3a3b3c] rounded-full px-4">
+                      <input
+                        id={`comment-input-${post.id}`}
+                        type="text"
+                        placeholder="Write a comment..."
+                        className="flex-1 py-2 bg-transparent text-white placeholder-gray-500 focus:outline-none text-sm"
+                      />
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => setShowEmojiPicker(showEmojiPicker === post.id ? null : post.id)} className="p-1 text-gray-400 hover:text-gray-300">
+                          <Smile className="w-5 h-5" />
+                        </button>
+                        <button onClick={() => commentImageRefs.current[post.id]?.click()} className="p-1 text-gray-400 hover:text-gray-300">
+                          <ImageIcon className="w-5 h-5" />
+                        </button>
+                        <input
+                          ref={(el) => { commentImageRefs.current[post.id] = el; }}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              useUIStore.getState().addToast({ type: 'success', message: `Image "${file.name}" attached` });
+                              e.target.value = '';
+                            }
+                          }}
+                        />
+                      </div>
                     </div>
+                    {showEmojiPicker === post.id && (
+                      <div className="absolute bottom-full mb-2 right-0 bg-[#242526] border border-gray-700 rounded-lg shadow-xl p-2 flex gap-1 z-10">
+                        {['😀', '😂', '❤️', '👍', '🔥', '😮', '😢', '🎉'].map(emoji => (
+                          <button
+                            key={emoji}
+                            onClick={() => {
+                              const input = document.getElementById(`comment-input-${post.id}`) as HTMLInputElement;
+                              if (input) {
+                                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+                                nativeInputValueSetter?.call(input, input.value + emoji);
+                                input.dispatchEvent(new Event('input', { bubbles: true }));
+                                input.focus();
+                              }
+                              setShowEmojiPicker(null);
+                            }}
+                            className="p-1.5 text-lg hover:bg-[#3a3b3c] rounded transition-colors"
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
+                )}
               </article>
             ))}
             </>
@@ -559,7 +665,7 @@ export default function TimelineLensPage() {
           <div className="bg-[#242526] rounded-lg p-4">
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-semibold text-white">Friend Requests</h3>
-              <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'View all friend requests' })} className="text-blue-500 text-sm hover:underline">See all</button>
+              <button onClick={() => router.push('/lenses/collab')} className="text-blue-500 text-sm hover:underline">See all</button>
             </div>
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-full bg-gradient-to-br from-green-500 to-teal-500" />
@@ -587,7 +693,7 @@ export default function TimelineLensPage() {
               {friends?.map((friend: Friend) => (
                 <button
                   key={friend.id}
-                  onClick={() => useUIStore.getState().addToast({ type: 'info', message: `Chat with ${friend.name}` })}
+                  onClick={() => router.push('/lenses/chat')}
                   className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-[#3a3b3c] transition-colors"
                 >
                   <div className="relative">
@@ -668,6 +774,44 @@ export default function TimelineLensPage() {
         />
       )}
               </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Story Viewing Modal */}
+      <AnimatePresence>
+        {viewingStory && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+            onClick={() => setViewingStory(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl w-full max-w-sm h-[70vh] relative flex flex-col items-center justify-center"
+              onClick={e => e.stopPropagation()}
+            >
+              <button onClick={() => setViewingStory(null)} className="absolute top-4 right-4 text-white/80 hover:text-white">
+                <MoreHorizontal className="w-6 h-6" />
+              </button>
+              <div className="absolute top-4 left-4 flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-white/20" />
+                <span className="text-white font-medium text-sm">{viewingStory.author.name}</span>
+              </div>
+              {/* Progress bar */}
+              <div className="absolute top-1 left-2 right-2 h-1 bg-white/20 rounded-full overflow-hidden">
+                <motion.div
+                  initial={{ width: '0%' }}
+                  animate={{ width: '100%' }}
+                  transition={{ duration: 5, ease: 'linear' }}
+                  onAnimationComplete={() => setViewingStory(null)}
+                  className="h-full bg-white rounded-full"
+                />
+              </div>
+              <p className="text-white text-center px-8 text-lg">
+                {viewingStory.preview || `${viewingStory.author.name} shared a story`}
+              </p>
             </motion.div>
           </motion.div>
         )}

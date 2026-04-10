@@ -46,7 +46,7 @@ interface Goal {
   id: string;
   title: string;
   description: string;
-  category: 'Production' | 'Mixing' | 'Release' | 'Learning' | 'Collaboration';
+  category: 'Creative' | 'Professional' | 'Personal' | 'Learning' | 'Collaboration';
   progress: number;
   priority: 'low' | 'medium' | 'high';
   targetDate: string;
@@ -84,7 +84,7 @@ interface Achievement {
   id: string;
   name: string;
   description: string;
-  category: 'Production' | 'Social' | 'Sales' | 'Learning';
+  category: 'Creative' | 'Social' | 'Professional' | 'Learning';
   unlocked: boolean;
   icon: string;
   rarity: 'common' | 'rare' | 'epic' | 'legendary';
@@ -103,17 +103,17 @@ const SEED_ACHIEVEMENTS: Achievement[] = [];
 // --------------- Style Mappings ---------------
 
 const categoryColors: Record<string, string> = {
-  Production: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-  Mixing: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  Release: 'bg-green-500/20 text-green-400 border-green-500/30',
+  Creative: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+  Professional: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+  Personal: 'bg-green-500/20 text-green-400 border-green-500/30',
   Learning: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
   Collaboration: 'bg-pink-500/20 text-pink-400 border-pink-500/30',
 };
 
 const categoryDotColors: Record<string, string> = {
-  Production: 'bg-purple-400',
-  Mixing: 'bg-blue-400',
-  Release: 'bg-green-400',
+  Creative: 'bg-purple-400',
+  Professional: 'bg-blue-400',
+  Personal: 'bg-green-400',
   Learning: 'bg-yellow-400',
   Collaboration: 'bg-pink-400',
 };
@@ -223,7 +223,7 @@ function WeeklyActivityBar({ goals }: { goals: Goal[] }) {
 function resolveIcon(iconName: string) {
   const iconMap: Record<string, typeof Zap> = {
     zap: Zap,
-    music: Flag,
+    flag: Flag,
     sparkles: Sparkles,
     users: Users,
     star: Star,
@@ -253,7 +253,7 @@ export default function GoalsLensPage() {
   // Create goal form state
   const [newTitle, setNewTitle] = useState('');
   const [newDescription, setNewDescription] = useState('');
-  const [newCategory, setNewCategory] = useState<Goal['category']>('Production');
+  const [newCategory, setNewCategory] = useState<Goal['category']>('Creative');
   const [newTargetDate, setNewTargetDate] = useState('');
   const [newSubtasks, setNewSubtasks] = useState('');
   const [newXp, setNewXp] = useState(200);
@@ -336,15 +336,15 @@ export default function GoalsLensPage() {
     if (goalFilter === 'All') return goals;
     if (goalFilter === 'Active') return goals.filter((g) => g.status === 'active');
     if (goalFilter === 'Completed') return goals.filter((g) => g.status === 'completed');
-    if (goalFilter === 'Creative') return goals.filter((g) => g.category === 'Production' || g.category === 'Mixing');
+    if (goalFilter === 'Creative') return goals.filter((g) => g.category === 'Creative');
     if (goalFilter === 'Technical') return goals.filter((g) => g.category === 'Learning');
-    if (goalFilter === 'Release') return goals.filter((g) => g.category === 'Release');
+    if (goalFilter === 'Personal') return goals.filter((g) => g.category === 'Personal');
     return goals;
   }, [goals, goalFilter]);
 
   // Category breakdown for summary
   const categoryBreakdown = useMemo(() => {
-    const cats = ['Production', 'Mixing', 'Release', 'Learning', 'Collaboration'] as const;
+    const cats = ['Creative', 'Professional', 'Personal', 'Learning', 'Collaboration'] as const;
     return cats.map((cat) => ({
       name: cat,
       count: goals.filter((g) => g.category === cat).length,
@@ -381,7 +381,7 @@ export default function GoalsLensPage() {
     { key: 'achievements' as const, label: 'Achievements', icon: Award, count: unlockedAchievementCount },
   ];
 
-  const filterPills = ['All', 'Active', 'Completed', 'Creative', 'Technical', 'Release'];
+  const filterPills = ['All', 'Active', 'Completed', 'Creative', 'Technical', 'Personal'];
 
 
   if (isLoading) {
@@ -539,7 +539,7 @@ export default function GoalsLensPage() {
               <textarea value={newDescription} onChange={(e) => setNewDescription(e.target.value)} placeholder="Describe your goal and what success looks like..." className="input-lattice w-full h-16 resize-none" />
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                 <select value={newCategory} onChange={(e) => setNewCategory(e.target.value as Goal['category'])} className="input-lattice">
-                  {['Production', 'Mixing', 'Release', 'Learning', 'Collaboration'].map((c) => <option key={c} value={c}>{c}</option>)}
+                  {['Creative', 'Professional', 'Personal', 'Learning', 'Collaboration'].map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
                 <select value={newPriority} onChange={(e) => setNewPriority(e.target.value as Goal['priority'])} className="input-lattice">
                   <option value="low">Low Priority</option>
@@ -927,7 +927,7 @@ export default function GoalsLensPage() {
             </div>
           </div>
 
-          {(['Production', 'Social', 'Sales', 'Learning'] as const).map((cat) => {
+          {(['Creative', 'Social', 'Professional', 'Learning'] as const).map((cat) => {
             const catAchievements = achievements.filter((a) => a.category === cat);
 
             return (

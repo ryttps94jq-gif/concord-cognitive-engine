@@ -3,8 +3,8 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useQuery } from '@tanstack/react-query';
-import { apiHelpers } from '@/lib/api/client';
-import { useState, useMemo } from 'react';
+import { apiHelpers, api } from '@/lib/api/client';
+import { useState, useMemo, useCallback } from 'react';
 import { useUIStore } from '@/store/ui';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLensData } from '@/lib/hooks/use-lens-data';
@@ -37,7 +37,7 @@ interface PortfolioItem {
   playCount?: number;
   itemCount?: number;
   medium?: string;
-  genre: string;
+  category: string;
   date: string;
   featured: boolean;
 }
@@ -65,7 +65,7 @@ interface HistoryItem {
 
 interface InsightData {
   mostProductiveDay: string;
-  favoriteGenre: string;
+  favoriteCategory: string;
   collaborationScore: number;
   recommendations: string[];
   weeklyHeatmap: number[][];
@@ -77,7 +77,7 @@ const PROFILE = {
   name: '',
   bio: '',
   location: '',
-  genres: [] as string[],
+  categories: [] as string[],
   stats: { projects: 0, collaborations: 0, sales: 0, followers: 0 },
   socials: [] as { label: string; url: string }[],
 };
@@ -217,8 +217,10 @@ export default function ExperienceLensPage() {
   const [activeTab, setActiveTab] = useState<TabId>('portfolio');
   const [portfolioFilter, setPortfolioFilter] = useState<PortfolioFilter>('all');
   const [showFeatures, setShowFeatures] = useState(true);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [showCreatePortfolio, setShowCreatePortfolio] = useState(false);
 
-  const { isLoading, isError: isError, error: error, refetch: refetch, items: portfolioItems } = useLensData('experience', 'portfolio', {
+  const { isLoading, isError: isError, error: error, refetch: refetch, items: portfolioItems, create: createPortfolioItem } = useLensData('experience', 'portfolio', {
     seed: INITIAL_PORTFOLIO.map(p => ({ title: p.title, data: p as unknown as Record<string, unknown> })),
   });
   const { isError: isError2, error: error2, refetch: refetch2, items: skillItems } = useLensData('experience', 'skill', {
@@ -301,16 +303,16 @@ export default function ExperienceLensPage() {
       mostProductiveDay = Object.entries(dayCounts).sort((a, b) => b[1] - a[1])[0][0];
     }
 
-    // favoriteGenre: count genres from portfolio items
-    const genreCounts: Record<string, number> = {};
+    // favoriteCategory: count categories from portfolio items
+    const categoryCounts: Record<string, number> = {};
     for (const item of portfolio) {
-      if (item.genre) {
-        genreCounts[item.genre] = (genreCounts[item.genre] || 0) + 1;
+      if (item.category) {
+        categoryCounts[item.category] = (categoryCounts[item.category] || 0) + 1;
       }
     }
-    let favoriteGenre = '';
-    if (Object.keys(genreCounts).length > 0) {
-      favoriteGenre = Object.entries(genreCounts).sort((a, b) => b[1] - a[1])[0][0];
+    let favoriteCategory = '';
+    if (Object.keys(categoryCounts).length > 0) {
+      favoriteCategory = Object.entries(categoryCounts).sort((a, b) => b[1] - a[1])[0][0];
     }
 
     // collaborationScore: percentage of portfolio items that are collaborations
@@ -358,11 +360,11 @@ export default function ExperienceLensPage() {
       if (portfolio.length > 0 && portfolio.filter(p => p.type === 'collaboration').length === 0) {
         recommendations.push('Try collaborating with another creator to diversify your portfolio.');
       }
-      if (portfolio.length > 0 && Object.keys(genreCounts).length === 1) {
-        recommendations.push('Experiment with a new genre to broaden your creative range.');
+      if (portfolio.length > 0 && Object.keys(categoryCounts).length === 1) {
+        recommendations.push('Experiment with a new category to broaden your creative range.');
       }
-      if (portfolio.length > 0 && Object.keys(genreCounts).length > 2) {
-        recommendations.push(`You work across ${Object.keys(genreCounts).length} genres — consider deepening your ${favoriteGenre} skills.`);
+      if (portfolio.length > 0 && Object.keys(categoryCounts).length > 2) {
+        recommendations.push(`You work across ${Object.keys(categoryCounts).length} categories — consider deepening your ${favoriteCategory} skills.`);
       }
       if (skills.length > 0) {
         const lowest = [...skills].sort((a, b) => a.level - b.level)[0];
@@ -381,12 +383,49 @@ export default function ExperienceLensPage() {
 
     return {
       mostProductiveDay,
-      favoriteGenre,
+      favoriteCategory,
       collaborationScore,
       weeklyHeatmap,
       recommendations: recommendations.slice(0, 4),
     };
   }, [portfolio, history, skills]);
+
+  // --- Action handlers ---
+
+  const handleEditProfile = useCallback(async () => {
+    setIsEditingProfile(true);
+    try {
+      await api.post('/api/lens/run', { domain: 'experience', action: 'edit-profile' });
+      useUIStore.getState().addToast({ type: 'success', message: 'Profile editor opened' });
+    } catch {
+      useUIStore.getState().addToast({ type: 'error', message: 'Failed to open profile editor' });
+    } finally {
+      setIsEditingProfile(false);
+    }
+  }, []);
+
+  const handleCreatePortfolioItem = useCallback(async () => {
+    setShowCreatePortfolio(true);
+    try {
+      await createPortfolioItem({
+        title: 'New Portfolio Item',
+        data: {
+          type: 'project',
+          title: 'New Portfolio Item',
+          subtitle: '',
+          coverGradient: 'from-blue-500 to-purple-600',
+          category: '',
+          date: new Date().toISOString().split('T')[0],
+          featured: false,
+        },
+      });
+      useUIStore.getState().addToast({ type: 'success', message: 'Portfolio item created' });
+    } catch {
+      useUIStore.getState().addToast({ type: 'error', message: 'Failed to create portfolio item' });
+    } finally {
+      setShowCreatePortfolio(false);
+    }
+  }, [createPortfolioItem]);
 
   const TABS: { id: TabId; label: string }[] = [
     { id: 'portfolio', label: 'Portfolio' },
@@ -478,9 +517,9 @@ export default function ExperienceLensPage() {
                 AR
               </div>
             </div>
-            <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Profile editor opening...' })} className="btn-neon text-xs flex items-center gap-1 px-3 py-1.5">
+            <button onClick={handleEditProfile} disabled={isEditingProfile} className="btn-neon text-xs flex items-center gap-1 px-3 py-1.5 disabled:opacity-50">
               <Edit3 className="w-3 h-3" />
-              Edit Profile
+              {isEditingProfile ? 'Opening...' : 'Edit Profile'}
             </button>
           </div>
 
@@ -511,9 +550,9 @@ export default function ExperienceLensPage() {
               ))}
             </div>
 
-            {/* Genre tags */}
+            {/* Category tags */}
             <div className="flex flex-wrap gap-2">
-              {PROFILE.genres.map((g) => (
+              {PROFILE.categories.map((g) => (
                 <span key={g} className="px-2.5 py-1 rounded-full text-xs bg-neon-purple/15 text-neon-purple border border-neon-purple/20">
                   {g}
                 </span>
@@ -587,9 +626,9 @@ export default function ExperienceLensPage() {
                   </button>
                 ))}
               </div>
-              <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Add new portfolio item via the creative lens' })} className="btn-neon purple text-xs flex items-center gap-1">
+              <button onClick={handleCreatePortfolioItem} disabled={showCreatePortfolio} className="btn-neon purple text-xs flex items-center gap-1 disabled:opacity-50">
                 <Plus className="w-3 h-3" />
-                Add to Portfolio
+                {showCreatePortfolio ? 'Creating...' : 'Add to Portfolio'}
               </button>
             </div>
 
@@ -638,7 +677,7 @@ export default function ExperienceLensPage() {
                       </div>
                       <p className="text-xs text-gray-400">{item.subtitle}</p>
                       <div className="flex items-center justify-between text-xs text-gray-500">
-                        <span>{item.genre}</span>
+                        <span>{item.category}</span>
                         {item.playCount !== undefined && (
                           <span className="flex items-center gap-1">
                             <Play className="w-3 h-3" />
@@ -794,9 +833,9 @@ export default function ExperienceLensPage() {
                   </h4>
                   <div className="space-y-2">
                     {(cat === 'technical'
-                      ? ['DAW Proficiency', 'Mixing', 'Mastering']
+                      ? ['Data Analysis', 'System Design', 'Problem Solving']
                       : cat === 'creative'
-                      ? ['Composition', 'Arrangement', 'Sound Design']
+                      ? ['Visual Design', 'Content Creation', 'Innovation']
                       : ['Marketing', 'Networking', 'Branding']
                     ).map((subSkill) => {
                       const matched = skillsByCategory[cat].find(
@@ -909,9 +948,9 @@ export default function ExperienceLensPage() {
               <div className="lens-card text-center py-4">
                 <Eye className="w-6 h-6 mx-auto mb-2 text-neon-purple" />
                 <p className="text-lg font-bold">
-                  {computedInsights.favoriteGenre || <span className="text-gray-500 text-sm font-normal">Add items to see</span>}
+                  {computedInsights.favoriteCategory || <span className="text-gray-500 text-sm font-normal">Add items to see</span>}
                 </p>
-                <p className="text-xs text-gray-400">Favorite Genre</p>
+                <p className="text-xs text-gray-400">Top Category</p>
               </div>
               <div className="lens-card text-center py-4">
                 <Users className="w-6 h-6 mx-auto mb-2 text-neon-cyan" />

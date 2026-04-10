@@ -152,6 +152,15 @@ export default function CalendarLensPage() {
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [calendarSettings, setCalendarSettings] = useState({
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    defaultView: 'month' as ViewMode,
+    weekStartsOn: 'sunday' as 'sunday' | 'monday',
+    showWeekNumbers: false,
+    defaultEventDuration: 60,
+    reminderDefault: 30,
+  });
 
   // New event form
   const [newEvent, setNewEvent] = useState<Partial<CalendarEvent>>({
@@ -1205,7 +1214,7 @@ export default function CalendarLensPage() {
           <button onClick={() => setShowSidebar(!showSidebar)} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400">
             <Search className="w-5 h-5" />
           </button>
-          <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Calendar settings' })} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400">
+          <button onClick={() => setShowSettingsModal(true)} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400">
             <Settings className="w-5 h-5" />
           </button>
         </div>
@@ -1808,6 +1817,175 @@ export default function CalendarLensPage() {
           compact
         />
       )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ----------------------------------------------------------------- */}
+      {/* Calendar Settings modal                                           */}
+      {/* ----------------------------------------------------------------- */}
+      <AnimatePresence>
+        {showSettingsModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+            onClick={() => setShowSettingsModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-lattice-surface border border-lattice-border rounded-xl p-6 max-w-md w-full"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-gray-500/20 flex items-center justify-center">
+                    <Settings className="w-5 h-5 text-gray-400" />
+                  </div>
+                  <h2 className="text-xl font-bold">Calendar Settings</h2>
+                </div>
+                <button
+                  onClick={() => setShowSettingsModal(false)}
+                  className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {/* Timezone */}
+                <div>
+                  <label className="text-xs text-gray-400 mb-1 block">Timezone</label>
+                  <select
+                    value={calendarSettings.timezone}
+                    onChange={(e) => setCalendarSettings({ ...calendarSettings, timezone: e.target.value })}
+                    className="w-full bg-lattice-deep rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-neon-cyan"
+                  >
+                    {['America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Asia/Tokyo', 'Asia/Shanghai', 'Australia/Sydney', 'Pacific/Auckland'].map((tz) => (
+                      <option key={tz} value={tz}>{tz.replace(/_/g, ' ')}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Default view */}
+                <div>
+                  <label className="text-xs text-gray-400 mb-2 block">Default View</label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {(['day', 'week', 'month', 'agenda'] as ViewMode[]).map((mode) => (
+                      <button
+                        key={mode}
+                        onClick={() => setCalendarSettings({ ...calendarSettings, defaultView: mode })}
+                        className={cn(
+                          'px-3 py-1.5 rounded-lg border text-xs capitalize transition-colors',
+                          calendarSettings.defaultView === mode
+                            ? 'border-neon-cyan bg-neon-cyan/10 text-neon-cyan'
+                            : 'border-lattice-border text-gray-400 hover:border-gray-500'
+                        )}
+                      >
+                        {mode}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Week starts on */}
+                <div>
+                  <label className="text-xs text-gray-400 mb-2 block">Week Starts On</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(['sunday', 'monday'] as const).map((day) => (
+                      <button
+                        key={day}
+                        onClick={() => setCalendarSettings({ ...calendarSettings, weekStartsOn: day })}
+                        className={cn(
+                          'px-3 py-1.5 rounded-lg border text-xs capitalize transition-colors',
+                          calendarSettings.weekStartsOn === day
+                            ? 'border-neon-cyan bg-neon-cyan/10 text-neon-cyan'
+                            : 'border-lattice-border text-gray-400 hover:border-gray-500'
+                        )}
+                      >
+                        {day}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Show week numbers */}
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={calendarSettings.showWeekNumbers}
+                    onChange={(e) => setCalendarSettings({ ...calendarSettings, showWeekNumbers: e.target.checked })}
+                    className="w-4 h-4 rounded"
+                  />
+                  <span className="text-sm">Show week numbers</span>
+                </label>
+
+                {/* Default event duration */}
+                <div>
+                  <label className="text-xs text-gray-400 mb-2 block">Default Event Duration</label>
+                  <div className="flex gap-2">
+                    {[30, 60, 90, 120].map((dur) => (
+                      <button
+                        key={dur}
+                        onClick={() => setCalendarSettings({ ...calendarSettings, defaultEventDuration: dur })}
+                        className={cn(
+                          'flex-1 px-3 py-1.5 rounded-lg border text-xs transition-colors',
+                          calendarSettings.defaultEventDuration === dur
+                            ? 'border-neon-cyan bg-neon-cyan/10 text-neon-cyan'
+                            : 'border-lattice-border text-gray-400 hover:border-gray-500'
+                        )}
+                      >
+                        {dur}m
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Default reminder */}
+                <div>
+                  <label className="text-xs text-gray-400 mb-2 block">Default Reminder</label>
+                  <div className="flex gap-2">
+                    {[0, 15, 30, 60].map((mins) => (
+                      <button
+                        key={mins}
+                        onClick={() => setCalendarSettings({ ...calendarSettings, reminderDefault: mins })}
+                        className={cn(
+                          'flex-1 px-3 py-1.5 rounded-lg border text-xs transition-colors',
+                          calendarSettings.reminderDefault === mins
+                            ? 'border-neon-cyan bg-neon-cyan/10 text-neon-cyan'
+                            : 'border-lattice-border text-gray-400 hover:border-gray-500'
+                        )}
+                      >
+                        {mins === 0 ? 'None' : `${mins}m`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center gap-3 pt-4">
+                  <button
+                    onClick={() => setShowSettingsModal(false)}
+                    className="flex-1 py-2 rounded-lg border border-lattice-border hover:bg-lattice-elevated transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      setViewMode(calendarSettings.defaultView);
+                      useUIStore.getState().addToast({ type: 'success', message: 'Calendar settings saved' });
+                      setShowSettingsModal(false);
+                    }}
+                    className="flex-1 py-2 rounded-lg bg-neon-cyan text-black font-semibold"
+                  >
+                    Save Settings
+                  </button>
+                </div>
               </div>
             </motion.div>
           </motion.div>

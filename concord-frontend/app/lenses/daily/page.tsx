@@ -21,7 +21,7 @@ import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 
 // -- Types ------------------------------------------------------------------
 interface JournalEntry { id: string; date: string; mood: number | null; notes: string; workedOn: string; learned: string; goals: string }
-interface SessionLog { id: string; project: string; duration: number; genre: string; startedAt: string }
+interface SessionLog { id: string; project: string; duration: number; category: string; startedAt: string }
 interface AudioClip { id: string; name: string; duration: number; waveform: number[]; recordedAt: string }
 interface Reminder { id: string; title: string; dueAt: string; completed: boolean }
 interface PracticeSession { id: string; skill: string; duration: number; completedAt: string }
@@ -45,7 +45,7 @@ const _INITIAL_CLIPS: AudioClip[] = [];
 
 const INITIAL_REMINDERS: Reminder[] = [];
 
-const SKILLS = ['Finger drumming', 'Chord voicings', 'Sound design', 'Ear training', 'Mixing technique', 'Rhythm exercises'];
+const SKILLS = ['Deep work', 'Writing', 'Reading', 'Exercise', 'Meditation', 'Learning'];
 const MOODS = ['😤', '😕', '😐', '🙂', '🔥'];
 const MOOD_LABELS = ['Frustrated', 'Meh', 'Neutral', 'Good vibes', 'On fire'];
 
@@ -261,7 +261,7 @@ export default function DailyLensPage() {
     if (!newProject.trim()) return;
     const sessionData = {
       id: `s${Date.now()}`, project: newProject, duration: parseInt(newDuration) || 30,
-      genre: newGenre || 'General', startedAt: new Date().toISOString(),
+      category: newGenre || 'General', startedAt: new Date().toISOString(),
     };
     setSessions((prev) => [...prev, sessionData]);
     createSession({ title: newProject, data: sessionData as unknown as Record<string, unknown> });
@@ -294,9 +294,9 @@ export default function DailyLensPage() {
   // -- Daily digest ----------------------------------------------------------
   const dailyDigest = useMemo(() => {
     const tot = sessions.reduce((s, x) => s + x.duration, 0);
-    const genres = [...new Set(sessions.map((s) => s.genre))].join(', ');
+    const categories = [...new Set(sessions.map((s) => s.category))].join(', ');
     const pending = localReminders.filter((r) => !r.completed).length;
-    return `You spent ${fmtDur(tot)} across ${sessions.length} sessions today. Genres covered: ${genres}. You recorded ${clips.length} audio clips and have ${pending} pending reminders.${selectedMood !== null ? ` Mood: ${MOODS[selectedMood]}` : ''}`;
+    return `You spent ${fmtDur(tot)} across ${sessions.length} sessions today. Categories: ${categories}. You recorded ${clips.length} voice notes and have ${pending} pending reminders.${selectedMood !== null ? ` Mood: ${MOODS[selectedMood]}` : ''}`;
   }, [sessions, clips.length, localReminders, selectedMood]);
 
   // -- Handlers -------------------------------------------------------------
@@ -423,7 +423,7 @@ export default function DailyLensPage() {
               <h1 className="text-2xl font-bold">
                 {new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
               </h1>
-              <p className="text-sm text-gray-400 mt-0.5">Production Journal</p>
+              <p className="text-sm text-gray-400 mt-0.5">Daily Journal</p>
             </div>
 
       {/* Real-time Enhancement Toolbar */}
@@ -472,7 +472,7 @@ export default function DailyLensPage() {
                 <CheckSquare className="w-3 h-3" /> What I worked on today
               </label>
               <textarea value={workedOn} onChange={(e) => setWorkedOn(e.target.value)}
-                placeholder="Production log..." rows={2} className="input-lattice w-full text-sm resize-none" />
+                placeholder="What did you accomplish?" rows={2} className="input-lattice w-full text-sm resize-none" />
             </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1.5 uppercase tracking-wider flex items-center gap-1.5">
@@ -518,7 +518,7 @@ export default function DailyLensPage() {
                       placeholder="Project name..." className="input-lattice w-full text-sm" />
                     <div className="flex gap-2">
                       <input type="text" value={newGenre} onChange={(e) => setNewGenre(e.target.value)}
-                        placeholder="Genre..." className="input-lattice flex-1 text-sm" />
+                        placeholder="Category..." className="input-lattice flex-1 text-sm" />
                       <input type="number" value={newDuration} onChange={(e) => setNewDuration(e.target.value)}
                         placeholder="Minutes" className="input-lattice w-24 text-sm" />
                     </div>
@@ -532,7 +532,7 @@ export default function DailyLensPage() {
                 <div key={s.id} className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-lattice-border">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{s.project}</p>
-                    <p className="text-xs text-gray-500">{s.genre}</p>
+                    <p className="text-xs text-gray-500">{s.category}</p>
                   </div>
                   <div className="text-right shrink-0 ml-3">
                     <span className="text-sm font-mono text-neon-cyan">{fmtDur(s.duration)}</span>

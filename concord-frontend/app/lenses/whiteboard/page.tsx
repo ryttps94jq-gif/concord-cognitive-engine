@@ -45,7 +45,7 @@ import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { DTUDetailView } from '@/components/dtu/DTUDetailView';
 
 /* ---------- types ---------- */
-type BoardMode = 'canvas' | 'moodboard' | 'arrangement';
+type BoardMode = 'canvas' | 'moodboard' | 'storyboard';
 type Tool =
   | 'select' | 'draw' | 'rectangle' | 'ellipse' | 'line' | 'arrow'
   | 'text' | 'dtu' | 'audio' | 'image' | 'notecard' | 'section';
@@ -77,14 +77,14 @@ type Element = {
   cardColor?: string;
   /* section marker */
   sectionType?: string;
-  bars?: number;
+  sectionDuration?: number;
 };
 
-type ArrangementSection = {
+type StoryboardSection = {
   id: string;
   type: string;
   label: string;
-  bars: number;
+  duration: number;
   color: string;
 };
 
@@ -98,24 +98,20 @@ type MoodZone = {
 const COLORS = ['#00d4ff', '#a855f7', '#ec4899', '#22c55e', '#f59e0b', '#ef4444', '#ffffff', '#6b7280'];
 const STROKE_WIDTHS = [1, 2, 4, 6, 8];
 const CARD_COLORS = ['#fbbf24', '#34d399', '#f472b6', '#60a5fa', '#c084fc', '#fb923c'];
-const SECTION_PRESETS: { type: string; label: string; bars: number; color: string }[] = [
-  { type: 'intro', label: 'Intro', bars: 4, color: '#60a5fa' },
-  { type: 'verse', label: 'Verse', bars: 8, color: '#34d399' },
-  { type: 'prechorus', label: 'Pre-Chorus', bars: 4, color: '#fbbf24' },
-  { type: 'chorus', label: 'Chorus', bars: 8, color: '#f472b6' },
-  { type: 'bridge', label: 'Bridge', bars: 4, color: '#c084fc' },
-  { type: 'outro', label: 'Outro', bars: 4, color: '#fb923c' },
+const SECTION_PRESETS: { type: string; label: string; duration: number; color: string }[] = [
+  { type: 'opening', label: 'Opening', duration: 3, color: '#60a5fa' },
+  { type: 'act1', label: 'Act 1', duration: 10, color: '#34d399' },
+  { type: 'rising', label: 'Rising Action', duration: 8, color: '#fbbf24' },
+  { type: 'climax', label: 'Climax', duration: 5, color: '#f472b6' },
+  { type: 'falling', label: 'Falling Action', duration: 6, color: '#c084fc' },
+  { type: 'resolution', label: 'Resolution', duration: 5, color: '#fb923c' },
 ];
-const DEFAULT_ARRANGEMENT: ArrangementSection[] = [
-  { id: 'arr_1', type: 'intro', label: 'Intro', bars: 4, color: '#60a5fa' },
-  { id: 'arr_2', type: 'verse', label: 'Verse 1', bars: 8, color: '#34d399' },
-  { id: 'arr_3', type: 'prechorus', label: 'Pre-Chorus', bars: 4, color: '#fbbf24' },
-  { id: 'arr_4', type: 'chorus', label: 'Chorus 1', bars: 8, color: '#f472b6' },
-  { id: 'arr_5', type: 'verse', label: 'Verse 2', bars: 8, color: '#34d399' },
-  { id: 'arr_6', type: 'chorus', label: 'Chorus 2', bars: 8, color: '#f472b6' },
-  { id: 'arr_7', type: 'bridge', label: 'Bridge', bars: 4, color: '#c084fc' },
-  { id: 'arr_8', type: 'chorus', label: 'Final Chorus', bars: 8, color: '#f472b6' },
-  { id: 'arr_9', type: 'outro', label: 'Outro', bars: 4, color: '#fb923c' },
+const DEFAULT_STORYBOARD: StoryboardSection[] = [
+  { id: 'sb_1', type: 'opening', label: 'Opening', duration: 3, color: '#60a5fa' },
+  { id: 'sb_2', type: 'act1', label: 'Act 1', duration: 10, color: '#34d399' },
+  { id: 'sb_3', type: 'rising', label: 'Rising Action', duration: 8, color: '#fbbf24' },
+  { id: 'sb_4', type: 'climax', label: 'Climax', duration: 5, color: '#f472b6' },
+  { id: 'sb_5', type: 'resolution', label: 'Resolution', duration: 5, color: '#fb923c' },
 ];
 const DEFAULT_MOOD_ZONES: MoodZone[] = [
   { id: 'mz_1', label: 'Ideas & Concepts', items: [] },
@@ -183,9 +179,9 @@ export default function WhiteboardLensPage() {
   const [noteColor, setNoteColor] = useState(CARD_COLORS[0]);
   const [sectionChoice, setSectionChoice] = useState(SECTION_PRESETS[0]);
 
-  /* arrangement state */
-  const [arrangement, setArrangement] = useState<ArrangementSection[]>(DEFAULT_ARRANGEMENT);
-  const [pace, setPace] = useState(120);
+  /* storyboard state */
+  const [storyboard, setStoryboard] = useState<StoryboardSection[]>(DEFAULT_STORYBOARD);
+  const [pacing, setPacing] = useState('Moderate');
   const [theme, setTheme] = useState('Minimal');
   const [dragIdx, setDragIdx] = useState<number | null>(null);
 
@@ -472,9 +468,9 @@ export default function WhiteboardLensPage() {
     pushUndo();
     setElements(prev => [...prev, {
       id: uid(), type: 'section', x: textPosition.x, y: textPosition.y,
-      sectionType: sectionChoice.type, text: sectionChoice.label, bars: sectionChoice.bars,
+      sectionType: sectionChoice.type, text: sectionChoice.label, sectionDuration: sectionChoice.duration,
       stroke: sectionChoice.color, fill: sectionChoice.color + '18',
-      strokeWidth: 2, width: sectionChoice.bars * 24, height: 56,
+      strokeWidth: 2, width: sectionChoice.duration * 24, height: 56,
     }]);
     setShowSectionDialog(false); setTextPosition(null);
   };
@@ -678,7 +674,7 @@ export default function WhiteboardLensPage() {
           ctx.fillStyle = '#ffffff'; ctx.font = 'bold 13px Inter, sans-serif';
           ctx.fillText(el.text || '', el.x + 10, el.y + 22);
           ctx.fillStyle = '#9ca3af'; ctx.font = '11px Inter, sans-serif';
-          ctx.fillText(`${el.bars || 0} bars`, el.x + 10, el.y + 42);
+          ctx.fillText(`${el.sectionDuration || 0}m`, el.x + 10, el.y + 42);
           break;
         }
       }
@@ -735,23 +731,23 @@ export default function WhiteboardLensPage() {
     { id: 'section', icon: Bookmark, label: 'Section Marker', key: '' },
   ];
 
-  /* ---------- arrangement helpers ---------- */
-  const totalBars = arrangement.reduce((s, sec) => s + sec.bars, 0);
+  /* ---------- storyboard helpers ---------- */
+  const totalDuration = storyboard.reduce((s, sec) => s + sec.duration, 0);
   const addSection = (preset: typeof SECTION_PRESETS[0]) => {
-    setArrangement(prev => [...prev, { ...preset, id: `arr_${Date.now()}`, label: preset.label }]);
+    setStoryboard(prev => [...prev, { ...preset, id: `sb_${Date.now()}`, label: preset.label }]);
   };
-  const removeSection = (id: string) => setArrangement(prev => prev.filter(s => s.id !== id));
-  const updateSectionBars = (id: string, bars: number) => {
-    setArrangement(prev => prev.map(s => s.id === id ? { ...s, bars: clamp(bars, 1, 32) } : s));
+  const removeSection = (id: string) => setStoryboard(prev => prev.filter(s => s.id !== id));
+  const updateSectionDuration = (id: string, duration: number) => {
+    setStoryboard(prev => prev.map(s => s.id === id ? { ...s, duration: clamp(duration, 1, 60) } : s));
   };
   const handleArrDragStart = (idx: number) => setDragIdx(idx);
   const handleArrDragOver = (e: React.DragEvent, idx: number) => {
     e.preventDefault();
     if (dragIdx === null || dragIdx === idx) return;
-    const updated = [...arrangement];
+    const updated = [...storyboard];
     const [moved] = updated.splice(dragIdx, 1);
     updated.splice(idx, 0, moved);
-    setArrangement(updated);
+    setStoryboard(updated);
     setDragIdx(idx);
   };
   const handleArrDragEnd = () => setDragIdx(null);
@@ -773,7 +769,7 @@ export default function WhiteboardLensPage() {
   const modeLabels: Record<BoardMode, string> = {
     canvas: 'Freeform Canvas',
     moodboard: 'Moodboard',
-    arrangement: 'Arrangement Sketch',
+    storyboard: 'Storyboard',
   };
 
   /* ================================================================== */
@@ -917,20 +913,20 @@ export default function WhiteboardLensPage() {
               </div>
             )}
 
-            {/* ===== Arrangement toolbar ===== */}
-            {boardMode === 'arrangement' && (
+            {/* ===== Storyboard toolbar ===== */}
+            {boardMode === 'storyboard' && (
               <div className="border-b border-lattice-border bg-lattice-surface/50 backdrop-blur px-4 py-2 flex items-center gap-4">
                 <Clock className="w-5 h-5 text-neon-cyan" />
-                <span className="text-sm font-semibold">Arrangement Sketch</span>
+                <span className="text-sm font-semibold">Storyboard</span>
                 <div className="w-px h-6 bg-lattice-border" />
-                <label className="text-xs text-gray-400">Pace</label>
-                <input type="number" value={pace} onChange={e => setPace(clamp(+e.target.value, 20, 300))}
-                  className="w-16 px-2 py-1 bg-lattice-bg border border-lattice-border rounded text-sm text-center" />
+                <label className="text-xs text-gray-400">Pacing</label>
+                <input type="text" value={pacing} onChange={e => setPacing(e.target.value)}
+                  className="w-24 px-2 py-1 bg-lattice-bg border border-lattice-border rounded text-sm text-center" />
                 <label className="text-xs text-gray-400">Theme</label>
                 <input type="text" value={theme} onChange={e => setTheme(e.target.value)}
                   className="w-24 px-2 py-1 bg-lattice-bg border border-lattice-border rounded text-sm text-center" />
                 <div className="w-px h-6 bg-lattice-border" />
-                <span className="text-xs text-gray-400">Total: <strong className="text-white">{totalBars} bars</strong></span>
+                <span className="text-xs text-gray-400">Total: <strong className="text-white">{totalDuration}m</strong></span>
                 <div className="flex-1" />
                 <span className="text-xs text-gray-400">Drag to rearrange sections</span>
               </div>
@@ -1021,7 +1017,7 @@ export default function WhiteboardLensPage() {
                           <h3 className="font-semibold flex items-center gap-2"><PenTool className="w-4 h-4 text-neon-cyan" />Pin Audio Clip</h3>
                           <button onClick={() => { setShowAudioDialog(false); setTextPosition(null); }}><X className="w-5 h-5" /></button>
                         </div>
-                        <input type="text" placeholder="Clip name (e.g. Verse Vocal Take 3)" value={audioClipName}
+                        <input type="text" placeholder="Clip name (e.g. Scene 2 - Establishing Shot)" value={audioClipName}
                           onChange={e => setAudioClipName(e.target.value)} autoFocus
                           className="w-full px-3 py-2 bg-lattice-bg border border-lattice-border rounded text-sm mb-3" />
                         <label className="text-xs text-gray-400">Duration (seconds)</label>
@@ -1107,7 +1103,7 @@ export default function WhiteboardLensPage() {
                               className={`w-full flex items-center gap-3 p-2 rounded-lg border transition-colors ${sectionChoice.type === s.type ? 'border-white bg-lattice-elevated' : 'border-lattice-border hover:border-gray-500'}`}>
                               <div className="w-4 h-4 rounded" style={{ backgroundColor: s.color }} />
                               <span className="text-sm">{s.label}</span>
-                              <span className="text-xs text-gray-400 ml-auto">{s.bars} bars</span>
+                              <span className="text-xs text-gray-400 ml-auto">{s.duration}m</span>
                             </button>
                           ))}
                         </div>
@@ -1147,13 +1143,13 @@ export default function WhiteboardLensPage() {
               </div>
             )}
 
-            {/* ===== Arrangement Sketch view ===== */}
-            {boardMode === 'arrangement' && (
+            {/* ===== Storyboard view ===== */}
+            {boardMode === 'storyboard' && (
               <div className="flex-1 overflow-auto p-6">
-                {/* Speed/Theme badge */}
+                {/* Pacing/Theme badge */}
                 <div className="absolute top-20 right-6 flex items-center gap-3 bg-lattice-surface border border-lattice-border rounded-lg px-4 py-2 z-10">
-                  <span className="text-xs text-gray-400">Speed</span>
-                  <span className="text-lg font-bold text-neon-cyan">{pace}</span>
+                  <span className="text-xs text-gray-400">Pacing</span>
+                  <span className="text-lg font-bold text-neon-cyan">{pacing}</span>
                   <div className="w-px h-6 bg-lattice-border" />
                   <span className="text-xs text-gray-400">Theme</span>
                   <span className="text-lg font-bold text-neon-pink">{theme}</span>
@@ -1162,26 +1158,26 @@ export default function WhiteboardLensPage() {
                 {/* Timeline */}
                 <div className="mt-4">
                   <div className="flex items-end gap-3 mb-6 flex-wrap pb-4">
-                    {arrangement.map((sec, idx) => (
+                    {storyboard.map((sec, idx) => (
                       <motion.div key={sec.id} layout draggable
                         onDragStart={() => handleArrDragStart(idx)}
                         onDragOver={e => handleArrDragOver(e, idx)}
                         onDragEnd={handleArrDragEnd}
                         className={`flex-shrink-0 rounded-xl border-2 cursor-grab active:cursor-grabbing transition-shadow ${dragIdx === idx ? 'shadow-lg shadow-white/10' : ''}`}
-                        style={{ borderColor: sec.color, width: Math.max(sec.bars * 20, 80), minHeight: 120, backgroundColor: sec.color + '15' }}>
+                        style={{ borderColor: sec.color, width: Math.max(sec.duration * 20, 80), minHeight: 120, backgroundColor: sec.color + '15' }}>
                         <div className="p-3 flex flex-col h-full">
                           <div className="flex items-center gap-1 mb-2">
                             <GripVertical className="w-3 h-3 text-gray-500" />
                             <span className="text-xs font-bold" style={{ color: sec.color }}>{sec.label}</span>
                           </div>
                           <div className="flex-1 flex items-center justify-center">
-                            <span className="text-2xl font-bold text-white/80">{sec.bars}</span>
-                            <span className="text-xs text-gray-400 ml-1 mt-1">bars</span>
+                            <span className="text-2xl font-bold text-white/80">{sec.duration}</span>
+                            <span className="text-xs text-gray-400 ml-1 mt-1">min</span>
                           </div>
                           <div className="flex items-center gap-1 mt-2">
-                            <button onClick={() => updateSectionBars(sec.id, sec.bars - 1)}
+                            <button onClick={() => updateSectionDuration(sec.id, sec.duration - 1)}
                               className="w-6 h-6 rounded bg-lattice-bg text-gray-400 hover:text-white flex items-center justify-center text-xs">-</button>
-                            <button onClick={() => updateSectionBars(sec.id, sec.bars + 1)}
+                            <button onClick={() => updateSectionDuration(sec.id, sec.duration + 1)}
                               className="w-6 h-6 rounded bg-lattice-bg text-gray-400 hover:text-white flex items-center justify-center text-xs">+</button>
                             <div className="flex-1" />
                             <button onClick={() => removeSection(sec.id)}
@@ -1208,13 +1204,13 @@ export default function WhiteboardLensPage() {
                     </div>
                   </div>
 
-                  {/* Bar ruler */}
+                  {/* Duration ruler */}
                   <div className="flex items-center gap-0 flex-wrap">
-                    {arrangement.map(sec => (
-                      <div key={`ruler_${sec.id}`} className="flex-shrink-0 flex" style={{ width: Math.max(sec.bars * 20, 80) + 12 }}>
-                        {Array.from({ length: sec.bars }, (_, i) => (
+                    {storyboard.map(sec => (
+                      <div key={`ruler_${sec.id}`} className="flex-shrink-0 flex" style={{ width: Math.max(sec.duration * 20, 80) + 12 }}>
+                        {Array.from({ length: sec.duration }, (_, i) => (
                           <div key={i} className="flex-1 h-4 border-l border-gray-700 flex items-end">
-                            <span className="text-[9px] text-gray-600 pl-0.5">{i + 1}</span>
+                            <span className="text-[9px] text-gray-600 pl-0.5">{i + 1}m</span>
                           </div>
                         ))}
                       </div>

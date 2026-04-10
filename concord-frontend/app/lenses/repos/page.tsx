@@ -2,9 +2,10 @@
 
 import { useState } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
-import { useQuery } from '@tanstack/react-query';
-import { apiHelpers } from '@/lib/api/client';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { api, apiHelpers } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
+import { useLensData } from '@/lib/hooks/use-lens-data';
 import {
   GitBranch,
   GitCommit,
@@ -81,6 +82,20 @@ export default function ReposLensPage() {
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('code');
   const [selectedRepo, setSelectedRepo] = useState<string | null>(null);
+  const [issueFilter, setIssueFilter] = useState<'open' | 'closed'>('open');
+  const [showCreateRepo, setShowCreateRepo] = useState(false);
+  const [showCreateIssue, setShowCreateIssue] = useState(false);
+  const [showCreatePR, setShowCreatePR] = useState(false);
+  const [newRepoName, setNewRepoName] = useState('');
+  const [newRepoDesc, setNewRepoDesc] = useState('');
+  const [newIssueTitle, setNewIssueTitle] = useState('');
+  const [newIssueBody, setNewIssueBody] = useState('');
+  const [newPRTitle, setNewPRTitle] = useState('');
+  const [newPRBody, setNewPRBody] = useState('');
+  const [showBranchDropdown, setShowBranchDropdown] = useState(false);
+  const [starredRepos, setStarredRepos] = useState<Set<string>>(new Set());
+  const queryClient = useQueryClient();
+  const { create: createRepoDTU } = useLensData<Record<string, unknown>>('repos', 'repo');
 
   const { data: repos, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
     queryKey: ['repos-list'],
@@ -209,7 +224,7 @@ export default function ReposLensPage() {
               </div>
             </div>
             <div className="flex items-center gap-4">
-              <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Create new repository' })} className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 transition-colors">
+              <button onClick={() => setShowCreateRepo(true)} className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 transition-colors">
                 <Plus className="w-4 h-4" />
                 New
               </button>
@@ -224,7 +239,7 @@ export default function ReposLensPage() {
           <div>
             <div className="flex items-center justify-between mb-6">
               <h1 className="text-2xl font-bold text-white">Repositories</h1>
-              <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Create new repository' })} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white font-medium rounded-md hover:bg-green-700 transition-colors">
+              <button onClick={() => setShowCreateRepo(true)} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white font-medium rounded-md hover:bg-green-700 transition-colors">
                 <Plus className="w-4 h-4" />
                 New repository
               </button>
@@ -325,9 +340,9 @@ export default function ReposLensPage() {
                         <span>Updated {formatTime(repo.updatedAt)}</span>
                       </div>
                     </div>
-                    <button onClick={() => useUIStore.getState().addToast({ type: 'success', message: `Starred ${repo.name}` })} className="flex items-center gap-1 px-3 py-1 border border-gray-600 rounded-md text-sm text-gray-300 hover:bg-gray-800 transition-colors">
-                      <Star className="w-4 h-4" />
-                      Star
+                    <button onClick={() => { const isStarred = starredRepos.has(repo.id); api.post('/api/lens/run', { domain: 'repos', action: 'star', input: { repoId: repo.id } }).then(() => { setStarredRepos(prev => { const next = new Set(prev); if (isStarred) { next.delete(repo.id); } else { next.add(repo.id); } return next; }); useUIStore.getState().addToast({ type: 'success', message: isStarred ? `Unstarred ${repo.name}` : `Starred ${repo.name}` }); }).catch(() => useUIStore.getState().addToast({ type: 'error', message: `Failed to star ${repo.name}` })); }} className={cn('flex items-center gap-1 px-3 py-1 border border-gray-600 rounded-md text-sm transition-colors', starredRepos.has(repo.id) ? 'text-yellow-400 bg-yellow-400/10 hover:bg-yellow-400/20' : 'text-gray-300 hover:bg-gray-800')}>
+                      <Star className={cn('w-4 h-4', starredRepos.has(repo.id) && 'fill-yellow-400')} />
+                      {starredRepos.has(repo.id) ? 'Starred' : 'Star'}
                     </button>
                   </div>
                 </motion.div>
@@ -385,12 +400,24 @@ export default function ReposLensPage() {
                   <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700">
                     <div className="flex items-center gap-2">
                       <GitBranch className="w-4 h-4 text-gray-400" />
-                      <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Branch: main' })} className="flex items-center gap-1 px-3 py-1 bg-[#21262d] border border-gray-600 rounded-md text-sm">
-                        main
-                        <ChevronRight className="w-4 h-4 rotate-90" />
-                      </button>
+                      <div className="relative">
+                        <button onClick={() => setShowBranchDropdown(prev => !prev)} className="flex items-center gap-1 px-3 py-1 bg-[#21262d] border border-gray-600 rounded-md text-sm">
+                          {repos?.find((r: Repository) => r.id === selectedRepo)?.defaultBranch || 'main'}
+                          <ChevronRight className="w-4 h-4 rotate-90" />
+                        </button>
+                        {showBranchDropdown && (
+                          <div className="absolute top-full left-0 mt-1 w-48 bg-[#21262d] border border-gray-600 rounded-md shadow-lg z-10">
+                            {['main', 'develop', 'staging', 'feature/next'].map(branch => (
+                              <button key={branch} onClick={() => { api.post('/api/lens/run', { domain: 'repos', action: 'switch-branch', input: { repoId: selectedRepo, branch } }).then(() => { useUIStore.getState().addToast({ type: 'success', message: `Switched to branch: ${branch}` }); setShowBranchDropdown(false); }).catch(() => useUIStore.getState().addToast({ type: 'error', message: `Failed to switch to ${branch}` })); }} className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-gray-700 first:rounded-t-md last:rounded-b-md">
+                                <GitBranch className="w-3 h-3 inline mr-2" />
+                                {branch}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Clone URL copied to clipboard' })} className="flex items-center gap-2 px-3 py-1 bg-green-600 text-white text-sm rounded-md hover:bg-green-700">
+                    <button onClick={() => { navigator.clipboard.writeText(window.location.href).then(() => useUIStore.getState().addToast({ type: 'success', message: 'Clone URL copied to clipboard' })).catch(() => useUIStore.getState().addToast({ type: 'error', message: 'Failed to copy URL' })); }} className="flex items-center gap-2 px-3 py-1 bg-green-600 text-white text-sm rounded-md hover:bg-green-700">
                       <Code className="w-4 h-4" />
                       Code
                     </button>
@@ -473,23 +500,23 @@ export default function ReposLensPage() {
               <div className="bg-[#161b22] border border-gray-700 rounded-lg">
                 <div className="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
                   <div className="flex items-center gap-4">
-                    <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Showing open issues' })} className="flex items-center gap-2 text-white font-medium">
+                    <button onClick={() => setIssueFilter('open')} className={cn('flex items-center gap-2 font-medium', issueFilter === 'open' ? 'text-white' : 'text-gray-400 hover:text-white')}>
                       <AlertCircle className="w-4 h-4" />
                       Open
                     </button>
-                    <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Showing closed issues' })} className="flex items-center gap-2 text-gray-400 hover:text-white">
+                    <button onClick={() => setIssueFilter('closed')} className={cn('flex items-center gap-2 font-medium', issueFilter === 'closed' ? 'text-white' : 'text-gray-400 hover:text-white')}>
                       <CheckCircle className="w-4 h-4" />
                       Closed
                     </button>
                   </div>
-                  <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Create new issue' })} className="flex items-center gap-2 px-3 py-1 bg-green-600 text-white text-sm rounded-md hover:bg-green-700">
+                  <button onClick={() => setShowCreateIssue(true)} className="flex items-center gap-2 px-3 py-1 bg-green-600 text-white text-sm rounded-md hover:bg-green-700">
                     <Plus className="w-4 h-4" />
                     New issue
                   </button>
                 </div>
 
                 <div className="divide-y divide-gray-700">
-                  {issues?.map((issue: Issue) => (
+                  {issues?.filter((issue: Issue) => issue.state === issueFilter).map((issue: Issue) => (
                     <div key={issue.id} className="px-4 py-3 hover:bg-[#1c2128]">
                       <div className="flex items-start gap-3">
                         {issue.state === 'open' ? (
@@ -536,7 +563,7 @@ export default function ReposLensPage() {
                 <p className="text-gray-400 mb-4">
                   Pull requests help you collaborate on code with other people.
                 </p>
-                <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Create new pull request' })} className="px-4 py-2 bg-green-600 text-white font-medium rounded-md hover:bg-green-700">
+                <button onClick={() => setShowCreatePR(true)} className="px-4 py-2 bg-green-600 text-white font-medium rounded-md hover:bg-green-700">
                   New pull request
                 </button>
               </div>
@@ -556,6 +583,75 @@ export default function ReposLensPage() {
         />
       )}
       </div>
+
+      {/* Create Repository Modal */}
+      {showCreateRepo && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center" onClick={() => setShowCreateRepo(false)}>
+          <div className="bg-[#161b22] border border-gray-700 rounded-lg p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold text-white mb-4">Create a new repository</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Repository name</label>
+                <input type="text" value={newRepoName} onChange={e => setNewRepoName(e.target.value)} placeholder="my-awesome-project" className="w-full bg-[#0d1117] border border-gray-600 rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500" />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Description (optional)</label>
+                <input type="text" value={newRepoDesc} onChange={e => setNewRepoDesc(e.target.value)} placeholder="A short description" className="w-full bg-[#0d1117] border border-gray-600 rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500" />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button onClick={() => { setShowCreateRepo(false); setNewRepoName(''); setNewRepoDesc(''); }} className="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancel</button>
+                <button disabled={!newRepoName.trim()} onClick={() => { createRepoDTU({ title: newRepoName.trim(), data: { description: newRepoDesc, language: 'TypeScript', stars: 0, forks: 0, watchers: 0, issues: 0, pullRequests: 0, isPrivate: false, defaultBranch: 'main' }, meta: {} }).then(() => { useUIStore.getState().addToast({ type: 'success', message: `Repository "${newRepoName}" created` }); setShowCreateRepo(false); setNewRepoName(''); setNewRepoDesc(''); queryClient.invalidateQueries({ queryKey: ['repos-list'] }); }).catch(() => useUIStore.getState().addToast({ type: 'error', message: 'Failed to create repository' })); }} className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed">Create repository</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Issue Modal */}
+      {showCreateIssue && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center" onClick={() => setShowCreateIssue(false)}>
+          <div className="bg-[#161b22] border border-gray-700 rounded-lg p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold text-white mb-4">Create a new issue</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Title</label>
+                <input type="text" value={newIssueTitle} onChange={e => setNewIssueTitle(e.target.value)} placeholder="Issue title" className="w-full bg-[#0d1117] border border-gray-600 rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500" />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Description</label>
+                <textarea value={newIssueBody} onChange={e => setNewIssueBody(e.target.value)} placeholder="Describe the issue..." rows={4} className="w-full bg-[#0d1117] border border-gray-600 rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500 resize-none" />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button onClick={() => { setShowCreateIssue(false); setNewIssueTitle(''); setNewIssueBody(''); }} className="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancel</button>
+                <button disabled={!newIssueTitle.trim()} onClick={() => { api.post('/api/lens/run', { domain: 'repos', action: 'create-issue', input: { repoId: selectedRepo, title: newIssueTitle.trim(), body: newIssueBody } }).then(() => { useUIStore.getState().addToast({ type: 'success', message: `Issue "${newIssueTitle}" created` }); setShowCreateIssue(false); setNewIssueTitle(''); setNewIssueBody(''); queryClient.invalidateQueries({ queryKey: ['repos-issues'] }); }).catch(() => useUIStore.getState().addToast({ type: 'error', message: 'Failed to create issue' })); }} className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed">Submit new issue</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Pull Request Modal */}
+      {showCreatePR && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center" onClick={() => setShowCreatePR(false)}>
+          <div className="bg-[#161b22] border border-gray-700 rounded-lg p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold text-white mb-4">Open a pull request</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Title</label>
+                <input type="text" value={newPRTitle} onChange={e => setNewPRTitle(e.target.value)} placeholder="Pull request title" className="w-full bg-[#0d1117] border border-gray-600 rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500" />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Description</label>
+                <textarea value={newPRBody} onChange={e => setNewPRBody(e.target.value)} placeholder="Describe your changes..." rows={4} className="w-full bg-[#0d1117] border border-gray-600 rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500 resize-none" />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button onClick={() => { setShowCreatePR(false); setNewPRTitle(''); setNewPRBody(''); }} className="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancel</button>
+                <button disabled={!newPRTitle.trim()} onClick={() => { api.post('/api/lens/run', { domain: 'repos', action: 'create-pr', input: { repoId: selectedRepo, title: newPRTitle.trim(), body: newPRBody } }).then(() => { useUIStore.getState().addToast({ type: 'success', message: `Pull request "${newPRTitle}" created` }); setShowCreatePR(false); setNewPRTitle(''); setNewPRBody(''); queryClient.invalidateQueries({ queryKey: ['repos-issues'] }); }).catch(() => useUIStore.getState().addToast({ type: 'error', message: 'Failed to create pull request' })); }} className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed">Create pull request</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

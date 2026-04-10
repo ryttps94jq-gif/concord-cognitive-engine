@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiHelpers } from '@/lib/api/client';
+import { api, apiHelpers } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useUIStore } from '@/store/ui';
 import { useLensBridge } from '@/lib/hooks/use-lens-bridge';
@@ -434,13 +434,13 @@ export default function ThreadLensPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Merge branches' })} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400 hover:text-white">
+                    <button onClick={() => { api.post('/api/lens/run', { domain: 'thread', action: 'merge' }).then(() => { useUIStore.getState().addToast({ type: 'success', message: 'Branches merged' }); queryClient.invalidateQueries({ queryKey: ['thread-conversations'] }); }).catch(() => useUIStore.getState().addToast({ type: 'error', message: 'Failed to merge branches' })); }} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400 hover:text-white">
                       <GitMerge className="w-4 h-4" />
                     </button>
-                    <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Fork thread' })} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400 hover:text-white">
+                    <button onClick={() => { api.post('/api/lens/run', { domain: 'thread', action: 'fork' }).then(() => { useUIStore.getState().addToast({ type: 'success', message: 'Thread forked' }); queryClient.invalidateQueries({ queryKey: ['thread-conversations'] }); }).catch(() => useUIStore.getState().addToast({ type: 'error', message: 'Failed to fork thread' })); }} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400 hover:text-white">
                       <GitFork className="w-4 h-4" />
                     </button>
-                    <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Fullscreen view' })} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400 hover:text-white">
+                    <button onClick={() => { if (document.fullscreenElement) { document.exitFullscreen().catch(() => {}); } else { document.documentElement.requestFullscreen().catch(() => useUIStore.getState().addToast({ type: 'error', message: 'Fullscreen not supported' })); } }} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400 hover:text-white">
                       <Maximize2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -605,7 +605,7 @@ export default function ThreadLensPage() {
 
                 <div className="p-4 border-t border-lattice-border">
                   <div className="grid grid-cols-4 gap-2">
-                    <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Forking node...' })} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400 hover:text-white flex flex-col items-center gap-1">
+                    <button onClick={() => { if (!selectedNode) return; api.post('/api/lens/run', { domain: 'thread', action: 'fork-node', input: { nodeId: selectedNode.id } }).then(() => { useUIStore.getState().addToast({ type: 'success', message: 'Node forked successfully' }); queryClient.invalidateQueries({ queryKey: ['thread-conversations'] }); }).catch(() => useUIStore.getState().addToast({ type: 'error', message: 'Failed to fork node' })); }} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400 hover:text-white flex flex-col items-center gap-1">
                       <GitFork className="w-4 h-4" />
                       <span className="text-xs">Fork</span>
                     </button>
@@ -617,7 +617,7 @@ export default function ThreadLensPage() {
                       <Link2 className="w-4 h-4" />
                       <span className="text-xs">Link</span>
                     </button>
-                    <button onClick={() => { setSelectedNode(null); useUIStore.getState().addToast({ type: 'info', message: 'Node removed' }); }} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400 hover:text-red-500 flex flex-col items-center gap-1">
+                    <button onClick={() => { if (!selectedNode) return; api.post('/api/lens/run', { domain: 'thread', action: 'delete', input: { nodeId: selectedNode.id } }).then(() => { setSelectedNode(null); useUIStore.getState().addToast({ type: 'success', message: 'Node deleted' }); queryClient.invalidateQueries({ queryKey: ['thread-conversations'] }); }).catch(() => useUIStore.getState().addToast({ type: 'error', message: 'Failed to delete node' })); }} className="p-2 rounded-lg hover:bg-lattice-elevated text-gray-400 hover:text-red-500 flex flex-col items-center gap-1">
                       <Trash2 className="w-4 h-4" />
                       <span className="text-xs">Delete</span>
                     </button>

@@ -26,6 +26,14 @@ import { FeedBanner } from '@/components/lens/FeedBanner';
 type PoetryTab = 'collection' | 'compose' | 'forms' | 'workshop';
 type PoemForm = 'free-verse' | 'sonnet' | 'haiku' | 'limerick' | 'villanelle' | 'ballad' | 'ode' | 'elegy' | 'acrostic' | 'other';
 
+interface WorkshopEntry {
+  poemTitle: string;
+  author: string;
+  excerpt: string;
+  poemContent: string;
+  submittedAt: string;
+}
+
 interface Poem {
   id: string;
   title: string;
@@ -252,6 +260,40 @@ export default function PoetryPage() {
 
   const { items: poemItems, isLoading, isError, error, refetch, create: createPoem, update: updatePoem, remove: removePoem } = useLensData<Poem>('poetry', 'poem', { seed: [] });
   const poems = useMemo(() => poemItems.map(i => ({ ...(i.data as unknown as Poem), id: i.id, title: i.title })), [poemItems]);
+
+  // Workshop data
+  const { items: workshopItems, isLoading: workshopLoading, create: createWorkshopEntry, refetch: refetchWorkshop } = useLensData<WorkshopEntry>('poetry', 'workshop', { seed: [] });
+  const workshopEntries = useMemo(() => workshopItems.map(i => ({ ...(i.data as unknown as WorkshopEntry), id: i.id, title: i.title })), [workshopItems]);
+  const [wsTitle, setWsTitle] = useState('');
+  const [wsAuthor, setWsAuthor] = useState('');
+  const [wsContent, setWsContent] = useState('');
+  const [wsSubmitting, setWsSubmitting] = useState(false);
+
+  const submitForWorkshop = useCallback(async () => {
+    if (!wsTitle.trim() || !wsContent.trim()) return;
+    setWsSubmitting(true);
+    try {
+      const lines = wsContent.split('\n').filter(l => l.trim());
+      const excerpt = lines.slice(0, 3).join(' / ').slice(0, 120) + (lines.length > 3 ? '...' : '');
+      await createWorkshopEntry({
+        title: wsTitle,
+        data: {
+          poemTitle: wsTitle,
+          author: wsAuthor || 'Anonymous',
+          excerpt,
+          poemContent: wsContent,
+          submittedAt: new Date().toISOString(),
+        } as unknown as Record<string, unknown>,
+      });
+      setWsTitle('');
+      setWsAuthor('');
+      setWsContent('');
+      refetchWorkshop();
+    } catch (err) {
+      console.error('Workshop submission failed:', err instanceof Error ? err.message : err);
+    }
+    setWsSubmitting(false);
+  }, [wsTitle, wsAuthor, wsContent, createWorkshopEntry, refetchWorkshop]);
 
   const [tab, setTab] = useState<PoetryTab>('collection');
   const [searchQuery, setSearchQuery] = useState('');
@@ -529,11 +571,84 @@ export default function PoetryPage() {
 
         {/* Workshop */}
         {tab === 'workshop' && (
-          <div className="text-center py-16 text-gray-500">
-            <Globe className="w-12 h-12 mx-auto mb-3 opacity-30" />
-            <p className="text-sm mb-2">Poetry Workshop</p>
-            <p className="text-xs text-gray-600">Share poems for critique, participate in collaborative verse, and discover other poets.</p>
-            <div className="mt-4 text-xs text-gray-600">Poetry DTUs: {contextDTUs.length}</div>
+          <div className="space-y-6">
+            {/* Submission form */}
+            <div className="bg-white/5 border border-white/10 rounded-lg p-5 space-y-4">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <Globe className="w-5 h-5 text-rose-400" /> Submit for Review
+              </h2>
+              <p className="text-xs text-gray-500">Share a poem with the workshop for critique and feedback.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <input
+                  value={wsTitle}
+                  onChange={e => setWsTitle(e.target.value)}
+                  placeholder="Poem title"
+                  className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:outline-none focus:border-rose-500/50"
+                />
+                <input
+                  value={wsAuthor}
+                  onChange={e => setWsAuthor(e.target.value)}
+                  placeholder="Author name (optional)"
+                  className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:outline-none focus:border-rose-500/50"
+                />
+              </div>
+              <textarea
+                value={wsContent}
+                onChange={e => setWsContent(e.target.value)}
+                placeholder="Paste or write your poem here..."
+                className="w-full h-40 px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-sm leading-relaxed focus:outline-none focus:border-rose-500/30 resize-none font-serif italic"
+              />
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-600">Poetry DTUs: {contextDTUs.length}</span>
+                <button
+                  onClick={submitForWorkshop}
+                  disabled={wsSubmitting || !wsTitle.trim() || !wsContent.trim()}
+                  className="px-4 py-2 text-xs bg-rose-500/20 border border-rose-500/30 rounded-lg hover:bg-rose-500/30 flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <Plus className="w-3 h-3" />
+                  {wsSubmitting ? 'Submitting...' : 'Submit for Review'}
+                </button>
+              </div>
+            </div>
+
+            {/* Workshop submissions list */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+                <BookOpen className="w-4 h-4 text-rose-400" /> Workshop Submissions
+                {workshopLoading && (
+                  <div className="w-3 h-3 border-2 border-rose-400 border-t-transparent rounded-full animate-spin" />
+                )}
+              </h3>
+              {workshopEntries.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  <Feather className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                  <p className="text-sm">No workshop submissions yet.</p>
+                  <p className="text-xs text-gray-600 mt-1">Be the first to share a poem for critique.</p>
+                </div>
+              ) : (
+                workshopEntries.map(entry => (
+                  <motion.div
+                    key={entry.id}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-white/5 border border-white/10 rounded-lg p-4 hover:border-rose-500/30 transition-colors"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h4 className="font-medium text-sm italic">{entry.poemTitle || entry.title}</h4>
+                        <p className="text-xs text-gray-500 mt-0.5">by {entry.author || 'Anonymous'}</p>
+                      </div>
+                      {entry.submittedAt && (
+                        <span className="text-xs text-gray-600">{new Date(entry.submittedAt).toLocaleDateString()}</span>
+                      )}
+                    </div>
+                    {entry.excerpt && (
+                      <p className="text-xs text-gray-400 mt-2 font-serif italic line-clamp-2">{entry.excerpt}</p>
+                    )}
+                  </motion.div>
+                ))
+              )}
+            </div>
           </div>
         )}
       </div>
