@@ -137,6 +137,11 @@ import history from './history.js';
 import homeimprovement from './homeimprovement.js';
 import hr from './hr.js';
 import hvac from './hvac.js';
+import landscaping from './landscaping.js';
+import lawenforcement from './lawenforcement.js';
+import linguistics from './linguistics.js';
+import marketing from './marketing.js';
+import masonry from './masonry.js';
 
 export default [
   healthcare,
@@ -267,4 +272,9 @@ export default [
   homeimprovement,
   hr,
   hvac,
+  landscaping,
+  lawenforcement,
+  linguistics,
+  marketing,
+  masonry,
 ];
