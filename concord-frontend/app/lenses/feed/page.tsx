@@ -53,6 +53,8 @@ import { ReportButton } from '@/components/common/ReportButton';
 import { StoriesBar } from '@/components/social/StoriesBar';
 import { SuggestedFollows } from '@/components/social/SuggestedFollows';
 import { SocialCommerceTag } from '@/components/social/SocialCommerceTag';
+import { PullToSubstrate } from '@/components/lens/PullToSubstrate';
+import { FeedBanner } from '@/components/lens/FeedBanner';
 import { ShoppingBag, Tag } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -678,6 +680,11 @@ export default function FeedLensPage() {
           </div>
         </header>
 
+        {/* Feed Banner */}
+        <div className="px-4 py-2 border-b border-lattice-border">
+          <FeedBanner domain="feed" />
+        </div>
+
         {/* Stories Bar — prominent with gradient border */}
         <StoriesBar
           currentUserId="current-user"
@@ -1002,6 +1009,7 @@ export default function FeedLensPage() {
                         </div>
 
                         <div className="flex items-center gap-0.5">
+                          <PullToSubstrate domain="feed" artifactId={post.id} compact />
                           <button
                             onClick={() => bookmarkMutation.mutate(post.id)}
                             className="p-1.5 rounded-full hover:bg-neon-cyan/15 hover:text-neon-cyan hover:scale-110 transition-all duration-200"

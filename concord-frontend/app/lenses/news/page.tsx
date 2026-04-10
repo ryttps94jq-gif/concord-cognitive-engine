@@ -2,13 +2,15 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { UniversalActions } from '@/components/lens/UniversalActions';
-import { useQuery } from '@tanstack/react-query';
-import { apiHelpers } from '@/lib/api/client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { api, apiHelpers } from '@/lib/api/client';
 import { useState, useMemo, useCallback } from 'react';
+import { useUIStore } from '@/store/ui';
 import {
   Newspaper, Clock, Tag, TrendingUp, Bookmark, Share2,
   Search, RefreshCw, ChevronDown, ChevronUp, ExternalLink,
   Filter, X, Eye, BarChart3, ArrowUpRight, Bell, Globe, Rss,
+  Download, Quote, GitFork,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -56,6 +58,25 @@ export default function NewsLensPage() {
   const [showFilters, setShowFilters] = useState(false);
   const { bookmarkedIds, toggleBookmark } = useBookmarks('news');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
+  const addToast = useUIStore((s) => s.addToast);
+  const queryClient = useQueryClient();
+
+  // Pull article to user's DTU substrate
+  const pullMutation = useMutation({
+    mutationFn: (articleId: string) => api.post(`/api/lens/news/${articleId}/pull`),
+    onSuccess: (res) => {
+      addToast({ type: 'success', message: `Pulled to your substrate${res.data?.dtu?.title ? `: ${res.data.dtu.title}` : ''}` });
+      queryClient.invalidateQueries({ queryKey: ['dtus'] });
+    },
+    onError: () => addToast({ type: 'error', message: 'Failed to pull article' }),
+  });
+
+  // Cite an article (link it to one of user's DTUs)
+  const citeMutation = useMutation({
+    mutationFn: ({ articleId, userDtuId }: { articleId: string; userDtuId?: string }) =>
+      api.post('/api/social/cite', { citedDtuId: articleId, citingDtuId: userDtuId || 'latest' }),
+    onSuccess: () => addToast({ type: 'success', message: 'Citation recorded' }),
+  });
 
   const { data: news, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['news', selectedCategory],
@@ -455,6 +476,20 @@ export default function NewsLensPage() {
                         </div>
                         <div className="flex items-center gap-2">
                           <button
+                            onClick={(e) => { e.stopPropagation(); pullMutation.mutate(article.id); }}
+                            className="text-gray-400 hover:text-neon-green transition-colors"
+                            title="Pull to substrate"
+                          >
+                            <Download className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); citeMutation.mutate({ articleId: article.id }); }}
+                            className="text-gray-400 hover:text-neon-cyan transition-colors"
+                            title="Cite this article"
+                          >
+                            <Quote className="w-4 h-4" />
+                          </button>
+                          <button
                             onClick={(e) => { e.stopPropagation(); toggleBookmark(article.id); }}
                             className={`transition-colors ${isBookmarked ? 'text-neon-yellow' : 'text-gray-400 hover:text-neon-yellow'}`}
                           >
@@ -466,6 +501,7 @@ export default function NewsLensPage() {
                               navigator.clipboard?.writeText(
                                 `${window.location.origin}/lenses/news?article=${article.id}`
                               );
+                              addToast({ type: 'info', message: 'Link copied' });
                             }}
                             className="text-gray-400 hover:text-neon-purple transition-colors"
                           >
@@ -501,6 +537,23 @@ export default function NewsLensPage() {
                               Read full article
                             </a>
                           )}
+                          <div className="flex gap-2 pt-2">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); pullMutation.mutate(article.id); }}
+                              disabled={pullMutation.isPending}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-neon-green/10 text-neon-green border border-neon-green/20 hover:bg-neon-green/20 transition-colors disabled:opacity-50"
+                            >
+                              <Download className="w-3 h-3" />
+                              {pullMutation.isPending ? 'Pulling...' : 'Pull to Substrate'}
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); citeMutation.mutate({ articleId: article.id }); }}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/20 hover:bg-neon-cyan/20 transition-colors"
+                            >
+                              <Quote className="w-3 h-3" />
+                              Cite
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>

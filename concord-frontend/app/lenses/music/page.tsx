@@ -32,6 +32,8 @@ import { PlaylistView } from '@/components/music/PlaylistView';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
+import { PullToSubstrate } from '@/components/lens/PullToSubstrate';
+import { FeedBanner } from '@/components/lens/FeedBanner';
 
 // ============================================================================
 // Seed Data — empty; all data comes from the backend API
@@ -381,6 +383,11 @@ export default function MusicLensPage() {
           </button>
         </div>
       </header>
+
+      {/* Feed Banner */}
+      <div className="px-6 py-2">
+        <FeedBanner domain="music" />
+      </div>
 
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto px-6 py-4 pb-24">

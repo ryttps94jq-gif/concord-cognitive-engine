@@ -6471,6 +6471,39 @@ try {
   }
 }
 
+// Seed default feed sources (idempotent — only adds if STATE.feeds is empty)
+{
+  if (!STATE.feeds) STATE.feeds = new Map();
+  if (STATE.feeds.size === 0) {
+    const seedFeeds = [
+      // News / General
+      { id: "feed_seed_reuters", url: "https://feeds.reuters.com/reuters/topNews", domain: "news", name: "Reuters Top News", pollIntervalMs: 1800000 },
+      { id: "feed_seed_ap", url: "https://rsshub.app/apnews/topics/apf-topnews", domain: "news", name: "AP News", pollIntervalMs: 1800000 },
+      { id: "feed_seed_bbc", url: "https://feeds.bbci.co.uk/news/rss.xml", domain: "news", name: "BBC News", pollIntervalMs: 1800000 },
+      // Technology
+      { id: "feed_seed_hn", url: "https://hnrss.org/frontpage", domain: "code", name: "Hacker News", pollIntervalMs: 3600000 },
+      { id: "feed_seed_arxiv_ai", url: "https://rss.arxiv.org/rss/cs.AI", domain: "research", name: "arXiv AI", pollIntervalMs: 7200000 },
+      { id: "feed_seed_techcrunch", url: "https://techcrunch.com/feed/", domain: "news", name: "TechCrunch", pollIntervalMs: 3600000 },
+      // Science / Research
+      { id: "feed_seed_nature", url: "https://www.nature.com/nature.rss", domain: "research", name: "Nature", pollIntervalMs: 14400000 },
+      { id: "feed_seed_arxiv_ml", url: "https://rss.arxiv.org/rss/cs.LG", domain: "ml", name: "arXiv Machine Learning", pollIntervalMs: 7200000 },
+      // Creative / Culture
+      { id: "feed_seed_creativity", url: "https://www.creativebloq.com/feed", domain: "creative", name: "Creative Bloq", pollIntervalMs: 7200000 },
+      // Health
+      { id: "feed_seed_health", url: "https://tools.cdc.gov/api/v2/resources/media/rss", domain: "healthcare", name: "CDC Health", pollIntervalMs: 14400000 },
+      // Finance / Economics
+      { id: "feed_seed_economics", url: "https://feeds.finance.yahoo.com/rss/2.0/headline?s=^GSPC&region=US&lang=en-US", domain: "eco", name: "Yahoo Finance", pollIntervalMs: 3600000 },
+      // Philosophy / Ethics
+      { id: "feed_seed_philosophy", url: "https://dailynous.com/feed/", domain: "philosophy", name: "Daily Nous (Philosophy)", pollIntervalMs: 14400000 },
+    ];
+    for (const sf of seedFeeds) {
+      STATE.feeds.set(sf.id, { ...sf, active: true, lastFetchedAt: null, itemCount: 0, createdBy: "system", createdAt: nowISO() });
+    }
+    structuredLog("info", "seed_feeds_registered", { count: seedFeeds.length });
+    saveStateDebounced();
+  }
+}
+
 const SEED_INFO = { ok:false, loaded:false, count:0, path:"./dtus.js", error:null, source:"none" };
 
 async function tryLoadSeedDTUs() {
@@ -35471,6 +35504,126 @@ app.post("/api/dtus/:id/share", (req, res) => {
   }
 });
 
+// POST /api/dtus/:id/sync-lens — sync a DTU into a specific lens as an artifact
+app.post("/api/dtus/:id/sync-lens", (req, res) => {
+  try {
+    const dtu = STATE.dtus?.get?.(req.params.id);
+    if (!dtu) return res.status(404).json({ ok: false, error: "DTU not found" });
+    const lens = req.body?.lens || req.body?.domain;
+    if (!lens) return res.status(400).json({ ok: false, error: "lens/domain required" });
+    const userId = req.user?.id || "anon";
+
+    // Create a lens artifact from this DTU
+    const artifactId = uid("lart");
+    const artifact = {
+      id: artifactId, domain: lens, type: dtu.type || "dtu_sync",
+      ownerId: userId,
+      title: dtu.title || "Synced DTU",
+      data: {
+        summary: typeof dtu.creti === "string" ? dtu.creti.slice(0, 500) : "",
+        description: dtu.content || dtu.creti || "",
+        source: dtu.source || "dtu",
+        dtuId: dtu.id,
+        tags: dtu.tags || [],
+      },
+      meta: { tags: dtu.tags || [], status: "draft", visibility: "private", scope: req.body?.scope || "local" },
+      createdAt: nowISO(), updatedAt: nowISO(), version: 1,
+      qualityScore: 0.5,
+    };
+    STATE.lensArtifacts.set(artifactId, artifact);
+    _lensDomainIndexAdd(lens, artifactId);
+    saveStateDebounced();
+    res.json({ ok: true, artifact, dtuId: dtu.id });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+// POST /api/dtus/:id/fork — fork/clone a DTU into the user's substrate
+app.post("/api/dtus/:id/fork", (req, res) => {
+  try {
+    const sourceDtu = STATE.dtus?.get?.(req.params.id);
+    if (!sourceDtu) return res.status(404).json({ ok: false, error: "DTU not found" });
+    const userId = req.user?.id || req.body?.userId || "anon";
+    const forkedDtu = {
+      ...structuredClone(sourceDtu),
+      id: uid("dtu"),
+      ownerId: userId,
+      scope: "local",
+      visibility: "private",
+      creatorType: "user",
+      source: `fork:${sourceDtu.id}`,
+      lineage: [...(sourceDtu.lineage || []), sourceDtu.id],
+      meta: {
+        ...(sourceDtu.meta || {}),
+        forkedFrom: sourceDtu.id,
+        forkedAt: nowISO(),
+        originalSource: sourceDtu.source,
+      },
+      createdAt: nowISO(),
+      updatedAt: nowISO(),
+    };
+    upsertDTU(forkedDtu, { broadcast: true });
+    saveStateDebounced();
+    res.json({ ok: true, dtu: forkedDtu, forkedFrom: sourceDtu.id });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+// POST /api/lens/:domain/:id/pull — pull a lens artifact into user's DTU substrate
+app.post("/api/lens/:domain/:id/pull", (req, res) => {
+  try {
+    const artifact = STATE.lensArtifacts.get(req.params.id);
+    if (!artifact) return res.status(404).json({ ok: false, error: "Artifact not found" });
+    const userId = req.user?.id || "anon";
+
+    // If the artifact links to an existing DTU, fork that DTU
+    if (artifact.data?.dtuId && STATE.dtus.get(artifact.data.dtuId)) {
+      const sourceDtu = STATE.dtus.get(artifact.data.dtuId);
+      const forkedDtu = {
+        ...structuredClone(sourceDtu),
+        id: uid("dtu"),
+        ownerId: userId,
+        scope: "local",
+        visibility: "private",
+        creatorType: "user",
+        source: `pull:${artifact.id}`,
+        lineage: [...(sourceDtu.lineage || []), sourceDtu.id],
+        meta: { ...(sourceDtu.meta || {}), pulledFrom: artifact.id, pulledAt: nowISO(), originalDomain: artifact.domain },
+        createdAt: nowISO(), updatedAt: nowISO(),
+      };
+      upsertDTU(forkedDtu, { broadcast: true });
+      saveStateDebounced();
+      return res.json({ ok: true, dtu: forkedDtu, source: "dtu_fork", artifactId: artifact.id });
+    }
+
+    // Otherwise, create a new DTU from the artifact data
+    const newDtu = {
+      id: uid("dtu"),
+      title: artifact.title || "Pulled Artifact",
+      creti: artifact.data?.description || artifact.data?.summary || JSON.stringify(artifact.data),
+      content: artifact.data?.description || artifact.data?.summary || "",
+      tags: [...(artifact.meta?.tags || []), artifact.domain, "pulled"],
+      tier: "regular",
+      type: "pulled_artifact",
+      source: `pull:${artifact.domain}:${artifact.id}`,
+      ownerId: userId,
+      scope: "local",
+      visibility: "private",
+      creatorType: "user",
+      meta: { pulledFrom: artifact.id, pulledAt: nowISO(), originalDomain: artifact.domain, articleUrl: artifact.data?.url || artifact.data?.link },
+      lineage: [],
+      createdAt: nowISO(), updatedAt: nowISO(),
+    };
+    upsertDTU(newDtu, { broadcast: true });
+    saveStateDebounced();
+    res.json({ ok: true, dtu: newDtu, source: "artifact_convert", artifactId: artifact.id });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
 // POST /api/dtus/:id/vote — up/down vote a DTU (forum)
 app.post("/api/dtus/:id/vote", validate("dtuVote"), (req, res) => {
   try {
@@ -36357,6 +36510,31 @@ async function pollFeeds() {
         };
 
         upsertDTU(dtu);
+
+        // Also create a lens artifact in the feed's target domain so it shows up in lens pages
+        const lensDomain = feed.domain || "news";
+        const artifactId = uid("lart");
+        const artifact = {
+          id: artifactId, domain: lensDomain, type: "feed_article",
+          ownerId: "system",
+          title: item.title || "Feed Item",
+          data: {
+            summary: (item.description || "").slice(0, 500),
+            description: item.description || "",
+            source: feed.name || feedDomain,
+            url: item.link || "",
+            link: item.link || "",
+            feedUrl: feed.url,
+            publishedAt: item.pubDate || "",
+            dtuId: dtu.id, // link back to the DTU for pull-to-substrate
+          },
+          meta: { tags: ["feed", feedDomain, "web-dtu"], status: "published", visibility: "public", scope: "global", consent: { publishToMarketplace: false, shareToFeed: true, allowCitations: true, allowAiTraining: false } },
+          createdAt: nowISO(), updatedAt: nowISO(), version: 1,
+          qualityScore: 0.5,
+        };
+        STATE.lensArtifacts.set(artifactId, artifact);
+        _lensDomainIndexAdd(lensDomain, artifactId);
+
         feed._itemsSeen.add(itemKey);
         ingested++;
 

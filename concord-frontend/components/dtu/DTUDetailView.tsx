@@ -126,7 +126,7 @@ export function DTUDetailView({ dtuId, onClose, onNavigate }: DTUDetailViewProps
   });
 
   // Prefer server data when available, fall back to offline cache
-  const dtuData = (serverDtu || offlineDtu as DTU | null) ?? null;
+  const dtuData: DTU | null = (serverDtu || (offlineDtu as DTU | null)) ?? null;
   const isLoading = serverLoading && offlineLoading;
 
   // Fetch lineage (enhanced: includes forks, citations, citedBy, royaltyCascade)
@@ -358,7 +358,7 @@ export function DTUDetailView({ dtuId, onClose, onNavigate }: DTUDetailViewProps
                   )}
 
                   {/* Summary */}
-                  {dtu.summary && (
+                  {!!dtu.summary && (
                     <div>
                       <h3 className="text-sm font-medium text-gray-400 mb-1">Summary</h3>
                       <p className="text-gray-200">{dtu.summary}</p>
@@ -366,9 +366,9 @@ export function DTUDetailView({ dtuId, onClose, onNavigate }: DTUDetailViewProps
                   )}
 
                   {/* Human-readable summary from human layer */}
-                  {(dtu as unknown as Record<string, unknown>).human && typeof (dtu as unknown as Record<string, unknown>).human === 'object' && (
+                  {!!(dtu as unknown as Record<string, unknown>).human && typeof (dtu as unknown as Record<string, unknown>).human === 'object' && (
                     <div>
-                      {((dtu as unknown as Record<string, Record<string, unknown>>).human?.summary) && (
+                      {!!((dtu as unknown as Record<string, Record<string, unknown>>).human?.summary) && (
                         <div className="mb-3">
                           <h3 className="text-sm font-medium text-gray-400 mb-1">Human Summary</h3>
                           <p className="text-gray-200">{String((dtu as unknown as Record<string, Record<string, unknown>>).human.summary)}</p>
@@ -388,7 +388,7 @@ export function DTUDetailView({ dtuId, onClose, onNavigate }: DTUDetailViewProps
                   )}
 
                   {/* CRETI content (the main knowledge text) */}
-                  {((dtu as unknown as Record<string, unknown>).creti || (dtu as unknown as Record<string, unknown>).cretiHuman) && (
+                  {!!((dtu as unknown as Record<string, unknown>).creti || (dtu as unknown as Record<string, unknown>).cretiHuman) && (
                     <div>
                       <h3 className="text-sm font-medium text-gray-400 mb-2">CRETI Content</h3>
                       <div className="bg-lattice-deep p-4 rounded-lg">
@@ -420,7 +420,7 @@ export function DTUDetailView({ dtuId, onClose, onNavigate }: DTUDetailViewProps
                   )}
 
                   {/* Core structured data (definitions, claims, examples) */}
-                  {(dtu as unknown as Record<string, unknown>).core && typeof (dtu as unknown as Record<string, unknown>).core === 'object' && (
+                  {!!(dtu as unknown as Record<string, unknown>).core && typeof (dtu as unknown as Record<string, unknown>).core === 'object' && (
                     <div className="space-y-3">
                       {Array.isArray((dtu as unknown as Record<string, Record<string, unknown[]>>).core?.definitions) && ((dtu as unknown as Record<string, Record<string, string[]>>).core.definitions).length > 0 && (
                         <div>
