@@ -275,6 +275,114 @@ DOMAIN_RULES.set("whiteboard", {
   },
 });
 
+// === Chat (Conversational AI) ===
+DOMAIN_RULES.set("chat", {
+  types: ["conversation", "thread", "summary", "forged", "analysis"],
+  validStatuses: ["active", "archived", "pinned", "exported"],
+  transitions: {
+    active: ["archived", "pinned", "exported"],
+    pinned: ["active", "archived", "exported"],
+    archived: ["active"],
+    exported: ["archived"],
+  },
+  requiredFields: { conversation: ["title"] },
+  computedFields: (type, data) => {
+    const messages = data.messages || [];
+    data.messageCount = messages.length;
+    data.userMessageCount = messages.filter(m => m.role === "user").length;
+    data.assistantMessageCount = messages.filter(m => m.role === "assistant").length;
+    data.avgResponseLength = data.assistantMessageCount > 0
+      ? Math.round(messages.filter(m => m.role === "assistant").reduce((s, m) => s + (m.content || "").length, 0) / data.assistantMessageCount)
+      : 0;
+    data.hasFeedback = messages.some(m => m.feedbackGiven);
+    data.pinnedCount = messages.filter(m => m.pinned).length;
+    return data;
+  },
+  scoring: (type, data) => {
+    const msgs = (data.messages || []).length;
+    if (msgs === 0) return 0.1;
+    const depth = Math.min(msgs / 20, 1) * 0.4;
+    const feedback = data.hasFeedback ? 0.2 : 0;
+    const pinned = data.pinnedCount > 0 ? 0.1 : 0;
+    return Math.round((depth + feedback + pinned + 0.2) * 100) / 100;
+  },
+});
+
+// === Feed (Social) ===
+DOMAIN_RULES.set("feed", {
+  types: ["post", "article", "link", "media", "poll"],
+  validStatuses: ["draft", "published", "archived", "flagged"],
+  transitions: {
+    draft: ["published", "archived"],
+    published: ["archived", "flagged"],
+    flagged: ["published", "archived"],
+    archived: [],
+  },
+  requiredFields: { post: ["content"] },
+  computedFields: (type, data) => {
+    data.likeCount = data.likes?.length || 0;
+    data.commentCount = data.comments?.length || 0;
+    data.repostCount = data.reposts?.length || 0;
+    data.engagementScore = data.likeCount + data.commentCount * 2 + data.repostCount * 3;
+    return data;
+  },
+  scoring: (type, data) => {
+    const engagement = data.engagementScore || 0;
+    return Math.round(Math.min(engagement / 50, 1) * 100) / 100;
+  },
+});
+
+// === Forum ===
+DOMAIN_RULES.set("forum", {
+  types: ["thread", "reply", "announcement", "poll"],
+  validStatuses: ["open", "closed", "pinned", "locked", "archived"],
+  transitions: {
+    open: ["closed", "pinned", "locked", "archived"],
+    pinned: ["open", "closed", "locked"],
+    closed: ["open", "archived"],
+    locked: ["open", "archived"],
+    archived: [],
+  },
+  requiredFields: { thread: ["title", "content"] },
+  computedFields: (type, data) => {
+    data.replyCount = data.replies?.length || 0;
+    data.voteScore = (data.upvotes || 0) - (data.downvotes || 0);
+    return data;
+  },
+  scoring: (type, data) => {
+    const replies = data.replyCount || 0;
+    const votes = Math.max(data.voteScore || 0, 0);
+    return Math.round((Math.min(replies / 20, 1) * 0.5 + Math.min(votes / 10, 1) * 0.3 + 0.1) * 100) / 100;
+  },
+});
+
+// === Marketplace ===
+DOMAIN_RULES.set("marketplace", {
+  types: ["template", "component", "dataset", "artwork", "plugin", "preset"],
+  validStatuses: ["draft", "listed", "sold", "suspended", "archived"],
+  transitions: {
+    draft: ["listed", "archived"],
+    listed: ["sold", "suspended", "archived"],
+    sold: ["listed", "archived"],
+    suspended: ["listed", "archived"],
+    archived: [],
+  },
+  requiredFields: { template: ["title", "price"], component: ["title", "price"] },
+  computedFields: (type, data) => {
+    data.salesCount = data.purchases?.length || 0;
+    data.totalRevenue = (data.purchases || []).reduce((s, p) => s + (p.price || 0), 0);
+    data.avgRating = data.ratings?.length > 0
+      ? Math.round(data.ratings.reduce((s, r) => s + r.score, 0) / data.ratings.length * 10) / 10
+      : 0;
+    return data;
+  },
+  scoring: (type, data) => {
+    const sales = data.salesCount || 0;
+    const rating = data.avgRating || 0;
+    return Math.round((Math.min(sales / 10, 1) * 0.4 + (rating / 5) * 0.4 + 0.1) * 100) / 100;
+  },
+});
+
 // ── Exported helpers ─────────────────────────────────────────────────────────
 
 function validateArtifact(domain, type, data, meta) {
