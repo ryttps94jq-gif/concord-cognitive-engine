@@ -147,6 +147,11 @@ import mentorship from './mentorship.js';
 import mining from './mining.js';
 import ocean from './ocean.js';
 import pharmacy from './pharmacy.js';
+import philosophy from './philosophy.js';
+import photography from './photography.js';
+import plumbing from './plumbing.js';
+import podcast from './podcast.js';
+import poetry from './poetry.js';
 
 export default [
   healthcare,
@@ -287,4 +292,9 @@ export default [
   mining,
   ocean,
   pharmacy,
+  philosophy,
+  photography,
+  plumbing,
+  podcast,
+  poetry,
 ];
