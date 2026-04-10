@@ -122,6 +122,11 @@ import electrical from './electrical.js';
 import emergencyservices from './emergencyservices.js';
 import energy from './energy.js';
 import engineering from './engineering.js';
+import experience from './experience.js';
+import exportdomain from './exportdomain.js';
+import fashion from './fashion.js';
+import feed from './feed.js';
+import filmstudios from './filmstudios.js';
 
 export default [
   healthcare,
@@ -237,4 +242,9 @@ export default [
   emergencyservices,
   energy,
   engineering,
+  experience,
+  exportdomain,
+  fashion,
+  feed,
+  filmstudios,
 ];
