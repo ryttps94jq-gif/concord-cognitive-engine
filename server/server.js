@@ -30533,6 +30533,7 @@ const ALL_LENS_DOMAINS = [
   "bio","board","bridge","calendar","carpentry","chat","chem","code","collab","command-center","construction",
   "commonsense","consulting","cooking","council","creative","creative-writing","cri","crypto","custom","daily",
   "database","debate","debug","defense","desert","diy","docs","eco","education","entity","environment",
+  "disputes","electrical","emergency-services","energy","engineering",
   "ethics","events","experience","export","feed","finance","fitness",
   "food","fork","forum","fractal","game","global","goals","government",
   "graph","grounding","healthcare","household","hypothesis","import",

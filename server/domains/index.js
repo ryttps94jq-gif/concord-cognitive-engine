@@ -117,6 +117,11 @@ import database from './database.js';
 import debate from './debate.js';
 import defense from './defense.js';
 import desert from './desert.js';
+import disputes from './disputes.js';
+import electrical from './electrical.js';
+import emergencyservices from './emergencyservices.js';
+import energy from './energy.js';
+import engineering from './engineering.js';
 
 export default [
   healthcare,
@@ -227,4 +232,9 @@ export default [
   debate,
   defense,
   desert,
+  disputes,
+  electrical,
+  emergencyservices,
+  energy,
+  engineering,
 ];
