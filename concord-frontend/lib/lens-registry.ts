@@ -474,10 +474,10 @@ export function getLensesByCategory(): Record<LensCategory, LensEntry[]> {
 
 // ── Sovereign visibility & sidebar category grouping ──────────
 
-/** Lens IDs that require admin+ access (admin or sovereign) */
-export const SOVEREIGN_LENSES = ['admin', 'command-center'] as const;
+/** Lens IDs historically restricted — now open to all authenticated users */
+export const SOVEREIGN_LENSES = [] as const;
 
-/** Set for fast lookup */
+/** Set for fast lookup (empty — no lenses restricted) */
 const SOVEREIGN_LENS_SET = new Set<string>(SOVEREIGN_LENSES);
 
 /**
@@ -502,14 +502,10 @@ export const SIDEBAR_CATEGORIES: Record<string, string[]> = {
 
 /**
  * Returns sidebar categories visible to the given user role.
- * Sovereign category is hidden for non-admin/sovereign users.
+ * All categories visible to all authenticated users.
  */
-export function getVisibleSidebarCategories(userRole: string): Record<string, string[]> {
-  const categories = { ...SIDEBAR_CATEGORIES };
-  if (userRole !== 'sovereign' && userRole !== 'admin' && userRole !== 'owner' && userRole !== 'founder') {
-    delete categories['Sovereign'];
-  }
-  return categories;
+export function getVisibleSidebarCategories(_userRole: string): Record<string, string[]> {
+  return { ...SIDEBAR_CATEGORIES };
 }
 
 /**
@@ -525,13 +521,9 @@ export function getSidebarCategory(lensId: string): string {
 
 /**
  * Checks if a lens is visible to the given user role.
- * Admin-only lenses (admin, command-center) require admin or sovereign role.
- * All other lenses are visible to all authenticated users.
+ * Every lens is visible to all authenticated users. No exceptions.
  */
-export function isLensVisible(lensId: string, userRole: string): boolean {
-  if (SOVEREIGN_LENS_SET.has(lensId)) {
-    return userRole === 'sovereign' || userRole === 'admin' || userRole === 'owner' || userRole === 'founder';
-  }
+export function isLensVisible(_lensId: string, _userRole: string): boolean {
   return true;
 }
 
