@@ -127,6 +127,11 @@ import exportdomain from './exportdomain.js';
 import fashion from './fashion.js';
 import feed from './feed.js';
 import filmstudios from './filmstudios.js';
+import finance from './finance.js';
+import forestry from './forestry.js';
+import forum from './forum.js';
+import game from './game.js';
+import gamedesign from './gamedesign.js';
 
 export default [
   healthcare,
@@ -247,4 +252,9 @@ export default [
   fashion,
   feed,
   filmstudios,
+  finance,
+  forestry,
+  forum,
+  game,
+  gamedesign,
 ];
