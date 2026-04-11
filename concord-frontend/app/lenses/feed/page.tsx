@@ -2,7 +2,8 @@
 
 import { useState, useCallback, useMemo, useRef } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Virtuoso } from 'react-virtuoso';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { api, apiHelpers } from '@/lib/api/client';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -411,21 +412,33 @@ export default function FeedLensPage() {
     seed: INITIAL_POSTS.map(p => ({ title: p.content?.slice(0, 80) || p.id, data: p as unknown as Record<string, unknown> })),
   });
 
-  // Fetch feed from social API with DTU fallback
-  const { data: feedPosts, isLoading, isError: isError2, error: error2, refetch: refetch2,} = useQuery<FeedPost[]>({
+  // Fetch feed from social API with infinite scrolling + DTU fallback
+  const PAGE_SIZE = 20;
+  const {
+    data: feedPages,
+    isLoading,
+    isError: isError2,
+    error: error2,
+    refetch: refetch2,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery<FeedPost[]>({
     queryKey: ['feed-posts', activeTab],
-    queryFn: async () => {
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }) => {
+      const offset = pageParam as number;
       try {
         const endpoint = activeTab === 'following' ? '/api/social/feed/following'
           : activeTab === 'trending' ? '/api/social/feed/explore'
           : '/api/social/feed/foryou';
-        const socialRes = await api.get(endpoint, { params: { limit: 50, offset: 0 } }).catch(() => null);
+        const socialRes = await api.get(endpoint, { params: { limit: PAGE_SIZE, offset } }).catch(() => null);
         const socialPosts = socialRes?.data?.posts || socialRes?.data || [];
         if (Array.isArray(socialPosts) && socialPosts.length > 0) {
           return socialPosts.map((p: Record<string, unknown>, i: number) => ({
-            id: (p.id as string) || `sp-${i}`,
+            id: (p.id as string) || `sp-${offset + i}`,
             type: ((p.mediaType as string) || 'text') as PostType,
-            author: { id: (p.userId as string) || 'user', name: (p.displayName as string) || 'User', handle: (p.userId as string) || 'user', gradient: pickGrad(i), verified: false },
+            author: { id: (p.userId as string) || 'user', name: (p.displayName as string) || 'User', handle: (p.userId as string) || 'user', gradient: pickGrad(offset + i), verified: false },
             content: (p.content as string) || (p.title as string) || '',
             createdAt: (p.createdAt as string) || new Date().toISOString(),
             likes: (p.reactionCount as number) || 0, comments: (p.commentCount as number) || 0,
@@ -436,28 +449,38 @@ export default function FeedLensPage() {
             linkedDTUs: (p.linkedDTUs as FeedPost['linkedDTUs']) || [],
           }));
         }
-        // Fallback: DTUs as posts
-        const dtuRes = await apiHelpers.dtus.paginated({ limit: 50 }).catch(() => ({ data: { dtus: [] } }));
-        if (dtuRes?.data?.dtus?.length) {
-          return dtuRes.data.dtus.map((dtu: Record<string, unknown>, i: number) => ({
-            id: dtu.id as string, type: 'text' as PostType,
-            author: { id: (dtu.authorId as string) || 'user', name: (dtu.authorName as string) || 'User', handle: (dtu.authorHandle as string) || 'user', gradient: pickGrad(i), verified: false },
-            content: (dtu.content as string)?.slice(0, 400) || (dtu.title as string) || '',
-            createdAt: (dtu.createdAt as string) || new Date().toISOString(),
-            likes: 0, comments: 0, reposts: 0, shares: 0, views: 0,
-            liked: false, reposted: false, bookmarked: false, dtuId: dtu.id as string,
-            dtuSource: dtu.source as string | undefined,
-            dtuMeta: dtu.meta as Record<string, unknown> | undefined,
-          }));
+        // Fallback: DTUs as posts (only on first page)
+        if (offset === 0) {
+          const dtuRes = await apiHelpers.dtus.paginated({ limit: PAGE_SIZE }).catch(() => ({ data: { dtus: [] } }));
+          if (dtuRes?.data?.dtus?.length) {
+            return dtuRes.data.dtus.map((dtu: Record<string, unknown>, i: number) => ({
+              id: dtu.id as string, type: 'text' as PostType,
+              author: { id: (dtu.authorId as string) || 'user', name: (dtu.authorName as string) || 'User', handle: (dtu.authorHandle as string) || 'user', gradient: pickGrad(i), verified: false },
+              content: (dtu.content as string)?.slice(0, 400) || (dtu.title as string) || '',
+              createdAt: (dtu.createdAt as string) || new Date().toISOString(),
+              likes: 0, comments: 0, reposts: 0, shares: 0, views: 0,
+              liked: false, reposted: false, bookmarked: false, dtuId: dtu.id as string,
+              dtuSource: dtu.source as string | undefined,
+              dtuMeta: dtu.meta as Record<string, unknown> | undefined,
+            }));
+          }
+          return postLensItems.length > 0
+            ? postLensItems.map(li => ({ id: li.id, ...(li.data as Record<string, unknown>) } as unknown as FeedPost)) : [];
         }
-        return postLensItems.length > 0
-          ? postLensItems.map(li => ({ id: li.id, ...(li.data as Record<string, unknown>) } as unknown as FeedPost)) : [];
+        return [];
       } catch {
-        return postLensItems.length > 0
-          ? postLensItems.map(li => ({ id: li.id, ...(li.data as Record<string, unknown>) } as unknown as FeedPost)) : [];
+        if (offset === 0 && postLensItems.length > 0) {
+          return postLensItems.map(li => ({ id: li.id, ...(li.data as Record<string, unknown>) } as unknown as FeedPost));
+        }
+        return [];
       }
     },
+    getNextPageParam: (lastPage, allPages) => {
+      if (lastPage.length < PAGE_SIZE) return undefined;
+      return allPages.reduce((sum, page) => sum + page.length, 0);
+    },
   });
+  const feedPosts = useMemo(() => feedPages?.pages.flat() ?? [], [feedPages]);
 
   const { data: trending, isError: isError3, error: error3, refetch: refetch3,} = useQuery<TrendingTopic[]>({
     queryKey: ['trending-topics'],
@@ -642,7 +665,7 @@ export default function FeedLensPage() {
     { icon: Home, label: 'Home', active: activeTab === 'for-you', action: () => setActiveTab('for-you') },
     { icon: Search, label: 'Explore', active: activeTab === 'trending', action: () => setActiveTab('trending') },
     { icon: Bell, label: 'Notifications', active: activeTab === 'notifications' as string, action: () => setActiveTab('for-you' as FeedTab) },
-    { icon: Mail, label: 'Messages', active: false, action: () => useUIStore.getState().addToast({ type: 'info', message: 'Requires direct messaging to be enabled' }) },
+    { icon: Mail, label: 'Messages', active: false, action: () => { window.location.href = '/messages'; } },
     { icon: Bookmark, label: 'Bookmarks', active: activeTab === 'bookmarks' as string, action: () => setActiveTab('following' as FeedTab) },
     { icon: User, label: 'Profile', active: false, action: () => { apiHelpers.social.getProfile('me').then(() => useUIStore.getState().addToast({ type: 'success', message: 'Profile loaded' })).catch(() => useUIStore.getState().addToast({ type: 'info', message: 'No profile yet. Create DTUs to build your profile.' })); } },
     { icon: Rss, label: 'Media', active: activeTab === 'releases', action: () => setActiveTab('releases') },
@@ -903,14 +926,17 @@ export default function FeedLensPage() {
               <p className="text-sm mb-4">Create a post or follow users to populate your feed.</p>
             </div>
           ) : (
-            <AnimatePresence mode="popLayout">
-              {filteredPosts.map((post, idx) => (
+            <Virtuoso
+              data={filteredPosts}
+              useWindowScroll
+              endReached={() => { if (hasNextPage && !isFetchingNextPage) fetchNextPage(); }}
+              overscan={400}
+              itemContent={(idx, post) => (
                 <motion.article
                   key={post.id}
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -12 }}
-                  transition={{ delay: idx * 0.03, duration: 0.25 }}
+                  transition={{ delay: Math.min(idx, 5) * 0.03, duration: 0.25 }}
                   className="p-4 border-b border-lattice-border hover:bg-lattice-surface/30 transition-colors"
                 >
                   <div className="flex gap-3">
@@ -1182,16 +1208,26 @@ export default function FeedLensPage() {
                     </div>
                   </div>
                 </motion.article>
-              ))}
-            </AnimatePresence>
-          )}
-
-          {/* End-of-feed indicator */}
-          {!isLoading && filteredPosts.length > 0 && (
-            <div className="p-8 text-center text-gray-600 text-sm">
-              <Newspaper className="w-6 h-6 mx-auto mb-2 animate-spin-slow opacity-40" />
-              You are all caught up
-            </div>
+              )}
+              components={{
+                Footer: () => (
+                  <div className="p-8 text-center text-gray-600 text-sm">
+                    {isFetchingNextPage ? (
+                      <div className="animate-pulse flex justify-center gap-2">
+                        <div className="w-2 h-2 bg-neon-cyan rounded-full animate-bounce" />
+                        <div className="w-2 h-2 bg-neon-cyan rounded-full animate-bounce" style={{ animationDelay: '0.15s' }} />
+                        <div className="w-2 h-2 bg-neon-cyan rounded-full animate-bounce" style={{ animationDelay: '0.3s' }} />
+                      </div>
+                    ) : !hasNextPage && filteredPosts.length > 0 ? (
+                      <>
+                        <Newspaper className="w-6 h-6 mx-auto mb-2 opacity-40" />
+                        You are all caught up
+                      </>
+                    ) : null}
+                  </div>
+                ),
+              }}
+            />
           )}
         </div>
       </main>

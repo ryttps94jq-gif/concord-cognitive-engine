@@ -1,6 +1,12 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
+import dynamic from 'next/dynamic';
+
+const Excalidraw = dynamic(
+  () => import('@excalidraw/excalidraw').then(mod => ({ default: mod.Excalidraw })),
+  { ssr: false },
+);
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
@@ -332,21 +338,36 @@ export default function ArtistryLensPage() {
           </div>
         )}
 
-        {/* Studio */}
+        {/* Studio — Canvas + Projects */}
         {tab === 'studio' && (
           <div className="space-y-4">
-            <h2 className="text-lg font-semibold flex items-center gap-2"><Paintbrush className="w-5 h-5" /> Creative Projects</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {(studioProjects as Record<string, unknown>[]).map((proj: Record<string, unknown>) => (
-                <div key={proj.id as string} className="bg-white/5 border border-white/10 rounded-lg p-4 hover:border-neon-pink/30 transition-colors">
-                  <h3 className="font-medium text-sm">{proj.title as string || 'Untitled Project'}</h3>
-                  <div className="text-xs text-gray-500 mt-1">{proj.medium as string || proj.status as string || 'In Progress'}</div>
-                </div>
-              ))}
-              {(studioProjects as Record<string, unknown>[]).length === 0 && (
-                <div className="col-span-full text-center py-12 text-gray-500 text-sm">No projects yet. Start creating in the Studio lens.</div>
-              )}
+            <h2 className="text-lg font-semibold flex items-center gap-2"><Paintbrush className="w-5 h-5" /> Creative Canvas</h2>
+            {/* Excalidraw Drawing Canvas */}
+            <div className="w-full rounded-lg border border-white/10 overflow-hidden" style={{ height: '65vh' }}>
+              <Excalidraw
+                theme="dark"
+                UIOptions={{
+                  canvasActions: {
+                    saveToActiveFile: false,
+                    loadScene: false,
+                  },
+                }}
+              />
             </div>
+            {/* Projects list below canvas */}
+            {(studioProjects as Record<string, unknown>[]).length > 0 && (
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold text-gray-400">Recent Projects</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {(studioProjects as Record<string, unknown>[]).map((proj: Record<string, unknown>) => (
+                    <div key={proj.id as string} className="bg-white/5 border border-white/10 rounded-lg p-3 hover:border-neon-pink/30 transition-colors">
+                      <h4 className="font-medium text-sm">{proj.title as string || 'Untitled Project'}</h4>
+                      <div className="text-xs text-gray-500 mt-1">{proj.medium as string || proj.status as string || 'In Progress'}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

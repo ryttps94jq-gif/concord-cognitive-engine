@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
+import { UniversalPlayer } from '@/components/media/UniversalPlayer';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -50,6 +51,8 @@ export default function FilmStudiosPage() {
   const [showFeatures, setShowFeatures] = useState(true);
   const [partyCode, setPartyCode] = useState('');
   const [partyActive, setPartyActive] = useState(false);
+  const [previewFilm, setPreviewFilm] = useState<FilmProject | null>(null);
+  const [uploadVideoUrl, setUploadVideoUrl] = useState<string | null>(null);
 
   // My films via useLensData (declared before action wiring to avoid used-before-declaration errors)
   const { items: myFilmItems, create: createFilmItem, isError: isError2, error: error2, refetch: refetch2 } = useLensData<Record<string, unknown>>('film-studios', 'film', { seed: [] });
@@ -432,7 +435,7 @@ export default function FilmStudiosPage() {
                     )}
                   </div>
                   <div className="flex gap-2 mt-3">
-                    <button onClick={() => { apiHelpers.filmStudio.preview(film.id).then(() => showToast('success', `Loading preview for "${film.title}"`)).catch(() => showToast('error', 'Preview unavailable')); }} className="flex-1 text-xs py-1.5 bg-neon-purple/20 rounded hover:bg-neon-purple/30 flex items-center justify-center gap-1"><Play className="w-3 h-3" /> Preview</button>
+                    <button onClick={() => setPreviewFilm(film)} className="flex-1 text-xs py-1.5 bg-neon-purple/20 rounded hover:bg-neon-purple/30 flex items-center justify-center gap-1"><Play className="w-3 h-3" /> Preview</button>
                     <button onClick={() => { navigator.clipboard?.writeText(window.location.href).then(() => showToast('success', 'Link copied to clipboard')).catch(() => showToast('error', 'Failed to copy link')); }} className="text-xs py-1.5 px-2 bg-white/5 rounded hover:bg-white/10"><Share2 className="w-3 h-3" /></button>
                   </div>
                 </motion.div>
@@ -527,6 +530,25 @@ export default function FilmStudiosPage() {
             <select value={newResolution} onChange={e => setNewResolution(e.target.value)} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:outline-none">
               {(resolutions as string[]).map((r: string) => <option key={r} value={r}>{r}</option>)}
             </select>
+            {/* Video file upload */}
+            <div className="space-y-1.5">
+              <label className="text-xs text-gray-400 flex items-center gap-1.5"><Camera className="w-3 h-3" /> Upload Video</label>
+              <input
+                type="file"
+                accept="video/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    if (uploadVideoUrl) URL.revokeObjectURL(uploadVideoUrl);
+                    setUploadVideoUrl(URL.createObjectURL(file));
+                  }
+                }}
+                className="w-full text-xs text-gray-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:bg-neon-purple/20 file:text-neon-purple hover:file:bg-neon-purple/30"
+              />
+              {uploadVideoUrl && (
+                <video src={uploadVideoUrl} controls className="w-full rounded-lg border border-white/10 mt-2" style={{ maxHeight: '200px' }} />
+              )}
+            </div>
             <button onClick={handleCreate} disabled={!newTitle.trim() || createFilmMutation.isPending} className="w-full py-2 bg-neon-purple/20 border border-neon-purple/30 rounded-lg text-sm hover:bg-neon-purple/30 disabled:opacity-50">
               {createFilmMutation.isPending ? 'Creating...' : 'Create Film'}
             </button>
@@ -712,6 +734,76 @@ export default function FilmStudiosPage() {
                   <button onClick={handleCreate} disabled={!newTitle.trim()} className="w-full py-2 bg-neon-purple/20 rounded-lg text-sm hover:bg-neon-purple/30 disabled:opacity-50">
                     {createFilmMutation.isPending ? 'Creating...' : 'Create'}
                   </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Video Preview Modal */}
+        <AnimatePresence>
+          {previewFilm && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-8"
+              onClick={() => setPreviewFilm(null)}
+            >
+              <motion.div
+                initial={{ scale: 0.9 }}
+                animate={{ scale: 1 }}
+                exit={{ scale: 0.9 }}
+                className="bg-gray-900 border border-white/10 rounded-xl w-full max-w-4xl overflow-hidden"
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+                  <div className="flex items-center gap-2">
+                    <Film className="w-4 h-4 text-neon-purple" />
+                    <span className="font-medium text-sm">{previewFilm.title}</span>
+                    {previewFilm.resolution && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-neon-purple/20 text-neon-purple">{previewFilm.resolution}</span>
+                    )}
+                  </div>
+                  <button onClick={() => setPreviewFilm(null)} className="p-1 rounded hover:bg-white/10"><X className="w-4 h-4" /></button>
+                </div>
+                <div className="p-4">
+                  <UniversalPlayer
+                    mediaDTU={{
+                      id: previewFilm.id,
+                      title: previewFilm.title,
+                      mediaType: 'video',
+                      hlsManifest: `/api/film-studio/${previewFilm.id}/stream`,
+                      thumbnail: `/api/film-studio/${previewFilm.id}/thumbnail`,
+                      duration: previewFilm.duration || 0,
+                      resolution: { width: previewFilm.resolution === '4k' ? 3840 : previewFilm.resolution === '1440p' ? 2560 : 1920, height: previewFilm.resolution === '4k' ? 2160 : previewFilm.resolution === '1440p' ? 1440 : 1080 },
+                      engagement: { views: 0, likes: 0, comments: 0, shares: 0 },
+                    }}
+                    autoplay
+                  />
+                </div>
+                {/* Clip Timeline */}
+                <div className="border-t border-white/10 px-4 py-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Layers className="w-3.5 h-3.5 text-gray-400" />
+                    <span className="text-xs text-gray-400 font-medium">Timeline</span>
+                  </div>
+                  <div className="relative h-10 bg-white/5 rounded-lg border border-white/10 overflow-hidden">
+                    {/* Time ruler */}
+                    <div className="absolute inset-x-0 top-0 h-3 flex">
+                      {Array.from({ length: 10 }).map((_, i) => (
+                        <div key={i} className="flex-1 border-r border-white/10 px-1">
+                          <span className="text-[8px] text-gray-600">{Math.round(((previewFilm.duration || 120) / 10) * i)}s</span>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Video track */}
+                    <div className="absolute inset-x-1 bottom-1 h-4 bg-gradient-to-r from-neon-purple/40 to-pink-500/40 rounded border border-neon-purple/30">
+                      <div className="absolute inset-0 flex items-center px-2">
+                        <span className="text-[8px] text-white/70 truncate">{previewFilm.title}</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </motion.div>
             </motion.div>

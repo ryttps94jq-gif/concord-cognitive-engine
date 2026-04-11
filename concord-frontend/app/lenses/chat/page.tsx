@@ -68,6 +68,7 @@ import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { DTUDetailView } from '@/components/dtu/DTUDetailView';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useLensData } from '@/lib/hooks/use-lens-data';
+import MessageRenderer from '@/components/chat/MessageRenderer';
 
 // ──────────────────────────────────────────────
 // Types
@@ -1254,7 +1255,7 @@ export default function ChatLensPage() {
                 </div>
               </div>
             ) : (
-              <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
+              <MessageRenderer content={message.content} />
             )}
             {timeStr && editingMessageId !== message.id && (
               <p className="text-[10px] text-gray-500 mt-1 select-none">{timeStr}</p>
@@ -1929,8 +1930,7 @@ export default function ChatLensPage() {
               </div>
               <div className="flex-1 max-w-2xl">
                 <div className="inline-block p-4 rounded-2xl rounded-bl-md bg-lattice-surface border border-neon-cyan/30 text-gray-200">
-                  <p className="whitespace-pre-wrap">{streamingContent}</p>
-                  <span className="inline-block w-2 h-4 bg-neon-cyan/60 animate-pulse ml-0.5" />
+                  <MessageRenderer content={streamingContent} streaming />
                 </div>
               </div>
             </div>
