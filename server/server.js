@@ -14681,90 +14681,20 @@ function generateOpenAPISpec() {
 }
 
 // ---- Plugin System ----
-const PLUGINS = new BoundedMap(200, "PLUGINS"); // pluginId -> { id, name, version, hooks, enabled, config }
-const PLUGIN_HOOKS = {
-  "dtu:beforeCreate": [],
-  "dtu:afterCreate": [],
-  "dtu:beforeUpdate": [],
-  "dtu:afterUpdate": [],
-  "dtu:beforeDelete": [],
-  "dtu:afterDelete": [],
-  "macro:beforeExecute": [],
-  "macro:afterExecute": [],
-  "search:beforeQuery": [],
-  "search:afterQuery": []
-};
-
-function _registerPlugin(plugin) {
-  if (!plugin.id || !plugin.name) {
-    return { ok: false, error: "Plugin must have id and name" };
-  }
-
-  const registered = {
-    id: plugin.id,
-    name: plugin.name,
-    version: plugin.version || "1.0.0",
-    description: plugin.description || "",
-    author: plugin.author || "Unknown",
-    hooks: [],
-    enabled: true,
-    config: plugin.defaultConfig || {}
-  };
-
-  // Register hooks
-  for (const [hookName, handler] of Object.entries(plugin.hooks || {})) {
-    if (PLUGIN_HOOKS[hookName]) {
-      PLUGIN_HOOKS[hookName].push({ pluginId: plugin.id, handler });
-      registered.hooks.push(hookName);
-    }
-  }
-
-  PLUGINS.set(plugin.id, registered);
-  structuredLog("info", "plugin_registered", { name: plugin.name, version: registered.version });
-  return { ok: true, plugin: registered };
-}
-
-function unregisterPlugin(pluginId) {
-  const plugin = PLUGINS.get(pluginId);
-  if (!plugin) return { ok: false, error: "Plugin not found" };
-
-  // Remove hooks
-  for (const hookName of Object.keys(PLUGIN_HOOKS)) {
-    PLUGIN_HOOKS[hookName] = PLUGIN_HOOKS[hookName].filter(h => h.pluginId !== pluginId);
-  }
-
-  PLUGINS.delete(pluginId);
-  return { ok: true };
-}
-
-async function _executeHook(hookName, context) {
-  const handlers = PLUGIN_HOOKS[hookName] || [];
-  let result = context;
-
-  for (const { pluginId, handler } of handlers) {
-    const plugin = PLUGINS.get(pluginId);
-    if (!plugin?.enabled) continue;
-
-    try {
-      result = await handler(result, plugin.config);
-    } catch (e) {
-      console.error(`[Plugins] Hook ${hookName} failed for ${pluginId}:`, e.message);
-    }
-  }
-
-  return result;
-}
-
-function _listPlugins() {
-  return Array.from(PLUGINS.values()).map(p => ({
-    id: p.id,
-    name: p.name,
-    version: p.version,
-    description: p.description,
-    enabled: p.enabled,
-    hooks: p.hooks
-  }));
-}
+// Delegates to the validated plugin loader (server/plugins/loader.js) which
+// enforces 4-gate security validation (shape, namespace, patterns, deps) and
+// supports emergent-generated plugins via runtime-compiler.js.
+//
+// Legacy inline PLUGINS/PLUGIN_HOOKS maps removed — all plugin lifecycle
+// (register, unload, hooks, tick, metrics) now flows through:
+//   loader.js  → validator.js   (4-gate security check)
+//              → runtime-compiler.js (emergent-gen compilation + governance)
+//
+// API endpoints use macros registered in emergent/index.js which call loader
+// functions: registerPlugin, unloadPlugin, listPlugins, getPlugin,
+// getPluginMetrics, compileEmergentPlugin, activateApprovedPlugin, etc.
+// Hook dispatch uses fireHook(STATE, hookName, payload) from loader.js.
+// Per-tick plugin work uses tickPlugins(STATE) from loader.js.
 
 // ---- CLI Helpers ----
 function generateCLIHelp() {
@@ -14806,7 +14736,7 @@ function getCLIStats() {
     shadowDtus: STATE.shadowDtus.size,
     sessions: STATE.sessions.size,
     macros: Array.from(MACROS.entries()).reduce((acc, [, m]) => acc + m.size, 0),
-    plugins: PLUGINS.size,
+    plugins: (getPluginMetrics(STATE)?.loadedCount || 0),
     embeddings: EMBEDDINGS.store.size,
     uptime: process.uptime()
   };
@@ -25777,61 +25707,47 @@ register("import", "markdown", (ctx, input) => {
 });
 
 // ---- Plugin/Extension System (Macro-based) ----
-// Note: PLUGINS Map is declared above in Wave 3. This adds macro-based registration.
-
-function registerPluginFromMacro(name, config) {
-  const plugin = {
-    name,
-    version: config.version || "1.0.0",
-    description: config.description || "",
-    macros: config.macros || {},
-    hooks: config.hooks || {},
-    enabled: config.enabled !== false,
-    registeredAt: nowISO()
-  };
-
-  // Register plugin macros
-  for (const [macroName, handler] of Object.entries(plugin.macros)) {
-    const [domain, op] = macroName.split(".");
-    if (domain && op && typeof handler === "function") {
-      register(domain, op, handler);
-    }
-  }
-
-  PLUGINS.set(name, plugin);
-  log("plugin", `Plugin registered: ${name}`, { version: plugin.version });
-  return plugin;
-}
+// Delegates to the validated plugin loader (server/plugins/loader.js).
+// The "plugin.*" domain macros below are thin wrappers around the loader,
+// which enforces 4-gate security validation via validator.js and supports
+// emergent-generated plugins via runtime-compiler.js.
+// The full lifecycle macros are also registered under "emergent.plugin.*"
+// in emergent/index.js for the emergent system.
 
 register("plugin", "register", (ctx, input) => {
-  if (!input.name) return { ok: false, error: "Plugin name required" };
-  const plugin = registerPluginFromMacro(input.name, input);
-  return { ok: true, plugin: { name: plugin.name, version: plugin.version } };
+  if (!input.name && !input.module?.name) return { ok: false, error: "Plugin name required" };
+  const pluginModule = input.module || {
+    id: `custom.${(input.name || "unknown").toLowerCase().replace(/[^a-z0-9_-]/g, "-")}`,
+    name: input.name,
+    version: input.version || "1.0.0",
+    description: input.description || "",
+    macros: input.macros || {},
+    hooks: input.hooks || {},
+    init() { return { ok: true }; },
+    destroy() {},
+  };
+  return loaderRegisterPlugin(STATE, pluginModule, {
+    register,
+    helpers: { uid, nowISO, log, upsertDTU, realtimeEmit, saveStateDebounced },
+  });
 });
 
 register("plugin", "list", (_ctx, _input) => {
-  const plugins = Array.from(PLUGINS.values()).map(p => ({
-    name: p.name,
-    version: p.version,
-    description: p.description,
-    enabled: p.enabled,
-    macroCount: Object.keys(p.macros).length
-  }));
-  return { ok: true, plugins, count: plugins.length };
+  return loaderListPlugins(STATE);
 });
 
-register("plugin", "enable", (ctx, input) => {
-  const plugin = PLUGINS.get(input.name);
-  if (!plugin) return { ok: false, error: "Plugin not found" };
-  plugin.enabled = true;
-  return { ok: true, name: plugin.name, enabled: true };
+register("plugin", "enable", (_ctx, input) => {
+  // Enable/disable not directly supported in validated loader — plugins are
+  // either loaded (active) or unloaded. Re-register to enable.
+  const info = loaderGetPlugin(STATE, input.name || input.pluginId);
+  if (!info.ok) return { ok: false, error: "Plugin not found" };
+  return { ok: true, name: info.plugin.name, enabled: true };
 });
 
-register("plugin", "disable", (ctx, input) => {
-  const plugin = PLUGINS.get(input.name);
-  if (!plugin) return { ok: false, error: "Plugin not found" };
-  plugin.enabled = false;
-  return { ok: true, name: plugin.name, enabled: false };
+register("plugin", "disable", (_ctx, input) => {
+  // Disabling = unloading in the validated plugin system
+  const pluginId = input.name || input.pluginId;
+  return loaderUnloadPlugin(STATE, pluginId);
 });
 
 // ---- Enhanced Council with Vote Tallying ----
@@ -26021,10 +25937,10 @@ register("admin", "dashboard", (_ctx, _input) => {
       synthesis: STATE.queues?.synthesis?.length || 0,
       hypotheses: STATE.queues?.hypotheses?.length || 0
     },
-    plugins: {
-      total: PLUGINS.size,
-      enabled: Array.from(PLUGINS.values()).filter(p => p.enabled).length
-    },
+    plugins: (() => {
+      const pm = getPluginMetrics(STATE);
+      return { total: pm?.loadedCount || 0, enabled: pm?.loadedCount || 0 };
+    })(),
     searchIndex: {
       documents: SEARCH_INDEX.documents.size,
       terms: SEARCH_INDEX.invertedIndex.size,
@@ -37084,16 +37000,17 @@ app.get("/api/docs/openapi.yaml", (req, res) => {
   res.status(404).json({ ok: false, error: "OpenAPI spec not found" });
 });
 
-// GET/POST /api/plugins already registered above (lines ~17993-18001).
-
-app.delete("/api/plugins/:id", requireRole("owner", "admin"), (req, res) => {
-  try {
-    const result = unregisterPlugin(req.params.id);
-    res.json(result);
-  } catch (e) {
-    res.status(500).json({ ok: false, error: String(e?.message || e) });
-  }
-});
+// GET/POST/DELETE /api/plugins — primary endpoints registered above (lines ~28880-28932).
+// This legacy duplicate DELETE now delegates to the loader-based unload via macro,
+// matching the primary DELETE handler at /api/plugins/:pluginId.
+app.delete("/api/plugins/:id", requireRole("owner", "admin"), asyncHandler(async (req, res) => {
+  const result = await runMacro("emergent", "plugin.unload", { pluginId: req.params.id }, {
+    actor: { userId: req.user?.id || "system", role: req.user?.role || "admin", scopes: req.user?.scopes || ["*"] },
+    state: STATE,
+    internal: true,
+  });
+  res.json(result);
+}));
 
 app.get("/api/cli/help", (req, res) => {
   res.type("text/plain").send(generateCLIHelp());
