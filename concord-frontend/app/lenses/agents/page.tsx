@@ -3,6 +3,7 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useMutation } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
@@ -15,6 +16,7 @@ import {
   CheckCircle, XCircle,
   Workflow, Database,
   Layers, TrendingUp, ChevronDown, Trash2,
+  Gauge, Route, Radio, Timer, Loader2, Award, AlertTriangle, RefreshCw,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -91,6 +93,11 @@ export default function AgentsLensPage() {
   const [newMaxTokens, setNewMaxTokens] = useState(4096);
   const [showFeatures, setShowFeatures] = useState(true);
 
+  // Backend action wiring
+  const runAction = useRunArtifact('agents');
+  const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
+  const [isRunning, setIsRunning] = useState<string | null>(null);
+
   // Persist agents via lens data (auto-seeds on first use)
   const { items: lensAgentItems, isLoading, isError, error, isSeeding: _isSeeding, refetch, create: createLensAgent, update: updateLensAgent, remove: removeLensAgent } = useLensData<Record<string, unknown>>('agents', 'agent', {
     seed: INITIAL_AGENTS.map(a => ({ title: a.name, data: a as unknown as Record<string, unknown> })),
@@ -166,6 +173,17 @@ export default function AgentsLensPage() {
     setNewName(''); setNewType('general'); setNewDescription('');
     setNewGoals(''); setNewTools([]); setNewModel('claude-sonnet-4-5-20250929');
     setNewTemp(0.3); setNewMaxTokens(4096);
+  };
+
+  const handleAgentAction = async (action: string) => {
+    const targetId = selectedAgent?.id || lensAgentItems[0]?.id;
+    if (!targetId) return;
+    setIsRunning(action);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action });
+      setActionResult(res.result as Record<string, unknown>);
+    } catch (e) { console.error(`Action ${action} failed:`, e); }
+    setIsRunning(null);
   };
 
   const getStatusColor = (status?: string) => {
@@ -576,6 +594,220 @@ export default function AgentsLensPage() {
                       ))}
                     </div>
                   </div>
+                )}
+
+                {/* ── Backend Action Panels ── */}
+                <div className="panel p-4">
+                  <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-neon-yellow" /> Computational Actions
+                  </h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <button
+                      onClick={() => handleAgentAction('evaluateCapability')}
+                      disabled={isRunning !== null}
+                      className="flex flex-col items-center gap-2 p-3 bg-lattice-bg rounded-lg border border-lattice-border hover:border-neon-cyan/50 transition-colors disabled:opacity-50"
+                    >
+                      {isRunning === 'evaluateCapability' ? <Loader2 className="w-5 h-5 text-neon-cyan animate-spin" /> : <Gauge className="w-5 h-5 text-neon-cyan" />}
+                      <span className="text-xs text-gray-300">Evaluate Capability</span>
+                    </button>
+                    <button
+                      onClick={() => handleAgentAction('routeTask')}
+                      disabled={isRunning !== null}
+                      className="flex flex-col items-center gap-2 p-3 bg-lattice-bg rounded-lg border border-lattice-border hover:border-neon-purple/50 transition-colors disabled:opacity-50"
+                    >
+                      {isRunning === 'routeTask' ? <Loader2 className="w-5 h-5 text-neon-purple animate-spin" /> : <Route className="w-5 h-5 text-neon-purple" />}
+                      <span className="text-xs text-gray-300">Route Task</span>
+                    </button>
+                    <button
+                      onClick={() => handleAgentAction('swarmStatus')}
+                      disabled={isRunning !== null}
+                      className="flex flex-col items-center gap-2 p-3 bg-lattice-bg rounded-lg border border-lattice-border hover:border-neon-green/50 transition-colors disabled:opacity-50"
+                    >
+                      {isRunning === 'swarmStatus' ? <Loader2 className="w-5 h-5 text-neon-green animate-spin" /> : <Radio className="w-5 h-5 text-neon-green" />}
+                      <span className="text-xs text-gray-300">Swarm Status</span>
+                    </button>
+                    <button
+                      onClick={() => handleAgentAction('benchmarkAgent')}
+                      disabled={isRunning !== null}
+                      className="flex flex-col items-center gap-2 p-3 bg-lattice-bg rounded-lg border border-lattice-border hover:border-yellow-400/50 transition-colors disabled:opacity-50"
+                    >
+                      {isRunning === 'benchmarkAgent' ? <Loader2 className="w-5 h-5 text-yellow-400 animate-spin" /> : <Timer className="w-5 h-5 text-yellow-400" />}
+                      <span className="text-xs text-gray-300">Benchmark</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Action Result Display */}
+                {actionResult && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="panel p-4"
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="font-semibold text-white flex items-center gap-2">
+                        <BarChart3 className="w-4 h-4 text-neon-cyan" /> Action Result
+                      </h3>
+                      <button onClick={() => setActionResult(null)} className="text-gray-400 hover:text-white">
+                        <XCircle className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {/* Capability Evaluation Result */}
+                    {actionResult.capabilityScore !== undefined && (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3">
+                          <div className="text-3xl font-bold text-neon-cyan">{actionResult.capabilityScore as number}</div>
+                          <div>
+                            <span className={`text-sm font-medium px-2 py-0.5 rounded ${
+                              (actionResult.tier as string) === 'Elite' ? 'bg-green-500/20 text-green-400' :
+                              (actionResult.tier as string) === 'Proficient' ? 'bg-blue-500/20 text-blue-400' :
+                              (actionResult.tier as string) === 'Developing' ? 'bg-yellow-500/20 text-yellow-400' :
+                              'bg-gray-500/20 text-gray-400'
+                            }`}>
+                              {actionResult.tier as string}
+                            </span>
+                            <p className="text-xs text-gray-400 mt-1">{actionResult.agentName as string}</p>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="p-2 bg-lattice-bg rounded text-center">
+                            <p className="text-sm font-bold text-neon-green">{actionResult.successRate as number}%</p>
+                            <p className="text-[10px] text-gray-500">Success Rate</p>
+                          </div>
+                          <div className="p-2 bg-lattice-bg rounded text-center">
+                            <p className="text-sm font-bold text-neon-blue">{actionResult.avgLatencyMs as number}ms</p>
+                            <p className="text-[10px] text-gray-500">Avg Latency</p>
+                          </div>
+                          <div className="p-2 bg-lattice-bg rounded text-center">
+                            <p className="text-sm font-bold text-neon-purple">{actionResult.tasksCompleted as number}/{actionResult.totalTasks as number}</p>
+                            <p className="text-[10px] text-gray-500">Tasks Done</p>
+                          </div>
+                        </div>
+                        {(actionResult.recommendations as string[])?.length > 0 && (
+                          <div className="space-y-1">
+                            {(actionResult.recommendations as string[]).map((rec, i) => (
+                              <div key={i} className="flex items-center gap-2 text-xs text-yellow-400">
+                                <AlertTriangle className="w-3 h-3 flex-shrink-0" /> {rec}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Route Task Result */}
+                    {actionResult.bestAgent !== undefined && (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Route className="w-4 h-4 text-neon-purple" />
+                          <span className="text-sm text-gray-300">Task: <span className="text-white font-medium">{actionResult.task as string}</span></span>
+                        </div>
+                        <div className="p-3 bg-neon-cyan/10 border border-neon-cyan/20 rounded-lg">
+                          <p className="text-xs text-gray-400">Best Match</p>
+                          <p className="text-lg font-bold text-neon-cyan">{actionResult.bestAgent as string}</p>
+                        </div>
+                        {(actionResult.rankings as Array<{ name: string; score: number; skillMatch: number }>)?.map((r, i) => (
+                          <div key={i} className="flex items-center justify-between p-2 bg-lattice-bg rounded">
+                            <div className="flex items-center gap-2">
+                              <span className={`text-xs font-bold w-5 text-center ${i === 0 ? 'text-neon-cyan' : 'text-gray-500'}`}>{i + 1}</span>
+                              <span className="text-sm text-white">{r.name}</span>
+                            </div>
+                            <div className="flex items-center gap-3 text-xs text-gray-400">
+                              <span>Skills: {r.skillMatch}</span>
+                              <span className="font-bold text-neon-green">{r.score}%</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Swarm Status Result */}
+                    {actionResult.healthScore !== undefined && actionResult.totalAgents !== undefined && (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3 mb-2">
+                          <div className="text-3xl font-bold text-neon-green">{actionResult.healthScore as number}%</div>
+                          <span className="text-sm text-gray-400">Swarm Health</span>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                          <div className="p-2 bg-lattice-bg rounded text-center">
+                            <p className="text-sm font-bold text-white">{actionResult.totalAgents as number}</p>
+                            <p className="text-[10px] text-gray-500">Total</p>
+                          </div>
+                          <div className="p-2 bg-lattice-bg rounded text-center">
+                            <p className="text-sm font-bold text-neon-green">{actionResult.active as number}</p>
+                            <p className="text-[10px] text-gray-500">Active</p>
+                          </div>
+                          <div className="p-2 bg-lattice-bg rounded text-center">
+                            <p className="text-sm font-bold text-yellow-400">{actionResult.idle as number}</p>
+                            <p className="text-[10px] text-gray-500">Idle</p>
+                          </div>
+                          <div className="p-2 bg-lattice-bg rounded text-center">
+                            <p className="text-sm font-bold text-red-400">{actionResult.errored as number}</p>
+                            <p className="text-[10px] text-gray-500">Errored</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-gray-400 pt-2 border-t border-lattice-border">
+                          <span>Total Tasks Completed: <span className="text-white font-medium">{(actionResult.totalTasksCompleted as number)?.toLocaleString()}</span></span>
+                          <span>Avg Load: <span className="text-white font-medium">{actionResult.avgLoad as number}</span></span>
+                        </div>
+                        {(actionResult.alerts as string[])?.length > 0 && (
+                          <div className="space-y-1">
+                            {(actionResult.alerts as string[]).map((alert, i) => (
+                              <div key={i} className="flex items-center gap-2 text-xs text-red-400 bg-red-500/10 p-2 rounded">
+                                <AlertTriangle className="w-3 h-3 flex-shrink-0" /> {alert}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Benchmark Result */}
+                    {actionResult.benchmarkScore !== undefined && (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3">
+                          <div className={`text-4xl font-bold ${
+                            (actionResult.grade as string) === 'A' ? 'text-green-400' :
+                            (actionResult.grade as string) === 'B' ? 'text-blue-400' :
+                            (actionResult.grade as string) === 'C' ? 'text-yellow-400' :
+                            'text-red-400'
+                          }`}>
+                            {actionResult.grade as string}
+                          </div>
+                          <div>
+                            <p className="text-lg font-bold text-white">{actionResult.benchmarkScore as number}</p>
+                            <p className="text-xs text-gray-400">{actionResult.agentName as string}</p>
+                          </div>
+                        </div>
+                        {actionResult.metrics && (
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                            <div className="p-2 bg-lattice-bg rounded text-center">
+                              <p className="text-sm font-bold text-neon-cyan">{(actionResult.metrics as Record<string, number>).throughput}</p>
+                              <p className="text-[10px] text-gray-500">Tasks/min</p>
+                            </div>
+                            <div className="p-2 bg-lattice-bg rounded text-center">
+                              <p className="text-sm font-bold text-neon-green">{(actionResult.metrics as Record<string, number>).accuracy}%</p>
+                              <p className="text-[10px] text-gray-500">Accuracy</p>
+                            </div>
+                            <div className="p-2 bg-lattice-bg rounded text-center">
+                              <p className="text-sm font-bold text-neon-blue">{(actionResult.metrics as Record<string, number>).uptimePercent}%</p>
+                              <p className="text-[10px] text-gray-500">Uptime</p>
+                            </div>
+                            <div className="p-2 bg-lattice-bg rounded text-center">
+                              <p className="text-sm font-bold text-neon-purple">{(actionResult.metrics as Record<string, number>).memoryMB}MB</p>
+                              <p className="text-[10px] text-gray-500">Memory</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Fallback: message-only result */}
+                    {actionResult.message && !actionResult.capabilityScore && !actionResult.bestAgent && !actionResult.healthScore && !actionResult.benchmarkScore && (
+                      <p className="text-sm text-gray-400">{actionResult.message as string}</p>
+                    )}
+                  </motion.div>
                 )}
               </div>
             )}
