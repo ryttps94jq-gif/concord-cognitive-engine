@@ -55,6 +55,26 @@ const SoundscapeEngine = dynamic(() => import('@/components/world-lens/Soundscap
 const AnimationManager = dynamic(() => import('@/components/world-lens/AnimationManager'), { ssr: false });
 const GameJuice = dynamic(() => import('@/components/world-lens/GameJuice'), { ssr: false });
 const LoadingTransitions = dynamic(() => import('@/components/world-lens/LoadingTransitions'), { ssr: false });
+
+// ── Builder / Tools (District mode) ───────────────────────────────
+const SnapBuildCatalog = dynamic(() => import('@/components/world-lens/SnapBuildCatalog'), { ssr: false });
+const ConcordDSLEditor = dynamic(() => import('@/components/world-lens/ConcordDSLEditor'), { ssr: false });
+const ConcordTerminal = dynamic(() => import('@/components/world-lens/ConcordTerminal'), { ssr: false });
+const DTUDiffViewer = dynamic(() => import('@/components/world-lens/DTUDiffViewer'), { ssr: false });
+const StandardsLibrary = dynamic(() => import('@/components/world-lens/StandardsLibrary'), { ssr: false });
+const FabricationExportPanel = dynamic(() => import('@/components/world-lens/FabricationExportPanel'), { ssr: false });
+const ExportEmbed = dynamic(() => import('@/components/world-lens/ExportEmbed'), { ssr: false });
+const NotebookEditor = dynamic(() => import('@/components/world-lens/NotebookEditor'), { ssr: false });
+const DependencyGraphViewer = dynamic(() => import('@/components/world-lens/DependencyGraphViewer'), { ssr: false });
+const DigitalTwinDashboard = dynamic(() => import('@/components/world-lens/DigitalTwinDashboard'), { ssr: false });
+const SensorDashboard = dynamic(() => import('@/components/world-lens/SensorDashboard'), { ssr: false });
+const ServiceMarketplace = dynamic(() => import('@/components/world-lens/ServiceMarketplace'), { ssr: false });
+const CertificatePanel = dynamic(() => import('@/components/world-lens/CertificatePanel'), { ssr: false });
+const NotarizationPanel = dynamic(() => import('@/components/world-lens/NotarizationPanel'), { ssr: false });
+const StressTestPanel = dynamic(() => import('@/components/world-lens/StressTestPanel'), { ssr: false });
+const ReplayForensics = dynamic(() => import('@/components/world-lens/ReplayForensics'), { ssr: false });
+const ReplaySpectator = dynamic(() => import('@/components/world-lens/ReplaySpectator'), { ssr: false });
+
 import { SEED_MATERIALS } from '@/lib/world-lens/material-seed';
 import { cacheMaterials } from '@/lib/world-lens/validation-engine';
 import type {
@@ -68,6 +88,9 @@ import {
   Radio, Eye, Play, Square, Users, Clock, Coins,
   Handshake, CalendarDays, Bell, Mic, MessageSquare,
   ThumbsUp, BellRing, Shield, Fingerprint, Network, AudioLines,
+  Wrench, Package, Code2, Terminal, Diff, BookOpen, BoxSelect,
+  FileCode, GitBranch, Activity, Gauge, ShoppingCart,
+  Award, Stamp, FlaskConical, History, Clapperboard, ChevronRight,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api/client';
