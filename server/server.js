@@ -1581,6 +1581,10 @@ function defaultStyleVector() {
     skepticism: 0.55,
     abstraction: 0.45,
     bulletiness: 0.45,
+    technicality: 0.5,
+    warmth: 0.5,
+    // personality growth metadata
+    exchanges: 0,
     // mutation metadata
     updatedAt: nowISO(),
     mutations: 0
@@ -1597,6 +1601,9 @@ function normalizeStyleVector(v) {
   out.skepticism = clamp01(out.skepticism);
   out.abstraction = clamp01(out.abstraction);
   out.bulletiness = clamp01(out.bulletiness);
+  out.technicality = clamp01(out.technicality ?? 0.5);
+  out.warmth = clamp01(out.warmth ?? 0.5);
+  out.exchanges = Number(out.exchanges || 0);
   out.updatedAt = nowISO();
   out.mutations = Number(out.mutations||0);
   return out;
@@ -1621,7 +1628,7 @@ function mutateStyleVector(current, signal) {
     nudge("verbosity", -0.03);
     nudge("skepticism", 0.03);
     nudge("abstraction", -0.02);
-  } else if (field && ["verbosity","formality","skepticism","abstraction","bulletiness"].includes(field)) {
+  } else if (field && ["verbosity","formality","skepticism","abstraction","bulletiness","technicality","warmth"].includes(field)) {
     const delta = (dir === "up" ? Math.abs(amt) : dir === "down" ? -Math.abs(amt) : amt);
     nudge(field, delta);
   }
@@ -16732,7 +16739,23 @@ sess.messages.push({ role: "user", content: prompt, ts: nowISO() });
   // ===== END DTU ENRICHMENT =====
 
   // --- Per-user personality growth (style vector) ---
-  // Only react to explicit preference signals (offline-safe).
+  // On first message, inherit style from previous session mega DTUs
+  if (sess.messages.length <= 1) {
+    const _currentVec = STATE.styleVectors.get(sessionId);
+    if (!_currentVec || _currentVec.exchanges === 0) {
+      for (const [, dtu] of STATE.dtus) {
+        if (dtu.tier === 'mega' && dtu.machine?.kind === 'chat_mega' && dtu.machine?.styleVector) {
+          const inherited = normalizeStyleVector({ ...dtu.machine.styleVector });
+          STATE.styleVectors.set(sessionId, inherited);
+          styleVec = inherited;
+          localSettings = applyStyleToSettings(baseSettings, inherited);
+          break; // Use most recent mega's style
+        }
+      }
+    }
+  }
+
+  // Explicit preference signals (offline-safe).
   const _low = tokenish(prompt);
   const signals = [];
   if (/\b(shorter|too long|less detail|brief)\b/i.test(prompt)) signals.push({ field:"verbosity", dir:"down", amount:0.10 });
@@ -16744,11 +16767,29 @@ sess.messages.push({ role: "user", content: prompt, ts: nowISO() });
   if (/\b(stop being static|be dynamic|free flow|freestyle)\b/i.test(prompt)) signals.push({ field:"bulletiness", dir:"down", amount:0.08 });
   if (/\b(stop arguing|stop disclaimers|stop assistant)\b/i.test(prompt)) signals.push({ field:"formality", dir:"down", amount:0.06 });
 
-  if (signals.length) {
+  // Implicit pattern analysis — gradual drift toward user's communication style (learning rate 0.05)
+  const _promptWords = prompt.split(/\s+/).length;
+  const _hasTechnicalTerms = /\b(api|function|algorithm|database|config|deploy|debug|error|stack|runtime|server|endpoint|schema|query|index|cache|thread|async|promise|callback|middleware)\b/i.test(prompt);
+  const _isShortMessage = _promptWords < 15;
+  const _isLongMessage = _promptWords > 50;
+  const _hasEmoji = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/u.test(prompt);
+  const _hasGreeting = /\b(thanks|thank you|please|hi |hey |hello|cheers|appreciate)\b/i.test(prompt);
+  const _lr = 0.05;
+  if (_hasTechnicalTerms) signals.push({ field:"technicality", dir:"up", amount:_lr });
+  if (_isShortMessage) signals.push({ field:"verbosity", dir:"down", amount:_lr });
+  else if (_isLongMessage) signals.push({ field:"verbosity", dir:"up", amount:_lr });
+  if (_hasEmoji || _hasGreeting) signals.push({ field:"warmth", dir:"up", amount:_lr });
+
+  // Always increment exchange counter
+  {
     let v = getSessionStyleVector(sessionId);
-    for (const s of signals) v = mutateStyleVector(v, s);
+    v.exchanges = (v.exchanges || 0) + 1;
+    if (signals.length) {
+      for (const s of signals) v = mutateStyleVector(v, s);
+    }
     STATE.styleVectors.set(sessionId, v);
     // apply updated style to this response immediately
+    styleVec = v;
     localSettings = applyStyleToSettings(baseSettings, v);
     saveStateDebounced();
   }
