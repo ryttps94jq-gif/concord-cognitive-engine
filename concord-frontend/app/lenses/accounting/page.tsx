@@ -2482,6 +2482,82 @@ export default function AccountingLensPage() {
         </div>
       )}
 
+      {/* Rent Roll Action Panel (Properties tab) */}
+      {mode === 'Properties' && (
+        <div className={ds.panel}>
+          <div className={ds.sectionHeader}>
+            <h3 className={cn(ds.heading3, 'flex items-center gap-2')}>
+              <Building2 className="w-5 h-5 text-neon-purple" /> Rent Roll Report
+            </h3>
+            <button className={ds.btnPrimary} onClick={handleRentRoll} disabled={rentRollLoading}>
+              {rentRollLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <FileSpreadsheet className="w-4 h-4" />} Generate Rent Roll
+            </button>
+          </div>
+
+          {rentRollResult && (
+            <div className="mt-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <span className={cn(ds.textMuted, 'text-xs')}>As of: {(rentRollResult.asOfMonth as string) || '-'}</span>
+                <button onClick={() => setRentRollResult(null)} className={ds.btnGhost}><X className="w-4 h-4" /></button>
+              </div>
+
+              <div className={ds.grid4}>
+                <div className="text-center p-3 rounded-lg bg-lattice-elevated/50">
+                  <p className={ds.textMuted}>Properties</p>
+                  <p className={cn(ds.heading3, 'text-white')}>{rentRollResult.totalProperties as number || 0}</p>
+                </div>
+                <div className="text-center p-3 rounded-lg bg-lattice-elevated/50">
+                  <p className={ds.textMuted}>Total Units</p>
+                  <p className={cn(ds.heading3, 'text-white')}>{rentRollResult.totalUnits as number || 0}</p>
+                </div>
+                <div className="text-center p-3 rounded-lg bg-green-400/10 border border-green-400/30">
+                  <p className={ds.textMuted}>Occupancy Rate</p>
+                  <p className={cn(ds.heading3, 'text-green-400')}>{rentRollResult.occupancyRate as number || 0}%</p>
+                </div>
+                <div className="text-center p-3 rounded-lg bg-neon-cyan/10 border border-neon-cyan/30">
+                  <p className={ds.textMuted}>Collection Rate</p>
+                  <p className={cn(ds.heading3, 'text-neon-cyan')}>{rentRollResult.collectionRate as number || 0}%</p>
+                </div>
+              </div>
+
+              <div className={ds.grid3}>
+                <div className="text-center p-3 rounded-lg bg-lattice-elevated/50">
+                  <p className={ds.textMuted}>Expected Rent</p>
+                  <p className={cn(ds.heading3, 'text-white')}>{fmt(rentRollResult.totalExpectedRent as number || 0)}</p>
+                </div>
+                <div className="text-center p-3 rounded-lg bg-green-400/10 border border-green-400/30">
+                  <p className={ds.textMuted}>Collected</p>
+                  <p className={cn(ds.heading3, 'text-green-400')}>{fmt(rentRollResult.totalCollected as number || 0)}</p>
+                </div>
+                <div className={cn('text-center p-3 rounded-lg', (rentRollResult.totalOutstanding as number) > 0 ? 'bg-red-400/10 border border-red-400/30' : 'bg-green-400/10 border border-green-400/30')}>
+                  <p className={ds.textMuted}>Outstanding</p>
+                  <p className={cn(ds.heading3, (rentRollResult.totalOutstanding as number) > 0 ? 'text-red-400' : 'text-green-400')}>{fmt(rentRollResult.totalOutstanding as number || 0)}</p>
+                </div>
+              </div>
+
+              {/* Per-property breakdown */}
+              {Array.isArray(rentRollResult.properties) && (rentRollResult.properties as Array<Record<string, unknown>>).length > 0 && (
+                <div className="space-y-3">
+                  <h4 className={cn(ds.heading3, 'text-sm')}>Property Breakdown</h4>
+                  {(rentRollResult.properties as Array<Record<string, unknown>>).map((prop, i) => (
+                    <div key={i} className={cn(ds.panelHover, 'flex items-center justify-between')}>
+                      <div>
+                        <p className="text-sm text-white font-medium">{prop.address as string || prop.propertyId as string}</p>
+                        <p className={ds.textMuted}>{prop.occupied as number}/{prop.totalUnits as number} occupied | {prop.vacant as number} vacant</p>
+                      </div>
+                      <div className="text-right">
+                        <p className={cn(ds.textMono, 'text-green-400')}>{fmt(prop.collected as number || 0)} / {fmt(prop.expectedRent as number || 0)}</p>
+                        <p className={cn(ds.textMuted, 'text-xs')}>{prop.collectionRate as number || 0}% collected</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Artifact library */}
       {isLoading ? (
         <div className="flex items-center justify-center py-20">
