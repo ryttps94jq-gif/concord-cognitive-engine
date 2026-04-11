@@ -541,6 +541,38 @@ function CityStreamingSection() {
 
 type ViewMode = 'concordia' | 'district' | 'streams' | 'explore';
 
+type DistrictTool =
+  | 'snapbuild' | 'dsl' | 'terminal' | 'diff' | 'standards'
+  | 'fabrication' | 'embed' | 'notebook' | 'depgraph'
+  | 'digitaltwin' | 'sensors' | 'marketplace'
+  | 'certificates' | 'notarization' | 'stresstest'
+  | 'replay' | 'spectator' | null;
+
+const DISTRICT_TOOLS: { key: Exclude<DistrictTool, null>; label: string; icon: React.ComponentType<{ className?: string }>; group: string }[] = [
+  // Build
+  { key: 'snapbuild', label: 'Snap Build', icon: Package, group: 'Build' },
+  { key: 'dsl', label: 'DSL Editor', icon: Code2, group: 'Build' },
+  { key: 'terminal', label: 'Terminal', icon: Terminal, group: 'Build' },
+  { key: 'notebook', label: 'Notebook', icon: FileCode, group: 'Build' },
+  // Inspect
+  { key: 'diff', label: 'DTU Diff', icon: Diff, group: 'Inspect' },
+  { key: 'standards', label: 'Standards', icon: BookOpen, group: 'Inspect' },
+  { key: 'depgraph', label: 'Dependencies', icon: GitBranch, group: 'Inspect' },
+  { key: 'digitaltwin', label: 'Digital Twin', icon: Activity, group: 'Inspect' },
+  { key: 'sensors', label: 'Sensors', icon: Gauge, group: 'Inspect' },
+  // Export & Services
+  { key: 'fabrication', label: 'Fabrication', icon: BoxSelect, group: 'Export' },
+  { key: 'embed', label: 'Embed Export', icon: Code2, group: 'Export' },
+  { key: 'marketplace', label: 'Marketplace', icon: ShoppingCart, group: 'Export' },
+  // Verify
+  { key: 'certificates', label: 'Certificates', icon: Award, group: 'Verify' },
+  { key: 'notarization', label: 'Notarization', icon: Stamp, group: 'Verify' },
+  { key: 'stresstest', label: 'Stress Test', icon: FlaskConical, group: 'Verify' },
+  // Replay
+  { key: 'replay', label: 'Replay', icon: History, group: 'Replay' },
+  { key: 'spectator', label: 'Spectator', icon: Clapperboard, group: 'Replay' },
+];
+
 // ── Component ───────────────────────────────────────────────────────
 
 export default function WorldLensPage() {
@@ -555,6 +587,10 @@ export default function WorldLensPage() {
   const [creationMode, setCreationMode] = useState<CreationMode | null>(null);
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState<0 | 1 | 2 | 3>(0);
+
+  // District tools state
+  const [activeTool, setActiveTool] = useState<DistrictTool>(null);
+  const [toolsExpanded, setToolsExpanded] = useState(false);
 
   // 3D Explore mode state
   const [cameraMode, setCameraMode] = useState<'isometric' | 'follow' | 'free' | 'interior' | 'cinematic'>('follow');
