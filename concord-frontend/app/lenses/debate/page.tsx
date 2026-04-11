@@ -457,7 +457,7 @@ export default function DebateLensPage() {
           <div className="space-y-3 pt-2 border-t border-white/5">
             <div className="grid grid-cols-2 gap-2">
               <div className="p-2 bg-lattice-surface rounded text-center">
-                <p className="text-lg font-bold text-neon-cyan">{String((actionResult.originalPosition as string)?.split(/\s+/)?.length ?? actionResult.originalLength ?? 0)}</p>
+                <p className="text-lg font-bold text-neon-cyan">{String((actionResult.originalPosition as string)?.split(/\s+/)?.length ?? Number(actionResult.originalLength) ?? 0)}</p>
                 <p className="text-[10px] text-gray-500">Original Words</p>
               </div>
               <div className="p-2 bg-lattice-surface rounded text-center">
@@ -561,7 +561,7 @@ export default function DebateLensPage() {
           </div>
         )}
 
-        {actionResult && actionResult.message && (
+        {actionResult && !!actionResult.message && (
           <p className="text-xs text-gray-400 italic pt-1">{String(actionResult.message)}</p>
         )}
       </div>

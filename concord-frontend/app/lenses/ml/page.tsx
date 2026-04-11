@@ -257,7 +257,7 @@ export default function MLLensPage() {
   // Data - sourced from persistent backend
   const datasets: Dataset[] = datasetItems.map(i => ({ ...(i.data as unknown as Dataset), id: i.id }));
   const deployments: Deployment[] = deploymentItems.map(i => ({ ...(i.data as unknown as Deployment), id: i.id }));
-  const metrics = metricsItems?.[0]?.data || { gpuUsage: 0, memoryUsage: 0, totalInferences: 0, avgLatency: 0 };
+  const metrics = (metricsItems?.[0]?.data || { gpuUsage: 0, memoryUsage: 0, totalInferences: 0, avgLatency: 0 }) as { gpuUsage: number; memoryUsage: number; totalInferences: number; avgLatency: number };
 
   // Filtered data
   const filteredModels = useMemo(() => {

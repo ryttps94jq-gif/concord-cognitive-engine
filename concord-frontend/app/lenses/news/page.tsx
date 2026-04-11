@@ -112,14 +112,14 @@ export default function NewsLensPage() {
   ];
 
   const articles: NewsArticle[] = useMemo(() => {
-    return (newsItems || []).map((item: Record<string, unknown>) => {
+    return (newsItems || []).map((item) => {
       const data = (item.data || {}) as Record<string, unknown>;
       return {
         id: String(item.id || ''),
         title: String(data.title || item.title || ''),
         summary: String(data.summary || data.description || ''),
         source: String(data.source || ''),
-        category: String(data.eventType?.toString().split(':')[1] || item.type || 'general'),
+        category: String(data.eventType?.toString().split(':')[1] || data.type || 'general'),
         timestamp: String(item.createdAt || item.updatedAt || ''),
         imageUrl: (data.imageUrl as string) || undefined,
         trending: Boolean(data.trending),
@@ -604,20 +604,23 @@ export default function NewsLensPage() {
             </h3>
             <div className="space-y-2">
               {trendingItems?.length > 0 ? (
-                trendingItems.map((topic: Record<string, unknown>, index: number) => (
+                trendingItems.map((topic, index: number) => {
+                  const topicData = topic.data as Record<string, unknown>;
+                  return (
                   <div
-                    key={topic.id as string}
+                    key={topic.id}
                     className="flex items-center gap-3 p-2 rounded-lg hover:bg-lattice-elevated cursor-pointer transition-colors"
-                    onClick={() => setSearchText(topic.name as string)}
+                    onClick={() => setSearchText(String(topicData.name ?? topic.title ?? ''))}
                   >
                     <span className="text-gray-500 text-sm w-6 text-right font-mono">{index + 1}</span>
                     <div className="flex-1">
-                      <p className="font-medium text-sm">{topic.name as string}</p>
-                      <p className="text-xs text-gray-500">{topic.count as number} mentions</p>
+                      <p className="font-medium text-sm">{String(topicData.name ?? topic.title ?? '')}</p>
+                      <p className="text-xs text-gray-500">{String(topicData.count ?? 0)} mentions</p>
                     </div>
                     <ArrowUpRight className="w-3 h-3 text-gray-600" />
                   </div>
-                ))
+                  );
+                })
               ) : (
                 <p className="text-sm text-gray-500 text-center py-4">No trending topics</p>
               )}

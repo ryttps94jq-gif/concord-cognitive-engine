@@ -494,8 +494,8 @@ export default function LockLensPage() {
                 {'suggestions' in actionResult && Array.isArray(actionResult.suggestions) && actionResult.suggestions.length > 0 && (
                   <div>
                     <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Suggestions</p>
-                    {(actionResult.suggestions as string[]).map((s, i) => (
-                      <p key={i} className="text-xs text-gray-300">• {s}</p>
+                    {(actionResult.suggestions as Array<{resource: string; recommendation: string; reason: string}>).map((s, i) => (
+                      <p key={i} className="text-xs text-gray-300">• <span className="font-mono text-neon-cyan">{s.resource}</span>: {s.reason}</p>
                     ))}
                   </div>
                 )}
@@ -506,8 +506,8 @@ export default function LockLensPage() {
                 <div className="flex items-center gap-4">
                   <span className="text-gray-400 text-xs">Jain&apos;s Index: <span className="text-neon-cyan font-bold text-lg">{String(actionResult.jainsIndex)}</span></span>
                   <span className={`text-xs px-2 py-0.5 rounded ${
-                    actionResult.fairnessLevel === 'high' ? 'bg-neon-green/20 text-neon-green' :
-                    actionResult.fairnessLevel === 'medium' ? 'bg-yellow-400/20 text-yellow-400' : 'bg-red-400/20 text-red-400'
+                    actionResult.fairnessLevel === 'excellent' || actionResult.fairnessLevel === 'good' ? 'bg-neon-green/20 text-neon-green' :
+                    actionResult.fairnessLevel === 'moderate' ? 'bg-yellow-400/20 text-yellow-400' : 'bg-red-400/20 text-red-400'
                   }`}>{String(actionResult.fairnessLevel)}</span>
                 </div>
                 {'starvation' in actionResult && actionResult.starvation !== null && typeof actionResult.starvation === 'object' && (

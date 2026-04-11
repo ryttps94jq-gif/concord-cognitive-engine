@@ -512,7 +512,7 @@ export default function CRILensPage() {
           return (
             <div className="rounded-lg bg-lattice-deep border border-neon-cyan/20 p-3 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-neon-cyan font-medium capitalize text-xs">{actionResult.action}</span>
+                <span className="text-neon-cyan font-medium capitalize text-xs">{String(actionResult.action)}</span>
                 <button onClick={() => setActionResult(null)} className="text-gray-500 hover:text-gray-300">
                   <XCircle className="w-3.5 h-3.5" />
                 </button>
@@ -677,7 +677,7 @@ export default function CRILensPage() {
               )}
 
               {/* Fallback */}
-              {(typeof actionResult.result === 'string' || r?.message) && (
+              {(typeof actionResult.result === 'string' || !!r?.message) && (
                 <p className="text-xs text-gray-400">{(r?.message as string) || (actionResult.result as string)}</p>
               )}
             </div>

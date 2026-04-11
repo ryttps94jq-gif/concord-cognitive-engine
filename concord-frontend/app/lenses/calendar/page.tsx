@@ -1339,18 +1339,18 @@ export default function CalendarLensPage() {
                   )}
 
                   {/* Find Availability */}
-                  {!!actionResult.slots && (
+                  {!!actionResult.availableSlots && (
                     <div>
                       <div className="flex items-center gap-1.5 mb-2 text-cyan-400 font-semibold">
                         <Clock className="w-3.5 h-3.5" /> Available Slots
                       </div>
-                      {(actionResult.slots as Array<{ start: string; end: string; score?: number }>).length === 0
+                      {(actionResult.availableSlots as Array<{ start: string; end: string; minutes: number }>).length === 0
                         ? <p className="text-gray-400">No availability windows found.</p>
-                        : (actionResult.slots as Array<{ start: string; end: string; score?: number }>).map((s, i) => (
+                        : (actionResult.availableSlots as Array<{ start: string; end: string; minutes: number }>).map((s, i) => (
                           <div key={i} className="mb-1 text-cyan-300">
                             {s.start} &ndash; {s.end}
-                            {s.score !== undefined && (
-                              <span className="ml-2 text-gray-400">score: {s.score}</span>
+                            {s.minutes !== undefined && (
+                              <span className="ml-2 text-gray-400">{s.minutes} min</span>
                             )}
                           </div>
                         ))
@@ -1359,16 +1359,16 @@ export default function CalendarLensPage() {
                   )}
 
                   {/* Expand Recurring */}
-                  {!!actionResult.expanded && (
+                  {!!actionResult.occurrences && (
                     <div>
                       <div className="flex items-center gap-1.5 mb-2 text-purple-400 font-semibold">
                         <Repeat className="w-3.5 h-3.5" /> Expanded Events
                       </div>
-                      {(actionResult.expanded as Array<{ title: string; date: string }>).length === 0
+                      {(actionResult.occurrences as Array<{ occurrence: number; date: string; dayOfWeek: string }>).length === 0
                         ? <p className="text-gray-400">No recurring events to expand.</p>
-                        : (actionResult.expanded as Array<{ title: string; date: string }>).map((e, i) => (
+                        : (actionResult.occurrences as Array<{ occurrence: number; date: string; dayOfWeek: string }>).map((e, i) => (
                           <div key={i} className="mb-1 text-purple-300">
-                            <span className="font-medium">{e.title}</span>
+                            <span className="font-medium">{e.dayOfWeek}</span>
                             <span className="text-gray-400 ml-2">{e.date}</span>
                           </div>
                         ))
@@ -1377,29 +1377,24 @@ export default function CalendarLensPage() {
                   )}
 
                   {/* Schedule Optimize */}
-                  {!!actionResult.suggestions && (
+                  {!!actionResult.optimizedOrder && (
                     <div>
                       <div className="flex items-center gap-1.5 mb-2 text-green-400 font-semibold">
-                        <BarChart3 className="w-3.5 h-3.5" /> Optimization Suggestions
+                        <BarChart3 className="w-3.5 h-3.5" /> Optimized Order
                       </div>
-                      {(actionResult.suggestions as Array<string | { text: string; impact?: string }>).length === 0
+                      {(actionResult.optimizedOrder as Array<string>).length === 0
                         ? <p className="text-gray-400">Schedule looks optimal.</p>
-                        : (actionResult.suggestions as Array<string | { text: string; impact?: string }>).map((s, i) => {
-                          const text = typeof s === 'string' ? s : s.text;
-                          const impact = typeof s === 'object' ? s.impact : undefined;
-                          return (
-                            <div key={i} className="mb-1 text-green-300">
-                              &bull; {text}
-                              {impact && <span className="text-gray-400 ml-1">({impact})</span>}
-                            </div>
-                          );
-                        })
+                        : (actionResult.optimizedOrder as Array<string>).map((s, i) => (
+                          <div key={i} className="mb-1 text-green-300">
+                            &bull; {s}
+                          </div>
+                        ))
                       }
                     </div>
                   )}
 
                   {/* Fallback */}
-                  {!actionResult.conflicts && !actionResult.slots && !actionResult.expanded && !actionResult.suggestions && (
+                  {!actionResult.conflicts && !actionResult.availableSlots && !actionResult.occurrences && !actionResult.optimizedOrder && (
                     <div className="text-sm text-gray-400">
                       {actionResult.message ? (
                         <p>{actionResult.message as string}</p>

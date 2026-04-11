@@ -567,7 +567,7 @@ export default function ChemLensPage() {
             )}
 
             {/* Fallback: generic JSON display */}
-            {actionResult.formula === undefined && actionResult.equation === undefined && actionResult.pH === undefined && actionResult.message && (
+            {actionResult.formula === undefined && actionResult.equation === undefined && actionResult.pH === undefined && !!actionResult.message && (
               <p className="text-sm text-gray-400">{actionResult.message as string}</p>
             )}
             {actionResult.formula === undefined && actionResult.equation === undefined && actionResult.pH === undefined && !actionResult.message && (

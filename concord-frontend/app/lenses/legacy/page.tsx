@@ -413,8 +413,8 @@ export default function LegacyLensPage() {
                   <div>
                     <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Migration Order</p>
                     <div className="flex flex-wrap gap-1">
-                      {(actionResult.migrationOrder as string[]).map((m, i) => (
-                        <span key={i} className="text-xs bg-neon-cyan/10 border border-neon-cyan/20 rounded px-2 py-0.5 text-neon-cyan">{i + 1}. {m}</span>
+                      {(actionResult.migrationOrder as Array<{phase: number; module: string; readiness: number}>).map((m, i) => (
+                        <span key={i} className="text-xs bg-neon-cyan/10 border border-neon-cyan/20 rounded px-2 py-0.5 text-neon-cyan">{m.phase}. {m.module}</span>
                       ))}
                     </div>
                   </div>
@@ -433,9 +433,9 @@ export default function LegacyLensPage() {
                 {'keyPersonRisks' in actionResult && Array.isArray(actionResult.keyPersonRisks) && actionResult.keyPersonRisks.length > 0 && (
                   <div>
                     <p className="text-xs text-red-400 font-semibold mb-1">Key Person Risks</p>
-                    {(actionResult.keyPersonRisks as Array<Record<string, unknown>>).map((r, i) => (
+                    {(actionResult.keyPersonRisks as Array<{person: string; componentCount: number; components: string[]}>).map((r, i) => (
                       <div key={i} className="text-xs bg-red-400/10 border border-red-400/20 rounded px-2 py-1 mb-1 text-red-400">
-                        {String(r.person || r.name)} — {String(r.risk || r.level || 'high')}
+                        {String(r.person)} — {String(r.componentCount)} components
                       </div>
                     ))}
                   </div>

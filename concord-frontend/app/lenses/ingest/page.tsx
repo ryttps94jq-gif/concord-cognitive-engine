@@ -27,7 +27,7 @@ interface ParseDocumentResult {
   sentenceCount: number;
   wordCount: number;
   sectionCount: number;
-  sections: { title: string; wordCount: number; sentenceCount: number }[];
+  sections: { title: string; wordCount: number }[];
   avgWordsPerSentence: number;
   avgWordsPerParagraph: number;
 }
@@ -46,7 +46,7 @@ interface ValidateSchemaResult {
   validRecords: number;
   invalidRecords: number;
   validationRate: number;
-  issues: { field: string; message: string; count: number }[];
+  issues: { row: number; valid: boolean; missingFields: string[]; extraFields: string[]; nullFields: string[]; field?: string; message?: string; count?: number }[];
 }
 
 interface BatchStatusResult {
@@ -57,8 +57,8 @@ interface BatchStatusResult {
   failed: number;
   completionRate: number;
   statusBreakdown: Record<string, number>;
-  recentErrors: string[];
-  estimatedRemaining: string;
+  recentErrors: { index: number; id: string; error: string }[];
+  estimatedRemaining: number;
 }
 
 interface IngestJob {
@@ -682,7 +682,7 @@ export default function IngestLensPage() {
                     { label: 'Total', value: (d.totalRecords || 0).toLocaleString(), color: 'text-gray-300' },
                     { label: 'Valid', value: (d.validRecords || 0).toLocaleString(), color: 'text-neon-green' },
                     { label: 'Invalid', value: (d.invalidRecords || 0).toLocaleString(), color: 'text-red-400' },
-                    { label: 'Rate', value: `${((d.validationRate || 0) * 100).toFixed(1)}%`, color: 'text-neon-cyan' },
+                    { label: 'Rate', value: `${(d.validationRate || 0).toFixed(1)}%`, color: 'text-neon-cyan' },
                   ].map(s => (
                     <div key={s.label} className="lens-card text-center">
                       <p className={`text-lg font-bold ${s.color}`}>{s.value}</p>
@@ -691,13 +691,12 @@ export default function IngestLensPage() {
                   ))}
                 </div>
                 <div className="h-2 bg-lattice-deep rounded-full overflow-hidden">
-                  <div className="h-full bg-neon-green rounded-full" style={{ width: `${(d.validationRate || 0) * 100}%` }} />
+                  <div className="h-full bg-neon-green rounded-full" style={{ width: `${(d.validationRate || 0)}%` }} />
                 </div>
                 {(d.issues || []).slice(0, 4).map((issue, i) => (
                   <div key={i} className="flex items-center justify-between text-xs">
-                    <span className="text-gray-300">{issue.field}</span>
-                    <span className="text-red-400">{issue.message}</span>
-                    <span className="text-gray-500">×{issue.count}</span>
+                    <span className="text-gray-300">Row {issue.row}</span>
+                    <span className="text-red-400">{[...(issue.missingFields || []), ...(issue.extraFields || []), ...(issue.nullFields || [])].join(', ') || 'invalid'}</span>
                   </div>
                 ))}
               </div>
@@ -738,7 +737,7 @@ export default function IngestLensPage() {
                   <div>
                     <p className="text-xs text-gray-400 mb-1">Recent Errors</p>
                     {d.recentErrors.slice(0, 3).map((e, i) => (
-                      <p key={i} className="text-xs text-red-400">{e}</p>
+                      <p key={i} className="text-xs text-red-400">[{e.index}] {e.id}: {e.error}</p>
                     ))}
                   </div>
                 )}

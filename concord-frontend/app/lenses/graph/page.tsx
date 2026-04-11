@@ -1868,7 +1868,7 @@ export default function GraphLensPage() {
                       <div className="flex justify-between"><span className="text-gray-400">Density Label</span><span className="text-neon-cyan">{metrics.densityLabel as string}</span></div>
                     </div>
                     <div className="lens-card space-y-1 text-sm">
-                      <div className="flex justify-between"><span className="text-gray-400">Diameter</span><span className="text-white">{!!metrics.diameter ?? 'n/a'}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-400">Diameter</span><span className="text-white">{(metrics.diameter as number | null | undefined) ?? 'n/a'}</span></div>
                       <div className="flex justify-between"><span className="text-gray-400">Avg Path Length</span><span className="text-white">{metrics.averagePathLength as number}</span></div>
                       <div className="flex justify-between"><span className="text-gray-400">Connected</span><span className={metrics.isConnected ? 'text-neon-green' : 'text-red-400'}>{metrics.isConnected ? 'Yes' : 'No'}</span></div>
                     </div>

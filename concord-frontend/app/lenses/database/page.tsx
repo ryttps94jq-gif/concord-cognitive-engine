@@ -1200,7 +1200,7 @@ export default function DatabaseLensPage() {
         )}
 
         {/* message fallback */}
-        {actionResult && actionResult.message && (
+        {actionResult && !!actionResult.message && (
           <p className="text-xs text-gray-400 italic">{String(actionResult.message)}</p>
         )}
       </div>

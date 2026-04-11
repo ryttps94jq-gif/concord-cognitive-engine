@@ -903,7 +903,7 @@ export default function DisputesPage() {
           </div>
         )}
 
-        {actionResult && actionResult.message && (
+        {actionResult && !!actionResult.message && (
           <p className="text-xs text-gray-400 italic pt-1">{String(actionResult.message)}</p>
         )}
       </div>
