@@ -384,7 +384,7 @@ await tryLoadDotenv();
 
 // ---- Environment Validation ----
 const REQUIRED_ENV_PRODUCTION = ["JWT_SECRET", "ADMIN_PASSWORD"];
-const RECOMMENDED_ENV = ["OPENAI_API_KEY", "ALLOWED_ORIGINS"];
+const RECOMMENDED_ENV = ["ALLOWED_ORIGINS"];
 
 function validateEnvironment() {
   const errors = [];
@@ -1205,10 +1205,10 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
 const OPENAI_MODEL_FAST = process.env.OPENAI_MODEL_FAST || process.env.OPENAI_MODEL || "gpt-4o-mini";
 const OPENAI_MODEL_SMART = process.env.OPENAI_MODEL_SMART || "gpt-4.1";
-let LLM_READY = Boolean(OPENAI_API_KEY);
+let LLM_READY = Boolean(OPENAI_API_KEY) || Boolean((process.env.BRAIN_CONSCIOUS_URL || process.env.OLLAMA_HOST || "").trim());
 // Also mark LLM ready if conscious brain becomes available (updated in initThreeBrains)
 function _refreshLlmReady() {
-  LLM_READY = Boolean(OPENAI_API_KEY) || (BRAIN && BRAIN.conscious && BRAIN.conscious.enabled);
+  LLM_READY = Boolean(OPENAI_API_KEY) || Boolean((process.env.BRAIN_CONSCIOUS_URL || process.env.OLLAMA_HOST || "").trim()) || (BRAIN && BRAIN.conscious && BRAIN.conscious.enabled);
 }
 // LLM toggle: default ON only when a key is present
 const __envBool = (v) => String(v ?? "").toLowerCase().trim();
