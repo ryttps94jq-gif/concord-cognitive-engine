@@ -68,6 +68,10 @@ import { TrendingTopics } from '@/components/social/TrendingTopics';
 import { UserProfile } from '@/components/social/UserProfile';
 import { PullToSubstrate } from '@/components/lens/PullToSubstrate';
 import { FeedBanner } from '@/components/lens/FeedBanner';
+import { StreakIndicator } from '@/components/social/StreakIndicator';
+import { NotificationCenter } from '@/components/social/NotificationCenter';
+import { DMIndicator } from '@/components/social/DMIndicator';
+import { GroupCard, GroupData } from '@/components/social/GroupCard';
 import { ShoppingBag, Tag } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -739,6 +743,8 @@ export default function FeedLensPage() {
           <div className="flex items-center justify-between px-4 py-3">
             <h1 className="text-xl font-bold text-white">Feed</h1>
             <div className="flex items-center gap-2">
+              <StreakIndicator userId="current-user" className="mr-1" />
+              <DMIndicator userId="current-user" />
               {dtusLoading && <span className="w-4 h-4 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin" />}
               <button onClick={() => refetchDTUs()} disabled={dtusLoading} className="p-1 rounded hover:bg-lattice-surface/50 disabled:opacity-50 transition-colors" title="Refresh DTUs">
                 <Sparkles className="w-5 h-5 text-neon-cyan" />
@@ -1324,6 +1330,28 @@ export default function FeedLensPage() {
         {/* Post Scheduler */}
         <div className="bg-lattice-surface rounded-xl border border-lattice-border overflow-hidden p-4">
           <PostScheduler userId="current-user" />
+        </div>
+
+        {/* Notifications */}
+        <div className="bg-lattice-surface rounded-xl border border-lattice-border overflow-hidden p-4">
+          <NotificationCenter userId="current-user" mode="panel" />
+        </div>
+
+        {/* Groups */}
+        <div className="bg-lattice-surface rounded-xl border border-lattice-border overflow-hidden p-4">
+          <h2 className="text-base font-bold text-white mb-3 flex items-center gap-2">
+            <Users className="w-4 h-4 text-neon-purple" />
+            Suggested Groups
+          </h2>
+          <div className="space-y-3">
+            {([
+              { groupId: 'g1', name: 'Sovereignty Builders', description: 'Build sovereign-first systems together', memberCount: 842, tags: ['sovereignty', 'dev'] },
+              { groupId: 'g2', name: 'DTU Creators', description: 'Share and discuss data transfer units', memberCount: 1203, tags: ['dtu', 'data'] },
+              { groupId: 'g3', name: 'Local-First Advocates', description: 'Community for local-first software', memberCount: 567, tags: ['local-first', 'privacy'] },
+            ] as GroupData[]).map(group => (
+              <GroupCard key={group.groupId} group={group} />
+            ))}
+          </div>
         </div>
 
         {/* New Releases Mini */}

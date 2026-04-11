@@ -69,6 +69,14 @@ import { DTUDetailView } from '@/components/dtu/DTUDetailView';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import MessageRenderer from '@/components/chat/MessageRenderer';
+import AtlasOverlay from '@/components/chat/AtlasOverlay';
+import AtlasViewer from '@/components/chat/AtlasViewer';
+import { WelcomePanel, ModeSelector, ChatPanel as ChatModePanel } from '@/components/chat/ChatModePanels';
+import ChatRouteOverlay from '@/components/chat/ChatRouteOverlay';
+import { ContextOverlay } from '@/components/chat/ContextOverlay';
+import ForgeCard from '@/components/chat/ForgeCard';
+import FoundationCard from '@/components/chat/FoundationCard';
+import { SessionSidebar } from '@/components/chat/SessionSidebar';
 
 // ──────────────────────────────────────────────
 // Types
@@ -375,6 +383,15 @@ export default function ChatLensPage() {
   // New state — Domain context
   const [domainContext, setDomainContext] = useState<string>('');
   const [inspectingDtuId, setInspectingDtuId] = useState<string | null>(null);
+
+  // New state — Wired orphan components
+  const [sessionSidebarOpen, setSessionSidebarOpen] = useState(false);
+  const [contextOverlayOpen, setContextOverlayOpen] = useState(false);
+  const [atlasQuery, setAtlasQuery] = useState('');
+  const [atlasResult, setAtlasResult] = useState<Record<string, unknown> | null>(null);
+  const [atlasLoading, setAtlasLoading] = useState(false);
+  const [routeMeta, setRouteMeta] = useState<{ actionType: string; lenses: Array<{ lensId: string; score: number }>; primaryLens: string | null; isMultiLens: boolean; confidence: number; attribution: string[]; message: string | null } | null>(null);
+  const [forgeEnvelope, setForgeEnvelope] = useState<Record<string, unknown> | null>(null);
 
   // ── Chat backend action state ──
   const runChatAction = useRunArtifact('chat');
@@ -1797,6 +1814,14 @@ export default function ChatLensPage() {
 
           <div className="flex items-center gap-2 relative">
             <button
+              onClick={() => setSessionSidebarOpen(true)}
+              className="p-2 hover:bg-lattice-bg rounded-lg transition-colors"
+              aria-label="Session history"
+              title="Session history"
+            >
+              <Layers className="w-5 h-5 text-gray-400" />
+            </button>
+            <button
               onClick={() => setShowMoreMenu(!showMoreMenu)}
               className="p-2 hover:bg-lattice-bg rounded-lg transition-colors"
               aria-label="Chat options"
@@ -1909,6 +1934,16 @@ export default function ChatLensPage() {
               >
                 Type <code className="px-1.5 py-0.5 bg-lattice-surface rounded text-gray-400">/help</code> for slash commands &middot; <code className="px-1.5 py-0.5 bg-lattice-surface rounded text-gray-400">/forge</code> to create DTUs
               </motion.p>
+
+              {/* Welcome panel from ChatModePanels */}
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.7, duration: 0.4 }}
+                className="mt-6 w-full max-w-lg"
+              >
+                <WelcomePanel currentLens="chat" onSendMessage={(msg) => { setInput(msg); }} />
+              </motion.div>
             </div>
           )}
 
