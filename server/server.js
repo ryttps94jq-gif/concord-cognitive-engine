@@ -27731,10 +27731,12 @@ register("lens", "run", async (ctx, input={}) => {
       return { ok: false, error: `${artifact.domain}.${action} encountered an error`, domain: artifact.domain, action };
     }
   }
-  const result = await handler(ctx, artifact, params);
-  _lensEmitDTU(ctx, artifact.domain, action, artifact.type, artifact, { actionResult: result });
+  const handlerResult = await handler(ctx, artifact, params);
+  // Normalize: if handler returns { ok, result }, unwrap to avoid double-nesting
+  const result = (handlerResult && typeof handlerResult === 'object' && 'result' in handlerResult) ? handlerResult.result : handlerResult;
+  _lensEmitDTU(ctx, artifact.domain, action, artifact.type, artifact, { actionResult: handlerResult });
   // Run cross-lens pipelines (fire-and-forget)
-  const pipelineResults = _runLensPipelines(ctx, artifact.domain, action, artifact, result);
+  const pipelineResults = _runLensPipelines(ctx, artifact.domain, action, artifact, handlerResult);
   return { ok: true, result, pipelines: pipelineResults.length > 0 ? pipelineResults : undefined };
 });
 

@@ -185,7 +185,7 @@ export default function ArtistryLensPage() {
                   <div className="grid grid-cols-3 gap-2">
                     <div className="p-2 bg-white/5 rounded text-center"><p className="text-sm font-bold text-neon-pink">{actionResult.harmonyScore as number}</p><p className="text-[10px] text-gray-500">Harmony</p></div>
                     <div className="p-2 bg-white/5 rounded text-center"><p className="text-sm font-bold text-neon-cyan capitalize">{actionResult.dominantHue as string}</p><p className="text-[10px] text-gray-500">Dominant</p></div>
-                    <div className="p-2 bg-white/5 rounded text-center"><p className="text-sm font-bold text-yellow-400">{actionResult.contrastRatio as number}</p><p className="text-[10px] text-gray-500">Contrast</p></div>
+                    <div className="p-2 bg-white/5 rounded text-center"><p className="text-sm font-bold text-yellow-400">{actionResult.contrastRange as number}</p><p className="text-[10px] text-gray-500">Contrast</p></div>
                   </div>
                   {(actionResult.colors as Array<{ hex: string }>)?.slice(0, 8).map((c, i) => (
                     <span key={i} className="inline-block w-6 h-6 rounded-sm border border-white/20 mr-1" style={{ backgroundColor: c.hex }} title={c.hex} />
@@ -201,12 +201,12 @@ export default function ArtistryLensPage() {
                 <div className="flex items-center gap-3"><span className="text-xl font-bold text-purple-400 capitalize">{actionResult.classification as string}</span>{!!actionResult.confidence && <span className="text-xs text-gray-400">{actionResult.confidence as number}%</span>}</div>
               )}
               {/* Media Inventory */}
-              {actionResult.totalItems !== undefined && actionResult.byType !== undefined && (
+              {actionResult.totalItems !== undefined && actionResult.categoryBreakdown !== undefined && (
                 <div className="space-y-2">
                   <div className="text-lg font-bold text-yellow-400">{actionResult.totalItems as number} items</div>
                   <div className="grid grid-cols-2 gap-2">
-                    {Object.entries(actionResult.byType as Record<string, number>).map(([type, count]) => (
-                      <div key={type} className="p-2 bg-white/5 rounded flex justify-between text-xs"><span className="text-white capitalize">{type}</span><span className="text-gray-400">{count}</span></div>
+                    {(actionResult.categoryBreakdown as Array<{ category: string; itemCount: number }>).map((entry) => (
+                      <div key={entry.category} className="p-2 bg-white/5 rounded flex justify-between text-xs"><span className="text-white capitalize">{entry.category}</span><span className="text-gray-400">{entry.itemCount}</span></div>
                     ))}
                   </div>
                 </div>

@@ -1161,12 +1161,12 @@ export default function ArtLensPage() {
               <button onClick={() => setActionResult(null)} className="text-gray-400 hover:text-white"><X className="w-4 h-4" /></button>
             </div>
             {/* Color Harmony */}
-            {actionResult.harmonies !== undefined && actionResult.colorCount !== undefined && (
+            {actionResult.harmonies !== undefined && actionResult.paletteSize !== undefined && (
               <div className="space-y-2">
                 <div className="grid grid-cols-3 gap-2">
-                  <div className="p-2 bg-white/5 rounded text-center"><p className="text-sm font-bold text-neon-pink">{actionResult.colorCount as number}</p><p className="text-[10px] text-gray-500">Colors</p></div>
+                  <div className="p-2 bg-white/5 rounded text-center"><p className="text-sm font-bold text-neon-pink">{actionResult.paletteSize as number}</p><p className="text-[10px] text-gray-500">Colors</p></div>
                   <div className="p-2 bg-white/5 rounded text-center"><p className="text-sm font-bold text-neon-cyan">{actionResult.harmonyScore as number}</p><p className="text-[10px] text-gray-500">Harmony Score</p></div>
-                  <div className="p-2 bg-white/5 rounded text-center"><p className="text-sm font-bold text-yellow-400">{actionResult.dominantTemperature as string}</p><p className="text-[10px] text-gray-500">Temperature</p></div>
+                  <div className="p-2 bg-white/5 rounded text-center"><p className="text-sm font-bold text-yellow-400">{actionResult.temperature as string}</p><p className="text-[10px] text-gray-500">Temperature</p></div>
                 </div>
                 {(actionResult.harmonies as Array<{ type: string; colors: string[] }>)?.slice(0, 4).map((h, i) => (
                   <div key={i} className="flex items-center gap-2 text-xs"><span className="text-white capitalize">{h.type}</span><div className="flex gap-1">{h.colors.map((c, j) => <span key={j} className="w-4 h-4 rounded-sm border border-white/20" style={{ backgroundColor: c }} />)}</div></div>
@@ -1174,12 +1174,12 @@ export default function ArtLensPage() {
               </div>
             )}
             {/* Composition Score */}
-            {actionResult.overallScore !== undefined && actionResult.ruleOfThirds !== undefined && (
+            {actionResult.overall !== undefined && actionResult.scores !== undefined && (
               <div className="space-y-2">
-                <div className="text-3xl font-bold text-neon-cyan">{actionResult.overallScore as number}<span className="text-sm text-gray-400">/100</span></div>
+                <div className="text-3xl font-bold text-neon-cyan">{actionResult.overall as number}<span className="text-sm text-gray-400">/100</span></div>
                 <div className="grid grid-cols-2 gap-2">
-                  {Object.entries(actionResult as Record<string, unknown>).filter(([k]) => k !== 'overallScore' && k !== 'message' && typeof (actionResult as Record<string, unknown>)[k] === 'number').slice(0, 6).map(([key, val]) => (
-                    <div key={key} className="p-2 bg-white/5 rounded"><p className="text-[10px] text-gray-500 capitalize">{key.replace(/([A-Z])/g, ' $1')}</p><p className="text-sm font-bold text-white">{val as number}</p></div>
+                  {Object.entries(actionResult.scores as Record<string, number>).map(([key, val]) => (
+                    <div key={key} className="p-2 bg-white/5 rounded"><p className="text-[10px] text-gray-500 capitalize">{key.replace(/([A-Z])/g, ' $1')}</p><p className="text-sm font-bold text-white">{val}</p></div>
                   ))}
                 </div>
               </div>
@@ -1188,19 +1188,18 @@ export default function ArtLensPage() {
             {actionResult.palette !== undefined && !actionResult.harmonies && (
               <div className="space-y-2">
                 <div className="flex gap-2">{(actionResult.palette as Array<{ hex: string }>)?.map((c, i) => <div key={i} className="flex-1 h-10 rounded" style={{ backgroundColor: c.hex || (c as unknown as string) }} title={c.hex || (c as unknown as string)} />)}</div>
-                {!!actionResult.mood && <p className="text-xs text-gray-400">Mood: <span className="text-white">{actionResult.mood as string}</span></p>}
               </div>
             )}
             {/* Style Classify */}
-            {actionResult.classification !== undefined && actionResult.confidence !== undefined && (
+            {actionResult.topMatch !== undefined && actionResult.confidence !== undefined && (
               <div className="space-y-2">
-                <div className="flex items-center gap-3"><span className="text-2xl font-bold text-yellow-400 capitalize">{actionResult.classification as string}</span><span className="text-xs text-gray-400">Confidence: {actionResult.confidence as number}%</span></div>
-                {(actionResult.alternativeStyles as Array<{ style: string; confidence: number }>)?.map((s, i) => (
-                  <div key={i} className="flex items-center justify-between text-xs p-1.5 bg-white/5 rounded"><span className="text-white capitalize">{s.style}</span><span className="text-gray-400">{s.confidence}%</span></div>
+                <div className="flex items-center gap-3"><span className="text-2xl font-bold text-yellow-400 capitalize">{(actionResult.topMatch as { style: string }).style}</span><span className="text-xs text-gray-400">Confidence: {actionResult.confidence as string}</span></div>
+                {(actionResult.allMatches as Array<{ style: string; similarity: number }>)?.slice(1).map((s, i) => (
+                  <div key={i} className="flex items-center justify-between text-xs p-1.5 bg-white/5 rounded"><span className="text-white capitalize">{s.style}</span><span className="text-gray-400">{s.similarity}%</span></div>
                 ))}
               </div>
             )}
-            {!!actionResult.message && !actionResult.harmonies && !actionResult.overallScore && !actionResult.palette && !actionResult.classification && (
+            {!!actionResult.message && !actionResult.harmonies && !actionResult.overall && !actionResult.palette && !actionResult.topMatch && (
               <p className="text-sm text-gray-400">{actionResult.message as string}</p>
             )}
           </motion.div>

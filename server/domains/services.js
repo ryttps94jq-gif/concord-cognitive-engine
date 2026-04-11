@@ -14,7 +14,7 @@ export default function registerServicesActions(registerLensAction) {
       const gapMinutes = (nextStart - prevEnd) / (1000 * 60);
       if (gapMinutes > 0) { totalGap += gapMinutes; gaps.push({ after: sorted[i - 1].client || i - 1, before: sorted[i].client || i, gapMinutes }); }
     }
-    return { ok: true, optimizedOrder: sorted.map(a => ({ client: a.client, time: a.time, service: a.serviceType })), totalGapMinutes: totalGap, gaps };
+    return { ok: true, result: { optimizedOrder: sorted.map(a => ({ client: a.client, time: a.time, service: a.serviceType })), totalGapMinutes: totalGap, gaps } };
   });
 
   registerLensAction("services", "reminderGenerate", (ctx, artifact, params) => {
@@ -33,7 +33,7 @@ export default function registerServicesActions(registerLensAction) {
       provider: a.provider || '',
       message: `Reminder: Your ${a.serviceType || 'appointment'} is scheduled for ${a.date || a.time}`,
     }));
-    return { ok: true, reminders, count: reminders.length };
+    return { ok: true, result: { reminders, count: reminders.length } };
   });
 
   registerLensAction("services", "revenueByProvider", (ctx, artifact, params) => {
@@ -53,7 +53,7 @@ export default function registerServicesActions(registerLensAction) {
       byProvider[provider].revenue += a.price || 0;
     });
     const summary = Object.entries(byProvider).map(([name, data]) => ({ provider: name, ...data })).sort((a, b) => b.revenue - a.revenue);
-    return { ok: true, period, summary, totalRevenue: summary.reduce((s, p) => s + p.revenue, 0) };
+    return { ok: true, result: { period, summary, totalRevenue: summary.reduce((s, p) => s + p.revenue, 0) } };
   });
 
   registerLensAction("services", "supplyCheck", (ctx, artifact, _params) => {
@@ -68,6 +68,6 @@ export default function registerServicesActions(registerLensAction) {
       reorderPoint: s.reorderPoint || s.minStock || 5,
       supplier: s.supplier || '',
     }));
-    return { ok: true, lowStock, count: lowStock.length, totalItems: supplies.length, needsOrder: lowStock.length > 0 };
+    return { ok: true, result: { lowStock, count: lowStock.length, totalItems: supplies.length, needsOrder: lowStock.length > 0 } };
   });
 };

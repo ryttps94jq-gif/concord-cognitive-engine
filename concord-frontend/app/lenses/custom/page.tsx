@@ -24,6 +24,19 @@ interface CustomLens {
   isActive: boolean;
 }
 
+interface SchemaField {
+  name: string;
+  type: string;
+  required: boolean;
+  valid: boolean;
+}
+
+interface ValidationResult {
+  field: string;
+  passed: boolean;
+  reason?: string;
+}
+
 export default function CustomLensPage() {
   useLensNav('custom');
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('custom');
@@ -414,33 +427,34 @@ export default function CustomLensPage() {
             </button>
             <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Result</p>
             {(() => {
-              const r = (actionResult as any)?.result ?? actionResult;
+              const r = (actionResult?.['result'] as Record<string, unknown> | undefined) ?? actionResult;
+              const errorMsg = typeof actionResult?.['error'] === 'string' ? (actionResult['error'] as string) : null;
               if (!r) return null;
               return (
                 <div className="text-xs space-y-3 max-h-72 overflow-y-auto">
                   {/* Error */}
-                  {(actionResult as any)?.error && (
-                    <p className="text-red-400">{(actionResult as any).error}</p>
-                  )}
+                  {errorMsg != null ? (
+                    <p className="text-red-400">{String(errorMsg)}</p>
+                  ) : null}
                   {/* Message-only result */}
-                  {r?.message && !r?.error && (
-                    <p className="text-gray-300">{r.message}</p>
-                  )}
+                  {r?.message != null && !r?.error ? (
+                    <p className="text-gray-300">{String(r.message)}</p>
+                  ) : null}
 
                   {/* evaluateSchema */}
-                  {r?.fields !== undefined && r?.totalFields !== undefined && (
+                  {r?.fields !== undefined && r?.totalFields !== undefined ? (
                     <div className="space-y-2">
                       <div className="grid grid-cols-3 gap-2">
                         <div className="p-2 bg-lattice-bg rounded text-center">
-                          <p className="text-sm font-bold text-neon-cyan">{r.totalFields}</p>
+                          <p className="text-sm font-bold text-neon-cyan">{String(r.totalFields)}</p>
                           <p className="text-[10px] text-gray-500">Total Fields</p>
                         </div>
                         <div className="p-2 bg-lattice-bg rounded text-center">
-                          <p className="text-sm font-bold text-neon-green">{r.validFields}</p>
+                          <p className="text-sm font-bold text-neon-green">{String(r.validFields)}</p>
                           <p className="text-[10px] text-gray-500">Valid</p>
                         </div>
                         <div className="p-2 bg-lattice-bg rounded text-center">
-                          <p className="text-sm font-bold text-yellow-400">{r.requiredCount}</p>
+                          <p className="text-sm font-bold text-yellow-400">{String(r.requiredCount)}</p>
                           <p className="text-[10px] text-gray-500">Required</p>
                         </div>
                       </div>
@@ -454,7 +468,7 @@ export default function CustomLensPage() {
                         )}
                       </div>
                       <div className="space-y-1">
-                        {((r.fields as any[]) || []).map((f: any, i: number) => (
+                        {((r.fields as SchemaField[]) || []).map((f: SchemaField, i: number) => (
                           <div key={i} className="flex items-center justify-between px-2 py-1 bg-lattice-bg rounded">
                             <span className="text-gray-200 font-mono">{f.name}</span>
                             <div className="flex items-center gap-2">
@@ -466,10 +480,10 @@ export default function CustomLensPage() {
                         ))}
                       </div>
                     </div>
-                  )}
+                  ) : null}
 
                   {/* templateRender */}
-                  {r?.rendered !== undefined && (
+                  {r?.rendered !== undefined ? (
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${r.complete ? 'bg-neon-green/20 text-neon-green' : 'bg-yellow-500/20 text-yellow-400'}`}>
@@ -478,7 +492,7 @@ export default function CustomLensPage() {
                       </div>
                       <div className="p-2 bg-lattice-bg rounded">
                         <p className="text-[10px] text-gray-500 mb-1 uppercase">Rendered</p>
-                        <p className="text-gray-200 whitespace-pre-wrap">{r.rendered}</p>
+                        <p className="text-gray-200 whitespace-pre-wrap">{String(r.rendered)}</p>
                       </div>
                       {(r.variablesFound as string[] || []).length > 0 && (
                         <div className="flex flex-wrap gap-1">
@@ -496,22 +510,22 @@ export default function CustomLensPage() {
                         </div>
                       )}
                     </div>
-                  )}
+                  ) : null}
 
                   {/* validateData */}
-                  {r?.results !== undefined && r?.totalRules !== undefined && (
+                  {r?.results !== undefined && r?.totalRules !== undefined ? (
                     <div className="space-y-2">
                       <div className="grid grid-cols-3 gap-2">
                         <div className="p-2 bg-lattice-bg rounded text-center">
-                          <p className="text-sm font-bold text-neon-cyan">{r.totalRules}</p>
+                          <p className="text-sm font-bold text-neon-cyan">{String(r.totalRules)}</p>
                           <p className="text-[10px] text-gray-500">Rules</p>
                         </div>
                         <div className="p-2 bg-lattice-bg rounded text-center">
-                          <p className="text-sm font-bold text-neon-green">{r.passed}</p>
+                          <p className="text-sm font-bold text-neon-green">{String(r.passed)}</p>
                           <p className="text-[10px] text-gray-500">Passed</p>
                         </div>
                         <div className="p-2 bg-lattice-bg rounded text-center">
-                          <p className="text-sm font-bold text-red-400">{r.failed}</p>
+                          <p className="text-sm font-bold text-red-400">{String(r.failed)}</p>
                           <p className="text-[10px] text-gray-500">Failed</p>
                         </div>
                       </div>
@@ -522,7 +536,7 @@ export default function CustomLensPage() {
                         </span>
                       </div>
                       <div className="space-y-1">
-                        {((r.results as any[]) || []).map((res: any, i: number) => (
+                        {((r.results as ValidationResult[]) || []).map((res: ValidationResult, i: number) => (
                           <div key={i} className={`flex items-center justify-between px-2 py-1 rounded ${res.passed ? 'bg-neon-green/5' : 'bg-red-500/10'}`}>
                             <span className="text-gray-300 font-mono">{res.field}</span>
                             <span className={`text-[10px] ${res.passed ? 'text-neon-green' : 'text-red-400'}`}>{res.passed ? 'OK' : res.reason}</span>
@@ -530,14 +544,14 @@ export default function CustomLensPage() {
                         ))}
                       </div>
                     </div>
-                  )}
+                  ) : null}
 
                   {/* transformData */}
-                  {r?.log !== undefined && r?.output !== undefined && (
+                  {r?.log !== undefined && r?.output !== undefined ? (
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
                         <span className="text-gray-500">Transforms applied:</span>
-                        <span className="text-neon-cyan font-bold">{r.transformsApplied}</span>
+                        <span className="text-neon-cyan font-bold">{String(r.transformsApplied)}</span>
                       </div>
                       <div className="space-y-1">
                         {((r.log as string[]) || []).map((entry: string, i: number) => (
@@ -556,7 +570,7 @@ export default function CustomLensPage() {
                         ))}
                       </div>
                     </div>
-                  )}
+                  ) : null}
                 </div>
               );
             })()}

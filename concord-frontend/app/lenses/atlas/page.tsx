@@ -335,11 +335,11 @@ export default function AtlasLensPage() {
                   <div className="p-2 bg-lattice-surface rounded text-center"><p className="text-sm font-bold text-neon-cyan">{actionResult.resolvedCount as number || 0}</p><p className="text-[10px] text-gray-500">Resolved</p></div>
                   <div className="p-2 bg-lattice-surface rounded text-center"><p className="text-sm font-bold text-red-400">{actionResult.unresolvedCount as number || 0}</p><p className="text-[10px] text-gray-500">Unresolved</p></div>
                 </div>
-                {(actionResult.resolved as Array<{ name: string; lat: number; lon: number; distanceKm?: number }>)?.slice(0, 5).map((p, i) => (
+                {(actionResult.resolved as Array<{ name: string; lat: number; lon: number; distanceFromOriginKm?: number }>)?.slice(0, 5).map((p, i) => (
                   <div key={i} className="flex items-center justify-between text-xs p-1.5 bg-lattice-surface rounded">
                     <span className="text-white">{p.name}</span>
                     <span className="text-gray-400">{p.lat?.toFixed(2)}, {p.lon?.toFixed(2)}</span>
-                    {p.distanceKm !== undefined && <span className="text-neon-cyan">{p.distanceKm}km</span>}
+                    {p.distanceFromOriginKm !== undefined && <span className="text-neon-cyan">{p.distanceFromOriginKm}km</span>}
                   </div>
                 ))}
               </div>
@@ -347,20 +347,29 @@ export default function AtlasLensPage() {
             {/* Distance Matrix */}
             {actionResult.matrix !== undefined && (
               <div className="space-y-2">
-                <div className="text-xs text-gray-400">{actionResult.placeCount as number} places, {actionResult.totalPairs as number} pairs</div>
-                {!!actionResult.closest && <div className="text-xs text-neon-green">Closest: {(actionResult.closest as Record<string, unknown>).pair as string} ({(actionResult.closest as Record<string, unknown>).distanceKm as number}km)</div>}
-                {!!actionResult.farthest && <div className="text-xs text-red-400">Farthest: {(actionResult.farthest as Record<string, unknown>).pair as string} ({(actionResult.farthest as Record<string, unknown>).distanceKm as number}km)</div>}
+                <div className="text-xs text-gray-400">{actionResult.pointCount as number} points, {(actionResult.stats as Record<string, unknown>)?.totalPairs as number} pairs</div>
+                {(actionResult.stats as Record<string, unknown>)?.minDistancePair ? <div className="text-xs text-neon-green">Closest: {((actionResult.stats as Record<string, unknown>).minDistancePair as string[])?.join(' - ')} ({(actionResult.stats as Record<string, unknown>).minDistanceKm as number}km)</div> : null}
+                {(actionResult.stats as Record<string, unknown>)?.maxDistancePair ? <div className="text-xs text-red-400">Farthest: {((actionResult.stats as Record<string, unknown>).maxDistancePair as string[])?.join(' - ')} ({(actionResult.stats as Record<string, unknown>).maxDistanceKm as number}km)</div> : null}
               </div>
             )}
             {/* Region Stats */}
-            {actionResult.regionName !== undefined && actionResult.statistics !== undefined && (
+            {actionResult.totals !== undefined && actionResult.rankings !== undefined && (
               <div className="space-y-2">
-                <div className="text-lg font-bold text-green-400">{actionResult.regionName as string}</div>
+                <div className="text-lg font-bold text-green-400">{actionResult.regionCount as number} Regions</div>
                 <div className="grid grid-cols-2 gap-2">
-                  {Object.entries(actionResult.statistics as Record<string, unknown>).map(([key, val]) => (
-                    <div key={key} className="p-2 bg-lattice-surface rounded"><p className="text-[10px] text-gray-500 capitalize">{key.replace(/([A-Z])/g, ' $1')}</p><p className="text-sm font-bold text-white">{String(val)}</p></div>
+                  {Object.entries(actionResult.totals as Record<string, unknown>).map(([key, val]) => (
+                    <div key={`total-${key}`} className="p-2 bg-lattice-surface rounded"><p className="text-[10px] text-gray-500 capitalize">Total {key.replace(/([A-Z])/g, ' $1')}</p><p className="text-sm font-bold text-white">{String(val)}</p></div>
+                  ))}
+                  {Object.entries(actionResult.averages as Record<string, unknown>).map(([key, val]) => (
+                    <div key={`avg-${key}`} className="p-2 bg-lattice-surface rounded"><p className="text-[10px] text-gray-500 capitalize">Avg {key.replace(/([A-Z])/g, ' $1')}</p><p className="text-sm font-bold text-white">{String(val)}</p></div>
                   ))}
                 </div>
+                {actionResult.distribution ? (
+                  <div className="p-2 bg-lattice-surface rounded">
+                    <p className="text-[10px] text-gray-500">Distribution</p>
+                    <p className="text-sm font-bold text-white">{String((actionResult.distribution as Record<string, unknown>).concentration)}</p>
+                  </div>
+                ) : null}
               </div>
             )}
             {/* Route Optimize */}
@@ -370,15 +379,15 @@ export default function AtlasLensPage() {
                   <div className="p-2 bg-lattice-surface rounded text-center"><p className="text-sm font-bold text-orange-400">{actionResult.totalDistanceKm as number}km</p><p className="text-[10px] text-gray-500">Total Distance</p></div>
                   <div className="p-2 bg-lattice-surface rounded text-center"><p className="text-sm font-bold text-neon-cyan">{(actionResult.optimizedRoute as unknown[])?.length || 0}</p><p className="text-[10px] text-gray-500">Stops</p></div>
                 </div>
-                {(actionResult.optimizedRoute as Array<{ name: string; order: number }>)?.map((s, i) => (
+                {(actionResult.optimizedRoute as Array<{ name: string; step: number }>)?.map((s, i) => (
                   <div key={i} className="flex items-center gap-2 text-xs p-1.5 bg-lattice-surface rounded">
-                    <span className="text-orange-400 font-bold w-5 text-center">{s.order}</span>
+                    <span className="text-orange-400 font-bold w-5 text-center">{s.step}</span>
                     <span className="text-white">{s.name}</span>
                   </div>
                 ))}
               </div>
             )}
-            {!!actionResult.message && !actionResult.resolved && !actionResult.matrix && !actionResult.regionName && !actionResult.optimizedRoute && (
+            {!!actionResult.message && !actionResult.resolved && !actionResult.matrix && !actionResult.totals && !actionResult.optimizedRoute && (
               <p className="text-sm text-gray-400">{actionResult.message as string}</p>
             )}
           </motion.div>

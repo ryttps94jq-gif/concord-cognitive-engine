@@ -18,7 +18,7 @@ export default function registerFitnessActions(registerLensAction) {
         recommendation: rpe <= 6 ? 'increase_weight' : rpe <= 8 ? 'maintain' : 'reduce_weight',
       };
     });
-    return { ok: true, recommendations };
+    return { ok: true, result: { recommendations } };
   });
 
   registerLensAction("fitness", "classUtilization", (ctx, artifact, params) => {
@@ -35,7 +35,7 @@ export default function registerFitnessActions(registerLensAction) {
       ? Math.round(recentAttendance.reduce((s, a) => s + (a.count || 0), 0) / recentAttendance.length)
       : enrolled;
     const utilization = capacity > 0 ? Math.round((avgAttendance / capacity) * 100) : 0;
-    return { ok: true, className: artifact.title, capacity, enrolled, avgAttendance, utilization, period, sessions: recentAttendance.length };
+    return { ok: true, result: { className: artifact.title, capacity, enrolled, avgAttendance, utilization, period, sessions: recentAttendance.length } };
   });
 
   registerLensAction("fitness", "periodization", (ctx, artifact, params) => {
@@ -53,7 +53,7 @@ export default function registerFitnessActions(registerLensAction) {
       phases.push({ name: 'Peak', weeks: Math.ceil(weeks * 0.25), sets: '3-4', reps: '6-10', intensity: '75-85%' });
       phases.push({ name: 'Recovery', weeks: Math.max(1, weeks - phases.reduce((s, p) => s + p.weeks, 0)), sets: '2', reps: '10-12', intensity: '50-60%' });
     }
-    return { ok: true, program: artifact.title, goal, totalWeeks: weeks, phases };
+    return { ok: true, result: { program: artifact.title, goal, totalWeeks: weeks, phases } };
   });
 
   registerLensAction("fitness", "recruitProfile", (ctx, artifact, _params) => {
@@ -68,6 +68,6 @@ export default function registerFitnessActions(registerLensAction) {
       recruitingStatus: artifact.data?.recruitingStatus || 'prospect',
       compiledAt: new Date().toISOString(),
     };
-    return { ok: true, profile };
+    return { ok: true, result: { profile } };
   });
 };

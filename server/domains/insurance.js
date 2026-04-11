@@ -9,12 +9,12 @@ export default function registerInsuranceActions(registerLensAction) {
       const daysLeft = (new Date(p.expiryDate) - new Date()) / (1000 * 60 * 60 * 24);
       return daysLeft >= 0 && daysLeft <= 30;
     });
-    return { ok: true, coveredTypes: [...coveredTypes], gaps, gapCount: gaps.length, expiringSoon, totalPolicies: policies.length };
+    return { ok: true, result: { coveredTypes: [...coveredTypes], gaps, gapCount: gaps.length, expiringSoon, totalPolicies: policies.length } };
   });
 
   registerLensAction("insurance", "premiumHistory", (ctx, artifact, _params) => {
     const renewals = artifact.data?.renewalHistory || [];
-    if (renewals.length < 2) return { ok: true, history: renewals, trend: 'insufficient_data' };
+    if (renewals.length < 2) return { ok: true, result: { history: renewals, trend: 'insufficient_data' } };
     const sorted = [...renewals].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     let totalChange = 0;
     const changes = [];
@@ -26,7 +26,7 @@ export default function registerInsuranceActions(registerLensAction) {
       changes.push({ period: sorted[i].date, previousPremium: prev, currentPremium: curr, changePercent: Math.round(change * 10) / 10 });
     }
     const avgChange = changes.length > 0 ? Math.round((totalChange / changes.length) * 10) / 10 : 0;
-    return { ok: true, policyNumber: artifact.data?.policyNumber, history: changes, averageChangePercent: avgChange, trend: avgChange > 2 ? 'increasing' : avgChange < -2 ? 'decreasing' : 'stable' };
+    return { ok: true, result: { policyNumber: artifact.data?.policyNumber, history: changes, averageChangePercent: avgChange, trend: avgChange > 2 ? 'increasing' : avgChange < -2 ? 'decreasing' : 'stable' } };
   });
 
   registerLensAction("insurance", "claimStatus", (ctx, artifact, _params) => {
@@ -46,7 +46,7 @@ export default function registerInsuranceActions(registerLensAction) {
       }
     });
     const totalAmount = claims.reduce((s, c) => s + (c.amount || 0), 0);
-    return { ok: true, byStatus, aging, totalClaims: claims.length, totalAmount, openClaims: claims.filter(c => !['closed', 'paid', 'denied'].includes(c.status)).length };
+    return { ok: true, result: { byStatus, aging, totalClaims: claims.length, totalAmount, openClaims: claims.filter(c => !['closed', 'paid', 'denied'].includes(c.status)).length } };
   });
 
   registerLensAction("insurance", "riskScore", (ctx, artifact, params) => {
@@ -59,14 +59,16 @@ export default function registerInsuranceActions(registerLensAction) {
     const mitigatedScore = Math.max(1, score - mitigations.length);
     return {
       ok: true,
-      risk: artifact.title,
-      probability,
-      impact,
-      rawScore: score,
-      normalizedScore,
-      mitigations: mitigations.length,
-      mitigatedScore,
-      level: score >= 15 ? 'critical' : score >= 10 ? 'high' : score >= 5 ? 'medium' : 'low',
+      result: {
+        risk: artifact.title,
+        probability,
+        impact,
+        rawScore: score,
+        normalizedScore,
+        mitigations: mitigations.length,
+        mitigatedScore,
+        level: score >= 15 ? 'critical' : score >= 10 ? 'high' : score >= 5 ? 'medium' : 'low',
+      },
     };
   });
 };

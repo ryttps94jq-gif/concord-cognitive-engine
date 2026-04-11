@@ -12,16 +12,16 @@ export default function registerSecurityActions(registerLensAction) {
       byLocation[location] = (byLocation[location] || 0) + 1;
       byMonth[month] = (byMonth[month] || 0) + 1;
     });
-    return { ok: true, byType, byLocation, byMonth, totalIncidents: incidents.length, analyzedAt: new Date().toISOString() };
+    return { ok: true, result: { byType, byLocation, byMonth, totalIncidents: incidents.length, analyzedAt: new Date().toISOString() } };
   });
 
   registerLensAction("security", "patrolCoverage", (ctx, artifact, _params) => {
     const checkpoints = artifact.data?.checkpoints || [];
-    if (checkpoints.length === 0) return { ok: true, coverage: 0, completed: 0, total: 0 };
+    if (checkpoints.length === 0) return { ok: true, result: { coverage: 0, completed: 0, total: 0 } };
     const completed = checkpoints.filter(cp => cp.status === 'completed' || cp.checkedAt).length;
     const coverage = Math.round((completed / checkpoints.length) * 100);
     const missed = checkpoints.filter(cp => cp.status !== 'completed' && !cp.checkedAt).map(cp => ({ location: cp.location, scheduledTime: cp.time }));
-    return { ok: true, patrol: artifact.title, coverage, completed, total: checkpoints.length, missed };
+    return { ok: true, result: { patrol: artifact.title, coverage, completed, total: checkpoints.length, missed } };
   });
 
   registerLensAction("security", "threatMatrix", (ctx, artifact, _params) => {
@@ -40,7 +40,7 @@ export default function registerSecurityActions(registerLensAction) {
         mitigations: t.mitigations || [],
       };
     }).sort((a, b) => b.riskScore - a.riskScore);
-    return { ok: true, matrix, totalThreats: matrix.length, criticalCount: matrix.filter(m => m.riskLevel === 'critical').length };
+    return { ok: true, result: { matrix, totalThreats: matrix.length, criticalCount: matrix.filter(m => m.riskLevel === 'critical').length } };
   });
 
   registerLensAction("security", "evidenceChain", (ctx, artifact, _params) => {
@@ -58,6 +58,6 @@ export default function registerSecurityActions(registerLensAction) {
         issues.push({ position: i, issue: 'Date out of sequence', entry });
       }
     }
-    return { ok: true, investigationId: artifact.id, intact, transfers: evidenceLog.length, issues, verifiedAt: new Date().toISOString() };
+    return { ok: true, result: { investigationId: artifact.id, intact, transfers: evidenceLog.length, issues, verifiedAt: new Date().toISOString() } };
   });
 };

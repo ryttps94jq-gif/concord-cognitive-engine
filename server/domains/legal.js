@@ -11,24 +11,26 @@ export default function registerLegalActions(registerLensAction) {
       ...i,
       daysUntil: Math.ceil((new Date(i.deadline) - now) / (1000 * 60 * 60 * 24)),
     })).sort((a, b) => a.daysUntil - b.daysUntil);
-    return { ok: true, upcoming, count: upcoming.length };
+    return { ok: true, result: { upcoming, count: upcoming.length } };
   });
 
   registerLensAction("legal", "contractRenewal", (ctx, artifact, _params) => {
     const expiryDate = artifact.data?.expiryDate ? new Date(artifact.data.expiryDate) : null;
-    if (!expiryDate) return { ok: true, status: "no_expiry", message: "No expiry date set" };
+    if (!expiryDate) return { ok: true, result: { status: "no_expiry", message: "No expiry date set" } };
     const now = new Date();
     const daysUntilExpiry = Math.ceil((expiryDate - now) / (1000 * 60 * 60 * 24));
     const autoRenewal = artifact.data?.renewalType === 'auto';
     return {
       ok: true,
-      contractId: artifact.id,
-      title: artifact.title,
-      expiryDate: artifact.data.expiryDate,
-      daysUntilExpiry,
-      autoRenewal,
-      actionRequired: daysUntilExpiry <= 60,
-      urgency: daysUntilExpiry <= 14 ? 'critical' : daysUntilExpiry <= 30 ? 'high' : daysUntilExpiry <= 60 ? 'medium' : 'low',
+      result: {
+        contractId: artifact.id,
+        title: artifact.title,
+        expiryDate: artifact.data.expiryDate,
+        daysUntilExpiry,
+        autoRenewal,
+        actionRequired: daysUntilExpiry <= 60,
+        urgency: daysUntilExpiry <= 14 ? 'critical' : daysUntilExpiry <= 30 ? 'high' : daysUntilExpiry <= 60 ? 'medium' : 'low',
+      },
     };
   });
 
@@ -44,16 +46,16 @@ export default function registerLegalActions(registerLensAction) {
         }
       }
     }
-    return { ok: true, conflicts, hasConflict: conflicts.length > 0, checkedAt: new Date().toISOString() };
+    return { ok: true, result: { conflicts, hasConflict: conflicts.length > 0, checkedAt: new Date().toISOString() } };
   });
 
   registerLensAction("legal", "complianceScore", (ctx, artifact, _params) => {
     const items = artifact.data?.requirements || [];
-    if (items.length === 0) return { ok: true, score: 100, compliant: 0, overdue: 0, total: 0 };
+    if (items.length === 0) return { ok: true, result: { score: 100, compliant: 0, overdue: 0, total: 0 } };
     const now = new Date();
     const compliant = items.filter(i => i.status === 'compliant').length;
     const overdue = items.filter(i => i.status === 'overdue' || (i.deadline && new Date(i.deadline) < now && i.status !== 'compliant')).length;
     const score = Math.round((compliant / items.length) * 100);
-    return { ok: true, score, compliant, overdue, total: items.length, rating: score >= 90 ? 'excellent' : score >= 70 ? 'good' : score >= 50 ? 'fair' : 'poor' };
+    return { ok: true, result: { score, compliant, overdue, total: items.length, rating: score >= 90 ? 'excellent' : score >= 70 ? 'good' : score >= 50 ? 'fair' : 'poor' } };
   });
 };

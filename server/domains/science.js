@@ -11,7 +11,7 @@ export default function registerScienceActions(registerLensAction) {
         gaps.push({ position: i, expected: prev.transferredTo, actual: curr.receivedBy, date: curr.date });
       }
     }
-    return { ok: true, sampleId: artifact.id, sample: artifact.title, intact, transfers: custodyLog.length, gaps, verifiedAt: new Date().toISOString() };
+    return { ok: true, result: { sampleId: artifact.id, sample: artifact.title, intact, transfers: custodyLog.length, gaps, verifiedAt: new Date().toISOString() } };
   });
 
   registerLensAction("science", "calibrationCheck", (ctx, artifact, _params) => {
@@ -24,7 +24,7 @@ export default function registerScienceActions(registerLensAction) {
       daysUntilDue = Math.ceil((nextCalibration - now) / (1000 * 60 * 60 * 24));
       status = daysUntilDue < 0 ? 'overdue' : daysUntilDue <= 14 ? 'due_soon' : 'current';
     }
-    return { ok: true, equipment: artifact.title, serial: artifact.data?.serial, lastCalibration: artifact.data?.calibrationDate, nextCalibration: artifact.data?.nextCalibration, status, daysUntilDue };
+    return { ok: true, result: { equipment: artifact.title, serial: artifact.data?.serial, lastCalibration: artifact.data?.calibrationDate, nextCalibration: artifact.data?.nextCalibration, status, daysUntilDue } };
   });
 
   registerLensAction("science", "dataExport", (ctx, artifact, params) => {
@@ -43,7 +43,7 @@ export default function registerScienceActions(registerLensAction) {
     } else {
       exportData = observations;
     }
-    return { ok: true, format, records: observations.length, data: exportData, exportedAt: new Date().toISOString() };
+    return { ok: true, result: { format, records: observations.length, data: exportData, exportedAt: new Date().toISOString() } };
   });
 
   registerLensAction("science", "spatialCluster", (ctx, artifact, params) => {
@@ -65,6 +65,6 @@ export default function registerScienceActions(registerLensAction) {
       }
       clusters.push({ id: clusters.length + 1, observations: cluster.length, center: geoObs[i].gps });
     }
-    return { ok: true, clusters, totalObservations: geoObs.length, radiusKm: radius };
+    return { ok: true, result: { clusters, totalObservations: geoObs.length, radiusKm: radius } };
   });
 };

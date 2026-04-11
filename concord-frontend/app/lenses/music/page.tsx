@@ -1462,7 +1462,7 @@ export default function MusicLensPage() {
               <div className="space-y-2">
                 <div className="flex gap-4 text-xs text-gray-400">
                   <span>Tracks: <span className="text-neon-cyan">{String(actionResult.trackCount)}</span></span>
-                  <span>Duration: <span className="text-neon-cyan">{String(actionResult.totalDuration)} min</span></span>
+                  <span>Duration: <span className="text-neon-cyan">{String(actionResult.totalMinutes)} min</span></span>
                   <span>Avg BPM: <span className="text-neon-purple">{String(actionResult.avgBpm)}</span></span>
                 </div>
                 {'peakMoment' in actionResult && <p className="text-xs text-gray-300">Peak: {String(actionResult.peakMoment)}</p>}

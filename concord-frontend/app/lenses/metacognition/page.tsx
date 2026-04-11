@@ -1401,7 +1401,7 @@ export default function MetacognitionLensPage() {
                   <span className="text-gray-400 text-xs">Detected: <span className="text-neon-cyan font-bold">{String(actionResult.biasesDetected)}</span></span>
                   <span className={`text-xs px-2 py-0.5 rounded ${
                     actionResult.riskLevel === 'high' ? 'bg-red-400/20 text-red-400' :
-                    actionResult.riskLevel === 'medium' ? 'bg-yellow-400/20 text-yellow-400' : 'bg-neon-green/20 text-neon-green'
+                    actionResult.riskLevel === 'moderate' ? 'bg-yellow-400/20 text-yellow-400' : 'bg-neon-green/20 text-neon-green'
                   }`}>{String(actionResult.riskLevel)} risk</span>
                 </div>
                 {'biases' in actionResult && Array.isArray(actionResult.biases) && actionResult.biases.length > 0 && (

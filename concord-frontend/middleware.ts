@@ -22,7 +22,6 @@ const PUBLIC_PREFIXES = [
   '/legal/',
   '/dtu/',
   '/lens/',
-  '/lenses/',
   '/newsletter/',
   '/profile/',
   '/manifest.json',
