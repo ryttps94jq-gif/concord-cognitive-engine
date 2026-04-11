@@ -1547,6 +1547,7 @@ export default function ChatLensPage() {
             className="!bg-transparent !border-0 !p-0"
           />
           <FeedbackWidget targetType="lens" targetId="chat" />
+          <FoundationCard type="status" />
         </div>
 
         <div className="p-4">
@@ -1779,6 +1780,16 @@ export default function ChatLensPage() {
                 </button>
               </div>
             )}
+
+            {/* View Context button — opens ContextOverlay */}
+            <button
+              onClick={() => setContextOverlayOpen(true)}
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-lattice-bg border border-lattice-border rounded-full text-xs text-gray-400 hover:text-neon-cyan hover:border-neon-cyan/30 transition-colors"
+              title="View working set context"
+            >
+              <Eye className="w-3 h-3" />
+              <span>Context</span>
+            </button>
           </div>
 
           {/* Cognitive Status Bar */}
@@ -2367,8 +2378,10 @@ export default function ChatLensPage() {
           <ChevronDown className={`w-4 h-4 transition-transform ${showFeatures ? 'rotate-180' : ''}`} />
         </button>
         {showFeatures && (
-          <div className="px-4 pb-4">
+          <div className="px-4 pb-4 space-y-4">
             <LensFeaturePanel lensId="chat" />
+            {/* Atlas Viewer — spatial/material data overview */}
+            <AtlasViewer type="overview" />
           </div>
         )}
       </div>
@@ -2381,6 +2394,46 @@ export default function ChatLensPage() {
           onClose={() => setInspectingDtuId(null)}
           onNavigate={(id) => setInspectingDtuId(id)}
         />
+      )}
+
+      {/* Session Sidebar — session management overlay */}
+      <SessionSidebar isOpen={sessionSidebarOpen} onClose={() => setSessionSidebarOpen(false)} />
+
+      {/* Context Overlay — shows working-set DTUs for a response */}
+      <ContextOverlay
+        sessionId={selectedConversation || ''}
+        lens="chat"
+        isOpen={contextOverlayOpen}
+        onClose={() => setContextOverlayOpen(false)}
+      />
+
+      {/* Atlas Overlay — material query results */}
+      {atlasLoading || atlasResult ? (
+        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-40">
+          <AtlasOverlay query={atlasQuery} result={atlasResult as never} loading={atlasLoading} />
+        </div>
+      ) : null}
+
+      {/* Chat Route Overlay — shows lens attribution on routed messages */}
+      {routeMeta && (
+        <ChatRouteOverlay
+          route={routeMeta}
+          onConfirm={() => setRouteMeta(null)}
+          onCancel={() => setRouteMeta(null)}
+        />
+      )}
+
+      {/* Forge Card — inline artifact creation when forge envelope exists */}
+      {forgeEnvelope && (
+        <div className="absolute bottom-20 right-4 z-40 w-96">
+          <ForgeCard
+            dtu={forgeEnvelope.dtu as never}
+            presentation={forgeEnvelope.presentation as never}
+            actions={forgeEnvelope.actions as never}
+            onSave={() => setForgeEnvelope(null)}
+            onDelete={() => setForgeEnvelope(null)}
+          />
+        </div>
       )}
     </div>
   );

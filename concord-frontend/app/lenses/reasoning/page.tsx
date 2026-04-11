@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   GitBranch, Plus, CheckCircle2, ArrowRight, Brain,
@@ -14,7 +14,8 @@ import {
   ThumbsUp, ThumbsDown, Link2, FileText, Sparkles,
   Target, Scale, Eye, Layers, Zap, RefreshCw,
   Download, X, Trash2, Flag,
-  CircleDot, ArrowUpRight, MessageSquare, Hash
+  CircleDot, ArrowUpRight, MessageSquare, Hash,
+  Loader2, Play
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { ds } from '@/lib/design-system';
@@ -521,6 +522,10 @@ export default function ReasoningLensPage() {
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [templateFormValues, setTemplateFormValues] = useState<Record<string, string>>({});
 
+  // ----- Analysis action state -----
+  const [analysisResult, setAnalysisResult] = useState<Record<string, unknown> | null>(null);
+  const [analysisRunning, setAnalysisRunning] = useState<string | null>(null);
+
   // ----- API queries -----
   const { data: chainsData, isError: isError2, error: error2, refetch: refetch2 } = useQuery({
     queryKey: ['reasoning-chains'],
@@ -581,6 +586,22 @@ export default function ReasoningLensPage() {
 
   // ----- Domain actions via useRunArtifact -----
   const runAction = useRunArtifact('reasoning');
+
+  // ----- Auto-seed artifact from backend chains (ensures action buttons have a target) -----
+  const chainSeeded = useRef(false);
+  useEffect(() => {
+    if (chainSeeded.current || chainArtifacts.length > 0 || !chainsData) return;
+    const allChains: Chain[] = chainsData?.chains || chainsData || [];
+    if (allChains.length > 0) {
+      chainSeeded.current = true;
+      const first = allChains[0];
+      createChainArtifact({
+        title: first.premise || 'Reasoning Chain',
+        data: { chainId: first.id, type: first.type, premise: first.premise },
+        meta: { status: first.status || 'active', tags: ['auto-synced'] },
+      });
+    }
+  }, [chainsData, chainArtifacts.length, createChainArtifact]);
 
   // ----- Derived data -----
   const chains: Chain[] = chainsData?.chains || chainsData || [];
@@ -894,6 +915,31 @@ export default function ReasoningLensPage() {
     a.click();
     URL.revokeObjectURL(url);
   }, [selectedMap]);
+
+  // ----- Analysis tab backend action handler -----
+  const handleAnalysisAction = useCallback(async (action: string) => {
+    const artifactId = chainArtifacts[0]?.id;
+    if (!artifactId) {
+      setAnalysisResult({ message: 'No reasoning artifacts synced yet. Create a chain or argument map first.' });
+      return;
+    }
+    setAnalysisRunning(action);
+    setAnalysisResult(null);
+    try {
+      const res = await runAction.mutateAsync({ id: artifactId, action, params: { chainId: selectedChain } });
+      if (res.ok === false) {
+        setAnalysisResult({ message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` });
+      } else {
+        setAnalysisResult((res.result as Record<string, unknown>) || { message: 'Analysis complete' });
+      }
+      queryClient.invalidateQueries({ queryKey: ['reasoning-chains'] });
+    } catch (e) {
+      console.error(`Analysis action ${action} failed:`, e);
+      setAnalysisResult({ message: `Action failed: ${e instanceof Error ? e.message : 'Unknown error'}` });
+    } finally {
+      setAnalysisRunning(null);
+    }
+  }, [chainArtifacts, runAction, selectedChain, queryClient]);
 
   // ----- Error state -----
   if (isLoading) {

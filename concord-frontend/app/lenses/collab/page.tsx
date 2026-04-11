@@ -46,6 +46,8 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { SharedSessionChat } from '@/components/social/SharedSessionChat';
+import { SharedSessionInvite } from '@/components/social/SharedSessionInvite';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -318,6 +320,7 @@ export default function CollabLensPage() {
   const [activeSession, setActiveSession] = useState<CollabSession | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showFeatures, setShowFeatures] = useState(true);
+  const [inviteSessionId, setInviteSessionId] = useState<string | null>(null);
 
   // --- Backend action wiring ---
   const runAction = useRunArtifact('collab');
@@ -566,6 +569,20 @@ export default function CollabLensPage() {
             transition={{ duration: 0.2 }}
             className="space-y-3"
           >
+            {/* Sovereignty gate for joining an invited session */}
+            {inviteSessionId && (
+              <div className="panel p-4 mb-4 border border-neon-blue/20">
+                <SharedSessionInvite
+                  sessionId={inviteSessionId}
+                  onJoined={(sid) => {
+                    setInviteSessionId(null);
+                    const joinedSession = sessions.find(s => s.id === sid);
+                    if (joinedSession) setActiveSession(joinedSession);
+                  }}
+                  onDeclined={() => setInviteSessionId(null)}
+                />
+              </div>
+            )}
             {invitations.length === 0 ? (
               <div className="panel p-12 text-center text-gray-400">
                 <Mail className="w-12 h-12 mx-auto mb-3 opacity-40" />
@@ -574,7 +591,9 @@ export default function CollabLensPage() {
               </div>
             ) : (
               invitations.map(inv => (
-                <InvitationCard key={inv.id} invitation={inv} />
+                <div key={inv.id} onClick={() => setInviteSessionId(inv.id)} className="cursor-pointer">
+                  <InvitationCard invitation={inv} />
+                </div>
               ))
             )}
           </motion.div>
@@ -1248,6 +1267,14 @@ function ActiveSessionView({ session, onLeave }: { session: CollabSession; onLea
 
         {/* Right panel: live chat */}
         <div className="w-72 border-l border-lattice-border flex flex-col shrink-0">
+          {/* Multi-sovereign shared session chat */}
+          <div className="border-b border-lattice-border">
+            <SharedSessionChat
+              sessionId={session.id}
+              currentUserId="current-user"
+              onEnd={() => onLeave()}
+            />
+          </div>
           <div className="px-3 py-2.5 border-b border-lattice-border">
             <h3 className="text-xs font-semibold text-gray-400 flex items-center gap-1.5">
               <MessageSquare className="w-3.5 h-3.5" /> Live Chat
