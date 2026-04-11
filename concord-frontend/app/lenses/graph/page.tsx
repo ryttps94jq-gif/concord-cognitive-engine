@@ -5,6 +5,7 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ZoomIn, ZoomOut, RotateCcw, Search, Eye, EyeOff,
@@ -12,7 +13,7 @@ import {
   Share2, GitBranch, ChevronRight, Copy, ExternalLink,
   Plus, Link2, User, AudioWaveform,
   TreePine, Users, Filter,
-  Layers, ChevronDown
+  Layers, ChevronDown, Loader2, BarChart3, Network, Cpu,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
@@ -219,6 +220,18 @@ export default function GraphLensPage() {
   const [showAddNode, setShowAddNode] = useState(false);
   const [showFeatures, setShowFeatures] = useState(true);
   const [addNodeType, setAddNodeType] = useState<NodeType>('track');
+  // --- Graph action wiring ---
+  const { items: graphArtifacts } = useLensData('graph', 'graph-data', { seed: [] });
+  const runGraphAction = useRunArtifact('graph');
+  const [graphActionResult, setGraphActionResult] = useState<{ action: string; data: unknown } | null>(null);
+  const handleGraphAction = useCallback((action: string) => {
+    const artifactId = graphArtifacts[0]?.id;
+    if (!artifactId) return;
+    runGraphAction.mutate(
+      { id: artifactId, action, params: {} },
+      { onSuccess: (res) => setGraphActionResult({ action, data: res.result }) }
+    );
+  }, [graphArtifacts, runGraphAction]);
   const [addNodeLabel, setAddNodeLabel] = useState('');
   const [localEdges, setLocalEdges] = useState<GraphEdge[]>([]);
   const [filterRelated, setFilterRelated] = useState<string | null>(null);
@@ -1712,6 +1725,160 @@ export default function GraphLensPage() {
             <LensFeaturePanel lensId="graph" />
           </div>
         )}
+      </div>
+
+      {/* ---- Graph Domain Actions ---- */}
+      <div className="panel p-4 space-y-4">
+        <h2 className="font-semibold flex items-center gap-2">
+          <Network className="w-4 h-4 text-neon-cyan" /> Graph Analytics Actions
+        </h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            { action: 'nodeAnalysis', label: 'Node Analysis', icon: Cpu, color: 'neon-cyan', desc: 'Degree, betweenness & closeness centrality' },
+            { action: 'pathFind', label: 'Path Find', icon: GitBranch, color: 'neon-purple', desc: 'BFS shortest path between nodes' },
+            { action: 'clusterDetect', label: 'Cluster Detect', icon: Users, color: 'neon-green', desc: 'Connected components & fragmentation' },
+            { action: 'graphMetrics', label: 'Graph Metrics', icon: BarChart3, color: 'amber-400', desc: 'Density, diameter, clustering coefficient' },
+          ].map(({ action, label, icon: Icon, color, desc }) => (
+            <button
+              key={action}
+              onClick={() => handleGraphAction(action)}
+              disabled={runGraphAction.isPending || !graphArtifacts[0]?.id}
+              className="p-3 rounded-lg border text-left transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-lattice-surface border-lattice-border hover:border-white/20"
+            >
+              <div className="flex items-center gap-2 mb-1">
+                {runGraphAction.isPending ? <Loader2 className={`w-4 h-4 text-${color} animate-spin`} /> : <Icon className={`w-4 h-4 text-${color}`} />}
+                <span className="text-xs font-semibold text-white">{label}</span>
+              </div>
+              <p className="text-xs text-gray-500">{desc}</p>
+            </button>
+          ))}
+        </div>
+        {!graphArtifacts[0]?.id && (
+          <p className="text-xs text-gray-500 text-center">Create a graph-data artifact to run graph analytics.</p>
+        )}
+
+        {runGraphAction.isPending && (
+          <div className="flex items-center justify-center gap-3 py-4">
+            <Loader2 className="w-5 h-5 text-neon-cyan animate-spin" />
+            <span className="text-sm text-gray-400">Analyzing graph...</span>
+          </div>
+        )}
+
+        {graphActionResult && !runGraphAction.isPending && (() => {
+          const r = graphActionResult.data as Record<string, unknown>;
+          if (graphActionResult.action === 'nodeAnalysis') {
+            const summary = r.summary as Record<string, unknown> | undefined;
+            const nodes = (r.nodes as { id: string; degree: number; degreeCentrality: number; betweennessCentrality: number; isIsolated: boolean }[]) || [];
+            return (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="lens-card text-center"><p className="text-xl font-bold text-white">{r.nodeCount as number}</p><p className="text-xs text-gray-400">Nodes</p></div>
+                  <div className="lens-card text-center"><p className="text-xl font-bold text-white">{r.edgeCount as number}</p><p className="text-xs text-gray-400">Edges</p></div>
+                  <div className="lens-card text-center"><p className="text-xl font-bold text-neon-cyan">{summary?.averageDegree as number}</p><p className="text-xs text-gray-400">Avg Degree</p></div>
+                  <div className="lens-card text-center"><p className="text-xl font-bold text-yellow-400">{summary?.isolatedNodes as number}</p><p className="text-xs text-gray-400">Isolated</p></div>
+                </div>
+                {summary?.mostConnected && <div className="lens-card flex justify-between text-sm"><span className="text-gray-400">Most Connected</span><span className="text-neon-cyan font-mono">{summary.mostConnected as string}</span></div>}
+                {nodes.slice(0, 5).length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-xs text-gray-500 uppercase tracking-wider">Top Nodes by Centrality</p>
+                    {nodes.slice(0, 5).map((n) => (
+                      <div key={n.id} className="lens-card flex items-center justify-between text-xs">
+                        <span className="text-white font-mono">{n.id}</span>
+                        <div className="flex items-center gap-3">
+                          <span className="text-gray-400">degree: <span className="text-neon-cyan">{n.degree}</span></span>
+                          <span className="text-gray-400">btw: <span className="text-neon-purple">{n.betweennessCentrality}</span></span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          }
+          if (graphActionResult.action === 'pathFind') {
+            const found = r.found as boolean;
+            const path = r.path as string[] | null;
+            return (
+              <div className="space-y-3">
+                <div className={`lens-card flex items-center gap-3 border ${found ? 'border-neon-green/30' : 'border-red-400/30'}`}>
+                  <span className={found ? 'text-neon-green' : 'text-red-400'}>{found ? 'Path found' : 'No path'}</span>
+                  {found && <span className="text-xs text-gray-400">{r.hopCount as number} hops, weight: {r.weightedDistance as number}</span>}
+                </div>
+                {path && path.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1">
+                    {path.map((node, i) => (
+                      <span key={i} className="flex items-center gap-1">
+                        <span className="text-xs px-2 py-1 rounded bg-neon-cyan/10 text-neon-cyan font-mono">{node}</span>
+                        {i < path.length - 1 && <span className="text-gray-500 text-xs">→</span>}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {r.message && <p className="text-xs text-gray-400">{r.message as string}</p>}
+              </div>
+            );
+          }
+          if (graphActionResult.action === 'clusterDetect') {
+            const clusters = (r.clusters as { clusterId: number; size: number; nodes: string[]; density: number; isIsolatedNode: boolean }[]) || [];
+            const summary = r.summary as Record<string, unknown> | undefined;
+            return (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="lens-card text-center"><p className="text-xl font-bold text-white">{r.totalNodes as number}</p><p className="text-xs text-gray-400">Nodes</p></div>
+                  <div className="lens-card text-center"><p className="text-xl font-bold text-neon-cyan">{r.clusterCount as number}</p><p className="text-xs text-gray-400">Clusters</p></div>
+                  <div className="lens-card text-center"><p className="text-xl font-bold text-yellow-400">{summary?.isolatedNodes as number}</p><p className="text-xs text-gray-400">Isolated</p></div>
+                  <div className="lens-card text-center"><p className="text-xl font-bold text-neon-purple">{summary?.fragmentationIndex as number}</p><p className="text-xs text-gray-400">Fragmentation</p></div>
+                </div>
+                {summary?.connectivity && <div className="lens-card flex justify-between text-sm"><span className="text-gray-400">Connectivity</span><span className="text-neon-cyan">{summary.connectivity as string}</span></div>}
+                {clusters.slice(0, 4).map((c) => (
+                  <div key={c.clusterId} className="lens-card">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-medium text-white">Cluster {c.clusterId}</span>
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="text-gray-400">{c.size} nodes</span>
+                        <span className="text-gray-400">density: {c.density}</span>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {c.nodes.slice(0, 6).map((n) => <span key={n} className="text-xs px-1.5 py-0.5 rounded bg-neon-cyan/10 text-neon-cyan font-mono">{n}</span>)}
+                      {c.nodes.length > 6 && <span className="text-xs text-gray-500">+{c.nodes.length - 6}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          }
+          if (graphActionResult.action === 'graphMetrics') {
+            const metrics = r.metrics as Record<string, unknown> | undefined;
+            return (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="lens-card text-center"><p className="text-xl font-bold text-white">{r.nodeCount as number}</p><p className="text-xs text-gray-400">Nodes</p></div>
+                  <div className="lens-card text-center"><p className="text-xl font-bold text-white">{r.edgeCount as number}</p><p className="text-xs text-gray-400">Edges</p></div>
+                  {metrics && <>
+                    <div className="lens-card text-center"><p className="text-xl font-bold text-neon-cyan">{metrics.density as number}</p><p className="text-xs text-gray-400">Density</p></div>
+                    <div className="lens-card text-center"><p className="text-xl font-bold text-neon-purple">{metrics.clusteringCoefficient as number}</p><p className="text-xs text-gray-400">Clustering</p></div>
+                  </>}
+                </div>
+                {metrics && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="lens-card space-y-1 text-sm">
+                      <div className="flex justify-between"><span className="text-gray-400">Avg Degree</span><span className="text-white">{metrics.averageDegree as number}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-400">Max Degree</span><span className="text-white">{metrics.maxDegree as number}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-400">Density Label</span><span className="text-neon-cyan">{metrics.densityLabel as string}</span></div>
+                    </div>
+                    <div className="lens-card space-y-1 text-sm">
+                      <div className="flex justify-between"><span className="text-gray-400">Diameter</span><span className="text-white">{metrics.diameter ?? 'n/a'}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-400">Avg Path Length</span><span className="text-white">{metrics.averagePathLength as number}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-400">Connected</span><span className={metrics.isConnected ? 'text-neon-green' : 'text-red-400'}>{metrics.isConnected ? 'Yes' : 'No'}</span></div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          }
+          return null;
+        })()}
       </div>
     </div>
   );
