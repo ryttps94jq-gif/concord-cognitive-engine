@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
+import { useSocket } from '@/hooks/useSocket';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
@@ -31,12 +32,456 @@ import type { ConcordiaDistrict } from '@/components/world-lens/ConcordiaHub';
 
 import {
   Globe, ChevronDown, Layers, Map as MapIcon, Zap, X,
+  Radio, Eye, Play, Square, Users, Clock, Coins,
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { api } from '@/lib/api/client';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
+
+// ── City Streaming Types ───────────────────────────────────────
+
+interface CityStream {
+  id: string;
+  creatorId: string;
+  cityId: string;
+  title: string;
+  startedAt: string;
+  viewerCount: number;
+  dtusCreated: number;
+  salesMade: number;
+  ccEarned: number;
+  status: 'live' | 'ended';
+}
+
+interface StreamEvent {
+  id: string;
+  type: 'dtu-created' | 'sale' | 'viewer-joined' | 'viewer-left';
+  message: string;
+  timestamp: string;
+}
+
+// ── City Streaming Section ─────────────────────────────────────
+
+function CityStreamingSection() {
+  const { on, off, isConnected } = useSocket({ autoConnect: true });
+
+  // Creator controls
+  const [myStream, setMyStream] = useState<CityStream | null>(null);
+  const [streamTitle, setStreamTitle] = useState('');
+  const [streamCityId, setStreamCityId] = useState('concordia-central');
+  const [isStarting, setIsStarting] = useState(false);
+  const [isEnding, setIsEnding] = useState(false);
+
+  // Viewer state
+  const [activeStreams, setActiveStreams] = useState<CityStream[]>([]);
+  const [watchingStreamId, setWatchingStreamId] = useState<string | null>(null);
+  const [activityFeed, setActivityFeed] = useState<StreamEvent[]>([]);
+  const [isLoadingStreams, setIsLoadingStreams] = useState(false);
+  const feedEndRef = useRef<HTMLDivElement>(null);
+
+  const eventCounter = useRef(0);
+
+  // Fetch active streams
+  const fetchStreams = useCallback(async () => {
+    setIsLoadingStreams(true);
+    try {
+      const { data } = await api.get('/api/city/streams');
+      const streams = Array.isArray(data) ? data : (data?.streams ?? []);
+      setActiveStreams(streams);
+    } catch {
+      // Silently handle — streams may not be available
+    } finally {
+      setIsLoadingStreams(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchStreams();
+    const interval = setInterval(fetchStreams, 15000);
+    return () => clearInterval(interval);
+  }, [fetchStreams]);
+
+  // Socket listeners for live events
+  useEffect(() => {
+    const handleDtuCreated = (data: unknown) => {
+      const d = data as Record<string, unknown>;
+      setActivityFeed(prev => [...prev.slice(-49), {
+        id: `evt-${++eventCounter.current}`,
+        type: 'dtu-created' as const,
+        message: `DTU created: ${d.title || d.dtuId || 'untitled'}`,
+        timestamp: new Date().toISOString(),
+      }]);
+      // Update stream stats
+      setActiveStreams(prev => prev.map(s =>
+        s.id === d.streamId ? { ...s, dtusCreated: (s.dtusCreated || 0) + 1 } : s
+      ));
+    };
+
+    const handleSale = (data: unknown) => {
+      const d = data as Record<string, unknown>;
+      setActivityFeed(prev => [...prev.slice(-49), {
+        id: `evt-${++eventCounter.current}`,
+        type: 'sale' as const,
+        message: `Sale: ${d.amount || 0} CC`,
+        timestamp: new Date().toISOString(),
+      }]);
+      setActiveStreams(prev => prev.map(s =>
+        s.id === d.streamId ? {
+          ...s,
+          salesMade: (s.salesMade || 0) + 1,
+          ccEarned: (s.ccEarned || 0) + Number(d.amount || 0),
+        } : s
+      ));
+    };
+
+    const handleStreamStarted = (data: unknown) => {
+      const d = data as CityStream;
+      setActiveStreams(prev => {
+        if (prev.some(s => s.id === d.id)) return prev;
+        return [...prev, d];
+      });
+    };
+
+    const handleStreamEnded = (data: unknown) => {
+      const d = data as Record<string, unknown>;
+      setActiveStreams(prev => prev.filter(s => s.id !== d.streamId && s.id !== d.id));
+      if (watchingStreamId === (d.streamId ?? d.id)) {
+        setWatchingStreamId(null);
+      }
+    };
+
+    on('city:stream-dtu-created', handleDtuCreated);
+    on('city:stream-sale', handleSale);
+    on('city:stream-started', handleStreamStarted);
+    on('city:stream-ended', handleStreamEnded);
+
+    return () => {
+      off('city:stream-dtu-created', handleDtuCreated);
+      off('city:stream-sale', handleSale);
+      off('city:stream-started', handleStreamStarted);
+      off('city:stream-ended', handleStreamEnded);
+    };
+  }, [on, off, watchingStreamId]);
+
+  // Auto-scroll activity feed
+  useEffect(() => {
+    feedEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [activityFeed.length]);
+
+  // Creator: start stream
+  const handleStartStream = async () => {
+    if (!streamTitle.trim()) return;
+    setIsStarting(true);
+    try {
+      const { data } = await api.post('/api/city/stream/start', {
+        cityId: streamCityId,
+        title: streamTitle.trim(),
+      });
+      setMyStream(data?.stream ?? data);
+      setStreamTitle('');
+      fetchStreams();
+    } catch (err) {
+      console.error('Failed to start stream:', err);
+    } finally {
+      setIsStarting(false);
+    }
+  };
+
+  // Creator: end stream
+  const handleEndStream = async () => {
+    setIsEnding(true);
+    try {
+      await api.post('/api/city/stream/end', {});
+      setMyStream(null);
+      fetchStreams();
+    } catch (err) {
+      console.error('Failed to end stream:', err);
+    } finally {
+      setIsEnding(false);
+    }
+  };
+
+  // Viewer: follow/unfollow stream
+  const handleToggleWatch = async (streamId: string) => {
+    const isWatching = watchingStreamId === streamId;
+    try {
+      await api.post('/api/macros/run', {
+        domain: 'city',
+        name: isWatching ? 'unfollowStream' : 'followStream',
+        input: { streamId },
+      });
+      setWatchingStreamId(isWatching ? null : streamId);
+      if (!isWatching) {
+        setActivityFeed([]);
+      }
+    } catch (err) {
+      console.error('Failed to toggle stream watch:', err);
+    }
+  };
+
+  const watchedStream = activeStreams.find(s => s.id === watchingStreamId);
+
+  // Duration helper
+  const formatDuration = (startedAt: string) => {
+    const ms = Date.now() - new Date(startedAt).getTime();
+    const mins = Math.floor(ms / 60000);
+    const hrs = Math.floor(mins / 60);
+    if (hrs > 0) return `${hrs}h ${mins % 60}m`;
+    return `${mins}m`;
+  };
+
+  return (
+    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      {/* Connection status */}
+      <div className="flex items-center gap-2 text-xs text-gray-500">
+        <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400'}`} />
+        {isConnected ? 'Live connection' : 'Connecting...'}
+      </div>
+
+      {/* ── Creator Controls ──────────────────────────────── */}
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-white/[0.03] border border-white/10 rounded-xl p-4 space-y-3"
+      >
+        <h3 className="text-sm font-semibold text-cyan-300 flex items-center gap-2">
+          <Radio className="w-4 h-4" />
+          Stream Controls
+        </h3>
+
+        {myStream ? (
+          <div className="space-y-3">
+            {/* Active stream status */}
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+              <span className="text-xs font-medium text-red-400">LIVE</span>
+              <span className="text-xs text-gray-400 ml-auto">
+                {formatDuration(myStream.startedAt)}
+              </span>
+            </div>
+            <div className="text-sm text-white font-medium">{myStream.title}</div>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="bg-white/5 rounded-lg p-2">
+                <div className="text-xs text-gray-400 flex items-center justify-center gap-1">
+                  <Eye className="w-3 h-3" /> Viewers
+                </div>
+                <div className="text-sm font-bold text-white">{myStream.viewerCount}</div>
+              </div>
+              <div className="bg-white/5 rounded-lg p-2">
+                <div className="text-xs text-gray-400">DTUs</div>
+                <div className="text-sm font-bold text-cyan-300">{myStream.dtusCreated}</div>
+              </div>
+              <div className="bg-white/5 rounded-lg p-2">
+                <div className="text-xs text-gray-400 flex items-center justify-center gap-1">
+                  <Coins className="w-3 h-3" /> Earned
+                </div>
+                <div className="text-sm font-bold text-green-400">{myStream.ccEarned} CC</div>
+              </div>
+            </div>
+            <button
+              onClick={handleEndStream}
+              disabled={isEnding}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium rounded-lg bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 disabled:opacity-50 transition-colors"
+            >
+              {isEnding ? (
+                <div className="w-3 h-3 border border-red-400 border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Square className="w-3 h-3" />
+              )}
+              End Stream
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <input
+              type="text"
+              value={streamTitle}
+              onChange={e => setStreamTitle(e.target.value)}
+              placeholder="Stream title..."
+              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50"
+            />
+            <select
+              value={streamCityId}
+              onChange={e => setStreamCityId(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500/50"
+            >
+              <option value="concordia-central">Concordia Central</option>
+              <option value="neon-district">Neon District</option>
+              <option value="maker-mile">Maker Mile</option>
+              <option value="data-harbor">Data Harbor</option>
+            </select>
+            <button
+              onClick={handleStartStream}
+              disabled={isStarting || !streamTitle.trim()}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium rounded-lg bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/30 disabled:opacity-50 transition-colors"
+            >
+              {isStarting ? (
+                <div className="w-3 h-3 border border-cyan-300 border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Play className="w-3 h-3" />
+              )}
+              Go Live
+            </button>
+          </div>
+        )}
+      </motion.div>
+
+      {/* ── Active Streams ────────────────────────────────── */}
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.05 }}
+        className="bg-white/[0.03] border border-white/10 rounded-xl p-4 space-y-3"
+      >
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-cyan-300 flex items-center gap-2">
+            <Eye className="w-4 h-4" />
+            Active Streams
+          </h3>
+          <button
+            onClick={fetchStreams}
+            disabled={isLoadingStreams}
+            className="text-gray-400 hover:text-white transition-colors"
+          >
+            <Radio className={`w-3.5 h-3.5 ${isLoadingStreams ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+
+        {activeStreams.length === 0 ? (
+          <div className="text-center py-6 text-gray-500 text-xs">
+            No active streams right now
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <AnimatePresence mode="popLayout">
+              {activeStreams.map(stream => (
+                <motion.div
+                  key={stream.id}
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className={`bg-white/5 rounded-lg p-3 border transition-colors ${
+                    watchingStreamId === stream.id
+                      ? 'border-cyan-500/50 bg-cyan-500/5'
+                      : 'border-white/5 hover:border-white/15'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                        <span className="text-xs text-gray-400 truncate">
+                          {stream.creatorId}
+                        </span>
+                      </div>
+                      <div className="text-sm text-white font-medium truncate mt-0.5">
+                        {stream.title}
+                      </div>
+                      <div className="flex items-center gap-3 mt-1 text-[10px] text-gray-500">
+                        <span className="flex items-center gap-0.5">
+                          <Globe className="w-2.5 h-2.5" /> {stream.cityId}
+                        </span>
+                        <span className="flex items-center gap-0.5">
+                          <Users className="w-2.5 h-2.5" /> {stream.viewerCount}
+                        </span>
+                        <span className="flex items-center gap-0.5">
+                          <Clock className="w-2.5 h-2.5" /> {formatDuration(stream.startedAt)}
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleToggleWatch(stream.id)}
+                      className={`shrink-0 px-2.5 py-1 text-[10px] font-medium rounded-md transition-colors ${
+                        watchingStreamId === stream.id
+                          ? 'bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30'
+                          : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/30'
+                      }`}
+                    >
+                      {watchingStreamId === stream.id ? 'Leave' : 'Watch'}
+                    </button>
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
+        )}
+      </motion.div>
+
+      {/* ── Live Stream View (when watching) ──────────────── */}
+      <AnimatePresence>
+        {watchedStream && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="bg-white/[0.03] border border-cyan-500/20 rounded-xl p-4 space-y-3 overflow-hidden"
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-cyan-300 flex items-center gap-2">
+                <Radio className="w-4 h-4 text-red-400 animate-pulse" />
+                {watchedStream.title}
+              </h3>
+              <div className="flex items-center gap-2 text-[10px] text-gray-400">
+                <span className="flex items-center gap-0.5">
+                  <Eye className="w-3 h-3" /> {watchedStream.viewerCount}
+                </span>
+                <span>{formatDuration(watchedStream.startedAt)}</span>
+              </div>
+            </div>
+
+            {/* Real-time activity feed */}
+            <div className="bg-black/30 rounded-lg border border-white/5 max-h-48 overflow-y-auto p-2 space-y-1">
+              {activityFeed.length === 0 ? (
+                <div className="text-center py-4 text-gray-600 text-[10px]">
+                  Waiting for stream activity...
+                </div>
+              ) : (
+                activityFeed.map(evt => (
+                  <motion.div
+                    key={evt.id}
+                    initial={{ opacity: 0, x: -8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className="flex items-center gap-2 text-[11px] py-0.5"
+                  >
+                    <span className={`w-1 h-1 rounded-full shrink-0 ${
+                      evt.type === 'sale' ? 'bg-green-400' : 'bg-cyan-400'
+                    }`} />
+                    <span className={
+                      evt.type === 'sale' ? 'text-green-400' : 'text-gray-300'
+                    }>
+                      {evt.message}
+                    </span>
+                    <span className="text-gray-600 ml-auto text-[9px]">
+                      {new Date(evt.timestamp).toLocaleTimeString()}
+                    </span>
+                  </motion.div>
+                ))
+              )}
+              <div ref={feedEndRef} />
+            </div>
+
+            {/* Stream stats bar */}
+            <div className="flex items-center gap-4 text-[10px]">
+              <span className="text-gray-400">
+                DTUs: <span className="text-cyan-300 font-medium">{watchedStream.dtusCreated}</span>
+              </span>
+              <span className="text-gray-400">
+                Sales: <span className="text-green-400 font-medium">{watchedStream.salesMade}</span>
+              </span>
+              <span className="text-gray-400">
+                Earned: <span className="text-green-400 font-medium">{watchedStream.ccEarned} CC</span>
+              </span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 // ── View Modes ──────────────────────────────────────────────────────
 
-type ViewMode = 'concordia' | 'district';
+type ViewMode = 'concordia' | 'district' | 'streams';
 
 // ── Component ───────────────────────────────────────────────────────
 
@@ -243,6 +688,13 @@ export default function WorldLensPage() {
               <MapIcon className="w-3.5 h-3.5 inline mr-1" />
               District
             </button>
+            <button
+              onClick={() => setViewMode('streams')}
+              className={`px-3 py-1.5 text-xs ${viewMode === 'streams' ? 'bg-cyan-500/20 text-cyan-300' : 'text-gray-400 hover:text-white'}`}
+            >
+              <Radio className="w-3.5 h-3.5 inline mr-1" />
+              Streams
+            </button>
           </div>
           <UniversalActions domain="world" artifactId={undefined} compact />
         </div>
@@ -256,6 +708,8 @@ export default function WorldLensPage() {
             onNavigateToLens={(lens) => router.push(`/lenses/${lens}`)}
           />
         </div>
+      ) : viewMode === 'streams' ? (
+        <CityStreamingSection />
       ) : (
         <div className="flex-1 flex min-h-0">
           {/* Left Sidebar: Toolbar + Creation Panel */}
