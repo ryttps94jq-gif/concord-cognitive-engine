@@ -52,7 +52,6 @@ export default function ResearchLensPage() {
   const [showFeatures, setShowFeatures] = useState(true);
 
   /* ---------- domain actions ---------- */
-  const { items: researchArtifacts } = useLensDTUs as unknown as { items: {id: string}[] };
   const runResearchAction = useRunArtifact('research');
   const [researchActionResult, setResearchActionResult] = useState<Record<string, unknown> | null>(null);
   const [researchActiveAction, setResearchActiveAction] = useState<string | null>(null);

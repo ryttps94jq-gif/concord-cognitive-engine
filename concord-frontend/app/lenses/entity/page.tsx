@@ -1278,7 +1278,6 @@ function AttributeValidationResult({ result }: { result: Record<string, unknown>
   const validationScore = result.validationScore as number;
   const valid = result.valid as boolean;
   const status = result.status as string;
-  const fieldsChecked = result.fieldsChecked as number;
   const fieldsValid = result.fieldsValid as number;
   const totalFields = result.totalFields as number;
   const errors = result.errors as { count: number; items: Array<{ field: string; type: string; message: string; value?: string }> };

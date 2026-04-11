@@ -70,7 +70,7 @@ export default function ThreadLensPage() {
 
   // --- Lens Bridge ---
   const bridge = useLensBridge('thread', 'conversation');
-  const { create: createThread, remove: deleteThread, items: threadItems } = useLensData<Record<string, unknown>>('thread', 'conversation');
+  const { create: createThread, items: threadItems } = useLensData<Record<string, unknown>>('thread', 'conversation');
   const runThreadAction = useRunArtifact('thread');
   const [threadActionResult, setThreadActionResult] = useState<{ action: string; result: Record<string, unknown> } | null>(null);
   const [threadActiveAction, setThreadActiveAction] = useState<string | null>(null);

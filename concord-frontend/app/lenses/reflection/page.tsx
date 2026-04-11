@@ -460,8 +460,8 @@ export default function ReflectionLensPage() {
             {reflActionResult.action === 'insightExtraction' && (
               <div className="space-y-1">
                 <div className="flex gap-4 flex-wrap">
-                  <span className="text-gray-400">Entries: <span className="text-white font-mono">{String(reflActionResult.entryCount ?? '')}</span></span>
-                  <span className="text-gray-400">Themes: <span className="text-neon-blue font-mono">{String(reflActionResult.totalUniqueThemes ?? '')}</span></span>
+                  <span className="text-gray-400">Entries: <span className="text-white font-mono">{String(reflActionResult.entriesAnalyzed ?? '')}</span></span>
+                  <span className="text-gray-400">Themes: <span className="text-neon-blue font-mono">{Array.isArray(reflActionResult.themes) ? (reflActionResult.themes as unknown[]).length : ''}</span></span>
                 </div>
                 {Array.isArray(reflActionResult.themes) && (
                   <div className="flex flex-wrap gap-1">{(reflActionResult.themes as {theme:string;prevalence:number}[]).slice(0,8).map(({theme,prevalence}) => <span key={theme} className="px-2 py-0.5 bg-neon-blue/10 text-neon-blue rounded font-mono">{theme} <span className="text-gray-500">{Math.round(prevalence*100)}%</span></span>)}</div>
@@ -471,20 +471,20 @@ export default function ReflectionLensPage() {
             {reflActionResult.action === 'growthMetrics' && (
               <div className="space-y-1">
                 <div className="flex gap-4 flex-wrap">
-                  <span className="text-gray-400">Trend: <span className={`font-mono ${reflActionResult.overallTrend === 'improving' ? 'text-green-400' : reflActionResult.overallTrend === 'declining' ? 'text-red-400' : 'text-yellow-400'}`}>{String(reflActionResult.overallTrend ?? '')}</span></span>
-                  <span className="text-gray-400">Growth: <span className="text-neon-blue font-mono">{String(reflActionResult.growthRate ?? '')}%</span></span>
+                  <span className="text-gray-400">Sentiment trend: <span className={`font-mono ${(reflActionResult.sentiment as Record<string,unknown>)?.trend === 'improving' ? 'text-green-400' : (reflActionResult.sentiment as Record<string,unknown>)?.trend === 'declining' ? 'text-red-400' : 'text-yellow-400'}`}>{String((reflActionResult.sentiment as Record<string,unknown>)?.trend ?? '')}</span></span>
+                  <span className="text-gray-400">Depth: <span className="text-neon-blue font-mono">{String((reflActionResult.entryDepth as Record<string,unknown>)?.trend ?? '')}</span></span>
                 </div>
-                {!!reflActionResult.summary && <p className="text-gray-300">{String(reflActionResult.summary)}</p>}
+                {!!(reflActionResult.sentiment as Record<string,unknown>)?.overall && <p className="text-gray-300">Avg sentiment: {String((reflActionResult.sentiment as Record<string,unknown>)?.overall ?? '')}</p>}
               </div>
             )}
             {reflActionResult.action === 'habitTracking' && (
               <div className="space-y-1">
                 <div className="flex gap-4 flex-wrap">
-                  <span className="text-gray-400">Habits tracked: <span className="text-white font-mono">{String(reflActionResult.habitCount ?? '')}</span></span>
-                  <span className="text-gray-400">Completion: <span className="text-neon-green font-mono">{String(reflActionResult.avgCompletionRate ?? '')}%</span></span>
+                  <span className="text-gray-400">Habits tracked: <span className="text-white font-mono">{String(reflActionResult.totalHabits ?? '')}</span></span>
+                  <span className="text-gray-400">Consistency: <span className="text-neon-green font-mono">{String(Math.round(((reflActionResult.overallConsistency as number) ?? 0) * 100))}%</span></span>
                 </div>
-                {Array.isArray(reflActionResult.habits) && (
-                  <div className="space-y-0.5">{(reflActionResult.habits as {name:string;streak:number;rate:number}[]).slice(0,5).map(h => <div key={h.name} className="flex gap-3"><span className="text-gray-300">{h.name}</span><span className="text-neon-green font-mono">🔥{h.streak}d</span><span className="text-gray-500">{h.rate}%</span></div>)}</div>
+                {Array.isArray(reflActionResult.habitProfiles) && (
+                  <div className="space-y-0.5">{(reflActionResult.habitProfiles as {name:string;currentStreak:number;consistency:number}[]).slice(0,5).map(h => <div key={h.name} className="flex gap-3"><span className="text-gray-300">{h.name}</span><span className="text-neon-green font-mono">🔥{h.currentStreak}d</span><span className="text-gray-500">{Math.round(h.consistency*100)}%</span></div>)}</div>
                 )}
               </div>
             )}

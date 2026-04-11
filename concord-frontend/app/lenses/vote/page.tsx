@@ -99,22 +99,6 @@ export default function VoteLensPage() {
     items: proposalItems, isLoading, isError, error, refetch, create,
   } = useLensData<ProposalData>('vote', 'proposal', { seed: [] });
 
-  const runVoteAction = useRunArtifact('vote');
-  const [voteActionResult, setVoteActionResult] = useState<{ action: string; result: Record<string, unknown> } | null>(null);
-  const [voteActiveAction, setVoteActiveAction] = useState<string | null>(null);
-
-  const handleVoteAction = useCallback(async (action: string) => {
-    const id = proposalItems[0]?.id;
-    if (!id) return;
-    setVoteActiveAction(action);
-    try {
-      const res = await runVoteAction.mutateAsync({ id, action });
-      if (res.ok) setVoteActionResult({ action, result: res.result as Record<string, unknown> });
-    } finally {
-      setVoteActiveAction(null);
-    }
-  }, [proposalItems, runVoteAction]);
-
   // Map lens items to proposals
   const proposals = useMemo(() =>
     proposalItems.map((item) => ({
