@@ -8,7 +8,7 @@ import { motion } from 'framer-motion';
 import {
   Download, FileJson, FileText, Database, Check, Package, Layers,
   ChevronDown, FileCode, FileSpreadsheet, Hash, ArrowDownToLine,
-  Loader2, Clock, Archive,
+  Loader2, Clock, Archive, X, CalendarClock, ShieldCheck, Zap, GitCompare,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -17,6 +17,8 @@ import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { ConnectiveTissueBar } from '@/components/lens/ConnectiveTissueBar';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
+import { useLensData } from '@/lib/hooks/use-lens-data';
 
 type ExportFormat = 'json' | 'csv' | 'markdown' | 'text' | 'dtu';
 
@@ -37,6 +39,23 @@ export default function ExportLensPage() {
   const [exporting, setExporting] = useState(false);
   const [exportingDtuId, setExportingDtuId] = useState<string | null>(null);
   const [singleExportFormat, setSingleExportFormat] = useState<ExportFormat>('json');
+
+  // Backend action wiring
+  const runAction = useRunArtifact('export');
+  const { items: exportItems } = useLensData<Record<string, unknown>>('export', 'export', { seed: [] });
+  const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
+  const [isRunning, setIsRunning] = useState<string | null>(null);
+
+  const handleExportAction = async (action: string) => {
+    const targetId = exportItems[0]?.id;
+    if (!targetId) return;
+    setIsRunning(action);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action });
+      setActionResult({ _action: action, ...(res.result as Record<string, unknown>) });
+    } catch (e) { console.error(`Action ${action} failed:`, e); }
+    setIsRunning(null);
+  };
 
   const { data: dtusData, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['dtus'],
@@ -185,6 +204,143 @@ export default function ExportLensPage() {
           )}
         </div>
       </header>
+
+      {/* Action Panel */}
+      <div className="panel p-4 space-y-3">
+        <h2 className="font-semibold text-sm flex items-center gap-2">
+          <Zap className="w-4 h-4 text-neon-cyan" />
+          Export Actions
+        </h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          {[
+            { action: 'generatePackage', label: 'Generate Package', icon: Package, color: 'text-neon-green' },
+            { action: 'validateExport',  label: 'Validate Export',  icon: ShieldCheck, color: 'text-neon-cyan' },
+            { action: 'scheduleExport',  label: 'Schedule Export',  icon: CalendarClock, color: 'text-yellow-400' },
+            { action: 'diffExport',      label: 'Diff Export',      icon: GitCompare, color: 'text-neon-purple' },
+          ].map(({ action, label, icon: Icon, color }) => (
+            <button
+              key={action}
+              onClick={() => handleExportAction(action)}
+              disabled={!!isRunning || !exportItems[0]?.id}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-lattice-deep border border-lattice-border text-sm hover:border-white/20 disabled:opacity-40 transition-colors"
+            >
+              {isRunning === action ? <Loader2 className="w-4 h-4 animate-spin" /> : <Icon className={`w-4 h-4 ${color}`} />}
+              <span className="truncate">{label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Action Results */}
+        {actionResult && (
+          <div className="mt-3 rounded-lg bg-black/30 border border-white/10 p-4 relative">
+            <button onClick={() => setActionResult(null)} className="absolute top-3 right-3 text-gray-500 hover:text-white">
+              <X className="w-4 h-4" />
+            </button>
+
+            {/* generatePackage */}
+            {actionResult._action === 'generatePackage' && (
+              <div className="space-y-3">
+                <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Package Ready</p>
+                {actionResult.message ? (
+                  <p className="text-sm text-gray-400">{actionResult.message as string}</p>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {[
+                        { label: 'Format', value: String(actionResult.format || '').toUpperCase() },
+                        { label: 'Items', value: String(actionResult.itemCount ?? 0) },
+                        { label: 'Size', value: String(actionResult.estimatedSizeHuman ?? '—') },
+                        { label: 'Status', value: String(actionResult.status ?? '—') },
+                      ].map(({ label, value }) => (
+                        <div key={label} className="bg-white/5 rounded-lg p-3 text-center">
+                          <p className="text-lg font-bold text-white">{value}</p>
+                          <p className="text-xs text-gray-400">{label}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-xs text-gray-500">MIME: {actionResult.mimeType as string} &nbsp;|&nbsp; Ext: {actionResult.extension as string}</p>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* validateExport */}
+            {actionResult._action === 'validateExport' && (
+              <div className="space-y-3">
+                <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Validation Report</p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Total', value: String(actionResult.totalItems ?? 0), color: 'text-white' },
+                    { label: 'Valid', value: String(actionResult.valid ?? 0), color: 'text-neon-green' },
+                    { label: 'Invalid', value: String(actionResult.invalid ?? 0), color: 'text-red-400' },
+                    { label: 'Ready', value: actionResult.exportReady ? 'Yes' : 'No', color: actionResult.exportReady ? 'text-neon-green' : 'text-red-400' },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} className="bg-white/5 rounded-lg p-3 text-center">
+                      <p className={`text-lg font-bold ${color}`}>{value}</p>
+                      <p className="text-xs text-gray-400">{label}</p>
+                    </div>
+                  ))}
+                </div>
+                {Array.isArray(actionResult.errors) && (actionResult.errors as Array<Record<string,unknown>>).length > 0 && (
+                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                    {(actionResult.errors as Array<Record<string,unknown>>).map((e, i) => (
+                      <p key={i} className="text-xs text-red-400">Row {e.index as number}: {e.error as string}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* scheduleExport */}
+            {actionResult._action === 'scheduleExport' && (
+              <div className="space-y-3">
+                <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Schedule Configured</p>
+                {actionResult.schedule && (
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {[
+                      { label: 'Frequency', value: String((actionResult.schedule as Record<string,unknown>).frequency ?? '—') },
+                      { label: 'Destination', value: String((actionResult.schedule as Record<string,unknown>).destination ?? '—') },
+                      { label: 'Format', value: String((actionResult.schedule as Record<string,unknown>).format ?? '—').toUpperCase() },
+                      { label: 'Next Run', value: String((actionResult.schedule as Record<string,unknown>).nextRun ?? '—') },
+                      { label: 'Status', value: String(actionResult.status ?? '—') },
+                    ].map(({ label, value }) => (
+                      <div key={label} className="bg-white/5 rounded-lg p-3">
+                        <p className="text-xs text-gray-400">{label}</p>
+                        <p className="text-sm font-semibold text-white capitalize">{value}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* diffExport */}
+            {actionResult._action === 'diffExport' && (
+              <div className="space-y-3">
+                <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Export Diff</p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Added', value: String(actionResult.added ?? 0), color: 'text-neon-green' },
+                    { label: 'Removed', value: String(actionResult.removed ?? 0), color: 'text-red-400' },
+                    { label: 'Modified', value: String(actionResult.modified ?? 0), color: 'text-yellow-400' },
+                    { label: 'Unchanged', value: String(actionResult.unchanged ?? 0), color: 'text-gray-400' },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} className="bg-white/5 rounded-lg p-3 text-center">
+                      <p className={`text-xl font-bold ${color}`}>{value}</p>
+                      <p className="text-xs text-gray-400">{label}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center gap-4 text-xs text-gray-400">
+                  <span>Current: {actionResult.totalCurrent as number} items</span>
+                  <span>Previous: {actionResult.totalPrevious as number} items</span>
+                  <span className="text-yellow-400">Change: {actionResult.changePercent as number}%</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">

@@ -1077,6 +1077,59 @@ export default function ExperienceLensPage() {
         )}
       </AnimatePresence>
 
+      {/* ── Experience Domain Actions ────────────────────────────────────── */}
+      <div className="panel p-4 space-y-4">
+        <h2 className="font-semibold flex items-center gap-2">
+          <Activity className="w-4 h-4 text-neon-purple" />
+          Experience Domain Actions
+        </h2>
+        <p className="text-xs text-gray-400">
+          Run UX analysis actions on the first experience artifact in this lens.
+        </p>
+        <div className="flex flex-wrap gap-3">
+          {[
+            { action: 'journeyMap', label: 'Journey Map', icon: Map, color: 'cyan' },
+            { action: 'usabilityScore', label: 'Usability Score', icon: Gauge, color: 'purple' },
+            { action: 'heuristicEval', label: 'Heuristic Eval', icon: ClipboardCheck, color: 'green' },
+            { action: 'personaBuilder', label: 'Persona Builder', icon: UserCircle, color: 'pink' },
+          ].map(({ action, label, icon: Icon, color }) => (
+            <button
+              key={action}
+              onClick={() => handleExpAction(action)}
+              disabled={!!expRunning || expArtifacts.length === 0}
+              className={`btn-neon ${color} flex items-center gap-2 text-sm`}
+            >
+              {expRunning === action ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Icon className="w-4 h-4" />
+              )}
+              {label}
+            </button>
+          ))}
+        </div>
+        {expArtifacts.length === 0 && (
+          <p className="text-xs text-yellow-400/70 flex items-center gap-1">
+            <AlertTriangle className="w-3 h-3" />
+            No artifacts found. Create an experience artifact first.
+          </p>
+        )}
+
+        {/* ── Action Results ─────────────────────────────────────────────── */}
+        {expActionResult && activeExpAction === 'journeyMap' && (
+          <JourneyMapResult result={expActionResult} />
+        )}
+        {expActionResult && activeExpAction === 'usabilityScore' && (
+          <UsabilityScoreResult result={expActionResult} />
+        )}
+        {expActionResult && activeExpAction === 'heuristicEval' && (
+          <HeuristicEvalResult result={expActionResult} />
+        )}
+        {expActionResult && activeExpAction === 'personaBuilder' && (
+          <PersonaBuilderResult result={expActionResult} />
+        )}
+      </div>
+
       {/* Lens Features */}
       <div className="border-t border-white/10">
         <button
@@ -1095,6 +1148,435 @@ export default function ExperienceLensPage() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── Journey Map Result ────────────────────────────────────────────────────
+
+function JourneyMapResult({ result }: { result: Record<string, unknown> }) {
+  if (result.message) {
+    return (
+      <div className="mt-4 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-sm text-yellow-300">
+        {result.message as string}
+      </div>
+    );
+  }
+
+  const stages = result.stages as Array<{
+    stage: string;
+    touchpoints: string[];
+    emotion: string;
+    painPoints: string[];
+    opportunities: string[];
+    satisfactionScore: number;
+  }>;
+  const totalStages = result.totalStages as number;
+  const avgSatisfaction = result.avgSatisfaction as number;
+  const lowestPoint = result.lowestPoint as string;
+  const totalPainPoints = result.totalPainPoints as number;
+  const totalOpportunities = result.totalOpportunities as number;
+
+  const emotionIcon = (e: string) => {
+    if (e === 'happy' || e === 'excited' || e === 'delighted') return <Smile className="w-3 h-3 text-neon-green" />;
+    if (e === 'frustrated' || e === 'angry' || e === 'sad') return <Frown className="w-3 h-3 text-red-400" />;
+    return <Meh className="w-3 h-3 text-yellow-400" />;
+  };
+
+  const satisfactionColor = (score: number) =>
+    score >= 75 ? 'bg-neon-green' : score >= 50 ? 'bg-yellow-400' : 'bg-red-400';
+
+  const satisfactionText = (score: number) =>
+    score >= 75 ? 'text-neon-green' : score >= 50 ? 'text-yellow-400' : 'text-red-400';
+
+  return (
+    <div className="mt-4 space-y-4">
+      <div className="flex items-center gap-2">
+        <Map className="w-4 h-4 text-neon-cyan" />
+        <h3 className="font-semibold text-sm">Journey Map</h3>
+      </div>
+
+      {/* Summary stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        {[
+          { label: 'Stages', value: totalStages, color: 'text-white' },
+          { label: 'Avg Satisfaction', value: `${avgSatisfaction}%`, color: avgSatisfaction >= 70 ? 'text-neon-green' : avgSatisfaction >= 50 ? 'text-yellow-400' : 'text-red-400' },
+          { label: 'Pain Points', value: totalPainPoints, color: totalPainPoints > 0 ? 'text-red-400' : 'text-neon-green' },
+          { label: 'Opportunities', value: totalOpportunities, color: 'text-neon-cyan' },
+          { label: 'Lowest Point', value: lowestPoint || '—', color: 'text-yellow-400' },
+        ].map(({ label, value, color }) => (
+          <div key={label} className="bg-zinc-900 rounded-lg p-3 border border-zinc-800 text-center">
+            <p className={`text-sm font-bold truncate ${color}`}>{value}</p>
+            <p className="text-[10px] text-gray-400 mt-0.5">{label}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Journey stages */}
+      {stages?.length > 0 && (
+        <div className="space-y-3">
+          <h4 className="text-xs font-semibold uppercase text-gray-400">Journey Stages</h4>
+          <div className="space-y-3">
+            {stages.map((s, i) => (
+              <div key={i} className="bg-zinc-900 rounded-lg p-3 border border-zinc-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-500 font-mono w-5">{i + 1}</span>
+                    <span className="text-sm font-medium text-white">{s.stage}</span>
+                    {emotionIcon(s.emotion)}
+                    <span className="text-[10px] text-gray-500 capitalize">{s.emotion}</span>
+                  </div>
+                  <span className={`text-sm font-bold ${satisfactionText(s.satisfactionScore)}`}>
+                    {s.satisfactionScore}%
+                  </span>
+                </div>
+                {/* Satisfaction bar */}
+                <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full ${satisfactionColor(s.satisfactionScore)}`}
+                    style={{ width: `${s.satisfactionScore}%` }}
+                  />
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-[10px]">
+                  {s.touchpoints.length > 0 && (
+                    <div>
+                      <p className="text-gray-500 mb-1">Touchpoints</p>
+                      {s.touchpoints.map((t, j) => (
+                        <p key={j} className="text-gray-300">• {t}</p>
+                      ))}
+                    </div>
+                  )}
+                  {s.painPoints.length > 0 && (
+                    <div>
+                      <p className="text-red-400 mb-1">Pain Points</p>
+                      {s.painPoints.map((p, j) => (
+                        <p key={j} className="text-red-300">• {p}</p>
+                      ))}
+                    </div>
+                  )}
+                  {s.opportunities.length > 0 && (
+                    <div>
+                      <p className="text-neon-green mb-1">Opportunities</p>
+                      {s.opportunities.map((o, j) => (
+                        <p key={j} className="text-green-300">• {o}</p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Usability Score Result ────────────────────────────────────────────────
+
+function UsabilityScoreResult({ result }: { result: Record<string, unknown> }) {
+  const susScore = result.susScore as number;
+  const grade = result.grade as string;
+  const taskSuccessRate = result.taskSuccessRate as number;
+  const avgTimeSeconds = result.avgTimeSeconds as number;
+  const errorCount = result.errorCount as number;
+  const satisfactionScore = result.satisfactionScore as number;
+  const benchmark = result.benchmark as string;
+
+  const gradeColor = grade === 'A' ? 'text-neon-green' : grade === 'B' ? 'text-cyan-400' : grade === 'C' ? 'text-yellow-400' : 'text-red-400';
+  const gradeBg = grade === 'A' ? 'bg-neon-green/10 border-neon-green/20' : grade === 'B' ? 'bg-cyan-400/10 border-cyan-400/20' : grade === 'C' ? 'bg-yellow-400/10 border-yellow-400/20' : 'bg-red-400/10 border-red-400/20';
+  const scoreBarColor = susScore >= 80 ? 'bg-neon-green' : susScore >= 68 ? 'bg-cyan-400' : susScore >= 50 ? 'bg-yellow-400' : 'bg-red-400';
+
+  return (
+    <div className="mt-4 space-y-4">
+      <div className="flex items-center gap-2">
+        <Gauge className="w-4 h-4 text-neon-purple" />
+        <h3 className="font-semibold text-sm">Usability Score</h3>
+      </div>
+
+      {/* SUS score hero */}
+      <div className={`rounded-xl p-5 border ${gradeBg} flex items-center justify-between`}>
+        <div>
+          <p className="text-xs text-gray-400 mb-1">SUS Score</p>
+          <p className={`text-4xl font-bold ${gradeColor}`}>{susScore}</p>
+          <p className="text-xs text-gray-500 mt-1">{benchmark}</p>
+        </div>
+        <div className="text-center">
+          <p className={`text-6xl font-bold ${gradeColor}`}>{grade}</p>
+          <p className="text-xs text-gray-400 mt-1">Grade</p>
+        </div>
+      </div>
+
+      {/* SUS bar */}
+      <div className="space-y-1.5">
+        <div className="flex justify-between text-xs text-gray-500">
+          <span>0</span>
+          <span className="text-yellow-400">Poor (50)</span>
+          <span className="text-cyan-400">Good (68)</span>
+          <span className="text-neon-green">Excellent (80+)</span>
+          <span>100</span>
+        </div>
+        <div className="relative h-3 bg-zinc-800 rounded-full overflow-hidden">
+          {/* Benchmark marker */}
+          <div className="absolute top-0 bottom-0 w-0.5 bg-gray-500/50" style={{ left: '68%' }} />
+          <div
+            className={`h-full rounded-full ${scoreBarColor} transition-all`}
+            style={{ width: `${susScore}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Input metrics */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Task Success', value: `${taskSuccessRate}%`, icon: CheckCircle2, color: taskSuccessRate >= 80 ? 'text-neon-green' : 'text-yellow-400' },
+          { label: 'Avg Time (s)', value: avgTimeSeconds, icon: Clock, color: 'text-neon-cyan' },
+          { label: 'Errors', value: errorCount, icon: XCircle, color: errorCount === 0 ? 'text-neon-green' : errorCount > 5 ? 'text-red-400' : 'text-yellow-400' },
+          { label: 'Satisfaction', value: `${satisfactionScore}%`, icon: Star, color: satisfactionScore >= 70 ? 'text-neon-green' : 'text-yellow-400' },
+        ].map(({ label, value, icon: Icon, color }) => (
+          <div key={label} className="bg-zinc-900 rounded-lg p-3 border border-zinc-800 flex items-center gap-2">
+            <Icon className={`w-4 h-4 shrink-0 ${color}`} />
+            <div>
+              <p className={`text-sm font-bold ${color}`}>{value}</p>
+              <p className="text-[10px] text-gray-500">{label}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Heuristic Eval Result ─────────────────────────────────────────────────
+
+function HeuristicEvalResult({ result }: { result: Record<string, unknown> }) {
+  const heuristics = result.heuristics as Array<{
+    heuristic: string;
+    score: number;
+    severity: number;
+    notes: string;
+    finding: string;
+  }>;
+  const avgScore = result.avgScore as number;
+  const criticalIssues = result.criticalIssues as number;
+  const evaluated = result.evaluated as number;
+  const total = result.total as number;
+
+  const scoreColor = (s: number) => s >= 7 ? 'text-neon-green' : s >= 4 ? 'text-yellow-400' : 'text-red-400';
+  const scoreBar = (s: number) => s >= 7 ? 'bg-neon-green' : s >= 4 ? 'bg-yellow-400' : 'bg-red-400';
+  const severityBadge = (sev: number) => {
+    if (sev >= 4) return 'bg-red-500/20 text-red-400 border-red-500/30';
+    if (sev >= 3) return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
+    if (sev >= 2) return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+    if (sev >= 1) return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+    return 'bg-zinc-700 text-gray-500 border-zinc-600';
+  };
+  const severityLabel = (sev: number) => {
+    if (sev >= 4) return 'Critical';
+    if (sev >= 3) return 'Major';
+    if (sev >= 2) return 'Minor';
+    if (sev >= 1) return 'Cosmetic';
+    return 'None';
+  };
+
+  return (
+    <div className="mt-4 space-y-4">
+      <div className="flex items-center gap-2">
+        <ClipboardCheck className="w-4 h-4 text-neon-green" />
+        <h3 className="font-semibold text-sm">Heuristic Evaluation</h3>
+      </div>
+
+      {/* Summary */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="bg-zinc-900 rounded-lg p-3 border border-zinc-800 text-center">
+          <p className={`text-2xl font-bold ${avgScore >= 7 ? 'text-neon-green' : avgScore >= 4 ? 'text-yellow-400' : 'text-red-400'}`}>
+            {avgScore}
+          </p>
+          <p className="text-xs text-gray-400 mt-0.5">Avg Score / 10</p>
+        </div>
+        <div className="bg-zinc-900 rounded-lg p-3 border border-zinc-800 text-center">
+          <p className={`text-2xl font-bold ${criticalIssues === 0 ? 'text-neon-green' : 'text-red-400'}`}>
+            {criticalIssues}
+          </p>
+          <p className="text-xs text-gray-400 mt-0.5">Critical Issues</p>
+        </div>
+        <div className="bg-zinc-900 rounded-lg p-3 border border-zinc-800 text-center">
+          <p className="text-2xl font-bold text-neon-cyan">{evaluated}/{total}</p>
+          <p className="text-xs text-gray-400 mt-0.5">Evaluated</p>
+        </div>
+      </div>
+
+      {/* Heuristics list */}
+      {heuristics?.length > 0 && (
+        <div className="space-y-2">
+          <h4 className="text-xs font-semibold uppercase text-gray-400">10 Nielsen Heuristics</h4>
+          <div className="space-y-2">
+            {heuristics.map((h, i) => (
+              <div key={i} className={`bg-zinc-900 rounded-lg p-3 border space-y-2 ${h.severity >= 4 ? 'border-red-500/30' : 'border-zinc-800'}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <span className="text-xs text-gray-500 font-mono w-4 shrink-0">{i + 1}</span>
+                    <span className="text-xs font-medium text-white truncate">{h.heuristic}</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {h.severity > 0 && (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded border font-semibold ${severityBadge(h.severity)}`}>
+                        {severityLabel(h.severity)}
+                      </span>
+                    )}
+                    <span className={`text-sm font-bold ${scoreColor(h.score)}`}>{h.score}/10</span>
+                  </div>
+                </div>
+                {/* Score bar */}
+                <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full ${scoreBar(h.score)}`}
+                    style={{ width: `${(h.score / 10) * 100}%` }}
+                  />
+                </div>
+                {h.finding && (
+                  <p className="text-[10px] text-gray-400 leading-relaxed">{h.finding}</p>
+                )}
+                {h.notes && (
+                  <p className="text-[10px] text-gray-500 italic">{h.notes}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Persona Builder Result ────────────────────────────────────────────────
+
+function PersonaBuilderResult({ result }: { result: Record<string, unknown> }) {
+  const persona = result.persona as {
+    name: string;
+    age: string;
+    occupation: string;
+    goals: string[];
+    frustrations: string[];
+    behaviors: string[];
+    techSavvy: string;
+    quote: string;
+  };
+  const completeness = result.completeness as number;
+
+  const techSavvyColor = (level: string) => {
+    switch (level?.toLowerCase()) {
+      case 'high': case 'expert': case 'advanced': return 'text-neon-green';
+      case 'moderate': case 'medium': return 'text-yellow-400';
+      default: return 'text-red-400';
+    }
+  };
+
+  const completenessBar = completeness >= 80 ? 'bg-neon-green' : completeness >= 50 ? 'bg-yellow-400' : 'bg-red-400';
+
+  return (
+    <div className="mt-4 space-y-4">
+      <div className="flex items-center gap-2">
+        <UserCircle className="w-4 h-4 text-pink-400" />
+        <h3 className="font-semibold text-sm">Persona</h3>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-xs text-gray-400">Completeness:</span>
+          <span className={`text-xs font-bold ${completeness >= 80 ? 'text-neon-green' : completeness >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
+            {completeness}%
+          </span>
+        </div>
+      </div>
+
+      {/* Completeness bar */}
+      <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+        <div className={`h-full rounded-full ${completenessBar}`} style={{ width: `${completeness}%` }} />
+      </div>
+
+      {persona && (
+        <div className="space-y-4">
+          {/* Identity card */}
+          <div className="bg-zinc-900 rounded-xl p-4 border border-pink-500/20 space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-pink-500 to-purple-500 flex items-center justify-center text-white font-bold text-lg">
+                {persona.name ? persona.name[0].toUpperCase() : '?'}
+              </div>
+              <div>
+                <h4 className="text-base font-bold text-white">{persona.name || 'Unnamed Persona'}</h4>
+                <p className="text-sm text-gray-400">{persona.occupation} · Age {persona.age}</p>
+              </div>
+              <div className="ml-auto text-right">
+                <p className={`text-sm font-bold ${techSavvyColor(persona.techSavvy)}`}>
+                  {persona.techSavvy}
+                </p>
+                <p className="text-[10px] text-gray-500">Tech Savvy</p>
+              </div>
+            </div>
+            {persona.quote && (
+              <blockquote className="text-sm text-gray-300 italic border-l-2 border-pink-500/40 pl-3">
+                &ldquo;{persona.quote}&rdquo;
+              </blockquote>
+            )}
+          </div>
+
+          {/* Goals / Frustrations / Behaviors */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {persona.goals?.length > 0 && (
+              <div className="bg-zinc-900 rounded-lg p-3 border border-neon-green/20 space-y-2">
+                <p className="text-xs font-semibold text-neon-green flex items-center gap-1">
+                  <Target className="w-3 h-3" />
+                  Goals
+                </p>
+                <ul className="space-y-1">
+                  {persona.goals.map((g, i) => (
+                    <li key={i} className="text-[11px] text-gray-300 flex gap-1">
+                      <span className="text-neon-green shrink-0">•</span>
+                      <span>{g}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {persona.frustrations?.length > 0 && (
+              <div className="bg-zinc-900 rounded-lg p-3 border border-red-400/20 space-y-2">
+                <p className="text-xs font-semibold text-red-400 flex items-center gap-1">
+                  <Frown className="w-3 h-3" />
+                  Frustrations
+                </p>
+                <ul className="space-y-1">
+                  {persona.frustrations.map((f, i) => (
+                    <li key={i} className="text-[11px] text-gray-300 flex gap-1">
+                      <span className="text-red-400 shrink-0">•</span>
+                      <span>{f}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {persona.behaviors?.length > 0 && (
+              <div className="bg-zinc-900 rounded-lg p-3 border border-neon-cyan/20 space-y-2">
+                <p className="text-xs font-semibold text-neon-cyan flex items-center gap-1">
+                  <Activity className="w-3 h-3" />
+                  Behaviors
+                </p>
+                <ul className="space-y-1">
+                  {persona.behaviors.map((b, i) => (
+                    <li key={i} className="text-[11px] text-gray-300 flex gap-1">
+                      <span className="text-neon-cyan shrink-0">•</span>
+                      <span>{b}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          {persona.goals?.length === 0 && persona.frustrations?.length === 0 && persona.behaviors?.length === 0 && (
+            <div className="text-sm text-gray-400 text-center py-3">
+              Persona created. Add goals, frustrations, and behaviors to the artifact data to enrich this profile.
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

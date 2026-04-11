@@ -280,6 +280,22 @@ export default function DebateLensPage() {
   const [newArgument, setNewArgument] = useState('');
   const [argumentSide, setArgumentSide] = useState<'pro' | 'con'>('pro');
 
+  // Wire to social groups API for community features
+  const { data: trendingTopics } = useQuery({
+    queryKey: ['social-trending-topics'],
+    queryFn: async () => {
+      const { data } = await api.get('/api/social/topics/trending');
+      return data;
+    },
+    staleTime: 60000,
+    retry: 1,
+  });
+
+  const {
+    items, isLoading, isError, error, refetch,
+    create, createMut, update, remove, deleteMut,
+  } = useLensData<DebateData>('debate', 'debate', { seed: [] });
+
   // --- Domain action state ---
   const runAction = useRunArtifact('debate');
   const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
@@ -296,22 +312,6 @@ export default function DebateLensPage() {
     } catch (e) { console.error(`Action ${action} failed:`, e); }
     setActiveAction(null);
   }, [items, runAction]);
-
-  // Wire to social groups API for community features
-  const { data: trendingTopics } = useQuery({
-    queryKey: ['social-trending-topics'],
-    queryFn: async () => {
-      const { data } = await api.get('/api/social/topics/trending');
-      return data;
-    },
-    staleTime: 60000,
-    retry: 1,
-  });
-
-  const {
-    items, isLoading, isError, error, refetch,
-    create, createMut, update, remove, deleteMut,
-  } = useLensData<DebateData>('debate', 'debate', { seed: [] });
 
   const debates = useMemo(() =>
     items.map(item => ({ id: item.id, ...item.data, topic: item.title || item.data?.topic || 'Untitled Debate' }))

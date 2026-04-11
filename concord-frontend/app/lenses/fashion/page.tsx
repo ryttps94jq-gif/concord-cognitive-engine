@@ -3,11 +3,12 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Shirt, Plus, Search, Trash2, Star, Tag, Palette, DollarSign, Layers, ChevronDown, X,
-  Heart, Eye, Sparkles, Grid3X3, List, Loader2,
+  Heart, Eye, Sparkles, Grid3X3, List, Loader2, Zap, TrendingUp, BarChart3,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -89,6 +90,21 @@ export default function FashionLensPage() {
     items, isLoading, isError, error, refetch,
     create, createMut, remove, deleteMut,
   } = useLensData<FashionItem>('fashion', 'garment', { seed: [] });
+
+  const runAction = useRunArtifact('fashion');
+  const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
+  const [isRunning, setIsRunning] = useState<string | null>(null);
+
+  const handleFashionAction = useCallback(async (action: string) => {
+    const targetId = items[0]?.id;
+    if (!targetId) return;
+    setIsRunning(action);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action });
+      setActionResult({ _action: action, ...(res.result as Record<string, unknown>) });
+    } catch (e) { console.error(`Action ${action} failed:`, e); }
+    setIsRunning(null);
+  }, [items, runAction]);
 
   const garments = useMemo(() =>
     items.map(item => ({ id: item.id, ...item.data, name: item.title || item.data?.name || 'Untitled' }))
