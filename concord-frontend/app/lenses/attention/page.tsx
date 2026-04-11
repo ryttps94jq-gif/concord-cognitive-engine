@@ -21,6 +21,13 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { AttentionPanel as EmergentAttentionPanel } from '@/components/emergent/AttentionPanel';
+import { DreamPanel } from '@/components/emergent/DreamPanel';
+import { ForgettingPanel } from '@/components/emergent/ForgettingPanel';
+import { RepairPanel } from '@/components/emergent/RepairPanel';
+import { EmergentCard } from '@/components/emergent/EmergentCard';
+import { EmergentPanel } from '@/components/emergent/EmergentPanel';
+import { EntityGrowthDashboard } from '@/components/emergent/EntityGrowthDashboard';
 
 interface Thread {
   id: string;
@@ -845,6 +852,54 @@ export default function AttentionLensPage() {
           compact
         />
       )}
+      </div>
+
+      {/* ── Emergent Subsystems ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Emergent Attention Allocation */}
+        <div className="panel p-4">
+          <h2 className="font-semibold mb-3 flex items-center gap-2">
+            <Activity className="w-4 h-4 text-neon-cyan" /> Attention Allocation
+          </h2>
+          <EmergentAttentionPanel />
+        </div>
+
+        {/* Emergent Entities */}
+        <div className="panel p-4">
+          <h2 className="font-semibold mb-3 flex items-center gap-2">
+            <Brain className="w-4 h-4 text-neon-purple" /> Emergent Entities
+          </h2>
+          <EmergentPanel />
+        </div>
+
+        {/* Dream Journal */}
+        <div className="panel p-4">
+          <h2 className="font-semibold mb-3 flex items-center gap-2">
+            <Cpu className="w-4 h-4 text-neon-blue" /> Dream Journal
+          </h2>
+          <DreamPanel />
+        </div>
+
+        {/* Forgetting Engine */}
+        <div className="panel p-4">
+          <h2 className="font-semibold mb-3 flex items-center gap-2">
+            <Clock className="w-4 h-4 text-neon-yellow" /> Forgetting Engine
+          </h2>
+          <ForgettingPanel />
+        </div>
+
+        {/* Repair Cortex */}
+        <div className="panel p-4">
+          <h2 className="font-semibold mb-3 flex items-center gap-2">
+            <Zap className="w-4 h-4 text-neon-green" /> Repair Cortex
+          </h2>
+          <RepairPanel />
+        </div>
+      </div>
+
+      {/* Entity Growth Dashboard */}
+      <div className="panel p-4">
+        <EntityGrowthDashboard />
       </div>
 
       {/* Lens Features */}

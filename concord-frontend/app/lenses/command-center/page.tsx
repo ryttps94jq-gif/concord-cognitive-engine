@@ -14,7 +14,7 @@ import {
   AlertTriangle, Moon, FileText, Pause, Play,
   Save, Trash2, XCircle, Loader2, Clock, ArrowUp,
   Zap, Send, MapPin, Focus, ShieldAlert, ChevronDown,
-  Lightbulb, GitBranch, Globe,
+  Lightbulb, GitBranch, Globe, Undo2, Compass, Radio,
 } from 'lucide-react';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -22,6 +22,10 @@ import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import FoundationCard from '@/components/chat/FoundationCard';
+import { ActionPreviewModal } from '@/components/guidance/ActionPreviewModal';
+import { ActivityFeed } from '@/components/guidance/ActivityFeed';
+import { UndoTimeline } from '@/components/guidance/UndoTimeline';
+import { SystemGuidePanel } from '@/components/guidance/SystemGuidePanel';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 

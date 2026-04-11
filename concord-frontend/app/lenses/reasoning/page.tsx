@@ -1998,6 +1998,45 @@ export default function ReasoningLensPage() {
               <p className={ds.textMuted}>No chains to analyze. Create chains in the Arguments tab.</p>
             )}
           </div>
+
+          {/* Backend Reasoning Analysis Actions */}
+          <div className={ds.panel}>
+            <h3 className={cn(ds.heading3, 'text-sm mb-3 flex items-center gap-2')}>
+              <Brain className="w-4 h-4 text-neon-purple" />
+              AI-Powered Analysis
+            </h3>
+            <p className={cn(ds.textMuted, 'mb-3')}>
+              Run backend reasoning analysis engines against your arguments and chains.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { action: 'deepAnalysis', label: 'Deep Analysis' },
+                { action: 'counterArgumentGen', label: 'Generate Counter-Arguments' },
+                { action: 'strengthAssessment', label: 'Full Strength Assessment' },
+              ].map(({ action, label }) => (
+                <button
+                  key={action}
+                  onClick={() => handleAnalysisAction(action)}
+                  disabled={!!analysisRunning || chainArtifacts.length === 0}
+                  className={cn(ds.btnSmall, 'bg-neon-purple/10 text-neon-purple border border-neon-purple/30 hover:bg-neon-purple/20 disabled:opacity-50 disabled:cursor-not-allowed')}
+                >
+                  {analysisRunning === action ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+                  {label}
+                </button>
+              ))}
+            </div>
+            {analysisResult && (
+              <div className="mt-3 bg-lattice-deep rounded-lg p-4 text-sm">
+                {'message' in analysisResult ? (
+                  <p className={ds.textMuted}>{String(analysisResult.message)}</p>
+                ) : (
+                  <pre className="whitespace-pre-wrap text-xs text-gray-300 font-mono max-h-48 overflow-y-auto">
+                    {JSON.stringify(analysisResult, null, 2)}
+                  </pre>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

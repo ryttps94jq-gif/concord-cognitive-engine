@@ -53,6 +53,8 @@ import { TransactionHistory } from '@/components/economy/TransactionHistory';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
+import { BountiesAndFutures } from '@/components/economy/BountiesAndFutures';
+import { WalletBadge } from '@/components/economy/WalletBadge';
 import { Zap, X as XIcon } from 'lucide-react';
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -333,6 +335,7 @@ function WalletPageInner() {
             <Wallet className="w-7 h-7" />
           </div>
           <h1 className={ds.heading1}>Wallet & Billing</h1>
+          <WalletBadge />
           <WalletWidget compact className="ml-auto" />
         </div>
       </div>
@@ -578,6 +581,16 @@ function WalletPageInner() {
               </div>
             </motion.div>
           )}
+
+          {/* Bounties & Futures */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35 }}
+            className={ds.panel}
+          >
+            <BountiesAndFutures />
+          </motion.div>
         </div>
 
         {/* Right Column: Transaction History */}
