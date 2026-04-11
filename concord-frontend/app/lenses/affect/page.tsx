@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useState, useMemo, useEffect } from 'react';
 import { useLensBridge } from '@/lib/hooks/use-lens-bridge';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { motion } from 'framer-motion';
 import {
@@ -32,6 +33,14 @@ import {
   ChevronDown,
   ChevronUp,
   Layers,
+  Loader2,
+  Search,
+  Sparkles,
+  MessageSquare,
+  Hand,
+  ArrowUpRight,
+  ArrowDownRight,
+  ArrowRight,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -51,7 +60,7 @@ type AffectDim = {
   description: string;
 };
 
-type TabId = 'dimensions' | 'events' | 'policy' | 'health';
+type TabId = 'dimensions' | 'events' | 'policy' | 'health' | 'analysis';
 
 // --- Constants ---
 
@@ -207,6 +216,14 @@ export default function AffectLensPage() {
   const [expandedEvent, setExpandedEvent] = useState<number | null>(null);
   const [showFeatures, setShowFeatures] = useState(true);
 
+  // --- Domain action state (backend analysis tools) ---
+  const runAction = useRunArtifact('affect');
+  const [isRunning, setIsRunning] = useState<string | null>(null);
+  const [sentimentResult, setSentimentResult] = useState<Record<string, unknown> | null>(null);
+  const [timelineResult, setTimelineResult] = useState<Record<string, unknown> | null>(null);
+  const [empathyResult, setEmpathyResult] = useState<Record<string, unknown> | null>(null);
+  const [patternResult, setPatternResult] = useState<Record<string, unknown> | null>(null);
+
   // --- Lens Bridge (mirrors affect state into universal artifact system) ---
   const bridge = useLensBridge('affect', 'snapshot');
 
@@ -308,6 +325,22 @@ export default function AffectLensPage() {
       bridge.sync(affectState as Record<string, unknown>, 'Affect State Snapshot');
     }
   }, [affectState, bridge]);
+
+  // --- Domain action handler ---
+  const handleAnalysisAction = async (
+    action: string,
+    setter: (val: Record<string, unknown> | null) => void
+  ) => {
+    if (!bridge.selectedId) return;
+    setIsRunning(action);
+    try {
+      const res = await runAction.mutateAsync({ id: bridge.selectedId, action });
+      setter((res.result as Record<string, unknown>) || null);
+    } catch (e) {
+      console.error(`Action ${action} failed:`, e);
+    }
+    setIsRunning(null);
+  };
 
   const eventList = useMemo(() => {
     const raw = events?.events || events;
@@ -493,6 +526,7 @@ export default function AffectLensPage() {
     { id: 'events', label: 'Event Log', icon: <Clock className="w-4 h-4" /> },
     { id: 'policy', label: 'Policies', icon: <BarChart3 className="w-4 h-4" /> },
     { id: 'health', label: 'Health', icon: <Thermometer className="w-4 h-4" /> },
+    { id: 'analysis', label: 'Analysis Tools', icon: <Sparkles className="w-4 h-4" /> },
   ];
 
   // --- Render ---
