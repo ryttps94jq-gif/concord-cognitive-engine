@@ -13,7 +13,6 @@
  * @exports handleMCPRequest
  */
 
-import crypto from "crypto";
 import logger from "../logger.js";
 
 // ── MCP Protocol Constants ──────────────────────────────────────────────────
