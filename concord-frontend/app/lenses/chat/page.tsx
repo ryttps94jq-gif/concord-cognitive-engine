@@ -385,6 +385,7 @@ export default function ChatLensPage() {
   const [inspectingDtuId, setInspectingDtuId] = useState<string | null>(null);
 
   // New state — Wired orphan components
+  const [chatMode, setChatMode] = useState<'welcome' | 'assist' | 'explore' | 'connect' | 'chat'>('chat');
   const [sessionSidebarOpen, setSessionSidebarOpen] = useState(false);
   const [contextOverlayOpen, setContextOverlayOpen] = useState(false);
   const [atlasQuery, setAtlasQuery] = useState('');
@@ -1880,6 +1881,16 @@ export default function ChatLensPage() {
             </AnimatePresence>
           </div>
         </header>
+
+        {/* Chat Mode Selector Rail */}
+        <ModeSelector activeMode={chatMode} onModeChange={setChatMode} />
+
+        {/* Chat Mode Panel — shown when in chat mode */}
+        {chatMode === 'chat' && messages.length > 0 && (
+          <div className="px-4 py-2 border-b border-lattice-border/30">
+            <ChatModePanel currentLens="chat" onSendMessage={(msg) => { setInput(msg); }} />
+          </div>
+        )}
 
         {/* Messages */}
         <div className="flex-1 overflow-hidden flex flex-col" role="log" aria-label="Chat messages" aria-live="polite">
