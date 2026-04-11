@@ -1502,8 +1502,8 @@ export default function MarketplaceLensPage() {
                 <div className="flex items-center gap-3">
                   <span className="text-neon-cyan font-bold text-xl">{String(actionResult.score)}<span className="text-gray-400 text-sm">/{String(actionResult.maxScore)}</span></span>
                   <span className={`text-xs px-2 py-0.5 rounded ${
-                    actionResult.rating === 'excellent' ? 'bg-neon-green/20 text-neon-green' :
-                    actionResult.rating === 'good' ? 'bg-neon-cyan/20 text-neon-cyan' :
+                    actionResult.rating === 'Excellent' ? 'bg-neon-green/20 text-neon-green' :
+                    actionResult.rating === 'Good' ? 'bg-neon-cyan/20 text-neon-cyan' :
                     'bg-yellow-400/20 text-yellow-400'
                   }`}>{String(actionResult.rating)}</span>
                 </div>
