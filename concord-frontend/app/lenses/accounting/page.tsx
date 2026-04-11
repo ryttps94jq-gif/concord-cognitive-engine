@@ -148,6 +148,20 @@ export default function AccountingLensPage() {
   const [formData, setFormData] = useState<Record<string, unknown>>({});
   const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
 
+  /* ---- backend action results ---- */
+  const [trialBalanceResult, setTrialBalanceResult] = useState<Record<string, unknown> | null>(null);
+  const [trialBalanceLoading, setTrialBalanceLoading] = useState(false);
+  const [profitLossResult, setProfitLossResult] = useState<Record<string, unknown> | null>(null);
+  const [profitLossLoading, setProfitLossLoading] = useState(false);
+  const [backendAgingResult, setBackendAgingResult] = useState<Record<string, unknown> | null>(null);
+  const [backendAgingLoading, setBackendAgingLoading] = useState(false);
+  const [backendVarianceResult, setBackendVarianceResult] = useState<Record<string, unknown> | null>(null);
+  const [backendVarianceLoading, setBackendVarianceLoading] = useState(false);
+  const [rentRollResult, setRentRollResult] = useState<Record<string, unknown> | null>(null);
+  const [rentRollLoading, setRentRollLoading] = useState(false);
+  const [validateLedgerResult, setValidateLedgerResult] = useState<Record<string, unknown> | null>(null);
+  const [validateLedgerLoading, setValidateLedgerLoading] = useState(false);
+
   /* ---- chart of accounts tree ---- */
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(ACCOUNT_CATEGORIES));
 
@@ -246,6 +260,73 @@ export default function AccountingLensPage() {
     } catch (err) {
       console.error('Action failed:', err);
     }
+  };
+
+  /* ---- backend computational action handlers ---- */
+  const handleTrialBalance = async () => {
+    const targetId = accountData.items[0]?.id || filtered[0]?.id;
+    if (!targetId) return;
+    setTrialBalanceLoading(true);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action: 'trialBalance' });
+      setTrialBalanceResult(res.result as Record<string, unknown>);
+    } catch (e) { console.error('trialBalance failed:', e); }
+    setTrialBalanceLoading(false);
+  };
+
+  const handleProfitLoss = async () => {
+    const targetId = accountData.items[0]?.id || filtered[0]?.id;
+    if (!targetId) return;
+    setProfitLossLoading(true);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action: 'profitLoss' });
+      setProfitLossResult(res.result as Record<string, unknown>);
+    } catch (e) { console.error('profitLoss failed:', e); }
+    setProfitLossLoading(false);
+  };
+
+  const handleInvoiceAging = async () => {
+    const targetId = invoiceData.items[0]?.id || filtered[0]?.id;
+    if (!targetId) return;
+    setBackendAgingLoading(true);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action: 'invoiceAging' });
+      setBackendAgingResult(res.result as Record<string, unknown>);
+    } catch (e) { console.error('invoiceAging failed:', e); }
+    setBackendAgingLoading(false);
+  };
+
+  const handleBudgetVariance = async () => {
+    const targetId = budgetData.items[0]?.id || filtered[0]?.id;
+    if (!targetId) return;
+    setBackendVarianceLoading(true);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action: 'budgetVariance' });
+      setBackendVarianceResult(res.result as Record<string, unknown>);
+    } catch (e) { console.error('budgetVariance failed:', e); }
+    setBackendVarianceLoading(false);
+  };
+
+  const handleRentRoll = async () => {
+    const targetId = items[0]?.id || filtered[0]?.id;
+    if (!targetId) return;
+    setRentRollLoading(true);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action: 'rentRoll' });
+      setRentRollResult(res.result as Record<string, unknown>);
+    } catch (e) { console.error('rentRoll failed:', e); }
+    setRentRollLoading(false);
+  };
+
+  const handleValidateLedger = async () => {
+    const targetId = accountData.items[0]?.id || filtered[0]?.id;
+    if (!targetId) return;
+    setValidateLedgerLoading(true);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action: 'validate-ledger' });
+      setValidateLedgerResult(res.result as Record<string, unknown>);
+    } catch (e) { console.error('validate-ledger failed:', e); }
+    setValidateLedgerLoading(false);
   };
 
   /* ---- toggle category expansion ---- */
@@ -602,12 +683,86 @@ export default function AccountingLensPage() {
       <div className={ds.sectionHeader}>
         <h2 className={ds.heading2}>Trial Balance Report</h2>
         <div className="flex items-center gap-2">
-          <button className={ds.btnSecondary} onClick={() => { if (filtered[0]) handleAction('trial-balance', filtered[0].id); }}>
-            <RefreshCw className="w-4 h-4" /> Recalculate
+          <button className={ds.btnPrimary} onClick={handleTrialBalance} disabled={trialBalanceLoading}>
+            {trialBalanceLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Calculator className="w-4 h-4" />} Generate Trial Balance
           </button>
-          <button onClick={() => { const data = JSON.stringify(transactionData.items, null, 2); const blob = new Blob([data], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'trial-balance.json'; a.click(); URL.revokeObjectURL(url); }} className={ds.btnSecondary}><Download className="w-4 h-4" /> Export</button>
+          <button className={ds.btnSecondary} onClick={handleValidateLedger} disabled={validateLedgerLoading}>
+            {validateLedgerLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />} Validate Ledger
+          </button>
+          <button onClick={() => { const data = JSON.stringify(trialBalanceResult || transactionData.items, null, 2); const blob = new Blob([data], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'trial-balance.json'; a.click(); URL.revokeObjectURL(url); }} className={ds.btnSecondary}><Download className="w-4 h-4" /> Export</button>
         </div>
       </div>
+
+      {/* Backend Trial Balance Result */}
+      {trialBalanceResult && (
+        <div className={cn(ds.panel, 'border border-green-400/30')}>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className={cn(ds.heading3, 'flex items-center gap-2')}>
+              <Scale className="w-5 h-5 text-green-400" /> Server-Computed Trial Balance
+            </h3>
+            <div className="flex items-center gap-3">
+              <span className={cn(ds.textMuted, 'text-xs')}>Generated: {(trialBalanceResult.generatedAt as string)?.split('T')[0] || '-'}</span>
+              <span className={cn(ds.textMuted, 'text-xs')}>As of: {(trialBalanceResult.asOfDate as string) || '-'}</span>
+              <button onClick={() => setTrialBalanceResult(null)} className={ds.btnGhost}><X className="w-4 h-4" /></button>
+            </div>
+          </div>
+          {Array.isArray(trialBalanceResult.accounts) && (trialBalanceResult.accounts as Array<Record<string, unknown>>).length > 0 && (
+            <table className="w-full mb-4">
+              <thead>
+                <tr className="text-left text-xs text-gray-500 border-b border-lattice-border">
+                  <th className="pb-2 pr-4">Account #</th>
+                  <th className="pb-2 pr-4">Name</th>
+                  <th className="pb-2 pr-4">Type</th>
+                  <th className="pb-2 text-right pr-4">Debit</th>
+                  <th className="pb-2 text-right">Credit</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(trialBalanceResult.accounts as Array<Record<string, unknown>>).map((row, idx) => (
+                  <tr key={idx} className="border-b border-lattice-border/20 hover:bg-lattice-elevated/30">
+                    <td className={cn(ds.textMono, 'py-2 pr-4 text-gray-400')}>{(row.accountNumber as string) || '-'}</td>
+                    <td className="py-2 pr-4 text-sm text-white">{row.name as string}</td>
+                    <td className="py-2 pr-4"><span className={ds.badge('gray-400')}>{row.type as string}</span></td>
+                    <td className={cn(ds.textMono, 'py-2 text-right pr-4', (row.debit as number) > 0 ? 'text-green-400' : 'text-gray-600')}>
+                      {(row.debit as number) > 0 ? fmt(row.debit as number) : '-'}
+                    </td>
+                    <td className={cn(ds.textMono, 'py-2 text-right', (row.credit as number) > 0 ? 'text-neon-cyan' : 'text-gray-600')}>
+                      {(row.credit as number) > 0 ? fmt(row.credit as number) : '-'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-lattice-border font-bold">
+                  <td colSpan={3} className="pt-3 text-white">Totals</td>
+                  <td className={cn(ds.textMono, 'pt-3 text-right pr-4 text-green-400')}>{fmt(trialBalanceResult.totalDebits as number)}</td>
+                  <td className={cn(ds.textMono, 'pt-3 text-right text-neon-cyan')}>{fmt(trialBalanceResult.totalCredits as number)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          )}
+          <div className={cn('p-3 rounded-lg text-center', (trialBalanceResult.isBalanced as boolean) ? 'bg-green-400/10 border border-green-400/30' : 'bg-red-400/10 border border-red-400/30')}>
+            {(trialBalanceResult.isBalanced as boolean) ? (
+              <span className="flex items-center justify-center gap-2 text-green-400"><CheckCircle className="w-5 h-5" /> Books are balanced (Difference: {fmt((trialBalanceResult.difference as number) || 0)})</span>
+            ) : (
+              <span className="flex items-center justify-center gap-2 text-red-400"><AlertCircle className="w-5 h-5" /> Out of balance by {fmt(Math.abs((trialBalanceResult.difference as number) || 0))}</span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Validate Ledger Result */}
+      {validateLedgerResult && (
+        <div className={cn(ds.panel, 'border border-neon-blue/30')}>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className={cn(ds.heading3, 'flex items-center gap-2')}>
+              <ListChecks className="w-5 h-5 text-neon-blue" /> Ledger Validation Result
+            </h3>
+            <button onClick={() => setValidateLedgerResult(null)} className={ds.btnGhost}><X className="w-4 h-4" /></button>
+          </div>
+          <pre className={cn(ds.textMono, 'text-xs overflow-auto max-h-48 p-3 bg-lattice-elevated/50 rounded-lg')}>{JSON.stringify(validateLedgerResult, null, 2)}</pre>
+        </div>
+      )}
 
       <div className={ds.panel}>
         <table className="w-full">
@@ -686,6 +841,9 @@ export default function AccountingLensPage() {
               <option value="quarterly">Quarterly</option>
               <option value="annual">Annual</option>
             </select>
+            <button className={ds.btnPrimary} onClick={handleProfitLoss} disabled={profitLossLoading}>
+              {profitLossLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Calculator className="w-4 h-4" />} Generate P&amp;L
+            </button>
             <button className={ds.btnSecondary} onClick={() => { if (filtered[0]) handleAction('pnl-report', filtered[0].id); }}>
               <Download className="w-4 h-4" /> Export
             </button>
@@ -773,6 +931,104 @@ export default function AccountingLensPage() {
             </div>
           </div>
         </div>
+
+        {/* Backend P&L Result */}
+        {profitLossResult && (
+          <div className={cn(ds.panel, 'border border-green-400/30')}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className={cn(ds.heading3, 'flex items-center gap-2')}>
+                <TrendingUp className="w-5 h-5 text-green-400" /> Server-Computed P&amp;L Statement
+              </h3>
+              <div className="flex items-center gap-3">
+                <span className={cn(ds.textMuted, 'text-xs')}>
+                  Period: {((profitLossResult.period as Record<string, string>)?.start || '-')} to {((profitLossResult.period as Record<string, string>)?.end || '-')}
+                </span>
+                <button onClick={() => setProfitLossResult(null)} className={ds.btnGhost}><X className="w-4 h-4" /></button>
+              </div>
+            </div>
+
+            {/* Revenue */}
+            <div className="mb-4">
+              <h4 className="text-sm font-semibold text-green-400 uppercase tracking-wider mb-2 flex items-center gap-2">
+                <ArrowUpRight className="w-4 h-4" /> Revenue
+              </h4>
+              {Array.isArray((profitLossResult.revenue as Record<string, unknown>)?.lines) &&
+                ((profitLossResult.revenue as Record<string, unknown>).lines as Array<Record<string, unknown>>).map((line, i) => (
+                  <div key={i} className="flex items-center justify-between py-1.5 px-4 hover:bg-lattice-elevated/30 rounded">
+                    <span className="text-sm text-white">{line.name as string}</span>
+                    <span className={cn(ds.textMono, 'text-green-400')}>{fmt(line.amount as number)}</span>
+                  </div>
+                ))
+              }
+              <div className="flex items-center justify-between py-2 px-4 border-t border-lattice-border/30 font-semibold">
+                <span className="text-white">Total Revenue</span>
+                <span className={cn(ds.textMono, 'text-green-400')}>{fmt((profitLossResult.revenue as Record<string, unknown>)?.total as number || 0)}</span>
+              </div>
+            </div>
+
+            {/* COGS */}
+            {((profitLossResult.costOfGoodsSold as Record<string, unknown>)?.total as number || 0) > 0 && (
+              <div className="mb-4">
+                <h4 className="text-sm font-semibold text-orange-400 uppercase tracking-wider mb-2">Cost of Goods Sold</h4>
+                {Array.isArray((profitLossResult.costOfGoodsSold as Record<string, unknown>)?.lines) &&
+                  ((profitLossResult.costOfGoodsSold as Record<string, unknown>).lines as Array<Record<string, unknown>>).map((line, i) => (
+                    <div key={i} className="flex items-center justify-between py-1.5 px-4 hover:bg-lattice-elevated/30 rounded">
+                      <span className="text-sm text-white">{line.name as string}</span>
+                      <span className={cn(ds.textMono, 'text-orange-400')}>{fmt(line.amount as number)}</span>
+                    </div>
+                  ))
+                }
+                <div className="flex items-center justify-between py-2 px-4 border-t border-lattice-border/30 font-semibold">
+                  <span className="text-white">Total COGS</span>
+                  <span className={cn(ds.textMono, 'text-orange-400')}>{fmt((profitLossResult.costOfGoodsSold as Record<string, unknown>)?.total as number || 0)}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Gross Profit */}
+            <div className="flex items-center justify-between py-2 px-4 mb-4 bg-lattice-elevated/50 rounded-lg font-semibold">
+              <span className="text-white">Gross Profit</span>
+              <div className="flex items-center gap-3">
+                <span className={cn(ds.textMono, (profitLossResult.grossProfit as number) >= 0 ? 'text-green-400' : 'text-red-400')}>
+                  {fmt(profitLossResult.grossProfit as number || 0)}
+                </span>
+                <span className={cn(ds.textMuted, 'text-xs')}>({profitLossResult.grossMarginPct as number || 0}% margin)</span>
+              </div>
+            </div>
+
+            {/* Operating Expenses */}
+            <div className="mb-4">
+              <h4 className="text-sm font-semibold text-red-400 uppercase tracking-wider mb-2 flex items-center gap-2">
+                <ArrowDownRight className="w-4 h-4" /> Operating Expenses
+              </h4>
+              {Array.isArray((profitLossResult.operatingExpenses as Record<string, unknown>)?.lines) &&
+                ((profitLossResult.operatingExpenses as Record<string, unknown>).lines as Array<Record<string, unknown>>).map((line, i) => (
+                  <div key={i} className="flex items-center justify-between py-1.5 px-4 hover:bg-lattice-elevated/30 rounded">
+                    <span className="text-sm text-white">{line.name as string}</span>
+                    <span className={cn(ds.textMono, 'text-red-400')}>{fmt(line.amount as number)}</span>
+                  </div>
+                ))
+              }
+              <div className="flex items-center justify-between py-2 px-4 border-t border-lattice-border/30 font-semibold">
+                <span className="text-white">Total Expenses</span>
+                <span className={cn(ds.textMono, 'text-red-400')}>{fmt((profitLossResult.operatingExpenses as Record<string, unknown>)?.total as number || 0)}</span>
+              </div>
+            </div>
+
+            {/* Net Income */}
+            <div className={cn('p-4 rounded-lg', (profitLossResult.netIncome as number) >= 0 ? 'bg-green-400/10 border border-green-400/30' : 'bg-red-400/10 border border-red-400/30')}>
+              <div className="flex items-center justify-between">
+                <span className="text-lg font-bold text-white">Net Income</span>
+                <div className="flex items-center gap-3">
+                  <span className={cn('text-xl font-bold', ds.textMono, (profitLossResult.netIncome as number) >= 0 ? 'text-green-400' : 'text-red-400')}>
+                    {fmt(profitLossResult.netIncome as number || 0)}
+                  </span>
+                  <span className={cn(ds.textMuted, 'text-sm')}>({profitLossResult.netMarginPct as number || 0}% margin)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -1274,11 +1530,73 @@ export default function AccountingLensPage() {
     <div className="space-y-4">
       <div className={ds.sectionHeader}>
         <h2 className={ds.heading2}>Invoice Aging Report</h2>
-        <button className={ds.btnSecondary} onClick={() => setInvoicingView('list')}>
-          <ArrowRight className="w-4 h-4" /> Back to List
-        </button>
+        <div className="flex items-center gap-2">
+          <button className={ds.btnPrimary} onClick={handleInvoiceAging} disabled={backendAgingLoading}>
+            {backendAgingLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Clock className="w-4 h-4" />} Run Aging Analysis
+          </button>
+          <button className={ds.btnSecondary} onClick={() => setInvoicingView('list')}>
+            <ArrowRight className="w-4 h-4" /> Back to List
+          </button>
+        </div>
       </div>
 
+      {/* Backend Aging Result */}
+      {backendAgingResult && (
+        <div className={cn(ds.panel, 'border border-yellow-400/30')}>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className={cn(ds.heading3, 'flex items-center gap-2')}>
+              <Clock className="w-5 h-5 text-yellow-400" /> Server-Computed Aging Analysis
+            </h3>
+            <div className="flex items-center gap-3">
+              <span className={cn(ds.textMuted, 'text-xs')}>As of: {(backendAgingResult.asOfDate as string) || '-'}</span>
+              <button onClick={() => setBackendAgingResult(null)} className={ds.btnGhost}><X className="w-4 h-4" /></button>
+            </div>
+          </div>
+
+          <div className={ds.grid3}>
+            <div className="text-center p-3 rounded-lg bg-lattice-elevated/50">
+              <p className={ds.textMuted}>Total Invoices</p>
+              <p className={cn(ds.heading2, 'text-white')}>{backendAgingResult.totalInvoices as number || 0}</p>
+            </div>
+            <div className="text-center p-3 rounded-lg bg-lattice-elevated/50">
+              <p className={ds.textMuted}>Unpaid Count</p>
+              <p className={cn(ds.heading2, 'text-yellow-400')}>{backendAgingResult.unpaidCount as number || 0}</p>
+            </div>
+            <div className="text-center p-3 rounded-lg bg-lattice-elevated/50">
+              <p className={ds.textMuted}>Avg Days Outstanding</p>
+              <p className={cn(ds.heading2, 'text-neon-cyan')}>{backendAgingResult.avgDaysOutstanding as number || 0}</p>
+            </div>
+          </div>
+
+          {backendAgingResult.buckets && (
+            <div className="grid grid-cols-5 gap-3 mt-4">
+              {Object.entries(backendAgingResult.buckets as Record<string, Record<string, unknown>>).map(([key, bucket]) => {
+                const colorMap: Record<string, string> = { current: 'text-green-400 border-green-400/30 bg-green-400/10', '1-30': 'text-yellow-400 border-yellow-400/30 bg-yellow-400/10', '31-60': 'text-orange-400 border-orange-400/30 bg-orange-400/10', '61-90': 'text-red-400 border-red-400/30 bg-red-400/10', '90+': 'text-red-500 border-red-500/30 bg-red-500/10' };
+                return (
+                  <div key={key} className={cn('text-center p-3 rounded-lg border', colorMap[key] || 'border-gray-400/30')}>
+                    <p className={ds.textMuted}>{key === 'current' ? 'Current' : `${key} Days`}</p>
+                    <p className={cn(ds.heading3, colorMap[key]?.split(' ')[0])}>{fmt(bucket.total as number || 0)}</p>
+                    <p className="text-xs text-gray-500">{(bucket.invoices as Array<unknown>)?.length || 0} invoices</p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div className={cn(ds.grid2, 'mt-4')}>
+            <div className={cn('p-3 rounded-lg text-center', 'bg-yellow-400/10 border border-yellow-400/30')}>
+              <p className={ds.textMuted}>Total Outstanding</p>
+              <p className={cn(ds.heading2, 'text-yellow-400')}>{fmt(backendAgingResult.totalOutstanding as number || 0)}</p>
+            </div>
+            <div className={cn('p-3 rounded-lg text-center', 'bg-red-400/10 border border-red-400/30')}>
+              <p className={ds.textMuted}>Total Overdue</p>
+              <p className={cn(ds.heading2, 'text-red-400')}>{fmt(backendAgingResult.totalOverdue as number || 0)}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Client-side aging buckets */}
       <div className={ds.grid4}>
         <div className={cn(ds.panel, 'text-center border-green-400/30')}>
           <p className={ds.textMuted}>Current</p>
@@ -1459,10 +1777,101 @@ export default function AccountingLensPage() {
       <div className="space-y-4">
         <div className={ds.sectionHeader}>
           <h2 className={ds.heading2}>Budget vs Actual</h2>
-          <button className={ds.btnSecondary} onClick={() => setBudgetView('list')}>
-            <ArrowRight className="w-4 h-4" /> Back to List
-          </button>
+          <div className="flex items-center gap-2">
+            <button className={ds.btnPrimary} onClick={handleBudgetVariance} disabled={backendVarianceLoading}>
+              {backendVarianceLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <BarChart3 className="w-4 h-4" />} Run Variance Analysis
+            </button>
+            <button className={ds.btnSecondary} onClick={() => setBudgetView('list')}>
+              <ArrowRight className="w-4 h-4" /> Back to List
+            </button>
+          </div>
         </div>
+
+        {/* Backend Variance Result */}
+        {backendVarianceResult && (
+          <div className={cn(ds.panel, 'border border-neon-cyan/30')}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className={cn(ds.heading3, 'flex items-center gap-2')}>
+                <BarChart3 className="w-5 h-5 text-neon-cyan" /> Server-Computed Variance Analysis
+              </h3>
+              <div className="flex items-center gap-3">
+                <span className={cn(ds.textMuted, 'text-xs')}>Period: {(backendVarianceResult.period as string) || '-'}</span>
+                <button onClick={() => setBackendVarianceResult(null)} className={ds.btnGhost}><X className="w-4 h-4" /></button>
+              </div>
+            </div>
+
+            <div className={ds.grid4}>
+              <div className="text-center p-3 rounded-lg bg-lattice-elevated/50">
+                <p className={ds.textMuted}>Total Planned</p>
+                <p className={cn(ds.heading3, 'text-white')}>{fmt(backendVarianceResult.totalPlanned as number || 0)}</p>
+              </div>
+              <div className="text-center p-3 rounded-lg bg-lattice-elevated/50">
+                <p className={ds.textMuted}>Total Actual</p>
+                <p className={cn(ds.heading3, 'text-neon-cyan')}>{fmt(backendVarianceResult.totalActual as number || 0)}</p>
+              </div>
+              <div className={cn('text-center p-3 rounded-lg', (backendVarianceResult.totalVariance as number) > 0 ? 'bg-red-400/10 border border-red-400/30' : 'bg-green-400/10 border border-green-400/30')}>
+                <p className={ds.textMuted}>Total Variance</p>
+                <p className={cn(ds.heading3, (backendVarianceResult.totalVariance as number) > 0 ? 'text-red-400' : 'text-green-400')}>
+                  {fmt(backendVarianceResult.totalVariance as number || 0)}
+                </p>
+              </div>
+              <div className={cn('text-center p-3 rounded-lg bg-lattice-elevated/50')}>
+                <p className={ds.textMuted}>Over-Budget Items</p>
+                <p className={cn(ds.heading3, (backendVarianceResult.overBudgetCount as number) > 0 ? 'text-red-400' : 'text-green-400')}>
+                  {backendVarianceResult.overBudgetCount as number || 0}
+                </p>
+              </div>
+            </div>
+
+            {Array.isArray(backendVarianceResult.lineItems) && (backendVarianceResult.lineItems as Array<Record<string, unknown>>).length > 0 && (
+              <table className="w-full mt-4">
+                <thead>
+                  <tr className="text-left text-xs text-gray-500 border-b border-lattice-border">
+                    <th className="pb-2 pr-4">Category</th>
+                    <th className="pb-2 text-right pr-4">Planned</th>
+                    <th className="pb-2 text-right pr-4">Actual</th>
+                    <th className="pb-2 text-right pr-4">Variance</th>
+                    <th className="pb-2 text-right pr-4">Variance %</th>
+                    <th className="pb-2 text-center">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(backendVarianceResult.lineItems as Array<Record<string, unknown>>).map((line, i) => (
+                    <tr key={i} className="border-b border-lattice-border/20 hover:bg-lattice-elevated/30">
+                      <td className="py-2 pr-4 text-sm text-white">{line.category as string}</td>
+                      <td className={cn(ds.textMono, 'py-2 text-right pr-4 text-white')}>{fmt(line.planned as number)}</td>
+                      <td className={cn(ds.textMono, 'py-2 text-right pr-4 text-neon-cyan')}>{fmt(line.actual as number)}</td>
+                      <td className={cn(ds.textMono, 'py-2 text-right pr-4', (line.variance as number) > 0 ? 'text-red-400' : 'text-green-400')}>
+                        {fmt(line.variance as number)}
+                      </td>
+                      <td className={cn(ds.textMono, 'py-2 text-right pr-4', (line.variancePct as number) > 0 ? 'text-red-400' : 'text-green-400')}>
+                        {fmtPct(line.variancePct as number)}
+                      </td>
+                      <td className="py-2 text-center">
+                        <span className={ds.badge(
+                          (line.status as string) === 'over-budget' ? 'red-400' : (line.status as string) === 'under-budget' ? 'green-400' : 'neon-cyan'
+                        )}>
+                          {line.status as string}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            {backendVarianceResult.largestOverrun && (
+              <div className="mt-4 p-3 rounded-lg bg-red-400/10 border border-red-400/30">
+                <div className="flex items-center gap-2 text-red-400">
+                  <AlertCircle className="w-4 h-4" />
+                  <span className="text-sm font-semibold">Largest Overrun:</span>
+                  <span className="text-sm">{(backendVarianceResult.largestOverrun as Record<string, unknown>).category as string}</span>
+                  <span className={cn(ds.textMono, 'text-sm')}>({fmt((backendVarianceResult.largestOverrun as Record<string, unknown>).variance as number)} over)</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className={ds.grid3}>
           <div className={cn(ds.panel, 'text-center')}>
