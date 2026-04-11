@@ -1,0 +1,456 @@
+/**
+ * Concord SDK — TypeScript Client
+ *
+ * Lightweight client for the Concord Cognitive Engine API.
+ * Supports API key (csk_...) and JWT authentication.
+ *
+ * @example
+ * ```ts
+ * import { ConcordClient } from "@concord/sdk";
+ *
+ * const client = new ConcordClient("csk_your_key_here");
+ *
+ * // Run a lens action
+ * const result = await client.lens.run("healthcare", "analyze", { patientId: "123" });
+ *
+ * // List DTUs
+ * const dtus = await client.dtus.list({ limit: 10 });
+ *
+ * // Chat
+ * const reply = await client.chat.send("Explain quantum entanglement");
+ *
+ * // Stream chat
+ * for await (const chunk of client.chat.stream("Tell me about DTUs")) {
+ *   process.stdout.write(chunk.content);
+ * }
+ * ```
+ *
+ * @packageDocumentation
+ */
+
+// ── Types ──────────────────────────────────────────────────────────────────
+
+/** Configuration options for the Concord client. */
+export interface ConcordClientOptions {
+  /** Base URL of the Concord server (default: "http://localhost:5050") */
+  baseUrl?: string;
+  /** Request timeout in milliseconds (default: 30000) */
+  timeout?: number;
+  /** Custom headers to include with every request */
+  headers?: Record<string, string>;
+}
+
+/** Standard API response envelope. */
+export interface ApiResponse<T = unknown> {
+  ok: boolean;
+  error?: string;
+  detail?: string;
+  data?: T;
+  [key: string]: unknown;
+}
+
+/** A Discrete Thought Unit. */
+export interface DTU {
+  id: string;
+  title: string;
+  body: string;
+  domain: string;
+  tags: string[];
+  meta?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** DTU creation input. */
+export interface DTUCreateInput {
+  title: string;
+  body: string;
+  domain: string;
+  tags?: string[];
+  meta?: Record<string, unknown>;
+}
+
+/** Pagination / filter parameters for DTU listing. */
+export interface DTUListParams {
+  limit?: number;
+  offset?: number;
+  domain?: string;
+}
+
+/** Lens action result. */
+export interface LensActionResult {
+  ok: boolean;
+  output?: string;
+  source?: string;
+  model?: string;
+  action: string;
+  domain: string;
+  [key: string]: unknown;
+}
+
+/** Chat response. */
+export interface ChatResponse {
+  ok: boolean;
+  reply: string;
+  sessionId?: string;
+  dtusForged?: DTU[];
+  [key: string]: unknown;
+}
+
+/** A single chunk from a streaming chat response. */
+export interface ChatStreamChunk {
+  content: string;
+  done: boolean;
+  sessionId?: string;
+}
+
+/** API key metadata. */
+export interface ApiKey {
+  id: string;
+  prefix: string;
+  scopes: string[];
+  rateLimit: { requestsPerMinute: number; requestsPerDay: number };
+  createdAt: string;
+  lastUsed: string | null;
+  usageCount: number;
+  revoked: boolean;
+}
+
+/** API key creation input. */
+export interface ApiKeyCreateInput {
+  name?: string;
+  scopes?: string[];
+  rateLimit?: { requestsPerMinute?: number; requestsPerDay?: number };
+}
+
+/** API key creation result (raw key returned only once). */
+export interface ApiKeyCreateResult extends ApiResponse {
+  key: ApiKey;
+  rawKey: string;
+}
+
+// ── Error ──────────────────────────────────────────────────────────────────
+
+/** Typed error for API failures. */
+export class ConcordApiError extends Error {
+  public readonly status: number;
+  public readonly code: string;
+  public readonly body: unknown;
+
+  constructor(message: string, status: number, code: string, body?: unknown) {
+    super(message);
+    this.name = "ConcordApiError";
+    this.status = status;
+    this.code = code;
+    this.body = body;
+  }
+}
+
+// ── Client ─────────────────────────────────────────────────────────────────
+
+export class ConcordClient {
+  private readonly apiKey: string;
+  private readonly baseUrl: string;
+  private readonly timeout: number;
+  private readonly customHeaders: Record<string, string>;
+
+  /** Lens action sub-client. */
+  public readonly lens: LensClient;
+  /** DTU sub-client. */
+  public readonly dtus: DTUClient;
+  /** Chat sub-client. */
+  public readonly chat: ChatClient;
+  /** API key management sub-client. */
+  public readonly keys: KeysClient;
+
+  /**
+   * Create a new Concord client.
+   *
+   * @param apiKey - A Concord Secret Key ("csk_...") or JWT token.
+   * @param options - Optional configuration.
+   */
+  constructor(apiKey: string, options: ConcordClientOptions = {}) {
+    if (!apiKey) throw new Error("apiKey is required");
+    this.apiKey = apiKey;
+    this.baseUrl = (options.baseUrl || "http://localhost:5050").replace(/\/+$/, "");
+    this.timeout = options.timeout ?? 30_000;
+    this.customHeaders = options.headers || {};
+
+    this.lens = new LensClient(this);
+    this.dtus = new DTUClient(this);
+    this.chat = new ChatClient(this);
+    this.keys = new KeysClient(this);
+  }
+
+  // ── Internal HTTP helpers ──────────────────────────────────────────────
+
+  /** Build standard request headers. */
+  private buildHeaders(extra?: Record<string, string>): Record<string, string> {
+    return {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${this.apiKey}`,
+      ...this.customHeaders,
+      ...extra,
+    };
+  }
+
+  /** Core request method. */
+  async request<T = unknown>(
+    method: string,
+    path: string,
+    body?: unknown,
+    extra?: { headers?: Record<string, string> },
+  ): Promise<T> {
+    const url = `${this.baseUrl}${path}`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeout);
+
+    try {
+      const opts: RequestInit = {
+        method,
+        headers: this.buildHeaders(extra?.headers),
+        signal: controller.signal,
+      };
+
+      if (body !== undefined && method !== "GET") {
+        opts.body = JSON.stringify(body);
+      }
+
+      const res = await fetch(url, opts);
+
+      if (!res.ok) {
+        let errorBody: unknown;
+        try {
+          errorBody = await res.json();
+        } catch {
+          errorBody = await res.text();
+        }
+        const msg =
+          typeof errorBody === "object" && errorBody !== null && "error" in errorBody
+            ? (errorBody as Record<string, string>).error
+            : `HTTP ${res.status}`;
+        throw new ConcordApiError(msg, res.status, String(res.status), errorBody);
+      }
+
+      return (await res.json()) as T;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /** GET shorthand. */
+  async get<T = unknown>(path: string): Promise<T> {
+    return this.request<T>("GET", path);
+  }
+
+  /** POST shorthand. */
+  async post<T = unknown>(path: string, body?: unknown): Promise<T> {
+    return this.request<T>("POST", path, body);
+  }
+
+  /** PUT shorthand. */
+  async put<T = unknown>(path: string, body?: unknown): Promise<T> {
+    return this.request<T>("PUT", path, body);
+  }
+
+  /** DELETE shorthand. */
+  async delete<T = unknown>(path: string, body?: unknown): Promise<T> {
+    return this.request<T>("DELETE", path, body);
+  }
+
+  /**
+   * Streaming fetch — returns an async iterator of lines from an SSE stream.
+   */
+  async *stream(path: string, body?: unknown): AsyncGenerator<ChatStreamChunk> {
+    const url = `${this.baseUrl}${path}`;
+    const controller = new AbortController();
+    // Longer timeout for streaming
+    const timer = setTimeout(() => controller.abort(), this.timeout * 4);
+
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: this.buildHeaders({ Accept: "text/event-stream" }),
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new ConcordApiError(`Stream failed: ${res.status}`, res.status, "STREAM_ERROR", errText);
+      }
+
+      if (!res.body) {
+        throw new ConcordApiError("No response body for stream", 500, "NO_BODY");
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const data = line.slice(6).trim();
+          if (data === "[DONE]") return;
+          try {
+            const parsed = JSON.parse(data);
+            yield {
+              content: parsed.content || parsed.text || "",
+              done: !!parsed.done,
+              sessionId: parsed.sessionId,
+            };
+            if (parsed.done) return;
+          } catch {
+            // Non-JSON SSE data — yield as raw content
+            yield { content: data, done: false };
+          }
+        }
+      }
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+}
+
+// ── Sub-clients ────────────────────────────────────────────────────────────
+
+class LensClient {
+  constructor(private client: ConcordClient) {}
+
+  /**
+   * Run a lens action on a domain.
+   *
+   * @param domain - Lens domain (e.g., "healthcare", "code", "math")
+   * @param action - Action name (e.g., "analyze", "generate", "suggest")
+   * @param input  - Action parameters / artifact data
+   */
+  async run(
+    domain: string,
+    action: string,
+    input: Record<string, unknown> = {},
+  ): Promise<LensActionResult> {
+    return this.client.post<LensActionResult>(`/api/lens/${domain}/${action}`, {
+      artifact: input.artifact || { domain },
+      params: input.params || input,
+    });
+  }
+
+  /** List all available lens actions. */
+  async actions(): Promise<{ domain: string; action: string }[]> {
+    const res = await this.client.get<{
+      ok: boolean;
+      lensActions: { domain: string; action: string }[];
+    }>("/api/lens/pipelines");
+    return res.lensActions || [];
+  }
+}
+
+class DTUClient {
+  constructor(private client: ConcordClient) {}
+
+  /** List DTUs with optional filtering. */
+  async list(params: DTUListParams = {}): Promise<ApiResponse<DTU[]>> {
+    const query = new URLSearchParams();
+    if (params.limit != null) query.set("limit", String(params.limit));
+    if (params.offset != null) query.set("offset", String(params.offset));
+    if (params.domain) query.set("domain", params.domain);
+    const qs = query.toString();
+    return this.client.get<ApiResponse<DTU[]>>(`/api/dtus${qs ? `?${qs}` : ""}`);
+  }
+
+  /** Get a single DTU by ID. */
+  async get(id: string): Promise<ApiResponse<DTU>> {
+    return this.client.get<ApiResponse<DTU>>(`/api/dtus/${encodeURIComponent(id)}`);
+  }
+
+  /** Create a new DTU. */
+  async create(data: DTUCreateInput): Promise<ApiResponse<DTU>> {
+    return this.client.post<ApiResponse<DTU>>("/api/dtus", data);
+  }
+
+  /** Search DTUs by query text. */
+  async search(query: string, options?: { limit?: number; domain?: string }): Promise<ApiResponse<DTU[]>> {
+    return this.client.post<ApiResponse<DTU[]>>("/api/search", { query, ...options });
+  }
+}
+
+class ChatClient {
+  constructor(private client: ConcordClient) {}
+
+  /**
+   * Send a chat message and receive a complete response.
+   *
+   * @param message  - The message text
+   * @param options  - Optional session ID and parameters
+   */
+  async send(
+    message: string,
+    options?: { sessionId?: string; [key: string]: unknown },
+  ): Promise<ChatResponse> {
+    return this.client.post<ChatResponse>("/api/chat", {
+      message,
+      ...options,
+    });
+  }
+
+  /**
+   * Stream a chat response via Server-Sent Events.
+   *
+   * @param message  - The message text
+   * @param options  - Optional session ID and parameters
+   * @returns Async iterator of stream chunks
+   */
+  async *stream(
+    message: string,
+    options?: { sessionId?: string; [key: string]: unknown },
+  ): AsyncGenerator<ChatStreamChunk> {
+    yield* this.client.stream("/api/chat/stream", {
+      message,
+      ...options,
+    });
+  }
+}
+
+class KeysClient {
+  constructor(private client: ConcordClient) {}
+
+  /** Generate a new API key. */
+  async create(input: ApiKeyCreateInput = {}): Promise<ApiKeyCreateResult> {
+    return this.client.post<ApiKeyCreateResult>("/api/keys", input);
+  }
+
+  /** List all API keys for the authenticated user. */
+  async list(): Promise<ApiResponse<ApiKey[]>> {
+    return this.client.get<ApiResponse<ApiKey[]>>("/api/keys");
+  }
+
+  /** Revoke an API key. */
+  async revoke(keyId: string): Promise<ApiResponse> {
+    return this.client.delete<ApiResponse>(`/api/keys/${encodeURIComponent(keyId)}`);
+  }
+
+  /** Update scopes or rate limits on a key. */
+  async update(
+    keyId: string,
+    updates: { scopes?: string[]; rateLimit?: { requestsPerMinute?: number; requestsPerDay?: number } },
+  ): Promise<ApiResponse<ApiKey>> {
+    return this.client.put<ApiResponse<ApiKey>>(`/api/keys/${encodeURIComponent(keyId)}`, updates);
+  }
+
+  /** Get usage statistics for a key. */
+  async usage(keyId: string): Promise<ApiResponse> {
+    return this.client.get<ApiResponse>(`/api/keys/${encodeURIComponent(keyId)}/usage`);
+  }
+}
+
+// ── Default export ─────────────────────────────────────────────────────────
+
+export default ConcordClient;

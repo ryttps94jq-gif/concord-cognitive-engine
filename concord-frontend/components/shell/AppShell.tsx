@@ -20,6 +20,7 @@ import SyncIndicator from '@/components/pwa/SyncIndicator';
 import { ConnectionStatus } from '@/components/common/ConnectionStatus';
 import { QuickCapture, useQuickCapture } from '@/components/capture/QuickCapture';
 import { NowPlayingBar } from '@/components/music/NowPlayingBar';
+import { MobileNav } from '@/components/shell/MobileNav';
 import { SessionSidebar } from '@/components/chat/SessionSidebar';
 import { useSessionStore } from '@/store/sessions';
 
@@ -136,7 +137,7 @@ export function AppShell({ children }: AppShellProps) {
           id="main-content"
           role="main"
           tabIndex={-1}
-          className={`flex-1 overflow-auto transition-all duration-300 ${
+          className={`flex-1 overflow-auto transition-all duration-300 pb-16 md:pb-0 ${
             sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'
           }`}
         >
@@ -157,6 +158,7 @@ export function AppShell({ children }: AppShellProps) {
       <CookieConsent />
       <QuickCapture isOpen={quickCapture.isOpen} onClose={quickCapture.close} />
       <NowPlayingBar />
+      <MobileNav />
     </div>
   );
 }

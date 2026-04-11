@@ -16,6 +16,7 @@
  */
 
 import https from "https";
+import crypto from "crypto";
 import logger from "../logger.js";
 
 // ── Configuration ──────────────────────────────────────────────────────────
@@ -326,7 +327,7 @@ export function verifyWebhookSecret(headerValue, expectedSecret) {
     const a = Buffer.from(String(headerValue));
     const b = Buffer.from(String(expectedSecret));
     if (a.length !== b.length) return false;
-    return require("crypto").timingSafeEqual(a, b);
+    return crypto.timingSafeEqual(a, b);
   } catch {
     return false;
   }
