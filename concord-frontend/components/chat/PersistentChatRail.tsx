@@ -486,12 +486,13 @@ export function PersistentChatRail({
       }
     };
 
-    const handleToolResult = (data: { tool: string; result: string; ok: boolean; sessionId: string }) => {
-      if (data.sessionId !== sessionId) return;
+    const handleToolResult = (data: unknown) => {
+      const d = data as { tool: string; result: string; ok: boolean; sessionId: string };
+      if (d.sessionId !== sessionId) return;
       setMessages(prev => [...prev, {
         id: `tool-${Date.now()}`,
         role: 'system' as const,
-        content: `\u{1F527} ${data.tool}: ${data.ok ? data.result : `Error: ${data.result}`}`,
+        content: `\u{1F527} ${d.tool}: ${d.ok ? d.result : `Error: ${d.result}`}`,
         timestamp: new Date().toISOString(),
       }]);
     };
