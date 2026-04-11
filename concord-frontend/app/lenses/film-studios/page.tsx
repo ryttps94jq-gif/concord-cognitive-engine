@@ -84,7 +84,7 @@ export default function FilmStudiosPage() {
   // Discover films
   const { data: discoveredFilms, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['film-studio', 'discover', searchQuery],
-    queryFn: () => apiHelpers.filmStudio.discover({ q: searchQuery || undefined }).then(r => r.data?.films || r.data?.items || r.data || []).catch(() => []),
+    queryFn: () => apiHelpers.filmStudio.discover({ q: searchQuery || undefined }).then(r => r.data?.films || r.data?.items || r.data || []).catch((e) => { console.warn('[FilmStudios] Query failed:', e?.message); return []; }),
     initialData: [],
   });
   const myFilms = useMemo(() => myFilmItems.map(i => ({ ...(i.data as unknown as FilmProject), id: i.id, title: i.title })), [myFilmItems]);

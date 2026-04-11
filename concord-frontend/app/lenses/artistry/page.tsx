@@ -65,28 +65,28 @@ export default function ArtistryLensPage() {
   // Assets from API
   const { data: assets, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['artistry', 'assets', searchQuery],
-    queryFn: () => apiHelpers.artistry.assets.list({ search: searchQuery || undefined }).then(r => r.data?.assets || []).catch(() => []),
+    queryFn: () => apiHelpers.artistry.assets.list({ search: searchQuery || undefined }).then(r => r.data?.assets || []).catch((e) => { console.warn('[Artistry] Query failed:', e?.message); return []; }),
     initialData: [],
   });
 
   // Styles / Mediums
   const { data: styles } = useQuery({
     queryKey: ['artistry', 'styles'],
-    queryFn: () => apiHelpers.artistry.genres().then(r => r.data?.genres || []).catch(() => []),
+    queryFn: () => apiHelpers.artistry.genres().then(r => r.data?.genres || []).catch((e) => { console.warn('[Artistry] Query failed:', e?.message); return []; }),
     initialData: [],
   });
 
   // Asset types
   const { data: assetTypes } = useQuery({
     queryKey: ['artistry', 'asset-types'],
-    queryFn: () => apiHelpers.artistry.assetTypes().then(r => r.data?.types || []).catch(() => []),
+    queryFn: () => apiHelpers.artistry.assetTypes().then(r => r.data?.types || []).catch((e) => { console.warn('[Artistry] Query failed:', e?.message); return []; }),
     initialData: [],
   });
 
   // Marketplace artworks
   const { data: marketplaceArt } = useQuery({
     queryKey: ['artistry', 'marketplace', 'art'],
-    queryFn: () => apiHelpers.artistry.marketplace.art.list().then(r => r.data?.art || r.data?.items || []).catch(() => []),
+    queryFn: () => apiHelpers.artistry.marketplace.art.list().then(r => r.data?.art || r.data?.items || []).catch((e) => { console.warn('[Artistry] Query failed:', e?.message); return []; }),
     initialData: [],
     enabled: tab === 'marketplace',
   });
@@ -94,7 +94,7 @@ export default function ArtistryLensPage() {
   // Studio projects
   const { data: studioProjects } = useQuery({
     queryKey: ['artistry', 'studio', 'projects'],
-    queryFn: () => apiHelpers.artistry.studio.projects.list().then(r => r.data?.projects || []).catch(() => []),
+    queryFn: () => apiHelpers.artistry.studio.projects.list().then(r => r.data?.projects || []).catch((e) => { console.warn('[Artistry] Query failed:', e?.message); return []; }),
     initialData: [],
     enabled: tab === 'studio',
   });

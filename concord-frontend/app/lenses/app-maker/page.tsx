@@ -64,7 +64,7 @@ export default function AppMakerLens() {
     try {
       const resp = await apiHelpers.apps.list();
       setApps(resp.data?.apps || []);
-    } catch (e) { console.error('[AppMaker] Failed to load apps:', e); }
+    } catch (e) { console.error('[AppMaker] Failed to load apps:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to load apps' }); }
     setLoading(false);
   };
 
