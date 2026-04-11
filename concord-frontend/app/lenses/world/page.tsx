@@ -21,7 +21,60 @@ import MarketplacePalette from '@/components/world-lens/MarketplacePalette';
 import ConcordiaHub from '@/components/world-lens/ConcordiaHub';
 import OnboardingTutorial from '@/components/world-lens/OnboardingTutorial';
 
+import dynamic from 'next/dynamic';
 import { DEMO_DISTRICT } from '@/lib/world-lens/district-seed';
+
+const ConcordiaScene = dynamic(() => import('@/components/world-lens/ConcordiaScene'), { ssr: false });
+const AvatarSystem3D = dynamic(() => import('@/components/world-lens/AvatarSystem3D'), { ssr: false });
+const CameraControls = dynamic(() => import('@/components/world-lens/CameraControls'), { ssr: false });
+const HUDOverlay = dynamic(() => import('@/components/world-lens/HUDOverlay'), { ssr: false });
+const ChatSystem = dynamic(() => import('@/components/world-lens/ChatSystem'), { ssr: false });
+const InventoryPanel = dynamic(() => import('@/components/world-lens/InventoryPanel'), { ssr: false });
+const QuestPanel = dynamic(() => import('@/components/world-lens/QuestPanel'), { ssr: false });
+const PlayerPresence = dynamic(() => import('@/components/world-lens/PlayerPresence'), { ssr: false });
+const MapNavigation = dynamic(() => import('@/components/world-lens/MapNavigation'), { ssr: false });
+const PlayerProfile = dynamic(() => import('@/components/world-lens/PlayerProfile'), { ssr: false });
+const CraftingPanel = dynamic(() => import('@/components/world-lens/CraftingPanel'), { ssr: false });
+const CollaborationTools = dynamic(() => import('@/components/world-lens/CollaborationTools'), { ssr: false });
+const LiveCollaboration = dynamic(() => import('@/components/world-lens/LiveCollaboration'), { ssr: false });
+const EventsGatherings = dynamic(() => import('@/components/world-lens/EventsGatherings'), { ssr: false });
+const SocialProofFeed = dynamic(() => import('@/components/world-lens/SocialProofFeed'), { ssr: false });
+const NotificationFeed = dynamic(() => import('@/components/world-lens/NotificationFeed'), { ssr: false });
+const SmartNotifications = dynamic(() => import('@/components/world-lens/SmartNotifications'), { ssr: false });
+const ModerationPanel = dynamic(() => import('@/components/world-lens/ModerationPanel'), { ssr: false });
+const OwnershipProfile = dynamic(() => import('@/components/world-lens/OwnershipProfile'), { ssr: false });
+const FederationPanel = dynamic(() => import('@/components/world-lens/FederationPanel'), { ssr: false });
+const VoiceInterface = dynamic(() => import('@/components/world-lens/VoiceInterface'), { ssr: false });
+const VoiceAssistant = dynamic(() => import('@/components/world-lens/VoiceAssistant'), { ssr: false });
+const BuildingRenderer3D = dynamic(() => import('@/components/world-lens/BuildingRenderer3D'), { ssr: false });
+const TerrainRenderer = dynamic(() => import('@/components/world-lens/TerrainRenderer'), { ssr: false });
+const SkyWeatherRenderer = dynamic(() => import('@/components/world-lens/SkyWeatherRenderer'), { ssr: false });
+const WaterRenderer = dynamic(() => import('@/components/world-lens/WaterRenderer'), { ssr: false });
+const ParticleEffectsComponent = dynamic(() => import('@/components/world-lens/ParticleEffects'), { ssr: false });
+const SoundscapeEngine = dynamic(() => import('@/components/world-lens/SoundscapeEngine'), { ssr: false });
+const AnimationManager = dynamic(() => import('@/components/world-lens/AnimationManager'), { ssr: false });
+const GameJuice = dynamic(() => import('@/components/world-lens/GameJuice'), { ssr: false });
+const LoadingTransitions = dynamic(() => import('@/components/world-lens/LoadingTransitions'), { ssr: false });
+
+// ── Builder / Tools (District mode) ───────────────────────────────
+const SnapBuildCatalog = dynamic(() => import('@/components/world-lens/SnapBuildCatalog'), { ssr: false });
+const ConcordDSLEditor = dynamic(() => import('@/components/world-lens/ConcordDSLEditor'), { ssr: false });
+const ConcordTerminal = dynamic(() => import('@/components/world-lens/ConcordTerminal'), { ssr: false });
+const DTUDiffViewer = dynamic(() => import('@/components/world-lens/DTUDiffViewer'), { ssr: false });
+const StandardsLibrary = dynamic(() => import('@/components/world-lens/StandardsLibrary'), { ssr: false });
+const FabricationExportPanel = dynamic(() => import('@/components/world-lens/FabricationExportPanel'), { ssr: false });
+const ExportEmbed = dynamic(() => import('@/components/world-lens/ExportEmbed'), { ssr: false });
+const NotebookEditor = dynamic(() => import('@/components/world-lens/NotebookEditor'), { ssr: false });
+const DependencyGraphViewer = dynamic(() => import('@/components/world-lens/DependencyGraphViewer'), { ssr: false });
+const DigitalTwinDashboard = dynamic(() => import('@/components/world-lens/DigitalTwinDashboard'), { ssr: false });
+const SensorDashboard = dynamic(() => import('@/components/world-lens/SensorDashboard'), { ssr: false });
+const ServiceMarketplace = dynamic(() => import('@/components/world-lens/ServiceMarketplace'), { ssr: false });
+const CertificatePanel = dynamic(() => import('@/components/world-lens/CertificatePanel'), { ssr: false });
+const NotarizationPanel = dynamic(() => import('@/components/world-lens/NotarizationPanel'), { ssr: false });
+const StressTestPanel = dynamic(() => import('@/components/world-lens/StressTestPanel'), { ssr: false });
+const ReplayForensics = dynamic(() => import('@/components/world-lens/ReplayForensics'), { ssr: false });
+const ReplaySpectator = dynamic(() => import('@/components/world-lens/ReplaySpectator'), { ssr: false });
+
 import { SEED_MATERIALS } from '@/lib/world-lens/material-seed';
 import { cacheMaterials } from '@/lib/world-lens/validation-engine';
 import type {
@@ -33,6 +86,11 @@ import type { ConcordiaDistrict } from '@/components/world-lens/ConcordiaHub';
 import {
   Globe, ChevronDown, Layers, Map as MapIcon, Zap, X,
   Radio, Eye, Play, Square, Users, Clock, Coins,
+  Handshake, CalendarDays, Bell, Mic, MessageSquare,
+  ThumbsUp, BellRing, Shield, Fingerprint, Network, AudioLines,
+  Wrench, Package, Code2, Terminal, Diff, BookOpen, BoxSelect,
+  FileCode, GitBranch, Activity, Gauge, ShoppingCart,
+  Award, Stamp, FlaskConical, History, Clapperboard, ChevronRight,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api/client';
@@ -481,7 +539,39 @@ function CityStreamingSection() {
 
 // ── View Modes ──────────────────────────────────────────────────────
 
-type ViewMode = 'concordia' | 'district' | 'streams';
+type ViewMode = 'concordia' | 'district' | 'streams' | 'explore';
+
+type DistrictTool =
+  | 'snapbuild' | 'dsl' | 'terminal' | 'diff' | 'standards'
+  | 'fabrication' | 'embed' | 'notebook' | 'depgraph'
+  | 'digitaltwin' | 'sensors' | 'marketplace'
+  | 'certificates' | 'notarization' | 'stresstest'
+  | 'replay' | 'spectator' | null;
+
+const DISTRICT_TOOLS: { key: Exclude<DistrictTool, null>; label: string; icon: React.ComponentType<{ className?: string }>; group: string }[] = [
+  // Build
+  { key: 'snapbuild', label: 'Snap Build', icon: Package, group: 'Build' },
+  { key: 'dsl', label: 'DSL Editor', icon: Code2, group: 'Build' },
+  { key: 'terminal', label: 'Terminal', icon: Terminal, group: 'Build' },
+  { key: 'notebook', label: 'Notebook', icon: FileCode, group: 'Build' },
+  // Inspect
+  { key: 'diff', label: 'DTU Diff', icon: Diff, group: 'Inspect' },
+  { key: 'standards', label: 'Standards', icon: BookOpen, group: 'Inspect' },
+  { key: 'depgraph', label: 'Dependencies', icon: GitBranch, group: 'Inspect' },
+  { key: 'digitaltwin', label: 'Digital Twin', icon: Activity, group: 'Inspect' },
+  { key: 'sensors', label: 'Sensors', icon: Gauge, group: 'Inspect' },
+  // Export & Services
+  { key: 'fabrication', label: 'Fabrication', icon: BoxSelect, group: 'Export' },
+  { key: 'embed', label: 'Embed Export', icon: Code2, group: 'Export' },
+  { key: 'marketplace', label: 'Marketplace', icon: ShoppingCart, group: 'Export' },
+  // Verify
+  { key: 'certificates', label: 'Certificates', icon: Award, group: 'Verify' },
+  { key: 'notarization', label: 'Notarization', icon: Stamp, group: 'Verify' },
+  { key: 'stresstest', label: 'Stress Test', icon: FlaskConical, group: 'Verify' },
+  // Replay
+  { key: 'replay', label: 'Replay', icon: History, group: 'Replay' },
+  { key: 'spectator', label: 'Spectator', icon: Clapperboard, group: 'Replay' },
+];
 
 // ── Component ───────────────────────────────────────────────────────
 
@@ -497,6 +587,31 @@ export default function WorldLensPage() {
   const [creationMode, setCreationMode] = useState<CreationMode | null>(null);
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState<0 | 1 | 2 | 3>(0);
+
+  // District tools state
+  const [activeTool, setActiveTool] = useState<DistrictTool>(null);
+  const [toolsExpanded, setToolsExpanded] = useState(false);
+
+  // 3D Explore mode state
+  const [cameraMode, setCameraMode] = useState<'isometric' | 'follow' | 'free' | 'interior' | 'cinematic'>('follow');
+  const [showPanel, setShowPanel] = useState<'none' | 'inventory' | 'quests' | 'chat' | 'map' | 'crafting' | 'players' | 'profile' | 'collaboration' | 'livecollab' | 'events' | 'socialproof' | 'notifications' | 'smartnotify' | 'moderation' | 'ownership' | 'federation' | 'voice' | 'voiceassist'>('none');
+  const [playerAvatar] = useState({
+    id: 'player-1',
+    name: 'You',
+    appearance: {
+      skinColor: '#c8956c',
+      hairColor: '#3d2314',
+      hairStyle: 'short' as const,
+      bodyType: 'average' as const,
+      clothing: {
+        top: { color: '#1a5276', type: 'shirt' as const },
+        bottom: { color: '#2c3e50', type: 'pants' as const },
+      },
+    },
+    position: { x: 0, y: 0, z: 0 },
+    rotation: 0,
+    currentAnimation: 'idle' as const,
+  });
   const [visibleLayers, setVisibleLayers] = useState(new Set(['water', 'power', 'drainage', 'road', 'data']));
   const [showValidation, setShowValidation] = useState(false);
   const [showWeather, setShowWeather] = useState(false);
@@ -689,6 +804,13 @@ export default function WorldLensPage() {
               District
             </button>
             <button
+              onClick={() => setViewMode('explore')}
+              className={`px-3 py-1.5 text-xs ${viewMode === 'explore' ? 'bg-emerald-500/20 text-emerald-300' : 'text-gray-400 hover:text-white'}`}
+            >
+              <Users className="w-3.5 h-3.5 inline mr-1" />
+              Explore 3D
+            </button>
+            <button
               onClick={() => setViewMode('streams')}
               className={`px-3 py-1.5 text-xs ${viewMode === 'streams' ? 'bg-cyan-500/20 text-cyan-300' : 'text-gray-400 hover:text-white'}`}
             >
@@ -707,6 +829,198 @@ export default function WorldLensPage() {
             onDistrictSelect={handleConcordiaDistrictSelect}
             onNavigateToLens={(lens) => router.push(`/lenses/${lens}`)}
           />
+        </div>
+      ) : viewMode === 'explore' ? (
+        /* ── 3D Explore Mode ── */
+        <div className="flex-1 relative min-h-0">
+          <ConcordiaScene
+            districtId={activeDistrict.id}
+            quality="medium"
+            onBuildingClick={(id) => {
+              const b = activeDistrict.buildings.find(b => b.id === id);
+              if (b) setSelectedBuilding(b);
+            }}
+            onTerrainClick={() => {}}
+            width="100%"
+            height="100%"
+          />
+          {/* 3D scene rendering layers */}
+          <TerrainRenderer />
+          <BuildingRenderer3D />
+          <SkyWeatherRenderer />
+          <WaterRenderer />
+          <ParticleEffectsComponent />
+          <SoundscapeEngine />
+          <AnimationManager />
+          <GameJuice />
+          <LoadingTransitions />
+          <div className="absolute inset-0 pointer-events-none">
+            <AvatarSystem3D
+              playerAvatar={playerAvatar}
+              otherPlayers={[]}
+              npcs={[]}
+              onMove={(pos) => { void pos; }}
+              onEmote={(emote) => { void emote; }}
+            />
+          </div>
+          {/* Camera mode controls */}
+          <div className="absolute top-4 right-4 z-20">
+            <CameraControls
+              cameraState={{ mode: cameraMode, zoom: 15, rotation: 'NE', followTarget: 'avatar', cinematicPlaying: false, cinematicTime: 0, cinematicDuration: 0, transitioning: false }}
+              onModeChange={(mode) => setCameraMode(mode as typeof cameraMode)}
+              onZoom={() => {}}
+              onRotate={() => {}}
+              onTransition={() => {}}
+            />
+          </div>
+          {/* HUD overlay */}
+          <HUDOverlay
+            mode="explore"
+            district={activeDistrict.name}
+            timeOfDay="day"
+            weather="clear"
+            playerCount={1}
+            currency={{ concordCoin: 0, pendingRoyalties: 0 }}
+            professionBadge=""
+            reputationLevel={1}
+            notifications={[]}
+            unreadCount={0}
+            tools={[]}
+            onToolSelect={() => {}}
+            onMenuOpen={() => {}}
+          />
+          {/* Gameplay toolbar */}
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 bg-black/70 border border-white/10 rounded-xl px-2 py-1.5 pointer-events-auto">
+            {([
+              { key: 'inventory', label: 'Inventory', icon: Layers },
+              { key: 'quests', label: 'Quests', icon: Zap },
+              { key: 'chat', label: 'Chat', icon: MessageSquare },
+              { key: 'map', label: 'Map', icon: MapIcon },
+              { key: 'crafting', label: 'Craft', icon: Layers },
+              { key: 'players', label: 'Players', icon: Users },
+              { key: 'profile', label: 'Profile', icon: Eye },
+              { key: 'collaboration', label: 'Collab', icon: Handshake },
+              { key: 'livecollab', label: 'Live Co-op', icon: Radio },
+              { key: 'events', label: 'Events', icon: CalendarDays },
+              { key: 'socialproof', label: 'Social', icon: ThumbsUp },
+              { key: 'notifications', label: 'Notifs', icon: Bell },
+              { key: 'smartnotify', label: 'Smart', icon: BellRing },
+              { key: 'moderation', label: 'Mod', icon: Shield },
+              { key: 'ownership', label: 'Own', icon: Fingerprint },
+              { key: 'federation', label: 'Fed', icon: Network },
+              { key: 'voice', label: 'Voice', icon: Mic },
+              { key: 'voiceassist', label: 'Assist', icon: AudioLines },
+            ] as const).map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                onClick={() => setShowPanel(showPanel === key ? 'none' : key)}
+                className={`flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-lg text-[10px] transition-colors ${showPanel === key ? 'bg-emerald-500/20 text-emerald-300' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
+              >
+                <Icon className="w-4 h-4" />
+                {label}
+              </button>
+            ))}
+          </div>
+          {/* Side panels */}
+          {showPanel === 'inventory' && (
+            <div className="absolute top-4 left-4 z-20 w-80 max-h-[70vh] overflow-auto pointer-events-auto">
+              <InventoryPanel onClose={() => setShowPanel('none')} />
+            </div>
+          )}
+          {showPanel === 'quests' && (
+            <div className="absolute top-4 left-4 z-20 w-80 max-h-[70vh] overflow-auto pointer-events-auto">
+              <QuestPanel onClose={() => setShowPanel('none')} />
+            </div>
+          )}
+          {showPanel === 'chat' && (
+            <div className="absolute top-4 left-4 z-20 w-96 max-h-[70vh] overflow-auto pointer-events-auto">
+              <ChatSystem />
+            </div>
+          )}
+          {showPanel === 'map' && (
+            <div className="absolute top-4 left-4 z-20 w-80 max-h-[70vh] overflow-auto pointer-events-auto">
+              <MapNavigation
+                playerPosition={{ x: 0, y: 0 }}
+                district={activeDistrict.name}
+                buildings={[]}
+                npcs={[]}
+                players={[]}
+                waypoints={[]}
+                onWaypointPlace={() => {}}
+                mapMode="district"
+              />
+            </div>
+          )}
+          {showPanel === 'crafting' && (
+            <div className="absolute top-4 left-4 z-20 w-96 max-h-[70vh] overflow-auto pointer-events-auto">
+              <CraftingPanel onClose={() => setShowPanel('none')} />
+            </div>
+          )}
+          {showPanel === 'players' && (
+            <div className="absolute top-4 left-4 z-20 w-80 max-h-[70vh] overflow-auto pointer-events-auto">
+              <PlayerPresence />
+            </div>
+          )}
+          {showPanel === 'profile' && (
+            <div className="absolute top-4 left-4 z-20 w-96 max-h-[70vh] overflow-auto pointer-events-auto">
+              <PlayerProfile isOwnProfile />
+            </div>
+          )}
+          {showPanel === 'collaboration' && (
+            <div className="absolute top-4 left-4 z-20 w-96 max-h-[70vh] overflow-auto pointer-events-auto">
+              <CollaborationTools />
+            </div>
+          )}
+          {showPanel === 'livecollab' && (
+            <div className="absolute top-4 left-4 z-20 w-96 max-h-[70vh] overflow-auto pointer-events-auto">
+              <LiveCollaboration />
+            </div>
+          )}
+          {showPanel === 'events' && (
+            <div className="absolute top-4 left-4 z-20 w-96 max-h-[70vh] overflow-auto pointer-events-auto">
+              <EventsGatherings />
+            </div>
+          )}
+          {showPanel === 'socialproof' && (
+            <div className="absolute top-4 left-4 z-20 w-80 max-h-[70vh] overflow-auto pointer-events-auto">
+              <SocialProofFeed />
+            </div>
+          )}
+          {showPanel === 'notifications' && (
+            <div className="absolute top-4 left-4 z-20 w-80 max-h-[70vh] overflow-auto pointer-events-auto">
+              <NotificationFeed />
+            </div>
+          )}
+          {showPanel === 'smartnotify' && (
+            <div className="absolute top-4 left-4 z-20 w-80 max-h-[70vh] overflow-auto pointer-events-auto">
+              <SmartNotifications />
+            </div>
+          )}
+          {showPanel === 'moderation' && (
+            <div className="absolute top-4 left-4 z-20 w-96 max-h-[70vh] overflow-auto pointer-events-auto">
+              <ModerationPanel />
+            </div>
+          )}
+          {showPanel === 'ownership' && (
+            <div className="absolute top-4 left-4 z-20 w-96 max-h-[70vh] overflow-auto pointer-events-auto">
+              <OwnershipProfile />
+            </div>
+          )}
+          {showPanel === 'federation' && (
+            <div className="absolute top-4 left-4 z-20 w-96 max-h-[70vh] overflow-auto pointer-events-auto">
+              <FederationPanel />
+            </div>
+          )}
+          {showPanel === 'voice' && (
+            <div className="absolute top-4 left-4 z-20 w-80 max-h-[70vh] overflow-auto pointer-events-auto">
+              <VoiceInterface />
+            </div>
+          )}
+          {showPanel === 'voiceassist' && (
+            <div className="absolute top-4 left-4 z-20 w-80 max-h-[70vh] overflow-auto pointer-events-auto">
+              <VoiceAssistant />
+            </div>
+          )}
         </div>
       ) : viewMode === 'streams' ? (
         <CityStreamingSection />
@@ -740,6 +1054,51 @@ export default function WorldLensPage() {
                 />
               </div>
             )}
+
+            {/* ── Tools Panel ──────────────────────────────── */}
+            <div className="border-t border-white/10">
+              <button
+                onClick={() => setToolsExpanded(!toolsExpanded)}
+                className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-gray-300 hover:text-white transition-colors"
+              >
+                <span className="flex items-center gap-1.5">
+                  <Wrench className="w-3.5 h-3.5 text-cyan-400" />
+                  Tools
+                  {activeTool && (
+                    <span className="ml-1 w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                  )}
+                </span>
+                <ChevronRight className={`w-3.5 h-3.5 transition-transform ${toolsExpanded ? 'rotate-90' : ''}`} />
+              </button>
+              {toolsExpanded && (
+                <div className="px-2 pb-2 space-y-2">
+                  {(['Build', 'Inspect', 'Export', 'Verify', 'Replay'] as const).map(group => {
+                    const tools = DISTRICT_TOOLS.filter(t => t.group === group);
+                    return (
+                      <div key={group}>
+                        <div className="text-[10px] uppercase tracking-wider text-gray-500 px-1 mb-1">{group}</div>
+                        <div className="grid grid-cols-2 gap-1">
+                          {tools.map(({ key, label, icon: Icon }) => (
+                            <button
+                              key={key}
+                              onClick={() => setActiveTool(activeTool === key ? null : key)}
+                              className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] transition-colors ${
+                                activeTool === key
+                                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                                  : 'text-gray-400 hover:text-white hover:bg-white/5 border border-transparent'
+                              }`}
+                            >
+                              <Icon className="w-3 h-3 shrink-0" />
+                              <span className="truncate">{label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Center: District Viewport */}
@@ -771,6 +1130,49 @@ export default function WorldLensPage() {
                   onPublish={handlePublishRawDTU}
                   onCancel={() => setCreationMode(null)}
                 />
+              </div>
+            )}
+
+            {/* ── Tool panel overlays ──────────────────────── */}
+            {activeTool && (
+              <div className="absolute left-60 top-24 z-20 w-[480px] max-h-[75vh] overflow-auto bg-gray-900/95 border border-white/10 rounded-xl shadow-2xl">
+                <div className="sticky top-0 z-10 flex items-center justify-between px-3 py-2 border-b border-white/10 bg-gray-900/95 backdrop-blur">
+                  <span className="text-xs font-semibold text-cyan-300">
+                    {DISTRICT_TOOLS.find(t => t.key === activeTool)?.label}
+                  </span>
+                  <button onClick={() => setActiveTool(null)} className="p-0.5 rounded hover:bg-white/10 text-gray-400 hover:text-white">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <div className="p-2">
+                  {activeTool === 'snapbuild' && <SnapBuildCatalog onClose={() => setActiveTool(null)} />}
+                  {activeTool === 'dsl' && <ConcordDSLEditor />}
+                  {activeTool === 'terminal' && <ConcordTerminal />}
+                  {activeTool === 'diff' && <DTUDiffViewer />}
+                  {activeTool === 'standards' && <StandardsLibrary />}
+                  {activeTool === 'fabrication' && <FabricationExportPanel />}
+                  {activeTool === 'embed' && (
+                    <ExportEmbed
+                      dtuId={selectedBuilding?.dtuId ?? 'none'}
+                      dtuName={selectedBuilding?.dtuId ?? 'Selected DTU'}
+                    />
+                  )}
+                  {activeTool === 'notebook' && <NotebookEditor />}
+                  {activeTool === 'depgraph' && <DependencyGraphViewer />}
+                  {activeTool === 'digitaltwin' && <DigitalTwinDashboard />}
+                  {activeTool === 'sensors' && <SensorDashboard />}
+                  {activeTool === 'marketplace' && <ServiceMarketplace />}
+                  {activeTool === 'certificates' && <CertificatePanel />}
+                  {activeTool === 'notarization' && <NotarizationPanel />}
+                  {activeTool === 'stresstest' && (
+                    <StressTestPanel
+                      districtId={activeDistrict.id}
+                      buildingCount={activeDistrict.buildings.length}
+                    />
+                  )}
+                  {activeTool === 'replay' && <ReplayForensics />}
+                  {activeTool === 'spectator' && <ReplaySpectator />}
+                </div>
               </div>
             )}
 

@@ -303,6 +303,34 @@ export default function AffectLensPage() {
     },
   });
 
+  // --- Policy toggle via artifact action ---
+  const togglePolicy = useMutation({
+    mutationFn: async ({ category, key, newValue }: { category: string; key: string; newValue: boolean }) => {
+      // Use the lens artifact action system to request a policy toggle
+      if (bridge.selectedId) {
+        return runAction.mutateAsync({
+          id: bridge.selectedId,
+          action: 'togglePolicy',
+          params: { category, key, value: newValue, sessionId },
+        });
+      }
+      // Fallback: emit a CUSTOM event carrying the toggle payload
+      return apiHelpers.affect.emit(sessionId, {
+        type: 'CUSTOM',
+        intensity: 0,
+        polarity: 0,
+        payload: { action: 'togglePolicy', category, key, value: newValue },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['affect-policy', sessionId] });
+      queryClient.invalidateQueries({ queryKey: ['affect-state', sessionId] });
+    },
+    onError: (err) => {
+      console.error('Policy toggle failed:', err instanceof Error ? err.message : err);
+    },
+  });
+
   // --- Derived data ---
 
   const affectState = useMemo(() => {
@@ -1131,7 +1159,12 @@ export default function AffectLensPage() {
                                   </div>
                                   <div className="flex items-center gap-2">
                                     {isBoolean ? (
-                                      <span className="flex items-center gap-1">
+                                      <button
+                                        onClick={() => togglePolicy.mutate({ category, key, newValue: !val })}
+                                        disabled={togglePolicy.isPending}
+                                        className="flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity disabled:opacity-50"
+                                        title={`Click to toggle ${key.replace(/_/g, ' ')} ${val ? 'off' : 'on'}`}
+                                      >
                                         {val ? (
                                           <ToggleRight className="w-5 h-5 text-green-400" />
                                         ) : (
@@ -1144,7 +1177,7 @@ export default function AffectLensPage() {
                                         >
                                           {val ? 'ON' : 'OFF'}
                                         </span>
-                                      </span>
+                                      </button>
                                     ) : isNumber ? (
                                       <div className="flex items-center gap-2">
                                         <div className="w-16 h-1.5 bg-lattice-deep rounded-full overflow-hidden">

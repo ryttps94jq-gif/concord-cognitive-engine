@@ -46,9 +46,15 @@ import { cn } from '@/lib/utils';
 import { ds } from '@/lib/design-system';
 import { PurchaseFlow } from '@/components/wallet/PurchaseFlow';
 import { WithdrawFlow } from '@/components/wallet/WithdrawFlow';
+import { StripeConnectPanel } from '@/components/wallet/StripeConnectPanel';
+import { WalletWidget } from '@/components/wallet/WalletWidget';
+import { TokenBalance } from '@/components/economy/TokenBalance';
+import { TransactionHistory } from '@/components/economy/TransactionHistory';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
+import { BountiesAndFutures } from '@/components/economy/BountiesAndFutures';
+import { WalletBadge } from '@/components/economy/WalletBadge';
 import { Zap, X as XIcon } from 'lucide-react';
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -329,6 +335,8 @@ function WalletPageInner() {
             <Wallet className="w-7 h-7" />
           </div>
           <h1 className={ds.heading1}>Wallet & Billing</h1>
+          <WalletBadge />
+          <WalletWidget compact className="ml-auto" />
         </div>
       </div>
 
@@ -369,6 +377,7 @@ function WalletPageInner() {
               <DollarSign className="w-3.5 h-3.5" />
               {balance.toLocaleString()}.00 USD
             </p>
+            <TokenBalance />
 
             {/* Sparkline */}
             {sparklineData && sparklineData.length > 2 && (
@@ -481,12 +490,34 @@ function WalletPageInner() {
             />
           </motion.div>
 
+          {/* Stripe Connect Panel */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+          >
+            <StripeConnectPanel />
+          </motion.div>
+
+          {/* Recent Transactions */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className={ds.panel}
+          >
+            <div className="space-y-3">
+              <h3 className={ds.heading3}>Recent Activity</h3>
+              <TransactionHistory limit={5} />
+            </div>
+          </motion.div>
+
           {/* Earnings Summary Card (for creators) */}
           {(earnings.totalEarned > 0 || totalCredits > 0) && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
+              transition={{ delay: 0.3 }}
               className={ds.panel}
             >
               <div className="space-y-4">
@@ -550,6 +581,16 @@ function WalletPageInner() {
               </div>
             </motion.div>
           )}
+
+          {/* Bounties & Futures */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35 }}
+            className={ds.panel}
+          >
+            <BountiesAndFutures />
+          </motion.div>
         </div>
 
         {/* Right Column: Transaction History */}

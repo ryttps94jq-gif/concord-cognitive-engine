@@ -299,6 +299,19 @@ export default function PhysicsLensPage() {
     fps: 60
   });
 
+  // Auto-load the Bouncing Balls preset and start simulation on first mount
+  const hasInitialized = useRef(false);
+  useEffect(() => {
+    if (hasInitialized.current) return;
+    hasInitialized.current = true;
+    const preset = PRESETS.find(p => p.name === 'Bouncing Balls');
+    if (preset) {
+      loadPreset(preset);
+      setIsRunning(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Helper functions
   const distance = (a: Vector2D, b: Vector2D) =>
     Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);

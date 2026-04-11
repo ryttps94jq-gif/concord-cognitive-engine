@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   GitBranch, Plus, CheckCircle2, ArrowRight, Brain,
@@ -14,7 +14,8 @@ import {
   ThumbsUp, ThumbsDown, Link2, FileText, Sparkles,
   Target, Scale, Eye, Layers, Zap, RefreshCw,
   Download, X, Trash2, Flag,
-  CircleDot, ArrowUpRight, MessageSquare, Hash
+  CircleDot, ArrowUpRight, MessageSquare, Hash,
+  Loader2, Play
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { ds } from '@/lib/design-system';
@@ -521,6 +522,10 @@ export default function ReasoningLensPage() {
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [templateFormValues, setTemplateFormValues] = useState<Record<string, string>>({});
 
+  // ----- Analysis action state -----
+  const [analysisResult, setAnalysisResult] = useState<Record<string, unknown> | null>(null);
+  const [analysisRunning, setAnalysisRunning] = useState<string | null>(null);
+
   // ----- API queries -----
   const { data: chainsData, isError: isError2, error: error2, refetch: refetch2 } = useQuery({
     queryKey: ['reasoning-chains'],
@@ -581,6 +586,22 @@ export default function ReasoningLensPage() {
 
   // ----- Domain actions via useRunArtifact -----
   const runAction = useRunArtifact('reasoning');
+
+  // ----- Auto-seed artifact from backend chains (ensures action buttons have a target) -----
+  const chainSeeded = useRef(false);
+  useEffect(() => {
+    if (chainSeeded.current || chainArtifacts.length > 0 || !chainsData) return;
+    const allChains: Chain[] = chainsData?.chains || chainsData || [];
+    if (allChains.length > 0) {
+      chainSeeded.current = true;
+      const first = allChains[0];
+      createChainArtifact({
+        title: first.premise || 'Reasoning Chain',
+        data: { chainId: first.id, type: first.type, premise: first.premise },
+        meta: { status: first.status || 'active', tags: ['auto-synced'] },
+      });
+    }
+  }, [chainsData, chainArtifacts.length, createChainArtifact]);
 
   // ----- Derived data -----
   const chains: Chain[] = chainsData?.chains || chainsData || [];
@@ -894,6 +915,31 @@ export default function ReasoningLensPage() {
     a.click();
     URL.revokeObjectURL(url);
   }, [selectedMap]);
+
+  // ----- Analysis tab backend action handler -----
+  const handleAnalysisAction = useCallback(async (action: string) => {
+    const artifactId = chainArtifacts[0]?.id;
+    if (!artifactId) {
+      setAnalysisResult({ message: 'No reasoning artifacts synced yet. Create a chain or argument map first.' });
+      return;
+    }
+    setAnalysisRunning(action);
+    setAnalysisResult(null);
+    try {
+      const res = await runAction.mutateAsync({ id: artifactId, action, params: { chainId: selectedChain } });
+      if (res.ok === false) {
+        setAnalysisResult({ message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` });
+      } else {
+        setAnalysisResult((res.result as Record<string, unknown>) || { message: 'Analysis complete' });
+      }
+      queryClient.invalidateQueries({ queryKey: ['reasoning-chains'] });
+    } catch (e) {
+      console.error(`Analysis action ${action} failed:`, e);
+      setAnalysisResult({ message: `Action failed: ${e instanceof Error ? e.message : 'Unknown error'}` });
+    } finally {
+      setAnalysisRunning(null);
+    }
+  }, [chainArtifacts, runAction, selectedChain, queryClient]);
 
   // ----- Error state -----
   if (isLoading) {
@@ -1950,6 +1996,45 @@ export default function ReasoningLensPage() {
               </div>
             ) : (
               <p className={ds.textMuted}>No chains to analyze. Create chains in the Arguments tab.</p>
+            )}
+          </div>
+
+          {/* Backend Reasoning Analysis Actions */}
+          <div className={ds.panel}>
+            <h3 className={cn(ds.heading3, 'text-sm mb-3 flex items-center gap-2')}>
+              <Brain className="w-4 h-4 text-neon-purple" />
+              AI-Powered Analysis
+            </h3>
+            <p className={cn(ds.textMuted, 'mb-3')}>
+              Run backend reasoning analysis engines against your arguments and chains.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { action: 'deepAnalysis', label: 'Deep Analysis' },
+                { action: 'counterArgumentGen', label: 'Generate Counter-Arguments' },
+                { action: 'strengthAssessment', label: 'Full Strength Assessment' },
+              ].map(({ action, label }) => (
+                <button
+                  key={action}
+                  onClick={() => handleAnalysisAction(action)}
+                  disabled={!!analysisRunning || chainArtifacts.length === 0}
+                  className={cn(ds.btnSmall, 'bg-neon-purple/10 text-neon-purple border border-neon-purple/30 hover:bg-neon-purple/20 disabled:opacity-50 disabled:cursor-not-allowed')}
+                >
+                  {analysisRunning === action ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+                  {label}
+                </button>
+              ))}
+            </div>
+            {analysisResult && (
+              <div className="mt-3 bg-lattice-deep rounded-lg p-4 text-sm">
+                {'message' in analysisResult ? (
+                  <p className={ds.textMuted}>{String(analysisResult.message)}</p>
+                ) : (
+                  <pre className="whitespace-pre-wrap text-xs text-gray-300 font-mono max-h-48 overflow-y-auto">
+                    {JSON.stringify(analysisResult, null, 2)}
+                  </pre>
+                )}
+              </div>
             )}
           </div>
         </div>

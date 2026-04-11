@@ -205,6 +205,8 @@ export default function StudioLensPage() {
   const [project, setProject] = useState<DAWProject | null>(null);
   const [transportState, setTransportState] = useState<TransportState>('stopped');
   const transportStateRef = useRef<TransportState>('stopped');
+  const drumPatternRef = useRef<DrumPattern | null>(null);
+  const projectRef = useRef<DAWProject | null>(null);
   const [currentBeat, setCurrentBeat] = useState(0);
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
@@ -277,10 +279,10 @@ export default function StudioLensPage() {
   const [aiLoading, setAiLoading] = useState<string | null>(null);
   const [aiResult, setAiResult] = useState<{ title: string; content: string } | null>(null);
 
-  // Keep transportState ref in sync for use in intervals
-  useEffect(() => {
-    transportStateRef.current = transportState;
-  }, [transportState]);
+  // Keep refs in sync for use in intervals / event handlers
+  useEffect(() => { transportStateRef.current = transportState; }, [transportState]);
+  useEffect(() => { drumPatternRef.current = drumPattern; }, [drumPattern]);
+  useEffect(() => { projectRef.current = project; }, [project]);
 
   // ---- Initialize engines ----
   useEffect(() => {
@@ -290,11 +292,52 @@ export default function StudioLensPage() {
     recorderRef.current = new AudioRecorder();
 
     const unsub = transportRef.current.on('beatChange', (data) => {
-      setCurrentBeat(data.beat as number);
-      // Update drum step for sequencer
       const beat = data.beat as number;
-      const step = Math.floor((beat % 4) * 4) % (drumPattern?.steps || 16);
-      setDrumStep(step);
+      setCurrentBeat(beat);
+
+      // ---- Drum sequencer auto-playback ----
+      const pattern = drumPatternRef.current;
+      if (pattern && transportStateRef.current === 'playing') {
+        const stepCount = pattern.steps || 16;
+        const step = Math.floor((beat % 4) * 4) % stepCount;
+        setDrumStep(step);
+        for (const track of pattern.tracks) {
+          const s = track.steps[step];
+          if (s?.active) {
+            drumEngineRef.current?.triggerPad(track.padId, s.velocity ?? 100);
+          }
+        }
+      }
+
+      // ---- MIDI note playback ----
+      const proj = projectRef.current;
+      if (proj && transportStateRef.current === 'playing') {
+        for (const track of proj.tracks) {
+          if (track.type !== 'midi') continue;
+          for (const clip of track.clips) {
+            if (!clip.midiNotes) continue;
+            const clipBeat = beat - (clip.startBeat || 0);
+            if (clipBeat < 0) continue;
+            for (const note of clip.midiNotes) {
+              // Trigger note if this beat matches start
+              if (Math.abs(note.startBeat - clipBeat) < 0.125) {
+                let synth = synthEnginesRef.current.get(track.id);
+                if (!synth) {
+                  synth = new SynthEngine(DEFAULT_SYNTH_PRESETS[0]);
+                  const mixerInput = mixerRef.current?.getChannelInput(track.id);
+                  if (mixerInput) synth.connect(mixerInput);
+                  synthEnginesRef.current.set(track.id, synth);
+                }
+                synth.noteOn(note.pitch, note.velocity);
+                // Schedule noteOff based on note duration
+                const ctx = getAudioContext();
+                const durationSec = (note.lengthBeats / (proj.bpm / 60));
+                setTimeout(() => synth!.noteOff(note.pitch), durationSec * 1000);
+              }
+            }
+          }
+        }
+      }
     });
 
     const unsubDTU = dtuHooks.subscribe((event) => {
@@ -321,6 +364,59 @@ export default function StudioLensPage() {
       synthEngines.forEach(s => s.dispose());
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ---- Web MIDI input wiring ----
+  useEffect(() => {
+    let midiAccess: MIDIAccess | null = null;
+    const handleMIDIMessage = (e: MIDIMessageEvent) => {
+      const data = e.data;
+      if (!data || data.length < 2) return;
+      const status = data[0] & 0xf0;
+      const note = data[1];
+      const velocity = data.length > 2 ? data[2] : 0;
+
+      // Route to the synth on the selected track (or first available)
+      const trackId = selectedTrackId || projectRef.current?.tracks.find(t => t.type === 'midi')?.id;
+      if (!trackId) return;
+
+      let synth = synthEnginesRef.current.get(trackId);
+      if (!synth) {
+        synth = new SynthEngine(DEFAULT_SYNTH_PRESETS[0]);
+        const mixerInput = mixerRef.current?.getChannelInput(trackId);
+        if (mixerInput) synth.connect(mixerInput);
+        synthEnginesRef.current.set(trackId, synth);
+      }
+
+      if (status === 0x90 && velocity > 0) {
+        synth.noteOn(note, velocity);
+      } else if (status === 0x80 || (status === 0x90 && velocity === 0)) {
+        synth.noteOff(note);
+      }
+    };
+
+    const onMIDIInput = (input: MIDIInput) => {
+      input.onmidimessage = handleMIDIMessage;
+    };
+
+    if (typeof navigator !== 'undefined' && navigator.requestMIDIAccess) {
+      navigator.requestMIDIAccess().then((access) => {
+        midiAccess = access;
+        access.inputs.forEach(onMIDIInput);
+        access.onstatechange = () => {
+          access.inputs.forEach(onMIDIInput);
+        };
+      }).catch((err) => {
+        console.warn('[Studio] Web MIDI not available:', err);
+      });
+    }
+
+    return () => {
+      if (midiAccess) {
+        midiAccess.inputs.forEach(input => { input.onmidimessage = null; });
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTrackId]);
 
   // ---- Project operations ----
   const selectedTrack = useMemo(
@@ -573,6 +669,8 @@ export default function StudioLensPage() {
     updateProject(p => {
       const name = type === 'audio' ? `Audio ${p.tracks.length + 1}` : `Track ${p.tracks.length + 1}`;
       const track = createDefaultTrack(name, type, p.tracks.length, instrumentId);
+      // Create a mixer channel for the new track
+      mixerRef.current?.addChannel(track.id);
       emitTrackCreated(track, p.id);
       return { ...p, tracks: [...p.tracks, track] };
     });
@@ -588,8 +686,26 @@ export default function StudioLensPage() {
 
   const handleDeleteTrack = useCallback((trackId: string) => {
     updateProject(p => ({ ...p, tracks: p.tracks.filter(t => t.id !== trackId) }));
+    // Clean up audio engine resources for this track
+    mixerRef.current?.removeChannel(trackId);
+    const synth = synthEnginesRef.current.get(trackId);
+    if (synth) { synth.dispose(); synthEnginesRef.current.delete(trackId); }
     if (selectedTrackId === trackId) setSelectedTrackId(null);
   }, [updateProject, selectedTrackId]);
+
+  // ---- Synth engine helper ----
+  const getOrCreateSynth = useCallback((trackId: string): SynthEngine => {
+    let synth = synthEnginesRef.current.get(trackId);
+    if (!synth) {
+      const preset = activeSynthPreset || DEFAULT_SYNTH_PRESETS[0];
+      synth = new SynthEngine(preset);
+      // Route through mixer if channel exists, else direct
+      const mixerInput = mixerRef.current?.getChannelInput(trackId);
+      if (mixerInput) synth.connect(mixerInput);
+      synthEnginesRef.current.set(trackId, synth);
+    }
+    return synth;
+  }, [activeSynthPreset]);
 
   // ---- MIDI / Piano Roll ----
   const handleAddNote = useCallback((note: MIDINote) => {
@@ -605,7 +721,14 @@ export default function StudioLensPage() {
         ),
       })),
     }));
-  }, [updateProject, selectedClipId]);
+    // Audition the note immediately
+    if (selectedTrackId) {
+      const synth = getOrCreateSynth(selectedTrackId);
+      resumeAudioContext();
+      synth.noteOn(note.pitch, note.velocity);
+      setTimeout(() => synth.noteOff(note.pitch), 200);
+    }
+  }, [updateProject, selectedClipId, selectedTrackId, getOrCreateSynth]);
 
   const handleUpdateNote = useCallback((noteId: string, data: Partial<MIDINote>) => {
     updateProject(p => ({
@@ -1072,29 +1195,49 @@ export default function StudioLensPage() {
               selectedTrackId={selectedTrackId}
               spectrumData={spectrumData}
               onSelectTrack={setSelectedTrackId}
-              onUpdateTrack={handleUpdateTrack}
+              onUpdateTrack={(trackId, data) => {
+                handleUpdateTrack(trackId, data);
+                // Wire volume/pan/mute changes to the audio engine
+                if (data.volume !== undefined) mixerRef.current?.setVolume(trackId, data.volume);
+                if (data.pan !== undefined) mixerRef.current?.setPan(trackId, data.pan);
+                if (data.mute !== undefined) mixerRef.current?.setMute(trackId, data.mute);
+              }}
               onToggleEffect={(trackId, effectId) => {
-                updateProject(p => ({
-                  ...p,
-                  tracks: p.tracks.map(t =>
-                    t.id === trackId
-                      ? { ...t, effectChain: t.effectChain.map(e => e.id === effectId ? { ...e, enabled: !e.enabled } : e) }
-                      : t
-                  ),
-                }));
+                updateProject(p => {
+                  const updated = {
+                    ...p,
+                    tracks: p.tracks.map(t =>
+                      t.id === trackId
+                        ? { ...t, effectChain: t.effectChain.map(e => e.id === effectId ? { ...e, enabled: !e.enabled } : e) }
+                        : t
+                    ),
+                  };
+                  // Sync effect state to engine
+                  const track = updated.tracks.find(t => t.id === trackId);
+                  if (track) mixerRef.current?.setChannelEffects(trackId, track.effectChain);
+                  return updated;
+                });
               }}
               onAddEffect={(trackId) => { setSelectedTrackId(trackId); setStudioView('effects'); }}
               onRemoveEffect={(trackId, effectId) => {
-                updateProject(p => ({
-                  ...p,
-                  tracks: p.tracks.map(t =>
-                    t.id === trackId
-                      ? { ...t, effectChain: t.effectChain.filter(e => e.id !== effectId) }
-                      : t
-                  ),
-                }));
+                updateProject(p => {
+                  const updated = {
+                    ...p,
+                    tracks: p.tracks.map(t =>
+                      t.id === trackId
+                        ? { ...t, effectChain: t.effectChain.filter(e => e.id !== effectId) }
+                        : t
+                    ),
+                  };
+                  const track = updated.tracks.find(t => t.id === trackId);
+                  if (track) mixerRef.current?.setChannelEffects(trackId, track.effectChain);
+                  return updated;
+                });
               }}
-              onMasterVolumeChange={(vol) => updateProject(p => ({ ...p, masterBus: { ...p.masterBus, volume: vol } }))}
+              onMasterVolumeChange={(vol) => {
+                updateProject(p => ({ ...p, masterBus: { ...p.masterBus, volume: vol } }));
+                mixerRef.current?.setMasterVolume(vol);
+              }}
             />
           )}
 

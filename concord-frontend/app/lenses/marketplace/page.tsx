@@ -51,6 +51,7 @@ import { ArtifactRenderer } from '@/components/artifact/ArtifactRenderer';
 import { ArtifactUploader } from '@/components/artifact/ArtifactUploader';
 import { FeedbackWidget } from '@/components/feedback/FeedbackWidget';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
+import { useAuth } from '@/hooks/useAuth';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
@@ -58,6 +59,10 @@ import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { ProvenanceBadge } from '@/components/dtu/ProvenanceBadge';
 import { PullToSubstrate } from '@/components/lens/PullToSubstrate';
 import { FeedBanner } from '@/components/lens/FeedBanner';
+import { ArtifactDetailModal } from '@/components/market/ArtifactDetailModal';
+import { RoyaltyDashboard } from '@/components/market/RoyaltyDashboard';
+import { MarketplaceTab } from '@/components/lens/MarketplaceTab';
+import RoyaltyCascadeViz from '@/components/visualizations/RoyaltyCascadeViz';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -292,17 +297,17 @@ function WaveformBars({ playing, small }: { playing?: boolean; small?: boolean }
 }
 
 function ItemCard({
-  item, onPlay, isPlaying, onAddToCart, viewMode,
+  item, onPlay, isPlaying, onAddToCart, viewMode, onSelect,
 }: {
   item: MarketplaceItem; onPlay: (item: MarketplaceItem) => void; isPlaying: boolean;
-  onAddToCart: (item: MarketplaceItem) => void; viewMode: ViewMode;
+  onAddToCart: (item: MarketplaceItem) => void; viewMode: ViewMode; onSelect?: (item: MarketplaceItem) => void;
 }) {
   const Icon = typeIcon(item.type);
   const audio = hasPreview(item.type);
 
   if (viewMode === 'list') {
     return (
-      <motion.div layout className="panel p-4 flex items-center gap-4 hover:border-neon-purple/40 transition-colors cursor-pointer">
+      <motion.div layout onClick={() => onSelect?.(item)} className="panel p-4 flex items-center gap-4 hover:border-neon-purple/40 transition-colors cursor-pointer">
         {/* Thumbnail */}
         <div className="relative w-14 h-14 rounded-lg bg-lattice-deep flex items-center justify-center shrink-0 overflow-hidden">
           {audio ? <WaveformBars playing={isPlaying} small /> : <Icon className="w-6 h-6 text-gray-500" />}
@@ -337,7 +342,7 @@ function ItemCard({
   }
 
   return (
-    <motion.div layout className="panel p-0 overflow-hidden hover:border-amber-500/40 hover:shadow-lg hover:shadow-amber-500/5 transition-all duration-200 cursor-pointer group">
+    <motion.div layout onClick={() => onSelect?.(item)} className="panel p-0 overflow-hidden hover:border-amber-500/40 hover:shadow-lg hover:shadow-amber-500/5 transition-all duration-200 cursor-pointer group">
       {/* Thumbnail */}
       <div className="relative h-36 bg-lattice-deep flex items-center justify-center">
         {audio ? (
@@ -430,6 +435,7 @@ export default function MarketplaceLensPage() {
   useLensNav('marketplace');
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('marketplace');
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   // State
   const [tab, setTab] = useState<Tab>('browse');
@@ -448,6 +454,7 @@ export default function MarketplaceLensPage() {
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [showFeatures, setShowFeatures] = useState(true);
   const [showCheckoutConfirm, setShowCheckoutConfirm] = useState(false);
+  const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null);
 
   // New listing form state
   const [newListingForm, setNewListingForm] = useState({
@@ -955,7 +962,8 @@ export default function MarketplaceLensPage() {
               {filteredItems.map(item => (
                 <ItemCard key={item.id} item={item} viewMode={viewMode}
                   isPlaying={previewItem?.id === item.id && isPlaying}
-                  onPlay={handlePlay} onAddToCart={addToCart} />
+                  onPlay={handlePlay} onAddToCart={addToCart}
+                  onSelect={(i) => setSelectedArtifactId(i.id)} />
               ))}
             </AnimatePresence>
           </div>
@@ -965,6 +973,9 @@ export default function MarketplaceLensPage() {
               <p>No items match your filters.</p>
             </div>
           )}
+
+          {/* Domain-specific marketplace artifacts */}
+          <MarketplaceTab domain="marketplace" className="mt-6" />
         </motion.div>
       )}
 
@@ -1365,6 +1376,12 @@ export default function MarketplaceLensPage() {
       {/* ================================================================== */}
       {tab === 'analytics' && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+          {/* Royalty Cascade Flow Visualization */}
+          <RoyaltyCascadeViz />
+
+          {/* Royalty Earnings Dashboard */}
+          {user?.id && <RoyaltyDashboard userId={user.id} />}
+
           <div className="panel p-5 space-y-4">
             <h3 className="font-semibold flex items-center gap-2"><BarChart2 className="w-4 h-4 text-neon-cyan" /> Revenue Over Time</h3>
             <div className="flex items-center justify-center h-40 text-gray-500 text-sm">
@@ -1420,6 +1437,14 @@ export default function MarketplaceLensPage() {
             onToggle={() => setIsPlaying(p => !p)} onClose={closePreview} />
         )}
       </AnimatePresence>
+
+      {/* Artifact Detail Modal — opened on item click */}
+      {selectedArtifactId && (
+        <ArtifactDetailModal
+          artifactId={selectedArtifactId}
+          onClose={() => setSelectedArtifactId(null)}
+        />
+      )}
 
       {/* ================================================================== */}
       {/* DTU CONTEXT PANEL & ARTIFACTS (v3.0)                               */}

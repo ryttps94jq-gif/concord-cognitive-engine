@@ -6,14 +6,14 @@ import { apiHelpers, api } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
 import { useState, useEffect, useCallback } from 'react';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
-import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useLensBridge } from '@/lib/hooks/use-lens-bridge';
 import { useRouter } from 'next/navigation';
 import {
   Shield, Activity, Brain, Layers, Puzzle, Cpu, Users, Settings,
   AlertTriangle, Moon, FileText, Pause, Play,
   Save, Trash2, XCircle, Loader2, Clock, ArrowUp,
   Zap, Send, MapPin, Focus, ShieldAlert, ChevronDown,
-  Lightbulb, GitBranch, Globe,
+  Lightbulb, GitBranch, Globe, Undo2, Compass, Radio,
 } from 'lucide-react';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -21,6 +21,10 @@ import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import FoundationCard from '@/components/chat/FoundationCard';
+import { ActionPreviewModal } from '@/components/guidance/ActionPreviewModal';
+import { ActivityFeed } from '@/components/guidance/ActivityFeed';
+import { UndoTimeline } from '@/components/guidance/UndoTimeline';
+import { SystemGuidePanel } from '@/components/guidance/SystemGuidePanel';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -1738,6 +1742,9 @@ const TABS = [
   { id: 'foundation', label: 'Foundation', icon: Globe },
   { id: 'predictions', label: 'Predictions', icon: Puzzle },
   { id: 'logs', label: 'Logs', icon: FileText },
+  { id: 'activity', label: 'Activity', icon: Radio },
+  { id: 'undo', label: 'Undo', icon: Undo2 },
+  { id: 'guide', label: 'Guide', icon: Compass },
 ] as const;
 
 type TabId = typeof TABS[number]['id'];
@@ -1750,20 +1757,37 @@ export default function CommandCenterPage() {
   const router = useRouter();
   const [showFeatures, setShowFeatures] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>('vitals');
+  const [actionPreview, setActionPreview] = useState<{ action: string; entityType: string; entityId: string; onConfirm: () => void } | null>(null);
 
   // --- Backend action wiring ---
   const runAction = useRunArtifact('commandcenter');
-  const { items: ccItems } = useLensData('commandcenter', 'event', {});
+  const bridge = useLensBridge('commandcenter', 'event');
   const [actionResult, setActionResult] = useState<unknown>(null);
   const [isRunning, setIsRunning] = useState(false);
 
-  const ccTargetId = ccItems[0]?.id ?? 'default';
+  // Fetch system health to seed the bridge artifact (gives actions a real target ID)
+  const { data: mainHealth } = useQuery({
+    queryKey: ['cc-health-bridge'],
+    queryFn: () => apiHelpers.guidance.health().then(r => r.data),
+    refetchInterval: 30000,
+  });
+
+  // Auto-sync health snapshot into lens artifacts so guidance actions have a target
+  useEffect(() => {
+    if (mainHealth && typeof mainHealth === 'object') {
+      bridge.sync(mainHealth as Record<string, unknown>, 'Command Center Health Snapshot');
+    }
+  }, [mainHealth, bridge]);
 
   const handleAction = useCallback(async (action: string) => {
+    if (!bridge.selectedId) {
+      setActionResult({ message: 'No artifact available yet. Wait for system health data to sync.' });
+      return;
+    }
     setIsRunning(true);
     setActionResult(null);
     try {
-      const res = await runAction.mutateAsync({ id: ccTargetId, action });
+      const res = await runAction.mutateAsync({ id: bridge.selectedId, action });
       if (res.ok === false) {
         setActionResult({ message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` });
       } else {
@@ -1774,7 +1798,7 @@ export default function CommandCenterPage() {
     } finally {
       setIsRunning(false);
     }
-  }, [runAction, ccTargetId]);
+  }, [runAction, bridge.selectedId]);
 
   // Auth check — any authenticated user can access command center
   const { data: me, isLoading: authLoading } = useQuery({
@@ -1819,6 +1843,9 @@ export default function CommandCenterPage() {
       case 'foundation': return <FoundationPanel />;
       case 'logs': return <LogsPanel />;
       case 'predictions': return <PredictionMarketPanel />;
+      case 'activity': return <ActivityFeed />;
+      case 'undo': return <UndoTimeline />;
+      case 'guide': return <SystemGuidePanel />;
     }
   };
 
@@ -1902,7 +1929,7 @@ export default function CommandCenterPage() {
             <button
               key={action}
               onClick={() => handleAction(action)}
-              disabled={isRunning}
+              disabled={isRunning || !bridge.selectedId}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {isRunning ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
@@ -1946,6 +1973,17 @@ export default function CommandCenterPage() {
           </div>
         )}
       </div>
+
+      {/* Action Preview Modal — dry-run preview for destructive operations */}
+      {actionPreview && (
+        <ActionPreviewModal
+          action={actionPreview.action}
+          entityType={actionPreview.entityType}
+          entityId={actionPreview.entityId}
+          onConfirm={() => { actionPreview.onConfirm(); setActionPreview(null); }}
+          onCancel={() => setActionPreview(null)}
+        />
+      )}
     </div>
   );
 }

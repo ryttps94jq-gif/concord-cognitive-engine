@@ -6,7 +6,8 @@ import { api } from '@/lib/api/client';
 import { useState, useMemo, useCallback } from 'react';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useLensData } from '@/lib/hooks/use-lens-data';
-import { Book, ChevronRight, Search, Layers, ChevronDown, Code2, GitBranch, FileJson, Shield, RefreshCw, CheckCircle2, AlertCircle, FileText, Clock, Zap, Loader2 } from 'lucide-react';
+import { Book, ChevronRight, Search, Layers, ChevronDown, Code2, GitBranch, FileJson, Shield, RefreshCw, CheckCircle2, AlertCircle, FileText, Clock, Zap, Loader2, Upload } from 'lucide-react';
+import { ArtifactUploader } from '@/components/artifact/ArtifactUploader';
 import { motion } from 'framer-motion';
 import { ConnectiveTissueBar } from '@/components/lens/ConnectiveTissueBar';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
@@ -489,6 +490,21 @@ export default function DocsLensPage() {
             </div>
           )}
         </div>
+
+      {/* File Upload */}
+      <div className="panel p-4 space-y-3">
+        <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+          <Upload className="w-4 h-4 text-neon-green" /> Upload Document
+        </h3>
+        <ArtifactUploader
+          lens="docs"
+          onUploadComplete={(dtuId) => {
+            console.log('[Docs] Uploaded artifact:', dtuId);
+          }}
+          acceptTypes=".pdf,.md,.txt,.docx,.json,.csv"
+          compact
+        />
+      </div>
 
       {/* Real-time Data Panel */}
       {realtimeData && (

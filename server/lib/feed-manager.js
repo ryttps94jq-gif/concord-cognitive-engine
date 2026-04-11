@@ -18,6 +18,7 @@
 import { createHash, randomUUID } from "crypto";
 import logger from "../logger.js";
 import { feedAttribution } from "./source-attribution.js";
+import { browserEngine } from "./browser-engine.js";
 
 // ══════════════════════════════════════════════════════════════════════════════
 // CONSTANTS & LIMITS
@@ -393,6 +394,7 @@ async function fetchFeed(feedSource) {
 
     let items = [];
     const type = feedSource.type || "rss";
+    const mode = feedSource.mode || "standard";
 
     if (type === "rss" || type === "xml" || type === "atom") {
       const text = await res.text();
@@ -400,9 +402,54 @@ async function fetchFeed(feedSource) {
     } else if (type === "json") {
       const data = await res.json();
       items = parseJSON(data, feedSource);
+    } else if (type === "html" && mode === "rendered") {
+      // JS-rendered HTML: use Playwright via BrowserEngine for full rendering
+      const rendered = await browserEngine.fetchRenderedPage(feedSource.url, {
+        timeout: feedSource.timeout || FETCH_TIMEOUT,
+        waitFor: feedSource.waitFor || undefined,
+      });
+      if (rendered.ok) {
+        items = parseHTML(rendered.html, feedSource);
+        // If HTML parser found nothing, create a single item from the rendered text
+        if (items.length === 0 && rendered.text?.length > 20) {
+          items.push({
+            title: rendered.title || feedSource.name || "Rendered Page",
+            sourceUrl: feedSource.url,
+            summary: rendered.text.slice(0, 200),
+            publishedAt: new Date().toISOString(),
+            categories: [],
+            content: rendered.text.slice(0, 10000),
+          });
+        }
+      } else {
+        // Rendered fetch failed — fall back to the standard HTTP response
+        const text = await res.text();
+        items = parseHTML(text, feedSource);
+      }
     } else if (type === "html") {
       const text = await res.text();
       items = parseHTML(text, feedSource);
+    } else if (type === "rendered" || mode === "rendered") {
+      // Explicit "rendered" type: skip the HTTP response, use Playwright directly
+      const rendered = await browserEngine.fetchRenderedPage(feedSource.url, {
+        timeout: feedSource.timeout || FETCH_TIMEOUT,
+        waitFor: feedSource.waitFor || undefined,
+      });
+      if (rendered.ok) {
+        items = parseHTML(rendered.html, feedSource);
+        if (items.length === 0 && rendered.text?.length > 20) {
+          items.push({
+            title: rendered.title || feedSource.name || "Rendered Page",
+            sourceUrl: feedSource.url,
+            summary: rendered.text.slice(0, 200),
+            publishedAt: new Date().toISOString(),
+            categories: [],
+            content: rendered.text.slice(0, 10000),
+          });
+        }
+      } else {
+        throw new Error(`Rendered fetch failed: ${rendered.error}`);
+      }
     }
 
     // Update health

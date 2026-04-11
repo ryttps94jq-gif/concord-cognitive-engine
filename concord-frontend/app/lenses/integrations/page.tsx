@@ -8,7 +8,7 @@ import type { CreateWebhookRequest } from '@/lib/api/generated-types';
 import { useUIStore } from '@/store/ui';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Plug, Webhook, Zap, Code, FileText, Plus, Trash2, Play, ToggleLeft, ToggleRight, Layers, ChevronDown, Link, AlertCircle, Loader2, Activity, CheckCircle } from 'lucide-react';
+import { Plug, Webhook, Zap, Code, FileText, Plus, Trash2, Play, ToggleLeft, ToggleRight, Layers, ChevronDown, Link, AlertCircle, Loader2, Activity, CheckCircle, Send, Clock, Filter } from 'lucide-react';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -24,6 +24,9 @@ export default function IntegrationsLensPage() {
   const [activeTab, setActiveTab] = useState<'webhooks' | 'automations' | 'services'>('webhooks');
   const [showCreate, setShowCreate] = useState(false);
   const [showFeatures, setShowFeatures] = useState(true);
+  const [webhookTestResults, setWebhookTestResults] = useState<Record<string, { status: 'loading' | 'success' | 'error'; message: string }>>({});
+  const [showDeliveryLog, setShowDeliveryLog] = useState<string | null>(null);
+  const [showAutomationBuilder, setShowAutomationBuilder] = useState(false);
 
   // Action wiring
   const runAction = useRunArtifact('integrations');
@@ -47,7 +50,7 @@ export default function IntegrationsLensPage() {
     queryFn: () => apiHelpers.webhooks.list().then(r => r.data),
   });
 
-  const { items: automationItems, isError: isError2, error: error2, refetch: refetch2 } = useLensData('integrations', 'automation', { noSeed: true });
+  const { items: automationItems, isError: isError2, error: error2, refetch: refetch2, create: createAutomation } = useLensData('integrations', 'automation', { noSeed: true });
   const { items: integrationItems, isError: isError3, error: error3, refetch: refetch3 } = useLensData('integrations', 'integration', { noSeed: true });
 
   const createWebhookMutation = useMutation({
@@ -85,6 +88,34 @@ export default function IntegrationsLensPage() {
     },
   });
 
+  const testWebhookMutation = useMutation({
+    mutationFn: async (wh: { id: string; url: string; events: string[] }) => {
+      const testPayload = {
+        event: wh.events?.[0] || 'test.ping',
+        timestamp: new Date().toISOString(),
+        data: { message: 'Test payload from Concord', webhookId: wh.id },
+      };
+      return api.post(`/api/webhooks/${wh.id}/test`, testPayload);
+    },
+    onMutate: (wh) => {
+      setWebhookTestResults((prev) => ({ ...prev, [wh.id]: { status: 'loading', message: 'Sending test payload...' } }));
+    },
+    onSuccess: (_data, wh) => {
+      setWebhookTestResults((prev) => ({ ...prev, [wh.id]: { status: 'success', message: 'Test delivered successfully' } }));
+      setTimeout(() => setWebhookTestResults((prev) => { const n = { ...prev }; delete n[wh.id]; return n; }), 5000);
+    },
+    onError: (err, wh) => {
+      const msg = err instanceof Error ? err.message : 'Test delivery failed';
+      setWebhookTestResults((prev) => ({ ...prev, [wh.id]: { status: 'error', message: msg } }));
+      setTimeout(() => setWebhookTestResults((prev) => { const n = { ...prev }; delete n[wh.id]; return n; }), 8000);
+    },
+  });
+
+  const { data: deliveryLog } = useQuery({
+    queryKey: ['webhook-deliveries', showDeliveryLog],
+    queryFn: () => showDeliveryLog ? apiHelpers.webhooks.deliveries(showDeliveryLog).then(r => r.data) : null,
+    enabled: !!showDeliveryLog,
+  });
 
   if (isLoading) {
     return (
@@ -127,7 +158,7 @@ export default function IntegrationsLensPage() {
         )}
       </div>
         </div>
-        <button onClick={() => setShowCreate(true)} className="btn-primary flex items-center gap-2">
+        <button onClick={() => activeTab === 'automations' ? setShowAutomationBuilder(true) : setShowCreate(true)} className="btn-primary flex items-center gap-2">
           <Plus className="w-4 h-4" />
           Add {activeTab === 'webhooks' ? 'Webhook' : 'Automation'}
         </button>
@@ -186,7 +217,8 @@ export default function IntegrationsLensPage() {
             <EmptyState icon={<Webhook />} message="No webhooks configured" />
           ) : (
             webhooks?.webhooks?.map((wh: Record<string, unknown>, index: number) => (
-              <motion.div key={wh.id as string} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="panel p-4 flex items-center justify-between">
+              <motion.div key={wh.id as string} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="panel p-4">
+                <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-semibold">{String(wh.name)}</h3>
                   <p className="text-xs text-gray-400 truncate max-w-md">{String(wh.url)}</p>
@@ -198,6 +230,23 @@ export default function IntegrationsLensPage() {
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-sm text-gray-400">{String(wh.triggerCount)} triggers</span>
+                  <button
+                    onClick={() => testWebhookMutation.mutate({ id: wh.id as string, url: wh.url as string, events: wh.events as string[] })}
+                    disabled={webhookTestResults[wh.id as string]?.status === 'loading'}
+                    className="btn-secondary text-xs flex items-center gap-1 px-2 py-1"
+                    title="Send test payload"
+                  >
+                    {webhookTestResults[wh.id as string]?.status === 'loading' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                    Test
+                  </button>
+                  <button
+                    onClick={() => setShowDeliveryLog(showDeliveryLog === (wh.id as string) ? null : (wh.id as string))}
+                    className="text-gray-400 hover:text-neon-cyan text-xs flex items-center gap-1"
+                    title="View delivery log"
+                  >
+                    <Clock className="w-3 h-3" />
+                    Log
+                  </button>
                   <button
                     onClick={() => toggleWebhookMutation.mutate({ id: wh.id as string, enabled: !(wh.enabled as boolean) })}
                     disabled={toggleWebhookMutation.isPending}
@@ -213,6 +262,41 @@ export default function IntegrationsLensPage() {
                     <Trash2 className="w-5 h-5" />
                   </button>
                 </div>
+                </div>
+                {webhookTestResults[wh.id as string] && (
+                  <div className={`mt-2 text-xs px-3 py-1.5 rounded ${
+                    webhookTestResults[wh.id as string].status === 'success' ? 'bg-green-500/10 text-green-400' :
+                    webhookTestResults[wh.id as string].status === 'error' ? 'bg-red-500/10 text-red-400' :
+                    'bg-blue-500/10 text-blue-400'
+                  }`}>
+                    {webhookTestResults[wh.id as string].status === 'success' && <CheckCircle className="w-3 h-3 inline mr-1" />}
+                    {webhookTestResults[wh.id as string].status === 'error' && <AlertCircle className="w-3 h-3 inline mr-1" />}
+                    {webhookTestResults[wh.id as string].message}
+                  </div>
+                )}
+                {showDeliveryLog === (wh.id as string) && (
+                  <div className="mt-3 border-t border-lattice-border pt-3">
+                    <h4 className="text-xs font-semibold text-gray-300 mb-2 flex items-center gap-1">
+                      <Clock className="w-3 h-3" /> Recent Deliveries
+                    </h4>
+                    {!deliveryLog || (Array.isArray(deliveryLog) && deliveryLog.length === 0) ? (
+                      <p className="text-xs text-gray-500">No deliveries recorded yet.</p>
+                    ) : (
+                      <div className="space-y-1 max-h-48 overflow-y-auto">
+                        {(Array.isArray(deliveryLog) ? deliveryLog : (deliveryLog as Record<string, unknown>)?.deliveries as Record<string, unknown>[] || []).slice(0, 20).map((d: Record<string, unknown>, i: number) => (
+                          <div key={i} className="flex items-center justify-between bg-lattice-surface rounded px-2 py-1.5 text-xs">
+                            <span className="text-gray-400 font-mono">{String(d.event || d.type || 'delivery')}</span>
+                            <span className={`${Number(d.statusCode || d.status) >= 200 && Number(d.statusCode || d.status) < 300 ? 'text-green-400' : 'text-red-400'}`}>
+                              {String(d.statusCode || d.status || '—')}
+                            </span>
+                            <span className="text-gray-500">{d.timestamp ? new Date(String(d.timestamp)).toLocaleString() : d.createdAt ? new Date(String(d.createdAt)).toLocaleString() : '—'}</span>
+                            <span className="text-gray-500">{d.duration ? `${d.duration}ms` : '—'}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </motion.div>
             ))
           )}
@@ -221,7 +305,7 @@ export default function IntegrationsLensPage() {
 
       {activeTab === 'automations' && (
         <div className="space-y-3">
-          {automationItems?.length === 0 ? (
+          {automationItems?.length === 0 && !showAutomationBuilder ? (
             <EmptyState icon={<Zap />} message="No automations configured" />
           ) : (
             automationItems?.map((auto) => (
@@ -244,6 +328,15 @@ export default function IntegrationsLensPage() {
                 </div>
               </div>
             ))
+          )}
+          {showAutomationBuilder && (
+            <AutomationBuilderPanel
+              onSave={async (data) => {
+                await createAutomation({ title: data.name, data: data as unknown as Partial<Record<string, unknown>> });
+                setShowAutomationBuilder(false);
+              }}
+              onCancel={() => setShowAutomationBuilder(false)}
+            />
           )}
         </div>
       )}
@@ -515,5 +608,144 @@ function CreateWebhookModal({ onClose, onCreate, creating }: { onClose: () => vo
         </div>
       </div>
     </div>
+  );
+}
+
+interface AutomationFormData {
+  name: string;
+  trigger: string;
+  action: string;
+  condition: string;
+  enabled: boolean;
+  actionCount: number;
+  runCount: number;
+}
+
+const TRIGGER_OPTIONS = [
+  { value: 'dtu.created', label: 'DTU Created' },
+  { value: 'dtu.updated', label: 'DTU Updated' },
+  { value: 'webhook.received', label: 'Webhook Received' },
+  { value: 'schedule.cron', label: 'Scheduled (Cron)' },
+  { value: 'lens.alert', label: 'Lens Alert Fired' },
+  { value: 'integration.error', label: 'Integration Error' },
+  { value: 'manual', label: 'Manual Trigger' },
+];
+
+const ACTION_OPTIONS = [
+  { value: 'send_webhook', label: 'Send Webhook' },
+  { value: 'create_dtu', label: 'Create DTU' },
+  { value: 'run_analysis', label: 'Run Analysis' },
+  { value: 'send_notification', label: 'Send Notification' },
+  { value: 'transform_data', label: 'Transform Data' },
+  { value: 'sync_external', label: 'Sync to External Service' },
+  { value: 'log_event', label: 'Log Event' },
+];
+
+function AutomationBuilderPanel({ onSave, onCancel }: { onSave: (data: AutomationFormData) => Promise<void>; onCancel: () => void }) {
+  const [form, setForm] = useState<AutomationFormData>({
+    name: '',
+    trigger: 'dtu.created',
+    action: 'send_webhook',
+    condition: '',
+    enabled: true,
+    actionCount: 1,
+    runCount: 0,
+  });
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!form.name) return;
+    setSaving(true);
+    try {
+      await onSave(form);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="panel p-5 border-l-4 border-neon-cyan space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold flex items-center gap-2">
+          <Zap className="w-4 h-4 text-neon-cyan" />
+          New Automation
+        </h3>
+        <button onClick={onCancel} className="text-gray-400 hover:text-white text-sm">Cancel</button>
+      </div>
+
+      <div className="space-y-3">
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Name</label>
+          <input
+            type="text"
+            placeholder="e.g. Notify on new DTU"
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            className="w-full px-3 py-2 bg-lattice-surface border border-lattice-border rounded text-sm"
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Trigger Event</label>
+            <select
+              value={form.trigger}
+              onChange={(e) => setForm({ ...form, trigger: e.target.value })}
+              className="w-full px-3 py-2 bg-lattice-surface border border-lattice-border rounded text-sm"
+            >
+              {TRIGGER_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Action</label>
+            <select
+              value={form.action}
+              onChange={(e) => setForm({ ...form, action: e.target.value })}
+              className="w-full px-3 py-2 bg-lattice-surface border border-lattice-border rounded text-sm"
+            >
+              {ACTION_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">
+            <Filter className="w-3 h-3 inline mr-1" />
+            Condition / Filter (optional)
+          </label>
+          <input
+            type="text"
+            placeholder='e.g. domain == "integrations" && tags.includes("critical")'
+            value={form.condition}
+            onChange={(e) => setForm({ ...form, condition: e.target.value })}
+            className="w-full px-3 py-2 bg-lattice-surface border border-lattice-border rounded text-sm font-mono"
+          />
+          <p className="text-xs text-gray-500 mt-1">Leave blank to trigger on all matching events.</p>
+        </div>
+      </div>
+
+      {form.name && (
+        <div className="bg-lattice-surface rounded p-3 text-xs text-gray-400 space-y-1">
+          <p className="text-gray-300 font-semibold">Preview:</p>
+          <p>When <span className="text-neon-cyan">{TRIGGER_OPTIONS.find(o => o.value === form.trigger)?.label}</span> occurs{form.condition ? <> and <span className="text-yellow-400 font-mono">{form.condition}</span></> : null}, execute <span className="text-neon-green">{ACTION_OPTIONS.find(o => o.value === form.action)?.label}</span>.</p>
+        </div>
+      )}
+
+      <div className="flex gap-3 justify-end">
+        <button onClick={onCancel} className="btn-secondary text-sm">Cancel</button>
+        <button
+          onClick={handleSave}
+          disabled={saving || !form.name}
+          className="btn-primary text-sm flex items-center gap-1"
+        >
+          {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+          {saving ? 'Creating...' : 'Create Automation'}
+        </button>
+      </div>
+    </motion.div>
   );
 }

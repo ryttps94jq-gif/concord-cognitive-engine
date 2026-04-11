@@ -41,8 +41,36 @@ export default function InvariantLensPage() {
   const [isRunning, setIsRunning] = useState<string | null>(null);
 
   const handleAction = async (action: string) => {
-    const targetId = invariantItems[0]?.id;
-    if (!targetId) return;
+    let targetId = invariantItems[0]?.id;
+    // Auto-create an invariant artifact if none exists yet
+    if (!targetId) {
+      try {
+        const created = await apiHelpers.lens.create('invariant', {
+          type: 'invariant',
+          title: 'System Invariant Set',
+          data: {
+            name: 'SYSTEM_INVARIANTS',
+            description: 'Auto-created invariant set for analysis',
+            status: 'enforced',
+            category: 'structural',
+            frozen: true,
+          },
+        });
+        targetId = created?.data?.artifact?.id;
+        if (targetId) {
+          // Refetch so the UI picks up the new artifact
+          refetch();
+        }
+      } catch (e) {
+        console.error('[Invariant] Failed to auto-create artifact:', e);
+        setActionResult({ message: 'No invariant artifact found. Please try again.' });
+        return;
+      }
+      if (!targetId) {
+        setActionResult({ message: 'Could not create invariant artifact. Please try again.' });
+        return;
+      }
+    }
     setIsRunning(action);
     try {
       const res = await runAction.mutateAsync({ id: targetId, action });
@@ -493,14 +521,13 @@ export default function InvariantLensPage() {
         </h2>
         <div className="flex flex-wrap gap-2">
           {['invariantCheck', 'consistencyProof', 'constraintSatisfaction'].map((action) => (
-            <button key={action} onClick={() => handleAction(action)} disabled={!!isRunning || !invariantItems[0]}
+            <button key={action} onClick={() => handleAction(action)} disabled={!!isRunning}
               className="btn-secondary text-sm flex items-center gap-1 disabled:opacity-50">
               {isRunning === action ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
               {action === 'invariantCheck' ? 'Check Invariants' : action === 'consistencyProof' ? 'Consistency Proof' : 'Constraint Satisfaction'}
             </button>
           ))}
         </div>
-        {!invariantItems[0] && <p className="text-xs text-gray-500">Create an invariant artifact to run analysis.</p>}
         {actionResult && (
           <div className="bg-lattice-deep rounded-lg p-4 space-y-3 text-sm">
             {'systemStatus' in actionResult && (

@@ -97,9 +97,27 @@ export default function InferenceLensPage() {
   const runAction = useRunArtifact('inference');
   const [infActionResult, setInfActionResult] = useState<{ action: string; data: unknown } | null>(null);
 
-  const handleInfAction = useCallback((action: string) => {
-    const artifactId = infArtifacts[0]?.id;
-    if (!artifactId) return;
+  const handleInfAction = useCallback(async (action: string) => {
+    let artifactId = infArtifacts[0]?.id;
+    // Auto-create a snapshot artifact if none exists yet
+    if (!artifactId) {
+      try {
+        const created = await apiHelpers.lens.create('inference', {
+          type: 'snapshot',
+          title: 'Inference Engine Snapshot',
+          data: { model: selectedModel },
+        });
+        artifactId = created?.data?.artifact?.id;
+      } catch (e) {
+        console.error('[Inference] Failed to auto-create artifact:', e);
+        setInfActionResult({ action, data: { error: 'No inference artifact found. Try again after the auto-create completes.' } });
+        return;
+      }
+      if (!artifactId) {
+        setInfActionResult({ action, data: { error: 'Could not create inference artifact. Please try again.' } });
+        return;
+      }
+    }
     runAction.mutate(
       { id: artifactId, action, params: {} },
       {
@@ -110,7 +128,7 @@ export default function InferenceLensPage() {
         },
       }
     );
-  }, [infArtifacts, runAction]);
+  }, [infArtifacts, runAction, selectedModel]);
 
   const { data: status, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['inference-status'],
@@ -590,9 +608,6 @@ export default function InferenceLensPage() {
           <BarChart3 className="w-4 h-4 text-neon-blue" />
           Logical Inference Actions
         </h2>
-        {!infArtifacts[0]?.id && (
-          <p className="text-xs text-gray-500">Create a snapshot artifact to run inference actions.</p>
-        )}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {[
             { action: 'forwardChain', label: 'Forward Chain', icon: Zap, color: 'text-neon-green' },
@@ -602,7 +617,7 @@ export default function InferenceLensPage() {
             <button
               key={action}
               onClick={() => handleInfAction(action)}
-              disabled={runAction.isPending || !infArtifacts[0]?.id}
+              disabled={runAction.isPending}
               className="flex items-center gap-2 px-4 py-3 bg-lattice-surface border border-lattice-border rounded-lg text-sm font-medium text-white hover:border-neon-blue/40 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {runAction.isPending ? (

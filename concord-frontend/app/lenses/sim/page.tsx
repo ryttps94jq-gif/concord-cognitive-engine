@@ -303,6 +303,213 @@ function createDefaultScenario(): Scenario {
   };
 }
 
+// ─── Monte Carlo Simulation Utilities ────────────────────────────────────────
+
+/** Box-Muller transform: two uniform samples -> one standard-normal sample */
+function boxMullerNormal(): number {
+  let u = 0, v = 0;
+  while (u === 0) u = Math.random();
+  while (v === 0) v = Math.random();
+  return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+}
+
+/** Sample a single value from a SimVariable according to its distribution */
+function sampleVariable(v: SimVariable): number {
+  const { min, max, defaultValue, distribution, type } = v;
+
+  if (type === 'boolean') {
+    // defaultValue treated as probability of 1 (scaled 0-100 -> 0-1)
+    const p = defaultValue <= 1 ? defaultValue : defaultValue / 100;
+    return Math.random() < p ? 1 : 0;
+  }
+
+  let raw: number;
+  switch (distribution) {
+    case 'uniform':
+      raw = min + Math.random() * (max - min);
+      break;
+    case 'normal': {
+      // mean = midpoint, stdDev chosen so ±3σ spans [min, max]
+      const mean = (min + max) / 2;
+      const std = (max - min) / 6;
+      raw = mean + boxMullerNormal() * std;
+      break;
+    }
+    case 'triangular': {
+      // mode = defaultValue (clamped between min/max)
+      const mode = Math.max(min, Math.min(max, defaultValue));
+      const u = Math.random();
+      const fc = (mode - min) / (max - min);
+      raw = u < fc
+        ? min + Math.sqrt(u * (max - min) * (mode - min))
+        : max - Math.sqrt((1 - u) * (max - min) * (max - mode));
+      break;
+    }
+    case 'exponential': {
+      // lambda chosen so that mean = defaultValue (at least 0.001 to avoid Inf)
+      const lambda = 1 / Math.max(0.001, defaultValue || 1);
+      raw = -Math.log(1 - Math.random()) / lambda;
+      break;
+    }
+    case 'beta': {
+      // Simple beta(2,5) rescaled to [min, max] — lightweight approximation
+      // using the Jöhnk algorithm for small alpha/beta
+      const alpha = 2, beta = 5;
+      const ga = () => { let s = 0; for (let i = 0; i < alpha; i++) s -= Math.log(Math.random()); return s; };
+      const gb = () => { let s = 0; for (let i = 0; i < beta; i++) s -= Math.log(Math.random()); return s; };
+      const x = ga(); const y = gb();
+      raw = min + (x / (x + y)) * (max - min);
+      break;
+    }
+    case 'poisson': {
+      // Knuth algorithm; lambda = defaultValue
+      const L = Math.exp(-(defaultValue || 1));
+      let k = 0, p = 1;
+      do { k++; p *= Math.random(); } while (p > L);
+      raw = k - 1;
+      break;
+    }
+    default:
+      raw = min + Math.random() * (max - min);
+  }
+
+  // Clamp continuous to [min,max], round discrete
+  if (type === 'discrete') return Math.round(Math.max(min, Math.min(max, raw)));
+  return Math.max(min, Math.min(max, raw));
+}
+
+/** Compute percentile from a *sorted* array */
+function percentile(sorted: number[], p: number): number {
+  if (sorted.length === 0) return 0;
+  const idx = (p / 100) * (sorted.length - 1);
+  const lo = Math.floor(idx);
+  const hi = Math.ceil(idx);
+  if (lo === hi) return sorted[lo];
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
+}
+
+/**
+ * Run Monte Carlo simulation in chunked batches via setTimeout to keep the UI
+ * responsive. Returns a promise that resolves with the final SimResults.
+ *
+ * `onProgress(fraction)` is called after each chunk so the caller can update
+ * a progress bar.
+ */
+function runMonteCarloChunked(
+  variables: SimVariable[],
+  totalIterations: number,
+  onProgress: (fraction: number) => void,
+): Promise<SimResults> {
+  return new Promise((resolve) => {
+    const CHUNK = 500; // iterations per tick
+    const aggregatedValues: number[] = new Array(totalIterations);
+    // Per-variable accumulators for sensitivity analysis
+    const perVarSums: number[][] = variables.map(() => []);
+    let done = 0;
+
+    function processChunk() {
+      const end = Math.min(done + CHUNK, totalIterations);
+      for (let i = done; i < end; i++) {
+        let total = 0;
+        for (let vi = 0; vi < variables.length; vi++) {
+          const sample = sampleVariable(variables[vi]);
+          total += sample;
+          perVarSums[vi].push(sample);
+        }
+        aggregatedValues[i] = total;
+      }
+      done = end;
+      onProgress(done / totalIterations);
+
+      if (done < totalIterations) {
+        setTimeout(processChunk, 0);
+      } else {
+        // ── Compute statistics ────────────────────────────────
+        const sorted = aggregatedValues.slice().sort((a, b) => a - b);
+        const n = sorted.length;
+        const sum = sorted.reduce((s, x) => s + x, 0);
+        const mean = sum / n;
+        const variance = sorted.reduce((s, x) => s + (x - mean) ** 2, 0) / n;
+        const stdDev = Math.sqrt(variance);
+        const median = percentile(sorted, 50);
+        const minVal = sorted[0];
+        const maxVal = sorted[n - 1];
+        const p5 = percentile(sorted, 5);
+        const p25 = percentile(sorted, 25);
+        const p75 = percentile(sorted, 75);
+        const p95 = percentile(sorted, 95);
+
+        // ── Outcome distribution (histogram buckets) ─────────
+        const bucketCount = 8;
+        const range = maxVal - minVal || 1;
+        const bucketSize = range / bucketCount;
+        const buckets: OutcomeBucket[] = [];
+        for (let b = 0; b < bucketCount; b++) {
+          const lo = minVal + b * bucketSize;
+          const hi = lo + bucketSize;
+          const label = `${formatNumber(lo)} – ${formatNumber(hi)}`;
+          const count = sorted.filter(x => x >= lo && (b === bucketCount - 1 ? x <= hi : x < hi)).length;
+          buckets.push({ label, count, percentage: Math.round((count / n) * 100) });
+        }
+
+        // ── Sensitivity (correlation-based impact) ───────────
+        const sensitivity: SensitivityEntry[] = variables.map((v, vi) => {
+          const samples = perVarSums[vi];
+          const vMean = samples.reduce((s, x) => s + x, 0) / n;
+          const cov = samples.reduce((s, x, i) => s + (x - vMean) * (aggregatedValues[i] - mean), 0) / n;
+          const vStd = Math.sqrt(samples.reduce((s, x) => s + (x - vMean) ** 2, 0) / n) || 1;
+          const corr = cov / (vStd * (stdDev || 1));
+          return {
+            variable: v.name || v.id,
+            impact: Math.round(Math.abs(corr) * 100) / 100,
+            direction: (corr > 0.05 ? 'positive' : corr < -0.05 ? 'negative' : 'mixed') as SensitivityEntry['direction'],
+          };
+        }).sort((a, b) => b.impact - a.impact);
+
+        // ── Risk assessment ──────────────────────────────────
+        const riskAssessment: RiskEntry[] = [];
+        const belowP5Pct = 5;
+        riskAssessment.push({
+          outcome: `Below ${formatNumber(p5)}`,
+          probability: belowP5Pct,
+          severity: 'high',
+        });
+        const aboveP95Pct = 5;
+        riskAssessment.push({
+          outcome: `Above ${formatNumber(p95)}`,
+          probability: aboveP95Pct,
+          severity: 'low',
+        });
+        if (stdDev > mean * 0.5) {
+          riskAssessment.push({
+            outcome: 'High volatility (CV > 50%)',
+            probability: Math.round((stdDev / (Math.abs(mean) || 1)) * 100),
+            severity: 'medium',
+          });
+        }
+
+        resolve({
+          mean: Math.round(mean * 1e4) / 1e4,
+          median: Math.round(median * 1e4) / 1e4,
+          stdDev: Math.round(stdDev * 1e4) / 1e4,
+          min: Math.round(minVal * 1e4) / 1e4,
+          max: Math.round(maxVal * 1e4) / 1e4,
+          p5: Math.round(p5 * 1e4) / 1e4,
+          p25: Math.round(p25 * 1e4) / 1e4,
+          p75: Math.round(p75 * 1e4) / 1e4,
+          p95: Math.round(p95 * 1e4) / 1e4,
+          outcomes: buckets,
+          sensitivity,
+          riskAssessment,
+        });
+      }
+    }
+
+    // Kick off the first chunk
+    setTimeout(processChunk, 0);
+  });
+}
+
 // ─── Empty results placeholder (shown when no simulation has been run) ────────
 
 function getEmptyResults(): SimResults {
@@ -367,6 +574,7 @@ export default function SimLensPage() {
   const {
     items: runArtifacts,
     create: createRunArtifact,
+    update: updateRunArtifact,
   } = useLensData<SimRun>('sim', 'run', { noSeed: true });
 
   const runArtifactAction = useRunArtifact('sim');
@@ -452,29 +660,84 @@ export default function SimLensPage() {
   }, []);
 
   const handleRunSimulation = useCallback(async (scenario: Scenario) => {
+    if (!scenario.variables || scenario.variables.length === 0) {
+      useUIStore.getState().addToast({ type: 'error', message: 'Add at least one variable before running a simulation.' });
+      return;
+    }
+    const iterations = scenario.iterations || 1000;
+    const runId = generateId();
     const newRun: SimRun = {
-      id: generateId(),
+      id: runId,
       scenarioId: scenario.id,
       scenarioName: scenario.name,
       status: 'running',
       progress: 0,
       startedAt: new Date().toISOString(),
       errorCount: 0,
-      iterations: scenario.iterations,
+      iterations,
     };
-    await createRunArtifact({
+    const artifact = await createRunArtifact({
       title: `Run: ${scenario.name}`,
       data: newRun as unknown as Partial<SimRun>,
       meta: { tags: ['run', scenario.modelType], status: 'running' },
     });
-    // Fire backend simulation
+    const artifactId = artifact?.id || runId;
+    setActiveTab('runs');
+
+    try {
+      // Run client-side Monte Carlo in chunked batches (non-blocking)
+      const results = await runMonteCarloChunked(
+        scenario.variables,
+        iterations,
+        (fraction) => {
+          // Update progress in the artifact store so the UI reflects it
+          updateRunArtifact(artifactId, {
+            data: { progress: Math.round(fraction * 100), status: 'running' } as Partial<SimRun>,
+          }).catch(() => { /* swallow stale-update errors during rapid progress ticks */ });
+        },
+      );
+
+      const completedAt = new Date().toISOString();
+      const duration = new Date(completedAt).getTime() - new Date(newRun.startedAt).getTime();
+
+      await updateRunArtifact(artifactId, {
+        data: {
+          status: 'completed',
+          progress: 100,
+          completedAt,
+          duration,
+          results,
+        } as Partial<SimRun>,
+        meta: { tags: ['run', scenario.modelType], status: 'completed' },
+      });
+
+      useUIStore.getState().addToast({
+        type: 'success',
+        message: `Simulation "${scenario.name}" completed — ${iterations.toLocaleString()} iterations in ${formatDuration(duration)}.`,
+      });
+    } catch (err) {
+      console.error('Monte Carlo simulation failed:', err);
+      await updateRunArtifact(artifactId, {
+        data: {
+          status: 'failed',
+          progress: 0,
+          errorCount: 1,
+        } as Partial<SimRun>,
+        meta: { status: 'failed' },
+      }).catch(() => {});
+      useUIStore.getState().addToast({
+        type: 'error',
+        message: `Simulation failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+      });
+    }
+
+    // Also fire the backend simulation for AI-enriched analysis (best-effort)
     runSim.mutate({
       title: scenario.name,
       prompt: `Simulate ${scenario.modelType} model: ${scenario.description}`,
       assumptions: scenario.assumptions.map(a => a.text),
     });
-    setActiveTab('runs');
-  }, [createRunArtifact, runSim]);
+  }, [createRunArtifact, updateRunArtifact, runSim]);
 
   const handleRunSensitivity = useCallback(async (scenario: Scenario) => {
     const sensitiveVars = scenario.variables.filter(v => v.sensitive);

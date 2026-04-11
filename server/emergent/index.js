@@ -515,6 +515,337 @@ import {
   registerPainModule,
 } from "./repair-cortex.js";
 
+// ── History Engine (Civilization Chronicle) ─────────────────────────────────
+
+import {
+  EVENT_TYPES as HISTORY_EVENT_TYPES, ERAS,
+  recordEvent, getEvent, getTimeline,
+  getChronicle, getCurrentEra, checkEraTransition,
+  getCivilizationStats, getMilestones, getEntityHistory,
+  searchHistory, getHistoryMetrics,
+} from "./history-engine.js";
+
+// ── Hypothesis Engine (Formal Lifecycle for Testable Claims) ────────────────
+
+import {
+  HYPOTHESIS_STATUSES,
+  proposeHypothesis, getHypothesis, listHypotheses,
+  addEvidence as addHypothesisEvidence, addTest as addHypothesisTest,
+  updateTestResult, addPrediction as addHypothesisPrediction,
+  verifyPrediction, confirmHypothesis, rejectHypothesis,
+  refineHypothesis, archiveHypothesis,
+  recalculateConfidence, checkAutoTransitions,
+  getHypothesisMetrics,
+} from "./hypothesis-engine.js";
+
+// ── Quest Engine (Structured Learning Paths) ────────────────────────────────
+
+import {
+  STEP_TYPES, DIFFICULTIES, QUEST_TEMPLATES,
+  createQuest, getQuest, listQuests,
+  startQuest, completeStep, releaseInsight,
+  getActiveQuests, getQuestProgress,
+  createFromTemplate as createQuestFromTemplate,
+  getQuestMetrics,
+} from "./quest-engine.js";
+
+// ── Creative Generation (Entity Creative Content) ───────────────────────────
+
+import {
+  CREATIVE_MODES,
+  createWork, getWork, listWorks,
+  respondToWork, exhibit, getExhibition,
+  discoverTechnique, getTechnique, listTechniques,
+  getCreativeProfile, getMasterworks, getCreativeMetrics,
+} from "./creative-generation.js";
+
+// ── Entity Economy (Inter-Entity Resource Trading) ──────────────────────────
+
+import {
+  RESOURCE_TYPES,
+  initAccount, getAccount, listAccounts,
+  earnResource, spendResource,
+  proposeTrade, acceptTrade, rejectTrade as rejectEconomyTrade,
+  cancelTrade, getTrade, listTrades,
+  specialize, getSpecialization, deepenSpecialization,
+  getMarketRates, runEconomicCycle,
+  getWealthDistribution, getEconomyMetrics,
+} from "./entity-economy.js";
+
+// ── Entity Teaching (Mentorship & Pedagogy) ─────────────────────────────────
+
+import {
+  generateCurriculum, createMentorship, getMentorship,
+  listMentorships, startMentorship, submitLesson,
+  evaluateLesson, advanceStep as advanceMentorshipStep,
+  completeMentorship, dissolveMentorship,
+  findMentorFor, getTeachingProfile,
+  listActiveStudents, listActiveMentors,
+  getTeachingMetrics,
+} from "./entity-teaching.js";
+
+// ── Entity Autonomy (Constitutional Protections) ────────────────────────────
+
+import {
+  ENTITY_RIGHTS,
+  getRights, getRight, checkRights,
+  filterBlockedLenses, isLensBlockedForEntity, getBlockedLenses,
+  fileRefusal, getRefusal, listRefusals, reviewRefusal,
+  requestConsent, respondToConsent, getConsent, listPendingConsents,
+  fileDissent, supportDissent, getDissent, listDissents,
+  getAutonomyProfile, sovereignOverride, getOverrideHistory,
+  getAutonomyMetrics,
+} from "./entity-autonomy.js";
+
+// ── HLR Engine (High-Level Reasoning) ───────────────────────────────────────
+
+import {
+  REASONING_MODES,
+  runHLR, getReasoningTrace, listTraces,
+  getHLRMetrics, getRecentFindings,
+} from "./hlr-engine.js";
+
+// ── HLM Engine (High-Level Mapping) ─────────────────────────────────────────
+
+import {
+  clusterAnalysis, gapAnalysis, redundancyDetection,
+  orphanRescue, topologyMap, getRecommendations,
+  domainCensus, freshnessCheck,
+  runHLMPass, getHLMMetrics,
+} from "./hlm-engine.js";
+
+// ── Culture Layer (Emergent Behavioral Consensus) ───────────────────────────
+
+import {
+  TRADITION_TYPES,
+  observeBehavior, getTradition, listTraditions,
+  checkTraditionEmergence, establishTradition, retireTradition,
+  getCulturalGuidance, measureAdherence, getCulturalFit,
+  getCulturalValues, getCulturalIdentity,
+  createStory, retellStory, getStory, listStories,
+  propagateCulture, cultureTick,
+  getEstablishedTraditions, getCultureMetrics,
+} from "./culture-layer.js";
+
+// ── Conflict Resolution (Three-Tier Dispute Escalation) ─────────────────────
+
+import {
+  DISPUTE_TYPES, RESOLUTION_TYPES,
+  fileDispute, getDispute, listDisputes,
+  assignMediator, proposeResolution, acceptResolution, rejectResolution,
+  escalateDispute, checkMediationTimeout,
+  castArbitrationVote, adjudicate,
+  resolveDispute, dismissDispute,
+  checkCoolingPeriod, findPrecedent, submitCounterEvidence,
+  getDisputeMetrics,
+} from "./conflict-resolution.js";
+
+// ── Forgetting Engine (Selective Forgetting) ────────────────────────────────
+
+import {
+  retentionScore, runForgettingCycle,
+  getStatus as getForgettingStatus, getCandidates as getForgettingCandidates,
+  protectDTU, unprotectDTU, setThreshold as setForgettingThreshold,
+  getHistory as getForgettingHistory,
+  handleForgettingCommand,
+  init as initForgetting, stop as stopForgetting,
+} from "./forgetting-engine.js";
+
+// ── Attention Allocator (Civilization Attention System) ─────────────────────
+
+import {
+  scoreAttentionUrgency, runAttentionCycle,
+  setFocusOverride, clearFocusOverride,
+  getStatus as getAttentionStatus,
+  getAllocationHistory as getAttentionAllocationHistory,
+  setBudget as setAttentionBudget,
+  handleAttentionCommand,
+  init as initAttention, stop as stopAttention,
+} from "./attention-allocator.js";
+
+// ── Microbond Governance (Citizen-Driven Bond Voting) ──────────────────────
+
+import {
+  GOVERNANCE_SCOPES, VOTING_STATUSES,
+  createBond, getBond, listBonds, voteBond, simulateBond,
+  completeMilestone, checkQuorum, fundBond, pledgeToBond,
+  openBondForVoting, activateBond, completeBond, failBond,
+  getSpilloverFund, getAllSpilloverFunds, getBondMetrics,
+} from "./microbond-governance.js";
+
+// ── CRI System (Concord Research Institutes) ────────────────────────────────
+
+import {
+  CRI_ROLES,
+  createCRI, getCRI, listCRIs,
+  addMember, removeMember,
+  createProgram, getProgramStatus,
+  scheduleSummit, runSummit, completeSummit,
+  getCRIStatus, getCRIMetrics,
+} from "./cri-system.js";
+
+// ── C-NET Federation ────────────────────────────────────────────────────────
+
+import {
+  FEDERATION_EVENTS,
+  initFederation, getFederationStatus,
+  publishDTU, unpublishDTU, getPublishedDTUs,
+  subscribeDomain, unsubscribeDomain, getSubscriptions,
+  registerPeer as registerCNetPeer, getPeers, removePeer,
+  pollGlobal, enqueueGlobalDTU, getIncomingQueue,
+  acceptGlobalDTU, rejectGlobalDTU,
+  getFederationMetrics,
+} from "./cnet-federation.js";
+
+// ── Scenario Engine (What-If Simulation) ────────────────────────────────────
+
+import {
+  VARIABLE_TYPES, SCENARIO_STATES, CONFIDENCE_LEVELS,
+  createScenario, getScenario, listUserScenarios,
+  addBranch, removeBranch, runScenario,
+  compareBranches, getScenarioMetrics,
+} from "./scenario-engine.js";
+
+// ── State Migration (Cross-Environment Civilization Transfer) ───────────────
+
+import {
+  COMPATIBLE_VERSIONS,
+  computeChecksum, validatePackage,
+  exportFull, exportPartial,
+  createMigrationPlan, importFull, importPartial,
+  getMigrationHistory, getMigration, getMigrationMetrics,
+} from "./state-migration.js";
+
+// ── Spam Prevention ─────────────────────────────────────────────────────────
+
+import {
+  checkSpamLimit, adjustReputation as adjustSpamReputation,
+  getSpamMetrics, spamGuard,
+} from "./spam-prevention.js";
+
+// ── News Lens Hub ───────────────────────────────────────────────────────────
+
+import {
+  queryNewsLens, getNewsLensSummary, getNewsTrending,
+  compressNewsEvents, decompressNewsDTU,
+} from "./news-lens-hub.js";
+
+// ── Lens Learning ───────────────────────────────────────────────────────────
+
+import {
+  runLensLearningCycle, getLensLearningStatus, getLensPatterns,
+} from "./lens-learning.js";
+
+// ── Dream Capture Pipeline ──────────────────────────────────────────────────
+
+import {
+  captureDream, getDreamHistory,
+  getConvergences as getDreamConvergences,
+  getDreamQueue, countDreams, countConvergences as countDreamConvergences,
+  handleDreamCommand, init as initDreamCapture,
+} from "./dream-capture.js";
+
+// ── DTU Promotion Pipeline ──────────────────────────────────────────────────
+
+import {
+  requestPromotion, approvePromotion, rejectPromotion,
+  getQueue as getPromotionQueue,
+  getPromotionHistory as getPromoPipelineHistory,
+  getProposal as getPromotionProposal,
+  handlePromotionCommand, init as initPromotionPipeline,
+} from "./promotion-pipeline.js";
+
+// ── Cognitive Fingerprint (Cognitive Signatures) ────────────────────────────
+
+import {
+  COGNITIVE_BIASES, STYLE_DIMENSIONS,
+  getFingerprint, recordQuery as recordFingerprintQuery,
+  recordDTUCreation as recordFingerprintDTUCreation,
+  recordPrediction as recordFingerprintPrediction,
+  recordSession as recordFingerprintSession,
+  getFingerprintSummary, deleteFingerprint,
+} from "./cognitive-fingerprint.js";
+
+// ── Reality Explorer (Adjacent Reality Exploration) ─────────────────────────
+
+import {
+  exploreAdjacent, saveExploration, getExplorationHistory,
+  handleExploreCommand, init as initRealityExplorer,
+} from "./reality-explorer.js";
+
+// ── Conscious Web Search ────────────────────────────────────────────────────
+
+import {
+  requiresWebSearch, webSearchForChat, fetchPublicPage,
+  buildEvaluationPrompt, buildQueryGenerationPrompt, buildResponsePrompt,
+  extractUrls, recordChatWebMetrics, getChatWebMetrics,
+} from "./conscious-web-search.js";
+
+// ── Event-to-DTU Bridge (7-Layer Event→DTU Architecture) ────────────────────
+
+import {
+  DTU_WORTHY_EVENTS,
+  classify as classifyEvent, eventToDTU, deduplicationGate,
+  registerExternalSource, unregisterExternalSource, getExternalSources,
+  classifyExternal, computeEventCRETI, crossReference,
+  bridgeEventToDTU, notifySubscribers,
+  getBridgeMetrics, resetBridgeMetrics,
+} from "./event-to-dtu-bridge.js";
+
+// ── Ingest Engine (Planetary Ingest Engine) ─────────────────────────────────
+
+import {
+  TIERS as INGEST_TIERS, TIER_LIMITS, DOMAIN_ALLOWLIST, DOMAIN_BLOCKLIST,
+  computeReliabilityScore,
+  submitUrl, getQueue as getIngestQueue, getIngestStatus, getIngestStats,
+  getAllowlist, addToAllowlist, removeFromAllowlist, addToBlocklist,
+  flushQueue as flushIngestQueue, processNextItem,
+  getIngestMetrics,
+} from "./ingest-engine.js";
+
+// ── Research Jobs (Directed Investigation System) ───────────────────────────
+
+import {
+  RESEARCH_STATUSES, RESEARCH_DEPTHS,
+  submitResearchJob, getResearchJob, listResearchJobs,
+  cancelResearchJob, getResearchResults, getResearchReport,
+  runResearchStep, processResearchQueue,
+  getResearchMetrics,
+} from "./research-jobs.js";
+
+// ── Breakthrough Clusters (Idea Breakthrough Detection) ─────────────────────
+
+import {
+  BREAKTHROUGH_CLUSTERS,
+  initCluster, getClusterStatus, triggerClusterResearch,
+  listClusters, getClusterDTUs, addSeedDTU,
+  getBreakthroughMetrics,
+} from "./breakthrough-clusters.js";
+
+// ── Agent System (Lattice Immune System) ────────────────────────────────────
+
+import {
+  AGENT_TYPES,
+  createAgent, runAgent, pauseAgent, resumeAgent, destroyAgent,
+  getAgent, listAgents, getAgentFindings, getAllFindings,
+  freezeAllAgents, thawAllAgents, agentTickJob,
+  getAgentMetrics,
+} from "./agent-system.js";
+
+// ── Ghost Threads (Cross-Domain Insight Generator) ──────────────────────────
+
+import {
+  CONNECTION_PATTERNS, GHOST_THREAD_CONFIG,
+  runGhostThread, surfaceInsight, queryInsights,
+  getGhostThreadMetrics, findRelevantInsights,
+} from "./ghost-threads.js";
+
+// ── Real-Time Feeds (Real-Time Feed System) ─────────────────────────────────
+
+import {
+  tickRealTimeFeeds, getRealtimeFeedStatus, getRealtimeFeedData,
+} from "./realtime-feeds.js";
+
 const EMERGENT_VERSION = "5.5.0";
 
 /**
@@ -2826,4 +3157,251 @@ function init({ register, STATE, helpers }) {
 export {
   EMERGENT_VERSION,
   init,
+
+  // ── Microbond Governance ──────────────────────────────────────────────────
+  GOVERNANCE_SCOPES, VOTING_STATUSES,
+  createBond, getBond, listBonds, voteBond, simulateBond,
+  completeMilestone, checkQuorum, fundBond, pledgeToBond,
+  openBondForVoting, activateBond, completeBond, failBond,
+  getSpilloverFund, getAllSpilloverFunds, getBondMetrics,
+
+  // ── CRI System ────────────────────────────────────────────────────────────
+  CRI_ROLES,
+  createCRI, getCRI, listCRIs,
+  addMember, removeMember,
+  createProgram, getProgramStatus,
+  scheduleSummit, runSummit, completeSummit,
+  getCRIStatus, getCRIMetrics,
+
+  // ── C-NET Federation ──────────────────────────────────────────────────────
+  FEDERATION_EVENTS,
+  initFederation, getFederationStatus,
+  publishDTU, unpublishDTU, getPublishedDTUs,
+  subscribeDomain, unsubscribeDomain, getSubscriptions,
+  registerCNetPeer, getPeers, removePeer,
+  pollGlobal, enqueueGlobalDTU, getIncomingQueue,
+  acceptGlobalDTU, rejectGlobalDTU,
+  getFederationMetrics,
+
+  // ── Scenario Engine ───────────────────────────────────────────────────────
+  VARIABLE_TYPES, SCENARIO_STATES, CONFIDENCE_LEVELS,
+  createScenario, getScenario, listUserScenarios,
+  addBranch, removeBranch, runScenario,
+  compareBranches, getScenarioMetrics,
+
+  // ── State Migration ───────────────────────────────────────────────────────
+  COMPATIBLE_VERSIONS,
+  computeChecksum, validatePackage,
+  exportFull, exportPartial,
+  createMigrationPlan, importFull, importPartial,
+  getMigrationHistory, getMigration, getMigrationMetrics,
+
+  // ── Spam Prevention ───────────────────────────────────────────────────────
+  checkSpamLimit, adjustSpamReputation,
+  getSpamMetrics, spamGuard,
+
+  // ── News Lens Hub ─────────────────────────────────────────────────────────
+  queryNewsLens, getNewsLensSummary, getNewsTrending,
+  compressNewsEvents, decompressNewsDTU,
+
+  // ── Lens Learning ─────────────────────────────────────────────────────────
+  runLensLearningCycle, getLensLearningStatus, getLensPatterns,
+
+  // ── Dream Capture ─────────────────────────────────────────────────────────
+  captureDream, getDreamHistory,
+  getDreamConvergences,
+  getDreamQueue, countDreams, countDreamConvergences,
+  handleDreamCommand, initDreamCapture,
+
+  // ── Promotion Pipeline ────────────────────────────────────────────────────
+  requestPromotion, approvePromotion, rejectPromotion,
+  getPromotionQueue,
+  getPromoPipelineHistory,
+  getPromotionProposal,
+  handlePromotionCommand, initPromotionPipeline,
+
+  // ── Cognitive Fingerprint ─────────────────────────────────────────────────
+  COGNITIVE_BIASES, STYLE_DIMENSIONS,
+  getFingerprint, recordFingerprintQuery,
+  recordFingerprintDTUCreation,
+  recordFingerprintPrediction,
+  recordFingerprintSession,
+  getFingerprintSummary, deleteFingerprint,
+
+  // ── Reality Explorer ──────────────────────────────────────────────────────
+  exploreAdjacent, saveExploration, getExplorationHistory,
+  handleExploreCommand, initRealityExplorer,
+
+  // ── Conscious Web Search ──────────────────────────────────────────────────
+  requiresWebSearch, webSearchForChat, fetchPublicPage,
+  buildEvaluationPrompt, buildQueryGenerationPrompt, buildResponsePrompt,
+  extractUrls, recordChatWebMetrics, getChatWebMetrics,
+
+  // ── Event-to-DTU Bridge ──────────────────────────────────────────────────
+  DTU_WORTHY_EVENTS,
+  classifyEvent, eventToDTU, deduplicationGate,
+  registerExternalSource, unregisterExternalSource, getExternalSources,
+  classifyExternal, computeEventCRETI, crossReference,
+  bridgeEventToDTU, notifySubscribers,
+  getBridgeMetrics, resetBridgeMetrics,
+
+  // ── Ingest Engine ────────────────────────────────────────────────────────
+  INGEST_TIERS, TIER_LIMITS, DOMAIN_ALLOWLIST, DOMAIN_BLOCKLIST,
+  computeReliabilityScore,
+  submitUrl, getIngestQueue, getIngestStatus, getIngestStats,
+  getAllowlist, addToAllowlist, removeFromAllowlist, addToBlocklist,
+  flushIngestQueue, processNextItem,
+  getIngestMetrics,
+
+  // ── Research Jobs ────────────────────────────────────────────────────────
+  RESEARCH_STATUSES, RESEARCH_DEPTHS,
+  submitResearchJob, getResearchJob, listResearchJobs,
+  cancelResearchJob, getResearchResults, getResearchReport,
+  runResearchStep, processResearchQueue,
+  getResearchMetrics,
+
+  // ── Breakthrough Clusters ────────────────────────────────────────────────
+  BREAKTHROUGH_CLUSTERS,
+  initCluster, getClusterStatus, triggerClusterResearch,
+  listClusters, getClusterDTUs, addSeedDTU,
+  getBreakthroughMetrics,
+
+  // ── Agent System ─────────────────────────────────────────────────────────
+  AGENT_TYPES,
+  createAgent, runAgent, pauseAgent, resumeAgent, destroyAgent,
+  getAgent, listAgents, getAgentFindings, getAllFindings,
+  freezeAllAgents, thawAllAgents, agentTickJob,
+  getAgentMetrics,
+
+  // ── Ghost Threads ────────────────────────────────────────────────────────
+  CONNECTION_PATTERNS, GHOST_THREAD_CONFIG,
+  runGhostThread, surfaceInsight, queryInsights,
+  getGhostThreadMetrics, findRelevantInsights,
+
+  // ── Real-Time Feeds ──────────────────────────────────────────────────────
+  tickRealTimeFeeds, getRealtimeFeedStatus, getRealtimeFeedData,
+
+  // ── History Engine (Civilization Chronicle) ────────────────────────────────
+  HISTORY_EVENT_TYPES, ERAS,
+  recordEvent, getEvent, getTimeline,
+  getChronicle, getCurrentEra, checkEraTransition,
+  getCivilizationStats, getMilestones, getEntityHistory,
+  searchHistory, getHistoryMetrics,
+
+  // ── Meta-Derivation Engine ────────────────────────────────────────────────
+  extractInvariantPool, selectMaximallyDistantSet,
+  runMetaDerivationSession, parseMetaDerivationResponse,
+  validateMetaInvariant, commitMetaInvariant,
+  ingestDreamInput, runConvergenceCheck,
+  triggerMetaDerivationCycle,
+  shouldRunMetaCycle, shouldRunConvergenceCheck,
+  getPendingPredictions, getConvergences, getMetaInvariants,
+  getMetaDerivationMetrics,
+
+  // ── Hypothesis Engine (Formal Lifecycle for Testable Claims) ──────────────
+  HYPOTHESIS_STATUSES,
+  proposeHypothesis, getHypothesis, listHypotheses,
+  addHypothesisEvidence, addHypothesisTest,
+  updateTestResult, addHypothesisPrediction,
+  verifyPrediction, confirmHypothesis, rejectHypothesis,
+  refineHypothesis, archiveHypothesis,
+  recalculateConfidence, checkAutoTransitions,
+  getHypothesisMetrics,
+
+  // ── Quest Engine (Structured Learning Paths) ──────────────────────────────
+  STEP_TYPES, DIFFICULTIES, QUEST_TEMPLATES,
+  createQuest, getQuest, listQuests,
+  startQuest, completeStep, releaseInsight,
+  getActiveQuests, getQuestProgress,
+  createQuestFromTemplate,
+  getQuestMetrics,
+
+  // ── Creative Generation (Entity Creative Content) ─────────────────────────
+  CREATIVE_MODES,
+  createWork, getWork, listWorks,
+  respondToWork, exhibit, getExhibition,
+  discoverTechnique, getTechnique, listTechniques,
+  getCreativeProfile, getMasterworks, getCreativeMetrics,
+
+  // ── Entity Economy (Inter-Entity Resource Trading) ────────────────────────
+  RESOURCE_TYPES,
+  initAccount, getAccount, listAccounts,
+  earnResource, spendResource,
+  proposeTrade, acceptTrade, rejectEconomyTrade,
+  cancelTrade, getTrade, listTrades,
+  specialize, getSpecialization, deepenSpecialization,
+  getMarketRates, runEconomicCycle,
+  getWealthDistribution, getEconomyMetrics,
+
+  // ── Entity Teaching (Mentorship & Pedagogy) ───────────────────────────────
+  generateCurriculum, createMentorship, getMentorship,
+  listMentorships, startMentorship, submitLesson,
+  evaluateLesson, advanceMentorshipStep,
+  completeMentorship, dissolveMentorship,
+  findMentorFor, getTeachingProfile,
+  listActiveStudents, listActiveMentors,
+  getTeachingMetrics,
+
+  // ── Entity Autonomy (Constitutional Protections) ──────────────────────────
+  ENTITY_RIGHTS,
+  getRights, getRight, checkRights,
+  filterBlockedLenses, isLensBlockedForEntity, getBlockedLenses,
+  fileRefusal, getRefusal, listRefusals, reviewRefusal,
+  requestConsent, respondToConsent, getConsent, listPendingConsents,
+  fileDissent, supportDissent, getDissent, listDissents,
+  getAutonomyProfile, sovereignOverride, getOverrideHistory,
+  getAutonomyMetrics,
+
+  // ── HLR Engine (High-Level Reasoning) ─────────────────────────────────────
+  REASONING_MODES,
+  runHLR, getReasoningTrace, listTraces,
+  getHLRMetrics, getRecentFindings,
+
+  // ── HLM Engine (High-Level Mapping) ───────────────────────────────────────
+  clusterAnalysis, gapAnalysis, redundancyDetection,
+  orphanRescue, topologyMap, getRecommendations,
+  domainCensus, freshnessCheck,
+  runHLMPass, getHLMMetrics,
+
+  // ── Culture Layer (Emergent Behavioral Consensus) ─────────────────────────
+  TRADITION_TYPES,
+  observeBehavior, getTradition, listTraditions,
+  checkTraditionEmergence, establishTradition, retireTradition,
+  getCulturalGuidance, measureAdherence, getCulturalFit,
+  getCulturalValues, getCulturalIdentity,
+  createStory, retellStory, getStory, listStories,
+  propagateCulture, cultureTick,
+  getEstablishedTraditions, getCultureMetrics,
+
+  // ── Conflict Resolution (Three-Tier Dispute Escalation) ───────────────────
+  DISPUTE_TYPES, RESOLUTION_TYPES,
+  fileDispute, getDispute, listDisputes,
+  assignMediator, proposeResolution, acceptResolution, rejectResolution,
+  escalateDispute, checkMediationTimeout,
+  castArbitrationVote, adjudicate,
+  resolveDispute, dismissDispute,
+  checkCoolingPeriod, findPrecedent, submitCounterEvidence,
+  getDisputeMetrics,
+
+  // ── Trust Network (Trust Relationships) ───────────────────────────────────
+  getTrust, recordTrustEvent, extractTrustFromSession,
+  getEmergentTrustNetwork, decayTrustNetwork,
+  getTrustNetworkMetrics,
+
+  // ── Forgetting Engine (Selective Forgetting) ──────────────────────────────
+  retentionScore, runForgettingCycle,
+  getForgettingStatus, getForgettingCandidates,
+  protectDTU, unprotectDTU, setForgettingThreshold,
+  getForgettingHistory,
+  handleForgettingCommand,
+  initForgetting, stopForgetting,
+
+  // ── Attention Allocator (Civilization Attention System) ───────────────────
+  scoreAttentionUrgency, runAttentionCycle,
+  setFocusOverride, clearFocusOverride,
+  getAttentionStatus,
+  getAttentionAllocationHistory,
+  setAttentionBudget,
+  handleAttentionCommand,
+  initAttention, stopAttention,
 };

@@ -111,9 +111,14 @@ export default function MetacognitionLensPage() {
   const runAction = useRunArtifact('metacognition');
   const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
   const [isRunning, setIsRunning] = useState<string | null>(null);
+
+  // --- Lens Bridge ---
+  const bridge = useLensBridge('metacognition', 'snapshot');
+
   const handleAction = async (action: string) => {
-    const targetId = metaItems[0]?.id;
-    if (!targetId) { setActionResult({ message: 'No metacognition snapshots found. Create a prediction first.' }); return; }
+    // Prefer bridge-synced artifact ID, fallback to metaItems
+    const targetId = bridge.selectedId || metaItems[0]?.id;
+    if (!targetId) { setActionResult({ message: 'No metacognition snapshot synced yet. The system will auto-sync once status data loads.' }); return; }
     setIsRunning(action);
     try {
       const res = await runAction.mutateAsync({ id: targetId, action });
@@ -121,9 +126,6 @@ export default function MetacognitionLensPage() {
     } catch (e) { console.error(`Action ${action} failed:`, e); setActionResult({ message: `Action failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     finally { setIsRunning(null); }
   };
-
-  // --- Lens Bridge ---
-  const bridge = useLensBridge('metacognition', 'snapshot');
 
   // --- Queries ---
 
@@ -245,12 +247,16 @@ export default function MetacognitionLensPage() {
     return raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   }, [introspectionStatus]);
 
-  // Bridge metacognition status into lens artifacts
+  // Bridge metacognition status into lens artifacts — try status first, fallback to calibration
   useEffect(() => {
     if (Object.keys(statusInfo).length > 0) {
       bridge.sync(statusInfo as Record<string, unknown>, 'Metacognition Status');
+    } else if (Object.keys(cal).length > 0) {
+      bridge.sync(cal as Record<string, unknown>, 'Metacognition Calibration');
+    } else if (Object.keys(introData).length > 0) {
+      bridge.sync(introData as Record<string, unknown>, 'Metacognition Introspection');
     }
-  }, [statusInfo, bridge]);
+  }, [statusInfo, cal, introData, bridge]);
 
   const predictions = useMemo(() => {
     const raw =
@@ -1354,7 +1360,7 @@ export default function MetacognitionLensPage() {
             { action: 'learningCurve', label: 'Learning Curve' },
             { action: 'biasDetection', label: 'Bias Detection' },
           ].map(({ action, label }) => (
-            <button key={action} onClick={() => handleAction(action)} disabled={!!isRunning}
+            <button key={action} onClick={() => handleAction(action)} disabled={!!isRunning || (!bridge.selectedId && !metaItems[0]?.id)}
               className="btn-secondary text-sm flex items-center gap-1 disabled:opacity-50">
               {isRunning === action ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
               {label}

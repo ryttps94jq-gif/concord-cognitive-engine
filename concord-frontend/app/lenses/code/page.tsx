@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useMutation } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
@@ -8,6 +8,8 @@ import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
+import dynamic from 'next/dynamic';
+const MonacoWrapper = dynamic(() => import('@/components/code/MonacoWrapper'), { ssr: false });
 import { ErrorState } from '@/components/common/EmptyState';
 import { useLensDTUs } from '@/hooks/useLensDTUs';
 import { LensContextPanel } from '@/components/lens/LensContextPanel';
@@ -485,8 +487,6 @@ export default function CodeLensPage() {
   const [showForge, setShowForge] = useState(false);
   const [forgePrompt, setForgePrompt] = useState('');
   const [forgeResult, setForgeResult] = useState<string | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
 
   // Forge App Generation mutation
@@ -1230,23 +1230,11 @@ export default function CodeLensPage() {
                 </div>
               </div>
               <div className="flex-1 relative">
-                <div className="absolute inset-0 flex">
-                  {/* Line numbers */}
-                  <div className="w-12 bg-lattice-deep border-r border-lattice-border text-right py-4 pr-3 text-xs text-gray-600 font-mono select-none overflow-hidden">
-                    {activeTab.content.split('\n').map((_, idx) => (
-                      <div key={idx} className="leading-6">{idx + 1}</div>
-                    ))}
-                  </div>
-                  {/* Code area */}
-                  <textarea
-                    ref={textareaRef}
-                    value={activeTab.content}
-                    onChange={(e) => updateTabContent(e.target.value)}
-                    className="flex-1 bg-lattice-deep p-4 font-mono text-sm text-white resize-none focus:outline-none leading-6"
-                    spellCheck={false}
-                    placeholder="// Write your script here"
-                  />
-                </div>
+                <MonacoWrapper
+                  value={activeTab.content}
+                  onChange={(val) => updateTabContent(val)}
+                  language={activeTab.language || 'javascript'}
+                />
               </div>
             </div>
 

@@ -88,6 +88,8 @@ import createSovereignRouter from "./routes/sovereign.js";
 import createSovereignEmergentRouter from "./routes/sovereign-emergent.js";
 import createFederationRouter from "./routes/federation.js";
 import registerOAuthRoutes from "./routes/oauth.js";
+import createAuditRouter from "./routes/audit.js";
+import createMCPRouter from "./routes/mcp.js";
 import { QualiaEngine, hooks as qualiaHooks } from "./existential/index.js";
 import { rateLimitMiddleware as perEndpointRateLimit } from "./rateLimit.js";
 import { detectVulnerability, chooseDeliveryMode, hookVulnerability, assessAndAdapt } from "./emergent/vulnerability-engine.js";
@@ -22783,6 +22785,9 @@ registerSystemRoutes(app, {
   getDbStatus: () => ({ pgPool: !!pgPool, redisClient: !!redisClient }),
 });
 
+// ---- Audit Log Endpoints (extracted to routes/audit.js) ----
+app.use("/api/audit", createAuditRouter({ requireRole }));
+
 // ---- Auth Endpoints (extracted to routes/auth.js) ----
 app.use("/api/auth", createAuthRouter({
   AuthDB,
@@ -24198,6 +24203,10 @@ app.use("/api/lens-compliance", createLensComplianceRouter({ db }));
 import createLegalLiabilityRouter from "./routes/legal-liability.js";
 app.use("/api/legal", createLegalLiabilityRouter({ db }));
 
+// ===== LENS DEVELOPER KIT (LDK) =====
+import createLDKRouter from "./routes/ldk.js";
+app.use("/api/ldk", createLDKRouter({ ALL_LENS_DOMAINS, registerLensAction }));
+
 // ===== MARKETPLACE LENS REGISTRY (112 LENSES) =====
 import createMarketplaceLensRegistryRouter from "./routes/marketplace-lens-registry.js";
 app.use("/api/marketplace-lens-registry", createMarketplaceLensRegistryRouter(db, requireAuth));
@@ -24220,6 +24229,10 @@ import mobileCheckoutRouter from "./routes/mobile-checkout.js";
 app.locals.verifyToken = verifyToken;
 app.locals.db = db;
 app.use("/", mobileCheckoutRouter);
+
+// ===== CODEBASE INVENTORY & WIRING MAP =====
+import createInventoryRouter from "./routes/inventory.js";
+app.use("/api/inventory", createInventoryRouter());
 
 // ===== OPENAPI DOCUMENTATION =====
 import createOpenAPIRouter from "./routes/openapi.js";
@@ -24384,6 +24397,9 @@ try { app.use("/api/social", createSocialGroupRoutes({ db, requireAuth })); } ca
 
 import createFeedRoutes from "./routes/feeds.js";
 try { app.use("/api/feeds", createFeedRoutes({ requireAuth })); } catch (e) { structuredLog("warn", "feed_routes_skip", { error: e.message }); }
+
+import createBrowserRoutes from "./routes/browser.js";
+try { app.use("/api/browser", createBrowserRoutes({ requireAuth })); } catch (e) { structuredLog("warn", "browser_routes_skip", { error: e.message }); }
 
 import registerCanonicalRoutes from "./routes/canonical.js";
 try { registerCanonicalRoutes(app, { db, requireAuth, STATE, structuredLog }); } catch (e) { structuredLog("warn", "canonical_routes_skip", { error: e.message }); }
@@ -32365,6 +32381,12 @@ try {
 }
 
 structuredLog("info", "lens_runtime_loaded", { domainEngines: 24, superLensDomains: domainModules.length, totalActions: LENS_ACTIONS.size });
+
+// ── MCP (Model Context Protocol) Server ──────────────────────────────────────
+// Must be registered after LENS_ACTIONS and DOMAIN_ACTION_MANIFEST are populated.
+const mcpRouter = createMCPRouter({ LENS_ACTIONS, DOMAIN_ACTION_MANIFEST, makeCtx, STATE });
+mcpRouter.register(app);
+structuredLog("info", "mcp_server_initialized", { toolCount: LENS_ACTIONS.size });
 
 // ── Initialize Concord Shield (Security Module) ─────────────────────────────
 try {

@@ -37,8 +37,26 @@ export default function AppMakerLens() {
   const [isRunning, setIsRunning] = useState<string | null>(null);
 
   const handleAppmakerAction = async (action: string) => {
-    const targetId = appmakerItems[0]?.id;
-    if (!targetId) return;
+    let targetId = appmakerItems[0]?.id;
+    // Auto-create an app artifact if none exists yet
+    if (!targetId) {
+      try {
+        const created = await apiHelpers.lens.create('appmaker', {
+          type: 'app',
+          title: 'App Maker Workspace',
+          data: { template: selectedTemplate, name: appBuildName || 'Untitled App' },
+        });
+        targetId = created?.data?.artifact?.id;
+      } catch (e) {
+        console.error('[AppMaker] Failed to auto-create artifact:', e);
+        setActionResult({ message: 'No app artifact found. Please create an app first.' });
+        return;
+      }
+      if (!targetId) {
+        setActionResult({ message: 'No app artifact found. Please create an app first.' });
+        return;
+      }
+    }
     setIsRunning(action);
     try {
       const res = await runAction.mutateAsync({ id: targetId, action });

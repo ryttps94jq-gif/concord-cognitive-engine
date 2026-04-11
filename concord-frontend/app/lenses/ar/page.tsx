@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
@@ -88,6 +88,156 @@ export default function ARLensPage() {
   const [formConfidence, setFormConfidence] = useState('');
   const [formZIndex, setFormZIndex] = useState('0');
 
+  // Three.js viewport
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const rendererRef = useRef<unknown>(null);
+  const animFrameRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (!arEnabled || !viewportRef.current) {
+      return;
+    }
+
+    const container = viewportRef.current;
+    let disposed = false;
+
+    const initThree = async () => {
+      const THREE = await import('three');
+
+      if (disposed || !container) return;
+
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+
+      // Scene
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x0d0d14); // lattice-deep
+
+      // Camera
+      const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 100);
+      camera.position.set(0, 1.5, 4);
+      camera.lookAt(0, 0, 0);
+
+      // Renderer
+      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+      renderer.setSize(width, height);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      container.innerHTML = '';
+      container.appendChild(renderer.domElement);
+      rendererRef.current = renderer;
+
+      // Lights
+      const ambient = new THREE.AmbientLight(0x404060, 0.6);
+      scene.add(ambient);
+
+      const dirLight = new THREE.DirectionalLight(0xa855f7, 1.2); // neon-purple tinted
+      dirLight.position.set(3, 5, 4);
+      scene.add(dirLight);
+
+      const fillLight = new THREE.DirectionalLight(0x00d4ff, 0.4); // neon-blue
+      fillLight.position.set(-3, 2, -2);
+      scene.add(fillLight);
+
+      // Torus knot
+      const geometry = new THREE.TorusKnotGeometry(1, 0.35, 128, 32);
+      const material = new THREE.MeshStandardMaterial({
+        color: 0xa855f7, // neon-purple
+        emissive: 0x4a1a8a,
+        emissiveIntensity: 0.3,
+        metalness: 0.6,
+        roughness: 0.25,
+      });
+      const torusKnot = new THREE.Mesh(geometry, material);
+      scene.add(torusKnot);
+
+      // Grid helper for ground reference
+      const gridHelper = new THREE.GridHelper(10, 20, 0x2a2a3a, 0x1a1a24);
+      gridHelper.position.y = -1.5;
+      scene.add(gridHelper);
+
+      // Subtle wireframe sphere for AR-like atmosphere
+      const sphereGeo = new THREE.IcosahedronGeometry(3, 1);
+      const wireframeMat = new THREE.MeshBasicMaterial({
+        color: 0x00fff7, // neon-cyan
+        wireframe: true,
+        transparent: true,
+        opacity: 0.06,
+      });
+      const wireSphere = new THREE.Mesh(sphereGeo, wireframeMat);
+      scene.add(wireSphere);
+
+      // Mouse interaction (simple orbit via pointer)
+      let mouseX = 0;
+      let mouseY = 0;
+      const onPointerMove = (e: PointerEvent) => {
+        const rect = container.getBoundingClientRect();
+        mouseX = ((e.clientX - rect.left) / rect.width - 0.5) * 2;
+        mouseY = ((e.clientY - rect.top) / rect.height - 0.5) * 2;
+      };
+      container.addEventListener('pointermove', onPointerMove);
+
+      // Animation loop
+      const clock = new THREE.Clock();
+      const animate = () => {
+        if (disposed) return;
+        animFrameRef.current = requestAnimationFrame(animate);
+
+        const elapsed = clock.getElapsedTime();
+
+        torusKnot.rotation.x = elapsed * 0.3;
+        torusKnot.rotation.y = elapsed * 0.5;
+
+        wireSphere.rotation.y = elapsed * 0.1;
+        wireSphere.rotation.x = elapsed * 0.05;
+
+        // Gentle camera orbit influenced by mouse
+        camera.position.x = 4 * Math.sin(elapsed * 0.2) + mouseX * 1.5;
+        camera.position.y = 1.5 + mouseY * -0.8;
+        camera.lookAt(0, 0, 0);
+
+        renderer.render(scene, camera);
+      };
+      animate();
+
+      // Handle resize
+      const onResize = () => {
+        if (disposed || !container) return;
+        const w = container.clientWidth;
+        const h = container.clientHeight;
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h);
+      };
+      const resizeObserver = new ResizeObserver(onResize);
+      resizeObserver.observe(container);
+
+      // Cleanup references stored for the dispose closure
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (container as any).__threeCleanup = () => {
+        disposed = true;
+        cancelAnimationFrame(animFrameRef.current);
+        container.removeEventListener('pointermove', onPointerMove);
+        resizeObserver.disconnect();
+        geometry.dispose();
+        material.dispose();
+        sphereGeo.dispose();
+        wireframeMat.dispose();
+        renderer.dispose();
+        if (container.contains(renderer.domElement)) {
+          container.removeChild(renderer.domElement);
+        }
+        rendererRef.current = null;
+      };
+    };
+
+    initThree();
+
+    return () => {
+      const cleanup = (container as unknown as Record<string, unknown>).__threeCleanup as (() => void) | undefined;
+      if (cleanup) cleanup();
+    };
+  }, [arEnabled]);
+
   const activeArtifactType = MODE_TABS.find(t => t.id === activeTab)?.artifactType || 'Scene';
   const { items, isLoading, isError, error, refetch, create, update, remove } = useLensData<ARArtifact>('ar', activeArtifactType, { seed: [] });
   const runAction = useRunArtifact('ar');
@@ -170,13 +320,22 @@ export default function ARLensPage() {
         </div>
         {/* AR Viewport Preview */}
         <div className={ds.panel}>
-          <div className="h-48 relative overflow-hidden rounded-lg bg-lattice-deep flex items-center justify-center">
+          <div className="h-64 relative overflow-hidden rounded-lg bg-lattice-deep">
             {arEnabled ? (
-              <div className="text-center"><Scan className="w-16 h-16 mx-auto text-neon-cyan animate-pulse mb-2" /><p className="text-sm text-neon-cyan">AR Mode Active</p></div>
+              <div ref={viewportRef} className="w-full h-full" />
             ) : (
-              <div className="text-center text-gray-500"><Glasses className="w-12 h-12 mx-auto mb-2 opacity-50" /><p className="text-sm">Enable AR to begin</p></div>
+              <div className="w-full h-full flex items-center justify-center">
+                <div className="text-center text-gray-500"><Glasses className="w-12 h-12 mx-auto mb-2 opacity-50" /><p className="text-sm">Enable AR to begin</p></div>
+              </div>
             )}
           </div>
+          {arEnabled && (
+            <div className="flex items-center gap-2 mt-2 px-1">
+              <div className="w-2 h-2 rounded-full bg-neon-green animate-pulse" />
+              <span className="text-xs text-neon-cyan">3D Viewport Active</span>
+              <span className="text-xs text-gray-500 ml-auto">Move pointer to orbit</span>
+            </div>
+          )}
         </div>
       </div>
     );

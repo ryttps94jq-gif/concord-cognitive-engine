@@ -3,6 +3,7 @@
  * Registered directly on app (mixed prefixes)
  */
 import { asyncHandler } from "../lib/async-handler.js";
+import { logAudit } from "../lib/audit-logger.js";
 import logger from '../logger.js';
 
 export default function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuForClient, dtusArray, userVisibleDTUs, _withAck, _saveStateDebounced, validate }) {
@@ -213,8 +214,17 @@ export default function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuFo
   }));
 
   app.delete("/api/dtus/:id", asyncHandler(async (req, res) => {
-    // Note: You may need to create a dtu.delete macro first
-    const out = await runMacro("dtu", "delete", { id: req.params.id }, makeCtx(req));
+    const ctx = makeCtx(req);
+    const out = await runMacro("dtu", "delete", { id: req.params.id }, ctx);
+
+    if (out.ok) {
+      const actor = ctx?.actor?.id || ctx?.actor?.userId || req.user?.id || "anon";
+      logAudit(actor, "dtu.delete", req.params.id, {
+        ip: req.ip,
+        userAgent: req.headers["user-agent"],
+      });
+    }
+
     return res.json(out);
   }));
 

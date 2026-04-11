@@ -132,15 +132,54 @@ export default function AgentsLensPage() {
 
   const tickAgent = useMutation({
     mutationFn: async (id: string) => {
-      // Trigger a tick via the agents API if available
-      try { await apiHelpers.agents.tick(id); } catch (e) { console.warn('Agent tick endpoint not available:', e); }
       const agent = agents.find(a => a.id === id);
-      if (agent) {
-        await updateLensAgent(id, { data: { tickCount: (agent.tickCount || 0) + 1, lastTick: new Date().toISOString() } as unknown as Record<string, unknown> });
+      if (!agent) return;
+
+      // Update status to running during execution
+      await updateLensAgent(id, { data: { status: 'running' } as unknown as Record<string, unknown> });
+
+      // Try to run the agent via the runAction hook for real execution
+      let executionResult: Record<string, unknown> | null = null;
+      try {
+        const res = await runAction.mutateAsync({ id, action: 'tick', params: { agentType: agent.type, tools: agent.tools, goals: agent.goals } });
+        if (res.ok !== false) {
+          executionResult = res.result as Record<string, unknown>;
+        }
+      } catch {
+        // Fallback: try the direct agents tick endpoint
+        try { await apiHelpers.agents.tick(id); } catch (e2) { console.warn('Agent tick endpoint not available:', e2); }
+      }
+
+      // Build a new log entry from the execution
+      const newLog = {
+        timestamp: new Date().toISOString(),
+        level: executionResult ? 'info' : 'warn',
+        message: executionResult
+          ? `Tick completed: ${JSON.stringify(executionResult).slice(0, 120)}`
+          : 'Tick executed (no detailed result returned)',
+      };
+
+      const updatedLogs = [...(agent.logs || []), newLog].slice(-50);
+
+      await updateLensAgent(id, {
+        data: {
+          tickCount: (agent.tickCount || 0) + 1,
+          lastTick: new Date().toISOString(),
+          status: 'idle',
+          logs: updatedLogs,
+          successRate: executionResult
+            ? Math.min(100, (agent.successRate || 0) + (100 - (agent.successRate || 0)) * 0.1)
+            : agent.successRate || 0,
+        } as unknown as Record<string, unknown>,
+      });
+
+      // If we got a detailed result, show it in the action result panel
+      if (executionResult) {
+        setActionResult(executionResult);
       }
     },
-    onError: () => {
-      useUIStore.getState().addToast({ type: 'error', message: 'Operation failed. Please try again.' });
+    onError: (err) => {
+      useUIStore.getState().addToast({ type: 'error', message: `Agent tick failed: ${err instanceof Error ? err.message : 'Unknown error'}` });
     },
   });
 

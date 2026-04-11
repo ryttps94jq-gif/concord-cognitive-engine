@@ -121,7 +121,7 @@ export default function MusicLensPage() {
   const [marketplaceKey, setMarketplaceKey] = useState('');
   const [marketplaceSearch, setMarketplaceSearch] = useState('');
 
-  const { playTrack: _playTrack, addToQueue, nowPlaying } = useMusicStore();
+  const { addToQueue, nowPlaying } = useMusicStore();
 
   // ---- Navigation ----
   const navigateToArtist = useCallback((artistId: string) => {

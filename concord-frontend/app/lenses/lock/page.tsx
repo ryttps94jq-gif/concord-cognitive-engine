@@ -17,6 +17,10 @@ import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { ConnectiveTissueBar } from '@/components/lens/ConnectiveTissueBar';
+import { SovereigntyDashboard } from '@/components/sovereignty/SovereigntyDashboard';
+import { SovereigntySetup } from '@/components/sovereignty/SovereigntySetup';
+import { SovereigntyPrompt } from '@/components/sovereignty/SovereigntyPrompt';
+import { LockDashboard } from '@/components/sovereignty/LockDashboard';
 
 interface LockEventData {
   event: string;
@@ -33,6 +37,14 @@ export default function LockLensPage() {
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('lock');
   const { lockPercentage, invariants, isLocked, invariantSummary } = use70Lock();
   const [showFeatures, setShowFeatures] = useState(true);
+  const [showSovereigntySetup, setShowSovereigntySetup] = useState(false);
+  const [sovereigntyPromptMessage, setSovereigntyPromptMessage] = useState<{
+    message: string;
+    localCount: number;
+    globalCount: number;
+    globalDomains: string[];
+    globalDTUIds: string[];
+  } | null>(null);
 
   const { items: historyItems, isLoading: historyLoading, isError: isError, error: error, refetch: refetch, create: addEvent } = useLensData<LockEventData>('lock', 'lock-event', {
     seed: SEED_LOCK_HISTORY,
@@ -429,6 +441,57 @@ export default function LockLensPage() {
           </div>
         </div>
       </div>
+
+      {/* Lock Dashboard -- visual invariant overview */}
+      <div className="panel p-4">
+        <LockDashboard
+          status={{
+            overallLock: lockPercentage,
+            invariants: invariants.map(inv => ({
+              id: inv.id,
+              name: inv.name,
+              status: inv.status,
+              description: inv.description,
+            })),
+            lastAudit: lockHistory[0]?.date,
+          }}
+        />
+      </div>
+
+      {/* Sovereignty Dashboard -- full sovereignty status */}
+      <SovereigntyDashboard />
+
+      {/* Sovereignty Setup -- onboarding sovereignty mode picker */}
+      {showSovereigntySetup && (
+        <div className="panel p-4">
+          <SovereigntySetup onComplete={() => setShowSovereigntySetup(false)} />
+        </div>
+      )}
+
+      {/* Sovereignty Prompt -- inline consent prompt */}
+      {sovereigntyPromptMessage && (
+        <div className="panel p-4">
+          <SovereigntyPrompt
+            message={sovereigntyPromptMessage}
+            onResolve={(choice, remember) => {
+              console.log('[Lock] Sovereignty prompt resolved:', choice, remember);
+              setSovereigntyPromptMessage(null);
+            }}
+            isResolving={false}
+          />
+        </div>
+      )}
+
+      {/* Sovereignty Setup Trigger */}
+      {!showSovereigntySetup && (
+        <button
+          onClick={() => setShowSovereigntySetup(true)}
+          className="btn-secondary text-sm flex items-center gap-2"
+        >
+          <Shield className="w-4 h-4" />
+          Re-run Sovereignty Setup
+        </button>
+      )}
 
       {/* Backend Action Panel */}
       <div className="panel p-4 space-y-3">

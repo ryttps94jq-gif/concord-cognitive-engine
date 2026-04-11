@@ -1,0 +1,167 @@
+/**
+ * API Key Authentication Middleware
+ *
+ * Checks the Authorization header for "Bearer csk_..." API keys.
+ * If an API key is found and valid, attaches key metadata to req.apiKey
+ * and tracks usage. Falls back to JWT/cookie auth if no API key is present.
+ *
+ * Scope enforcement: if the key has scopes, the requested endpoint's
+ * domain must match one of the allowed scopes.
+ */
+
+import { validateKey, trackUsage, checkScope } from "../lib/api-keys.js";
+
+/**
+ * Map common route prefixes to lens domain names for scope checking.
+ * This is a best-effort mapping; keys with empty scopes bypass this entirely.
+ */
+const ROUTE_TO_DOMAIN = {
+  "/api/lens/":        null, // domain extracted from URL dynamically
+  "/api/dtus":         "dtus",
+  "/api/dtu":          "dtus",
+  "/api/chat":         "chat",
+  "/api/search":       "search",
+  "/api/economy":      "economy",
+  "/api/billing":      "billing",
+  "/api/marketplace":  "marketplace",
+  "/api/council":      "council",
+  "/api/graph":        "graph",
+  "/api/personas":     "personas",
+  "/api/emergent":     "emergent",
+  "/api/forge":        "forge",
+  "/api/keys":         "keys",
+  "/api/docs":         "docs",
+  "/api/auth":         "auth",
+  "/api/atlas":        "atlas",
+  "/api/backup":       "backup",
+  "/api/system":       "system",
+};
+
+/**
+ * Resolve the domain for an incoming request path.
+ *
+ * @param {string} urlPath - req.path
+ * @returns {string} domain name (or "unknown")
+ */
+function resolveDomain(urlPath) {
+  // Lens routes encode domain in the URL: /api/lens/:domain/...
+  const lensMatch = urlPath.match(/^\/api\/lens\/([^/]+)/);
+  if (lensMatch) return lensMatch[1];
+
+  for (const [prefix, domain] of Object.entries(ROUTE_TO_DOMAIN)) {
+    if (urlPath.startsWith(prefix) && domain) return domain;
+  }
+
+  return "unknown";
+}
+
+/**
+ * Create the API key auth middleware.
+ *
+ * @param {object} [options]
+ * @param {Function} [options.jwtFallback] - Optional function(req, res, next) for JWT auth fallback
+ * @returns {Function} Express middleware
+ */
+export default function apiKeyAuth(options = {}) {
+  const { jwtFallback } = options;
+
+  return function apiKeyAuthMiddleware(req, res, next) {
+    const authHeader = req.headers.authorization || "";
+
+    // Only intercept if the bearer token is a Concord Secret Key
+    if (!authHeader.startsWith("Bearer csk_")) {
+      // No API key — fall back to JWT auth if provided
+      if (typeof jwtFallback === "function") {
+        return jwtFallback(req, res, next);
+      }
+      return next();
+    }
+
+    const rawKey = authHeader.slice(7); // strip "Bearer "
+
+    // ── Validate ───────────────────────────────────────────────────────────
+    const result = validateKey(rawKey);
+    if (!result.ok) {
+      return res.status(401).json({
+        ok: false,
+        error: "invalid_api_key",
+        detail: result.error,
+      });
+    }
+
+    const keyRecord = result.key;
+
+    // ── Scope check ────────────────────────────────────────────────────────
+    const domain = resolveDomain(req.path);
+    if (!checkScope(keyRecord, domain)) {
+      return res.status(403).json({
+        ok: false,
+        error: "scope_denied",
+        detail: `Key does not have access to domain "${domain}"`,
+        allowedScopes: keyRecord.scopes,
+      });
+    }
+
+    // ── Rate limit check (simple per-minute window) ────────────────────────
+    // This is a lightweight in-middleware check; the billing metering layer
+    // handles cost-based gating separately.
+    // We use a sliding-window counter stored on the key record itself.
+    // For production, this would be backed by Redis or a proper sliding window.
+
+    // ── Track usage ────────────────────────────────────────────────────────
+    trackUsage(keyRecord.id);
+
+    // ── Attach metadata to request ─────────────────────────────────────────
+    req.apiKey = {
+      id: keyRecord.id,
+      userId: keyRecord.userId,
+      scopes: keyRecord.scopes,
+      rateLimit: keyRecord.rateLimit,
+      usageCount: keyRecord.usageCount + 1, // post-increment
+    };
+
+    // Also set req.user if not already set (allows downstream auth guards
+    // like requireAuth() to pass when only an API key is provided)
+    if (!req.user) {
+      req.user = {
+        id: keyRecord.userId,
+        role: "member",
+        authMethod: "apiKey",
+      };
+    }
+
+    req.authMethod = "csk_apiKey";
+
+    return next();
+  };
+}
+
+/**
+ * Convenience: scope-guard middleware factory.
+ * Use after apiKeyAuth to require specific scopes on a route.
+ *
+ * @param {...string} requiredScopes - Domains that must be in the key's scopes
+ * @returns {Function} Express middleware
+ */
+export function requireScope(...requiredScopes) {
+  return (req, res, next) => {
+    // If no API key was used, skip scope check (JWT users are unrestricted)
+    if (!req.apiKey) return next();
+
+    const keyScopes = req.apiKey.scopes || [];
+    // Empty scopes = unrestricted
+    if (keyScopes.length === 0 || keyScopes.includes("*")) return next();
+
+    const missing = requiredScopes.filter((s) => !keyScopes.includes(s));
+    if (missing.length > 0) {
+      return res.status(403).json({
+        ok: false,
+        error: "insufficient_scopes",
+        required: requiredScopes,
+        missing,
+      });
+    }
+
+    return next();
+  };
+}

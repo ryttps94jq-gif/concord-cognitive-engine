@@ -68,6 +68,15 @@ import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { DTUDetailView } from '@/components/dtu/DTUDetailView';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useLensData } from '@/lib/hooks/use-lens-data';
+import MessageRenderer from '@/components/chat/MessageRenderer';
+import AtlasOverlay from '@/components/chat/AtlasOverlay';
+import AtlasViewer from '@/components/chat/AtlasViewer';
+import { WelcomePanel, ModeSelector, ChatPanel as ChatModePanel } from '@/components/chat/ChatModePanels';
+import ChatRouteOverlay from '@/components/chat/ChatRouteOverlay';
+import { ContextOverlay } from '@/components/chat/ContextOverlay';
+import ForgeCard from '@/components/chat/ForgeCard';
+import FoundationCard from '@/components/chat/FoundationCard';
+import { SessionSidebar } from '@/components/chat/SessionSidebar';
 
 // ──────────────────────────────────────────────
 // Types
@@ -374,6 +383,16 @@ export default function ChatLensPage() {
   // New state — Domain context
   const [domainContext, setDomainContext] = useState<string>('');
   const [inspectingDtuId, setInspectingDtuId] = useState<string | null>(null);
+
+  // New state — Wired orphan components
+  const [chatMode, setChatMode] = useState<'welcome' | 'assist' | 'explore' | 'connect' | 'chat'>('chat');
+  const [sessionSidebarOpen, setSessionSidebarOpen] = useState(false);
+  const [contextOverlayOpen, setContextOverlayOpen] = useState(false);
+  const [atlasQuery, setAtlasQuery] = useState('');
+  const [atlasResult, setAtlasResult] = useState<Record<string, unknown> | null>(null);
+  const [atlasLoading, setAtlasLoading] = useState(false);
+  const [routeMeta, setRouteMeta] = useState<{ actionType: string; lenses: Array<{ lensId: string; score: number }>; primaryLens: string | null; isMultiLens: boolean; confidence: number; attribution: string[]; message: string | null } | null>(null);
+  const [forgeEnvelope, setForgeEnvelope] = useState<Record<string, unknown> | null>(null);
 
   // ── Chat backend action state ──
   const runChatAction = useRunArtifact('chat');
@@ -1254,7 +1273,7 @@ export default function ChatLensPage() {
                 </div>
               </div>
             ) : (
-              <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
+              <MessageRenderer content={message.content} />
             )}
             {timeStr && editingMessageId !== message.id && (
               <p className="text-[10px] text-gray-500 mt-1 select-none">{timeStr}</p>
@@ -1529,6 +1548,7 @@ export default function ChatLensPage() {
             className="!bg-transparent !border-0 !p-0"
           />
           <FeedbackWidget targetType="lens" targetId="chat" />
+          <FoundationCard type="status" />
         </div>
 
         <div className="p-4">
@@ -1761,6 +1781,16 @@ export default function ChatLensPage() {
                 </button>
               </div>
             )}
+
+            {/* View Context button — opens ContextOverlay */}
+            <button
+              onClick={() => setContextOverlayOpen(true)}
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-lattice-bg border border-lattice-border rounded-full text-xs text-gray-400 hover:text-neon-cyan hover:border-neon-cyan/30 transition-colors"
+              title="View working set context"
+            >
+              <Eye className="w-3 h-3" />
+              <span>Context</span>
+            </button>
           </div>
 
           {/* Cognitive Status Bar */}
@@ -1795,6 +1825,14 @@ export default function ChatLensPage() {
           )}
 
           <div className="flex items-center gap-2 relative">
+            <button
+              onClick={() => setSessionSidebarOpen(true)}
+              className="p-2 hover:bg-lattice-bg rounded-lg transition-colors"
+              aria-label="Session history"
+              title="Session history"
+            >
+              <Layers className="w-5 h-5 text-gray-400" />
+            </button>
             <button
               onClick={() => setShowMoreMenu(!showMoreMenu)}
               className="p-2 hover:bg-lattice-bg rounded-lg transition-colors"
@@ -1843,6 +1881,16 @@ export default function ChatLensPage() {
             </AnimatePresence>
           </div>
         </header>
+
+        {/* Chat Mode Selector Rail */}
+        <ModeSelector activeMode={chatMode} onModeChange={setChatMode} />
+
+        {/* Chat Mode Panel — shown when in chat mode */}
+        {chatMode === 'chat' && messages.length > 0 && (
+          <div className="px-4 py-2 border-b border-lattice-border/30">
+            <ChatModePanel currentLens="chat" onSendMessage={(msg) => { setInput(msg); }} />
+          </div>
+        )}
 
         {/* Messages */}
         <div className="flex-1 overflow-hidden flex flex-col" role="log" aria-label="Chat messages" aria-live="polite">
@@ -1908,6 +1956,16 @@ export default function ChatLensPage() {
               >
                 Type <code className="px-1.5 py-0.5 bg-lattice-surface rounded text-gray-400">/help</code> for slash commands &middot; <code className="px-1.5 py-0.5 bg-lattice-surface rounded text-gray-400">/forge</code> to create DTUs
               </motion.p>
+
+              {/* Welcome panel from ChatModePanels */}
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.7, duration: 0.4 }}
+                className="mt-6 w-full max-w-lg"
+              >
+                <WelcomePanel currentLens="chat" onSendMessage={(msg) => { setInput(msg); }} />
+              </motion.div>
             </div>
           )}
 
@@ -1929,8 +1987,7 @@ export default function ChatLensPage() {
               </div>
               <div className="flex-1 max-w-2xl">
                 <div className="inline-block p-4 rounded-2xl rounded-bl-md bg-lattice-surface border border-neon-cyan/30 text-gray-200">
-                  <p className="whitespace-pre-wrap">{streamingContent}</p>
-                  <span className="inline-block w-2 h-4 bg-neon-cyan/60 animate-pulse ml-0.5" />
+                  <MessageRenderer content={streamingContent} streaming />
                 </div>
               </div>
             </div>
@@ -2332,8 +2389,10 @@ export default function ChatLensPage() {
           <ChevronDown className={`w-4 h-4 transition-transform ${showFeatures ? 'rotate-180' : ''}`} />
         </button>
         {showFeatures && (
-          <div className="px-4 pb-4">
+          <div className="px-4 pb-4 space-y-4">
             <LensFeaturePanel lensId="chat" />
+            {/* Atlas Viewer — spatial/material data overview */}
+            <AtlasViewer type="overview" />
           </div>
         )}
       </div>
@@ -2346,6 +2405,46 @@ export default function ChatLensPage() {
           onClose={() => setInspectingDtuId(null)}
           onNavigate={(id) => setInspectingDtuId(id)}
         />
+      )}
+
+      {/* Session Sidebar — session management overlay */}
+      <SessionSidebar isOpen={sessionSidebarOpen} onClose={() => setSessionSidebarOpen(false)} />
+
+      {/* Context Overlay — shows working-set DTUs for a response */}
+      <ContextOverlay
+        sessionId={selectedConversation || ''}
+        lens="chat"
+        isOpen={contextOverlayOpen}
+        onClose={() => setContextOverlayOpen(false)}
+      />
+
+      {/* Atlas Overlay — material query results */}
+      {atlasLoading || atlasResult ? (
+        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-40">
+          <AtlasOverlay query={atlasQuery} result={atlasResult as never} loading={atlasLoading} />
+        </div>
+      ) : null}
+
+      {/* Chat Route Overlay — shows lens attribution on routed messages */}
+      {routeMeta && (
+        <ChatRouteOverlay
+          route={routeMeta}
+          onConfirm={() => setRouteMeta(null)}
+          onCancel={() => setRouteMeta(null)}
+        />
+      )}
+
+      {/* Forge Card — inline artifact creation when forge envelope exists */}
+      {forgeEnvelope && (
+        <div className="absolute bottom-20 right-4 z-40 w-96">
+          <ForgeCard
+            dtu={forgeEnvelope.dtu as never}
+            presentation={forgeEnvelope.presentation as never}
+            actions={forgeEnvelope.actions as never}
+            onSave={() => setForgeEnvelope(null)}
+            onDelete={() => setForgeEnvelope(null)}
+          />
+        </div>
       )}
     </div>
   );
