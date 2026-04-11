@@ -28,8 +28,6 @@ import {
   PlayCircle,
   StopCircle,
   Upload,
-  Zap,
-  X,
 } from 'lucide-react';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 
