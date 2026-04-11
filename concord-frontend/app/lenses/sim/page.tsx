@@ -484,7 +484,7 @@ export default function SimLensPage() {
     }
     await runArtifactAction.mutateAsync({
       id: scenario.id,
-      action: 'sensitivity-analysis',
+      action: 'sensitivityAnalysis',
       params: { variables: sensitiveVars.map(v => v.name), iterations: scenario.iterations },
     });
     setActiveTab('results');

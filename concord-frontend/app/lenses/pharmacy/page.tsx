@@ -94,7 +94,7 @@ export default function PharmacyLensPage() {
     const activeNames = medications.filter(m => m.status === 'active').map(m => m.name || m.title);
     if (activeNames.length < 2) return;
     try {
-      await runAction.mutateAsync({ id: medItems[0]?.id || 'check', action: 'checkInteractions', params: { medications: activeNames } });
+      await runAction.mutateAsync({ id: medItems[0]?.id || 'pharmacy-default', action: 'drugInteractionCheck', params: { medications: activeNames } });
       refetch();
     } catch { /* handled by UI */ }
   };

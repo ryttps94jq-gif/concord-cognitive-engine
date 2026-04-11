@@ -592,7 +592,7 @@ export default function CouncilLensPage() {
   const handleGenerateSynthesis = useCallback((debateId: string) => {
     const debate = debates.find(d => d.id === debateId);
     if (!debate) return;
-    runArtifact.mutate({ id: debateId, action: 'synthesize', params: { points: debate.points } });
+    runArtifact.mutate({ id: debateId, action: 'deliberate', params: { points: debate.points } });
   }, [debates, runArtifact]);
 
   const handleExportAudit = useCallback(() => {
@@ -1417,7 +1417,7 @@ export default function CouncilLensPage() {
           <div className="flex items-center gap-2">
             <button onClick={() => { setActiveTab('debates'); setShowCreateDebate(true); }} className={ds.btnSecondary}><Megaphone className="w-4 h-4" />Start Debate</button>
             <button onClick={() => { const vp = proposals.find(p => p.status === 'discussion'); if (vp) { handleAdvanceStatus(vp.id); setActiveTab('voting'); } }} className={ds.btnSecondary}><Gavel className="w-4 h-4" />Call Vote</button>
-            <button onClick={() => { runArtifact.mutate({ id: 'council', action: 'generate-minutes', params: { debates, proposals } }); }} disabled={runArtifact.isPending} className={cn(ds.btnSecondary, 'disabled:opacity-50 disabled:cursor-not-allowed')}><FileDown className="w-4 h-4" />{runArtifact.isPending ? 'Generating...' : 'Generate Minutes'}</button>
+            <button onClick={() => { runArtifact.mutate({ id: 'council', action: 'generateMinutes', params: { debates, proposals } }); }} disabled={runArtifact.isPending} className={cn(ds.btnSecondary, 'disabled:opacity-50 disabled:cursor-not-allowed')}><FileDown className="w-4 h-4" />{runArtifact.isPending ? 'Generating...' : 'Generate Minutes'}</button>
             <button onClick={handleExportAudit} className={ds.btnSecondary}><Download className="w-4 h-4" />Export Decisions</button>
           </div>
         </div>
