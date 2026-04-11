@@ -848,7 +848,7 @@ export default function DisputesPage() {
                 <p className="text-[10px] text-gray-500">Win Probability</p>
               </div>
             </div>
-            {actionResult.settlementZone && (
+            {!!actionResult.settlementZone && (
               <div className="p-2 bg-neon-green/5 border border-neon-green/20 rounded text-xs space-y-1">
                 <p className="text-[10px] text-gray-500 uppercase tracking-wider">Settlement Zone</p>
                 <div className="flex justify-between">

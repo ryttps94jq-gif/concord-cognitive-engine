@@ -452,7 +452,7 @@ export default function AttentionLensPage() {
           )}
 
           {/* Fallback: message-only result */}
-          {actionResult.message && actionResult.focusScore === undefined && actionResult.quadrants === undefined && actionResult.schedule === undefined && (
+          {!!actionResult.message && actionResult.focusScore === undefined && actionResult.quadrants === undefined && actionResult.schedule === undefined && (
             <p className="text-sm text-gray-400">{actionResult.message as string}</p>
           )}
         </motion.div>

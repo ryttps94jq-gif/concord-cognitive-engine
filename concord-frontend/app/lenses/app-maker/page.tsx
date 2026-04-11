@@ -236,7 +236,7 @@ export default function AppMakerLens() {
                     <span className="text-neon-cyan font-mono flex-1">{r.path}</span>
                     <span className="text-white">{r.name}</span>
                     <span className="text-gray-400">{r.componentCount} components</span>
-                    {r.dynamic && <span className="text-yellow-400 text-[10px]">dynamic</span>}
+                    {!!r.dynamic && <span className="text-yellow-400 text-[10px]">dynamic</span>}
                   </div>
                 ))}
                 {(actionResult.sharedComponents as Array<{ type: string; reuseCount: number }>)?.length > 0 && (
@@ -297,7 +297,7 @@ export default function AppMakerLens() {
             )}
 
             {/* Fallback */}
-            {actionResult.message && !actionResult.routes && !actionResult.complexityScore && !actionResult.valid && (
+            {!!actionResult.message && !actionResult.routes && !actionResult.complexityScore && !actionResult.valid && (
               <p className="text-sm text-gray-400">{actionResult.message as string}</p>
             )}
           </motion.div>

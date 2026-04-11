@@ -655,7 +655,7 @@ export default function LawLensPage() {
                 )}
               </div>
             )}
-            {'adRevenue' in actionResult || 'totalMonthlyRevenue' in actionResult ? (
+            {'totals' in actionResult && 'attorneyBreakdown' in actionResult ? (
               <div className="space-y-2">
                 {'totals' in actionResult && actionResult.totals !== null && typeof actionResult.totals === 'object' && (
                   <div className="flex gap-4">
@@ -669,8 +669,8 @@ export default function LawLensPage() {
                     <p className="text-xs text-gray-500 uppercase tracking-wider">By Attorney</p>
                     {(actionResult.attorneyBreakdown as Array<Record<string, unknown>>).map((a, i) => (
                       <div key={i} className="flex justify-between text-xs bg-lattice-surface rounded px-2 py-1">
-                        <span className="text-gray-300">{String(a.name || a.attorney)}</span>
-                        <span className="text-neon-green">${String(a.total || a.amount || 0)}</span>
+                        <span className="text-gray-300">{String(a.attorney)}</span>
+                        <span className="text-neon-green">${String(a.billableAmount || a.totalAmount || 0)}</span>
                       </div>
                     ))}
                   </div>

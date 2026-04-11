@@ -378,7 +378,7 @@ export default function AtlasLensPage() {
                 ))}
               </div>
             )}
-            {actionResult.message && !actionResult.resolved && !actionResult.matrix && !actionResult.regionName && !actionResult.optimizedRoute && (
+            {!!actionResult.message && !actionResult.resolved && !actionResult.matrix && !actionResult.regionName && !actionResult.optimizedRoute && (
               <p className="text-sm text-gray-400">{actionResult.message as string}</p>
             )}
           </motion.div>

@@ -1087,12 +1087,11 @@ export default function MathLensPage() {
                 <span className="ml-4 text-gray-400">Det: <span className="text-white">{String(actionResult.determinant)}</span></span>
               </div>
             )}
-            {'degree' in actionResult && 'equation' in actionResult && (
+            {'degree' in actionResult && 'coefficients' in actionResult && (
               <div className="space-y-1 text-xs">
                 <p className="text-gray-400">Degree: <span className="text-neon-cyan">{String(actionResult.degree)}</span></p>
-                <p className="font-mono text-white bg-lattice-surface rounded px-2 py-1">{String(actionResult.equation)}</p>
                 {'roots' in actionResult && actionResult.roots !== null && typeof actionResult.roots === 'object' && (
-                  <p className="text-gray-400">Roots: <span className="text-neon-green">{String((actionResult.roots as Record<string, unknown>).real || 'none')}</span></p>
+                  <p className="text-gray-400">Roots: <span className="text-neon-green">{String((actionResult.roots as Record<string, unknown>).values || 'none')}</span></p>
                 )}
               </div>
             )}

@@ -1200,7 +1200,7 @@ export default function ArtLensPage() {
                 ))}
               </div>
             )}
-            {actionResult.message && !actionResult.harmonies && !actionResult.overallScore && !actionResult.palette && !actionResult.classification && (
+            {!!actionResult.message && !actionResult.harmonies && !actionResult.overallScore && !actionResult.palette && !actionResult.classification && (
               <p className="text-sm text-gray-400">{actionResult.message as string}</p>
             )}
           </motion.div>

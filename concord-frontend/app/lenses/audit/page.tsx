@@ -610,7 +610,7 @@ export default function AuditLensPage() {
           )}
 
           {/* Fallback: generic message */}
-          {actionResult.message && actionResult.passed === undefined && actionResult.entries === undefined && actionResult.riskScore === undefined && actionResult.sampleSize === undefined && (
+          {!!actionResult.message && actionResult.passed === undefined && actionResult.entries === undefined && actionResult.riskScore === undefined && actionResult.sampleSize === undefined && (
             <p className="text-sm text-gray-400">{actionResult.message as string}</p>
           )}
         </motion.div>

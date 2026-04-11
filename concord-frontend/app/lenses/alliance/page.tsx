@@ -569,7 +569,7 @@ export default function AllianceLensPage() {
                     )}
 
                     {/* Fallback: message-only */}
-                    {actionResult.message && !actionResult.compositeScore && !actionResult.nodeCount && !actionResult.overallRiskScore && (
+                    {!!actionResult.message && !actionResult.compositeScore && !actionResult.nodeCount && !actionResult.overallRiskScore && (
                       <p className="text-sm text-gray-400">{actionResult.message as string}</p>
                     )}
                   </motion.div>

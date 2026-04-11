@@ -1086,7 +1086,7 @@ export default function CodeLensPage() {
               )}
 
               {/* Generic message fallback */}
-              {codeActionResult.message && !codeActionResult.averageMaintainability && !codeActionResult.totalDependencies && !codeActionResult.overall && !codeActionResult.totalChurn && (
+              {!!codeActionResult.message && !codeActionResult.averageMaintainability && !codeActionResult.totalDependencies && !codeActionResult.overall && !codeActionResult.totalChurn && (
                 <p className="text-sm text-gray-400">{codeActionResult.message as string}</p>
               )}
             </motion.div>

@@ -211,7 +211,7 @@ export default function ArtistryLensPage() {
                   </div>
                 </div>
               )}
-              {actionResult.message && !actionResult.harmonyScore && !actionResult.overallScore && !actionResult.classification && !actionResult.totalItems && (
+              {!!actionResult.message && !actionResult.harmonyScore && !actionResult.overallScore && !actionResult.classification && !actionResult.totalItems && (
                 <p className="text-sm text-gray-400">{actionResult.message as string}</p>
               )}
             </motion.div>

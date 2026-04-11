@@ -804,7 +804,7 @@ export default function AgentsLensPage() {
                     )}
 
                     {/* Fallback: message-only result */}
-                    {actionResult.message && !actionResult.capabilityScore && !actionResult.bestAgent && !actionResult.healthScore && !actionResult.benchmarkScore && (
+                    {!!actionResult.message && !actionResult.capabilityScore && !actionResult.bestAgent && !actionResult.healthScore && !actionResult.benchmarkScore && (
                       <p className="text-sm text-gray-400">{actionResult.message as string}</p>
                     )}
                   </motion.div>

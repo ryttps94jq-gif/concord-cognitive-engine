@@ -592,7 +592,7 @@ export default function DTUBrowserPage() {
               )}
 
               {/* Fallback */}
-              {actionResult.message && !actionResult.lineageHealth && !actionResult.totalScore && !actionResult.influenceScore && !actionResult.recommendedTier && !actionResult.duplicatesFound && (
+              {!!actionResult.message && !actionResult.lineageHealth && !actionResult.totalScore && !actionResult.influenceScore && !actionResult.recommendedTier && !actionResult.duplicatesFound && (
                 <p className="text-sm text-gray-400">{actionResult.message as string}</p>
               )}
             </motion.div>

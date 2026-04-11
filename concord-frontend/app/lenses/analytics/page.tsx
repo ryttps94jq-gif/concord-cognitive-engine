@@ -677,7 +677,7 @@ export default function AnalyticsPage() {
                 )}
 
                 {/* Fallback: message-only */}
-                {actionResult.message && !actionResult.stages && !actionResult.cohorts && !actionResult.anomaliesFound && !actionResult.trend && (
+                {!!actionResult.message && !actionResult.stages && !actionResult.cohorts && !actionResult.anomaliesFound && !actionResult.trend && (
                   <p className="text-sm text-gray-400">{actionResult.message as string}</p>
                 )}
               </motion.div>

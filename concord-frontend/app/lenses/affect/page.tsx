@@ -1698,7 +1698,7 @@ export default function AffectLensPage() {
                   )}
 
                   {/* Arc Segments */}
-                  {timelineResult.arcSegments && (
+                  {!!timelineResult.arcSegments && (
                     <div className="grid grid-cols-3 gap-2">
                       {Object.entries(timelineResult.arcSegments as Record<string, number>).map(([seg, val]) => {
                         const arrow = val > 0.1
@@ -1824,7 +1824,7 @@ export default function AffectLensPage() {
                   </div>
 
                   {/* Empathy Map Quadrants */}
-                  {empathyResult.quadrants && (
+                  {!!empathyResult.quadrants && (
                     <div className="grid grid-cols-2 gap-2">
                       {[
                         { key: 'thinks', label: 'Thinks', icon: <Brain className="w-3.5 h-3.5" />, color: 'text-blue-400', borderColor: 'border-blue-500/30', bgColor: 'bg-blue-500/5' },
@@ -1928,7 +1928,7 @@ export default function AffectLensPage() {
                   )}
 
                   {/* Sentiment Balance */}
-                  {empathyResult.summary && (
+                  {!!empathyResult.summary && (
                     <div className="flex items-center gap-4 p-3 bg-lattice-deep rounded-lg text-xs">
                       <div className="text-center">
                         <p className="text-gray-500">Balance</p>
@@ -2097,7 +2097,7 @@ export default function AffectLensPage() {
                   )}
 
                   {/* Summary / Raw fallback for arbitrary result shapes */}
-                  {patternResult.summary && typeof patternResult.summary === 'string' && (
+                  {!!patternResult.summary && typeof patternResult.summary === 'string' && (
                     <p className="text-xs text-gray-400 p-3 bg-lattice-deep rounded-lg">
                       {String(patternResult.summary)}
                     </p>

@@ -676,7 +676,7 @@ export default function BoardLensPage() {
             </div>
 
             {/* Message-only results */}
-            {actionResult.message && !actionResult.cycleTime && !actionResult.rankedCards && !actionResult.forecast && (
+            {!!actionResult.message && !actionResult.cycleTime && !actionResult.rankedCards && !actionResult.forecast && (
               <p className="text-sm text-gray-400">{actionResult.message as string}</p>
             )}
 
@@ -715,7 +715,7 @@ export default function BoardLensPage() {
                         </p>
                       </div>
                     </div>
-                    {actionResult.bottleneck && (
+                    {!!actionResult.bottleneck && (
                       <div className="flex items-center gap-2 text-xs text-gray-400 bg-orange-500/10 border border-orange-500/20 rounded-lg px-3 py-2">
                         <AlertTriangle className="w-3.5 h-3.5 text-orange-400 flex-shrink-0" />
                         <span>Bottleneck detected in <span className="text-orange-300 font-semibold">{actionResult.bottleneck as string}</span></span>

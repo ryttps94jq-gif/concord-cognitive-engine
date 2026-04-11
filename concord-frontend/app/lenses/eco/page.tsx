@@ -1089,7 +1089,7 @@ export default function EcoLensPage() {
             <div className="h-2 bg-white/5 rounded-full overflow-hidden">
               <div className={`h-full rounded-full transition-all ${Number(actionResult.overallScore) >= 80 ? 'bg-neon-green' : Number(actionResult.overallScore) >= 60 ? 'bg-neon-cyan' : Number(actionResult.overallScore) >= 40 ? 'bg-yellow-400' : 'bg-red-400'}`} style={{ width: `${actionResult.overallScore ?? 0}%` }} />
             </div>
-            {actionResult.pillars && (
+            {!!actionResult.pillars && (
               <div className="grid grid-cols-3 gap-2">
                 {Object.entries(actionResult.pillars as Record<string, {score:number|null;rating:string;dataCompleteness:number}>).map(([pillar, data]) => (
                   <div key={pillar} className="p-2 bg-white/[0.02] border border-white/5 rounded text-center">

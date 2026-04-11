@@ -240,7 +240,7 @@ export default function AnonLensPage() {
             )}
 
             {/* Fallback */}
-            {actionResult.message && !actionResult.kLevel && !actionResult.overallRisk && !actionResult.epsilon && (
+            {!!actionResult.message && !actionResult.kLevel && !actionResult.overallRisk && !actionResult.epsilon && (
               <p className="text-sm text-gray-400">{actionResult.message as string}</p>
             )}
           </motion.div>

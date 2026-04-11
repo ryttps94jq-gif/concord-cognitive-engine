@@ -391,7 +391,7 @@ export default function DocsLensPage() {
                 <p className="text-[10px] text-gray-500">Label</p>
               </div>
             </div>
-            {actionResult.summary && (
+            {!!actionResult.summary && (
               <div className="grid grid-cols-5 gap-1 text-center">
                 {Object.entries(actionResult.summary as Record<string, number>).map(([key, val]) => (
                   <div key={key} className={`p-1.5 rounded text-xs ${

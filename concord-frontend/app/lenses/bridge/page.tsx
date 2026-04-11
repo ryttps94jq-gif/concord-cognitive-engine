@@ -508,7 +508,7 @@ export default function BridgeLens() {
             )}
 
             {/* Fallback: message-only result */}
-            {actionResult.message &&
+            {!!actionResult.message &&
               actionResult.overallHealth === undefined &&
               actionResult.coverage === undefined &&
               actionResult.syncHealth === undefined &&

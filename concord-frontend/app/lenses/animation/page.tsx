@@ -417,7 +417,7 @@ export default function AnimationPage() {
                 )}
 
                 {/* Fallback */}
-                {actionResult.message && !actionResult.totalFrames && !actionResult.sequences && !actionResult.recommendedFPS && !actionResult.scenes && (
+                {!!actionResult.message && !actionResult.totalFrames && !actionResult.sequences && !actionResult.recommendedFPS && !actionResult.scenes && (
                   <p className="text-sm text-gray-400">{actionResult.message as string}</p>
                 )}
               </motion.div>

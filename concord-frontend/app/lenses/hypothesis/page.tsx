@@ -456,7 +456,7 @@ export default function HypothesisLensPage() {
                 </div>
                 {d.confidenceInterval && (
                   <p className="text-xs text-gray-400">
-                    {d.confidenceInterval.level}% CI: [{d.confidenceInterval.lower?.toFixed(4)}, {d.confidenceInterval.upper?.toFixed(4)}]
+                    {(d.confidenceInterval.level * 100).toFixed(0)}% CI: [{d.confidenceInterval.lower?.toFixed(4)}, {d.confidenceInterval.upper?.toFixed(4)}]
                   </p>
                 )}
                 {d.conclusion && <p className="text-xs text-gray-300 italic">{d.conclusion}</p>}
@@ -471,12 +471,12 @@ export default function HypothesisLensPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="lens-card">
                     <p className="text-xs text-gray-400 mb-2">Control</p>
-                    <p className="text-xl font-bold text-gray-300">{(d.control?.rate * 100 || 0).toFixed(2)}%</p>
+                    <p className="text-xl font-bold text-gray-300">{parseFloat(d.control?.rate as unknown as string || '0').toFixed(2)}%</p>
                     <p className="text-xs text-gray-500">{(d.control?.conversions || 0).toLocaleString()} / {(d.control?.visitors || 0).toLocaleString()}</p>
                   </div>
                   <div className="lens-card">
                     <p className="text-xs text-gray-400 mb-2">Variant</p>
-                    <p className="text-xl font-bold text-neon-green">{(d.variant?.rate * 100 || 0).toFixed(2)}%</p>
+                    <p className="text-xl font-bold text-neon-green">{parseFloat(d.variant?.rate as unknown as string || '0').toFixed(2)}%</p>
                     <p className="text-xs text-gray-500">{(d.variant?.conversions || 0).toLocaleString()} / {(d.variant?.visitors || 0).toLocaleString()}</p>
                   </div>
                 </div>
@@ -484,8 +484,8 @@ export default function HypothesisLensPage() {
                   <span className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${d.significant ? 'bg-neon-green/20 text-neon-green' : 'bg-yellow-400/20 text-yellow-400'}`}>
                     {d.significant ? 'Significant' : 'Not Significant'}
                   </span>
-                  <span className="text-xs text-gray-400">+{(d.relativeUplift || 0).toFixed(1)}% uplift</span>
-                  <span className="text-xs text-gray-400">Power: {((d.statisticalPower || 0) * 100).toFixed(0)}%</span>
+                  <span className="text-xs text-gray-400">+{parseFloat(d.relativeUplift as unknown as string || '0').toFixed(1)}% uplift</span>
+                  <span className="text-xs text-gray-400">Power: {parseFloat(d.statisticalPower as unknown as string || '0').toFixed(0)}%</span>
                 </div>
                 {d.recommendation && <p className="text-xs text-gray-300 italic">{d.recommendation}</p>}
                 {d.sampleSizeForPower80 && <p className="text-xs text-gray-500">Sample for 80% power: {d.sampleSizeForPower80.toLocaleString()}</p>}
@@ -512,7 +512,7 @@ export default function HypothesisLensPage() {
                 </div>
                 {d.credibleInterval && (
                   <p className="text-xs text-gray-400">
-                    {d.credibleInterval.level}% Credible Interval: [{d.credibleInterval.lower?.toFixed(4)}, {d.credibleInterval.upper?.toFixed(4)}]
+                    {d.credibleInterval.level} Credible Interval: [{d.credibleInterval.lower?.toFixed(4)}, {d.credibleInterval.upper?.toFixed(4)}]
                   </p>
                 )}
                 {d.evidenceStrength && (

@@ -1359,7 +1359,7 @@ export default function CalendarLensPage() {
                   )}
 
                   {/* Expand Recurring */}
-                  {actionResult.expanded && (
+                  {!!actionResult.expanded && (
                     <div>
                       <div className="flex items-center gap-1.5 mb-2 text-purple-400 font-semibold">
                         <Repeat className="w-3.5 h-3.5" /> Expanded Events
@@ -1377,7 +1377,7 @@ export default function CalendarLensPage() {
                   )}
 
                   {/* Schedule Optimize */}
-                  {actionResult.suggestions && (
+                  {!!actionResult.suggestions && (
                     <div>
                       <div className="flex items-center gap-1.5 mb-2 text-green-400 font-semibold">
                         <BarChart3 className="w-3.5 h-3.5" /> Optimization Suggestions
