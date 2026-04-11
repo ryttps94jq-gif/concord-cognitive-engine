@@ -73,6 +73,7 @@ import { getScalingStatus } from "./lib/horizontal-scaling.js";
 import { startAllIntervals, stopAllIntervals, getIntervalStatus } from "./lib/interval-registry.js";
 import { getMemoryPressureLevel, initMemoryWatchdog } from "./lib/memory-pressure.js";
 import { initStateSync, getSyncStatus, stopSync } from "./lib/state-sync.js";
+import * as cityStreaming from "./lib/city-streaming.js";
 
 // ---- Route modules (ESM) ----
 import registerSystemRoutes from "./routes/system.js";
@@ -7220,6 +7221,7 @@ async function runMacro(domain, name, input, ctx) {
     foundation: new Set(["status", "sense.readings", "sense.patterns", "identity.verify", "energy.map", "energy.grid", "spectrum.map", "spectrum.available", "emergency.status", "market.earnings", "market.topology", "archive.fossils", "archive.decoded", "synthesis.correlations", "neural.readiness", "protocol.stats"]),
     intel: new Set(["weather", "geology", "energy", "ocean", "seismic", "agriculture", "environment", "research.status", "research.data", "research.synthesis", "research.archive", "classifier.status", "metrics"]),
     cortex: new Set(["taxonomy", "unknown", "anomalies", "classify", "spectrum", "privacy.zones", "privacy.verify", "privacy.stats", "metrics"]),
+    city: new Set(["list", "get", "status", "startStream", "endStream", "followStream", "unfollowStream", "listStreams", "getStream"]),
   };
   const _domainSet = publicReadDomains[domain];
   const _domainNameAllowed = _domainSet ? _domainSet.has(name) : false;
@@ -21726,6 +21728,7 @@ register("lattice", "beacon", (ctx, input={}) => {
   // Update continuity metric
   STATE.__chicken2.metrics.continuityAvg = clamp(overlap, 0, 1);
   _c2log("c2.beacon", "Beacon computed", { rootHash, threshold, overlap, awake });
+  realtimeEmit("beacon:check", { rootHash, threshold, overlap, awake, timestamp: nowISO() });
   return { ok:true, rootHash, threshold, overlap, awake };
 }, { summary:"Chicken2 lattice beacon: returns overlap against genesis and awakens recognition if >= threshold." });
 
@@ -23375,6 +23378,14 @@ function startHeartbeat() {
   heartbeatTimer = setInterval(async () => {
     if (!STATE.settings.heartbeatEnabled) return;
     _heartbeatTickCount++;
+    // Broadcast heartbeat tick to frontend
+    realtimeEmit("heartbeat:tick", {
+      tickCount: _heartbeatTickCount,
+      timestamp: nowISO(),
+      dtuCount: STATE.dtus.size,
+      artifactCount: STATE.lensArtifacts.size,
+      sessionCount: STATE.sessions.size,
+    });
     const ctx = makeInternalCtx("heartbeat");
 
     // process crawl queue once (Local scope only — ingest is local activity)
@@ -23440,6 +23451,27 @@ function startHeartbeat() {
     // v5.6: repair agent tick — lattice health audit (every 30th tick ~5min, also has internal 5min cooldown)
     if (_heartbeatTickCount % 30 === 0) {
       try { await runMacro("emergent","repair.agent.tick", {}, ctx).catch((err) => { console.error('[system] Repair agent tick error:', err); }); } catch (err) { console.error('[system] Repair agent tick error:', err); }
+    }
+
+    // User session activity tick (every ~10 min)
+    if (_heartbeatTickCount % 12 === 0) {
+      try {
+        let activeCount = 0;
+        const cutoff = Date.now() - 600000; // 10 min
+        for (const [sessionId, session] of STATE.sessions) {
+          const msgs = session.messages || [];
+          const lastMsg = msgs[msgs.length - 1];
+          const isActive = lastMsg && new Date(lastMsg.ts || lastMsg.createdAt || 0).getTime() > cutoff;
+          if (isActive) activeCount++;
+        }
+        realtimeEmit("user:tick", {
+          tickCount: _heartbeatTickCount,
+          activeSessions: activeCount,
+          totalSessions: STATE.sessions.size,
+          dtuCount: STATE.dtus.size,
+          timestamp: nowISO(),
+        });
+      } catch (_e) { /* user tick is non-critical */ }
     }
 
     // v5.7: analogize engine — every 18th tick (~3min, let main pipelines settle)
