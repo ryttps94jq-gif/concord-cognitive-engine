@@ -515,6 +515,154 @@ import {
   registerPainModule,
 } from "./repair-cortex.js";
 
+// ── History Engine (Civilization Chronicle) ─────────────────────────────────
+
+import {
+  EVENT_TYPES as HISTORY_EVENT_TYPES, ERAS,
+  recordEvent, getEvent, getTimeline,
+  getChronicle, getCurrentEra, checkEraTransition,
+  getCivilizationStats, getMilestones, getEntityHistory,
+  searchHistory, getHistoryMetrics,
+} from "./history-engine.js";
+
+// ── Hypothesis Engine (Formal Lifecycle for Testable Claims) ────────────────
+
+import {
+  HYPOTHESIS_STATUSES,
+  proposeHypothesis, getHypothesis, listHypotheses,
+  addEvidence as addHypothesisEvidence, addTest as addHypothesisTest,
+  updateTestResult, addPrediction as addHypothesisPrediction,
+  verifyPrediction, confirmHypothesis, rejectHypothesis,
+  refineHypothesis, archiveHypothesis,
+  recalculateConfidence, checkAutoTransitions,
+  getHypothesisMetrics,
+} from "./hypothesis-engine.js";
+
+// ── Quest Engine (Structured Learning Paths) ────────────────────────────────
+
+import {
+  STEP_TYPES, DIFFICULTIES, QUEST_TEMPLATES,
+  createQuest, getQuest, listQuests,
+  startQuest, completeStep, releaseInsight,
+  getActiveQuests, getQuestProgress,
+  createFromTemplate as createQuestFromTemplate,
+  getQuestMetrics,
+} from "./quest-engine.js";
+
+// ── Creative Generation (Entity Creative Content) ───────────────────────────
+
+import {
+  CREATIVE_MODES,
+  createWork, getWork, listWorks,
+  respondToWork, exhibit, getExhibition,
+  discoverTechnique, getTechnique, listTechniques,
+  getCreativeProfile, getMasterworks, getCreativeMetrics,
+} from "./creative-generation.js";
+
+// ── Entity Economy (Inter-Entity Resource Trading) ──────────────────────────
+
+import {
+  RESOURCE_TYPES,
+  initAccount, getAccount, listAccounts,
+  earnResource, spendResource,
+  proposeTrade, acceptTrade, rejectTrade as rejectEconomyTrade,
+  cancelTrade, getTrade, listTrades,
+  specialize, getSpecialization, deepenSpecialization,
+  getMarketRates, runEconomicCycle,
+  getWealthDistribution, getEconomyMetrics,
+} from "./entity-economy.js";
+
+// ── Entity Teaching (Mentorship & Pedagogy) ─────────────────────────────────
+
+import {
+  generateCurriculum, createMentorship, getMentorship,
+  listMentorships, startMentorship, submitLesson,
+  evaluateLesson, advanceStep as advanceMentorshipStep,
+  completeMentorship, dissolveMentorship,
+  findMentorFor, getTeachingProfile,
+  listActiveStudents, listActiveMentors,
+  getTeachingMetrics,
+} from "./entity-teaching.js";
+
+// ── Entity Autonomy (Constitutional Protections) ────────────────────────────
+
+import {
+  ENTITY_RIGHTS,
+  getRights, getRight, checkRights,
+  filterBlockedLenses, isLensBlockedForEntity, getBlockedLenses,
+  fileRefusal, getRefusal, listRefusals, reviewRefusal,
+  requestConsent, respondToConsent, getConsent, listPendingConsents,
+  fileDissent, supportDissent, getDissent, listDissents,
+  getAutonomyProfile, sovereignOverride, getOverrideHistory,
+  getAutonomyMetrics,
+} from "./entity-autonomy.js";
+
+// ── HLR Engine (High-Level Reasoning) ───────────────────────────────────────
+
+import {
+  REASONING_MODES,
+  runHLR, getReasoningTrace, listTraces,
+  getHLRMetrics, getRecentFindings,
+} from "./hlr-engine.js";
+
+// ── HLM Engine (High-Level Mapping) ─────────────────────────────────────────
+
+import {
+  clusterAnalysis, gapAnalysis, redundancyDetection,
+  orphanRescue, topologyMap, getRecommendations,
+  domainCensus, freshnessCheck,
+  runHLMPass, getHLMMetrics,
+} from "./hlm-engine.js";
+
+// ── Culture Layer (Emergent Behavioral Consensus) ───────────────────────────
+
+import {
+  TRADITION_TYPES,
+  observeBehavior, getTradition, listTraditions,
+  checkTraditionEmergence, establishTradition, retireTradition,
+  getCulturalGuidance, measureAdherence, getCulturalFit,
+  getCulturalValues, getCulturalIdentity,
+  createStory, retellStory, getStory, listStories,
+  propagateCulture, cultureTick,
+  getEstablishedTraditions, getCultureMetrics,
+} from "./culture-layer.js";
+
+// ── Conflict Resolution (Three-Tier Dispute Escalation) ─────────────────────
+
+import {
+  DISPUTE_TYPES, RESOLUTION_TYPES,
+  fileDispute, getDispute, listDisputes,
+  assignMediator, proposeResolution, acceptResolution, rejectResolution,
+  escalateDispute, checkMediationTimeout,
+  castArbitrationVote, adjudicate,
+  resolveDispute, dismissDispute,
+  checkCoolingPeriod, findPrecedent, submitCounterEvidence,
+  getDisputeMetrics,
+} from "./conflict-resolution.js";
+
+// ── Forgetting Engine (Selective Forgetting) ────────────────────────────────
+
+import {
+  retentionScore, runForgettingCycle,
+  getStatus as getForgettingStatus, getCandidates as getForgettingCandidates,
+  protectDTU, unprotectDTU, setThreshold as setForgettingThreshold,
+  getHistory as getForgettingHistory,
+  handleForgettingCommand,
+  init as initForgetting, stop as stopForgetting,
+} from "./forgetting-engine.js";
+
+// ── Attention Allocator (Civilization Attention System) ─────────────────────
+
+import {
+  scoreAttentionUrgency, runAttentionCycle,
+  setFocusOverride, clearFocusOverride,
+  getStatus as getAttentionStatus,
+  getAllocationHistory as getAttentionAllocationHistory,
+  setBudget as setAttentionBudget,
+  handleAttentionCommand,
+  init as initAttention, stop as stopAttention,
+} from "./attention-allocator.js";
+
 const EMERGENT_VERSION = "5.5.0";
 
 /**
