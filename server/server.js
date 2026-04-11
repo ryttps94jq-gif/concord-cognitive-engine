@@ -1168,6 +1168,20 @@ function requestLoggerMiddleware(req, res, next) {
   next();
 }
 
+// Simple async mutex for state mutations (DTU/lens create/update/delete)
+const _mutexQueue = [];
+let _mutexLocked = false;
+function acquireMutex() {
+  return new Promise(resolve => {
+    if (!_mutexLocked) { _mutexLocked = true; resolve(); return; }
+    _mutexQueue.push(resolve);
+  });
+}
+function releaseMutex() {
+  if (_mutexQueue.length > 0) { _mutexQueue.shift()(); }
+  else { _mutexLocked = false; }
+}
+
 // ---- config ----
 const PORT = Number(process.env.PORT || 5050);
 const VERSION = "5.1.0-production";
@@ -22666,6 +22680,19 @@ try {
 }
 // ===== END GRC =====
 
+// ── Validate required secrets at startup ──────────────────────────────────────
+if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 16) {
+  console.error("[FATAL] JWT_SECRET must be set and at least 16 characters. Generate with: openssl rand -hex 32");
+  if (process.env.NODE_ENV === "production") process.exit(1);
+  else console.warn("[WARN] Using insecure default JWT_SECRET for development");
+}
+if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 16) {
+  if (process.env.NODE_ENV === "production") {
+    console.error("[FATAL] SESSION_SECRET must be set in production. Generate with: openssl rand -hex 32");
+    process.exit(1);
+  }
+}
+
 const app = express();
 
 // ---- Trust Proxy ----
@@ -28015,18 +28042,29 @@ register("lens", "update", async (ctx, input={}) => {
   saveStateDebounced();
   _lensEmitDTU(ctx, artifact.domain, "update", artifact.type, artifact, { claims: [`updated from v${artifact.version-1}`], before });
   return { ok: true, artifact };
+  } finally { releaseMutex(); }
 });
 
-register("lens", "delete", (ctx, input={}) => {
+register("lens", "delete", async (ctx, input={}) => {
+  await acquireMutex();
+  try {
   const { id } = input;
   if (!id) return { ok: false, error: "id required" };
   const artifact = STATE.lensArtifacts.get(id);
   if (!artifact) return { ok: false, error: "not found" };
+
+  // Ownership validation — artifact's owner fields must match actor userId (or actor must be admin)
+  const userId = ctx?.actor?.userId;
+  const isOwner = userId && (artifact.ownerId === userId || artifact.createdBy === userId || artifact.createdByUser === userId);
+  const isAdmin = ctx?.actor?.role === "owner" || ctx?.actor?.role === "admin" || ctx?.actor?.role === "founder";
+  if (!isOwner && !isAdmin) return { ok: false, error: "unauthorized: you can only delete your own artifacts" };
+
   STATE.lensArtifacts.delete(id);
   _lensDomainIndexRemove(artifact.domain, id);
   saveStateDebounced();
   _lensEmitDTU(ctx, artifact.domain, "delete", artifact.type, artifact);
   return { ok: true, deleted: id };
+  } finally { releaseMutex(); }
 });
 
 register("lens", "run", async (ctx, input={}) => {

@@ -11,9 +11,9 @@ describe('design-system tokens', () => {
     });
 
     it('panelHover extends panel with hover styles', () => {
-      expect(ds.panelHover).toContain(ds.panel);
-      expect(ds.panelHover).toContain('hover:border-neon-cyan/50');
-      expect(ds.panelHover).toContain('transition-colors');
+      expect(ds.panelHover).toContain('bg-lattice-surface');
+      expect(ds.panelHover).toContain('hover:border-white/15');
+      expect(ds.panelHover).toContain('transition-all');
       expect(ds.panelHover).toContain('cursor-pointer');
     });
   });
@@ -30,16 +30,16 @@ describe('design-system tokens', () => {
       expect(ds.btnBase).toContain('disabled:pointer-events-none');
     });
 
-    it('btnPrimary extends btnBase with blue styling', () => {
-      expect(ds.btnPrimary).toContain(ds.btnBase);
-      expect(ds.btnPrimary).toContain('bg-neon-blue');
+    it('btnPrimary has gradient blue styling', () => {
+      expect(ds.btnPrimary).toContain('from-neon-blue');
       expect(ds.btnPrimary).toContain('text-white');
+      expect(ds.btnPrimary).toContain('shadow-lg');
     });
 
-    it('btnSecondary extends btnBase with elevated styling', () => {
-      expect(ds.btnSecondary).toContain(ds.btnBase);
+    it('btnSecondary has elevated styling', () => {
       expect(ds.btnSecondary).toContain('bg-lattice-elevated');
       expect(ds.btnSecondary).toContain('text-gray-200');
+      expect(ds.btnSecondary).toContain('hover:border-white/20');
     });
 
     it('btnDanger extends btnBase with red styling', () => {

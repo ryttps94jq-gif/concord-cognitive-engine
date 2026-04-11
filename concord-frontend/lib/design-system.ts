@@ -13,20 +13,20 @@
 
 /** Panel / Card — the standard container used by most lenses. */
 const panel =
-  'bg-lattice-surface border border-lattice-border rounded-xl p-4';
+  'bg-lattice-surface border border-lattice-border rounded-xl p-4 shadow-lattice-sm';
 
 const panelHover =
-  `${panel} hover:border-neon-cyan/50 transition-colors cursor-pointer`;
+  'bg-lattice-surface border border-lattice-border rounded-xl p-4 shadow-lattice-sm hover:shadow-lattice-md hover:border-white/15 transition-all duration-150 cursor-pointer';
 
 /** Buttons */
 const btnBase =
   'inline-flex items-center justify-center gap-2 font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-lattice-void disabled:opacity-50 disabled:pointer-events-none';
 
 const btnPrimary =
-  `${btnBase} px-4 py-2 bg-neon-blue text-white hover:bg-neon-blue/80 focus:ring-neon-blue`;
+  'bg-gradient-to-r from-neon-blue to-cyan-500 text-white font-medium rounded-lg px-4 py-2 shadow-lg shadow-neon-blue/25 hover:shadow-neon-blue/40 hover:brightness-110 transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-neon-blue/50 disabled:opacity-50 disabled:cursor-not-allowed';
 
 const btnSecondary =
-  `${btnBase} px-4 py-2 bg-lattice-elevated text-gray-200 hover:bg-lattice-elevated/80 border border-lattice-border focus:ring-gray-500`;
+  'bg-lattice-elevated text-gray-200 font-medium rounded-lg px-4 py-2 border border-lattice-border hover:border-white/20 hover:bg-white/[0.08] transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-white/20 disabled:opacity-50 disabled:cursor-not-allowed';
 
 const btnDanger =
   `${btnBase} px-4 py-2 bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30 focus:ring-red-500`;
