@@ -51,6 +51,9 @@ export default function FilmStudiosPage() {
   const [partyCode, setPartyCode] = useState('');
   const [partyActive, setPartyActive] = useState(false);
 
+  // My films via useLensData (declared before action wiring to avoid used-before-declaration errors)
+  const { items: myFilmItems, create: createFilmItem, isError: isError2, error: error2, refetch: refetch2 } = useLensData<Record<string, unknown>>('film-studios', 'film', { seed: [] });
+
   // Backend action wiring
   const runFilmAction = useRunArtifact('film-studios');
   const [filmActionResult, setFilmActionResult] = useState<Record<string, unknown> | null>(null);
@@ -84,9 +87,6 @@ export default function FilmStudiosPage() {
     queryFn: () => apiHelpers.filmStudio.discover({ q: searchQuery || undefined }).then(r => r.data?.films || r.data?.items || r.data || []).catch(() => []),
     initialData: [],
   });
-
-  // My films via useLensData
-  const { items: myFilmItems, create: createFilmItem, isError: isError2, error: error2, refetch: refetch2 } = useLensData<Record<string, unknown>>('film-studios', 'film', { seed: [] });
   const myFilms = useMemo(() => myFilmItems.map(i => ({ ...(i.data as unknown as FilmProject), id: i.id, title: i.title })), [myFilmItems]);
 
   // Create film mutation
@@ -380,8 +380,8 @@ export default function FilmStudiosPage() {
                       ))}
                     </div>
                   )}
-                  {filmActionResult.parallelizable && <p className="text-xs text-gray-500 italic">{filmActionResult.parallelizable as string}</p>}
-                  {filmActionResult.estimatedCompletion && <p className="text-xs text-neon-green">Completion: {filmActionResult.estimatedCompletion as string}</p>}
+                  {filmActionResult.parallelizable && <p className="text-xs text-gray-500 italic">{String(filmActionResult.parallelizable)}</p>}
+                  {filmActionResult.estimatedCompletion && <p className="text-xs text-neon-green">Completion: {String(filmActionResult.estimatedCompletion)}</p>}
                 </div>
               )}
             </div>

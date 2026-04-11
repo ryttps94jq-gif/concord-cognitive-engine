@@ -224,23 +224,23 @@ export default function IntegrationsLensPage() {
           {automationItems?.length === 0 ? (
             <EmptyState icon={<Zap />} message="No automations configured" />
           ) : (
-            automationItems?.map((auto: Record<string, unknown>) => (
-              <div key={auto.id as string} className="panel p-4 flex items-center justify-between">
+            automationItems?.map((auto) => (
+              <div key={auto.id} className="panel p-4 flex items-center justify-between">
                 <div>
-                  <h3 className="font-semibold">{String(auto.name)}</h3>
-                  <p className="text-xs text-gray-400">Trigger: {String(auto.trigger)} | Actions: {String(auto.actionCount)}</p>
-                  <p className="text-xs text-gray-500 mt-1">Runs: {String(auto.runCount)}</p>
+                  <h3 className="font-semibold">{String((auto.data as Record<string, unknown>)?.name ?? auto.title)}</h3>
+                  <p className="text-xs text-gray-400">Trigger: {String((auto.data as Record<string, unknown>)?.trigger ?? '')} | Actions: {String((auto.data as Record<string, unknown>)?.actionCount ?? 0)}</p>
+                  <p className="text-xs text-gray-500 mt-1">Runs: {String((auto.data as Record<string, unknown>)?.runCount ?? 0)}</p>
                 </div>
                 <div className="flex items-center gap-3">
                   <button
-                    onClick={() => runAutomationMutation.mutate(auto.id as string)}
+                    onClick={() => runAutomationMutation.mutate(auto.id)}
                     disabled={runAutomationMutation.isPending}
                     className="btn-secondary text-sm flex items-center gap-1"
                   >
                     <Play className="w-4 h-4" />
                     Run
                   </button>
-                  <span className={`w-2 h-2 rounded-full ${auto.enabled ? 'bg-green-500' : 'bg-gray-500'}`} />
+                  <span className={`w-2 h-2 rounded-full ${(auto.data as Record<string, unknown>)?.enabled ? 'bg-green-500' : 'bg-gray-500'}`} />
                 </div>
               </div>
             ))
@@ -250,24 +250,28 @@ export default function IntegrationsLensPage() {
 
       {activeTab === 'services' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {integrationItems?.map((svc: Record<string, unknown>) => (
-            <div key={svc.id as string} className="panel p-4">
+          {integrationItems?.map((svc) => {
+            const svcData = svc.data as Record<string, unknown> | undefined;
+            const svcId = svcData?.id as string | undefined ?? svc.id;
+            return (
+            <div key={svc.id} className="panel p-4">
               <div className="flex items-center gap-3 mb-2">
-                {(svc.id as string) === 'vscode' && <Code className="w-6 h-6 text-blue-400" />}
-                {(svc.id as string) === 'obsidian' && <FileText className="w-6 h-6 text-purple-400" />}
-                {(svc.id as string) === 'notion' && <FileText className="w-6 h-6 text-white" />}
-                {!['vscode', 'obsidian', 'notion'].includes(svc.id as string) && <Plug className="w-6 h-6 text-gray-400" />}
+                {svcId === 'vscode' && <Code className="w-6 h-6 text-blue-400" />}
+                {svcId === 'obsidian' && <FileText className="w-6 h-6 text-purple-400" />}
+                {svcId === 'notion' && <FileText className="w-6 h-6 text-white" />}
+                {!['vscode', 'obsidian', 'notion'].includes(svcId ?? '') && <Plug className="w-6 h-6 text-gray-400" />}
                 <div>
-                  <h3 className="font-semibold">{String(svc.name)}</h3>
-                  <span className={`text-xs ${(svc.status as string) === 'available' ? 'text-green-400' : 'text-yellow-400'}`}>
-                    {String(svc.status)}
+                  <h3 className="font-semibold">{String(svcData?.name ?? svc.title)}</h3>
+                  <span className={`text-xs ${String(svcData?.status) === 'available' ? 'text-green-400' : 'text-yellow-400'}`}>
+                    {String(svcData?.status ?? '')}
                   </span>
                 </div>
               </div>
-              <p className="text-sm text-gray-400">{String(svc.description)}</p>
-              <p className="text-xs text-gray-500 mt-2">Type: {String(svc.type)}</p>
+              <p className="text-sm text-gray-400">{String(svcData?.description ?? '')}</p>
+              <p className="text-xs text-gray-500 mt-2">Type: {String(svcData?.type ?? '')}</p>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

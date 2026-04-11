@@ -1,6 +1,8 @@
 'use client';
 
 import { useLensNav } from '@/hooks/useLensNav';
+import { useQuery } from '@tanstack/react-query';
+import { apiHelpers } from '@/lib/api/client';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -293,7 +295,7 @@ export default function BioLensPage() {
             {systems.find((s) => s.id === selectedSystem)?.name} Metrics
           </h3>
 
-          {bioData?.systems?.[selectedSystem]?.metrics?.map((metric: BioMetric) => (
+          {(bioData?.systems as Record<string, { metrics?: BioMetric[] }>)?.[selectedSystem]?.metrics?.map((metric: BioMetric) => (
             <div key={metric.name} className="space-y-1">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-400">{metric.name}</span>
@@ -308,7 +310,7 @@ export default function BioLensPage() {
             </div>
           ))}
 
-          {!bioData?.systems?.[selectedSystem]?.metrics && (
+          {!(bioData?.systems as Record<string, { metrics?: BioMetric[] }>)?.[selectedSystem]?.metrics && (
             <p className="text-gray-500 text-center py-4">
               Loading system metrics...
             </p>
@@ -361,10 +363,10 @@ export default function BioLensPage() {
         </h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { name: 'Energy', value: bioData?.homeostasis?.energy || 0.85 },
-            { name: 'Coherence', value: bioData?.homeostasis?.coherence || 0.92 },
-            { name: 'Stability', value: bioData?.homeostasis?.stability || 0.78 },
-            { name: 'Adaptation', value: bioData?.homeostasis?.adaptation || 0.88 },
+            { name: 'Energy', value: (bioData?.homeostasis as Record<string, number>)?.energy || 0.85 },
+            { name: 'Coherence', value: (bioData?.homeostasis as Record<string, number>)?.coherence || 0.92 },
+            { name: 'Stability', value: (bioData?.homeostasis as Record<string, number>)?.stability || 0.78 },
+            { name: 'Adaptation', value: (bioData?.homeostasis as Record<string, number>)?.adaptation || 0.88 },
           ].map((indicator) => (
             <div key={indicator.name} className="lens-card text-center">
               <p className="text-3xl font-bold text-neon-cyan">

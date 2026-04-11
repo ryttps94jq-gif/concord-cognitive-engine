@@ -279,7 +279,7 @@ export default function DebugLensPage() {
                 <p className="text-[10px] text-gray-500">Patterns</p>
               </div>
             </div>
-            {actionResult.levelDistribution && (
+            {!!actionResult.levelDistribution && (
               <div>
                 <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">Level Distribution</p>
                 <div className="flex flex-wrap gap-2">
@@ -307,7 +307,7 @@ export default function DebugLensPage() {
                 </div>
               </div>
             )}
-            {Array.isArray(actionResult.spikes) && actionResult.spikes !== 'none_detected' && (
+            {Array.isArray(actionResult.spikes) && (actionResult.spikes as unknown[]).length > 0 && (
               <p className="text-xs text-yellow-400 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> {(actionResult.spikes as unknown[]).length} error spike(s) detected</p>
             )}
           </div>
@@ -410,7 +410,7 @@ export default function DebugLensPage() {
                 <p className="text-[10px] text-gray-500">Avg Lib Frames</p>
               </div>
             </div>
-            {actionResult.errorTypeDistribution && (
+            {!!actionResult.errorTypeDistribution && (
               <div>
                 <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">Error Types</p>
                 <div className="flex flex-wrap gap-1">

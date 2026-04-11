@@ -260,6 +260,27 @@ export default function AdminDashboardPage() {
   const [sysHealthLoading, setSysHealthLoading] = useState(false);
   const [sysHealthError, setSysHealthError] = useState<string | null>(null);
 
+  const {
+    data: dashboard,
+    refetch: refetchDashboard,
+    isLoading: dashboardLoading, isError: isError, error: error,} = useQuery<DashboardData>({
+    queryKey: ['admin-dashboard'],
+    queryFn: () => apiHelpers.guidance.health().then((r) => r.data),
+    refetchInterval: autoRefresh ? 5000 : false,
+  });
+
+  const { data: metrics, refetch: refetchMetrics, isError: isError2, error: error2,} = useQuery<MetricsData>({
+    queryKey: ['admin-metrics'],
+    queryFn: () => apiHelpers.perf.metrics().then((r) => r.data),
+    refetchInterval: autoRefresh ? 5000 : false,
+  });
+
+  const { data: logs, isError: isError3, error: error3, refetch: refetch3,} = useQuery({
+    queryKey: ['admin-logs'],
+    queryFn: () => apiHelpers.eventsLog.list({ limit: 20 }).then((r) => r.data),
+    refetchInterval: autoRefresh ? 10000 : false,
+  });
+
   // -- Audit Log action handler --
   const handleRunAuditLog = useCallback(async () => {
     setAuditLogLoading(true);
@@ -369,27 +390,6 @@ export default function AdminDashboardPage() {
       setSysHealthLoading(false);
     }
   }, [dashboard, createArtifact, runAction]);
-
-  const {
-    data: dashboard,
-    refetch: refetchDashboard,
-    isLoading: dashboardLoading, isError: isError, error: error,} = useQuery<DashboardData>({
-    queryKey: ['admin-dashboard'],
-    queryFn: () => apiHelpers.guidance.health().then((r) => r.data),
-    refetchInterval: autoRefresh ? 5000 : false,
-  });
-
-  const { data: metrics, refetch: refetchMetrics, isError: isError2, error: error2,} = useQuery<MetricsData>({
-    queryKey: ['admin-metrics'],
-    queryFn: () => apiHelpers.perf.metrics().then((r) => r.data),
-    refetchInterval: autoRefresh ? 5000 : false,
-  });
-
-  const { data: logs, isError: isError3, error: error3, refetch: refetch3,} = useQuery({
-    queryKey: ['admin-logs'],
-    queryFn: () => apiHelpers.eventsLog.list({ limit: 20 }).then((r) => r.data),
-    refetchInterval: autoRefresh ? 10000 : false,
-  });
 
   // Quality thresholds
   const { data: qualityData } = useQuery({
@@ -1719,16 +1719,16 @@ function AuditLogResultPanel({ result }: { result: Record<string, unknown> }) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-xs font-medium">{typeLabel(a.type as string)}</span>
-                    <span className="text-xs opacity-70">User: {a.userId as string}</span>
+                    <span className="text-xs opacity-70">User: {String(a.userId)}</span>
                     {a.timestamp && (
                       <span className="text-xs opacity-50">{new Date(a.timestamp as string).toLocaleTimeString()}</span>
                     )}
                   </div>
                   <div className="flex gap-3 mt-1 text-xs opacity-70">
-                    {a.zScore !== undefined && <span>z-score: {a.zScore as number}</span>}
-                    {a.gapMs !== undefined && <span>gap: {Math.round((a.gapMs as number) / 1000)}s</span>}
-                    {a.actionsInWindow !== undefined && <span>{a.actionsInWindow as number} actions/window</span>}
-                    {a.action && <span>action: {a.action as string}</span>}
+                    {a.zScore !== undefined && <span>z-score: {String(a.zScore)}</span>}
+                    {a.gapMs !== undefined && <span>gap: {Math.round(Number(a.gapMs) / 1000)}s</span>}
+                    {a.actionsInWindow !== undefined && <span>{String(a.actionsInWindow)} actions/window</span>}
+                    {a.action && <span>action: {String(a.action)}</span>}
                   </div>
                 </div>
               </div>
