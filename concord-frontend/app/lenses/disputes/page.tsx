@@ -776,7 +776,7 @@ export default function DisputesPage() {
                 <p className="text-[10px] text-gray-500">Amount</p>
               </div>
             </div>
-            {actionResult.preferredMethod && (
+            {!!actionResult.preferredMethod && (
               <div className="flex items-center gap-2 p-2 bg-neon-blue/5 border border-neon-blue/20 rounded text-xs">
                 <Gavel className="w-3 h-3 text-neon-blue" />
                 <span className="text-gray-300">Preferred Method: </span>
@@ -858,7 +858,7 @@ export default function DisputesPage() {
                 </div>
               </div>
             )}
-            {actionResult.recommendation && (
+            {!!actionResult.recommendation && (
               <p className={`text-xs px-3 py-2 rounded border ${String(actionResult.recommendation).includes('within') ? 'bg-neon-green/10 text-neon-green border-neon-green/20' : 'bg-yellow-400/10 text-yellow-400 border-yellow-400/20'}`}>
                 {String(actionResult.recommendation)}
               </p>
@@ -883,7 +883,7 @@ export default function DisputesPage() {
                 <p className="text-[10px] text-gray-500">Case Strength</p>
               </div>
             </div>
-            {actionResult.strongestEvidence && (
+            {!!actionResult.strongestEvidence && (
               <p className="text-xs text-gray-300 flex items-center gap-1">
                 <TrendingUp className="w-3 h-3 text-neon-green" /> Strongest: <span className="text-neon-green">{String(actionResult.strongestEvidence)}</span>
               </p>

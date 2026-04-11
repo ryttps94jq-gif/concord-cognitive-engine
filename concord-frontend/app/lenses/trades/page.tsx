@@ -2409,7 +2409,7 @@ export default function TradesLensPage() {
                     <p className="text-[10px] text-gray-500">Filter</p>
                   </div>
                 </div>
-                {actionResult.topMaterial && (
+                {!!actionResult.topMaterial && (
                   <div className="px-2 py-1 bg-lattice-surface rounded text-xs">
                     <span className="text-gray-400">Top material: </span>
                     <span className="text-neon-cyan">{String((actionResult.topMaterial as {item:string}).item)} — ${String((actionResult.topMaterial as {totalCost:number}).totalCost)}</span>

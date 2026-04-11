@@ -2251,7 +2251,7 @@ export default function LegalLensPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={`px-2 py-0.5 rounded text-xs font-semibold ${actionResult.autoRenewal ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-400'}`}>{actionResult.autoRenewal ? 'Auto-Renews' : 'Manual Renewal'}</span>
-                  {actionResult.actionRequired && <span className="px-2 py-0.5 rounded text-xs font-semibold bg-red-500/20 text-red-400">Action Required</span>}
+                  {!!actionResult.actionRequired && <span className="px-2 py-0.5 rounded text-xs font-semibold bg-red-500/20 text-red-400">Action Required</span>}
                 </div>
               </div>
             )}

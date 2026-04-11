@@ -557,7 +557,7 @@ export default function QueueLensPage() {
                   <span className="text-gray-400">Utilization: <span className={`font-mono ${(queueActionResult.utilization as number) > 0.8 ? 'text-red-400' : (queueActionResult.utilization as number) > 0.5 ? 'text-yellow-400' : 'text-green-400'}`}>{String(((queueActionResult.utilization as number) * 100)?.toFixed?.(1) ?? '')}%</span></span>
                   <span className={`${queueActionResult.stable ? 'text-green-400' : 'text-red-400'}`}>{queueActionResult.stable ? 'Stable' : 'Unstable'}</span>
                 </div>
-                {queueActionResult.message && <p className="text-gray-400 italic">{String(queueActionResult.message)}</p>}
+                {!!queueActionResult.message && <p className="text-gray-400 italic">{String(queueActionResult.message)}</p>}
               </div>
             )}
             {queueActionResult.action === 'prioritySchedule' && (

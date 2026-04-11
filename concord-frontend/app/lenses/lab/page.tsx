@@ -4,7 +4,7 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useMutation } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
-import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useLensData, type LensItem } from '@/lib/hooks/use-lens-data';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { FlaskConical, Play, Square, History, Zap, Search, Plus, Trash2, CheckCircle, AlertTriangle, Lightbulb, Layers, ChevronDown, Microscope, Activity, Loader2 } from 'lucide-react';
@@ -199,7 +199,12 @@ export default function LabLensPage() {
       <RealtimeDataPanel data={realtimeInsights} />
 
       {/* Adjacent Reality Explorer */}
-      <RealityExplorerSection />
+      <RealityExplorerSection
+        handleAction={handleAction}
+        isRunning={isRunning}
+        experimentItems={experimentItems}
+        actionResult={actionResult}
+      />
 
       {/* Experiment History */}
       <div className="panel p-4">
@@ -237,7 +242,14 @@ export default function LabLensPage() {
 
 interface ExploreConstraint { key: string; min: string; max: string; }
 
-function RealityExplorerSection() {
+interface RealityExplorerSectionProps {
+  handleAction: (action: string) => void;
+  isRunning: string | null;
+  experimentItems: LensItem<Record<string, unknown>>[];
+  actionResult: Record<string, unknown> | null;
+}
+
+function RealityExplorerSection({ handleAction, isRunning, experimentItems, actionResult }: RealityExplorerSectionProps) {
   const [domain, setDomain] = useState('');
   const [constraints, setConstraints] = useState<ExploreConstraint[]>([{ key: '', min: '', max: '' }]);
   const [results, setResults] = useState<Record<string, unknown> | null>(null);

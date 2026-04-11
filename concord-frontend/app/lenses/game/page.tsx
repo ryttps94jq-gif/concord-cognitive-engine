@@ -1138,7 +1138,7 @@ export default function GameLensPage() {
                     </div>
                   ))}
                 </div>
-                {gameActionResult.tip && <p className="text-xs text-gray-500 italic">{gameActionResult.tip as string}</p>}
+                {!!gameActionResult.tip && <p className="text-xs text-gray-500 italic">{gameActionResult.tip as string}</p>}
                 {Array.isArray(gameActionResult.timeline) && (
                   <div className="grid grid-cols-6 gap-1">
                     {(gameActionResult.timeline as {minute:number;gold:number}[]).slice(0,6).map(t => (
@@ -1202,7 +1202,7 @@ export default function GameLensPage() {
                     </div>
                   ))}
                 </div>
-                {gameActionResult.pitySystemSuggestion && (
+                {!!gameActionResult.pitySystemSuggestion && (
                   <p className="text-xs text-neon-cyan bg-neon-cyan/5 border border-neon-cyan/20 rounded px-3 py-2">{gameActionResult.pitySystemSuggestion as string}</p>
                 )}
               </div>

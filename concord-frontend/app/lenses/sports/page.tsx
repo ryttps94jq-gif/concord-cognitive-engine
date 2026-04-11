@@ -454,7 +454,7 @@ export default function SportsLensPage() {
                   <span className="text-gray-400">Trend: <span className={`font-mono capitalize ${sportsActionResult.trend === 'improving' ? 'text-green-400' : sportsActionResult.trend === 'declining' ? 'text-red-400' : 'text-yellow-400'}`}>{String(sportsActionResult.trend ?? '')}</span></span>
                   <span className="text-gray-400">Data points: <span className="text-white font-mono">{String(sportsActionResult.dataPoints ?? '')}</span></span>
                 </div>
-                {sportsActionResult.message && <p className="text-gray-400 italic">{String(sportsActionResult.message)}</p>}
+                {!!sportsActionResult.message && <p className="text-gray-400 italic">{String(sportsActionResult.message)}</p>}
               </div>
             )}
             {sportsActionResult.action === 'trainingPlan' && (
@@ -465,7 +465,7 @@ export default function SportsLensPage() {
                     <div key={s.day} className="flex gap-2"><span className="text-gray-500 w-8">Day {s.day}</span><span className="text-gray-200">{s.workout}</span><span className={`ml-auto ${s.intensity === 'high' ? 'text-red-400' : s.intensity === 'low' ? 'text-green-400' : 'text-yellow-400'}`}>{s.intensity}</span></div>
                   ))}</div>
                 )}
-                {sportsActionResult.principle && <p className="text-gray-500 italic">{String(sportsActionResult.principle)}</p>}
+                {!!sportsActionResult.principle && <p className="text-gray-500 italic">{String(sportsActionResult.principle)}</p>}
               </div>
             )}
             {sportsActionResult.action === 'injuryRisk' && (
@@ -486,7 +486,7 @@ export default function SportsLensPage() {
                   <span className="text-gray-400">Avg rating: <span className="text-neon-green font-mono">{String(sportsActionResult.avgRating ?? '')}</span></span>
                   <span className="text-gray-400">Strength: <span className="text-white capitalize">{String(sportsActionResult.teamStrength ?? '')}</span></span>
                 </div>
-                {sportsActionResult.message && <p className="text-gray-400 italic">{String(sportsActionResult.message)}</p>}
+                {!!sportsActionResult.message && <p className="text-gray-400 italic">{String(sportsActionResult.message)}</p>}
               </div>
             )}
             <button onClick={() => setSportsActionResult(null)} className="text-gray-600 hover:text-gray-400 text-xs flex items-center gap-1"><X className="w-3 h-3" /> Dismiss</button>

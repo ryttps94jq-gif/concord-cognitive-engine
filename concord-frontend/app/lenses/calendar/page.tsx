@@ -1319,7 +1319,7 @@ export default function CalendarLensPage() {
                   </button>
 
                   {/* Detect Conflicts */}
-                  {actionResult.conflicts && (
+                  {!!actionResult.conflicts && (
                     <div>
                       <div className="flex items-center gap-1.5 mb-2 text-yellow-400 font-semibold">
                         <AlertTriangle className="w-3.5 h-3.5" /> Conflict Report
@@ -1339,7 +1339,7 @@ export default function CalendarLensPage() {
                   )}
 
                   {/* Find Availability */}
-                  {actionResult.slots && (
+                  {!!actionResult.slots && (
                     <div>
                       <div className="flex items-center gap-1.5 mb-2 text-cyan-400 font-semibold">
                         <Clock className="w-3.5 h-3.5" /> Available Slots

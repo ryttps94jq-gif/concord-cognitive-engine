@@ -812,7 +812,7 @@ function WalletPageInner() {
                     <span className="text-gray-400">Spent: <span className="text-white">{String(r.totalSpent ?? 0)}</span></span>
                     <span className="text-gray-400">Budget: <span className="text-white">{String(r.budget ?? 0)}</span></span>
                   </div>
-                  {r.recommendations && Array.isArray(r.recommendations) && (
+                  {!!r.recommendations && Array.isArray(r.recommendations) && (
                     <div className="text-xs text-gray-400">
                       {(r.recommendations as string[]).slice(0, 2).map((rec, i) => <div key={i} className="text-gray-300">• {rec}</div>)}
                     </div>

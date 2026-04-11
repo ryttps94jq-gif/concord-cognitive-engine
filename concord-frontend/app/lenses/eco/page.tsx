@@ -984,7 +984,7 @@ export default function EcoLensPage() {
                 <p className="text-[10px] text-gray-500">Status</p>
               </div>
             </div>
-            {actionResult.scopeBreakdown && (
+            {!!actionResult.scopeBreakdown && (
               <div className="grid grid-cols-3 gap-2">
                 {Object.entries(actionResult.scopeBreakdown as Record<string, {kgCO2e:number;percentage:number;label:string}>).map(([scope, data]) => (
                   <div key={scope} className="p-2 bg-lattice-surface rounded text-center">
@@ -995,7 +995,7 @@ export default function EcoLensPage() {
                 ))}
               </div>
             )}
-            {actionResult.equivalencies && (
+            {!!actionResult.equivalencies && (
               <div className="grid grid-cols-3 gap-2 text-xs">
                 <div className="p-2 bg-white/[0.02] rounded text-center">
                   <p className="text-neon-green font-bold">{String((actionResult.equivalencies as Record<string,number>).treesNeededToOffset)}</p>
@@ -1030,7 +1030,7 @@ export default function EcoLensPage() {
         )}
 
         {/* biodiversityIndex result */}
-        {actionResult && actionResult.speciesRichness !== undefined && actionResult.diversityIndices !== undefined && (
+        {!!actionResult && actionResult.speciesRichness !== undefined && actionResult.diversityIndices !== undefined && (
           <div className="space-y-3 pt-2 border-t border-white/5">
             <div className="grid grid-cols-4 gap-2">
               <div className="p-2 bg-lattice-surface rounded text-center">
@@ -1059,7 +1059,7 @@ export default function EcoLensPage() {
               }`}>Diversity: {String(actionResult.diversityLabel)}</span>
               <span className={`px-2 py-0.5 text-[10px] rounded border bg-neon-purple/10 border-neon-purple/30 text-neon-purple`}>Evenness: {String(actionResult.evennessLabel)}</span>
             </div>
-            {actionResult.rareSpecies && (
+            {!!actionResult.rareSpecies && (
               <p className="text-xs text-gray-400">
                 Rare species (singletons): <span className="text-neon-cyan">{String((actionResult.rareSpecies as Record<string,unknown>).count)}</span> ({String((actionResult.rareSpecies as Record<string,unknown>).singletonPercentage)}%)
               </p>

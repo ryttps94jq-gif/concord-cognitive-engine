@@ -269,7 +269,7 @@ export default function SchemaLensPage() {
                 {Array.isArray(schemaActionResult.errors) && schemaActionResult.errors.length > 0 && (
                   <div className="space-y-0.5">{(schemaActionResult.errors as {field:string;message:string}[]).map((e, i) => <p key={i} className="text-red-300">✗ {e.field}: {e.message}</p>)}</div>
                 )}
-                {schemaActionResult.message && <p className="text-gray-400 italic">{String(schemaActionResult.message)}</p>}
+                {!!schemaActionResult.message && <p className="text-gray-400 italic">{String(schemaActionResult.message)}</p>}
               </div>
             )}
             {schemaActionResult.action === 'schemaDiff' && (
@@ -280,7 +280,7 @@ export default function SchemaLensPage() {
                   <span className="text-gray-400">Modified: <span className="text-yellow-400 font-mono">{String(schemaActionResult.modifiedFields ?? 0)}</span></span>
                   <span className={`${schemaActionResult.breakingChanges ? 'text-red-400' : 'text-green-400'}`}>{schemaActionResult.breakingChanges ? 'Breaking changes' : 'Non-breaking'}</span>
                 </div>
-                {schemaActionResult.message && <p className="text-gray-400 italic">{String(schemaActionResult.message)}</p>}
+                {!!schemaActionResult.message && <p className="text-gray-400 italic">{String(schemaActionResult.message)}</p>}
               </div>
             )}
             {schemaActionResult.action === 'schemaEvolution' && (
@@ -292,7 +292,7 @@ export default function SchemaLensPage() {
                 {Array.isArray(schemaActionResult.steps) && schemaActionResult.steps.length > 0 && (
                   <div className="space-y-0.5">{(schemaActionResult.steps as string[]).map((s, i) => <p key={i} className="text-gray-300">→ {s}</p>)}</div>
                 )}
-                {schemaActionResult.message && <p className="text-gray-400 italic">{String(schemaActionResult.message)}</p>}
+                {!!schemaActionResult.message && <p className="text-gray-400 italic">{String(schemaActionResult.message)}</p>}
               </div>
             )}
             <button onClick={() => setSchemaActionResult(null)} className="text-gray-600 hover:text-gray-400 text-xs flex items-center gap-1"><X className="w-3 h-3" /> Dismiss</button>

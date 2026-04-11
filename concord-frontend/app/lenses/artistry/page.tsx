@@ -198,7 +198,7 @@ export default function ArtistryLensPage() {
               )}
               {/* Style Classify */}
               {actionResult.classification !== undefined && (
-                <div className="flex items-center gap-3"><span className="text-xl font-bold text-purple-400 capitalize">{actionResult.classification as string}</span>{actionResult.confidence && <span className="text-xs text-gray-400">{actionResult.confidence as number}%</span>}</div>
+                <div className="flex items-center gap-3"><span className="text-xl font-bold text-purple-400 capitalize">{actionResult.classification as string}</span>{!!actionResult.confidence && <span className="text-xs text-gray-400">{actionResult.confidence as number}%</span>}</div>
               )}
               {/* Media Inventory */}
               {actionResult.totalItems !== undefined && actionResult.byType !== undefined && (

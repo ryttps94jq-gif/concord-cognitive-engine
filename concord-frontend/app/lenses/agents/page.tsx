@@ -780,7 +780,7 @@ export default function AgentsLensPage() {
                             <p className="text-xs text-gray-400">{actionResult.agentName as string}</p>
                           </div>
                         </div>
-                        {actionResult.metrics && (
+                        {!!actionResult.metrics && (
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                             <div className="p-2 bg-lattice-bg rounded text-center">
                               <p className="text-sm font-bold text-neon-cyan">{(actionResult.metrics as Record<string, number>).throughput}</p>

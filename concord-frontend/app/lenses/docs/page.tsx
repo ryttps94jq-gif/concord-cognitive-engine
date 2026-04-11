@@ -316,7 +316,7 @@ export default function DocsLensPage() {
                 <span className="text-gray-300">{String((actionResult.summary as Record<string,string>)?.fleschCategory ?? '—')}</span>
               </div>
             </div>
-            {actionResult.technicalIndicators && (
+            {!!actionResult.technicalIndicators && (
               <div className="grid grid-cols-3 gap-2 text-xs">
                 <div className="p-2 bg-lattice-surface rounded text-center">
                   <p className="text-sm font-bold text-orange-400">{String((actionResult.technicalIndicators as Record<string,unknown>)?.abbreviationCount ?? 0)}</p>
@@ -336,7 +336,7 @@ export default function DocsLensPage() {
         )}
 
         {/* crossReference result */}
-        {actionResult && actionResult.graphDensity !== undefined && actionResult.totalPages !== undefined && (
+        {!!actionResult && actionResult.graphDensity !== undefined && actionResult.totalPages !== undefined && (
           <div className="space-y-3 pt-2 border-t border-white/5">
             <div className="grid grid-cols-4 gap-2">
               <div className="p-2 bg-lattice-surface rounded text-center">
@@ -363,10 +363,10 @@ export default function DocsLensPage() {
             <div className="h-2 bg-white/5 rounded-full overflow-hidden">
               <div className="h-full bg-neon-blue rounded-full transition-all" style={{ width: `${actionResult.healthScore ?? 0}%` }} />
             </div>
-            {actionResult.orphanPages && Number((actionResult.orphanPages as Record<string,number>)?.count) > 0 && (
+            {!!actionResult.orphanPages && Number((actionResult.orphanPages as Record<string,number>)?.count) > 0 && (
               <p className="text-xs text-yellow-400 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> {String((actionResult.orphanPages as Record<string,number>).count)} orphan page(s)</p>
             )}
-            {actionResult.circularReferences && Number((actionResult.circularReferences as Record<string,number>)?.count) > 0 && (
+            {!!actionResult.circularReferences && Number((actionResult.circularReferences as Record<string,number>)?.count) > 0 && (
               <p className="text-xs text-red-400 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> {String((actionResult.circularReferences as Record<string,number>).count)} circular reference(s)</p>
             )}
           </div>

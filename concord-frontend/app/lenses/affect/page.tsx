@@ -1519,7 +1519,7 @@ export default function AffectLensPage() {
                     <span className="text-sm font-medium text-neon-cyan capitalize">
                       {String(sentimentResult.primaryEmotion)}
                     </span>
-                    {sentimentResult.isMixedEmotion && (
+                    {!!sentimentResult.isMixedEmotion && (
                       <span className="text-xs bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full">
                         Mixed
                       </span>
@@ -1589,7 +1589,7 @@ export default function AffectLensPage() {
                             } ${hit.negated ? 'line-through opacity-60' : ''}`}
                           >
                             {String(hit.word)}
-                            {hit.negated && <span className="ml-1 text-yellow-400 no-underline">(neg)</span>}
+                            {!!hit.negated && <span className="ml-1 text-yellow-400 no-underline">(neg)</span>}
                           </span>
                         ))}
                       </div>
@@ -1818,7 +1818,7 @@ export default function AffectLensPage() {
                   {/* Feedback Summary */}
                   <div className="flex items-center gap-3 text-xs text-gray-500">
                     <span>{String(empathyResult.totalFeedback)} feedback items analyzed</span>
-                    {empathyResult.analyzedAt && (
+                    {!!empathyResult.analyzedAt && (
                       <span className="text-gray-600">{new Date(String(empathyResult.analyzedAt)).toLocaleTimeString()}</span>
                     )}
                   </div>
@@ -2016,18 +2016,18 @@ export default function AffectLensPage() {
                               <p className="text-sm font-medium text-gray-300">
                                 {String(pattern.name || pattern.label || pattern.type || `Pattern ${i + 1}`)}
                               </p>
-                              {(pattern.description || pattern.detail) && (
+                              {!!(pattern.description || pattern.detail) && (
                                 <p className="text-xs text-gray-500 mt-0.5">
                                   {String(pattern.description || pattern.detail)}
                                 </p>
                               )}
-                              {pattern.frequency && (
+                              {!!pattern.frequency && (
                                 <span className="text-[10px] text-gray-600 mt-1 block">
                                   Frequency: {String(pattern.frequency)}
                                 </span>
                               )}
                             </div>
-                            {(pattern.confidence || pattern.score) && (
+                            {!!(pattern.confidence || pattern.score) && (
                               <span className="text-xs font-mono text-neon-purple shrink-0">
                                 {typeof pattern.confidence === 'number'
                                   ? `${(pattern.confidence * 100).toFixed(0)}%`
@@ -2065,7 +2065,7 @@ export default function AffectLensPage() {
                           <div key={i} className="flex items-center gap-2 text-xs p-2 bg-purple-500/5 rounded border border-purple-500/10">
                             <RefreshCw className="w-3 h-3 text-purple-400 shrink-0" />
                             <span className="text-gray-400">{String(cycle.description || cycle.name || `Cycle ${i + 1}`)}</span>
-                            {cycle.period && (
+                            {!!cycle.period && (
                               <span className="ml-auto text-gray-600 font-mono">{String(cycle.period)}</span>
                             )}
                           </div>

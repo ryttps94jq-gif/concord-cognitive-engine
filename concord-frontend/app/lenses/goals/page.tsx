@@ -1170,10 +1170,10 @@ export default function GoalsLensPage() {
                       <p className="text-sm font-medium text-white">Forecast</p>
                       <span className={`text-xs px-2 py-0.5 rounded ${forecast.onTrack ? 'bg-neon-green/10 text-neon-green' : 'bg-red-400/10 text-red-400'}`}>{forecast.onTrack ? 'On Track' : 'Behind'}</span>
                     </div>
-                    {forecast.estimatedCompletionDate && (
+                    {!!forecast.estimatedCompletionDate && (
                       <p className="text-sm text-gray-300">Est. completion: <span className="text-neon-cyan font-mono">{forecast.estimatedCompletionDate as string}</span></p>
                     )}
-                    {forecast.daysRemainingBest && (
+                    {!!forecast.daysRemainingBest && (
                       <p className="text-xs text-gray-400 mt-1">Best: {forecast.daysRemainingBest as number}d — Worst: {forecast.daysRemainingWorst as number}d</p>
                     )}
                   </div>

@@ -1720,7 +1720,7 @@ function AuditLogResultPanel({ result }: { result: Record<string, unknown> }) {
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-xs font-medium">{typeLabel(a.type as string)}</span>
                     <span className="text-xs opacity-70">User: {String(a.userId)}</span>
-                    {a.timestamp && (
+                    {!!a.timestamp && (
                       <span className="text-xs opacity-50">{new Date(a.timestamp as string).toLocaleTimeString()}</span>
                     )}
                   </div>
@@ -1728,7 +1728,7 @@ function AuditLogResultPanel({ result }: { result: Record<string, unknown> }) {
                     {a.zScore !== undefined && <span>z-score: {String(a.zScore)}</span>}
                     {a.gapMs !== undefined && <span>gap: {Math.round(Number(a.gapMs) / 1000)}s</span>}
                     {a.actionsInWindow !== undefined && <span>{String(a.actionsInWindow)} actions/window</span>}
-                    {a.action && <span>action: {String(a.action)}</span>}
+                    {!!a.action && <span>action: {String(a.action)}</span>}
                   </div>
                 </div>
               </div>

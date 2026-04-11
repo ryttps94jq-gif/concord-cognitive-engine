@@ -557,7 +557,7 @@ export default function GroundingLensPage() {
                   <div className="lens-card text-center"><p className="text-sm font-medium text-neon-cyan">{r.logicalStructure as string}</p><p className="text-xs text-gray-400">Structure</p></div>
                   <div className="lens-card text-center"><p className="text-sm font-medium text-white">{r.claimComplexity as string}</p><p className="text-xs text-gray-400">Complexity</p></div>
                 </div>
-                {r.overallAssessment && (
+                {!!r.overallAssessment && (
                   <div className="lens-card flex justify-between text-sm"><span className="text-gray-400">Assessment</span><span className="text-neon-cyan">{r.overallAssessment as string}</span></div>
                 )}
                 {components.length > 0 && (

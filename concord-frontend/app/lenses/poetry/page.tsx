@@ -450,7 +450,7 @@ export default function PoetryPage() {
                     <span className="text-gray-400 col-span-2">Rhyme: <span className="text-rose-300">{String(actionResult.rhyme ?? '')}</span></span>
                     <span className="text-gray-400 col-span-2">Structure: <span className="text-gray-200">{String(actionResult.structure ?? '')}</span></span>
                   </div>
-                  {actionResult.tip && <p className="text-gray-500 italic">{String(actionResult.tip)}</p>}
+                  {!!actionResult.tip && <p className="text-gray-500 italic">{String(actionResult.tip)}</p>}
                 </div>
               )}
               {actionResult.action === 'wordFrequency' && (

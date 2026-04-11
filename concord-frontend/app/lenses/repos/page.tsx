@@ -601,7 +601,7 @@ export default function ReposLensPage() {
                   <span className="text-gray-400">Avg complexity: <span className={`font-mono ${(reposActionResult.avgComplexity as number) > 20 ? 'text-red-400' : (reposActionResult.avgComplexity as number) > 10 ? 'text-yellow-400' : 'text-green-400'}`}>{String(reposActionResult.avgComplexity ?? '')}</span></span>
                   <span className="text-gray-400">High complexity: <span className="text-red-400 font-mono">{String(reposActionResult.highComplexityFiles ?? 0)}</span></span>
                 </div>
-                {reposActionResult.message && <p className="text-gray-400 italic">{String(reposActionResult.message)}</p>}
+                {!!reposActionResult.message && <p className="text-gray-400 italic">{String(reposActionResult.message)}</p>}
               </div>
             )}
             {reposActionResult.action === 'commitAnalysis' && (
@@ -611,7 +611,7 @@ export default function ReposLensPage() {
                   <span className="text-gray-400">Authors: <span className="text-neon-cyan font-mono">{String(reposActionResult.uniqueAuthors ?? '')}</span></span>
                   <span className="text-gray-400">Avg/day: <span className="text-neon-green font-mono">{String(reposActionResult.avgCommitsPerDay ?? '')}</span></span>
                 </div>
-                {reposActionResult.message && <p className="text-gray-400 italic">{String(reposActionResult.message)}</p>}
+                {!!reposActionResult.message && <p className="text-gray-400 italic">{String(reposActionResult.message)}</p>}
               </div>
             )}
             {reposActionResult.action === 'dependencyAudit' && (
@@ -621,7 +621,7 @@ export default function ReposLensPage() {
                   <span className="text-gray-400">Outdated: <span className="text-yellow-400 font-mono">{String(reposActionResult.outdatedCount ?? 0)}</span></span>
                   <span className="text-gray-400">Vulnerable: <span className="text-red-400 font-mono">{String(reposActionResult.vulnerableCount ?? 0)}</span></span>
                 </div>
-                {reposActionResult.message && <p className="text-gray-400 italic">{String(reposActionResult.message)}</p>}
+                {!!reposActionResult.message && <p className="text-gray-400 italic">{String(reposActionResult.message)}</p>}
               </div>
             )}
             <button onClick={() => setReposActionResult(null)} className="text-gray-600 hover:text-gray-400 text-xs flex items-center gap-1"><X className="w-3 h-3" /> Dismiss</button>

@@ -2185,7 +2185,7 @@ export default function ChatLensPage() {
               </button>
             </div>
             <div className="space-y-2 text-sm text-gray-300">
-              {threadSummarizeResult.summary && (
+              {!!threadSummarizeResult.summary && (
                 <p className="text-white">{threadSummarizeResult.summary as string}</p>
               )}
               {Array.isArray(threadSummarizeResult.keyPoints) && (threadSummarizeResult.keyPoints as string[]).length > 0 && (
@@ -2283,7 +2283,7 @@ export default function ChatLensPage() {
               </button>
             </div>
             <div className="space-y-2 text-sm text-gray-300">
-              {topicDetectionResult.primaryTopic && (
+              {!!topicDetectionResult.primaryTopic && (
                 <div className="p-2 bg-neon-green/10 border border-neon-green/30 rounded">
                   <p className="text-xs text-gray-500 mb-0.5">Primary Topic</p>
                   <p className="text-white font-medium">{topicDetectionResult.primaryTopic as string}</p>

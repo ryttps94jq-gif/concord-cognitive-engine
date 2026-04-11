@@ -506,7 +506,7 @@ export default function ChemLensPage() {
             )}
 
             {/* Balance Reaction Result */}
-            {actionResult.equation !== undefined && actionResult.coefficients !== undefined && (
+            {!!actionResult.equation !== undefined && actionResult.coefficients !== undefined && (
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
                   <span className={`text-xs px-2 py-0.5 rounded font-medium ${(actionResult.balanced as boolean) ? 'bg-neon-green/20 text-neon-green' : 'bg-neon-pink/20 text-neon-pink'}`}>

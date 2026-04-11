@@ -475,7 +475,7 @@ export default function DebateLensPage() {
                 ))}
               </ul>
             )}
-            {actionResult.framework && (
+            {!!actionResult.framework && (
               <div className="bg-neon-purple/5 border border-neon-purple/20 rounded p-3 space-y-1">
                 <p className="text-[10px] text-gray-500 uppercase tracking-wider">Framework</p>
                 {Object.entries(actionResult.framework as Record<string, string>).map(([k, v]) => (

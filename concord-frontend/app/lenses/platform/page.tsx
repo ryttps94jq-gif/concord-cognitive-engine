@@ -450,7 +450,7 @@ export default function PlatformPage() {
                   </span>
                   <span className="text-gray-400 text-xs">{String(actionResult.nines)} nines</span>
                 </div>
-                {'errorBudget' in actionResult && actionResult.errorBudget && typeof actionResult.errorBudget === 'object' && (
+                {!!'errorBudget' in actionResult && actionResult.errorBudget && typeof actionResult.errorBudget === 'object' && (
                   <div className="flex flex-wrap gap-3 text-xs">
                     {Object.entries(actionResult.errorBudget as Record<string, unknown>).map(([k, v]) => (
                       <span key={k} className="text-gray-400">{k}: <span className="text-neon-cyan">{String(v)}</span></span>
@@ -459,7 +459,7 @@ export default function PlatformPage() {
                 )}
               </div>
             )}
-            {'resources' in actionResult && actionResult.resources && typeof actionResult.resources === 'object' && (
+            {!!'resources' in actionResult && actionResult.resources && typeof actionResult.resources === 'object' && (
               <div className="space-y-2">
                 <span className="text-gray-400 text-xs">Overall: <span className={`font-bold ${
                   actionResult.overallHealth === 'healthy' ? 'text-neon-green' :

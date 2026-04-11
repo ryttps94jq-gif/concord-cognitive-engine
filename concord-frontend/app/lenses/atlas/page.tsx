@@ -348,8 +348,8 @@ export default function AtlasLensPage() {
             {actionResult.matrix !== undefined && (
               <div className="space-y-2">
                 <div className="text-xs text-gray-400">{actionResult.placeCount as number} places, {actionResult.totalPairs as number} pairs</div>
-                {actionResult.closest && <div className="text-xs text-neon-green">Closest: {(actionResult.closest as Record<string, unknown>).pair as string} ({(actionResult.closest as Record<string, unknown>).distanceKm as number}km)</div>}
-                {actionResult.farthest && <div className="text-xs text-red-400">Farthest: {(actionResult.farthest as Record<string, unknown>).pair as string} ({(actionResult.farthest as Record<string, unknown>).distanceKm as number}km)</div>}
+                {!!actionResult.closest && <div className="text-xs text-neon-green">Closest: {(actionResult.closest as Record<string, unknown>).pair as string} ({(actionResult.closest as Record<string, unknown>).distanceKm as number}km)</div>}
+                {!!actionResult.farthest && <div className="text-xs text-red-400">Farthest: {(actionResult.farthest as Record<string, unknown>).pair as string} ({(actionResult.farthest as Record<string, unknown>).distanceKm as number}km)</div>}
               </div>
             )}
             {/* Region Stats */}

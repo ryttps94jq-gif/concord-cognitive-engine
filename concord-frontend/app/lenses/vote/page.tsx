@@ -1074,7 +1074,7 @@ function ResultsDashboard({
                     <span className="text-gray-400">Score: <span className="text-white">{String(r.consensusScore ?? 0)}</span></span>
                     <span className="text-gray-400">Polarization: <span className="text-white">{String(r.polarization ?? 0)}</span></span>
                   </div>
-                  {r.recommendation && <div className="text-xs text-gray-400">Recommendation: <span className="text-gray-300">{String(r.recommendation)}</span></div>}
+                  {!!r.recommendation && <div className="text-xs text-gray-400">Recommendation: <span className="text-gray-300">{String(r.recommendation)}</span></div>}
                 </div>
               );
             })()}

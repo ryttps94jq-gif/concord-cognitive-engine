@@ -1188,7 +1188,7 @@ export default function SRSLensPage() {
                   <span className="text-gray-400">Due soon: <span className="text-yellow-400 font-mono">{String(srsActionResult.dueSoon ?? 0)}</span></span>
                   <span className="text-gray-400">Avg ease: <span className="text-neon-blue font-mono">{String(srsActionResult.avgEase ?? '')}</span></span>
                 </div>
-                {srsActionResult.message && <p className="text-gray-400 italic">{String(srsActionResult.message)}</p>}
+                {!!srsActionResult.message && <p className="text-gray-400 italic">{String(srsActionResult.message)}</p>}
               </div>
             )}
             {srsActionResult.action === 'retentionCurve' && (
@@ -1199,7 +1199,7 @@ export default function SRSLensPage() {
                   <span className="text-gray-400">Correct rate: <span className="text-white font-mono">{String(srsActionResult.correctRate ?? '')}%</span></span>
                 </div>
                 <p className="text-gray-300">{String(srsActionResult.recommendation ?? '')}</p>
-                {srsActionResult.message && <p className="text-gray-400 italic">{String(srsActionResult.message)}</p>}
+                {!!srsActionResult.message && <p className="text-gray-400 italic">{String(srsActionResult.message)}</p>}
               </div>
             )}
             {srsActionResult.action === 'cardDifficulty' && (
@@ -1210,7 +1210,7 @@ export default function SRSLensPage() {
                   <span className="text-gray-400">Hard: <span className="text-red-400 font-mono">{String((srsActionResult.distribution as Record<string,number>)?.hard ?? 0)}</span></span>
                   <span className="text-gray-400">Avg accuracy: <span className="text-white font-mono">{String(srsActionResult.avgAccuracy ?? '')}%</span></span>
                 </div>
-                {srsActionResult.message && <p className="text-gray-400 italic">{String(srsActionResult.message)}</p>}
+                {!!srsActionResult.message && <p className="text-gray-400 italic">{String(srsActionResult.message)}</p>}
               </div>
             )}
             {srsActionResult.action === 'deckStats' && (
@@ -1223,7 +1223,7 @@ export default function SRSLensPage() {
                   <span className="text-gray-400">Mastery: <span className="text-white font-mono">{String(srsActionResult.masteryRate ?? '')}%</span></span>
                   <span className="text-gray-400">Health: <span className="text-neon-green">{String(srsActionResult.healthScore ?? '')}</span></span>
                 </div>
-                {srsActionResult.message && <p className="text-gray-400 italic">{String(srsActionResult.message)}</p>}
+                {!!srsActionResult.message && <p className="text-gray-400 italic">{String(srsActionResult.message)}</p>}
               </div>
             )}
             <button onClick={() => setSrsActionResult(null)} className="text-gray-600 hover:text-gray-400 text-xs flex items-center gap-1"><X className="w-3 h-3" /> Dismiss</button>

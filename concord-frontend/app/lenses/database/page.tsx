@@ -1091,7 +1091,7 @@ export default function DatabaseLensPage() {
                 <div className="h-full bg-neon-green rounded-full transition-all" style={{ width: `${actionResult.healthScore ?? 0}%` }} />
               </div>
             </div>
-            {actionResult.normalizationTip && <p className="text-xs text-gray-400 italic">{String(actionResult.normalizationTip)}</p>}
+            {!!actionResult.normalizationTip && <p className="text-xs text-gray-400 italic">{String(actionResult.normalizationTip)}</p>}
             {Array.isArray(actionResult.tables) && actionResult.tables.length > 0 && (
               <div className="space-y-1 max-h-40 overflow-y-auto">
                 {(actionResult.tables as Array<{table:string;columns:number;hasPrimaryKey:boolean;indexedColumns:number;issues:string[]}>).map((t, i) => (
@@ -1156,7 +1156,7 @@ export default function DatabaseLensPage() {
                 <p className="text-[10px] text-gray-500">Downtime</p>
               </div>
             </div>
-            {actionResult.recommendation && <p className={`text-xs px-3 py-2 rounded ${Number(actionResult.highRiskChanges) > 0 ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-neon-green/10 text-neon-green border border-neon-green/20'}`}>{String(actionResult.recommendation)}</p>}
+            {!!actionResult.recommendation && <p className={`text-xs px-3 py-2 rounded ${Number(actionResult.highRiskChanges) > 0 ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-neon-green/10 text-neon-green border border-neon-green/20'}`}>{String(actionResult.recommendation)}</p>}
             {Array.isArray(actionResult.steps) && actionResult.steps.length > 0 && (
               <div className="space-y-1 max-h-40 overflow-y-auto">
                 {(actionResult.steps as Array<{step:number;operation:string;table:string;risk:string;reversible:boolean}>).map((s, i) => (

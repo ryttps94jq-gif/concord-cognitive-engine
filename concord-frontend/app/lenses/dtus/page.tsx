@@ -469,7 +469,7 @@ export default function DTUBrowserPage() {
                     <div className="p-2 bg-lattice-deep rounded text-center"><p className="text-sm font-bold text-neon-purple">{actionResult.totalDescendants as number}</p><p className="text-[10px] text-gray-500">Descendants</p></div>
                     <div className="p-2 bg-lattice-deep rounded text-center"><p className="text-sm font-bold text-white">{actionResult.isRoot ? 'Root' : actionResult.isLeaf ? 'Leaf' : 'Branch'}</p><p className="text-[10px] text-gray-500">Position</p></div>
                   </div>
-                  {actionResult.oldestAncestor && <p className="text-xs text-gray-400">Oldest ancestor: <span className="text-white">{actionResult.oldestAncestor as string}</span></p>}
+                  {!!actionResult.oldestAncestor && <p className="text-xs text-gray-400">Oldest ancestor: <span className="text-white">{actionResult.oldestAncestor as string}</span></p>}
                 </div>
               )}
 
@@ -506,7 +506,7 @@ export default function DTUBrowserPage() {
               )}
 
               {/* Citation Network */}
-              {actionResult.influenceScore !== undefined && actionResult.inDegree !== undefined && (
+              {!!actionResult.influenceScore !== undefined && actionResult.inDegree !== undefined && (
                 <div className="space-y-3">
                   <div className="flex items-center gap-3">
                     <span className="text-3xl font-bold text-neon-purple">{actionResult.influenceScore as number}</span>
@@ -550,7 +550,7 @@ export default function DTUBrowserPage() {
                     <span className="text-sm text-gray-300">{actionResult.currentTier as string} → {actionResult.recommendedTier as string}</span>
                   </div>
                   <p className="text-xs text-gray-400">{actionResult.reasoning as string}</p>
-                  {actionResult.metrics && (
+                  {!!actionResult.metrics && (
                     <div className="grid grid-cols-4 gap-2">
                       {Object.entries(actionResult.metrics as Record<string, number>).map(([key, val]) => (
                         <div key={key} className="p-2 bg-lattice-deep rounded text-center">

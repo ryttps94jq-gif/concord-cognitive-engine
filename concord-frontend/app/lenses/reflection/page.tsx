@@ -474,7 +474,7 @@ export default function ReflectionLensPage() {
                   <span className="text-gray-400">Trend: <span className={`font-mono ${reflActionResult.overallTrend === 'improving' ? 'text-green-400' : reflActionResult.overallTrend === 'declining' ? 'text-red-400' : 'text-yellow-400'}`}>{String(reflActionResult.overallTrend ?? '')}</span></span>
                   <span className="text-gray-400">Growth: <span className="text-neon-blue font-mono">{String(reflActionResult.growthRate ?? '')}%</span></span>
                 </div>
-                {reflActionResult.summary && <p className="text-gray-300">{String(reflActionResult.summary)}</p>}
+                {!!reflActionResult.summary && <p className="text-gray-300">{String(reflActionResult.summary)}</p>}
               </div>
             )}
             {reflActionResult.action === 'habitTracking' && (

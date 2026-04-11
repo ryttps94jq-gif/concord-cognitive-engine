@@ -1370,7 +1370,7 @@ export default function MetacognitionLensPage() {
                   <span className="text-gray-400">Skill Score: <span className="text-neon-green">{String(actionResult.brierSkillScore)}</span></span>
                   <span className="text-gray-400">Log Loss: <span className="text-yellow-400">{String(actionResult.logLoss)}</span></span>
                 </div>
-                {'calibration' in actionResult && actionResult.calibration && typeof actionResult.calibration === 'object' && (
+                {!!'calibration' in actionResult && actionResult.calibration && typeof actionResult.calibration === 'object' && (
                   <div className="flex flex-wrap gap-3 text-xs">
                     {Object.entries(actionResult.calibration as Record<string, unknown>).map(([k, v]) => (
                       <span key={k} className="text-gray-400">{k}: <span className="text-neon-cyan">{String(v)}</span></span>
@@ -1386,7 +1386,7 @@ export default function MetacognitionLensPage() {
                   <span className="text-gray-400">Mastered: <span className={actionResult.mastered ? 'text-neon-green' : 'text-yellow-400'}>{String(actionResult.mastered)}</span></span>
                   <span className="text-gray-400">Best Model: <span className="text-neon-purple">{String(actionResult.bestModel)}</span></span>
                 </div>
-                {'learningRate' in actionResult && actionResult.learningRate && typeof actionResult.learningRate === 'object' && (
+                {!!'learningRate' in actionResult && actionResult.learningRate && typeof actionResult.learningRate === 'object' && (
                   <div className="flex flex-wrap gap-3 text-xs">
                     {Object.entries(actionResult.learningRate as Record<string, unknown>).map(([k, v]) => (
                       <span key={k} className="text-gray-400">{k}: <span className="text-neon-cyan">{String(v)}</span></span>

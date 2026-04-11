@@ -295,7 +295,7 @@ export default function ExportLensPage() {
             {actionResult._action === 'scheduleExport' && (
               <div className="space-y-3">
                 <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Schedule Configured</p>
-                {actionResult.schedule && (
+                {!!actionResult.schedule && (
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                     {[
                       { label: 'Frequency', value: String((actionResult.schedule as Record<string,unknown>).frequency ?? '—') },

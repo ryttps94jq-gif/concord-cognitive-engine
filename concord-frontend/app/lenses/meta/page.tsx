@@ -606,7 +606,7 @@ export default function MetaLensPage() {
                   <span className="text-gray-400">Error Rate: <span className="text-red-400">{String(actionResult.overallErrorRate)}</span></span>
                   <span className="text-gray-400">Trend: <span className="text-yellow-400">{String(actionResult.errorTrend)}</span></span>
                 </div>
-                {'responseTime' in actionResult && actionResult.responseTime && typeof actionResult.responseTime === 'object' && (
+                {!!'responseTime' in actionResult && actionResult.responseTime && typeof actionResult.responseTime === 'object' && (
                   <div className="flex flex-wrap gap-3 text-xs">
                     {Object.entries(actionResult.responseTime as Record<string, unknown>).map(([k, v]) => (
                       <span key={k} className="text-gray-400">{k}: <span className="text-neon-cyan">{String(v)}ms</span></span>
@@ -626,14 +626,14 @@ export default function MetaLensPage() {
             {'totalFields' in actionResult && (
               <div className="space-y-2">
                 <div className="text-xs text-gray-400">Fields: <span className="text-neon-cyan font-bold">{String(actionResult.totalFields)}</span></div>
-                {'completeness' in actionResult && actionResult.completeness && typeof actionResult.completeness === 'object' && (
+                {!!'completeness' in actionResult && actionResult.completeness && typeof actionResult.completeness === 'object' && (
                   <div className="flex flex-wrap gap-3 text-xs">
                     {Object.entries(actionResult.completeness as Record<string, unknown>).map(([k, v]) => (
                       <span key={k} className="text-gray-400">{k}: <span className="text-neon-cyan">{String(v)}</span></span>
                     ))}
                   </div>
                 )}
-                {'overall' in actionResult && actionResult.overall && typeof actionResult.overall === 'object' && (
+                {!!'overall' in actionResult && actionResult.overall && typeof actionResult.overall === 'object' && (
                   <div className="flex flex-wrap gap-3 text-xs">
                     {Object.entries(actionResult.overall as Record<string, unknown>).map(([k, v]) => (
                       <span key={k} className="text-gray-400">{k}: <span className="text-neon-green font-bold">{String(v)}</span></span>

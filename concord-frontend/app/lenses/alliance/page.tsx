@@ -452,7 +452,7 @@ export default function AllianceLensPage() {
                             <p className="text-xs text-gray-400 mt-1">{actionResult.partnerA as string} + {actionResult.partnerB as string}</p>
                           </div>
                         </div>
-                        {actionResult.componentScores && (
+                        {!!actionResult.componentScores && (
                           <div className="grid grid-cols-2 gap-2">
                             {Object.entries(actionResult.componentScores as Record<string, number>).map(([key, val]) => (
                               <div key={key} className="p-2 bg-lattice-surface rounded">
@@ -462,7 +462,7 @@ export default function AllianceLensPage() {
                             ))}
                           </div>
                         )}
-                        {actionResult.overlap && (
+                        {!!actionResult.overlap && (
                           <div className="text-xs text-gray-400 space-y-1">
                             {Object.entries(actionResult.overlap as Record<string, string[]>).map(([key, vals]) => (
                               vals.length > 0 && (
@@ -479,7 +479,7 @@ export default function AllianceLensPage() {
                     )}
 
                     {/* Network Analysis Result */}
-                    {actionResult.nodeCount !== undefined && actionResult.density !== undefined && (
+                    {!!actionResult.nodeCount !== undefined && actionResult.density !== undefined && (
                       <div className="space-y-3">
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                           <div className="p-2 bg-lattice-surface rounded text-center">

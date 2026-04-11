@@ -494,7 +494,7 @@ export default function BridgeLens() {
                     <p className="text-[10px] text-zinc-500">Min RPS</p>
                   </div>
                 </div>
-                {actionResult.bottleneck && (
+                {!!actionResult.bottleneck && (
                   <div className={`flex items-start gap-2 text-xs p-2 rounded ${
                     String(actionResult.bottleneck).startsWith('Low')
                       ? 'bg-amber-500/10 text-amber-300'

@@ -740,7 +740,7 @@ export default function ThreadLensPage() {
                       </div>
                     ))}
                   </div>
-                  {r.mostActive && <div className="text-xs text-gray-400">Most Active: <span className="text-neon-cyan">{String(r.mostActive)}</span></div>}
+                  {!!r.mostActive && <div className="text-xs text-gray-400">Most Active: <span className="text-neon-cyan">{String(r.mostActive)}</span></div>}
                 </div>
               );
             })()}

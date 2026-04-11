@@ -380,8 +380,8 @@ export default function FilmStudiosPage() {
                       ))}
                     </div>
                   )}
-                  {filmActionResult.parallelizable && <p className="text-xs text-gray-500 italic">{String(filmActionResult.parallelizable)}</p>}
-                  {filmActionResult.estimatedCompletion && <p className="text-xs text-neon-green">Completion: {String(filmActionResult.estimatedCompletion)}</p>}
+                  {!!filmActionResult.parallelizable && <p className="text-xs text-gray-500 italic">{String(filmActionResult.parallelizable)}</p>}
+                  {!!filmActionResult.estimatedCompletion && <p className="text-xs text-neon-green">Completion: {String(filmActionResult.estimatedCompletion)}</p>}
                 </div>
               )}
             </div>

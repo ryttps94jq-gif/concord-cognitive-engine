@@ -473,7 +473,7 @@ export default function LockLensPage() {
             )}
             {'resources' in actionResult && Array.isArray(actionResult.resources) && (
               <div className="space-y-2">
-                {'summary' in actionResult && actionResult.summary && typeof actionResult.summary === 'object' && (
+                {!!'summary' in actionResult && actionResult.summary && typeof actionResult.summary === 'object' && (
                   <div className="flex flex-wrap gap-4 text-xs">
                     {Object.entries(actionResult.summary as Record<string, unknown>).map(([k, v]) => (
                       <span key={k} className="text-gray-400">{k}: <span className="text-neon-cyan">{String(v)}</span></span>
@@ -510,7 +510,7 @@ export default function LockLensPage() {
                     actionResult.fairnessLevel === 'medium' ? 'bg-yellow-400/20 text-yellow-400' : 'bg-red-400/20 text-red-400'
                   }`}>{String(actionResult.fairnessLevel)}</span>
                 </div>
-                {'starvation' in actionResult && actionResult.starvation && typeof actionResult.starvation === 'object' && (
+                {!!'starvation' in actionResult && actionResult.starvation && typeof actionResult.starvation === 'object' && (
                   <div className="flex flex-wrap gap-3 text-xs">
                     {Object.entries(actionResult.starvation as Record<string, unknown>).map(([k, v]) => (
                       <span key={k} className="text-gray-400">{k}: <span className="text-yellow-400">{String(v)}</span></span>

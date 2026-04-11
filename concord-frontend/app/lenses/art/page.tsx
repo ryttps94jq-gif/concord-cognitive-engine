@@ -1188,7 +1188,7 @@ export default function ArtLensPage() {
             {actionResult.palette !== undefined && !actionResult.harmonies && (
               <div className="space-y-2">
                 <div className="flex gap-2">{(actionResult.palette as Array<{ hex: string }>)?.map((c, i) => <div key={i} className="flex-1 h-10 rounded" style={{ backgroundColor: c.hex || (c as unknown as string) }} title={c.hex || (c as unknown as string)} />)}</div>
-                {actionResult.mood && <p className="text-xs text-gray-400">Mood: <span className="text-white">{actionResult.mood as string}</span></p>}
+                {!!actionResult.mood && <p className="text-xs text-gray-400">Mood: <span className="text-white">{actionResult.mood as string}</span></p>}
               </div>
             )}
             {/* Style Classify */}

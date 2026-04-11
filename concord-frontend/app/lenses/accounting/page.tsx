@@ -1568,7 +1568,7 @@ export default function AccountingLensPage() {
             </div>
           </div>
 
-          {backendAgingResult.buckets && (
+          {!!backendAgingResult.buckets && (
             <div className="grid grid-cols-5 gap-3 mt-4">
               {Object.entries(backendAgingResult.buckets as Record<string, Record<string, unknown>>).map(([key, bucket]) => {
                 const colorMap: Record<string, string> = { current: 'text-green-400 border-green-400/30 bg-green-400/10', '1-30': 'text-yellow-400 border-yellow-400/30 bg-yellow-400/10', '31-60': 'text-orange-400 border-orange-400/30 bg-orange-400/10', '61-90': 'text-red-400 border-red-400/30 bg-red-400/10', '90+': 'text-red-500 border-red-500/30 bg-red-500/10' };
@@ -1860,7 +1860,7 @@ export default function AccountingLensPage() {
               </table>
             )}
 
-            {backendVarianceResult.largestOverrun && (
+            {!!backendVarianceResult.largestOverrun && (
               <div className="mt-4 p-3 rounded-lg bg-red-400/10 border border-red-400/30">
                 <div className="flex items-center gap-2 text-red-400">
                   <AlertCircle className="w-4 h-4" />

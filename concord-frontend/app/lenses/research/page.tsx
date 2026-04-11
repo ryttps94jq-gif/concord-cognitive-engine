@@ -601,7 +601,7 @@ export default function ResearchLensPage() {
                   <span className="text-gray-400">Citations: <span className="text-neon-cyan font-mono">{String(researchActionResult.totalCitations ?? '')}</span></span>
                   <span className="text-gray-400">H-index: <span className="text-neon-blue font-mono">{String(researchActionResult.hIndex ?? '')}</span></span>
                 </div>
-                {researchActionResult.message && <p className="text-gray-400 italic">{String(researchActionResult.message)}</p>}
+                {!!researchActionResult.message && <p className="text-gray-400 italic">{String(researchActionResult.message)}</p>}
               </div>
             )}
             {researchActionResult.action === 'methodologyScore' && (
@@ -613,7 +613,7 @@ export default function ResearchLensPage() {
                 {Array.isArray(researchActionResult.strengths) && researchActionResult.strengths.length > 0 && (
                   <div className="space-y-0.5">{(researchActionResult.strengths as string[]).map((s, i) => <p key={i} className="text-green-300">✓ {s}</p>)}</div>
                 )}
-                {researchActionResult.message && <p className="text-gray-400 italic">{String(researchActionResult.message)}</p>}
+                {!!researchActionResult.message && <p className="text-gray-400 italic">{String(researchActionResult.message)}</p>}
               </div>
             )}
             {researchActionResult.action === 'reproducibilityCheck' && (
@@ -624,7 +624,7 @@ export default function ResearchLensPage() {
                 {Array.isArray(researchActionResult.issues) && researchActionResult.issues.length > 0 && (
                   <div className="space-y-0.5">{(researchActionResult.issues as string[]).map((s, i) => <p key={i} className="text-yellow-300">⚠ {s}</p>)}</div>
                 )}
-                {researchActionResult.message && <p className="text-gray-400 italic">{String(researchActionResult.message)}</p>}
+                {!!researchActionResult.message && <p className="text-gray-400 italic">{String(researchActionResult.message)}</p>}
               </div>
             )}
             <button onClick={() => setResearchActionResult(null)} className="text-gray-600 hover:text-gray-400 text-xs flex items-center gap-1"><X className="w-3 h-3" /> Dismiss</button>

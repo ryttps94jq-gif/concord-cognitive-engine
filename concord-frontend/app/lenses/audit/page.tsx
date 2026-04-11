@@ -541,7 +541,7 @@ export default function AuditLensPage() {
                 }`}>
                   {actionResult.riskScore as number}
                 </div>
-                {actionResult.riskLevel && (
+                {!!actionResult.riskLevel && (
                   <span className={`text-sm font-medium px-2 py-0.5 rounded ${
                     (actionResult.riskLevel as string) === 'HIGH' ? 'bg-red-500/20 text-red-400' :
                     (actionResult.riskLevel as string) === 'MEDIUM' ? 'bg-yellow-500/20 text-yellow-400' :
@@ -590,7 +590,7 @@ export default function AuditLensPage() {
                   </div>
                 )}
               </div>
-              {actionResult.method && (
+              {!!actionResult.method && (
                 <p className="text-xs text-gray-400">Method: <span className="text-white">{actionResult.method as string}</span></p>
               )}
               {(actionResult.strata as Array<{ name: string; count: number }>)?.length > 0 && (

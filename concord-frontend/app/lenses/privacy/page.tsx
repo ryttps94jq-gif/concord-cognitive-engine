@@ -732,7 +732,7 @@ export default function PrivacySharingPage() {
                   <span className="text-gray-400">Total items: <span className="text-white font-mono">{String(privacyActionResult.totalItems ?? 0)}</span></span>
                   <span className="text-gray-400">Sensitive: <span className={`font-mono ${(privacyActionResult.sensitiveItems as number) > 0 ? 'text-red-400' : 'text-green-400'}`}>{String(privacyActionResult.sensitiveItems ?? 0)}</span></span>
                   <span className="text-gray-400">Risk: <span className={`font-mono ${privacyActionResult.riskLevel === 'high' ? 'text-red-400' : privacyActionResult.riskLevel === 'moderate' ? 'text-yellow-400' : 'text-green-400'}`}>{String(privacyActionResult.riskLevel ?? '')}</span></span>
-                  {privacyActionResult.gdprRelevant && <span className="text-yellow-400">GDPR relevant</span>}
+                  {!!privacyActionResult.gdprRelevant && <span className="text-yellow-400">GDPR relevant</span>}
                 </div>
                 {Array.isArray(privacyActionResult.recommendations) && <ul className="space-y-0.5">{(privacyActionResult.recommendations as string[]).map((r, i) => <li key={i} className="text-gray-300">• {r}</li>)}</ul>}
               </div>

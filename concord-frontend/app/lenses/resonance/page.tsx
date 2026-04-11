@@ -1165,7 +1165,7 @@ export default function ResonanceBoundaryPage() {
                   <span className="text-gray-400">Level: <span className="text-neon-purple capitalize">{String(resonanceActionResult.engagementLevel ?? '')}</span></span>
                   <span className="text-gray-400">Trend: <span className="text-white">{String(resonanceActionResult.trend ?? '')}</span></span>
                 </div>
-                {resonanceActionResult.message && <p className="text-gray-400 italic">{String(resonanceActionResult.message)}</p>}
+                {!!resonanceActionResult.message && <p className="text-gray-400 italic">{String(resonanceActionResult.message)}</p>}
               </div>
             )}
             {resonanceActionResult.action === 'audienceMatch' && (
@@ -1174,7 +1174,7 @@ export default function ResonanceBoundaryPage() {
                   <span className="text-gray-400">Match: <span className={`font-mono font-bold ${(resonanceActionResult.matchScore as number) >= 70 ? 'text-green-400' : 'text-yellow-400'}`}>{String(resonanceActionResult.matchScore ?? '')}%</span></span>
                   <span className="text-gray-400">Primary: <span className="text-neon-purple">{String(resonanceActionResult.primaryAudience ?? '')}</span></span>
                 </div>
-                {resonanceActionResult.message && <p className="text-gray-400 italic">{String(resonanceActionResult.message)}</p>}
+                {!!resonanceActionResult.message && <p className="text-gray-400 italic">{String(resonanceActionResult.message)}</p>}
               </div>
             )}
             {resonanceActionResult.action === 'impactPrediction' && (
@@ -1183,7 +1183,7 @@ export default function ResonanceBoundaryPage() {
                   <span className="text-gray-400">Predicted reach: <span className="text-neon-purple font-mono">{String(resonanceActionResult.predictedReach ?? '')}</span></span>
                   <span className="text-gray-400">Impact: <span className="text-white capitalize">{String(resonanceActionResult.impactLevel ?? '')}</span></span>
                 </div>
-                {resonanceActionResult.message && <p className="text-gray-400 italic">{String(resonanceActionResult.message)}</p>}
+                {!!resonanceActionResult.message && <p className="text-gray-400 italic">{String(resonanceActionResult.message)}</p>}
               </div>
             )}
             <button onClick={() => setResonanceActionResult(null)} className="text-gray-600 hover:text-gray-400 text-xs flex items-center gap-1"><X className="w-3 h-3" /> Dismiss</button>

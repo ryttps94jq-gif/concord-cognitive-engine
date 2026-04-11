@@ -518,7 +518,7 @@ export default function MarketLensPage() {
               <div className="space-y-1">
                 <span className="text-gray-400">Elasticity: <span className="text-neon-cyan font-bold">{String(actionResult.primaryElasticity)}</span></span>
                 <span className="ml-3 text-xs text-gray-400">({String(actionResult.classification)})</span>
-                {'loglogRegression' in actionResult && actionResult.loglogRegression && typeof actionResult.loglogRegression === 'object' && (
+                {!!'loglogRegression' in actionResult && actionResult.loglogRegression && typeof actionResult.loglogRegression === 'object' && (
                   <div className="text-xs text-gray-500 mt-1">R²: {String((actionResult.loglogRegression as Record<string, unknown>).rSquared)}</div>
                 )}
               </div>

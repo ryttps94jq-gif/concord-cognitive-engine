@@ -534,7 +534,7 @@ export default function AnalyticsPage() {
                         </div>
                       ))}
                     </div>
-                    {actionResult.worstDropoff && (
+                    {!!actionResult.worstDropoff && (
                       <div className="flex items-center gap-2 text-xs text-red-400 bg-red-500/10 p-2 rounded">
                         <AlertTriangle className="w-3 h-3 flex-shrink-0" />
                         Worst dropoff: <span className="text-white font-medium">{actionResult.worstDropoff as string}</span> ({actionResult.worstDropoffRate as number}%)

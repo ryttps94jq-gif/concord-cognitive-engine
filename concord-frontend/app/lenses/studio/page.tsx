@@ -1418,7 +1418,7 @@ export default function StudioLensPage() {
                   <span className="text-gray-400">Progress: <span className="text-neon-purple font-mono">{String(studioActionResult.completionRate ?? 0)}%</span></span>
                   <span className="text-gray-400">Duration: <span className="text-white font-mono">{String(studioActionResult.totalDays ?? '')} days</span></span>
                 </div>
-                {studioActionResult.message && <p className="text-gray-400 italic">{String(studioActionResult.message)}</p>}
+                {!!studioActionResult.message && <p className="text-gray-400 italic">{String(studioActionResult.message)}</p>}
               </div>
             )}
             {studioActionResult.action === 'assetTracker' && (
@@ -1428,7 +1428,7 @@ export default function StudioLensPage() {
                   <span className="text-gray-400">Size: <span className="text-neon-purple font-mono">{String(studioActionResult.totalSizeMB ?? '')} MB</span></span>
                   <span className="text-gray-400">Orphaned: <span className="text-yellow-400 font-mono">{String(studioActionResult.orphanedAssets ?? 0)}</span></span>
                 </div>
-                {studioActionResult.message && <p className="text-gray-400 italic">{String(studioActionResult.message)}</p>}
+                {!!studioActionResult.message && <p className="text-gray-400 italic">{String(studioActionResult.message)}</p>}
               </div>
             )}
             {studioActionResult.action === 'renderEstimate' && (
@@ -1450,7 +1450,7 @@ export default function StudioLensPage() {
                   <span className="text-gray-400">Removed: <span className="text-red-400 font-mono">{String((studioActionResult.diff as Record<string,number>)?.removed ?? 0)}</span></span>
                   <span className="text-gray-400">Modified: <span className="text-yellow-400 font-mono">{String((studioActionResult.diff as Record<string,number>)?.modified ?? 0)}</span></span>
                 </div>
-                {studioActionResult.message && <p className="text-gray-400 italic">{String(studioActionResult.message)}</p>}
+                {!!studioActionResult.message && <p className="text-gray-400 italic">{String(studioActionResult.message)}</p>}
               </div>
             )}
             <button onClick={() => setStudioActionResult(null)} className="text-gray-600 hover:text-gray-400 text-xs flex items-center gap-1"><X className="w-3 h-3" /> Dismiss</button>

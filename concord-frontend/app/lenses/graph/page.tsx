@@ -1777,7 +1777,7 @@ export default function GraphLensPage() {
                   <div className="lens-card text-center"><p className="text-xl font-bold text-neon-cyan">{summary?.averageDegree as number}</p><p className="text-xs text-gray-400">Avg Degree</p></div>
                   <div className="lens-card text-center"><p className="text-xl font-bold text-yellow-400">{summary?.isolatedNodes as number}</p><p className="text-xs text-gray-400">Isolated</p></div>
                 </div>
-                {summary?.mostConnected && <div className="lens-card flex justify-between text-sm"><span className="text-gray-400">Most Connected</span><span className="text-neon-cyan font-mono">{summary.mostConnected as string}</span></div>}
+                {!!summary?.mostConnected && <div className="lens-card flex justify-between text-sm"><span className="text-gray-400">Most Connected</span><span className="text-neon-cyan font-mono">{summary.mostConnected as string}</span></div>}
                 {nodes.slice(0, 5).length > 0 && (
                   <div className="space-y-1">
                     <p className="text-xs text-gray-500 uppercase tracking-wider">Top Nodes by Centrality</p>
@@ -1814,7 +1814,7 @@ export default function GraphLensPage() {
                     ))}
                   </div>
                 )}
-                {r.message && <p className="text-xs text-gray-400">{r.message as string}</p>}
+                {!!r.message && <p className="text-xs text-gray-400">{r.message as string}</p>}
               </div>
             );
           }
@@ -1829,7 +1829,7 @@ export default function GraphLensPage() {
                   <div className="lens-card text-center"><p className="text-xl font-bold text-yellow-400">{summary?.isolatedNodes as number}</p><p className="text-xs text-gray-400">Isolated</p></div>
                   <div className="lens-card text-center"><p className="text-xl font-bold text-neon-purple">{summary?.fragmentationIndex as number}</p><p className="text-xs text-gray-400">Fragmentation</p></div>
                 </div>
-                {summary?.connectivity && <div className="lens-card flex justify-between text-sm"><span className="text-gray-400">Connectivity</span><span className="text-neon-cyan">{summary.connectivity as string}</span></div>}
+                {!!summary?.connectivity && <div className="lens-card flex justify-between text-sm"><span className="text-gray-400">Connectivity</span><span className="text-neon-cyan">{summary.connectivity as string}</span></div>}
                 {clusters.slice(0, 4).map((c) => (
                   <div key={c.clusterId} className="lens-card">
                     <div className="flex items-center justify-between mb-1">
@@ -1868,7 +1868,7 @@ export default function GraphLensPage() {
                       <div className="flex justify-between"><span className="text-gray-400">Density Label</span><span className="text-neon-cyan">{metrics.densityLabel as string}</span></div>
                     </div>
                     <div className="lens-card space-y-1 text-sm">
-                      <div className="flex justify-between"><span className="text-gray-400">Diameter</span><span className="text-white">{metrics.diameter ?? 'n/a'}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-400">Diameter</span><span className="text-white">{!!metrics.diameter ?? 'n/a'}</span></div>
                       <div className="flex justify-between"><span className="text-gray-400">Avg Path Length</span><span className="text-white">{metrics.averagePathLength as number}</span></div>
                       <div className="flex justify-between"><span className="text-gray-400">Connected</span><span className={metrics.isConnected ? 'text-neon-green' : 'text-red-400'}>{metrics.isConnected ? 'Yes' : 'No'}</span></div>
                     </div>

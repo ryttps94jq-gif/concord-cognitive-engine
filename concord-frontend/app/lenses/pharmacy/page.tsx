@@ -348,7 +348,7 @@ export default function PharmacyLensPage() {
                     <span className="text-xs text-gray-400">Daily Total</span>
                     <span className={`text-base font-bold font-mono ${dosageResult.capped ? 'text-orange-400' : 'text-neon-cyan'}`}>
                       {String(dosageResult.dailyDose)}
-                      {dosageResult.capped && <span className="text-xs ml-1 text-orange-300">(capped)</span>}
+                      {!!dosageResult.capped && <span className="text-xs ml-1 text-orange-300">(capped)</span>}
                     </span>
                   </div>
                   {'disclaimer' in dosageResult && (
@@ -394,9 +394,9 @@ export default function PharmacyLensPage() {
                         <div key={i} className="flex items-center gap-2 text-xs bg-white/5 rounded p-2">
                           <Package className="w-3 h-3 text-yellow-400 shrink-0" />
                           <span className="flex-1 text-gray-300">{String(alert.name)}</span>
-                          {alert.expired && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400">Expired</span>}
-                          {alert.nearExpiry && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-orange-500/20 text-orange-400">{String(alert.daysToExpiry)}d</span>}
-                          {alert.lowStock && !alert.expired && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400">Low ({String(alert.quantity)})</span>}
+                          {!!alert.expired && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400">Expired</span>}
+                          {!!alert.nearExpiry && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-orange-500/20 text-orange-400">{String(alert.daysToExpiry)}d</span>}
+                          {!!alert.lowStock && !alert.expired && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400">Low ({String(alert.quantity)})</span>}
                         </div>
                       ))}
                     </div>
@@ -427,7 +427,7 @@ export default function PharmacyLensPage() {
                           <ShieldCheck className={`w-3 h-3 shrink-0 ${m.covered ? 'text-green-400' : 'text-red-400'}`} />
                           <span className="flex-1 text-gray-300">{String(m.generic)}{m.brand ? ` (${String(m.brand)})` : ''}</span>
                           <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-500/20 text-gray-400">Tier {String(m.tier)}</span>
-                          {m.priorAuth && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400">PA</span>}
+                          {!!m.priorAuth && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400">PA</span>}
                         </div>
                       ))}
                     </div>
