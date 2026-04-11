@@ -3,14 +3,16 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useLensBridge } from '@/lib/hooks/use-lens-bridge';
+import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { motion } from 'framer-motion';
 import {
   GitMerge, Plus, ArrowRight, Database, Search, Zap,
   Clock, Gauge, Activity, ListOrdered, ChevronDown, ChevronUp,
-  RefreshCw, AlertCircle, CheckCircle2, Timer, Layers
+  RefreshCw, AlertCircle, CheckCircle2, Timer, Layers, Loader2, BarChart3, Link,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -18,6 +20,40 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+
+interface ForwardChainResult {
+  initialFactCount: number;
+  derivedFactCount: number;
+  totalFactCount: number;
+  iterations: number;
+  fixedPointReached: boolean;
+  derivedFacts: string[];
+  derivationLog: { iteration: number; rule: string; derived: string }[];
+  factsByPredicate: Record<string, number>;
+  rulesApplied: string[];
+}
+
+interface BackwardChainResult {
+  goal: string;
+  proved: boolean;
+  answerCount: number;
+  answers: string[];
+  proofCount: number;
+  proofTrees: { root: string; children: unknown[] }[];
+  nodesExplored: number;
+}
+
+interface UnifyResult {
+  unifiable: boolean;
+  term1: string;
+  term2: string;
+  mgu: Record<string, string>;
+  bindingCount: number;
+  unifiedTerm: string;
+  verification: boolean;
+  steps: { step: number; description: string }[];
+  stepCount: number;
+}
 
 interface InferenceHistoryEntry {
   id?: string;
@@ -56,6 +92,19 @@ export default function InferenceLensPage() {
 
   // --- Lens Bridge ---
   const bridge = useLensBridge('inference', 'snapshot');
+
+  const { items: infArtifacts } = useLensData('inference', 'snapshot', { seed: [] });
+  const runAction = useRunArtifact('inference');
+  const [infActionResult, setInfActionResult] = useState<{ action: string; data: unknown } | null>(null);
+
+  const handleInfAction = useCallback((action: string) => {
+    const artifactId = infArtifacts[0]?.id;
+    if (!artifactId) return;
+    runAction.mutate(
+      { id: artifactId, action, params: {} },
+      { onSuccess: (res) => setInfActionResult({ action, data: res.result }) }
+    );
+  }, [infArtifacts, runAction]);
 
   const { data: status, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['inference-status'],
@@ -527,6 +576,165 @@ export default function InferenceLensPage() {
           compact
         />
       )}
+      </div>
+
+      {/* AI Inference Actions Panel */}
+      <div className="panel p-4 space-y-4">
+        <h2 className="font-semibold flex items-center gap-2">
+          <BarChart3 className="w-4 h-4 text-neon-blue" />
+          Logical Inference Actions
+        </h2>
+        {!infArtifacts[0]?.id && (
+          <p className="text-xs text-gray-500">Create a snapshot artifact to run inference actions.</p>
+        )}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {[
+            { action: 'forwardChain', label: 'Forward Chain', icon: Zap, color: 'text-neon-green' },
+            { action: 'backwardChain', label: 'Backward Chain', icon: ArrowRight, color: 'text-neon-cyan' },
+            { action: 'unify', label: 'Unify Terms', icon: Link, color: 'text-neon-purple' },
+          ].map(({ action, label, icon: Icon, color }) => (
+            <button
+              key={action}
+              onClick={() => handleInfAction(action)}
+              disabled={runAction.isPending || !infArtifacts[0]?.id}
+              className="flex items-center gap-2 px-4 py-3 bg-lattice-surface border border-lattice-border rounded-lg text-sm font-medium text-white hover:border-neon-blue/40 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {runAction.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Icon className={`w-4 h-4 ${color}`} />
+              )}
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {infActionResult && !runAction.isPending && (() => {
+          if (infActionResult.action === 'forwardChain') {
+            const d = infActionResult.data as ForwardChainResult;
+            return (
+              <div className="space-y-3 pt-2 border-t border-lattice-border">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-neon-green">Forward Chain Results</h3>
+                  <span className={`text-xs px-2 py-1 rounded ${d.fixedPointReached ? 'bg-neon-green/10 text-neon-green' : 'bg-yellow-400/10 text-yellow-400'}`}>
+                    {d.fixedPointReached ? 'Fixed Point Reached' : 'Not Saturated'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Initial Facts', value: d.initialFactCount || 0, color: 'text-gray-300' },
+                    { label: 'Derived Facts', value: d.derivedFactCount || 0, color: 'text-neon-green' },
+                    { label: 'Total Facts', value: d.totalFactCount || 0, color: 'text-neon-cyan' },
+                    { label: 'Iterations', value: d.iterations || 0, color: 'text-neon-purple' },
+                  ].map(s => (
+                    <div key={s.label} className="lens-card text-center">
+                      <p className={`text-lg font-bold ${s.color}`}>{s.value}</p>
+                      <p className="text-xs text-gray-400">{s.label}</p>
+                    </div>
+                  ))}
+                </div>
+                {(d.derivedFacts || []).length > 0 && (
+                  <div>
+                    <p className="text-xs text-gray-400 mb-2">Derived Facts (first 5)</p>
+                    <div className="space-y-1">
+                      {d.derivedFacts.slice(0, 5).map((f, i) => (
+                        <p key={i} className="text-xs font-mono text-neon-green bg-neon-green/5 px-2 py-1 rounded">{f}</p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {(d.rulesApplied || []).length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    <span className="text-xs text-gray-500 mr-1">Rules applied:</span>
+                    {d.rulesApplied.slice(0, 5).map((r, i) => (
+                      <span key={i} className="text-xs px-1.5 py-0.5 bg-lattice-surface rounded text-gray-400">{r}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          }
+          if (infActionResult.action === 'backwardChain') {
+            const d = infActionResult.data as BackwardChainResult;
+            return (
+              <div className="space-y-3 pt-2 border-t border-lattice-border">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-neon-cyan">Backward Chain — {d.goal}</h3>
+                  <span className={`text-xs px-2 py-1 rounded font-semibold ${d.proved ? 'bg-neon-green/20 text-neon-green' : 'bg-red-400/20 text-red-400'}`}>
+                    {d.proved ? 'Proved' : 'Unproved'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="lens-card text-center">
+                    <p className="text-lg font-bold text-neon-cyan">{d.answerCount || 0}</p>
+                    <p className="text-xs text-gray-400">Answers</p>
+                  </div>
+                  <div className="lens-card text-center">
+                    <p className="text-lg font-bold text-neon-purple">{d.proofCount || 0}</p>
+                    <p className="text-xs text-gray-400">Proofs</p>
+                  </div>
+                  <div className="lens-card text-center">
+                    <p className="text-lg font-bold text-gray-300">{d.nodesExplored || 0}</p>
+                    <p className="text-xs text-gray-400">Nodes Explored</p>
+                  </div>
+                </div>
+                {(d.answers || []).length > 0 && (
+                  <div>
+                    <p className="text-xs text-gray-400 mb-2">Answers</p>
+                    {d.answers.slice(0, 5).map((a, i) => (
+                      <p key={i} className="text-xs font-mono text-neon-cyan bg-neon-cyan/5 px-2 py-1 rounded mb-1">{a}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          }
+          if (infActionResult.action === 'unify') {
+            const d = infActionResult.data as UnifyResult;
+            return (
+              <div className="space-y-3 pt-2 border-t border-lattice-border">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-neon-purple">Unification Result</h3>
+                  <span className={`text-xs px-2 py-1 rounded font-semibold ${d.unifiable ? 'bg-neon-green/20 text-neon-green' : 'bg-red-400/20 text-red-400'}`}>
+                    {d.unifiable ? 'Unifiable' : 'Not Unifiable'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+                  <div className="lens-card">
+                    <p className="text-gray-400 mb-1">Term 1</p>
+                    <p className="text-white">{d.term1}</p>
+                  </div>
+                  <div className="lens-card">
+                    <p className="text-gray-400 mb-1">Term 2</p>
+                    <p className="text-white">{d.term2}</p>
+                  </div>
+                </div>
+                {d.unifiable && d.unifiedTerm && (
+                  <div className="lens-card">
+                    <p className="text-xs text-gray-400 mb-1">Unified Term</p>
+                    <p className="text-sm font-mono text-neon-purple">{d.unifiedTerm}</p>
+                  </div>
+                )}
+                {Object.keys(d.mgu || {}).length > 0 && (
+                  <div>
+                    <p className="text-xs text-gray-400 mb-2">MGU Bindings ({d.bindingCount})</p>
+                    <div className="space-y-1">
+                      {Object.entries(d.mgu).slice(0, 5).map(([k, v]) => (
+                        <p key={k} className="text-xs font-mono"><span className="text-neon-cyan">{k}</span><span className="text-gray-500"> → </span><span className="text-white">{v}</span></p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {d.verification !== undefined && (
+                  <span className={`text-xs px-2 py-1 rounded ${d.verification ? 'bg-neon-green/10 text-neon-green' : 'bg-red-400/10 text-red-400'}`}>
+                    Verification: {d.verification ? 'Passed' : 'Failed'}
+                  </span>
+                )}
+              </div>
+            );
+          }
+          return null;
+        })()}
       </div>
 
       {/* Lens Features */}

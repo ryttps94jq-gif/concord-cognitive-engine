@@ -5,8 +5,10 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
+import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { motion } from 'framer-motion';
-import { Upload, Settings2, CheckCircle2, AlertTriangle, Loader2, Clock, Database, Layers, ChevronDown, FileUp, FileJson, FileText, Image as ImageIcon, Shield, Gauge, ArrowDownToLine, Zap, Activity } from 'lucide-react';
+import { Upload, Settings2, CheckCircle2, AlertTriangle, Loader2, Clock, Database, Layers, ChevronDown, FileUp, FileJson, FileText, Image as ImageIcon, Shield, Gauge, ArrowDownToLine, Zap, Activity, BarChart3, Search, List } from 'lucide-react';
 import { ConnectiveTissueBar } from '@/components/lens/ConnectiveTissueBar';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -17,6 +19,47 @@ import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
 import { showToast } from '@/components/common/Toasts';
+
+interface ParseDocumentResult {
+  format: string;
+  lineCount: number;
+  paragraphCount: number;
+  sentenceCount: number;
+  wordCount: number;
+  sectionCount: number;
+  sections: { title: string; wordCount: number; sentenceCount: number }[];
+  avgWordsPerSentence: number;
+  avgWordsPerParagraph: number;
+}
+
+interface ExtractEntitiesResult {
+  emails: string[];
+  urls: string[];
+  dates: string[];
+  phones: string[];
+  numbers: string[];
+  summary: { emailCount: number; urlCount: number; dateCount: number; phoneCount: number; numberCount: number };
+}
+
+interface ValidateSchemaResult {
+  totalRecords: number;
+  validRecords: number;
+  invalidRecords: number;
+  validationRate: number;
+  issues: { field: string; message: string; count: number }[];
+}
+
+interface BatchStatusResult {
+  totalItems: number;
+  completed: number;
+  pending: number;
+  inProgress: number;
+  failed: number;
+  completionRate: number;
+  statusBreakdown: Record<string, number>;
+  recentErrors: string[];
+  estimatedRemaining: string;
+}
 
 interface IngestJob {
   id: string;
@@ -42,6 +85,19 @@ export default function IngestLensPage() {
   const [showConfig, setShowConfig] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [showFeatures, setShowFeatures] = useState(true);
+
+  const { items: ingestArtifacts } = useLensData('ingest', 'ingest-job', { seed: [] });
+  const runAction = useRunArtifact('ingest');
+  const [ingestActionResult, setIngestActionResult] = useState<{ action: string; data: unknown } | null>(null);
+
+  const handleIngestAction = useCallback((action: string) => {
+    const artifactId = ingestArtifacts[0]?.id;
+    if (!artifactId) return;
+    runAction.mutate(
+      { id: artifactId, action, params: {} },
+      { onSuccess: (res) => setIngestActionResult({ action, data: res.result }) }
+    );
+  }, [ingestArtifacts, runAction]);
 
   // Fetch past ingestions
   const { data: historyData, isLoading, isError, error, refetch } = useQuery({
@@ -506,6 +562,191 @@ export default function IngestLensPage() {
             ))}
           </div>
         </div>
+      </div>
+
+      {/* AI Ingest Actions Panel */}
+      <div className="panel p-4 space-y-4">
+        <h2 className="font-semibold flex items-center gap-2">
+          <BarChart3 className="w-4 h-4 text-neon-cyan" />
+          Ingest Analysis Actions
+        </h2>
+        {!ingestArtifacts[0]?.id && (
+          <p className="text-xs text-gray-500">Create an ingest job to run AI actions.</p>
+        )}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {[
+            { action: 'parseDocument', label: 'Parse Document', icon: FileText, color: 'text-neon-cyan' },
+            { action: 'extractEntities', label: 'Extract Entities', icon: Search, color: 'text-neon-purple' },
+            { action: 'validateSchema', label: 'Validate Schema', icon: CheckCircle2, color: 'text-neon-green' },
+            { action: 'batchStatus', label: 'Batch Status', icon: List, color: 'text-yellow-400' },
+          ].map(({ action, label, icon: Icon, color }) => (
+            <button
+              key={action}
+              onClick={() => handleIngestAction(action)}
+              disabled={runAction.isPending || !ingestArtifacts[0]?.id}
+              className="flex items-center gap-2 px-4 py-3 bg-lattice-surface border border-lattice-border rounded-lg text-sm font-medium text-white hover:border-neon-cyan/40 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {runAction.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Icon className={`w-4 h-4 ${color}`} />
+              )}
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {ingestActionResult && !runAction.isPending && (() => {
+          if (ingestActionResult.action === 'parseDocument') {
+            const d = ingestActionResult.data as ParseDocumentResult;
+            return (
+              <div className="space-y-3 pt-2 border-t border-lattice-border">
+                <h3 className="text-sm font-semibold text-neon-cyan">Document Parse — {d.format}</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Words', value: (d.wordCount || 0).toLocaleString(), color: 'text-neon-cyan' },
+                    { label: 'Sentences', value: (d.sentenceCount || 0).toLocaleString(), color: 'text-neon-purple' },
+                    { label: 'Paragraphs', value: (d.paragraphCount || 0).toLocaleString(), color: 'text-neon-green' },
+                    { label: 'Sections', value: (d.sectionCount || 0).toLocaleString(), color: 'text-yellow-400' },
+                  ].map(s => (
+                    <div key={s.label} className="lens-card text-center">
+                      <p className={`text-lg font-bold ${s.color}`}>{s.value}</p>
+                      <p className="text-xs text-gray-400">{s.label}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-xs text-gray-400">
+                  <div>Avg words/sentence: <span className="text-white">{(d.avgWordsPerSentence || 0).toFixed(1)}</span></div>
+                  <div>Avg words/paragraph: <span className="text-white">{(d.avgWordsPerParagraph || 0).toFixed(1)}</span></div>
+                </div>
+                {(d.sections || []).length > 0 && (
+                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                    {d.sections.slice(0, 5).map((s, i) => (
+                      <div key={i} className="flex items-center justify-between text-xs">
+                        <span className="text-gray-300 truncate flex-1 mr-2">{s.title}</span>
+                        <span className="text-gray-500">{s.wordCount} words</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          }
+          if (ingestActionResult.action === 'extractEntities') {
+            const d = ingestActionResult.data as ExtractEntitiesResult;
+            return (
+              <div className="space-y-3 pt-2 border-t border-lattice-border">
+                <h3 className="text-sm font-semibold text-neon-purple">Extracted Entities</h3>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                  {[
+                    { label: 'Emails', value: d.summary?.emailCount || 0, color: 'text-neon-cyan' },
+                    { label: 'URLs', value: d.summary?.urlCount || 0, color: 'text-neon-purple' },
+                    { label: 'Dates', value: d.summary?.dateCount || 0, color: 'text-neon-green' },
+                    { label: 'Phones', value: d.summary?.phoneCount || 0, color: 'text-yellow-400' },
+                    { label: 'Numbers', value: d.summary?.numberCount || 0, color: 'text-gray-300' },
+                  ].map(s => (
+                    <div key={s.label} className="lens-card text-center">
+                      <p className={`text-lg font-bold ${s.color}`}>{s.value}</p>
+                      <p className="text-xs text-gray-400">{s.label}</p>
+                    </div>
+                  ))}
+                </div>
+                {(d.emails || []).length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    <span className="text-xs text-gray-500 mr-1">Emails:</span>
+                    {d.emails.slice(0, 3).map((e, i) => <span key={i} className="text-xs px-2 py-0.5 bg-neon-cyan/10 text-neon-cyan rounded">{e}</span>)}
+                  </div>
+                )}
+                {(d.urls || []).length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    <span className="text-xs text-gray-500 mr-1">URLs:</span>
+                    {d.urls.slice(0, 2).map((u, i) => <span key={i} className="text-xs px-2 py-0.5 bg-neon-purple/10 text-neon-purple rounded truncate max-w-32">{u}</span>)}
+                  </div>
+                )}
+                {(d.dates || []).length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    <span className="text-xs text-gray-500 mr-1">Dates:</span>
+                    {d.dates.slice(0, 4).map((dt, i) => <span key={i} className="text-xs px-2 py-0.5 bg-neon-green/10 text-neon-green rounded">{dt}</span>)}
+                  </div>
+                )}
+              </div>
+            );
+          }
+          if (ingestActionResult.action === 'validateSchema') {
+            const d = ingestActionResult.data as ValidateSchemaResult;
+            return (
+              <div className="space-y-3 pt-2 border-t border-lattice-border">
+                <h3 className="text-sm font-semibold text-neon-green">Schema Validation</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Total', value: (d.totalRecords || 0).toLocaleString(), color: 'text-gray-300' },
+                    { label: 'Valid', value: (d.validRecords || 0).toLocaleString(), color: 'text-neon-green' },
+                    { label: 'Invalid', value: (d.invalidRecords || 0).toLocaleString(), color: 'text-red-400' },
+                    { label: 'Rate', value: `${((d.validationRate || 0) * 100).toFixed(1)}%`, color: 'text-neon-cyan' },
+                  ].map(s => (
+                    <div key={s.label} className="lens-card text-center">
+                      <p className={`text-lg font-bold ${s.color}`}>{s.value}</p>
+                      <p className="text-xs text-gray-400">{s.label}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="h-2 bg-lattice-deep rounded-full overflow-hidden">
+                  <div className="h-full bg-neon-green rounded-full" style={{ width: `${(d.validationRate || 0) * 100}%` }} />
+                </div>
+                {(d.issues || []).slice(0, 4).map((issue, i) => (
+                  <div key={i} className="flex items-center justify-between text-xs">
+                    <span className="text-gray-300">{issue.field}</span>
+                    <span className="text-red-400">{issue.message}</span>
+                    <span className="text-gray-500">×{issue.count}</span>
+                  </div>
+                ))}
+              </div>
+            );
+          }
+          if (ingestActionResult.action === 'batchStatus') {
+            const d = ingestActionResult.data as BatchStatusResult;
+            return (
+              <div className="space-y-3 pt-2 border-t border-lattice-border">
+                <h3 className="text-sm font-semibold text-yellow-400">Batch Status</h3>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                  {[
+                    { label: 'Total', value: d.totalItems || 0, color: 'text-gray-300' },
+                    { label: 'Done', value: d.completed || 0, color: 'text-neon-green' },
+                    { label: 'Pending', value: d.pending || 0, color: 'text-yellow-400' },
+                    { label: 'Active', value: d.inProgress || 0, color: 'text-neon-cyan' },
+                    { label: 'Failed', value: d.failed || 0, color: 'text-red-400' },
+                  ].map(s => (
+                    <div key={s.label} className="lens-card text-center">
+                      <p className={`text-lg font-bold ${s.color}`}>{s.value}</p>
+                      <p className="text-xs text-gray-400">{s.label}</p>
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-gray-400">Completion</span>
+                    <span className="text-neon-green">{((d.completionRate || 0) * 100).toFixed(1)}%</span>
+                  </div>
+                  <div className="h-2 bg-lattice-deep rounded-full overflow-hidden">
+                    <div className="h-full bg-neon-green rounded-full" style={{ width: `${(d.completionRate || 0) * 100}%` }} />
+                  </div>
+                </div>
+                {d.estimatedRemaining && (
+                  <p className="text-xs text-gray-400">Est. remaining: <span className="text-white">{d.estimatedRemaining}</span></p>
+                )}
+                {(d.recentErrors || []).length > 0 && (
+                  <div>
+                    <p className="text-xs text-gray-400 mb-1">Recent Errors</p>
+                    {d.recentErrors.slice(0, 3).map((e, i) => (
+                      <p key={i} className="text-xs text-red-400">{e}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          }
+          return null;
+        })()}
       </div>
 
       {/* ConnectiveTissueBar */}
