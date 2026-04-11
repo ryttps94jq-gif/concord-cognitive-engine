@@ -1054,6 +1054,51 @@ export default function WorldLensPage() {
                 />
               </div>
             )}
+
+            {/* ── Tools Panel ──────────────────────────────── */}
+            <div className="border-t border-white/10">
+              <button
+                onClick={() => setToolsExpanded(!toolsExpanded)}
+                className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-gray-300 hover:text-white transition-colors"
+              >
+                <span className="flex items-center gap-1.5">
+                  <Wrench className="w-3.5 h-3.5 text-cyan-400" />
+                  Tools
+                  {activeTool && (
+                    <span className="ml-1 w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                  )}
+                </span>
+                <ChevronRight className={`w-3.5 h-3.5 transition-transform ${toolsExpanded ? 'rotate-90' : ''}`} />
+              </button>
+              {toolsExpanded && (
+                <div className="px-2 pb-2 space-y-2">
+                  {(['Build', 'Inspect', 'Export', 'Verify', 'Replay'] as const).map(group => {
+                    const tools = DISTRICT_TOOLS.filter(t => t.group === group);
+                    return (
+                      <div key={group}>
+                        <div className="text-[10px] uppercase tracking-wider text-gray-500 px-1 mb-1">{group}</div>
+                        <div className="grid grid-cols-2 gap-1">
+                          {tools.map(({ key, label, icon: Icon }) => (
+                            <button
+                              key={key}
+                              onClick={() => setActiveTool(activeTool === key ? null : key)}
+                              className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] transition-colors ${
+                                activeTool === key
+                                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                                  : 'text-gray-400 hover:text-white hover:bg-white/5 border border-transparent'
+                              }`}
+                            >
+                              <Icon className="w-3 h-3 shrink-0" />
+                              <span className="truncate">{label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Center: District Viewport */}
@@ -1085,6 +1130,49 @@ export default function WorldLensPage() {
                   onPublish={handlePublishRawDTU}
                   onCancel={() => setCreationMode(null)}
                 />
+              </div>
+            )}
+
+            {/* ── Tool panel overlays ──────────────────────── */}
+            {activeTool && (
+              <div className="absolute left-60 top-24 z-20 w-[480px] max-h-[75vh] overflow-auto bg-gray-900/95 border border-white/10 rounded-xl shadow-2xl">
+                <div className="sticky top-0 z-10 flex items-center justify-between px-3 py-2 border-b border-white/10 bg-gray-900/95 backdrop-blur">
+                  <span className="text-xs font-semibold text-cyan-300">
+                    {DISTRICT_TOOLS.find(t => t.key === activeTool)?.label}
+                  </span>
+                  <button onClick={() => setActiveTool(null)} className="p-0.5 rounded hover:bg-white/10 text-gray-400 hover:text-white">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <div className="p-2">
+                  {activeTool === 'snapbuild' && <SnapBuildCatalog onClose={() => setActiveTool(null)} />}
+                  {activeTool === 'dsl' && <ConcordDSLEditor />}
+                  {activeTool === 'terminal' && <ConcordTerminal />}
+                  {activeTool === 'diff' && <DTUDiffViewer />}
+                  {activeTool === 'standards' && <StandardsLibrary />}
+                  {activeTool === 'fabrication' && <FabricationExportPanel />}
+                  {activeTool === 'embed' && (
+                    <ExportEmbed
+                      dtuId={selectedBuilding?.dtuId ?? 'none'}
+                      dtuName={selectedBuilding?.dtuId ?? 'Selected DTU'}
+                    />
+                  )}
+                  {activeTool === 'notebook' && <NotebookEditor />}
+                  {activeTool === 'depgraph' && <DependencyGraphViewer />}
+                  {activeTool === 'digitaltwin' && <DigitalTwinDashboard />}
+                  {activeTool === 'sensors' && <SensorDashboard />}
+                  {activeTool === 'marketplace' && <ServiceMarketplace />}
+                  {activeTool === 'certificates' && <CertificatePanel />}
+                  {activeTool === 'notarization' && <NotarizationPanel />}
+                  {activeTool === 'stresstest' && (
+                    <StressTestPanel
+                      districtId={activeDistrict.id}
+                      buildingCount={activeDistrict.buildings.length}
+                    />
+                  )}
+                  {activeTool === 'replay' && <ReplayForensics />}
+                  {activeTool === 'spectator' && <ReplaySpectator />}
+                </div>
               </div>
             )}
 
